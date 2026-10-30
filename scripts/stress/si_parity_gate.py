@@ -369,6 +369,8 @@ def run_p3_cli(args: argparse.Namespace) -> int:
             building_id="SITE_MINI",
             live_sql_daily=live_sql,
             live_sample_counts=live_counts,
+            expected_window_start="2026-06-01T00:00:00Z",
+            expected_window_end="2026-06-02T00:00:00Z",
         )
         if result.errors:
             safe_print(f"FAIL P3 fixture: {'; '.join(result.errors)}")
@@ -387,8 +389,8 @@ def run_p3_cli(args: argparse.Namespace) -> int:
         safe_print("FAIL P3: sites-config must be a JSON list")
         return EXIT_FAIL
     safe_print(
-        "BLOCKED P3 live: Grok bot runs post-cutover compare on the owner stack; "
-        "cloud agents validate --p3-fixture only"
+        "BLOCKED P3 live: owner-stack adapter not run in CI; use --p3-fixture for the "
+        "mini regression fixture only (not W9 live P3)."
     )
     return EXIT_BLOCKED
 

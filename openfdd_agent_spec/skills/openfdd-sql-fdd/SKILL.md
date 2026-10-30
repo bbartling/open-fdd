@@ -26,7 +26,7 @@ One FDD result is `fdd_tsdb::FddResultIdentity`: data revision, model revision, 
 
 ## Typed unit and time contract
 
-- Temperatures are °F in SQL. Metric CSV values convert at query (`unit_system=metric|si`). Do not store a second copy of every rule for Celsius.
+- **Processing storage is canonical SI (`metric-c-v2`).** Values are normalized once at ingest by the single Timescale writer from engineer-declared source units. SQL rules and the pandas oracle read stored SI; display preference converts at the API/UI boundary only — never query-time imperial admission or a second stored copy per rule.
 - Timestamps are UTC `timestamptz`. Fault duration uses the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: not fault time, not covered time, and it breaks the confirmation streak. The last sample does not add a trailing interval.
 - Run one authorized tenant and building at a time. Equipment selection is `equipType` / roles, then exact id. Never a prefix or `LIKE` on `equipment_id`.
 

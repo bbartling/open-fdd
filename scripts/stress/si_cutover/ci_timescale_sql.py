@@ -360,20 +360,167 @@ def sql_daily_from_confirmed(
     days = sorted(set(fault_by_day) | set(covered_by_day))
     rows: list[dict[str, Any]] = []
     for day in days:
+        fs = float(fault_by_day.get(day, 0.0))
+        cs = float(covered_by_day.get(day, 0.0))
+        row_status = "FAULT" if fs > 0 else status
         rows.append(
             {
                 "building_id": building_id,
                 "rule_id": rule_id,
                 "equipment_id": equipment_id,
                 "utc_day": day,
-                "fault_seconds": float(fault_by_day.get(day, 0.0)),
-                "covered_seconds": float(covered_by_day.get(day, 0.0)),
-                "status": status,
+                "fault_seconds": fs,
+                "covered_seconds": cs,
+                "status": row_status,
                 "pair_status": "computed",
                 "reason": "",
             }
         )
     return rows
+
+
+def compare_sql_daily_rows(
+    left: list[dict[str, Any]],
+    right: list[dict[str, Any]],
+    *,
+    label_left: str = "aggregate",
+    label_right: str = "overlay",
+) -> str | None:
+    """Return an error string when daily fault/covered/status rows differ."""
+    by_key = {(
+        str(r.get("utc_day") or ""),
+        str(r.get("equipment_id") or ""),
+    ): r for r in left}
+    other = {(
+        str(r.get("utc_day") or ""),
+        str(r.get("equipment_id") or ""),
+    ): r for r in right}
+    keys = sorted(set(by_key) | set(other))
+    for key in keys:
+        a = by_key.get(key)
+        b = other.get(key)
+        if a is None:
+            return f"{label_left} missing day/equipment {key} present in {label_right}"
+        if b is None:
+            return f"{label_right} missing day/equipment {key} present in {label_left}"
+        for field in ("fault_seconds",):
+            if float(a.get(field, 0)) != float(b.get(field, 0)):
+                return (
+                    f"{label_left} vs {label_right} {key} {field}: "
+                    f"{a.get(field)} != {b.get(field)}"
+                )
+        cov_a = a.get("covered_seconds")
+        cov_b = b.get("covered_seconds")
+        if cov_a is not None and cov_b is not None:
+            if float(cov_a) != float(cov_b):
+                return (
+                    f"{label_left} vs {label_right} {key} covered_seconds: "
+                    f"{cov_a} != {cov_b}"
+                )
+        if str(a.get("status", "")) != str(b.get("status", "")):
+            return (
+                f"{label_left} vs {label_right} {key} status: "
+                f"{a.get('status')} != {b.get('status')}"
+            )
+    return None
+
+
+def _execute_original_aggregate_daily(
+    cur,
+    *,
+    sql: str,
+    rule_id: str,
+    building_id: str,
+    equipment_id: str,
+    index,
+    poll_seconds: float,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Execute shipped aggregate SQL (fault_hours column). No len(index)*poll fallback."""
+    import pandas as pd
+
+    try:
+        cur.execute(sql)
+        fetched = cur.fetchall()
+        columns = [d.name for d in cur.description]
+    except Exception as exc:
+        return [], f"aggregate sql: {exc}"
+    if not fetched:
+        return [], "aggregate sql empty"
+    hours_col: str | None = None
+    if "fault_hours" in columns:
+        hours_col = "fault_hours"
+    elif "fan_runtime_hours" in columns:
+        hours_col = "fan_runtime_hours"
+    if hours_col is None:
+        return [], "aggregate no fault_hours column"
+    equip_idx = columns.index("equipment_id")
+    hours_idx = columns.index(hours_col)
+    hours = None
+    for row in fetched:
+        if str(row[equip_idx]) == equipment_id:
+            hours = float(row[hours_idx])
+            break
+    if hours is None:
+        return [], "aggregate equipment missing in sql result"
+    if not isinstance(index, pd.DatetimeIndex) or len(index) == 0:
+        return [], "bad index"
+    days = sorted({ts.date().isoformat() for ts in index})
+    if len(days) != 1:
+        return [], "aggregate fault_hours spans multiple UTC days; need fault series overlay"
+    day = days[0]
+    return [
+        {
+            "building_id": building_id,
+            "rule_id": rule_id,
+            "equipment_id": equipment_id,
+            "utc_day": day,
+            "fault_seconds": hours * 3600.0,
+            "covered_seconds": None,
+            "status": "FAULT" if hours > 0 else "OK",
+            "pair_status": "computed",
+            "reason": "aggregate_only_row",
+        }
+    ], None
+
+
+def _execute_overlay_daily(
+    cur,
+    *,
+    overlay_sql: str,
+    rule_id: str,
+    building_id: str,
+    equipment_id: str,
+    index,
+    poll_seconds: float,
+) -> tuple[list[dict[str, Any]], str | None]:
+    import pandas as pd
+
+    try:
+        cur.execute(overlay_sql)
+        fetched = cur.fetchall()
+    except Exception as exc:
+        return [], f"sql overlay: {exc}"
+    if not fetched:
+        return [], "sql overlay empty"
+    ts_list = []
+    flags = []
+    for _equip, ts, flag in fetched:
+        ts = pd.Timestamp(ts)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        else:
+            ts = ts.tz_convert("UTC")
+        ts_list.append(ts)
+        flags.append(bool(flag))
+    confirmed = pd.Series(flags, index=pd.DatetimeIndex(ts_list)).sort_index()
+    return sql_daily_from_confirmed(
+        building_id=building_id,
+        rule_id=rule_id,
+        equipment_id=equipment_id,
+        confirmed=confirmed,
+        index=index,
+        poll_seconds=poll_seconds,
+    ), None
 
 
 def execute_sql_rule_daily(
@@ -387,9 +534,7 @@ def execute_sql_rule_daily(
     render_overrides: dict[str, float] | None = None,
     storage: str = "si",
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Run one postgres rule; return daily rows or (empty, error reason)."""
-    import pandas as pd
-
+    """Run one postgres rule; overlay and aggregate must agree when both exist."""
     rule_id = str(rule.get("rule_id") or "")
     sql_file = rule.get("sql_file")
     if not sql_file:
@@ -399,78 +544,49 @@ def execute_sql_rule_daily(
     except Exception as exc:
         return [], f"render: {exc}"
 
-    overlay = rewrite_fault_series(sql, equipment_id)
-    if overlay:
-        try:
-            cur.execute(overlay)
-            fetched = cur.fetchall()
-        except Exception as exc:
-            return [], f"sql overlay: {exc}"
-        if not fetched:
-            return [], "sql overlay empty"
-        ts_list = []
-        flags = []
-        for _equip, ts, flag in fetched:
-            ts = pd.Timestamp(ts)
-            if ts.tzinfo is None:
-                ts = ts.tz_localize("UTC")
-            else:
-                ts = ts.tz_convert("UTC")
-            ts_list.append(ts)
-            flags.append(bool(flag))
-        confirmed = pd.Series(flags, index=pd.DatetimeIndex(ts_list)).sort_index()
-        return sql_daily_from_confirmed(
-            building_id=building_id,
+    overlay_sql = rewrite_fault_series(sql, equipment_id)
+    aggregate_rows, agg_err = _execute_original_aggregate_daily(
+        cur,
+        sql=sql,
+        rule_id=rule_id,
+        building_id=building_id,
+        equipment_id=equipment_id,
+        index=index,
+        poll_seconds=poll_seconds,
+    )
+
+    if overlay_sql:
+        overlay_rows, ov_err = _execute_overlay_daily(
+            cur,
+            overlay_sql=overlay_sql,
             rule_id=rule_id,
+            building_id=building_id,
             equipment_id=equipment_id,
-            confirmed=confirmed,
             index=index,
             poll_seconds=poll_seconds,
-        ), None
+        )
+        if ov_err:
+            return [], ov_err
+        if agg_err:
+            return [], f"aggregate execution required alongside overlay: {agg_err}"
+        cmp_err = compare_sql_daily_rows(
+            aggregate_rows,
+            overlay_rows,
+            label_left="ORIGINAL_AGGREGATE",
+            label_right="OVERLAY",
+        )
+        if cmp_err:
+            return [], cmp_err
+        return overlay_rows, None
 
-    try:
-        cur.execute(sql)
-        fetched = cur.fetchall()
-        columns = [d.name for d in cur.description]
-    except Exception as exc:
-        return [], f"sql: {exc}"
-    if not fetched:
-        return [], "sql empty"
-    hours_col: str | None = None
-    if "fault_hours" in columns:
-        hours_col = "fault_hours"
-    elif "fan_runtime_hours" in columns:
-        hours_col = "fan_runtime_hours"
-    if hours_col is None:
-        return [], "no fault_hours column"
-    equip_idx = columns.index("equipment_id")
-    hours_idx = columns.index(hours_col)
-    hours = None
-    for row in fetched:
-        if str(row[equip_idx]) == equipment_id:
-            hours = float(row[hours_idx])
-            break
-    if hours is None:
-        return [], "equipment missing in sql result"
-    if not isinstance(index, pd.DatetimeIndex) or len(index) == 0:
-        return [], "bad index"
-    days = sorted({ts.date().isoformat() for ts in index})
-    if len(days) == 1:
-        day = days[0]
-        return [
-            {
-                "building_id": building_id,
-                "rule_id": rule_id,
-                "equipment_id": equipment_id,
-                "utc_day": day,
-                "fault_seconds": hours * 3600.0,
-                "covered_seconds": float(len(index)) * poll_seconds,
-                "status": "FAULT" if hours > 0 else "OK",
-                "pair_status": "computed",
-                "reason": "",
-            }
-        ], None
-    return [], "aggregate fault_hours spans multiple UTC days; need fault series overlay"
+    if agg_err:
+        return [], agg_err
+    if aggregate_rows and aggregate_rows[0].get("covered_seconds") is None:
+        return [], (
+            "aggregate_only_coverage_unqualified: irregular or multi-day data "
+            "requires fault series overlay (no len(index)*poll fallback)"
+        )
+    return [], "aggregate_only_coverage_unqualified: requires fault series overlay"
 
 
 def apply_fdd_postgres_helpers(conn) -> None:
@@ -628,15 +744,6 @@ def p2_pair_for_si_row(
             "utc_day": utc_day,
             "sql_si_fault_seconds": float(sql_si_fault_seconds),
             "pandas_si_fault_seconds": float(pandas_si_fault_seconds),
-            "sql_si_status": "computed",
-        }
-    if SI_SQL_PACK_AVAILABLE:
-        return {
-            "rule_id": rule_id,
-            "equipment_id": equipment_id,
-            "utc_day": utc_day,
-            "sql_si_fault_seconds": pandas_si_fault_seconds,
-            "pandas_si_fault_seconds": pandas_si_fault_seconds,
             "sql_si_status": "computed",
         }
     return {

@@ -60,6 +60,64 @@ def write_manifest(out_dir: Path, *, meta: dict[str, Any]) -> Path:
     return manifest_path
 
 
+def verify_site_manifest(site_dir: Path) -> tuple[dict[str, Any], list[str]]:
+    """Verify manifest.sha256.json matches on-disk baseline files for one site dir."""
+    errors: list[str] = []
+    manifest_path = site_dir / "manifest.sha256.json"
+    if not manifest_path.is_file():
+        return {}, [f"missing manifest {manifest_path}"]
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {}, [f"manifest JSON invalid: {exc}"]
+    if manifest.get("schema") != "openfdd-si-ip-baseline-manifest-v1":
+        errors.append("manifest schema must be openfdd-si-ip-baseline-manifest-v1")
+    files = manifest.get("files")
+    if not isinstance(files, list):
+        errors.append("manifest files must be a list")
+        return manifest, errors
+    for entry in files:
+        if not isinstance(entry, dict):
+            errors.append("manifest file entry must be an object")
+            continue
+        name = str(entry.get("name") or "")
+        expected = str(entry.get("sha256") or "")
+        path = site_dir / name
+        if not path.is_file():
+            errors.append(f"manifest lists missing file {name}")
+            continue
+        actual = sha256_file(path)
+        if expected and actual != expected:
+            errors.append(f"manifest hash mismatch for {name}")
+        size = entry.get("bytes")
+        if size is not None and int(size) != path.stat().st_size:
+            errors.append(f"manifest size mismatch for {name}")
+    return manifest, errors
+
+
+def validate_fdd_daily_row(row: dict[str, Any]) -> list[str]:
+    """Return field/shape errors for one sql_fdd_daily / live row."""
+    errors: list[str] = []
+    for key in ("building_id", "rule_id", "equipment_id", "utc_day", "status"):
+        if not str(row.get(key, "")).strip():
+            errors.append(f"missing {key}")
+    for field in ("fault_seconds", "covered_seconds"):
+        val = row.get(field)
+        if val is None:
+            errors.append(f"missing {field}")
+            continue
+        try:
+            num = float(val)
+        except (TypeError, ValueError):
+            errors.append(f"non-numeric {field}")
+            continue
+        if num != num or num in (float("inf"), float("-inf")):
+            errors.append(f"non-finite {field}")
+        if num < 0:
+            errors.append(f"negative {field}")
+    return errors
+
+
 def validate_record_shapes(records: dict[str, list[dict[str, Any]]]) -> list[str]:
     """Return human-readable shape errors (empty list = OK)."""
     errors: list[str] = []

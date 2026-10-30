@@ -1,0 +1,30 @@
+{
+  "files": [
+    {
+      "bytes": 111,
+      "name": "live_sample_counts.jsonl.gz",
+      "sha256": "30c3e7855f49ef3bcac41b5c34ee2890ece487196974af7a60cd64a6db2979b2"
+    },
+    {
+      "bytes": 172,
+      "name": "live_sql_si_daily.jsonl.gz",
+      "sha256": "fac760b46080d6eb5d74e9ee8308031cf0dff6cf85060fda05d13c93b6fdc83c"
+    },
+    {
+      "bytes": 107,
+      "name": "sample_counts.jsonl.gz",
+      "sha256": "4c815aafcbd85b237dc498d1bfe6f9f66382e4c34441c3538b55b44bd406eb41"
+    },
+    {
+      "bytes": 168,
+      "name": "sql_fdd_daily.jsonl.gz",
+      "sha256": "c869862d47baadaa6299da51a17fb1aea6fa6acbb64b354d36ded9a1c3e8b7f0"
+    }
+  ],
+  "meta": {
+    "building_id": "SITE_MINI",
+    "window_end": "2026-06-02T00:00:00Z",
+    "window_start": "2026-06-01T00:00:00Z"
+  },
+  "schema": "openfdd-si-ip-baseline-manifest-v1"
+}
