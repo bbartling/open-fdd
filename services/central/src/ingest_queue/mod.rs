@@ -18,6 +18,8 @@ pub(crate) mod replay_horizon;
 mod scale;
 pub(crate) mod schedule;
 mod status;
+#[cfg(test)]
+pub(crate) mod test_schema;
 mod worker;
 
 #[cfg(test)]

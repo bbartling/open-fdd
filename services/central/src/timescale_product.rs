@@ -4862,15 +4862,7 @@ mod elapsed_time_contract {
     }
 
     async fn ensure_schema(tsdb: &Tsdb) {
-        for stmt in crate::db_lifecycle::forward_statements() {
-            sqlx::query(&stmt)
-                .execute(tsdb.pool())
-                .await
-                .unwrap_or_else(|err| {
-                    let preview: String = stmt.chars().take(80).collect();
-                    panic!("schema statement failed ({preview}): {err}");
-                });
-        }
+        crate::test_ddl::apply_forward_schema(tsdb.pool()).await;
     }
 
     async fn run_rules(site: &str, confirm_seconds: u32) -> Value {
