@@ -3,7 +3,7 @@ import argparse, json, math, re, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
-def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres'):
+def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', parameter_controls=None):
     rules = json.loads((ROOT / 'tuning_catalog.json').read_text())['rules']
     rule = next((r for r in rules if r['rule_id'] == rule_id or rule_id in r.get('aliases',[])), None)
     if rule is None:
@@ -11,7 +11,7 @@ def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres'):
     if not math.isfinite(poll_seconds) or poll_seconds < 1:
         raise ValueError('poll_seconds must be finite and >= 1')
     values = json.loads((ROOT / 'runtime_defaults.json').read_text())
-    controls = rule['parameters']
+    controls = parameter_controls if parameter_controls is not None else rule['parameters']
     chosen = {k: d['default'] for k,d in controls.items()}
     for key,value in (overrides or {}).items():
         if key not in controls:

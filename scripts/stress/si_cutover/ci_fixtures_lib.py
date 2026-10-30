@@ -63,6 +63,9 @@ REGISTRY_ROLE_TO_COLUMN: dict[str, str] = {
     "sat_sp": "discharge-air-temp-sp",
     "zone_t": "zone-air-temp",
     "zone_flow": "zone-airflow",
+    "chw_supply_t": "chilled-water-supply-temp",
+    "chw_return_t": "chilled-water-return-temp",
+    "chiller_status": "chiller-status",
     "damper_pct": "damper",
 }
 
@@ -150,6 +153,7 @@ COOKBOOK_DATASETS: tuple[dict[str, str], ...] = (
     {"fixture": "vav1_obvious_fault.jsonl", "building_id": "COOKBOOK_VAV1", "equipment_type": "vav"},
     {"fixture": "vav6_obvious_fault.jsonl", "building_id": "COOKBOOK_VAV6", "equipment_type": "vav"},
     {"fixture": "vav7_obvious_fault.jsonl", "building_id": "COOKBOOK_VAV7", "equipment_type": "vav"},
+    {"fixture": "chw1_obvious_fault.jsonl", "building_id": "COOKBOOK_CHW1", "equipment_type": "chwPlant"},
 )
 
 SYNTH_CASE_DIRS: tuple[str, ...] = (
@@ -256,18 +260,62 @@ def iter_dataset_specs() -> list[DatasetSpec]:
 def _quantity_for_param(spec: dict[str, Any]) -> str | None:
     kind = str(spec.get("kind") or "")
     unit = str(spec.get("unit") or "")
+    if kind in {
+        "absolute_temperature",
+        "temperature_difference",
+        "air_pressure",
+        "hydronic_pressure",
+        "volumetric_flow",
+        "temperature_rate",
+    }:
+        return kind
     if kind == "absolute_temperature":
         return "absolute_temperature"
     if kind == "temperature_difference":
         return "temperature_difference"
-    if kind in ("duration_minutes", "duration_seconds"):
-        return "duration"
-    if kind == "percent":
-        return "dimensionless"
     if unit in ("degF", "degC", "°F", "°C"):
         return "absolute_temperature"
     if unit in ("degF_delta", "degC_delta"):
         return "temperature_difference"
+    if unit in ("in_wc", "inwc", "Pa"):
+        return "air_pressure"
+    if unit in ("psi", "kPa"):
+        return "hydronic_pressure"
+    if unit in ("cfm", "gpm", "L_per_s", "L/s"):
+        return "volumetric_flow"
+    if kind in ("duration_minutes", "duration_seconds"):
+        return "duration"
+    if kind == "percent":
+        return "dimensionless"
+    return None
+
+
+def _imperial_unit_for_quantity(quantity_id: str, *, param_key: str) -> str | None:
+    if quantity_id == "absolute_temperature":
+        return "degF"
+    if quantity_id == "temperature_difference":
+        return "degF_delta"
+    if quantity_id == "air_pressure":
+        return "in_wc"
+    if quantity_id == "hydronic_pressure":
+        return "psi"
+    if quantity_id == "volumetric_flow":
+        return "gpm"
+    if quantity_id == "temperature_rate":
+        return "degF_per_h"
+    return None
+
+
+def _si_source_unit(spec: dict[str, Any], quantity_id: str) -> str | None:
+    unit = str(spec.get("unit") or "")
+    if unit == "pct":
+        unit = "percent"
+    if quantity_id == "temperature_difference" and unit in ("degC", "°C"):
+        return "degC_delta"
+    if quantity_id == "absolute_temperature" and unit in ("degC", "°C"):
+        return "degC"
+    if unit in ("Pa", "kPa", "L_per_s", "L/s", "gpm", "psi", "in_wc", "degF", "degC"):
+        return unit
     return None
 
 
@@ -295,18 +343,77 @@ def convert_params_to_si(
             continue
         if unit in ("percent", "pct", "bool", "min"):
             continue
-        if not unit:
+        if not unit and not q:
             continue
         src_unit = unit
         if q == "temperature_difference" and unit == "degF":
             src_unit = "degF_delta"
         elif q == "temperature_difference" and unit in ("degC", "°C"):
             src_unit = "degC_delta"
+        elif not unit:
+            src_unit = _si_source_unit(spec, q) or unit
         val = float(out[name])
         if param_hook:
             val = param_hook(name, val)
         out[name] = uc.convert_to_canonical(metric, q, val, src_unit)
     return out
+
+
+def convert_params_from_si(
+    rule: dict[str, Any],
+    params: dict[str, float],
+    metric: dict[str, Any],
+    *,
+    param_hook: Callable[[str, float], float] | None = None,
+) -> dict[str, float]:
+    """Registry defaults stored in SI (W4d+) → imperial for IP SQL/pandas."""
+    out = dict(params)
+    for name, spec in (rule.get("parameters") or {}).items():
+        if name not in out:
+            continue
+        if not isinstance(spec, dict):
+            continue
+        kind = str(spec.get("kind") or "")
+        if kind in ("duration_minutes", "duration_seconds", "boolean", "percent"):
+            continue
+        unit = str(spec.get("unit") or "")
+        if unit in ("percent", "pct", "bool", "min", "count"):
+            continue
+        q = _quantity_for_param(spec)
+        if not q:
+            continue
+        target = _imperial_unit_for_quantity(q, param_key=name)
+        if not target:
+            continue
+        val = float(out[name])
+        if param_hook:
+            val = param_hook(name, val)
+        out[name] = uc.convert_from_canonical(metric, q, val, target)
+    return out
+
+
+def resolve_rule_params_ip_si(
+    rule: dict[str, Any],
+    metric: dict[str, Any],
+    *,
+    param_hook: Callable[[str, float], float] | None = None,
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Return (ip_params, si_params) for registry defaults (IP or SI-cutover)."""
+    from scripts.stress.si_cutover.product_sql_params import ip_parameter_controls
+
+    raw = rule_params_from_registry(rule)
+    rid = str(rule.get("rule_id") or "")
+    if ip_parameter_controls(rid) is not None:
+        params_si = dict(raw)
+        if param_hook:
+            params_si = {k: param_hook(k, float(v)) for k, v in params_si.items()}
+        params_ip = convert_params_from_si(rule, params_si, metric)
+        return params_ip, params_si
+    params_ip = dict(raw)
+    if param_hook:
+        params_ip = {k: param_hook(k, float(v)) for k, v in params_ip.items()}
+    params_si = convert_params_to_si(rule, params_ip, metric)
+    return params_ip, params_si
 
 
 def _role_unit(role: str) -> str | None:
@@ -354,9 +461,9 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
         if unit in ("percent", "pct"):
             q = "dimensionless"
         elif unit in ("inWC", "in_wc"):
-            q = "pressure"
+            q = "air_pressure"
         elif unit == "cfm":
-            q = "volumetric_flow_rate"
+            q = "volumetric_flow"
         series = pd.to_numeric(out[col], errors="coerce")
         converted = []
         for v in series:
@@ -371,7 +478,14 @@ def frame_to_si(frame, metric: dict[str, Any], *, value_hook: Callable[[str, flo
             except ValueError:
                 converted.append(v)
         out[col] = converted
-        role_units[str(col)] = "°C" if q == "absolute_temperature" else unit
+        if q == "absolute_temperature":
+            role_units[str(col)] = "°C"
+        elif q == "air_pressure":
+            role_units[str(col)] = "Pa"
+        elif q == "volumetric_flow":
+            role_units[str(col)] = "L/s"
+        else:
+            role_units[str(col)] = unit
     out.attrs["unit_system"] = "metric"
     out.attrs["role_units"] = role_units
     _apply_unit_metadata(out, "metric")
@@ -503,6 +617,7 @@ def build_golden_for_dataset(
         return val
 
     params_by_rule: dict[str, dict[str, float]] = {}
+    params_si_by_rule: dict[str, dict[str, float]] = {}
     eligible_rules: list[dict[str, Any]] = []
     pandas_rows: list[dict[str, Any]] = []
     sql_rows: list[dict[str, Any]] = []
@@ -525,7 +640,13 @@ def build_golden_for_dataset(
             sql_rows.append(dict(na))
             continue
         eligible_rules.append(rule)
-        params_by_rule[rule_id] = rule_params_from_registry(rule)
+        params_ip, params_si = resolve_rule_params_ip_si(
+            rule,
+            metric,
+            param_hook=lambda n, v: _param_hook(rule_id, n, v),
+        )
+        params_by_rule[rule_id] = params_ip
+        params_si_by_rule[rule_id] = params_si
 
     sql_computed, sql_exec_notes = cts.run_sql_ip_for_dataset(
         conn,
@@ -541,6 +662,34 @@ def build_golden_for_dataset(
         raise RuntimeError(
             f"{spec.building_id}: Timescale SQL errors: {'; '.join(sql_exec_notes[:5])}"
         )
+
+    si_frame_global = frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v))
+    plant_eligible = [r for r in eligible_rules if cts.rule_si_sql_shipped(str(r.get("rule_id") or ""))]
+    si_params_by_rule: dict[str, dict[str, float]] = {}
+    for rule in plant_eligible:
+        rid = str(rule.get("rule_id") or "")
+        si_params_by_rule[rid] = params_si_by_rule[rid]
+    si_sql_by_key: dict[tuple[str, str], float] = {}
+    if plant_eligible:
+        si_sql_rows, si_sql_errs = cts.run_sql_si_for_dataset(
+            conn,
+            spec=spec,
+            frame=si_frame_global,
+            equipment_id=spec.equipment_id,
+            rules=plant_eligible,
+            poll_seconds=poll_seconds,
+            params_by_rule=si_params_by_rule,
+        )
+        if si_sql_errs:
+            raise RuntimeError(
+                f"{spec.building_id}: Timescale SQL SI errors: {'; '.join(si_sql_errs[:5])}"
+            )
+        for row in si_sql_rows:
+            if row.get("pair_status") != "computed" or not row.get("utc_day"):
+                continue
+            si_sql_by_key[(str(row.get("rule_id")), str(row.get("utc_day")))] = float(
+                row.get("fault_seconds", 0.0)
+            )
 
     si_rows_for_p1: list[dict[str, Any]] = []
     p2_pairs: list[dict[str, Any]] = []
@@ -563,8 +712,8 @@ def build_golden_for_dataset(
         for row in ip_daily:
             pandas_rows.append(dict(row))
 
-        si_frame = frame_to_si(ip_frame, metric, value_hook=lambda c, v: _value_hook(c, v))
-        params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
+        si_frame = si_frame_global
+        params_si = params_si_by_rule[rule_id]
         si_daily = run_rule_daily_rows(
             rule,
             si_frame,
@@ -586,6 +735,9 @@ def build_golden_for_dataset(
                 continue
             key = si_fault_key(row)
             si_row = si_by_key.get(key)
+            sql_si_fs = None
+            if cts.rule_si_sql_shipped(rule_id):
+                sql_si_fs = si_sql_by_key.get((rule_id, str(row.get("utc_day"))))
             p2_pairs.append(
                 cts.p2_pair_for_si_row(
                     rule_id=rule_id,
@@ -595,6 +747,7 @@ def build_golden_for_dataset(
                         si_row.get("fault_seconds", 0.0) if si_row else 0.0
                     ),
                     pandas_si_missing=si_row is None,
+                    sql_si_fault_seconds=sql_si_fs,
                 )
             )
 
@@ -739,7 +892,6 @@ def recompute_si_daily_for_golden(
     for rule_id, rule in rules_by_id.items():
         if not rule.get("pandas_function"):
             continue
-        params_ip = rule_params_from_registry(rule)
 
         def ph(name: str, val: float) -> float:
             if param_hook:
@@ -751,7 +903,9 @@ def recompute_si_daily_for_golden(
             metric,
             value_hook=lambda c, v: value_hook(building_id, c, v) if value_hook else v,
         )
-        params_si = convert_params_to_si(rule, params_ip, metric, param_hook=lambda n, v: ph(n, v))
+        _params_ip, params_si = resolve_rule_params_ip_si(
+            rule, metric, param_hook=lambda n, v: ph(n, v)
+        )
         if si_param_post_hook:
             params_si = si_param_post_hook(rule_id, params_si)
         si_daily = run_rule_daily_rows(

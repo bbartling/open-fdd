@@ -27,7 +27,7 @@ proof AS (
       WHEN chiller_current IS NOT NULL THEN CASE WHEN chiller_current > 0.5 THEN 1 ELSE 0 END
       WHEN chiller_amps IS NOT NULL THEN CASE WHEN chiller_amps > 0.5 THEN 1 ELSE 0 END
       WHEN chiller_power IS NOT NULL THEN CASE WHEN chiller_power > 0.5 THEN 1 ELSE 0 END
-      WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 1.0 THEN 1 ELSE 0 END
+      WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
       WHEN pump IS NOT NULL THEN CASE WHEN pump > 0.05 THEN 1 ELSE 0 END
       ELSE NULL
     END AS proof_on
