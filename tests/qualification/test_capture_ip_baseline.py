@@ -501,21 +501,69 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
         self.assertEqual(seen, ["RTU_A.fc"])
         self.assertIn("fan-cmd", frame.columns)
 
-    def test_unmapped_role_raises_for_pair_status(self) -> None:
+    def test_unmapped_optional_role_skipped_frame_still_builds(self) -> None:
         points = [
+            {
+                "equipmentId": "RTU_A",
+                "column": "fc",
+                "fddSelection": "fan_cmd",
+                "openfdd_key": "RTU_A.fc",
+            },
             {
                 "equipmentId": "RTU_A",
                 "column": "mystery",
                 "fddSelection": "not_in_golden_xyz",
             },
         ]
-        with self.assertRaises(capture.UnmappedRoleError) as ctx:
-            self._frame_from_points(
-                "RTU_A",
-                points,
-                load_keys={capture.resolve_openfdd_key("RTU_A", "mystery", None)},
-            )
-        self.assertEqual(ctx.exception.skip_counts["skipped_unmapped_role"], 1)
+        frame, skips = self._frame_from_points(
+            "RTU_A",
+            points,
+            load_keys={capture.resolve_openfdd_key("RTU_A", "fc", "RTU_A.fc")},
+        )
+        self.assertEqual(skips["skipped_unmapped_role"], 1)
+        self.assertIn("fan-cmd", frame.columns)
+
+    def test_unmapped_required_role_pair_status(self) -> None:
+        fc1_rules = [r for r in capture.load_rule_registry() if r.get("rule_id") == "FC1"]
+        self.assertEqual(len(fc1_rules), 1)
+        rule = dict(fc1_rules[0])
+        rule["required_roles"] = list(rule.get("required_roles") or []) + ["not_in_golden_xyz"]
+        points = [
+            {"equipmentId": "RTU_A", "column": "fc", "fddSelection": "fan_cmd"},
+        ]
+        http = mock.MagicMock()
+        http.get_json.return_value = {
+            "equipment": [{"equipment_id": "RTU_A", "equip_type": "ahu"}],
+        }
+        with mock.patch.object(capture, "post_sparql", return_value=points):
+            with mock.patch.object(capture, "load_samples_in_window", return_value=[]):
+                rows, _cov, _err, _skips = capture.collect_pandas_fdd_rows(
+                    http,
+                    {},
+                    mock.MagicMock(),
+                    building_id="SITE_GEN",
+                    rules=[rule],
+                    window_start="2026-06-01T00:00:00Z",
+                    window_end="2026-06-01T06:00:00Z",
+                    pandas_max_rules=None,
+                )
+        self.assertTrue(
+            any(r.get("pair_status") == "unmapped_role" for r in rows),
+            rows,
+        )
+
+    def test_all_points_no_role_error_lists_skip_counters(self) -> None:
+        points = [
+            {
+                "equipmentId": "RTU_A",
+                "column": "x1",
+                "fddSelection": "",
+            },
+        ]
+        with self.assertRaises(ValueError) as ctx:
+            self._frame_from_points("RTU_A", points, load_keys=set())
+        self.assertIn("all points skipped", str(ctx.exception))
+        self.assertIn("skipped_no_role=1", str(ctx.exception))
 
     def test_fc1_computes_on_role_id_columns(self) -> None:
         fc1_rules = [r for r in capture.load_rule_registry() if r.get("rule_id") == "FC1"]
@@ -552,6 +600,78 @@ class EquipmentFrameBuilderTest(unittest.TestCase):
         self.assertGreater(coverage.get("computed", 0), 0)
         computed = [r for r in rows if r.get("pair_status") == "computed"]
         self.assertTrue(computed)
+
+
+class TelemetryReadOnlyGuardTest(unittest.TestCase):
+    def test_sample_count_respects_window_end(self) -> None:
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+        cur.fetchone.side_effect = [(100,), (4,), (4,)]
+
+        counts = capture.telemetry_row_counts(
+            conn,
+            "SITE_A",
+            sample_before="2026-10-15T00:00:00Z",
+        )
+        self.assertEqual(counts["sample"], 100)
+        sample_sql = cur.execute.call_args_list[0][0][0]
+        self.assertIn("ts <", sample_sql)
+
+    def test_live_ingest_after_window_does_not_change_guard_count(self) -> None:
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+        cur.fetchone.side_effect = [(100,), (4,), (4,), (100,), (4,), (4,)]
+
+        before = capture.telemetry_row_counts(
+            conn, "SITE_A", sample_before="2026-10-15T00:00:00Z"
+        )
+        after = capture.telemetry_row_counts(
+            conn, "SITE_A", sample_before="2026-10-15T00:00:00Z"
+        )
+        self.assertEqual(before, after)
+
+    def test_write_inside_window_changes_guard_count(self) -> None:
+        conn = mock.MagicMock()
+        cur = mock.MagicMock()
+        conn.cursor.return_value.__enter__ = mock.Mock(return_value=cur)
+        conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+        cur.fetchone.side_effect = [(100,), (4,), (4,), (101,), (4,), (4,)]
+
+        before = capture.telemetry_row_counts(
+            conn, "SITE_A", sample_before="2026-10-15T00:00:00Z"
+        )
+        after = capture.telemetry_row_counts(
+            conn, "SITE_A", sample_before="2026-10-15T00:00:00Z"
+        )
+        self.assertNotEqual(before["sample"], after["sample"])
+
+
+class SqlDailyRollupTest(unittest.TestCase):
+    def test_legacy_window_fraction_spread_is_equal_per_full_day(self) -> None:
+        """Document the pre-fix ``distribute_interval_buckets`` symptom (P0 equal per day)."""
+        window_days = 5
+        total_fault_seconds = 24477.7
+        per_day = total_fault_seconds / window_days
+        self.assertAlmostEqual(per_day, 4895.54, places=1)
+
+    def test_fault_on_single_day_only(self) -> None:
+        import pandas as pd
+
+        start = pd.Timestamp("2026-10-10T08:00:00Z", tz="UTC")
+        idx = pd.date_range(start, periods=8, freq="5min", tz="UTC")
+        idx2 = pd.date_range(start + pd.Timedelta(days=1), periods=8, freq="5min", tz="UTC")
+        full = idx.union(idx2)
+        confirmed = pd.Series(False, index=full)
+        confirmed.iloc[2:6] = True
+        fault_by_day, _ = capture.daily_fault_and_covered_seconds(
+            confirmed, full, poll_seconds=300.0
+        )
+        self.assertGreater(fault_by_day.get("2026-10-10", 0.0), 0.0)
+        self.assertEqual(fault_by_day.get("2026-10-11", 0.0), 0.0)
 
 
 class FddRunBusyRetryTest(unittest.TestCase):

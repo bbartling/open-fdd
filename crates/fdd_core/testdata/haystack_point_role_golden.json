@@ -304,6 +304,34 @@
     "pump_status"
   ],
   [
+    "zone-airflow-sp",
+    "zone_airflow_sp"
+  ],
+  [
+    "return-air-humidity",
+    "ra_h"
+  ],
+  [
+    "burner-stage-1",
+    "burner_stage_1"
+  ],
+  [
+    "cooling-capacity-status",
+    "cooling_capacity_status"
+  ],
+  [
+    "hot-water-system-differential-pressure",
+    "hws_differential_pressure"
+  ],
+  [
+    "system-pump-vfd-signal",
+    "system_pump_vfd_signal"
+  ],
+  [
+    "firing-rate",
+    "firing_rate"
+  ],
+  [
     "fan_cmd",
     "fan_cmd"
   ]

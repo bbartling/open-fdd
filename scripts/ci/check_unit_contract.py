@@ -180,7 +180,10 @@ def check_metadata_only_diff() -> None:
         assert_metadata_only_tuning_diff()
     except (AssertionError, RuntimeError) as exc:
         fail(str(exc))
-    print("PASS registry.yaml and tuning_catalog.json differ from master only by kind/effect and SQL-justified optional_roles additions")
+    print(
+        "PASS registry.yaml and tuning_catalog.json differ from merge-base with the "
+        "default branch only by kind/effect and SQL-justified optional_roles additions"
+    )
 
 
 def main() -> int:

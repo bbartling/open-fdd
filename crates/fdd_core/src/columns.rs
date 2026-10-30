@@ -174,6 +174,11 @@ pub fn haystack_point_to_role(point: &str) -> String {
         "chiller-amps" => "chiller_amps".into(),
         "chiller-current" => "chiller_current".into(),
         "pump-status" => "pump_status".into(),
+        "burner-stage-1" => "burner_stage_1".into(),
+        "cooling-capacity-status" => "cooling_capacity_status".into(),
+        "hot-water-system-differential-pressure" => "hws_differential_pressure".into(),
+        "system-pump-vfd-signal" => "system_pump_vfd_signal".into(),
+        "firing-rate" => "firing_rate".into(),
         other => normalize_role(&other.replace('-', "_")),
     }
 }
