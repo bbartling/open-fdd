@@ -440,6 +440,11 @@ def compare_rows(
     stage: str, cell: str, stem: str, left_name: str, left: list[list[Any]],
     right_name: str, right: list[list[Any]],
 ) -> tuple[int, list[str]]:
+    """Compare keyed rows across every declared output column, not just numerics.
+
+    `STEM_COLUMNS` marks text, booleans, timestamps, and numeric outputs so
+    categorical results such as `hunt_flag` participate in parity too.
+    """
     errors: list[str] = []
     names = [c for c, _k in STEM_COLUMNS[stem]]
     lk: dict[tuple[Any, ...], list[Any]] = {}

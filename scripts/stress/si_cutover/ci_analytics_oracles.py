@@ -67,6 +67,22 @@ def _window_filter(long: pd.DataFrame, ws: str | None, we: str | None) -> pd.Dat
     return out
 
 
+def _frame_window_filter(frame: pd.DataFrame, ws: str | None, we: str | None) -> pd.DataFrame:
+    """Apply the same half-open UTC window to a wide frame as `_window_filter`."""
+    out = frame
+    if ws:
+        start = pd.Timestamp(ws)
+        if start.tzinfo is None:
+            start = start.tz_localize("UTC")
+        out = out[out.index >= start]
+    if we:
+        end = pd.Timestamp(we)
+        if end.tzinfo is None:
+            end = end.tz_localize("UTC")
+        out = out[out.index < end]
+    return out
+
+
 
 
 def oracle_plant_health_inventory(*, equipment_id: str, equip_type: str) -> OracleRowSet:
@@ -204,7 +220,7 @@ def oracle_pid_hunting_proxy(long: pd.DataFrame) -> OracleRowSet:
             )
         )
     rows.sort(key=lambda r: (-(r[5] or 0.0), r[2]))
-    return OracleRowSet(tuple(rows[:2000]), (0, 1, 2), (3, 4, 5), "numeric_parity")
+    return OracleRowSet(tuple(rows[:2000]), (0, 1, 2, 6), (3, 4, 5), "numeric_parity")
 
 
 def oracle_rcx_preset_role_coverage(long: pd.DataFrame) -> OracleRowSet:
@@ -433,7 +449,8 @@ def oracle_bas_vs_web_oat(
 
 
 def oracle_motor_weekly_runtime(
-    si_frame: pd.DataFrame, *, equipment_id: str, equip_type: str
+    si_frame: pd.DataFrame, *, equipment_id: str, equip_type: str,
+    ws: str | None = None, we: str | None = None,
 ) -> OracleRowSet:
     from open_fdd.analytics.core import motor_run_hours_weekly
 
@@ -446,7 +463,8 @@ def oracle_motor_weekly_runtime(
             "pump-cmd": "pump-cmd",
         }
     }
-    weekly = motor_run_hours_weekly({equipment_id: si_frame}, role_map)
+    windowed = _frame_window_filter(si_frame, ws, we)
+    weekly = motor_run_hours_weekly({equipment_id: windowed}, role_map)
     if weekly is None or weekly.empty:
         return OracleRowSet((), (0, 3, 4), (6, 7), "numeric_parity")
     rows: list[tuple[Any, ...]] = []
@@ -519,7 +537,7 @@ def build_oracle_for_stem(
             limit=int(extra.get("limit") or 500),
         ),
         "motor_weekly_runtime": lambda: oracle_motor_weekly_runtime(
-            si_frame, equipment_id=equipment_id, equip_type=equip_type
+            si_frame, equipment_id=equipment_id, equip_type=equip_type, ws=ws, we=we
         ),
     }
     fn = builders.get(stem)

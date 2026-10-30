@@ -69,6 +69,7 @@ scored AS (
   ) stats
     ON stats.n_window >= $5::int
    AND stats.stddev_val IS NOT NULL
+   AND stats.stddev_val > 0
    -- Non-constant window test is exact (min < max); stddev_samp of a constant
    -- window is round-off noise after unit conversion, not a real spread.
    AND stats.max_val > stats.min_val

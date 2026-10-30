@@ -127,6 +127,27 @@ def run_fixtures_gate(
     )
     analytics_results: list[pc.StageResult] = []
     if analytics_scope != set():
+        if analytics_mutation:
+            baseline = list(ap.run_analytics_stages(scope=analytics_scope))
+            baseline_map = {r.stage: r for r in baseline}
+            required = (baseline_map.get("P1-analytics"), baseline_map.get("P2-analytics"))
+            if any(r is None or r.comparisons <= 0 or r.errors for r in required):
+                details = [
+                    f"{r.stage if r else 'missing stage'}: comparisons={r.comparisons if r else 0}, "
+                    f"errors={len(r.errors) if r else 'missing'}"
+                    for r in required
+                ]
+                safe_print(
+                    "FAIL T1284-4: analytics positive control must have nonzero comparisons "
+                    "and no errors before mutation credit (" + "; ".join(details) + ")"
+                )
+                return EXIT_FAIL
+            baseline_comparisons = sum(r.comparisons for r in required if r is not None)
+            record_check(
+                "T1284-4.analytics_positive_control",
+                True,
+                comparisons=baseline_comparisons,
+            )
         hook = ap.t1284_4_analytics_double_conversion if analytics_mutation else None
         analytics_results = list(ap.run_analytics_stages(scope=analytics_scope, param_hook=hook))
     stage_map = {r.stage: r for r in results + analytics_results}
@@ -218,8 +239,11 @@ def run_fixtures_gate(
             )
             return EXIT_FAIL
         ap1 = stage_map.get("P1-analytics")
-        if not ap1 or not ap1.errors:
-            safe_print("FAIL T1284-4: analytics mutation did not produce P1-analytics mismatches")
+        if not ap1 or ap1.comparisons <= 0 or not ap1.errors:
+            safe_print(
+                "FAIL T1284-4: analytics mutation must produce P1-analytics mismatches "
+                "with nonzero comparisons"
+            )
             return EXIT_FAIL
         safe_print(
             f"PASS T1284-4 blocking gate failure under analytics mutation "
