@@ -169,7 +169,7 @@ def render_rule_sql(
         if controls is not None and overrides:
             # SI-renamed keys (parameter_si_rename_map.json) map back to the
             # base-branch IP control names that ``controls`` is keyed by.
-            overrides = {legacy_param_key(k): v for k, v in overrides.items()}
+            overrides = {(k if k in controls else legacy_param_key(k)): v for k, v in overrides.items()}
     return render(
         rule_id,
         poll_seconds=poll_seconds,
