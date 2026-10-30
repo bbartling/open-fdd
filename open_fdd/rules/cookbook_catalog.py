@@ -502,6 +502,9 @@ def _units_map(d: pd.DataFrame) -> dict[str, str]:
 
 
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    from open_fdd.quality import _storage_si
+    from open_fdd.rules.sensor_sweep_catalog import limits_for_haystack_role_si
+
     idx = d.index
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
@@ -512,11 +515,14 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
-        lim = SENSOR_LIMITS[role]
+        lim = limits_for_haystack_role_si(role) if _storage_si(d) else SENSOR_LIMITS[role]
+        if lim is None:
+            raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
+        base_lo, base_hi = lim["lo"], lim["hi"]
         type_scale = _role_type_scale(p, role, kind="range")
         # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
-        mid = (lim["lo"] + lim["hi"]) / 2.0
-        half = (lim["hi"] - lim["lo"]) / 2.0 * max(type_scale, 1e-6)
+        mid = (base_lo + base_hi) / 2.0
+        half = (base_hi - base_lo) / 2.0 * max(type_scale, 1e-6)
         lo, hi = mid - half, mid + half
         # BACnet sensor failures commonly arrive as IEEE +/-Inf. Treat any
         # present non-finite number as a hard range fault before JSON/Parquet
@@ -673,6 +679,19 @@ def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Ser
     return raw.fillna(False) & _gl36_mode_stable(d, p, poll)
 
 
+def _fc1_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fan-gap mode delay only — matches postgres fc1_duct_static_low.sql mode_stable."""
+    delay_min = _f(p, "mode_delay_min", 0.0)
+    if delay_min <= 0 or d.empty:
+        return pd.Series(True, index=d.index)
+    fan_on_min = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
+    fan = _fan(d)
+    on = fan > fan_on_min
+    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
+    off_in_window = (~on).astype(int).rolling(samples, min_periods=1).max().astype(bool)
+    return (on & ~off_in_window).fillna(False)
+
+
 def _fan(d: pd.DataFrame) -> pd.Series:
     # Match production SQL (fan_status then fan_cmd) — Wave J / #875.
     if "fan-status" in d.columns:
@@ -692,7 +711,7 @@ def fc1(d, p, poll):
         & (d["duct-static-pressure"] < d["duct-static-pressure-sp"] - err)
         & (fan >= fan_hi)
     )
-    return _gl36_fault(raw, d, p, poll)
+    return raw.fillna(False) & _fc1_mode_stable(d, p, poll)
 
 
 def fc2(d, p, poll):
@@ -982,11 +1001,12 @@ def econ2(d, p, poll):
 
 def econ4(d, p, poll):
     oa_min_pct = _f(p, "oa_min_pct", 21.0)
+    rat_oat_min = _f(p, "oat_rat_delta_min", 1.2222222222222223)
     fan = _fan(d)
     oa_frac = (d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan) * 100.0
     return (
         (fan > FAN_ON_MIN) & d["mixed-air-temp"].notna() & d["return-air-temp"].notna() & d["outside-air-temp"].notna()
-        & ((d["return-air-temp"] - d["outside-air-temp"]).abs() > 2.2) & (oa_frac < oa_min_pct)
+        & ((d["return-air-temp"] - d["outside-air-temp"]).abs() > rat_oat_min) & (oa_frac < oa_min_pct)
     )
 
 
@@ -1509,10 +1529,10 @@ def trim4(d, p, poll):
 
 def reset1(d, p, poll):
     """SAT SP not tracking the OA reset curve."""
-    err = _f(p, "reset_err_f", 3.0)
-    intercept = _f(p, "reset_sat_at_65", 52.0)
+    err = _f(p, "reset_err_f", 1.666667)
+    intercept = _f(p, "reset_sat_at_65", 11.111111)
     slope = _f(p, "reset_slope", 0.25)
-    oat_ref = _f(p, "reset_oat_ref", 65.0)
+    oat_ref = _f(p, "reset_oat_ref", 18.333333)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
     sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
     expected = intercept + slope * (oat - oat_ref)
@@ -1558,7 +1578,7 @@ def cmd1(d, p, poll):
 
 def oa1(d, p, poll):
     min_oa = _f(p, "min_oa_frac", 0.15)
-    guard = _f(p, "oat_rat_guard", 2.2)
+    guard = _f(p, "oat_rat_guard", 1.2222222222222223)
     oa_frac = (d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan)
     fan = _fan(d)
     return (

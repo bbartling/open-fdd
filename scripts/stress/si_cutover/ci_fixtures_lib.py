@@ -698,6 +698,7 @@ def build_golden_for_dataset(
         for r in eligible_rules
         if cts.sql_si_pack_enabled(str(r.get("rule_id") or ""))
         or cts.rule_si_sql_shipped(str(r.get("rule_id") or ""))
+        or cts.ahu_econ_si_sql_shipped(str(r.get("rule_id") or ""))
     ]
     si_params_by_rule: dict[str, dict[str, float]] = {}
     for rule in si_sql_eligible:

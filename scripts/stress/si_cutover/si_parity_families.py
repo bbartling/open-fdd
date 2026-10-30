@@ -10,6 +10,7 @@ REPO = Path(__file__).resolve().parents[3]
 FAMILIES_PATH = REPO / "tests" / "fixtures" / "si_cutover" / "w4_parity_families.json"
 
 W4C_SI_ZONE_FAMILY = "W4c_si_zone"
+W4B_AHU_ECON_FAMILY = "W4b_ahu_econ"
 
 
 def load_families_doc() -> dict:
@@ -66,3 +67,8 @@ def family_dataset_ids(family: str) -> frozenset[str]:
 def sql_si_pack_enabled(rule_id: str) -> bool:
     """Postgres rules converted to SI storage in the W4c_si_zone family."""
     return rule_id in family_rule_ids(W4C_SI_ZONE_FAMILY)
+
+
+def ahu_econ_si_sql_shipped(rule_id: str) -> bool:
+    """AHU economizer/ventilation rules whose product SQL is SI-native (W4b)."""
+    return rule_id in family_rule_ids(W4B_AHU_ECON_FAMILY)
