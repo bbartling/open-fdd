@@ -4,6 +4,8 @@
 CI default (full matrix, report-only mismatches):
   python scripts/stress/si_parity_gate.py --fixtures-only --report-json si_parity_report.json
 
+Blocking W4 family (W4a AHU fault conditions):
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4a_si_ahu_fc
 Blocking W4 family (W4b AHU economizer):
   python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4b_ahu_econ
 
@@ -27,7 +29,8 @@ if str(_SCRIPTS) not in sys.path:
 
 from helpers import EXIT_BLOCKED, EXIT_FAIL, EXIT_PASS, record_check, run_child, safe_print  # noqa: E402
 from si_cutover import parity_chain as pc  # noqa: E402
-from si_cutover.si_parity_families import W4C_SI_ZONE_FAMILY, resolve_rule_scope  # noqa: E402
+from si_cutover import ci_fixtures_lib as cfl  # noqa: E402
+from si_cutover.si_parity_families import SI_SQL_PACK_FAMILIES, resolve_rule_scope  # noqa: E402
 
 
 def _print_mismatch_table(label: str, table: dict[str, int], *, limit: int = 20) -> None:
@@ -89,9 +92,7 @@ def _blocking_errors(
 def _fc1_t1284_si_param_post_hook(rule_id: str, params: dict[str, float]) -> dict[str, float]:
     if rule_id != "FC1":
         return params
-    out = dict(params)
-    out["eps_dsp"] = float(out.get("eps_dsp", 0.12)) + 248.84
-    return out
+    return cfl.t1284_break_eps_dsp_si(params, rule_id=rule_id)
 
 
 def run_fixtures_gate(
@@ -105,7 +106,7 @@ def run_fixtures_gate(
 ) -> int:
     param_hook = None
     si_post = _fc1_t1284_si_param_post_hook if inject_t1284_4 else None
-    strict_p2 = bool(blocking and family == W4C_SI_ZONE_FAMILY)
+    strict_p2 = bool(blocking and family in SI_SQL_PACK_FAMILIES)
     results = pc.run_fixture_stages(
         scope=scope, strict_p2=strict_p2, si_param_post_hook=si_post
     )

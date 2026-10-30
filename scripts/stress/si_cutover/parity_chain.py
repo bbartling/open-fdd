@@ -1080,11 +1080,9 @@ def verify_vav1_rule_si_threshold_mutation() -> StageResult:
         equipment_type="ahu",
     )
     si_frame = cfl.frame_to_si(ip_frame, metric)
-    params_ip = cfl.rule_params_from_registry(rule)
-    params_si = cfl.convert_params_to_si(rule, params_ip, metric)
-    params_broken = dict(params_si)
+    _params_ip, params_si = cfl.resolve_rule_params_ip_si(rule, metric)
     # +1 in.w.c. in SI (Pa) — must change the fault mask vs golden IP seconds.
-    params_broken["eps_dsp"] = float(params_si.get("eps_dsp", 0.12)) + 248.84
+    params_broken = cfl.t1284_break_eps_dsp_si(params_si, rule_id="FC1")
     poll = float(golden.get("poll_seconds") or 300.0)
 
     def _fault_seconds(result, index) -> float:

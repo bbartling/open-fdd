@@ -26,27 +26,46 @@ if str(ROOT) not in sys.path:
 
 SITE = "SYNTH_PARITY"
 POLL_SECONDS = 300.0
-CONFIRM_SECONDS = 300.0
 SAMPLES = 12
 START = datetime(2026, 6, 1, tzinfo=timezone.utc)
 FAULT_EQUIPMENT = "AHU_FAULT"
 OK_EQUIPMENT = "AHU_OK"
 HOUR_TOLERANCE = 1e-6
 
-SQL_PARAMS = {
-    "POLL_SECONDS": "300",
-    "CONFIRM_SECONDS": "300",
-    "CONFIRM_ROWS": "1",
-    "EPS_DSP": "0.12",
-    "EPS_VFD_SPD": "0.13",
-    "FAN_ON_MIN": "0.01",
-    "MODE_DELAY_MIN": "0",
-    "MODE_DELAY_ROWS": "1",
-    "MODE_DELAY_ROWS_PRECEDING": "0",
-    "REQUIRE_OPERATIONAL_GATE": "1",
-    "MINIMUM_ACTIVE_COVERAGE_PCT": "5",
-    "MAX_GAP_HOURS": "1",
-}
+
+
+def product_rule_ip_params(rule_id: str) -> tuple[dict, dict[str, float]]:
+    """Registry rule and its imperial (IP) params from registry/tuning catalog defaults.
+
+    The synthetic rows in these Timescale checks are stored in IP, so pandas and
+    the rendered SQL both use the IP view of the defaults the product renders.
+    """
+    from scripts.ci import unit_contract_lib as uc
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+
+    rule = next((r for r in cfl.load_rule_registry() if r.get("rule_id") == rule_id), None)
+    if rule is None:
+        raise SystemExit(f"{rule_id} missing from sql/fdd/registry.yaml")
+    params_ip, _params_si = cfl.resolve_rule_params_ip_si(rule, uc.load_json(uc.METRIC_UNITS))
+    return rule, params_ip
+
+
+def render_product_ip_sql(rule_id: str, poll_seconds: float) -> str:
+    """Product render_rule SQL for IP-stored rows, tuned from registry defaults."""
+    from scripts.stress.si_cutover.ci_timescale_sql import render_rule_sql
+    from scripts.stress.si_cutover.product_sql_params import catalog_overrides_from_registry
+
+    rule, params = product_rule_ip_params(rule_id)
+    return render_rule_sql(
+        rule,
+        poll_seconds,
+        overrides=catalog_overrides_from_registry(rule, params),
+        storage="ip",
+    )
+
+
+def fc1_product_params() -> tuple[dict, dict[str, float]]:
+    return product_rule_ip_params("FC1")
 
 
 def synthetic_rows() -> list[dict[str, object]]:
@@ -77,12 +96,8 @@ def pandas_fault_hours() -> dict[str, tuple[int, float]]:
     from open_fdd.rules.base import confirm_fault, hours_true
     from open_fdd.rules.cookbook_catalog import fc1
 
-    params = {
-        "eps_dsp": 0.12,
-        "eps_vfd_spd": 0.13,
-        "mode_delay_min": 0.0,
-        "fan_on_min": 0.01,
-    }
+    _rule, params = fc1_product_params()
+    confirm_seconds = float(params["confirm_seconds"])
     out: dict[str, tuple[int, float]] = {}
     for equipment_id, static, setpoint in (
         (FAULT_EQUIPMENT, 0.20, 1.00),
@@ -99,7 +114,7 @@ def pandas_fault_hours() -> dict[str, tuple[int, float]]:
         )
         raw = fc1(frame, params, POLL_SECONDS)
         confirmed = confirm_fault(
-            raw, poll_seconds=POLL_SECONDS, confirm_seconds=CONFIRM_SECONDS
+            raw, poll_seconds=POLL_SECONDS, confirm_seconds=confirm_seconds
         )
         flags = int(confirmed.fillna(False).astype(bool).sum())
         hours = float(hours_true(confirmed, POLL_SECONDS))
@@ -172,14 +187,7 @@ def bind_current(cur, site: str, equipment_id: str, role: str, openfdd_key: str)
 
 
 def render_fc1() -> str:
-    raw = (ROOT / "sql" / "fdd" / "postgres" / "rules" / "fc1_duct_static_low.sql").read_text(
-        encoding="utf-8"
-    )
-    for key, value in SQL_PARAMS.items():
-        raw = raw.replace("{{" + key + "}}", value)
-    if "{{" in raw:
-        raise SystemExit(f"unrendered FC1 placeholder remains: {raw[raw.find('{{'):raw.find('{{')+40]}")
-    return raw
+    return render_product_ip_sql("FC1", POLL_SECONDS)
 
 
 def connect_with_retry(database_url: str):

@@ -17,6 +17,12 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from open_fdd.rules.mode_delay import (
+    PRODUCT_MODE_DELAY_MIN_DEFAULT,
+    effective_mode_delay_min,
+    fan_restart_stable,
+    mode_delay_rows,
+)
 from open_fdd.rules.sensor_sweep_catalog import (
     flatline_quantity_allowed,
     limits_for_haystack_role,
@@ -457,7 +463,8 @@ CONFIRM_PARAM = lambda default_min=5.0, mx=60.0: CookbookParam(  # noqa: E731
 )
 
 MODE_DELAY_PARAM = lambda: CookbookParam(  # noqa: E731
-    "mode_delay_min", "Mode-change suspension (GL36 default 30)", "min", 0.0, 60.0, 1.0, 0.0, direction="fewer"
+    "mode_delay_min", "Mode-change suspension (product default)", "min", 0.0, 60.0, 1.0,
+    PRODUCT_MODE_DELAY_MIN_DEFAULT, direction="fewer"
 )
 FAN_ON_PARAM = lambda: CookbookParam(  # noqa: E731
     "fan_on_min", "Fan-on command threshold", "frac", 0.0, 0.25, 0.01, FAN_ON_MIN
@@ -641,10 +648,10 @@ def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 # Air handling unit rules (FC1–FC15 + additional patterns)
 # ---------------------------------------------------------------------------
 
-MIX_TOL = 1.15
-SUPPLY_TOL = 1.15
+MIX_TOL = 0.6388888889
+SUPPLY_TOL = 0.6388888889
 AHU_MIN_OA_DPR = 0.05
-DELTA_SUPPLY_FAN = 0.55
+DELTA_SUPPLY_FAN = 0.3055555556
 FAN_ON_MIN = 0.01
 
 
@@ -658,29 +665,13 @@ def _gl36_value(p: dict, key: str, legacy_key: str | None, default: float) -> fl
 
 
 def _gl36_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """False during GL36 ModeDelay after an AHU operating-state change."""
-    delay_min = _f(p, "mode_delay_min", 0.0)
-    if delay_min <= 0 or d.empty:
-        return pd.Series(True, index=d.index)
-    htg = norm_cmd(d["heating-valve"]).fillna(0) if "heating-valve" in d else pd.Series(0.0, index=d.index)
-    clg = norm_cmd(d["cooling-valve"]).fillna(0) if "cooling-valve" in d else pd.Series(0.0, index=d.index)
-    econ = norm_cmd(d["outside-air-damper"]).fillna(0) if "outside-air-damper" in d else pd.Series(0.0, index=d.index)
-    fan = _fan(d)
-    fan_on = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
-    econ_min = _gl36_value(p, "econ_min_pos", None, AHU_MIN_OA_DPR)
-    clg_on = _gl36_value(p, "clg_on_min", None, 0.01)
-    htg_on = _gl36_value(p, "htg_on_min", None, 0.01)
-    state = pd.Series(0, index=d.index, dtype=int)
-    state[(fan > fan_on) & (htg > htg_on) & (clg <= clg_on)] = 1
-    state[(fan > fan_on) & (htg <= htg_on) & (clg <= clg_on) & (econ > econ_min)] = 2
-    state[(fan > fan_on) & (htg <= htg_on) & (clg > clg_on) & (econ > econ_min)] = 3
-    state[(fan > fan_on) & (htg <= htg_on) & (clg > clg_on) & (econ <= econ_min)] = 4
-    changed = state.ne(state.shift()).fillna(False)
-    if len(changed):
-        changed.iloc[0] = False
-    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
-    recent_change = changed.astype(int).rolling(samples, min_periods=1).max().astype(bool)
-    return ~recent_change
+    """False during the product mode-delay holdoff after a fan restart (#1459).
+
+    Matches product SQL (render_rule.py / params.rs) via ``open_fdd.rules.mode_delay``.
+    """
+    delay_min = effective_mode_delay_min(p)
+    fan_on = _fan(d) > _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
+    return fan_restart_stable(fan_on, mode_delay_rows(delay_min, float(poll)))
 
 
 def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
@@ -710,7 +701,7 @@ def _fan(d: pd.DataFrame) -> pd.Series:
 
 
 def fc1(d, p, poll):
-    err = _gl36_value(p, "eps_dsp", "duct_static_err", 0.12)
+    err = float(p["eps_dsp"]) if "eps_dsp" in p else float(p["duct_static_err"])
     speed_err = _gl36_value(p, "eps_vfd_spd", None, 0.13)
     fan_hi = _gl36_value(p, "fan_hi", None, 1.0 - speed_err)
     fan = _fan(d)

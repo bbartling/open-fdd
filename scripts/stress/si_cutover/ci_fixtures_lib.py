@@ -961,3 +961,16 @@ def recompute_si_daily_for_golden(
                 continue
             out[si_fault_key(row)] = float(row.get("fault_seconds", 0))
     return out
+
+
+# T1284-4 mutation: +1 inWC (contract scale, Pa) on the registry's SI eps_dsp.
+T1284_EPS_DSP_OFFSET_PA = 248.84
+
+
+def t1284_break_eps_dsp_si(params_si: dict[str, float], *, rule_id: str) -> dict[str, float]:
+    """Return FC1 SI params with eps_dsp offset; missing eps_dsp is a registry defect."""
+    if "eps_dsp" not in params_si:
+        raise KeyError(f"rule {rule_id}: SI parameters missing 'eps_dsp'")
+    out = dict(params_si)
+    out["eps_dsp"] = float(params_si["eps_dsp"]) + T1284_EPS_DSP_OFFSET_PA
+    return out
