@@ -1,17 +1,20 @@
-"""W5c: web weather declared in °F is normalized to SI once before economizer weather summary."""
+"""W5c: web weather declared in °F is normalized to SI once at the storage boundary.
+
+Economizer weather-summary thresholds and resolve_web_drybulb dewpoint SI fixes
+live on W4f (#1447) — do not patch core.py::economizer_weather_summary here.
+"""
 
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from open_fdd.analytics.core import economizer_weather_summary
 from open_fdd.rules.economizer_weather import resolve_web_drybulb_dewpoint
 from open_fdd.rules.runner import merge_weather
 from open_fdd.units.convert import source_temperature_to_si
 
 
-def test_web_oat_declared_fahrenheit_not_double_converted_for_weather_summary():
+def test_web_oat_declared_fahrenheit_not_double_converted_at_merge():
     idx = pd.date_range("2026-06-01", periods=6, freq="5min", tz="UTC")
     si_oat = source_temperature_to_si(60.0, "°F")
     si_dp = source_temperature_to_si(45.0, "°F")
@@ -39,11 +42,3 @@ def test_web_oat_declared_fahrenheit_not_double_converted_for_weather_summary():
 
     wrong_double = source_temperature_to_si(float(db.iloc[0]), "°F")
     assert wrong_double < si_oat - 1.0
-
-    summary = economizer_weather_summary(
-        {"AHU_1": merged},
-        {"AHU_1": {"equipType": "ahu"}},
-        weather=weather,
-    )
-    assert not summary.empty
-    assert summary.iloc[0]["equipment_id"] == "AHU_1"

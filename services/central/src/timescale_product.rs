@@ -3261,8 +3261,8 @@ fn metric_payload(
                     "unsupported_output_kind",
                 ));
             }
-            let canonical = fdd_core::units_contract::MetricUnitsContract::load_embedded()?
-                .canonical_unit(quantity_id)?;
+            let contract = fdd_core::units_contract::MetricUnitsContract::load_embedded()?;
+            let canonical = contract.canonical_unit(quantity_id)?;
             if declared.unit != canonical {
                 return Ok(not_assessed_metric_payload(
                     name,

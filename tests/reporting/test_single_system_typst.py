@@ -553,9 +553,12 @@ def test_metric_unit_labels():
     assert report_units_map("imperial")["duct-static-pressure"] == "in. w.c."
     assert "10°C" in econ_scatter_caption("°C")
     frame = pd.DataFrame({"outside-air-temp": [20.0]})
-    stamped = stamp_display_units(frame, {"unit_system": "si", "units": {"duct-static-pressure": "Pa"}})
+    stamped = stamp_display_units(
+        frame,
+        {"display_units": "si", "units": {"duct-static-pressure": "Pa"}},
+    )
     assert stamped["outside-air-temp"] == "°C"
-    assert frame.attrs["unit_system"] == "si"
+    assert frame.attrs["display_units"] == "si"
 
 
 def _write_device(
@@ -578,7 +581,15 @@ def _write_device(
         lines.append(",".join(values))
     (folder / "history_wide.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (folder / "column_map.json").write_text(
-        json.dumps({"equipType": equip_type, "equip": equip, "points": points}),
+        json.dumps(
+            {
+                "equipType": equip_type,
+                "equip": equip,
+                "points": points,
+                "storage_abi": "metric-c-v2",
+                "display_units": "imperial",
+            }
+        ),
         encoding="utf-8",
     )
 
