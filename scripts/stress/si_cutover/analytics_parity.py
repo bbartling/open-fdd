@@ -44,7 +44,7 @@ STALE_AGE = dt.timedelta(hours=24)
 STEM_COLUMNS: dict[str, tuple[tuple[str, str], ...]] = {
     "bas_vs_web_oat": (
         ("ts", "key"), ("equipment_id", "key"), ("bas_oa_t", "abs:oa_t"),
-        ("web_oa_t", "abs:web_oa_t"), ("delta_f", "delta:oa_t"),
+        ("web_oa_t", "abs:web_oa_t"), ("delta_c", "delta:oa_t"),
     ),
     "diurnal_hourly": (
         ("equipment_id", "key"), ("role", "key"), ("openfdd_key", "key"), ("hour_utc", "key"),
