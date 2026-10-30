@@ -71,13 +71,13 @@ vi.mock("../api/analyticsApi", () => ({
     points: [
       {
         timestamp_utc: "2024-01-01T00:00:00Z",
-        bas_oat_f: 40,
-        web_oat_f: 42,
+        bas_oat_c: 40,
+        web_oat_c: 42,
       },
       {
         timestamp_utc: "2024-01-01T00:05:00Z",
-        bas_oat_f: 41,
-        web_oat_f: 43,
+        bas_oat_c: 41,
+        web_oat_c: 43,
       },
     ],
     rows: [],
@@ -810,8 +810,8 @@ describe("FDD weather + econ helpers", () => {
     const { basOverlay } = await import("../api/centralOverview");
     const overlay = basOverlay(
       [
-        { timestamp_utc: "t0", bas_oat_f: 40, web_oat_f: 42 },
-        { timestamp_utc: "t1", bas_oat_f: 41, web_oat_f: 43 },
+        { timestamp_utc: "t0", bas_oat_c: 40, web_oat_c: 42 },
+        { timestamp_utc: "t1", bas_oat_c: 41, web_oat_c: 43 },
       ],
       5,
     )!;

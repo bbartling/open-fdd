@@ -88,7 +88,7 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "open-fdd-anomaly" not in typ
     assert "how to run" not in typ.lower()
     assert "FC1" in typ
-    assert "ECON-1" in typ
+    assert "SCHED-247" in typ
     assert "FC2" not in typ
     assert result.devices == ["AHU_1"]
     pngs = list((out / "figures").glob("*.png"))
@@ -123,7 +123,8 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "sensor_checks" in summary["ai_comment_slots"]
     assert "device_folder" in summary["history_sources"]
     health = {row["role"]: row for row in summary["devices"][0]["health"]}
-    assert health["outside-air-temp"]["out_of_range"] >= 1
+    assert health["outside-air-temp"]["max"] >= 50.0
+    assert health["outside-air-temp"]["out_of_range"] == 0
     fault_ids = {row["rule_id"] for row in summary["devices"][0]["faults"]}
     assert "FC1" in fault_ids
     assert "ECON-1" in fault_ids
@@ -553,9 +554,12 @@ def test_metric_unit_labels():
     assert report_units_map("imperial")["duct-static-pressure"] == "in. w.c."
     assert "10°C" in econ_scatter_caption("°C")
     frame = pd.DataFrame({"outside-air-temp": [20.0]})
-    stamped = stamp_display_units(frame, {"unit_system": "si", "units": {"duct-static-pressure": "Pa"}})
+    stamped = stamp_display_units(
+        frame,
+        {"display_units": "si", "units": {"duct-static-pressure": "Pa"}},
+    )
     assert stamped["outside-air-temp"] == "°C"
-    assert frame.attrs["unit_system"] == "si"
+    assert frame.attrs["display_units"] == "si"
 
 
 def _write_device(
@@ -578,7 +582,15 @@ def _write_device(
         lines.append(",".join(values))
     (folder / "history_wide.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (folder / "column_map.json").write_text(
-        json.dumps({"equipType": equip_type, "equip": equip, "points": points}),
+        json.dumps(
+            {
+                "equipType": equip_type,
+                "equip": equip,
+                "points": points,
+                "storage_abi": "metric-c-v2",
+                "display_units": "imperial",
+            }
+        ),
         encoding="utf-8",
     )
 

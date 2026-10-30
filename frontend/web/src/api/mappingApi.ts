@@ -63,7 +63,7 @@ export interface PackageMappingResponse {
   error?: string;
   hint?: string;
   building_id?: string;
-  unit_system?: string;
+  display_units?: string;
   equipment_ids?: string[];
   equipment?: MappingEquipment[];
   session_role_map?: Record<string, Record<string, string>>;
@@ -92,9 +92,9 @@ export interface SessionConfigResponse {
 
 export interface SessionConfig {
   schema_version?: string;
-  unit_system?: string;
+  display_units?: "imperial" | "metric" | "si";
   prefer_web_oat?: boolean;
-  chw_leave_max_f?: number;
+  chw_leave_max?: number;
   role_map?: Record<string, Record<string, string>>;
   params?: Record<string, Record<string, number>>;
   /** When set, FDD runs honor `require_operational_gate` on rules that declare it. */
@@ -212,7 +212,7 @@ export function buildMappingManifest(
       schema: "openfdd_data_model_v1",
       generated_at: new Date().toISOString(),
       building_id: inventory.building_id,
-      unit_system: inventory.unit_system,
+      display_units: inventory.display_units,
       validation: inventory.validation,
       warnings: inventory.warnings ?? [],
       equipment: (inventory.equipment ?? []).map((eq) => ({

@@ -30,7 +30,7 @@ import {
 import { naturalCompare } from "../lib/naturalSort";
 
 export const RULES_UPDATED_EVENT = "openfdd:rules-updated";
-const UNITS_KEY = "openfdd.ui.unit_system";
+const UNITS_KEY = "openfdd.ui.display_units";
 
 function familyOf(ruleId: string): string {
   if (/^FC\d+/i.test(ruleId)) return "FC";

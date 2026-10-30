@@ -172,9 +172,9 @@ class SessionConfig(BaseModel):
     """
 
     schema_version: str = SESSION_SCHEMA
-    unit_system: str | None = None
+    display_units: str | None = None
     prefer_web_oat: bool | None = None
-    chw_leave_max_f: float | None = None
+    chw_leave_max: float | None = None
     use_mech_cooling_status_proof: bool | None = True
     include_ahu_chw_valve: bool | None = False  # deprecated; apply path forces False
     role_map: dict[str, dict[str, str]] | None = None
@@ -187,22 +187,22 @@ class SessionConfig(BaseModel):
             raise ValueError(f"session schema_version must be {SESSION_SCHEMA!r}")
         return SESSION_SCHEMA if v == "v1" else v
 
-    @field_validator("unit_system")
+    @field_validator("display_units")
     @classmethod
     def _units(cls, v: str | None) -> str | None:
         if v is None:
             return v
-        if v not in {"imperial", "metric"}:
-            raise ValueError("unit_system must be imperial or metric")
+        if v not in {"imperial", "metric", "si"}:
+            raise ValueError("display_units must be imperial, metric, or si")
         return v
 
-    @field_validator("chw_leave_max_f")
+    @field_validator("chw_leave_max")
     @classmethod
     def _leave(cls, v: float | None) -> float | None:
         if v is None:
             return v
-        if not (35.0 <= float(v) <= 50.0):
-            raise ValueError("chw_leave_max_f out of range (35–50 °F)")
+        if not (1.6666666667 <= float(v) <= 10.0):
+            raise ValueError("chw_leave_max out of range (1.67–10 °C)")
         return float(v)
 
 

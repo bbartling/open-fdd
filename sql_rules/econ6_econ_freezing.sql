@@ -31,7 +31,7 @@ base AS (
     CAST(CASE
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN web_oa_t IS NULL OR oa_d IS NULL THEN 0
-      WHEN web_oa_t < {{ECON6_OAT_MAX_F}} AND oa_d > {{ECON6_DAMPER_MAX}} THEN 1
+      WHEN web_oa_t < {{ECON6_OAT_MAX}} AND oa_d > {{ECON6_DAMPER_MAX}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h

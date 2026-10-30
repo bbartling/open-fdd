@@ -3,7 +3,7 @@
 //! Unit/quantity resolution is intentionally small and binding-driven so the Wave 2c
 //! point overlay can supply overrides without changing call sites.
 
-/// Hard range / spike limits per physical quantity (imperial-f-v1 pack ABI).
+/// Hard range / spike limits per physical quantity, in canonical SI units.
 #[derive(Debug, Clone, Copy)]
 pub struct QuantityLimits {
     pub lo: f64,
@@ -12,39 +12,39 @@ pub struct QuantityLimits {
 }
 
 const TEMP: QuantityLimits = QuantityLimits {
-    lo: -60.0,
-    hi: 130.0,
-    spike: 36.0,
+    lo: -51.1111111111,
+    hi: 54.4444444444,
+    spike: 20.0,
 };
 const TEMP_ZONE: QuantityLimits = QuantityLimits {
-    lo: 40.0,
-    hi: 100.0,
-    spike: 12.0,
+    lo: 4.4444444444,
+    hi: 37.7777777778,
+    spike: 6.6666666667,
 };
 const TEMP_MAT: QuantityLimits = QuantityLimits {
-    lo: -20.0,
-    hi: 110.0,
-    spike: 25.0,
+    lo: -28.8888888889,
+    hi: 43.3333333333,
+    spike: 13.8888888889,
 };
 const TEMP_SAT: QuantityLimits = QuantityLimits {
-    lo: 30.0,
-    hi: 150.0,
-    spike: 40.0,
+    lo: -1.1111111111,
+    hi: 65.5555555556,
+    spike: 22.2222222222,
 };
 const TEMP_CHW_S: QuantityLimits = QuantityLimits {
-    lo: 30.0,
-    hi: 80.0,
-    spike: 20.0,
+    lo: -1.1111111111,
+    hi: 26.6666666667,
+    spike: 11.1111111111,
 };
 const TEMP_CHW_R: QuantityLimits = QuantityLimits {
-    lo: 30.0,
-    hi: 90.0,
-    spike: 20.0,
+    lo: -1.1111111111,
+    hi: 32.2222222222,
+    spike: 11.1111111111,
 };
 const TEMP_HW: QuantityLimits = QuantityLimits {
-    lo: 40.0,
-    hi: 220.0,
-    spike: 60.0,
+    lo: 4.4444444444,
+    hi: 104.4444444444,
+    spike: 33.3333333333,
 };
 const RH: QuantityLimits = QuantityLimits {
     lo: 0.0,
@@ -52,9 +52,9 @@ const RH: QuantityLimits = QuantityLimits {
     spike: 25.0,
 };
 const AIR_P: QuantityLimits = QuantityLimits {
-    lo: -1.0,
-    hi: 8.0,
-    spike: 2.0,
+    lo: -249.08891,
+    hi: 1992.71128,
+    spike: 498.17782,
 };
 
 fn norm_token(s: &str) -> String {
@@ -175,10 +175,7 @@ fn unit_declares_quantity(unit: Option<&str>, quantity: &str) -> bool {
     let t = norm_token(raw);
     match quantity {
         "absolute_temperature" => {
-            matches!(
-                t.as_str(),
-                "f" | "degf" | "fahrenheit" | "c" | "degc" | "celsius"
-            )
+            matches!(t.as_str(), "c" | "degc" | "celsius")
         }
         "relative_humidity" => {
             matches!(
@@ -187,8 +184,7 @@ fn unit_declares_quantity(unit: Option<&str>, quantity: &str) -> bool {
             ) || raw.contains('%')
         }
         "air_pressure" => {
-            matches!(t.as_str(), "inwc" | "inh2o" | "inw.c." | "pa" | "pascal")
-                || raw.contains("w.c")
+            matches!(t.as_str(), "pa" | "pascal")
         }
         _ => false,
     }
@@ -220,5 +216,16 @@ mod tests {
     fn no_unit_not_assessed() {
         assert!(!sweep_assessable_sql_role("ra_h", None));
         assert!(sweep_assessable_sql_role("ra_h", Some("%RH")));
+        assert!(!sweep_assessable_sql_role("oa_t", Some("degF")));
+        assert!(sweep_assessable_sql_role("oa_t", Some("degC")));
+        assert!(!sweep_assessable_sql_role("duct_static", Some("inH2O")));
+        assert!(sweep_assessable_sql_role("duct_static", Some("Pa")));
+    }
+
+    #[test]
+    fn temperature_limits_are_canonical_si() {
+        let limits = limits_for_haystack_role("zone-air-temp").expect("limits");
+        assert!((limits.lo - 4.4444444444).abs() < 1e-9);
+        assert!((limits.hi - 37.7777777778).abs() < 1e-9);
     }
 }

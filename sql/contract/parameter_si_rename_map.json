@@ -1,9 +1,8 @@
 {
-  "schema": "openfdd-parameter-si-rename-v1",
+  "schema": "openfdd-parameter-si-rename-v2",
   "notes": [
-    "One-to-one map from current registry/tuning_catalog parameter keys to SI-first names.",
-    "SQL placeholders and saved rule_config keys stay on the legacy names until W2c migration.",
-    "W2a adds kind metadata only; W2c writes new revisions using the si_key values."
+    "One-time compatibility map from historical saved rule_config keys to SI-first parameter keys.",
+    "Current registry, tuning, and oracle catalogs use the SI-first names; old keys are read only by the token-gated cutover migration."
   ],
   "renames": {
     "approach_max_f": "approach_max",
@@ -17,6 +16,37 @@
     "mech_oat_max_f": "mech_oat_max",
     "pass_delta_f": "pass_delta",
     "preheat_over_f": "preheat_over",
-    "reset_err_f": "reset_err"
+    "reset_err_f": "reset_err",
+    "sat_band_f": "sat_band"
+  },
+  "legacy_units": {
+    "approach_max_f": "degF_delta",
+    "coil_delta_f": "degF_delta",
+    "comfort_high_f": "degF",
+    "comfort_low_f": "degF",
+    "deadband_c": "degC_delta",
+    "delta_f": "degF_delta",
+    "econ6_oat_max_f": "degF",
+    "excess_beyond_approach_f": "degF_delta",
+    "mech_oat_max_f": "degF",
+    "pass_delta_f": "degF_delta",
+    "preheat_over_f": "degF_delta",
+    "reset_err_f": "degF_delta",
+    "sat_band_f": "degF_delta"
+  },
+  "quantities": {
+    "approach_max_f": "temperature_difference",
+    "coil_delta_f": "temperature_difference",
+    "comfort_high_f": "absolute_temperature",
+    "comfort_low_f": "absolute_temperature",
+    "deadband_c": "temperature_difference",
+    "delta_f": "temperature_difference",
+    "econ6_oat_max_f": "absolute_temperature",
+    "excess_beyond_approach_f": "temperature_difference",
+    "mech_oat_max_f": "absolute_temperature",
+    "pass_delta_f": "temperature_difference",
+    "preheat_over_f": "temperature_difference",
+    "reset_err_f": "temperature_difference",
+    "sat_band_f": "temperature_difference"
   }
 }

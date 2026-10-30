@@ -59,41 +59,35 @@ def test_economizer_delta_threshold_scales_with_display():
     assert economizer_identifiable_delta_min("si") == pytest.approx(5.555556, rel=1e-5)
 
 
-def test_frame_for_display_converts_legacy_imperial_to_si():
+def test_frame_for_display_rejects_legacy_or_undeclared_storage():
     import pandas as pd
 
     frame = pd.DataFrame({"outside-air-temp": [32.0, 50.0]})
+    with pytest.raises(ValueError, match="missing storage_abi"):
+        frame_for_display(frame, "si")
     frame.attrs["storage_abi"] = "imperial-f-v1"
-    shown = frame_for_display(frame, "si")
-    assert shown["outside-air-temp"].iloc[0] == pytest.approx(0.0, abs=1e-6)
-    assert shown.attrs["units_map"]["outside-air-temp"] == "°C"
+    with pytest.raises(ValueError, match="unsupported storage_abi"):
+        frame_for_display(frame, "si")
 
 
-def test_t1284_6_legacy_fixture_fault_parity_across_display_modes(tmp_path):
-    out_imperial = tmp_path / "imperial"
-    out_si = tmp_path / "si"
-    build_single_system_report(FIXTURE, out_imperial, month="2026-06", units="imperial")
-    build_single_system_report(FIXTURE, out_si, month="2026-06", units="si")
-    summary_i = json.loads((out_imperial / "report_summary.json").read_text(encoding="utf-8"))
-    summary_s = json.loads((out_si / "report_summary.json").read_text(encoding="utf-8"))
-    faults_i = summary_i["devices"][0]["faults"]
-    faults_s = summary_s["devices"][0]["faults"]
-    assert {row["rule_id"]: row["fault_hours"] for row in faults_i} == {
-        row["rule_id"]: row["fault_hours"] for row in faults_s
-    }
-    assert summary_i["devices"][0]["display_units"] == "imperial"
-    assert summary_s["devices"][0]["display_units"] == "si"
-    typ_i = (out_imperial / "report.typ").read_text(encoding="utf-8")
-    typ_s = (out_si / "report.typ").read_text(encoding="utf-8")
-    assert "10°F" in typ_i or "10° F" in typ_i or "10°F" in summary_i["devices"][0]["scatter_caption"]
-    assert "°C" in summary_s["devices"][0]["scatter_caption"]
+def test_t1284_6_undeclared_storage_fixture_is_rejected(tmp_path):
+    undeclared = tmp_path / "undeclared_fixture"
+    shutil.copytree(FIXTURE, undeclared)
+    column_map = json.loads((undeclared / "column_map.json").read_text(encoding="utf-8"))
+    column_map.pop("storage_abi", None)
+    (undeclared / "column_map.json").write_text(
+        json.dumps(column_map, indent=2) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="missing storage_abi"):
+        build_single_system_report(undeclared, tmp_path / "out", month="2026-06", units="si")
 
 
 @pytest.mark.skipif(shutil.which("typst") is None, reason="typst is not on PATH")
 def test_t1284_6_compiles_in_both_display_modes(tmp_path):
+    _build_si_fixture()
     for units in ("imperial", "si"):
         out = tmp_path / units
-        result = build_single_system_report(FIXTURE, out, month="2026-06", units=units, compile_pdf=True)
+        result = build_single_system_report(SI_FIXTURE, out, month="2026-06", units=units, compile_pdf=True)
         assert result.pdf_path is not None
         assert result.pdf_path.is_file()
         assert result.pdf_path.stat().st_size > 500

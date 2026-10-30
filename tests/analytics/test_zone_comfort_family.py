@@ -14,7 +14,8 @@ from open_fdd.analytics.rcx_plots import (
 
 def _zone(temp: float) -> pd.DataFrame:
     idx = pd.date_range("2026-01-05 10:00", periods=4, freq="h", tz="America/Chicago")
-    return pd.DataFrame({"zt": [temp, temp, 72.0, 72.0]}, index=idx)
+    to_c = lambda value: (value - 32.0) * 5.0 / 9.0
+    return pd.DataFrame({"zt": [to_c(temp), to_c(temp), to_c(72.0), to_c(72.0)]}, index=idx)
 
 
 def test_ranking_includes_stamped_zone_terminals_and_drops_wrong_stamp():
@@ -46,8 +47,8 @@ def test_ranking_includes_stamped_zone_terminals_and_drops_wrong_stamp():
         frames,
         role_map,
         schedule=OccupancySchedule(),
-        comfort_low_f=70.0,
-        comfort_high_f=75.0,
+        comfort_low=21.111111,
+        comfort_high=23.888889,
         equipment_types=ZONE_TERMINAL_TYPES,
     )
     ids = set(ranked["equipment_id"])
@@ -95,8 +96,8 @@ def test_prefix_ids_are_not_a_zone_plot_filter():
         frames,
         role_map,
         schedule=OccupancySchedule(),
-        comfort_low_f=70.0,
-        comfort_high_f=75.0,
+        comfort_low=21.111111,
+        comfort_high=23.888889,
         equipment_types=ZONE_TERMINAL_TYPES,
     )
     assert ranked.empty

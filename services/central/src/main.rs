@@ -3,7 +3,6 @@
 mod actions;
 mod actions_scope;
 mod admin_cp;
-mod admitted_sample;
 mod afdd_scheduler;
 mod analytics;
 #[cfg(test)]

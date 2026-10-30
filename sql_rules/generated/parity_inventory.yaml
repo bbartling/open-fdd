@@ -554,9 +554,19 @@ matrix:
   datafusion_sql_implementation: fc1_duct_static_low.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc1
   test_coverage: &id042
+  - tests/analytics/test_equipment_stamp.py
+  - tests/ci/test_unit_contract_si_cutover_diff.py
+  - tests/qualification/test_capture_ip_baseline.py
+  - tests/qualification/test_fc_tolerance_param_kinds.py
+  - tests/qualification/test_mode_delay_shared.py
+  - tests/qualification/test_product_sql_params.py
+  - tests/qualification/test_si_parity_gate_blocking.py
+  - tests/qualification/test_stress_evidence_integrity.py
+  - tests/qualification/test_stress_gate_fail_closed.py
   - tests/reporting/test_single_system_typst.py
   - tests/rules/test_evidence_json.py
   - tests/test_wattlab_parity_diff.py
+  - tests/units/test_unit_contract_metadata_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -1696,6 +1706,7 @@ matrix:
   datafusion_sql_implementation: sat_high_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc13
   test_coverage: &id114
+  - tests/qualification/test_fc_tolerance_param_kinds.py
   - tests/rules/test_parity_inventory.py
   parity_status: sql_screening
   known_semantic_differences: 'aliases: FC13 (not independent rules)'
@@ -1943,7 +1954,8 @@ matrix:
   pandas_implementation: fc15
   datafusion_sql_implementation: fc15_hw_coil_dt_inactive.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fc15
-  test_coverage: &id126 []
+  test_coverage: &id126
+  - tests/qualification/test_fc_tolerance_param_kinds.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -1997,6 +2009,8 @@ matrix:
   datafusion_sql_implementation: ahu_satdev.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-satdev
   test_coverage: &id132
+  - tests/qualification/test_stress_gate_fail_closed.py
+  - tests/rules/test_sql_quality_contract.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -2059,6 +2073,7 @@ matrix:
   datafusion_sql_implementation: ahu_ducthi.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi
   test_coverage: &id138
+  - tests/qualification/test_stress_gate_fail_closed.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -2404,7 +2419,8 @@ matrix:
   pandas_implementation: econ4
   datafusion_sql_implementation: econ4_low_oa_frac.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#econ-4
-  test_coverage: &id174 []
+  test_coverage: &id174
+  - tests/qualification/test_si_parity_gate_blocking.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -2449,7 +2465,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    preheat_over_f:
+    preheat_over:
       default: 2.2
       unit: degF
       min: 0.5
@@ -2509,7 +2525,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    econ6_oat_max_f:
+    econ6_oat_max:
       default: 25.0
       unit: degF
       min: 15.0
@@ -2630,7 +2646,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    mech_oat_max_f:
+    mech_oat_max:
       default: 60.0
       unit: degF
       min: 45.0
@@ -2746,7 +2762,7 @@ matrix:
       max: 1
       step: 0.05
       label: Valve open threshold
-    coil_delta_f:
+    coil_delta:
       default: 5.4
       unit: degF
       min: 1
@@ -2808,7 +2824,7 @@ matrix:
   - fan_cmd
   operational_proof_roles: &id226 []
   default_thresholds: &id227
-    pass_delta_f:
+    pass_delta:
       default: 5.4
       unit: degF
       min: 1
@@ -2839,7 +2855,7 @@ matrix:
   - fan_cmd
   operational_proof_roles: &id232 []
   default_thresholds: &id233
-    pass_delta_f:
+    pass_delta:
       default: 5.4
       unit: degF
       min: 1
@@ -2939,7 +2955,7 @@ matrix:
   optional_roles: &id249 []
   operational_proof_roles: &id250 []
   default_thresholds: &id251
-    deadband_c:
+    deadband:
       default: 1
       unit: degC
       min: 0
@@ -2950,6 +2966,7 @@ matrix:
   datafusion_sql_implementation: fcu_deadband.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#fcu-deadband
   test_coverage: &id252
+  - tests/ci/test_unit_contract_si_cutover_diff.py
   - tests/rules/test_fcu_family.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -2986,7 +3003,7 @@ matrix:
   known_semantic_differences: ''
   difference_class: none
 - rule_id: VAV-1
-  title: Zone comfort band violation hours with confirm window
+  title: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2
   equipment_types: &id259 []
   required_roles: &id260
   - zone_t
@@ -3029,6 +3046,13 @@ matrix:
       max: 85.0
       step: 0.5
       label: Zone high
+    require_occupied:
+      default: 1.0
+      unit: bool
+      min: 0.0
+      max: 1.0
+      step: 1.0
+      label: Require occupied
     confirm_seconds:
       default: 900
       unit: sec
@@ -3040,7 +3064,11 @@ matrix:
   datafusion_sql_implementation: vav1_comfort_fault.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-1
   test_coverage: &id264
+  - tests/analytics/test_equipment_stamp.py
+  - tests/ci/test_unit_contract_si_cutover_diff.py
   - tests/rules/test_quality.py
+  - tests/rules/test_vav1_occupancy.py
+  - tests/rules/test_vav1_t1407.py
   - tests/test_wattlab_parity_diff.py
   parity_status: sql_screening
   known_semantic_differences: ''
@@ -3092,7 +3120,8 @@ matrix:
   pandas_implementation: vav2
   datafusion_sql_implementation: vav2_night_setback.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-2
-  test_coverage: &id270 []
+  test_coverage: &id270
+  - tests/rules/test_vav1_occupancy.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -3160,7 +3189,9 @@ matrix:
   pandas_implementation: vav_3
   datafusion_sql_implementation: vav3_excessive_reheat.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#vav-3
-  test_coverage: &id276 []
+  test_coverage: &id276
+  - tests/ci/test_unit_contract_si_cutover_diff.py
+  - tests/units/test_ip_unit_declaration.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -3438,7 +3469,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    delta_f:
+    delta:
       default: 8.0
       unit: degF
       min: 2.0
@@ -3768,7 +3799,8 @@ matrix:
   pandas_implementation: chw_4
   datafusion_sql_implementation: chw4_flow_high.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#chw-4
-  test_coverage: &id336 []
+  test_coverage: &id336
+  - tests/units/test_ip_unit_declaration.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -3966,7 +3998,7 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    approach_max_f:
+    approach_max:
       default: 8.0
       unit: degF
       min: 5.0
@@ -4036,7 +4068,7 @@ matrix:
       max: 15.0
       step: 0.5
       label: Design approach
-    excess_beyond_approach_f:
+    excess_beyond_approach:
       default: 5.0
       unit: degF
       min: 2.0
@@ -4175,7 +4207,8 @@ matrix:
   pandas_implementation: trim_3
   datafusion_sql_implementation: trim3_hwst.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#trim-3
-  test_coverage: &id378 []
+  test_coverage: &id378
+  - tests/units/test_registry_role_diff_guard.py
   parity_status: sql_screening
   known_semantic_differences: ''
   difference_class: none
@@ -4257,14 +4290,14 @@ matrix:
       max: 3600.0
       step: 300.0
       label: Confirm time
-    comfort_low_f:
+    comfort_low:
       default: 70.0
       unit: °F
       min: 50.0
       max: 80.0
       step: 0.5
       label: Zone comfort low
-    comfort_high_f:
+    comfort_high:
       default: 75.0
       unit: °F
       min: 55.0
@@ -4275,6 +4308,7 @@ matrix:
   datafusion_sql_implementation: sched1_unoccupied_runtime.sql
   documentation_link: docs/rules/cookbook/pandas-cookbook.md#sched-1
   test_coverage: &id390
+  - tests/analytics/test_equipment_stamp.py
   - tests/reporting/test_findings_smoke.py
   - tests/rules/test_catalog_smoke.py
   - tests/rules/test_quality.py
@@ -4348,7 +4382,7 @@ matrix:
       max: 1.0
       step: 1.0
       label: Require operational gate
-    reset_err_f:
+    reset_err:
       default: 3.0
       unit: degF
       min: 0.5
@@ -9392,7 +9426,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    preheat_over_f:
+    preheat_over:
       label: Preheat over ΔT
       default: 2.2
       min: 0.5
@@ -9400,7 +9434,7 @@ concepts:
       step: 0.1
       unit: degF
       frontend_control: slider
-      sql_placeholder: PREHEAT_OVER_F
+      sql_placeholder: PREHEAT_OVER
     htg_open_min:
       label: Heating valve open minimum
       default: 0.01
@@ -9527,7 +9561,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    econ6_oat_max_f:
+    econ6_oat_max:
       label: Winter OAT ceiling
       default: 25.0
       min: 15.0
@@ -9535,7 +9569,7 @@ concepts:
       step: 1.0
       unit: degF
       frontend_control: slider
-      sql_placeholder: ECON6_OAT_MAX_F
+      sql_placeholder: ECON6_OAT_MAX
     econ6_damper_max:
       label: Winter min-OA damper
       default: 0.25
@@ -9797,7 +9831,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    mech_oat_max_f:
+    mech_oat_max:
       label: Mech-cool OAT ceiling
       default: 60.0
       min: 45.0
@@ -9805,7 +9839,7 @@ concepts:
       step: 1.0
       unit: degF
       frontend_control: slider
-      sql_placeholder: MECH_OAT_MAX_F
+      sql_placeholder: MECH_OAT_MAX
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -10067,7 +10101,7 @@ concepts:
       unit: frac
       frontend_control: slider
       sql_placeholder: VALVE_OPEN
-    coil_delta_f:
+    coil_delta:
       label: Minimum heating rise
       default: 5.4
       min: 1
@@ -10075,7 +10109,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: COIL_DELTA_F
+      sql_placeholder: COIL_DELTA
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -10152,7 +10186,7 @@ concepts:
   startup_delay_seconds: null
   confirm_seconds: 900
   parameters:
-    pass_delta_f:
+    pass_delta:
       label: Passing temperature rise
       default: 5.4
       min: 1
@@ -10160,7 +10194,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: PASS_DELTA_F
+      sql_placeholder: PASS_DELTA
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -10192,7 +10226,7 @@ concepts:
   startup_delay_seconds: null
   confirm_seconds: 900
   parameters:
-    pass_delta_f:
+    pass_delta:
       label: Passing temperature drop
       default: 5.4
       min: 1
@@ -10200,7 +10234,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: PASS_DELTA_F
+      sql_placeholder: PASS_DELTA
   time_semantics: row_or_interval_per_sql_file
   output_schema:
   - equipment_id
@@ -10335,7 +10369,7 @@ concepts:
   startup_delay_seconds: null
   confirm_seconds: 0
   parameters:
-    deadband_c:
+    deadband:
       label: Minimum deadband
       default: 1
       min: 0
@@ -10411,7 +10445,7 @@ concepts:
 - canonical_id: VAV-1
   pandas_id: VAV-1
   rule_id: VAV-1
-  title: Zone comfort band violation hours with confirm window
+  title: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2
   aliases: []
   kind: diagnostic
   equipment_types: *id259
@@ -10479,6 +10513,15 @@ concepts:
       unit: degF
       frontend_control: slider
       sql_placeholder: ZONE_T_HI
+    require_occupied:
+      label: Require occupied
+      default: 1.0
+      min: 0.0
+      max: 1.0
+      step: 1.0
+      unit: bool
+      frontend_control: slider
+      sql_placeholder: REQUIRE_OCCUPIED
     confirm_seconds:
       label: Confirm time
       default: 900
@@ -11407,7 +11450,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    delta_f:
+    delta:
       label: Leave Δ vs AHU SAT
       default: 8.0
       min: 2.0
@@ -11415,7 +11458,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: DELTA_F
+      sql_placeholder: DELTA
     flow_on_min:
       label: Airflow-on min
       default: 25.0
@@ -12595,7 +12638,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    approach_max_f:
+    approach_max:
       label: Max approach at full fan
       default: 8.0
       min: 5.0
@@ -12603,7 +12646,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: APPROACH_MAX_F
+      sql_placeholder: APPROACH_MAX
     tower_fan_hi:
       label: Tower fan full-speed threshold
       default: 0.95
@@ -12739,7 +12782,7 @@ concepts:
       unit: degF
       frontend_control: slider
       sql_placeholder: CW_APPROACH
-    excess_beyond_approach_f:
+    excess_beyond_approach:
       label: Excess beyond approach
       default: 5.0
       min: 2.0
@@ -12747,7 +12790,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: EXCESS_BEYOND_APPROACH_F
+      sql_placeholder: EXCESS_BEYOND_APPROACH
     tower_fan_hi:
       label: Tower fan full-speed threshold
       default: 0.95
@@ -13253,7 +13296,7 @@ concepts:
       unit: sec
       frontend_control: slider
       sql_placeholder: CONFIRM_SECONDS
-    comfort_low_f:
+    comfort_low:
       label: Zone comfort low
       default: 70.0
       min: 50.0
@@ -13262,7 +13305,7 @@ concepts:
       unit: °F
       frontend_control: slider
       sql_placeholder: ZONE_T_LO
-    comfort_high_f:
+    comfort_high:
       label: Zone comfort high
       default: 75.0
       min: 55.0
@@ -13478,7 +13521,7 @@ concepts:
       unit: bool
       frontend_control: slider
       sql_placeholder: REQUIRE_OPERATIONAL_GATE
-    reset_err_f:
+    reset_err:
       label: Reset error
       default: 3.0
       min: 0.5
@@ -13486,7 +13529,7 @@ concepts:
       step: 0.5
       unit: degF
       frontend_control: slider
-      sql_placeholder: RESET_ERR_F
+      sql_placeholder: RESET_ERR
     reset_sat_at_65:
       label: SAT SP at 65F OAT
       default: 52.0

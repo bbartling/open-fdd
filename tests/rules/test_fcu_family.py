@@ -6,12 +6,37 @@ from open_fdd.rules.cookbook_catalog import _fcu_fan_on, fcu_clg_coil, fcu_mode_
 from open_fdd.rules import run_rule
 
 
+from open_fdd.analytics.report_storage import STORAGE_ABI_METRIC
+from open_fdd.analytics.units import stamp_display_units
+from open_fdd.units.convert import fahrenheit_to_celsius
+
+
 def frame(**columns):
     n = len(next(iter(columns.values())))
     df = pd.DataFrame(columns, index=pd.date_range("2026-01-01", periods=n, freq="5min", tz="UTC"))
     df.attrs["equipment_id"] = "FCU_1"
     df.attrs["equipment_type"] = "FCU"
-    return df
+    df.attrs["storage_abi"] = STORAGE_ABI_METRIC
+    temp_roles = {
+        "zone-air-temp",
+        "zone-air-temp-sp",
+        "discharge-air-temp",
+        "cooling-sp",
+        "heating-sp",
+    }
+    role_units = {}
+    converted = {}
+    for key, values in columns.items():
+        if key in temp_roles:
+            role_units[key] = "°C"
+            converted[key] = [fahrenheit_to_celsius(float(v)) if v is not None else None for v in values]
+        else:
+            converted[key] = values
+    out = pd.DataFrame(converted, index=df.index)
+    out.attrs.update(df.attrs)
+    out.attrs["role_units"] = role_units
+    stamp_display_units(out, {"display_units": "si"})
+    return out
 
 
 def result(rule_id, df, params=None):

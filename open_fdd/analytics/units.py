@@ -121,22 +121,22 @@ def report_units_map(
 
 
 def stamp_display_units(frame: Any, column_map: dict | None = None) -> dict[str, str]:
-    """Attach ``unit_system`` and ``units_map`` on ``frame.attrs``.
+    """Attach ``display_units`` and ``units_map`` on ``frame.attrs``.
 
-    A column map with ``unit_system`` or ``units`` wins over a map already
+    A column map with ``display_units`` or ``units`` wins over a map already
     stamped by the history source.
     """
     column_map = column_map or {}
     raw_overrides = column_map.get("units") if isinstance(column_map.get("units"), dict) else None
-    has_map = bool(column_map.get("unit_system") or raw_overrides)
+    has_map = bool(column_map.get("display_units") or raw_overrides)
     if not has_map:
         existing = frame.attrs.get("units_map")
         if isinstance(existing, dict) and existing:
-            frame.attrs["unit_system"] = str(frame.attrs.get("unit_system") or "imperial")
+            frame.attrs["display_units"] = str(frame.attrs.get("display_units") or "imperial")
             return {str(k): str(v) for k, v in existing.items() if v}
-    system = column_map.get("unit_system") or frame.attrs.get("unit_system") or "imperial"
+    system = column_map.get("display_units") or frame.attrs.get("display_units") or "imperial"
     units = report_units_map(str(system), raw_overrides)
-    frame.attrs["unit_system"] = str(system)
+    frame.attrs["display_units"] = str(system)
     frame.attrs["units_map"] = units
     return units
 

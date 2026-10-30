@@ -168,13 +168,13 @@ describe("vibeCharts", () => {
       [
         {
           timestamp_utc: "2026-07-01T00:00:00Z",
-          bas_oat_f: 70,
-          web_oat_f: 68,
+          bas_oat_c: 70,
+          web_oat_c: 68,
         },
         {
           timestamp_utc: "2026-07-01T01:00:00Z",
-          bas_oat_f: 72,
-          web_oat_f: 69,
+          bas_oat_c: 72,
+          web_oat_c: 69,
         },
       ],
       5,
@@ -366,7 +366,7 @@ describe("vibeCharts", () => {
       [
         {
           equipment_id: "AHU_1",
-          oat_f: 32,
+          oa_t: 32,
           y_f: 50,
           x_quantity: "dry_bulb_temperature",
           x_unit: "°F",
@@ -383,7 +383,7 @@ describe("vibeCharts", () => {
       [
         {
           equipment_id: "AHU_1",
-          oat_f: 60,
+          oa_t: 60,
           y_f: 48,
           x_quantity: "dry_bulb_temperature",
           x_unit: "°F",
@@ -448,8 +448,8 @@ describe("vibeCharts", () => {
       identifiable: true,
       equipment_id: "AHU_1",
       // API metric-c-v2 stores temperature deltas in kelvin (scale-only display).
-      delta_or_f: 10,
-      delta_mr_f: 5,
+      delta_or_c: 10,
+      delta_mr_c: 5,
     }));
     const fig = econDeltaScatter(points, 10, "metric");
     const trace = fig?.data.find((item) => item.name === "AHU_1");

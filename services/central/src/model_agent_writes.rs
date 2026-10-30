@@ -1433,7 +1433,7 @@ mod tests {
         assert!(entry.primary_reference);
 
         use fdd_core::sensor_sweep::sweep_assessable_sql_role;
-        assert!(sweep_assessable_sql_role("oa_t", entry.unit.as_deref()));
+        assert!(!sweep_assessable_sql_role("oa_t", entry.unit.as_deref()));
     }
 
     #[tokio::test]

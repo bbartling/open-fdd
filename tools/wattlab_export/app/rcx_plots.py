@@ -623,8 +623,8 @@ def zone_comfort_fail_ranking(
     role_map: dict,
     *,
     schedule,
-    comfort_low_f: float,
-    comfort_high_f: float,
+    comfort_low: float,
+    comfort_high: float,
     equipment_types: tuple[str, ...] = ("VAV",),
     outlier_z: float = 2.5,
 ) -> pd.DataFrame:
@@ -634,8 +634,8 @@ def zone_comfort_fail_ranking(
     """
     from app.occupancy import occupied_mask
 
-    lo = float(min(comfort_low_f, comfort_high_f))
-    hi = float(max(comfort_low_f, comfort_high_f))
+    lo = float(min(comfort_low, comfort_high))
+    hi = float(max(comfort_low, comfort_high))
     rows: list[dict[str, Any]] = []
     for eq_id, raw in frames.items():
         et = _etype(eq_id, raw, role_map)
@@ -668,8 +668,8 @@ def zone_comfort_fail_ranking(
                 "mean_zone_t": round(float(occ_vals.mean()), 2),
                 "min_zone_t": round(float(occ_vals.min()), 2),
                 "max_zone_t": round(float(occ_vals.max()), 2),
-                "comfort_low_f": lo,
-                "comfort_high_f": hi,
+                "comfort_low": lo,
+                "comfort_high": hi,
             }
         )
     if not rows:
@@ -684,8 +684,8 @@ def zone_comfort_fail_ranking(
                 "mean_zone_t",
                 "min_zone_t",
                 "max_zone_t",
-                "comfort_low_f",
-                "comfort_high_f",
+                "comfort_low",
+                "comfort_high",
                 "outlier",
             ]
         )
@@ -794,8 +794,8 @@ def rcx_preset_coverage(
     weather: pd.DataFrame | None = None,
     outlier_z: float = 2.5,
     schedule=None,
-    comfort_low_f: float = 70.0,
-    comfort_high_f: float = 75.0,
+    comfort_low: float = 21.1111111111,
+    comfort_high: float = 23.8888888889,
 ) -> pd.DataFrame:
     """Diagnostics table: one row per RCx preset with series/row/outlier counts."""
     rows: list[dict[str, Any]] = []
@@ -813,8 +813,8 @@ def rcx_preset_coverage(
                 frames,
                 role_map,
                 schedule=schedule,
-                comfort_low_f=comfort_low_f,
-                comfort_high_f=comfort_high_f,
+                comfort_low=comfort_low,
+                comfort_high=comfort_high,
                 equipment_types=preset.equipment_types,
                 outlier_z=outlier_z,
             )

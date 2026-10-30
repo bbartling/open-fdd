@@ -112,8 +112,8 @@ describe("C4 tip Overview known answers", () => {
       mat: 65 + i * 0.4,
       sat: 55,
       oa_damper_pct: 35 + i,
-      delta_or_f: 50 + i - 72,
-      delta_mr_f: 65 + i * 0.4 - 72,
+      delta_or_c: 50 + i - 72,
+      delta_mr_c: 65 + i * 0.4 - 72,
       fan_on: true,
     }));
     const env = normalizeTipOverviewEnvelope("economizer", {
@@ -131,9 +131,9 @@ describe("C4 tip Overview known answers", () => {
     expect(env.points).toHaveLength(6);
     expect(env.points[0]?.identifiable).toBe(true);
     expect(env.points[0]?.fan_on).toBe(true);
-    expect(env.points[0]?.oat_f).toBe(50);
+    expect(env.points[0]?.oa_t).toBe(50);
     expect(env.points[0]?.damper_fb_pct).toBe(35);
-    expect(env.points[0]?.mat_resid_f).toBeCloseTo(
+    expect(env.points[0]?.mat_resid_c).toBeCloseTo(
       65 - (72 + (35 / 100) * (50 - 72)),
       6,
     );
@@ -165,14 +165,14 @@ describe("C4 tip Overview known answers", () => {
           equipment_id: "SYN_WX",
           bas_oa_t: 70,
           web_oa_t: 68,
-          delta_f: 2,
+          delta_c: 2,
         },
         {
           ts: "2026-04-01T01:00:00Z",
           equipment_id: "SYN_WX",
           bas_oa_t: 71,
           web_oa_t: 69,
-          delta_f: 2,
+          delta_c: 2,
         },
       ],
       equipment: [],
@@ -180,8 +180,8 @@ describe("C4 tip Overview known answers", () => {
       skipped: [],
       query_id: "bas-vs-web-oat",
     });
-    expect(env.points[0]?.bas_oat_f).toBe(70);
-    expect(env.points[0]?.web_oat_f).toBe(68);
+    expect(env.points[0]?.bas_oat_c).toBe(70);
+    expect(env.points[0]?.web_oat_c).toBe(68);
     const overlay = basOverlay(env.points, 5);
     expect(overlay?.data?.some((t) => t.name === "BAS oa_t")).toBe(true);
     expect(overlay?.data?.some((t) => t.name === "Web OAT")).toBe(true);
@@ -204,8 +204,8 @@ describe("C4 tip Overview known answers", () => {
             oa_t: 50,
             rat: 72,
             mat: 60,
-            delta_or_f: -22,
-            delta_mr_f: -12,
+            delta_or_c: -22,
+            delta_mr_c: -12,
             fan_on: false,
           },
           {
@@ -214,8 +214,8 @@ describe("C4 tip Overview known answers", () => {
             oa_t: 70,
             rat: 72,
             mat: 71,
-            delta_or_f: -2,
-            delta_mr_f: -1,
+            delta_or_c: -2,
+            delta_mr_c: -1,
             fan_on: true,
           },
           {
@@ -223,7 +223,7 @@ describe("C4 tip Overview known answers", () => {
             equipment_id: "SYN_AHU_E",
             oa_t: 50,
             rat: 72,
-            delta_or_f: -22,
+            delta_or_c: -22,
             fan_on: true,
           },
           {
@@ -232,8 +232,8 @@ describe("C4 tip Overview known answers", () => {
             oa_t: 50,
             rat: 72,
             mat: 60,
-            delta_or_f: -22,
-            delta_mr_f: -12,
+            delta_or_c: -22,
+            delta_mr_c: -12,
           },
         ],
         equipment: [],
@@ -241,7 +241,7 @@ describe("C4 tip Overview known answers", () => {
         skipped: [],
         query_id: "economizer",
       },
-      { dtMinF: 10 },
+      { dtMinC: 10 },
     );
     expect(env.points.every((p) => p.identifiable !== true)).toBe(true);
     expect(env.points.every((p) => p.fan_on !== true || p.identifiable !== true)).toBe(
@@ -293,15 +293,15 @@ describe("C4 tip Overview known answers", () => {
         {
           equipment_id: "AHU_1",
           identifiable: true,
-          delta_or_f: -5,
-          delta_mr_f: -2,
+          delta_or_c: -5,
+          delta_mr_c: -2,
           timestamp_utc: "2026-07-01T00:00:00Z",
         },
       ],
       skipped: [],
     });
     expect(env.points).toHaveLength(1);
-    expect(env.points[0]?.delta_or_f).toBe(-5);
+    expect(env.points[0]?.delta_or_c).toBe(-5);
   });
 });
 

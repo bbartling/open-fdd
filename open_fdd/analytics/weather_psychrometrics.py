@@ -41,6 +41,30 @@ def wetbulb_f_stull(dry_bulb_f: pd.Series | np.ndarray | float, rh_pct: pd.Serie
     return pd.Series(tw_f, index=getattr(t_f, "index", None))
 
 
+
+def dewpoint_c_from_db_rh(dry_bulb_c: pd.Series | np.ndarray | float, rh_pct: pd.Series | np.ndarray | float) -> pd.Series:
+    """Dew point °C from canonical dry-bulb °C and relative humidity % (0–100)."""
+    t_c = pd.to_numeric(dry_bulb_c, errors="coerce")
+    rh = pd.to_numeric(rh_pct, errors="coerce").clip(0.1, 100.0)
+    a, b = 17.625, 243.04
+    gamma = np.log(rh / 100.0) + (a * t_c) / (b + t_c)
+    dp_c = (b * gamma) / (a - gamma)
+    return pd.Series(dp_c, index=getattr(t_c, "index", None))
+
+
+def wetbulb_c_stull(dry_bulb_c: pd.Series | np.ndarray | float, rh_pct: pd.Series | np.ndarray | float) -> pd.Series:
+    """Wet-bulb °C via Stull (2011) for canonical SI dry-bulb and RH."""
+    t_c = pd.to_numeric(dry_bulb_c, errors="coerce")
+    rh = pd.to_numeric(rh_pct, errors="coerce").clip(5.0, 99.0)
+    tw_c = (
+        t_c * np.arctan(0.151977 * np.sqrt(rh + 8.313659))
+        + np.arctan(t_c + rh)
+        - np.arctan(rh - 1.676331)
+        + 0.00391838 * rh ** 1.5 * np.arctan(0.023101 * rh)
+        - 4.686035
+    )
+    return pd.Series(tw_c, index=getattr(t_c, "index", None))
+
 def enrich_weather_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize Open-Meteo / BAS weather columns and derive dewpoint / wetbulb when possible."""
     if df is None or df.empty:
@@ -87,12 +111,12 @@ def enrich_weather_frame(df: pd.DataFrame) -> pd.DataFrame:
     # Derive dewpoint from DB + RH when missing
     if "web-outside-air-dewpoint" not in out.columns or out["web-outside-air-dewpoint"].notna().sum() == 0:
         if "web-outside-air-temp" in out.columns and "web-outside-air-humidity" in out.columns:
-            out["web-outside-air-dewpoint"] = dewpoint_f_from_db_rh(out["web-outside-air-temp"], out["web-outside-air-humidity"])
+            out["web-outside-air-dewpoint"] = dewpoint_c_from_db_rh(out["web-outside-air-temp"], out["web-outside-air-humidity"])
 
     # Wet bulb
     if "web-outside-air-wetbulb" not in out.columns or out["web-outside-air-wetbulb"].notna().sum() == 0:
         if "web-outside-air-temp" in out.columns and "web-outside-air-humidity" in out.columns:
-            out["web-outside-air-wetbulb"] = wetbulb_f_stull(out["web-outside-air-temp"], out["web-outside-air-humidity"])
+            out["web-outside-air-wetbulb"] = wetbulb_c_stull(out["web-outside-air-temp"], out["web-outside-air-humidity"])
 
     return out
 

@@ -50,8 +50,8 @@
     "bas-vs-web-oat": {
       "rows": "points",
       "ts": "timestamp_utc",
-      "bas_oa_t": "bas_oat_f",
-      "web_oa_t": "web_oat_f"
+      "bas_oa_t": "bas_oat_c",
+      "web_oa_t": "web_oat_c"
     }
   },
   "png_stem_vocabulary": {
