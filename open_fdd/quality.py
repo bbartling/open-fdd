@@ -168,12 +168,54 @@ def _scale_position(num: pd.Series) -> pd.Series:
     return num
 
 
+def _storage_bounds(
+    bounds: tuple[float | None, float | None],
+    *,
+    declared_unit: str | None,
+) -> tuple[float | None, float | None]:
+    """Map legacy °F / in.w.c. cookbook bounds to SI when the frame is metric."""
+    if not declared_unit:
+        return bounds
+    unit = str(declared_unit).strip()
+    lo, hi = bounds
+    if unit in ("°C", "degC", "C"):
+        def _f2c(v: float | None) -> float | None:
+            if v is None:
+                return None
+            return (float(v) - 32.0) * (5.0 / 9.0)
+
+        return _f2c(lo), _f2c(hi)
+    if unit in ("Pa", "pascal"):
+        def _inwc2pa(v: float | None) -> float | None:
+            if v is None:
+                return None
+            return float(v) * 249.08891
+
+        return _inwc2pa(lo), _inwc2pa(hi)
+    if unit in ("L/s", "L_per_s", "lps"):
+        def _gpm2lps(v: float | None) -> float | None:
+            if v is None:
+                return None
+            return float(v) * 0.0630902
+
+        return _gpm2lps(lo), _gpm2lps(hi)
+    if unit in ("kPa",):
+        def _psi2kpa(v: float | None) -> float | None:
+            if v is None:
+                return None
+            return float(v) * 6.89476
+
+        return _psi2kpa(lo), _psi2kpa(hi)
+    return bounds
+
+
 def normalize_role_series(
     series: pd.Series,
     role: str,
     *,
     sentinels: Iterable[float] = DEFAULT_SENTINELS,
     bounds: tuple[float | None, float | None] | None = None,
+    declared_unit: str | None = None,
 ) -> RoleQuality:
     raw = series.copy()
     family = _role_family(role)
@@ -247,7 +289,7 @@ def normalize_role_series(
 
     lo_hi = bounds if bounds is not None else ROLE_BOUNDS.get(family)
     if lo_hi is not None:
-        lo, hi = lo_hi
+        lo, hi = _storage_bounds(lo_hi, declared_unit=declared_unit)
         scaled = _scale_position(num)
         if family in POSITION_ROLES or any(k in family for k in ("valve", "damper", "speed")):
             # Accept 0–1 or 0–100
@@ -313,6 +355,7 @@ def assess_frame(
 ) -> FrameQuality:
     cols = list(roles) if roles is not None else [c for c in df.columns if c != "timestamp_utc"]
     sentinels = tuple(sentinels)
+    role_units = df.attrs.get("role_units") or {}
     fq = FrameQuality()
     any_valid = pd.Series(False, index=df.index)
     totals = {"valid": 0, "invalid": 0}
@@ -320,7 +363,12 @@ def assess_frame(
     for role in cols:
         if role not in df.columns:
             continue
-        rq = normalize_role_series(df[role], role, sentinels=sentinels)
+        rq = normalize_role_series(
+            df[role],
+            role,
+            sentinels=sentinels,
+            declared_unit=role_units.get(role),
+        )
         fq.roles[role] = rq
         any_valid = any_valid | rq.valid
         totals["valid"] += rq.valid_sample_count

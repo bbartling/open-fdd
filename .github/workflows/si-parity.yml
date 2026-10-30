@@ -6,6 +6,10 @@ on:
     paths:
       - "scripts/ci/check_ip_goldens_frozen.py"
       - "scripts/stress/si_cutover/**"
+      - "sql/fdd/registry.yaml"
+      - "sql/fdd/postgres/rules/**"
+      - "sql/fdd/tuning_catalog.json"
+      - "open_fdd/rules/**"
       - "scripts/qualification/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
@@ -17,6 +21,10 @@ on:
     paths:
       - "scripts/ci/check_ip_goldens_frozen.py"
       - "scripts/stress/si_cutover/**"
+      - "sql/fdd/registry.yaml"
+      - "sql/fdd/postgres/rules/**"
+      - "sql/fdd/tuning_catalog.json"
+      - "open_fdd/rules/**"
       - "scripts/qualification/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
@@ -98,6 +106,11 @@ jobs:
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
             --family W4b_fc1_duct_static
+
+      - name: Blocking W4d plant scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4d_si_plant
 
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |

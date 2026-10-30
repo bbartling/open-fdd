@@ -20,19 +20,6 @@ MANIFEST = ROOT / "sql/contract/manifest.json"
 GOLDENS = ROOT / "sql/contract/goldens/unit_vectors.json"
 ALIAS_GOLDENS = ROOT / "sql/contract/goldens/alias_normalize_tokens.json"
 
-TEMPERATURE_DIFFERENCE_KEYS = frozenset(
-    {
-        "delta_f",
-        "coil_delta_f",
-        "pass_delta_f",
-        "reset_err_f",
-        "preheat_over_f",
-        "excess_beyond_approach_f",
-        "approach_max_f",
-        "deadband_c",
-    }
-)
-
 STRIP_PARAM_KEYS = frozenset({"kind", "effect"})
 
 
@@ -96,42 +83,88 @@ def convert_to_canonical(
     return float(value) * float(row["scale"]) + float(row["offset"])
 
 
-def infer_kind(param_key: str, unit: str) -> str:
-    u = (unit or "").strip().strip("'\"")
-    key = param_key.strip().lower()
-    if key in TEMPERATURE_DIFFERENCE_KEYS or "delta" in key and key.endswith("_f"):
-        return "temperature_difference"
-    if u in {"degF", "°F"}:
-        return "absolute_temperature"
-    if u == "degC":
-        return "temperature_difference" if key == "deadband_c" else "absolute_temperature"
-    if u == "degF_per_h":
-        return "temperature_rate"
-    if u in {"in_wc", "inwc"}:
-        return "air_pressure"
-    if u == "psi":
-        return "hydronic_pressure"
-    if u in {"cfm", "gpm"}:
-        return "volumetric_flow"
-    if u == "kWh":
-        return "interval_energy"
-    if u in {"pct", "%", "'%'"}:
-        return "percent"
-    if u == "frac":
-        return "fraction"
-    if u == "sec":
-        return "duration_seconds"
-    if u == "min":
-        return "duration_minutes"
-    if u == "h":
-        return "dimensionless"
-    if u == "bool":
-        return "boolean"
-    if u == "count":
-        return "count"
-    if u in {"x", "unit", "ppm"}:
-        return "dimensionless"
-    raise ValueError(f"cannot infer kind for param {param_key!r} unit {unit!r}")
+def convert_from_canonical(
+    metric: dict[str, Any], quantity_id: str, canonical: float, target_unit: str
+) -> float:
+    """Inverse of convert_to_canonical for parity IP paths after W4 SI registry defaults."""
+    if quantity_id == "occupancy_mode":
+        raise ValueError("occupancy_mode unsupported")
+    by_token = build_conversion_index(metric)
+    tok = normalize_alias(target_unit)
+    row = by_token.get(tok)
+    if row is None:
+        raise ValueError(f"unknown alias {target_unit!r}")
+    if row["quantity"] != quantity_id:
+        raise ValueError(
+            f"{target_unit!r} maps to {row['quantity']}, expected {quantity_id}"
+        )
+    scale = float(row["scale"])
+    offset = float(row["offset"])
+    if scale == 0.0:
+        raise ValueError(f"zero scale for alias {target_unit!r}")
+    return (float(canonical) - offset) / scale
+
+
+# Kinds without a metric quantity: the unit is a fixed token per kind.
+NON_QUANTITY_KIND_UNITS: dict[str, frozenset[str]] = {
+    "duration_seconds": frozenset({"sec"}),
+    "duration_minutes": frozenset({"min"}),
+    "boolean": frozenset({"bool"}),
+    "count": frozenset({"count"}),
+    "dimensionless": frozenset({"x", "unit", "ppm", "h"}),
+}
+
+# Kinds whose values convert through a metric_units.json quantity.
+QUANTITY_KINDS = frozenset(
+    {
+        "absolute_temperature",
+        "temperature_difference",
+        "temperature_rate",
+        "air_pressure",
+        "hydronic_pressure",
+        "volumetric_flow",
+        "interval_energy",
+        "percent",
+        "fraction",
+    }
+)
+
+
+def declared_kind(where: str, param: dict[str, Any]) -> str:
+    """Return the parameter's declared kind; a missing or unknown kind is an error."""
+    kind = param.get("kind")
+    if not isinstance(kind, str) or not kind:
+        raise ValueError(f"{where}: parameter has no declared kind")
+    if kind not in QUANTITY_KINDS and kind not in NON_QUANTITY_KIND_UNITS:
+        raise ValueError(f"{where}: unknown declared kind {kind!r}")
+    return kind
+
+
+def kind_source_unit(kind: str, unit: str) -> str:
+    """Conversion-table alias for a declared unit (plain degrees are deltas for differences)."""
+    u = unit.strip().strip("'\"")
+    if kind == "temperature_difference":
+        if u in ("degF", "°F"):
+            return "degF_delta"
+        if u in ("degC", "°C"):
+            return "degC_delta"
+    return u
+
+
+def assert_unit_matches_kind(metric: dict[str, Any], where: str, kind: str, unit: str) -> None:
+    """Declared unit must belong to the declared kind."""
+    u = unit.strip().strip("'\"")
+    if kind in NON_QUANTITY_KIND_UNITS:
+        if u not in NON_QUANTITY_KIND_UNITS[kind]:
+            raise ValueError(f"{where}: unit {unit!r} is not valid for kind {kind}")
+        return
+    row = build_conversion_index(metric).get(normalize_alias(kind_source_unit(kind, u)))
+    if row is None:
+        raise ValueError(f"{where}: unit {unit!r} has no conversion for kind {kind}")
+    if row["quantity"] != kind:
+        raise ValueError(
+            f"{where}: unit {unit!r} belongs to {row['quantity']}, declared kind is {kind}"
+        )
 
 
 def derive_tuner_effect(rule_id: str, effect_in_sql: bool | None) -> str:
@@ -235,6 +268,159 @@ def strip_registry_metadata(doc: Any) -> Any:
     return doc
 
 
+_VALUE_FIELDS = ("default", "min", "max", "step")
+_SI_CUTOVER_FIELDS = frozenset({"kind", "effect", "unit", *_VALUE_FIELDS})
+
+
+def _float_close(a: float, b: float, *, rel: float = 1e-6, abs_tol: float = 1e-6) -> bool:
+    return abs(a - b) <= max(abs_tol, rel * max(abs(a), abs(b), 1.0))
+
+
+def _rename_map() -> dict[str, str]:
+    renames = load_json(RENAME_MAP).get("renames")
+    if not isinstance(renames, dict):
+        raise ValueError("parameter_si_rename_map.json renames must be a mapping")
+    return {str(k): str(v) for k, v in renames.items()}
+
+
+def _params_by_rule(doc: Any, label: str) -> dict[str, dict[str, dict[str, Any]]]:
+    if not isinstance(doc, dict) or not isinstance(doc.get("rules"), list):
+        raise AssertionError(f"{label}: rules must be a list")
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for rule in doc["rules"]:
+        rid = str(rule.get("rule_id") or "")
+        if not rid:
+            raise AssertionError(f"{label}: rule missing rule_id")
+        params = rule.get("parameters") or {}
+        out[rid] = {str(k): v for k, v in params.items() if isinstance(v, dict)}
+    return out
+
+
+def _master_param(
+    master_params: dict[str, dict[str, Any]], branch_key: str, renames: dict[str, str]
+) -> dict[str, Any] | None:
+    if branch_key in master_params:
+        return master_params[branch_key]
+    for old, new in renames.items():
+        if new == branch_key and old in master_params:
+            return master_params[old]
+    return None
+
+
+def validate_param_si_change(
+    metric: dict[str, Any], where: str, master: dict[str, Any], branch: dict[str, Any]
+) -> None:
+    """A parameter may change only by converting its declared quantity to another unit.
+
+    The branch declared kind is authoritative for the conversion; it may differ from
+    master only when the unit changes as well (a kind correction during SI cutover).
+    """
+    branch_kind = declared_kind(f"{where} (branch)", branch)
+    master_kind = declared_kind(f"{where} (master)", master)
+    master_unit = str(master.get("unit") or "")
+    branch_unit = str(branch.get("unit") or "")
+    assert_unit_matches_kind(metric, f"{where} (branch)", branch_kind, branch_unit)
+    if master_unit == branch_unit:
+        if master_kind != branch_kind:
+            raise AssertionError(
+                f"{where}: kind changed {master_kind} -> {branch_kind} without a unit change"
+            )
+        for field in _VALUE_FIELDS:
+            if master.get(field) != branch.get(field):
+                raise AssertionError(f"{where}.{field}: value changed without a unit change")
+        return
+    if branch_kind not in QUANTITY_KINDS:
+        raise AssertionError(
+            f"{where}: unit changed {master_unit!r} -> {branch_unit!r} "
+            f"but kind {branch_kind} has no quantity to convert"
+        )
+    assert_unit_matches_kind(metric, f"{where} (master unit)", branch_kind, master_unit)
+    src = kind_source_unit(branch_kind, master_unit)
+    dst = kind_source_unit(branch_kind, branch_unit)
+    for field in _VALUE_FIELDS:
+        if field not in master and field not in branch:
+            continue
+        if field not in master or field not in branch:
+            raise AssertionError(f"{where}.{field}: present on only one side of the cutover")
+        mv = float(master[field])
+        bv = float(branch[field])
+        if field == "step":
+            # A step is an increment: convert the span, not the absolute point.
+            expected = convert_to_canonical(
+                metric, branch_kind, mv, src
+            ) - convert_to_canonical(metric, branch_kind, 0.0, src)
+        else:
+            expected = convert_to_canonical(metric, branch_kind, mv, src)
+        got = convert_to_canonical(metric, branch_kind, bv, dst)
+        if not _float_close(expected, got):
+            raise AssertionError(
+                f"{where}.{field}: {bv!r} {branch_unit} != {mv!r} {master_unit} "
+                f"converted as {branch_kind} ({expected!r})"
+            )
+
+
+def _validate_params_si_diff(
+    metric: dict[str, Any], label: str, master_doc: Any, branch_doc: Any
+) -> None:
+    renames = _rename_map()
+    master_map = _params_by_rule(master_doc, label)
+    for rule_id, branch_params in _params_by_rule(branch_doc, label).items():
+        master_params = master_map.get(rule_id)
+        if master_params is None:
+            continue
+        for key, branch_p in branch_params.items():
+            master_p = _master_param(master_params, key, renames)
+            if master_p is None:
+                raise AssertionError(f"{label} {rule_id}.{key}: parameter not present on master")
+            validate_param_si_change(metric, f"{label} {rule_id}.{key}", master_p, branch_p)
+
+
+def doc_for_metadata_diff(doc: Any, renames: dict[str, str]) -> Any:
+    """Snapshot without per-parameter cutover fields; SI renames applied to keys.
+
+    The removed fields are validated separately by validate_param_si_change.
+    """
+    import copy
+
+    out = strip_registry_metadata(copy.deepcopy(doc))
+    for rule in out.get("rules", []):
+        params = rule.get("parameters")
+        if not isinstance(params, dict):
+            continue
+        renamed: dict[str, Any] = {}
+        for k, v in params.items():
+            if isinstance(v, dict):
+                v = {f: x for f, x in v.items() if f not in _SI_CUTOVER_FIELDS and f != "key"}
+                if k in renames and v.get("sql_placeholder") == k.upper():
+                    v["sql_placeholder"] = renames[k].upper()
+            renamed[renames.get(k, k)] = v
+        rule["parameters"] = renamed
+    return out
+
+
+def validate_equipment_kinds_diff(master_doc: Any, branch_doc: Any) -> None:
+    """equipment_kinds may only widen; removing a kind narrows rule applicability."""
+    master_rules = _rules_by_id(master_doc)
+    for rule_id, branch_rule in _rules_by_id(branch_doc).items():
+        master_rule = master_rules.get(rule_id)
+        if master_rule is None:
+            continue
+        master_kinds = set(master_rule.get("equipment_kinds") or [])
+        branch_kinds = set(branch_rule.get("equipment_kinds") or [])
+        if not branch_kinds.issuperset(master_kinds):
+            raise AssertionError(
+                f"registry.yaml {rule_id}: equipment_kinds removal not allowed "
+                f"(removed {sorted(master_kinds - branch_kinds)!r})"
+            )
+
+
+def _without_equipment_kinds(doc: Any) -> Any:
+    for rule in doc.get("rules", []):
+        if isinstance(rule, dict):
+            rule.pop("equipment_kinds", None)
+    return doc
+
+
 def ensure_origin_master_ref() -> str:
     """Resolve a ref for master/base file content (shallow CI checkouts may lack origin/master)."""
     override = os.environ.get("UNIT_CONTRACT_BASE_REF", "").strip()
@@ -268,8 +454,66 @@ def ensure_origin_master_ref() -> str:
     return f"origin/{base}"
 
 
+def _git_merge_base(master_ref: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "merge-base", "HEAD", master_ref],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _is_shallow_repository() -> bool:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git rev-parse --is-shallow-repository failed: {proc.stderr.strip()}"
+        )
+    return proc.stdout.strip() == "true"
+
+
+def ensure_metadata_diff_base_ref() -> str:
+    """Merge-base of HEAD and the default branch (not the tip of master).
+
+    Branches that are only behind master must not fail metadata diff when master
+    moved without this branch touching registry files.
+    """
+    master_ref = ensure_origin_master_ref()
+    proc = _git_merge_base(master_ref)
+    if proc.returncode != 0 and _is_shallow_repository():
+        # actions/checkout clones with depth 1, so HEAD and the default branch
+        # share no history until the clone is deepened.
+        unshallow = subprocess.run(
+            ["git", "fetch", "--no-tags", "--unshallow", "origin"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if unshallow.returncode != 0:
+            raise RuntimeError(
+                f"git fetch --unshallow origin failed: {unshallow.stderr.strip()}"
+            )
+        proc = _git_merge_base(master_ref)
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git merge-base HEAD {master_ref} failed: {proc.stderr.strip()}"
+        )
+    base = proc.stdout.strip()
+    if not base:
+        raise RuntimeError(f"empty merge-base for HEAD and {master_ref}")
+    return base
+
+
 def git_show_master(relpath: str) -> str:
-    ref = ensure_origin_master_ref()
+    ref = ensure_metadata_diff_base_ref()
     proc = subprocess.run(
         ["git", "show", f"{ref}:{relpath}"],
         cwd=ROOT,
@@ -317,7 +561,7 @@ def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -
     branch_rules = _rules_by_id(branch_doc)
     if set(master_rules) != set(branch_rules):
         raise AssertionError(
-            "registry.yaml rule_id set differs from origin/master "
+            "registry.yaml rule_id set differs from merge-base with the default branch "
             "(add/remove rule entries not allowed in metadata-only PRs)"
         )
 
@@ -352,8 +596,8 @@ def validate_registry_role_declarations_diff(master_doc: Any, branch_doc: Any) -
 
     if registry_without_role_lists(master_doc) != registry_without_role_lists(branch_doc):
         raise AssertionError(
-            "registry.yaml differs from origin/master beyond kind/effect metadata "
-            "and SQL-justified optional_roles additions"
+            "registry.yaml differs from merge-base with the default branch beyond "
+            "kind/effect metadata and SQL-justified optional_roles additions"
         )
 
 
@@ -362,29 +606,40 @@ def assert_metadata_only_registry_diff() -> None:
         import yaml
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("PyYAML required") from exc
-    master_text = git_show_master("sql/fdd/registry.yaml")
-    branch_text = REGISTRY.read_text(encoding="utf-8")
-    master_doc = yaml.safe_load(master_text)
-    branch_doc = yaml.safe_load(branch_text)
-    validate_registry_role_declarations_diff(master_doc, branch_doc)
+    metric = load_json(METRIC_UNITS)
+    renames = _rename_map()
+    master_raw = yaml.safe_load(git_show_master("sql/fdd/registry.yaml"))
+    branch_raw = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    _validate_params_si_diff(metric, "registry", master_raw, branch_raw)
+    validate_equipment_kinds_diff(master_raw, branch_raw)
+    validate_registry_role_declarations_diff(
+        _without_equipment_kinds(doc_for_metadata_diff(master_raw, renames)),
+        _without_equipment_kinds(doc_for_metadata_diff(branch_raw, renames)),
+    )
 
 
 def assert_metadata_only_tuning_diff() -> None:
-    master = strip_registry_metadata(json.loads(git_show_master("sql/fdd/tuning_catalog.json")))
-    branch = strip_registry_metadata(load_json(TUNING))
-    if master != branch:
+    metric = load_json(METRIC_UNITS)
+    renames = _rename_map()
+    master_raw = json.loads(git_show_master("sql/fdd/tuning_catalog.json"))
+    branch_raw = load_json(TUNING)
+    _validate_params_si_diff(metric, "tuning", master_raw, branch_raw)
+    if doc_for_metadata_diff(master_raw, renames) != doc_for_metadata_diff(branch_raw, renames):
         raise AssertionError(
-            "tuning_catalog.json differs from origin/master beyond kind/effect metadata"
+            "tuning_catalog.json differs from merge-base with the default branch "
+            "beyond kind/effect metadata and declared-kind SI cutover"
         )
 
 
 def apply_tuning_catalog(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate declared kinds against units and derive tuner effects."""
+    metric = load_json(METRIC_UNITS)
     for rule in data.get("rules", []):
         rid = rule.get("rule_id", "")
         params = rule.get("parameters") or {}
         for key, param in params.items():
-            unit = param.get("unit", "")
-            param["kind"] = infer_kind(key, str(unit))
-            effect = derive_tuner_effect(rid, param.get("effect_in_sql"))
-            param["effect"] = effect
+            where = f"tuning {rid}.{key}"
+            kind = declared_kind(where, param)
+            assert_unit_matches_kind(metric, where, kind, str(param.get("unit") or ""))
+            param["effect"] = derive_tuner_effect(rid, param.get("effect_in_sql"))
     return data
