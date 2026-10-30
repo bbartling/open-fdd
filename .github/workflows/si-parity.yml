@@ -74,7 +74,8 @@ jobs:
       OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
     steps:
       - uses: actions/checkout@v4
-
+      - name: Fetch base ref for IP tuning catalog diff (shallow PR checkouts)
+        run: git fetch origin master --depth=1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

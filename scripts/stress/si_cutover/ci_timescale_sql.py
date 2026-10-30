@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import sys
 from datetime import timezone
@@ -164,6 +165,24 @@ def render_rule_sql(
     controls = None
     if storage == "ip":
         controls = ip_parameter_controls(rule_id)
+        if controls is None:
+            from scripts.ci import unit_contract_lib as uc
+            import yaml
+
+            reg_doc = yaml.safe_load(
+                (REPO / "sql" / "fdd" / "registry.yaml").read_text(encoding="utf-8")
+            )
+            reg_rules = {str(r["rule_id"]): r for r in reg_doc.get("rules") or []}
+            reg_rule = reg_rules.get(rule_id)
+            if reg_rule is not None:
+                from scripts.stress.si_cutover.ci_fixtures_lib import (
+                    imperial_tuning_controls_for_ip_render,
+                    registry_defaults_stored_in_si,
+                )
+
+                if registry_defaults_stored_in_si(reg_rule):
+                    metric = uc.load_json(uc.METRIC_UNITS)
+                    controls = imperial_tuning_controls_for_ip_render(reg_rule, metric)
     return render(
         rule_id,
         poll_seconds=poll_seconds,
