@@ -268,6 +268,31 @@ def ensure_origin_master_ref() -> str:
     return f"origin/{base}"
 
 
+def _git_merge_base(master_ref: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "merge-base", "HEAD", master_ref],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _is_shallow_repository() -> bool:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"git rev-parse --is-shallow-repository failed: {proc.stderr.strip()}"
+        )
+    return proc.stdout.strip() == "true"
+
+
 def ensure_metadata_diff_base_ref() -> str:
     """Merge-base of HEAD and the default branch (not the tip of master).
 
@@ -275,13 +300,22 @@ def ensure_metadata_diff_base_ref() -> str:
     moved without this branch touching registry files.
     """
     master_ref = ensure_origin_master_ref()
-    proc = subprocess.run(
-        ["git", "merge-base", "HEAD", master_ref],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    proc = _git_merge_base(master_ref)
+    if proc.returncode != 0 and _is_shallow_repository():
+        # actions/checkout clones with depth 1, so HEAD and the default branch
+        # share no history until the clone is deepened.
+        unshallow = subprocess.run(
+            ["git", "fetch", "--no-tags", "--unshallow", "origin"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if unshallow.returncode != 0:
+            raise RuntimeError(
+                f"git fetch --unshallow origin failed: {unshallow.stderr.strip()}"
+            )
+        proc = _git_merge_base(master_ref)
     if proc.returncode != 0:
         raise RuntimeError(
             f"git merge-base HEAD {master_ref} failed: {proc.stderr.strip()}"
