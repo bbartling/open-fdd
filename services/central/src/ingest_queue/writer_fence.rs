@@ -23,12 +23,9 @@ const DEVICE: &str = "AHU_FENCE";
 const POINT: &str = "nf-point-fence-sat";
 const LEASE_SECS: i64 = 180;
 
-fn expected_canonical_sat_deg_f(f: f64) -> f64 {
-    fdd_core::MetricUnitsContract::load_embedded()
-        .expect("metric units contract")
-        .convert_to_canonical("absolute_temperature", f, "degF")
-        .expect("degF absolute temperature")
-}
+/// Canonical °C stored for SAT after ingest declares `degF` (metric_units contract goldens).
+const SAMPLE_C_AFTER_2_DEGF: f64 = -16.666_666_666_666_668;
+const SAMPLE_C_AFTER_1_DEGF: f64 = -17.222_222_222_222_22;
 
 fn origin() -> DateTime<Utc> {
     DateTime::parse_from_rfc3339("2026-07-01T00:00:00Z")
@@ -219,7 +216,7 @@ async fn stale_owner_is_fenced(replica_a: &PgPool, replica_b: &PgPool, scope: &S
     );
     assert_eq!(
         canonical_values(replica_b, &scope.site, sample_ts(0)).await,
-        vec![expected_canonical_sat_deg_f(2.0)],
+        vec![SAMPLE_C_AFTER_2_DEGF],
         "canonical history must keep the reclaiming owner's value"
     );
     assert!(
@@ -260,7 +257,7 @@ async fn live_owner_commits(replica_a: &PgPool, replica_b: &PgPool, scope: &Scop
         .expect("owner a receipt");
     assert_eq!(
         canonical_values(replica_b, &scope.site, sample_ts(1)).await,
-        vec![expected_canonical_sat_deg_f(1.0)]
+        vec![SAMPLE_C_AFTER_1_DEGF]
     );
     assert_eq!(receipt_count(replica_b, job.job_id).await, 1);
     assert_eq!(job_state(replica_b, job.job_id).await, "committed");

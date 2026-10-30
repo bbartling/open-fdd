@@ -60,6 +60,8 @@ MIGRATION_CHW_LINES = (
     re.compile(r'^const\s+SESSION_CHW_LEGACY:\s*&str\s*=\s*"chw_leave_max_f";\s*$'),
     re.compile(r'^let n = v\.as_f64\(\)\.ok_or\("chw_leave_max_f must be numeric"\)\?;\s*$'),
 )
+# W4f analytics keeps the kwarg name for call-site compat; values are SI (CHW_LEAVE_MAX_C).
+CHW_LEAVE_MAX_F_COMPAT = frozenset({"open_fdd/analytics/core.py"})
 
 
 def check_text(path: str, text: str) -> list[str]:
@@ -81,7 +83,7 @@ def check_text(path: str, text: str) -> list[str]:
         bad = [line for line in legacy_chw if not any(pattern.fullmatch(line) for pattern in MIGRATION_CHW_LINES)]
         if len(legacy_chw) != len(MIGRATION_CHW_LINES) or bad:
             errors.append(f"{path}: legacy CHW field must appear only in the exact one-time migration code")
-    elif legacy_chw:
+    elif legacy_chw and path not in CHW_LEAVE_MAX_F_COMPAT:
         errors.append(f"{path}: legacy CHW field is allowed only in cutover migration or test assertions")
     return errors
 

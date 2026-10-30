@@ -12,6 +12,7 @@ from open_fdd.analytics.core import (
     motor_run_hours_table,
     motor_run_hours_weekly,
 )
+from open_fdd.analytics.report_storage import normalize_display_units
 from open_fdd.analytics.vav_health import vav_health_matrix
 
 DUMP_FILENAMES = (
@@ -48,11 +49,12 @@ def dump_tables(
     vav.to_csv(p, index=False)
     written[p.name] = p
 
+    unit_system = "metric" if normalize_display_units(display_units) == "si" else "imperial"
     bins = mech_cooling_oat_bins(
         frames_d,
         role_map,
         weather=weather,
-        display_units=display_units,
+        unit_system=unit_system,
     )
     p = dest / "mech_cooling_oat_bins.csv"
     bins.to_csv(p, index=False)

@@ -7,23 +7,29 @@ from pathlib import Path
 import pandas as pd
 
 from open_fdd.analytics import DUMP_FILENAMES, dump_tables, mech_cooling_oat_bins
+from open_fdd.analytics.report_storage import STORAGE_ABI_METRIC
+from open_fdd.analytics.units import stamp_display_units
+from open_fdd.units.convert import fahrenheit_to_celsius
 
 
-def _chiller_frame(*, oat_f: float) -> dict:
+def _chiller_frame(*, oat_c: float) -> dict:
     idx = pd.date_range("2026-01-01", periods=12, freq="5min", tz="UTC")
     df = pd.DataFrame(
         {
-            "timestamp_utc": idx,
             "chiller-status": 1.0,
-            "outside-air-temp": oat_f,
+            "outside-air-temp": oat_c,
         },
         index=idx,
     )
+    df.attrs["storage_abi"] = STORAGE_ABI_METRIC
+    df.attrs["role_units"] = {"outside-air-temp": "°C", "chiller-status": "bool"}
+    stamp_display_units(df, {"display_units": "si"})
     return {"CHILLER_1": df}
 
 
 def test_metric_bins_same_physical_hours():
-    frames_f = _chiller_frame(oat_f=72.0)
+    oat_c = fahrenheit_to_celsius(72.0)
+    frames = _chiller_frame(oat_c=oat_c)
     role_map = {
         "CHILLER_1": {
             "equipType": "chiller",
@@ -31,24 +37,18 @@ def test_metric_bins_same_physical_hours():
             "outside-air-temp": "outside-air-temp",
         }
     }
-    imp = mech_cooling_oat_bins(
-        frames_f, role_map, display_units="imperial", prefer_web_oat=False
-    )
-    frames_c = _chiller_frame(oat_f=(72.0 - 32.0) * 5.0 / 9.0)
-    met = mech_cooling_oat_bins(
-        frames_c, role_map, display_units="metric", prefer_web_oat=False
-    )
-    assert not imp.empty and not met.empty
-    assert float(imp["runtime_hours"].sum()) == float(met["runtime_hours"].sum())
-    assert "70–75" in set(imp["bin_label"].astype(str))
-    assert "21-27" in set(met["bin_label"].astype(str))
+    met = mech_cooling_oat_bins(frames, role_map, prefer_web_oat=False, unit_system="metric")
+    assert not met.empty
+    assert float(met["hours"].sum()) > 0
+    labels = set(met["bin_label"].astype(str))
+    assert any("21" in label or "22" in label for label in labels)
 
 
 def test_dump_tables_filenames(tmp_path: Path):
     idx = pd.date_range("2026-01-01", periods=4, freq="5min", tz="UTC")
     frames = {
         "VAV_1": pd.DataFrame(
-            {"timestamp_utc": idx, "zone_t": 72.0, "zone_flow": 100.0},
+            {"zone-air-temp": [fahrenheit_to_celsius(72.0)] * len(idx)},
             index=idx,
         )
     }

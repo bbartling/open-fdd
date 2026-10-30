@@ -967,7 +967,10 @@ def ahu_simul_heat_cool(d, p, poll):
 
 
 def econ1(d, p, poll):
-    oat_min = _f(p, "econ1_oat_min", 55.0)
+    from open_fdd.quality import _storage_si
+
+    raw_oat_min = _f(p, "econ1_oat_min", 12.777778)
+    oat_min = (raw_oat_min - 32.0) * (5.0 / 9.0) if _storage_si(d) and raw_oat_min >= 30.0 else raw_oat_min
     fan = _fan(d)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return (fan > FAN_ON_MIN) & d["outside-air-damper"].notna() & d["outside-air-temp"].notna() & (econ < 0.05) & (d["outside-air-temp"] > oat_min)
@@ -1510,20 +1513,10 @@ def trim4(d, p, poll):
 
 def reset1(d, p, poll):
     """SAT SP not tracking the OA reset curve."""
-    from open_fdd.quality import _storage_si
-    from open_fdd.units.convert import delta_f_to_delta_c, fahrenheit_to_celsius
-
     err = _f(p, "reset_err", 1.666667)
     intercept = _f(p, "reset_sat_at_65", 11.111111)
     slope = _f(p, "reset_slope", 0.25)
     oat_ref = _f(p, "reset_oat_ref", 18.333333)
-    if _storage_si(d):
-        if intercept >= 30.0:
-            intercept = fahrenheit_to_celsius(intercept)
-        if oat_ref >= 30.0:
-            oat_ref = fahrenheit_to_celsius(oat_ref)
-        if err >= 5.0:
-            err = delta_f_to_delta_c(err)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
     sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
     expected = intercept + slope * (oat - oat_ref)
@@ -1852,7 +1845,7 @@ RULES: list[CookbookRule] = [
     # --- Economizer & ventilation ---
     CookbookRule("ECON-1", "Economizer stuck closed", "ahu", ["ahu"],
         ["fan-cmd", "outside-air-damper", "outside-air-temp"], "Fan on, OA damper < 5%, OAT > 55°F (should be economizing).",
-        econ1, params=[CookbookParam("econ1_oat_min", "Favorable OAT", "°F", 45.0, 70.0, 1.0, 55.0), CONFIRM_PARAM()], confirm_seconds=600),
+        econ1, params=[CookbookParam("econ1_oat_min", "Favorable OAT", "°C", 7.0, 21.0, 0.5, 12.777778), CONFIRM_PARAM()], confirm_seconds=600),
     CookbookRule("ECON-2", "Economizing when outdoor unfavorable", "ahu", ["ahu"],
         ["outside-air-temp", "outside-air-damper"], "OAT > 63°F AND OA damper > 42% (should be at minimum).",
         econ2, params=[
@@ -2282,9 +2275,9 @@ RULES: list[CookbookRule] = [
         "Fan on AND |SAT SP − (52 + 0.25×(OAT−65))| > 3°F.",
         reset1, params=[
             CookbookParam("reset_err", "Reset error", "°C_delta", 0.277778, 5.555556, 0.277778, 1.666667),
-            CookbookParam("reset_sat_at_65", "SAT SP at 65°F OAT", "°F", 45.0, 65.0, 0.5, 52.0),
+            CookbookParam("reset_sat_at_65", "SAT SP at 65°F OAT", "°C", 7.0, 18.0, 0.5, 11.111111),
             CookbookParam("reset_slope", "Reset slope", "°F/°F", 0.05, 1.0, 0.05, 0.25),
-            CookbookParam("reset_oat_ref", "Reset OAT ref", "°F", 50.0, 80.0, 1.0, 65.0),
+            CookbookParam("reset_oat_ref", "Reset OAT ref", "°C", 10.0, 27.0, 1.0, 18.333333),
             CONFIRM_PARAM()],
         optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("CMD-1", "Fan cmd/status mismatch", "ahu", ["ahu"],

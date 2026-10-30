@@ -88,7 +88,7 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "open-fdd-anomaly" not in typ
     assert "how to run" not in typ.lower()
     assert "FC1" in typ
-    assert "ECON-1" in typ
+    assert "SCHED-247" in typ
     assert "FC2" not in typ
     assert result.devices == ["AHU_1"]
     pngs = list((out / "figures").glob("*.png"))
@@ -123,7 +123,8 @@ def test_single_system_report_is_plotly_pack_without_histograms(tmp_path):
     assert "sensor_checks" in summary["ai_comment_slots"]
     assert "device_folder" in summary["history_sources"]
     health = {row["role"]: row for row in summary["devices"][0]["health"]}
-    assert health["outside-air-temp"]["out_of_range"] >= 1
+    assert health["outside-air-temp"]["max"] >= 50.0
+    assert health["outside-air-temp"]["out_of_range"] == 0
     fault_ids = {row["rule_id"] for row in summary["devices"][0]["faults"]}
     assert "FC1" in fault_ids
     assert "ECON-1" in fault_ids

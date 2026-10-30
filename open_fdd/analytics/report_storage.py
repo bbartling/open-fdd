@@ -91,8 +91,7 @@ def _storage_to_display(role: str, value: float, *, display: str) -> float:
     return _storage_to_imperial(role, value)
 
 
-def oracle_seed_frame_from_imperial_wide(frame: pd.DataFrame) -> pd.DataFrame:
-    """Convert Wave-0 oracle CSV magnitudes (imperial) to metric-c-v2 rule storage."""
+def _convert_imperial_wide_columns_to_storage(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame.copy()
     out.attrs = dict(getattr(frame, "attrs", {}))
     for col in out.columns:
@@ -116,8 +115,12 @@ def oracle_seed_frame_from_imperial_wide(frame: pd.DataFrame) -> pd.DataFrame:
             else:
                 converted.append(fv)
         out[col] = converted
-    role_units: dict[str, str] = dict(out.attrs.get("role_units") or {})
-    for col in out.columns:
+    return out
+
+
+def _stamp_storage_role_units(frame: pd.DataFrame) -> None:
+    role_units: dict[str, str] = dict(frame.attrs.get("role_units") or {})
+    for col in frame.columns:
         quantity = ROLE_QUANTITY.get(str(col))
         if quantity == "absolute_temperature":
             role_units[str(col)] = "°C"
@@ -126,7 +129,13 @@ def oracle_seed_frame_from_imperial_wide(frame: pd.DataFrame) -> pd.DataFrame:
         elif quantity == "volumetric_flow":
             role_units[str(col)] = "L/s"
     if role_units:
-        out.attrs["role_units"] = role_units
+        frame.attrs["role_units"] = role_units
+
+
+def oracle_seed_frame_from_imperial_wide(frame: pd.DataFrame) -> pd.DataFrame:
+    """Convert Wave-0 oracle CSV magnitudes (imperial) to metric-c-v2 rule storage."""
+    out = _convert_imperial_wide_columns_to_storage(frame)
+    _stamp_storage_role_units(out)
     return ensure_storage_frame(
         out,
         {"storage_abi": STORAGE_ABI_METRIC, "display_units": "imperial"},
@@ -145,6 +154,11 @@ def ensure_storage_frame(frame: pd.DataFrame, column_map: dict[str, Any] | None 
     metadata = dict(column_map)
     if not metadata.get("display_units"):
         metadata["display_units"] = "imperial"
+    display_pref = normalize_display_units(metadata.get("display_units"))
+    if display_pref == "imperial" and not out.attrs.get("storage_values_converted"):
+        out = _convert_imperial_wide_columns_to_storage(out)
+        _stamp_storage_role_units(out)
+        out.attrs["storage_values_converted"] = True
     from open_fdd.analytics.units import stamp_display_units
 
     stamp_display_units(out, metadata)
