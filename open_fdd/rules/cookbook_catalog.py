@@ -17,6 +17,12 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
+from open_fdd.rules.mode_delay import (
+    PRODUCT_MODE_DELAY_MIN_DEFAULT,
+    effective_mode_delay_min,
+    fan_restart_stable,
+    mode_delay_rows,
+)
 from open_fdd.rules.sensor_sweep_catalog import (
     flatline_quantity_allowed,
     limits_for_haystack_role,
@@ -164,6 +170,45 @@ def _f(p: dict, key: str, default: float) -> float:
         return float(v) if v is not None else float(default)
     except (TypeError, ValueError):
         return float(default)
+
+
+def _role_series_unit(d: pd.DataFrame, role: str) -> str:
+    from open_fdd.analytics.units import DEFAULT_ROLE_UNITS
+
+    units = d.attrs.get("role_units") or d.attrs.get("units_map") or {}
+    if isinstance(units, dict):
+        u = units.get(role)
+        if u:
+            return str(u)
+    return str(DEFAULT_ROLE_UNITS.get(role, "°F"))
+
+
+def _param_si_abs_temp_to_series(d: pd.DataFrame, role: str, value_c: float) -> float:
+    """Map an SI (°C) rule threshold onto the series unit for ``role``."""
+    from open_fdd.units.convert import celsius_to_fahrenheit, normalize_unit_token
+
+    tok = normalize_unit_token(_role_series_unit(d, role))
+    if tok in {"c", "degc", "celsius"}:
+        return value_c
+    return celsius_to_fahrenheit(value_c)
+
+
+def _param_si_delta_temp_to_series(d: pd.DataFrame, role: str, delta_c: float) -> float:
+    from open_fdd.units.convert import delta_c_to_delta_f, normalize_unit_token
+
+    tok = normalize_unit_token(_role_series_unit(d, role))
+    if tok in {"c", "degc", "celsius"}:
+        return delta_c
+    return delta_c_to_delta_f(delta_c)
+
+
+def _param_si_flow_to_series(d: pd.DataFrame, value_lps: float) -> float:
+    from open_fdd.units.convert import LPS_PER_CFM, normalize_unit_token
+
+    tok = normalize_unit_token(_role_series_unit(d, "zone-airflow"))
+    if tok in {"lps", "ls"}:
+        return value_lps
+    return value_lps / LPS_PER_CFM
 
 
 def _false(index) -> pd.Series:
@@ -418,7 +463,8 @@ CONFIRM_PARAM = lambda default_min=5.0, mx=60.0: CookbookParam(  # noqa: E731
 )
 
 MODE_DELAY_PARAM = lambda: CookbookParam(  # noqa: E731
-    "mode_delay_min", "Mode-change suspension (GL36 default 30)", "min", 0.0, 60.0, 1.0, 0.0, direction="fewer"
+    "mode_delay_min", "Mode-change suspension (product default)", "min", 0.0, 60.0, 1.0,
+    PRODUCT_MODE_DELAY_MIN_DEFAULT, direction="fewer"
 )
 FAN_ON_PARAM = lambda: CookbookParam(  # noqa: E731
     "fan_on_min", "Fan-on command threshold", "frac", 0.0, 0.25, 0.01, FAN_ON_MIN
@@ -463,6 +509,9 @@ def _units_map(d: pd.DataFrame) -> dict[str, str]:
 
 
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    from open_fdd.quality import _storage_si
+    from open_fdd.rules.sensor_sweep_catalog import limits_for_haystack_role_si
+
     idx = d.index
     mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
@@ -473,11 +522,14 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
-        lim = SENSOR_LIMITS[role]
+        lim = limits_for_haystack_role_si(role) if _storage_si(d) else SENSOR_LIMITS[role]
+        if lim is None:
+            raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
+        base_lo, base_hi = lim["lo"], lim["hi"]
         type_scale = _role_type_scale(p, role, kind="range")
         # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
-        mid = (lim["lo"] + lim["hi"]) / 2.0
-        half = (lim["hi"] - lim["lo"]) / 2.0 * max(type_scale, 1e-6)
+        mid = (base_lo + base_hi) / 2.0
+        half = (base_hi - base_lo) / 2.0 * max(type_scale, 1e-6)
         lo, hi = mid - half, mid + half
         # BACnet sensor failures commonly arrive as IEEE +/-Inf. Treat any
         # present non-finite number as a hard range fault before JSON/Parquet
@@ -588,10 +640,10 @@ def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 # Air handling unit rules (FC1–FC15 + additional patterns)
 # ---------------------------------------------------------------------------
 
-MIX_TOL = 1.15
-SUPPLY_TOL = 1.15
+MIX_TOL = 0.6388888889
+SUPPLY_TOL = 0.6388888889
 AHU_MIN_OA_DPR = 0.05
-DELTA_SUPPLY_FAN = 0.55
+DELTA_SUPPLY_FAN = 0.3055555556
 FAN_ON_MIN = 0.01
 
 
@@ -604,65 +656,31 @@ def _gl36_value(p: dict, key: str, legacy_key: str | None, default: float) -> fl
     return float(default)
 
 
-def _runtime_defaults() -> dict[str, float]:
-    import json
-    from pathlib import Path
-
-    path = Path(__file__).resolve().parents[2] / "sql" / "fdd" / "runtime_defaults.json"
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    return {str(k): float(v) for k, v in raw.items()}
-
-
-def _product_effective_mode_delay_min(p: dict) -> float:
-    """Same max(MODE_DELAY_MIN, STARTUP_DELAY_MIN) as sql/fdd/render_rule.py."""
-    defaults = _runtime_defaults()
-    mode = float(defaults.get("MODE_DELAY_MIN", 10.0))
-    startup = float(p.get("startup_delay_min", defaults.get("STARTUP_DELAY_MIN", 0.0)))
-    return max(mode, startup)
-
-
-def _fc1_fan_on_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Mirror fc1_duct_static_low.sql mode_stable (fan_on + MODE_DELAY_ROWS window)."""
-    delay_min = _product_effective_mode_delay_min(p)
-    if delay_min <= 0 or d.empty:
-        return pd.Series(True, index=d.index)
-    fan = _fan(d)
-    fan_on_thr = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
-    on = (fan > fan_on_thr).fillna(False)
-    off = ~on
-    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
-    off_in_window = off.astype(int).rolling(samples, min_periods=1).max().astype(bool)
-    return on & ~off_in_window
-
-
 def _gl36_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """False during GL36 ModeDelay after an AHU operating-state change."""
-    delay_min = _f(p, "mode_delay_min", 0.0)
-    if delay_min <= 0 or d.empty:
-        return pd.Series(True, index=d.index)
-    htg = norm_cmd(d["heating-valve"]).fillna(0) if "heating-valve" in d else pd.Series(0.0, index=d.index)
-    clg = norm_cmd(d["cooling-valve"]).fillna(0) if "cooling-valve" in d else pd.Series(0.0, index=d.index)
-    econ = norm_cmd(d["outside-air-damper"]).fillna(0) if "outside-air-damper" in d else pd.Series(0.0, index=d.index)
-    fan = _fan(d)
-    fan_on = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
-    econ_min = _gl36_value(p, "econ_min_pos", None, AHU_MIN_OA_DPR)
-    clg_on = _gl36_value(p, "clg_on_min", None, 0.01)
-    htg_on = _gl36_value(p, "htg_on_min", None, 0.01)
-    state = pd.Series(0, index=d.index, dtype=int)
-    state[(fan > fan_on) & (htg > htg_on) & (clg <= clg_on)] = 1
-    state[(fan > fan_on) & (htg <= htg_on) & (clg <= clg_on) & (econ > econ_min)] = 2
-    state[(fan > fan_on) & (htg <= htg_on) & (clg > clg_on) & (econ > econ_min)] = 3
-    state[(fan > fan_on) & (htg <= htg_on) & (clg > clg_on) & (econ <= econ_min)] = 4
-    changed = state.ne(state.shift()).fillna(False)
-    if len(changed):
-        changed.iloc[0] = False
-    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
-    recent_change = changed.astype(int).rolling(samples, min_periods=1).max().astype(bool)
-    return ~recent_change
+    """False during the product mode-delay holdoff after a fan restart (#1459).
+
+    Matches product SQL (render_rule.py / params.rs) via ``open_fdd.rules.mode_delay``.
+    """
+    delay_min = effective_mode_delay_min(p)
+    fan_on = _fan(d) > _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
+    return fan_restart_stable(fan_on, mode_delay_rows(delay_min, float(poll)))
 
 
 def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     return raw.fillna(False) & _gl36_mode_stable(d, p, poll)
+
+
+def _fc1_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
+    """Fan-gap mode delay only — matches postgres fc1_duct_static_low.sql mode_stable."""
+    delay_min = _f(p, "mode_delay_min", 0.0)
+    if delay_min <= 0 or d.empty:
+        return pd.Series(True, index=d.index)
+    fan_on_min = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
+    fan = _fan(d)
+    on = fan > fan_on_min
+    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
+    off_in_window = (~on).astype(int).rolling(samples, min_periods=1).max().astype(bool)
+    return (on & ~off_in_window).fillna(False)
 
 
 def _fan(d: pd.DataFrame) -> pd.Series:
@@ -675,7 +693,7 @@ def _fan(d: pd.DataFrame) -> pd.Series:
 
 
 def fc1(d, p, poll):
-    err = _gl36_value(p, "eps_dsp", "duct_static_err", 0.12)
+    err = float(p["eps_dsp"]) if "eps_dsp" in p else float(p["duct_static_err"])
     speed_err = _gl36_value(p, "eps_vfd_spd", None, 0.13)
     fan_hi = _gl36_value(p, "fan_hi", None, 1.0 - speed_err)
     fan = _fan(d)
@@ -684,7 +702,7 @@ def fc1(d, p, poll):
         & (d["duct-static-pressure"] < d["duct-static-pressure-sp"] - err)
         & (fan >= fan_hi)
     )
-    return raw.fillna(False) & _fc1_fan_on_mode_stable(d, p, poll)
+    return raw.fillna(False) & _fc1_mode_stable(d, p, poll)
 
 
 def fc2(d, p, poll):
@@ -974,11 +992,12 @@ def econ2(d, p, poll):
 
 def econ4(d, p, poll):
     oa_min_pct = _f(p, "oa_min_pct", 21.0)
+    rat_oat_min = _f(p, "oat_rat_delta_min", 1.2222222222222223)
     fan = _fan(d)
     oa_frac = (d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan) * 100.0
     return (
         (fan > FAN_ON_MIN) & d["mixed-air-temp"].notna() & d["return-air-temp"].notna() & d["outside-air-temp"].notna()
-        & ((d["return-air-temp"] - d["outside-air-temp"]).abs() > 2.2) & (oa_frac < oa_min_pct)
+        & ((d["return-air-temp"] - d["outside-air-temp"]).abs() > rat_oat_min) & (oa_frac < oa_min_pct)
     )
 
 
@@ -1007,7 +1026,8 @@ def _vav_air_on(d: pd.DataFrame, flow_min: float) -> pd.Series:
     means the fan is on. When no airflow point is modeled we can't gate, so return True.
     """
     if "zone-airflow" in d.columns:
-        return pd.to_numeric(d["zone-airflow"], errors="coerce").fillna(0) > flow_min
+        thr = _param_si_flow_to_series(d, flow_min)
+        return pd.to_numeric(d["zone-airflow"], errors="coerce").fillna(0) > thr
     return pd.Series(True, index=d.index)
 
 
@@ -1048,26 +1068,16 @@ def vav1_occupied_mask(d: pd.DataFrame, p: dict | None = None) -> tuple[pd.Serie
 
 
 def _zone_comfort_band(p: dict | None, role_units: dict | None = None) -> tuple[float, float]:
-    lo = _f(p, "zone_lo", 70.0)
-    hi = _f(p, "zone_hi", 75.0)
-    unit = ""
-    if role_units:
-        unit = str(
-            role_units.get("zone-air-temp")
-            or role_units.get("zone_t")
-            or role_units.get("zone-air-temp".replace("-", "_"))
-            or ""
-        )
-    token = unit.strip().lower().replace(" ", "")
-    if token in {"c", "degc", "celsius", "°c"}:
-        lo = (lo - 32.0) * 5.0 / 9.0
-        hi = (hi - 32.0) * 5.0 / 9.0
+    _ = role_units
+    lo = _f(p, "zone_lo", 21.111111)
+    hi = _f(p, "zone_hi", 23.888889)
     return lo, hi
 
 
 def vav1(d, p, poll):
     """Comfort band during occupied hours when a schedule or occ column is set."""
-    lo, hi = _zone_comfort_band(p, d.attrs.get("role_units") or d.attrs.get("units_map"))
+    lo = _param_si_abs_temp_to_series(d, "zone-air-temp", _f(p, "zone_lo", 21.111111))
+    hi = _param_si_abs_temp_to_series(d, "zone-air-temp", _f(p, "zone_hi", 23.888889))
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     occupied, _src = vav1_occupied_mask(d, p)
     return zt.notna() & ((zt < lo) | (zt > hi)) & occupied
@@ -1075,15 +1085,15 @@ def vav1(d, p, poll):
 
 def vav2(d, p, poll):
     """Unoccupied zone stays warmer than heating setback (night setback miss)."""
-    hi = _f(p, "setback_hi", 68.0)
+    hi = _param_si_abs_temp_to_series(d, "zone-air-temp", _f(p, "setback_hi", 20.0))
     zt = pd.to_numeric(d["zone-air-temp"], errors="coerce")
     return zt.notna() & _unoccupied_mask(d) & (zt > hi)
 
 
 def vav3(d, p, poll):
-    oat_hi = _f(p, "reheat_oat", 78.0)
+    oat_hi = _param_si_abs_temp_to_series(d, "outside-air-temp", _f(p, "reheat_oat", 25.555556))
     reheat_thr = _f(p, "reheat_pct", 0.52)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     return _vav_air_on(d, flow_min) & d["outside-air-temp"].notna() & (d["outside-air-temp"] > oat_hi) & (reheat > reheat_thr)
 
@@ -1091,7 +1101,7 @@ def vav3(d, p, poll):
 def vav4(d, p, poll):
     full_open = _f(p, "full_open_pct", 0.975)
     hours = _f(p, "sustain_hours", 1.5)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     roll = max(2, int(round(hours * 3600 / max(poll, 1))))
     dmp = norm_cmd(d["damper"]).fillna(0)
     return (
@@ -1102,12 +1112,13 @@ def vav4(d, p, poll):
 
 def vav5(d, p, poll):
     dmp = norm_cmd(d["damper"]).fillna(0)
-    return d["zone-airflow"].notna() & (d["zone-airflow"] > 50.0) & (dmp < 0.10)
+    flow_thr = _param_si_flow_to_series(d, 23.597372)
+    return d["zone-airflow"].notna() & (d["zone-airflow"] > flow_thr) & (dmp < 0.10)
 
 
 def vav6(d, p, poll):
     """Reheat open while OA is cool enough for free cooling."""
-    oat_hi = _f(p, "free_cool_oat", 65.0)
+    oat_hi = _param_si_abs_temp_to_series(d, "outside-air-temp", _f(p, "free_cool_oat", 18.333333))
     reheat_thr = _f(p, "reheat_pct", 0.25)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
@@ -1127,17 +1138,17 @@ def vav7(d, p, poll):
     flow = pd.to_numeric(d["zone-airflow"], errors="coerce") if "zone-airflow" in d.columns else None
     if flow is None:
         return under
-    flow_min = _f(p, "flow_on_min", 25.0)
+    flow_min = _f(p, "flow_on_min", 11.798689)
     air_on = _vav_air_on(d, flow_min)
     window = max(6, int(round(3600.0 / max(float(poll), 1.0))))
     roll_std = flow.rolling(window, min_periods=max(3, window // 2)).std()
     roll_mean = flow.rolling(window, min_periods=max(3, window // 2)).mean()
-    max_std = _f(p, "fixed_flow_max_std", 15.0)
-    min_mean = _f(p, "fixed_flow_min_mean", 200.0)
+    max_std = _param_si_flow_to_series(d, _f(p, "fixed_flow_max_std", 7.079211))
+    min_mean = _param_si_flow_to_series(d, _f(p, "fixed_flow_min_mean", 94.389489))
     fixed_high = air_on & flow.notna() & (roll_std < max_std) & (roll_mean > min_mean)
     high_min = _false(d.index)
     if "min-flow-sp" in d.columns:
-        high_min_thr = _f(p, "high_min_flow_sp", 250.0)
+        high_min_thr = _param_si_flow_to_series(d, _f(p, "high_min_flow_sp", 117.986861))
         high_min = (
             air_on
             & d["min-flow-sp"].notna()
@@ -1155,8 +1166,10 @@ def vav_reheat_stuck(d, p, poll):
     failed reheat valve or coil. Fully computed from VAV-local sensors.
     """
     cmd_thr = _f(p, "reheat_cmd", 0.30)
-    min_rise = _f(p, "min_rise", 3.0)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    min_rise = _param_si_delta_temp_to_series(
+        d, "vav-discharge-air-temp", _f(p, "min_rise", 1.666667)
+    )
+    flow_min = _f(p, "flow_on_min", 11.798689)
     reheat = norm_cmd(d["reheat-valve"]).fillna(0)
     rise = d["vav-discharge-air-temp"] - d["vav-inlet-air-temp"]
     return (
@@ -1172,8 +1185,8 @@ def vav_vs_ahu_leave(d, p, poll):
     Requires topology enrich: ``ahu_sat`` copied from parent AHU onto the VAV frame.
     Without ``ahu_sat``, the rule is SKIPPED_MISSING_ROLES by the engine.
     """
-    band = _f(p, "delta_f", 8.0)
-    flow_min = _f(p, "flow_on_min", 25.0)
+    band = _param_si_delta_temp_to_series(d, "vav-discharge-air-temp", _f(p, "delta", 4.444444))
+    flow_min = _f(p, "flow_on_min", 11.798689)
     leave = pd.to_numeric(d["vav-discharge-air-temp"], errors="coerce")
     ahu = pd.to_numeric(d["ahu-discharge-air-temp"], errors="coerce")
     return (
@@ -1217,7 +1230,10 @@ def fcu_htg_coil(d, p, poll):
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < _f(p, "coil_delta_f", 5.4))
+    coil_delta = _param_si_delta_temp_to_series(
+        d, "discharge-air-temp", _f(p, "coil_delta", 3.0)
+    )
+    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < coil_delta)
 
 
 def fcu_clg_coil(d, p, poll):
@@ -1235,7 +1251,10 @@ def fcu_valve_pass_htg(d, p, poll):
     rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
         d["zone-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (rise > _f(p, "pass_delta_f", 5.4))
+    pass_delta = _param_si_delta_temp_to_series(
+        d, "discharge-air-temp", _f(p, "pass_delta", 3.0)
+    )
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (rise > pass_delta)
 
 
 def fcu_valve_pass_clg(d, p, poll):
@@ -1244,7 +1263,10 @@ def fcu_valve_pass_clg(d, p, poll):
     drop = pd.to_numeric(d["zone-air-temp"], errors="coerce") - pd.to_numeric(
         d["discharge-air-temp"], errors="coerce"
     )
-    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (drop > _f(p, "pass_delta_f", 5.4))
+    pass_delta = _param_si_delta_temp_to_series(
+        d, "discharge-air-temp", _f(p, "pass_delta", 3.0)
+    )
+    return _fcu_fan_on(d) & heat.notna() & cool.notna() & (heat <= 0.05) & (cool <= 0.05) & (drop > pass_delta)
 
 
 def fcu_damper_pos(d, p, poll):
@@ -1262,7 +1284,8 @@ def fcu_co2_damper(d, p, poll):
 def fcu_deadband(d, p, poll):
     cool = pd.to_numeric(d["cooling-sp"], errors="coerce")
     heat = pd.to_numeric(d["heating-sp"], errors="coerce")
-    return cool.notna() & heat.notna() & ((cool - heat) < _f(p, "deadband_c", 1.0))
+    band = _param_si_delta_temp_to_series(d, "zone-air-temp", _f(p, "deadband", 1.0))
+    return cool.notna() & heat.notna() & ((cool - heat) < band)
 
 
 def fcu_mode_cycle(d, p, poll):
@@ -1284,7 +1307,7 @@ def fcu_mode_cycle(d, p, poll):
 
 
 def chw1(d, p, poll):
-    min_dt = _f(p, "min_dt", 4.0)
+    min_dt = _f(p, "min_dt", 2.222222)
     dt = d["chilled-water-return-temp"] - d["chilled-water-supply-temp"]
     return (
         d["chilled-water-supply-temp"].notna()
@@ -1294,7 +1317,7 @@ def chw1(d, p, poll):
 
 
 def chw2(d, p, poll):
-    margin = _f(p, "dp_margin", 2.2)
+    margin = _f(p, "dp_margin", 15.1685)
     pmp_hi = _f(p, "pump_hi", 0.87)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return (
@@ -1304,7 +1327,7 @@ def chw2(d, p, poll):
 
 
 def chw3(d, p, poll):
-    band = _f(p, "sp_band", 2.2)
+    band = _f(p, "sp_band", 1.222222)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return (
         (pump > 0.01) & d["chilled-water-supply-temp"].notna() & d["chilled-water-supply-temp-sp"].notna()
@@ -1313,7 +1336,7 @@ def chw3(d, p, poll):
 
 
 def chw4(d, p, poll):
-    flow_hi = _f(p, "flow_hi", 1100.0)
+    flow_hi = _f(p, "flow_hi", 69.3992)
     pmp_hi = _f(p, "pump_hi", 0.87)
     pump = norm_cmd(d["chw-pump-cmd"]).fillna(0)
     return d["chw-flow"].notna() & (d["chw-flow"] > flow_hi) & (pump >= pmp_hi)
@@ -1325,8 +1348,8 @@ def chw4(d, p, poll):
 
 
 def hp1(d, p, poll):
-    min_sat = _f(p, "min_sat", 85.0)
-    zone_cold = _f(p, "zone_cold", 69.0)
+    min_sat = _f(p, "min_sat", 29.4444)
+    zone_cold = _f(p, "zone_cold", 20.5556)
     fan = _fan(d)
     return (
         d["discharge-air-temp"].notna() & d["zone-air-temp"].notna() & (fan > FAN_ON_MIN)
@@ -1362,8 +1385,8 @@ def cw_opt(d, p, poll):
     wb = d["web-outside-air-wetbulb"] if "web-outside-air-wetbulb" in d.columns else None
     if wb is None or wb.notna().sum() == 0:
         return _false(d.index)
-    approach = _f(p, "cw_approach", 7.0)
-    slack = _f(p, "cw_slack", 2.0)
+    approach = _f(p, "cw_approach", 3.888889)
+    slack = _f(p, "cw_slack", 1.111111)
     # Over-cooled tower water: supply significantly below wet-bulb + design approach
     return (
         d["condenser-water-supply-temp"].notna()
@@ -1396,7 +1419,7 @@ def cw_apr(d, p, poll):
         return _false(d.index)
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
-    limit = _f(p, "approach_max_f", 8.0)
+    limit = _f(p, "approach_max", _f(p, "approach_max_f", 4.444444))
     apr = _cw_approach_f(d)
     return (
         d["condenser-water-supply-temp"].notna()
@@ -1414,8 +1437,8 @@ def cw_fan_excess(d, p, poll):
         return _false(d.index)
     if not any(r in d.columns and d[r].notna().any() for r in ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd")):
         return _false(d.index)
-    approach = _f(p, "cw_approach", 7.0)
-    excess = _f(p, "excess_beyond_approach_f", 5.0)
+    approach = _f(p, "cw_approach", 3.888889)
+    excess = _f(p, "excess_beyond_approach", _f(p, "excess_beyond_approach_f", 2.777778))
     apr = _cw_approach_f(d)
     return (
         d["condenser-water-supply-temp"].notna()
@@ -1464,7 +1487,7 @@ def oat_vs_meteo(d, p, poll):
 
 
 def trim1(d, p, poll):
-    duct_hi = _f(p, "duct_hi", 1.35)
+    duct_hi = _f(p, "duct_hi", 335.934)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["duct-static-pressure"].notna() & d["vav-pressure-request-sum"].notna()
@@ -1473,7 +1496,7 @@ def trim1(d, p, poll):
 
 
 def trim3(d, p, poll):
-    hwst_hi = _f(p, "hwst_hi", 160.0)
+    hwst_hi = _f(p, "hwst_hi", 71.1111)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["hot-water-supply-temp"].notna() & d["hw-reset-request-sum"].notna()
@@ -1482,7 +1505,7 @@ def trim3(d, p, poll):
 
 
 def trim4(d, p, poll):
-    chw_lo = _f(p, "chw_lo", 45.0)
+    chw_lo = _f(p, "chw_lo", 7.222222)
     req_lo = _f(p, "request_lo", 1.0)
     return (
         d["chilled-water-supply-temp"].notna() & d["chw-reset-request-sum"].notna()
@@ -1497,10 +1520,10 @@ def trim4(d, p, poll):
 
 def reset1(d, p, poll):
     """SAT SP not tracking the OA reset curve."""
-    err = _f(p, "reset_err_f", 3.0)
-    intercept = _f(p, "reset_sat_at_65", 52.0)
+    err = _f(p, "reset_err_f", 1.666667)
+    intercept = _f(p, "reset_sat_at_65", 11.111111)
     slope = _f(p, "reset_slope", 0.25)
-    oat_ref = _f(p, "reset_oat_ref", 65.0)
+    oat_ref = _f(p, "reset_oat_ref", 18.333333)
     oat = pd.to_numeric(d["outside-air-temp"], errors="coerce")
     sat_sp = pd.to_numeric(d["discharge-air-temp-sp"], errors="coerce")
     expected = intercept + slope * (oat - oat_ref)
@@ -1546,7 +1569,7 @@ def cmd1(d, p, poll):
 
 def oa1(d, p, poll):
     min_oa = _f(p, "min_oa_frac", 0.15)
-    guard = _f(p, "oat_rat_guard", 2.2)
+    guard = _f(p, "oat_rat_guard", 1.2222222222222223)
     oa_frac = (d["mixed-air-temp"] - d["return-air-temp"]) / (d["outside-air-temp"] - d["return-air-temp"]).replace(0, np.nan)
     fan = _fan(d)
     return (
@@ -1971,7 +1994,7 @@ RULES: list[CookbookRule] = [
         "Fan on and heating valve ≥80%, but discharge air is less than 5.4°F above zone temperature.",
         fcu_htg_coil, params=[
             CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
-            CookbookParam("coil_delta_f", "Minimum heating rise", "°F", 1.0, 20.0, 0.5, 5.4),
+            CookbookParam("coil_delta", "Minimum heating rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
@@ -1983,13 +2006,13 @@ RULES: list[CookbookRule] = [
         ["discharge-air-temp", "zone-air-temp", "heating-valve", "cooling-valve"],
         "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 5.4°F.",
         fcu_valve_pass_htg, params=[
-            CookbookParam("pass_delta_f", "Passing temperature rise", "°F", 1.0, 20.0, 0.5, 5.4),
+            CookbookParam("pass_delta", "Passing temperature rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-VALVE-PASS-CLG", "FCU cooling valve passing", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "heating-valve", "cooling-valve"],
         "Fan on and both valves shut, but zone temperature exceeds discharge air by more than 5.4°F.",
         fcu_valve_pass_clg, params=[
-            CookbookParam("pass_delta_f", "Passing temperature drop", "°F", 1.0, 20.0, 0.5, 5.4),
+            CookbookParam("pass_delta", "Passing temperature drop", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-DAMPER-POS", "FCU damper command/position mismatch", "fcu", ["zone_other", "general", "ahu"],
         ["damper-cmd", "damper"],
@@ -2009,7 +2032,7 @@ RULES: list[CookbookRule] = [
         ["cooling-sp", "heating-sp"],
         "Pass-through cooling setpoint minus heating setpoint is less than 1°C.",
         fcu_deadband, params=[
-            CookbookParam("deadband_c", "Minimum deadband", "°C", 0.0, 5.0, 0.1, 1.0),
+            CookbookParam("deadband", "Minimum deadband", "°C", 0.0, 5.0, 0.1, 1.0),
             CONFIRM_PARAM()], confirm_seconds=0),
     CookbookRule("FCU-MODE-CYCLE", "FCU heating/cooling mode cycling", "fcu", ["zone_other", "general", "ahu"],
         ["heating-valve", "cooling-valve"],
@@ -2022,55 +2045,55 @@ RULES: list[CookbookRule] = [
     # --- VAV zones ---
     CookbookRule("VAV-1", "Zone comfort band", "vav", ["vav", "zone_other", "heatpump", "baseboard"],
         ["zone-air-temp"],
-        "Zone temp outside zone_lo–zone_hi (default 70–75°F) during occupied hours when an "
+        "Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied hours when an "
         "occupancy column or Overview calendar is set (require_occupied, default on). "
         "Unoccupied setback stays on VAV-2.",
         vav1, params=[
-            CookbookParam("zone_lo", "Zone low", "°F", 55.0, 72.0, 0.5, 70.0),
-            CookbookParam("zone_hi", "Zone high", "°F", 72.0, 85.0, 0.5, 75.0),
+            CookbookParam("zone_lo", "Zone low", "°C", 12.777778, 22.222222, 0.5, 21.111111),
+            CookbookParam("zone_hi", "Zone high", "°C", 22.222222, 29.444444, 0.5, 23.888889),
             CookbookParam("require_occupied", "Require occupied", "bool", 0.0, 1.0, 1.0, 1.0),
             CONFIRM_PARAM()],
         optional_roles=["occupied", "occ-mode"], confirm_seconds=900),
     CookbookRule("VAV-2", "Night setback miss", "vav", ["vav", "zone_other", "heatpump", "baseboard"],
         ["zone-air-temp", "occupied"],
-        "Unoccupied AND zone temp > setback_hi (default 68°F) — heating setback not taken.",
+        "Unoccupied AND zone temp > setback_hi (default 20 °C) — heating setback not taken.",
         vav2, params=[
-            CookbookParam("setback_hi", "Setback high", "°F", 55.0, 72.0, 0.5, 68.0),
+            CookbookParam("setback_hi", "Setback high", "°C", 12.777778, 22.222222, 0.5, 20.0),
             CONFIRM_PARAM()],
         optional_roles=["occ-mode"], confirm_seconds=900),
     CookbookRule("VAV-3", "Excessive reheat during warm weather", "vav", ["vav"],
-        ["outside-air-temp", "reheat-valve"], "Air flowing AND OAT > 78°F AND reheat valve > 52%.",
+        ["outside-air-temp", "reheat-valve"], "Air flowing AND OAT > 25.6 °C AND reheat valve > 52%.",
         vav3, params=[
-            CookbookParam("reheat_oat", "Warm OAT", "°F", 65.0, 90.0, 1.0, 78.0),
+            CookbookParam("reheat_oat", "Warm OAT", "°C", 18.333333, 32.222222, 0.555556, 25.555556),
             CookbookParam("reheat_pct", "Reheat frac", "frac", 0.1, 1.0, 0.02, 0.52),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM()], confirm_seconds=300),
     CookbookRule("VAV-4", "Damper stuck at full open", "vav", ["vav"],
         ["damper"], "Air flowing AND damper > 97.5% sustained across the window.",
         vav4, params=[
             CookbookParam("full_open_pct", "Full open frac", "frac", 0.8, 1.0, 0.005, 0.975),
             CookbookParam("sustain_hours", "Sustain window", "h", 0.5, 6.0, 0.5, 1.5),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM()], confirm_seconds=900),
     CookbookRule("VAV-5", "Airflow sensor bias", "vav", ["vav"],
-        ["zone-airflow", "damper"], "Airflow > 50 cfm while damper < 10% (implausible flow).",
+        ["zone-airflow", "damper"], "Airflow > ~24 L/s while damper < 10% (implausible flow).",
         vav5, params=[CONFIRM_PARAM()], confirm_seconds=900),
     CookbookRule("VAV-6", "Reheat when cooling available", "vav", ["vav"],
         ["outside-air-temp", "reheat-valve"],
-        "OAT < 65°F AND reheat valve > 25% (optional cooling-available must be true when mapped).",
+        "OAT < 18.3 °C AND reheat valve > 25% (optional cooling-available must be true when mapped).",
         vav6, params=[
-            CookbookParam("free_cool_oat", "Free-cool OAT", "°F", 45.0, 75.0, 1.0, 65.0),
+            CookbookParam("free_cool_oat", "Free-cool OAT", "°C", 7.222222, 23.888889, 0.555556, 18.333333),
             CookbookParam("reheat_pct", "Reheat frac", "frac", 0.05, 1.0, 0.05, 0.25),
             CONFIRM_PARAM()],
         optional_roles=["cooling-available"], confirm_seconds=900),
     CookbookRule("VAV-REHEAT", "Reheat valve stuck / no temp rise", "vav", ["vav"],
         ["reheat-valve", "vav-discharge-air-temp", "vav-inlet-air-temp"],
-        "Air flowing AND reheat valve > 30% AND box discharge temp rises < 3°F above duct inlet "
+        "Air flowing AND reheat valve > 30% AND box discharge temp rises < 1.7 °C above duct inlet "
         "(air from AHU) — stuck or failed reheat valve/coil.",
         vav_reheat_stuck, params=[
             CookbookParam("reheat_cmd", "Reheat open frac", "frac", 0.1, 1.0, 0.05, 0.30),
-            CookbookParam("min_rise", "Min temp rise", "°F", 0.5, 15.0, 0.5, 3.0),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("min_rise", "Min temp rise", "°C", 0.277778, 8.333333, 0.277778, 1.666667),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM()], confirm_seconds=900),
     CookbookRule(
         "VAV-AHU-LEAVE",
@@ -2083,8 +2106,8 @@ RULES: list[CookbookRule] = [
         "otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.",
         vav_vs_ahu_leave,
         params=[
-            CookbookParam("delta_f", "Leave Δ vs AHU SAT", "°F", 2.0, 25.0, 0.5, 8.0),
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
+            CookbookParam("delta", "Leave Δ vs AHU SAT", "°C", 1.111111, 13.888889, 0.277778, 4.444444),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
             CONFIRM_PARAM(),
         ],
         confirm_seconds=900,
@@ -2094,10 +2117,10 @@ RULES: list[CookbookRule] = [
         "Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on "
         "(mins too high / box never modulates), OR min_flow_sp itself is excessively high.",
         vav7, params=[
-            CookbookParam("flow_on_min", "Airflow-on min", "cfm", 0.0, 200.0, 5.0, 25.0),
-            CookbookParam("fixed_flow_max_std", "Fixed-flow max std", "cfm", 1.0, 80.0, 1.0, 15.0, direction="stricter"),
-            CookbookParam("fixed_flow_min_mean", "Fixed-flow min mean", "cfm", 50.0, 2000.0, 10.0, 200.0, direction="fewer"),
-            CookbookParam("high_min_flow_sp", "High min-flow SP", "cfm", 50.0, 2000.0, 10.0, 250.0, direction="fewer"),
+            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.389489, 2.359737, 11.798689),
+            CookbookParam("fixed_flow_max_std", "Fixed-flow max std", "L/s", 0.471947, 37.755795, 0.471947, 7.079211),
+            CookbookParam("fixed_flow_min_mean", "Fixed-flow min mean", "L/s", 23.597372, 943.894885, 4.719474, 94.389489, direction="fewer"),
+            CookbookParam("high_min_flow_sp", "High min-flow SP", "L/s", 23.597372, 943.894885, 4.719474, 117.986861, direction="fewer"),
             CONFIRM_PARAM()], confirm_seconds=900),
 
     # --- Central plants ---

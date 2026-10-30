@@ -147,7 +147,7 @@ def _seed_si_site(
             equipment_id=equipment_id,
             equip_type=equip_type,
             frame=si_frame,
-            si_storage=True,
+            storage="si",
         )
         cts.fill_history(cur, building_id, sql_cols)
     conn.commit()

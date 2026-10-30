@@ -2,24 +2,109 @@
   "schema": "openfdd-si-parity-w4-families-v1",
   "issue": "1284",
   "families": {
-    "W4f_analytics_si_p2": {
-      "wave": "W4f",
-      "description": "W4f SI SQL storage path (#1284): the 19 sql/analytics/postgres/queries/* bodies. P1 = pandas IP->SI vs pandas SI, P2 = committed SQL SI goldens (analytics_si_goldens.json) vs pandas SI, per query x equipment x bucket. Rules are owned by W4a/W4b/W4c/W4e.",
-      "rules": [],
-      "analytics_queries": [
-        "*"
+    "W4a_si_ahu_fc": {
+      "wave": "W4a",
+      "description": "FC1–FC15 + FC13-SAT-HIGH SI pandas/SQL parity (blocking); owns T1284-4 FC1 scope",
+      "datasets": [
+        "COOKBOOK_FC1",
+        "COOKBOOK_FC2",
+        "SYNTH_AHU_CASE_FC1"
+      ],
+      "rules": [
+        "FC1",
+        "FC2",
+        "FC3",
+        "FC4",
+        "FC5",
+        "FC6",
+        "FC7",
+        "FC8",
+        "FC9",
+        "FC10",
+        "FC11",
+        "FC12",
+        "FC13-SAT-HIGH",
+        "FC14",
+        "FC15"
       ]
     },
-    "W4a_fc1_duct_static": {
-      "wave": "W4a",
-      "description": "FC1 duct static (GL36 A) \u2014 owned by W4a #1450; report-only until W4a lands",
+    "W4c_si_zone": {
+      "wave": "W4c",
+      "description": "VAV/zone/FCU SI pandas/SQL parity (blocking)",
+      "datasets": [
+        "COOKBOOK_VAV1",
+        "COOKBOOK_VAV6",
+        "COOKBOOK_VAV7",
+        "SYNTH_VAV_CASE_VAV_1"
+      ],
       "rules": [
-        "FC1"
+        "VAV-1",
+        "VAV-2",
+        "VAV-3",
+        "VAV-4",
+        "VAV-5",
+        "VAV-6",
+        "VAV-7",
+        "VAV-REHEAT",
+        "VAV-AHU-LEAVE",
+        "AVG-ZONE-TEMP",
+        "ZONE-COMFORT-PCT",
+        "FCU-SENSOR-NULL",
+        "FCU-HTG-COIL",
+        "FCU-CLG-COIL",
+        "FCU-VALVE-PASS-HTG",
+        "FCU-VALVE-PASS-CLG",
+        "FCU-DAMPER-POS",
+        "FCU-CO2-DAMPER",
+        "FCU-DEADBAND",
+        "FCU-MODE-CYCLE"
+      ]
+    },
+    "W4b_ahu_econ": {
+      "wave": "W4b",
+      "description": "AHU economizer + ventilation SI family (#1284 W4b)",
+      "rules": [
+        "ECON-1",
+        "ECON-2",
+        "ECON-3",
+        "ECON-4",
+        "ECON-5",
+        "ECON-6",
+        "ECON-7",
+        "AHU-SATDEV",
+        "AHU-DUCTHI",
+        "AHU-SIMUL",
+        "MECH-OAT-1",
+        "CMD-1",
+        "OA-1",
+        "DMP-1",
+        "VLV-1",
+        "PID-HUNT-1",
+        "RESET-1",
+        "FAN-RUNTIME-HOURS"
+      ]
+    },
+    "W4d_si_plant": {
+      "wave": "W4d",
+      "description": "Central plant + trim (CHW/CW/HP/TRIM) — SI SQL pack",
+      "rules": [
+        "CHW-NOLOAD-1",
+        "CHW-1",
+        "CHW-2",
+        "CHW-3",
+        "CHW-4",
+        "CW-OPT-1",
+        "CW-APR-1",
+        "CW-FAN-1",
+        "HP-1",
+        "TRIM-1",
+        "TRIM-3",
+        "TRIM-4"
       ]
     },
     "W4e_sensor_validation": {
       "wave": "W4e",
-      "description": "Sensor validation SV-* \u2014 pandas SI vs IP parity row",
+      "description": "Sensor validation SV-* — pandas SI vs IP parity row",
       "rules": [
         "SV-RANGE",
         "SV-FLATLINE",
@@ -33,6 +118,21 @@
       "description": "Full cookbook + SYNTH ip golden matrix (report-only on chain PR)",
       "rules": [
         "*"
+      ]
+    },
+    "W4f_analytics_si_p2": {
+      "wave": "W4f",
+      "description": "W4f SI SQL storage path (#1284): the 19 sql/analytics/postgres/queries/* bodies. P1 = pandas IP->SI vs pandas SI, P2 = committed SQL SI goldens (analytics_si_goldens.json) vs pandas SI, per query x equipment x bucket. Rules are owned by W4a/W4b/W4c/W4e.",
+      "rules": [],
+      "analytics_queries": [
+        "*"
+      ]
+    },
+    "W4a_fc1_duct_static": {
+      "wave": "W4a",
+      "description": "FC1 duct static (GL36 A) — owned by W4a #1450; report-only until W4a lands",
+      "rules": [
+        "FC1"
       ]
     }
   }

@@ -6,7 +6,13 @@ on:
     paths:
       - "scripts/ci/check_ip_goldens_frozen.py"
       - "scripts/stress/si_cutover/**"
+      - "sql/fdd/registry.yaml"
+      - "sql/fdd/postgres/rules/**"
+      - "sql/fdd/tuning_catalog.json"
+      - "open_fdd/rules/**"
       - "scripts/qualification/**"
+      - "sql/fdd/**"
+      - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "tests/qualification/test_w4f_analytics_si.py"
@@ -22,11 +28,19 @@ on:
     paths:
       - "scripts/ci/check_ip_goldens_frozen.py"
       - "scripts/stress/si_cutover/**"
+      - "sql/fdd/registry.yaml"
+      - "sql/fdd/postgres/rules/**"
+      - "sql/fdd/tuning_catalog.json"
+      - "open_fdd/rules/**"
       - "scripts/qualification/**"
+      - "sql/fdd/**"
+      - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "tests/qualification/test_w4f_analytics_si.py"
       - "sql/contract/goldens/**"
+      - "sql/fdd/**"
+      - "open_fdd/**"
       - "docs/rules/cookbook/fixtures/**"
       - "sql/analytics/**"
       - "open_fdd/analytics/**"
@@ -107,6 +121,26 @@ jobs:
           name: si-parity-report
           path: si_parity_report.json
 
+      - name: Blocking W4a FC AHU scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4a_si_ahu_fc
+
+      - name: Blocking W4c zone/VAV/FCU scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4c_si_zone
+
+      - name: Blocking W4b AHU econ SI family (P1/P2 scope)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4b_ahu_econ
+
+      - name: Blocking W4d plant scope (clean)
+        run: |
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
+            --family W4d_si_plant
+
       - name: Blocking W4f analytics family (19 queries, P1/P2-analytics)
         run: |
           python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking \
@@ -116,6 +150,18 @@ jobs:
         env:
           OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si -v
+
+      - name: T1284-4 blocking FC1 mutation must fail gate
+        run: |
+          set +e
+          python3 scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 \
+            --inject-t1284-4-mutation
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "expected exit 1 under mutation, got $code"
+            exit 1
+          fi
 
       - name: T1284-4 blocking W4f analytics mutation must fail gate
         run: |

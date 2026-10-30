@@ -11,7 +11,6 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "CMD-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -20,10 +19,9 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "ECON-4",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
@@ -31,8 +29,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "FC2",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
@@ -40,23 +38,21 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "FC3",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "OA-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "PID-HUNT-1",
       "sql_si_fault_seconds": 0.0,
       "sql_si_status": "computed",
@@ -76,8 +72,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
@@ -112,8 +108,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     }
   ],
@@ -345,7 +341,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:duct_static",
+      "reason": "missing_roles",
       "rule_id": "FC1",
       "status": "",
       "utc_day": ""
@@ -356,7 +352,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:oa_damper_pct",
+      "reason": "missing_roles",
       "rule_id": "FC10",
       "status": "",
       "utc_day": ""
@@ -367,7 +363,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:sat_sp",
+      "reason": "missing_roles",
       "rule_id": "FC11",
       "status": "",
       "utc_day": ""
@@ -378,7 +374,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:sat",
+      "reason": "missing_roles",
       "rule_id": "FC12",
       "status": "",
       "utc_day": ""
@@ -389,7 +385,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:sat",
+      "reason": "unknown_rule",
       "rule_id": "FC13-SAT-HIGH",
       "status": "",
       "utc_day": ""
@@ -477,7 +473,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:sat",
+      "reason": "missing_roles",
       "rule_id": "FC7",
       "status": "",
       "utc_day": ""
@@ -488,7 +484,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:sat",
+      "reason": "missing_roles",
       "rule_id": "FC8",
       "status": "",
       "utc_day": ""
@@ -499,7 +495,7 @@
       "equipment_id": "equip:test-ahu",
       "fault_seconds": 0.0,
       "pair_status": "not_applicable",
-      "reason": "missing_role:sat_sp",
+      "reason": "missing_roles",
       "rule_id": "FC9",
       "status": "",
       "utc_day": ""
@@ -1397,39 +1393,6 @@
       "rule_id": "FC14",
       "status": "",
       "utc_day": ""
-    },
-    {
-      "building_id": "COOKBOOK_FC2",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC15",
-      "status": "OK",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_FC2",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC2",
-      "status": "OK",
-      "utc_day": "2026-07-01"
-    },
-    {
-      "building_id": "COOKBOOK_FC2",
-      "covered_seconds": 120.0,
-      "equipment_id": "equip:test-ahu",
-      "fault_seconds": 0.0,
-      "pair_status": "computed",
-      "reason": "",
-      "rule_id": "FC3",
-      "status": "OK",
-      "utc_day": "2026-07-01"
     },
     {
       "building_id": "COOKBOOK_FC2",

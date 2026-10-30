@@ -24,6 +24,8 @@ sqlx = { version = "0.8", default-features = false, features = [
 ] }
 uuid = { version = "1", features = ["v4", "serde"] }
 fdd_core = { path = "../fdd_core" }
+sha2.workspace = true
+hex = "0.4"
 
 [lints]
 workspace = true

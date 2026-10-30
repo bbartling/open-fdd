@@ -3,9 +3,7 @@ import argparse, json, math, re, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
-_INWC_TO_PA = 248.84
-
-def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', canonical_units=False):
+def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', parameter_controls=None):
     rules = json.loads((ROOT / 'tuning_catalog.json').read_text())['rules']
     rule = next((r for r in rules if r['rule_id'] == rule_id or rule_id in r.get('aliases',[])), None)
     if rule is None:
@@ -13,7 +11,7 @@ def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', canoni
     if not math.isfinite(poll_seconds) or poll_seconds < 1:
         raise ValueError('poll_seconds must be finite and >= 1')
     values = json.loads((ROOT / 'runtime_defaults.json').read_text())
-    controls = rule['parameters']
+    controls = parameter_controls if parameter_controls is not None else rule['parameters']
     chosen = {k: d['default'] for k,d in controls.items()}
     for key,value in (overrides or {}).items():
         if key not in controls:
@@ -21,11 +19,7 @@ def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', canoni
         if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value):
             raise ValueError(f'{key} must be a finite number')
         d = controls[key]
-        lo, hi = d['min'], d['max']
-        if canonical_units and d.get('kind') == 'air_pressure':
-            lo = lo * _INWC_TO_PA
-            hi = hi * _INWC_TO_PA
-        if not lo <= value <= hi:
+        if not d['min'] <= value <= d['max']:
             raise ValueError(f'{key} outside [{d["min"]}, {d["max"]}]')
         chosen[key] = value
         if not d['effect_in_sql']:

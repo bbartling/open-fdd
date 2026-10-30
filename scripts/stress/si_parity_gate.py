@@ -4,13 +4,16 @@
 CI default (full matrix, report-only mismatches):
   python scripts/stress/si_parity_gate.py --fixtures-only --report-json si_parity_report.json
 
-Blocking W4 family (example FC1 / W4b):
-  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4a_fc1_duct_static
+Blocking W4 family (W4a AHU fault conditions):
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4a_si_ahu_fc
+Blocking W4 family (W4b AHU economizer):
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4b_ahu_econ
 
 Blocking W4f analytics family (19 analytics queries, P1/P2-analytics):
   python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4f_analytics_si_p2
 
 T1284-4 gate failure under mutation + blocking scope:
+  python scripts/stress/si_parity_gate.py --fixtures-only --blocking --rules FC1 --inject-t1284-4-mutation
   python scripts/stress/si_parity_gate.py --fixtures-only --blocking --family W4f_analytics_si_p2 --inject-t1284-4-mutation
 
 Fault seconds are exact. Analytics use relative tolerance 1e-6 (see parity_chain.ANALYTICS_REL_TOL).
@@ -31,7 +34,12 @@ if str(_SCRIPTS) not in sys.path:
 from helpers import EXIT_BLOCKED, EXIT_FAIL, EXIT_PASS, record_check, run_child, safe_print  # noqa: E402
 from si_cutover import parity_chain as pc  # noqa: E402
 from si_cutover import analytics_parity as ap  # noqa: E402
-from si_cutover.si_parity_families import resolve_analytics_scope, resolve_rule_scope  # noqa: E402
+from si_cutover import ci_fixtures_lib as cfl  # noqa: E402
+from si_cutover.si_parity_families import (  # noqa: E402
+    SI_SQL_PACK_FAMILIES,
+    resolve_analytics_scope,
+    resolve_rule_scope,
+)
 
 
 def _print_mismatch_table(label: str, table: dict[str, int], *, limit: int = 20) -> None:
@@ -50,7 +58,8 @@ def _print_p0_kind_table(p0: pc.StageResult) -> None:
         kinds[k] = kinds.get(k, 0) + 1
     safe_print(
         f"  P0 by kind: sql_row_missing={kinds.get('sql_row_missing', 0)} "
-        f"value_mismatch={kinds.get('value_mismatch', 0)}"
+        f"value_mismatch={kinds.get('value_mismatch', 0)} "
+        f"ip_sql_skipped_si_pack={kinds.get('ip_sql_skipped_si_pack', 0)}"
     )
 
 
@@ -83,16 +92,18 @@ def _blocking_errors(
             out.extend(r.errors)
         elif scope is not None and r.stage in ("P1", "P2"):
             out.extend(r.errors)
+        if scope is not None and r.stage == "P2" and r.pending:
+            # A scoped blocking family gate may not pass on cells it never compared.
+            out.append(
+                f"P2: {r.pending} cell(s) pending_W4 in blocking scope (must be zero)"
+            )
     return out
 
 
 def _fc1_t1284_si_param_post_hook(rule_id: str, params: dict[str, float]) -> dict[str, float]:
     if rule_id != "FC1":
         return params
-    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
-
-    rules = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
-    return pc.t1284_4_double_param_conversion(rules["FC1"], params, "eps_dsp", pc._metric_doc())
+    return cfl.t1284_break_eps_dsp_si(params, rule_id=rule_id)
 
 
 def run_fixtures_gate(
@@ -100,14 +111,20 @@ def run_fixtures_gate(
     scope: set[str] | None,
     scope_label: str,
     blocking: bool,
+    family: str | None,
     report_json: Path | None,
     inject_t1284_4: bool,
     analytics_scope: set[str] | None = None,
 ) -> int:
     analytics_mutation = inject_t1284_4 and analytics_scope != set()
     si_post = _fc1_t1284_si_param_post_hook if inject_t1284_4 and not analytics_mutation else None
+    strict_p2 = bool(blocking and family in SI_SQL_PACK_FAMILIES)
     rules_in_scope = scope is None or bool(scope)
-    results = pc.run_fixture_stages(scope=scope, si_param_post_hook=si_post) if rules_in_scope else []
+    results = (
+        pc.run_fixture_stages(scope=scope, strict_p2=strict_p2, si_param_post_hook=si_post)
+        if rules_in_scope
+        else []
+    )
     analytics_results: list[pc.StageResult] = []
     if analytics_scope != set():
         hook = ap.t1284_4_analytics_double_conversion if analytics_mutation else None
@@ -128,12 +145,15 @@ def run_fixtures_gate(
     safe_print(
         f"  P0 comparisons={p0_n} mismatches={p0_m}  "
         f"P1 comparisons={p1_n} mismatches={p1_m}  "
-        f"P2 comparisons={p2_n}"
+        f"P2 comparisons={p2_n} pending_W4={p2.pending if p2 else 0}"
     )
 
     if p0 and p0.errors:
         _print_p0_kind_table(p0)
         _print_mismatch_table("P0 value_mismatch", pc.rule_mismatch_table(p0.errors, stage="P0"))
+    if p0 and p0.mismatch_table:
+        for line in p0.mismatch_table:
+            safe_print(f"  {line}")
     if p1 and p1.errors:
         _print_mismatch_table("P1", pc.rule_mismatch_table(p1.errors, stage="P1"))
 
@@ -421,6 +441,7 @@ def main(argv: list[str] | None = None) -> int:
             scope=scope,
             scope_label=scope_label,
             blocking=bool(args.blocking),
+            family=args.family,
             report_json=args.report_json,
             inject_t1284_4=bool(args.inject_t1284_4_mutation),
             analytics_scope=analytics_scope,

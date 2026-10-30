@@ -11,10 +11,9 @@
     {
       "equipment_id": "equip:test-ahu",
       "pandas_si_fault_seconds": 0.0,
-      "pandas_si_status": "computed",
       "rule_id": "RESET-1",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
@@ -31,8 +30,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-FLATLINE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     },
     {
@@ -67,8 +66,8 @@
       "pandas_si_fault_seconds": 0.0,
       "pandas_si_status": "computed",
       "rule_id": "SV-STALE",
-      "sql_si_fault_seconds": null,
-      "sql_si_status": "missing_sql_si",
+      "sql_si_fault_seconds": 0.0,
+      "sql_si_status": "computed",
       "utc_day": "2026-07-01"
     }
   ],

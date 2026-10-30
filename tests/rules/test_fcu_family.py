@@ -38,7 +38,7 @@ def test_boundaries_do_not_fault():
     assert result("FCU-CLG-COIL", frame(**{"discharge-air-temp": [55], "zone-air-temp": [72], "cooling-valve": [100], "heating-valve": [0], "fan-status": [1]}), {"confirm_min": 0}).status == "PASS"
     assert result("FCU-DAMPER-POS", frame(**{"damper-cmd": [25], "damper": [10], "fan-status": [1]}), {"confirm_min": 0}).status == "PASS"
     assert result("FCU-CO2-DAMPER", frame(**{"zone-co2": [250], "damper-cmd": [0], "fan-status": [1]}), {"confirm_min": 0}).status == "PASS"
-    assert result("FCU-DEADBAND", frame(**{"cooling-sp": [22], "heating-sp": [21]})).status == "PASS"
+    assert result("FCU-DEADBAND", frame(**{"cooling-sp": [22], "heating-sp": [20]})).status == "PASS"
 
 
 def test_fcu_fan_status_falls_back_per_row():
