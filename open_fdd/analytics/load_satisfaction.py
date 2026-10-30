@@ -21,18 +21,18 @@ def aggregate_load_satisfaction(
     frames: dict[str, pd.DataFrame],
     role_map: dict[str, Any] | None = None,
     *,
-    comfort_low_f: float = 70.0,
-    comfort_high_f: float = 75.0,
-    sat_band_f: float = 2.0,
+    comfort_low: float = 70.0,
+    comfort_high: float = 75.0,
+    sat_band: float = 2.0,
 ) -> dict[str, Any]:
     """Compute building-wide zone and AHU SAT satisfaction; inject onto chillers.
 
     Mutates chiller frames in place. Absent evidence is never treated as satisfied.
     """
     rm = role_map or {}
-    lo = float(min(comfort_low_f, comfort_high_f))
-    hi = float(max(comfort_low_f, comfort_high_f))
-    band = abs(float(sat_band_f))
+    lo = float(min(comfort_low, comfort_high))
+    hi = float(max(comfort_low, comfort_high))
+    band = abs(float(sat_band))
 
     zone_series: list[pd.Series] = []
     ahu_series: list[pd.Series] = []
@@ -67,9 +67,9 @@ def aggregate_load_satisfaction(
         "zone_equipment": zone_ids,
         "ahu_equipment": ahu_ids,
         "chiller_equipment": chiller_ids,
-        "comfort_low_f": lo,
-        "comfort_high_f": hi,
-        "sat_band_f": band,
+        "comfort_low": lo,
+        "comfort_high": hi,
+        "sat_band": band,
     }
 
     def _all_satisfied(parts: list[pd.Series], index: pd.Index) -> pd.Series | None:

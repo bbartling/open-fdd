@@ -641,9 +641,19 @@
       "datafusion_sql_implementation": "fc1_duct_static_low.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/qualification/test_capture_ip_baseline.py",
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
+        "tests/qualification/test_mode_delay_shared.py",
+        "tests/qualification/test_product_sql_params.py",
+        "tests/qualification/test_si_parity_gate_blocking.py",
+        "tests/qualification/test_stress_evidence_integrity.py",
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/reporting/test_single_system_typst.py",
         "tests/rules/test_evidence_json.py",
-        "tests/test_wattlab_parity_diff.py"
+        "tests/test_wattlab_parity_diff.py",
+        "tests/units/test_unit_contract_metadata_diff.py"
       ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
@@ -1974,6 +1984,7 @@
       "datafusion_sql_implementation": "sat_high_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc13",
       "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
@@ -2260,7 +2271,9 @@
       "pandas_implementation": "fc15",
       "datafusion_sql_implementation": "fc15_hw_coil_dt_inactive.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc15",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -2324,6 +2337,8 @@
       "datafusion_sql_implementation": "ahu_satdev.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-satdev",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
+        "tests/rules/test_sql_quality_contract.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -2398,6 +2413,7 @@
       "datafusion_sql_implementation": "ahu_ducthi.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -2810,7 +2826,9 @@
       "pandas_implementation": "econ4",
       "datafusion_sql_implementation": "econ4_low_oa_frac.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/qualification/test_si_parity_gate_blocking.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -2863,7 +2881,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "preheat_over_f": {
+        "preheat_over": {
           "default": 2.2,
           "unit": "degF",
           "min": 0.5,
@@ -2934,7 +2952,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "econ6_oat_max_f": {
+        "econ6_oat_max": {
           "default": 25.0,
           "unit": "degF",
           "min": 15.0,
@@ -3077,7 +3095,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "mech_oat_max_f": {
+        "mech_oat_max": {
           "default": 60.0,
           "unit": "degF",
           "min": 45.0,
@@ -3216,7 +3234,7 @@
           "step": 0.05,
           "label": "Valve open threshold"
         },
-        "coil_delta_f": {
+        "coil_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -3292,7 +3310,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -3330,7 +3348,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -3452,7 +3470,7 @@
       "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "deadband_c": {
+        "deadband": {
           "default": 1,
           "unit": "degC",
           "min": 0,
@@ -3465,6 +3483,7 @@
       "datafusion_sql_implementation": "fcu_deadband.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-deadband",
       "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_fcu_family.py"
       ],
       "parity_status": "sql_screening",
@@ -3511,7 +3530,7 @@
     },
     {
       "rule_id": "VAV-1",
-      "title": "Zone comfort band violation hours with confirm window",
+      "title": "Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2",
       "equipment_types": [],
       "required_roles": [
         "zone_t"
@@ -3561,6 +3580,14 @@
           "step": 0.5,
           "label": "Zone high"
         },
+        "require_occupied": {
+          "default": 1.0,
+          "unit": "bool",
+          "min": 0.0,
+          "max": 1.0,
+          "step": 1.0,
+          "label": "Require occupied"
+        },
         "confirm_seconds": {
           "default": 900,
           "unit": "sec",
@@ -3574,7 +3601,11 @@
       "datafusion_sql_implementation": "vav1_comfort_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_quality.py",
+        "tests/rules/test_vav1_occupancy.py",
+        "tests/rules/test_vav1_t1407.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -3636,7 +3667,9 @@
       "pandas_implementation": "vav2",
       "datafusion_sql_implementation": "vav2_night_setback.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-2",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/rules/test_vav1_occupancy.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -3716,7 +3749,10 @@
       "pandas_implementation": "vav_3",
       "datafusion_sql_implementation": "vav3_excessive_reheat.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-3",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -4045,7 +4081,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "delta_f": {
+        "delta": {
           "default": 8.0,
           "unit": "degF",
           "min": 2.0,
@@ -4433,7 +4469,9 @@
       "pandas_implementation": "chw_4",
       "datafusion_sql_implementation": "chw4_flow_high.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-4",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -4667,7 +4705,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "approach_max_f": {
+        "approach_max": {
           "default": 8.0,
           "unit": "degF",
           "min": 5.0,
@@ -4749,7 +4787,7 @@
           "step": 0.5,
           "label": "Design approach"
         },
-        "excess_beyond_approach_f": {
+        "excess_beyond_approach": {
           "default": 5.0,
           "unit": "degF",
           "min": 2.0,
@@ -4913,7 +4951,9 @@
       "pandas_implementation": "trim_3",
       "datafusion_sql_implementation": "trim3_hwst.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#trim-3",
-      "test_coverage": [],
+      "test_coverage": [
+        "tests/units/test_registry_role_diff_guard.py"
+      ],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
       "difference_class": "none"
@@ -5011,7 +5051,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "comfort_low_f": {
+        "comfort_low": {
           "default": 70.0,
           "unit": "\u00b0F",
           "min": 50.0,
@@ -5019,7 +5059,7 @@
           "step": 0.5,
           "label": "Zone comfort low"
         },
-        "comfort_high_f": {
+        "comfort_high": {
           "default": 75.0,
           "unit": "\u00b0F",
           "min": 55.0,
@@ -5032,6 +5072,7 @@
       "datafusion_sql_implementation": "sched1_unoccupied_runtime.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sched-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
         "tests/reporting/test_findings_smoke.py",
         "tests/rules/test_catalog_smoke.py",
         "tests/rules/test_quality.py"
@@ -5120,7 +5161,7 @@
           "step": 1.0,
           "label": "Require operational gate"
         },
-        "reset_err_f": {
+        "reset_err": {
           "default": 3.0,
           "unit": "degF",
           "min": 0.5,
@@ -5436,7 +5477,7 @@
       },
       "pandas_implementation": null,
       "datafusion_sql_implementation": "avg_zone_temp.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#avg-zone-temp",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "known_semantic_differences": "SQL analytics rollup \u2014 not a pandas diagnostic",
@@ -5454,7 +5495,7 @@
       "default_thresholds": {},
       "pandas_implementation": null,
       "datafusion_sql_implementation": "fan_runtime_hours.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#fan-runtime-hours",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours",
       "test_coverage": [
         "tests/rules/test_parity_inventory.py"
       ],
@@ -5491,7 +5532,7 @@
       },
       "pandas_implementation": null,
       "datafusion_sql_implementation": "fault_elapsed_hours.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#fault-elapsed-hours",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "known_semantic_differences": "SQL analytics rollup \u2014 not a pandas diagnostic",
@@ -5516,7 +5557,7 @@
       },
       "pandas_implementation": null,
       "datafusion_sql_implementation": "util_interval_fault.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#util-interval",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#util-interval",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
@@ -5541,7 +5582,7 @@
       },
       "pandas_implementation": null,
       "datafusion_sql_implementation": "util_monthly_fault.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#util-monthly",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#util-monthly",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "known_semantic_differences": "",
@@ -5576,7 +5617,7 @@
       },
       "pandas_implementation": null,
       "datafusion_sql_implementation": "zone_comfort_pct.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#zone-comfort-pct",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "known_semantic_differences": "SQL analytics rollup \u2014 not a pandas diagnostic",
@@ -5678,7 +5719,7 @@
       "datafusion_sql_implementation": "sv_range.sql",
       "sql_file": "sv_range.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sv-range",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#sv-range",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sv-range",
       "test_coverage": [
         "tests/reporting/test_single_system_typst.py",
         "tests/rules/test_equipment_energized_ungated.py",
@@ -5923,7 +5964,7 @@
       "datafusion_sql_implementation": "sv_flatline.sql",
       "sql_file": "sv_flatline.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sv-flatline",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#sv-flatline",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sv-flatline",
       "test_coverage": [
         "tests/reporting/test_single_system_typst.py",
         "tests/test_wattlab_parity_diff.py"
@@ -6174,7 +6215,7 @@
       "datafusion_sql_implementation": "sv_spike.sql",
       "sql_file": "sv_spike.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sv-spike",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#sv-spike",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sv-spike",
       "test_coverage": [
         "tests/reporting/test_single_system_typst.py",
         "tests/test_wattlab_parity_diff.py"
@@ -6399,7 +6440,7 @@
       "datafusion_sql_implementation": "sv_stale.sql",
       "sql_file": "sv_stale.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sv-stale",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#sv-stale",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sv-stale",
       "test_coverage": [
         "tests/test_wattlab_parity_diff.py"
       ],
@@ -6586,7 +6627,7 @@
       "datafusion_sql_implementation": "sv_rate.sql",
       "sql_file": "sv_rate.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sv-rate",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#sv-rate",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sv-rate",
       "test_coverage": [
         "scripts/sql_pandas_oracle_check.py",
         "tests/reporting/test_single_system_typst.py",
@@ -6844,7 +6885,7 @@
       "datafusion_sql_implementation": "pid_hunt_1.sql",
       "sql_file": "pid_hunt_1.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#pid-hunt-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#pid-hunt-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#pid-hunt-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -7132,11 +7173,21 @@
       "datafusion_sql_implementation": "fc1_duct_static_low.sql",
       "sql_file": "fc1_duct_static_low.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/qualification/test_capture_ip_baseline.py",
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
+        "tests/qualification/test_mode_delay_shared.py",
+        "tests/qualification/test_product_sql_params.py",
+        "tests/qualification/test_si_parity_gate_blocking.py",
+        "tests/qualification/test_stress_evidence_integrity.py",
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/reporting/test_single_system_typst.py",
         "tests/rules/test_evidence_json.py",
-        "tests/test_wattlab_parity_diff.py"
+        "tests/test_wattlab_parity_diff.py",
+        "tests/units/test_unit_contract_metadata_diff.py"
       ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -7411,7 +7462,7 @@
       "datafusion_sql_implementation": "fc2_mat_low.sql",
       "sql_file": "fc2_mat_low.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc2",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc2",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc2",
       "test_coverage": [
         "tests/reporting/test_single_system_typst.py"
       ],
@@ -7708,7 +7759,7 @@
       "datafusion_sql_implementation": "fc3_mat_high.sql",
       "sql_file": "fc3_mat_high.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc3",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc3",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc3",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -7977,7 +8028,7 @@
       "datafusion_sql_implementation": "fc4_os_hunting.sql",
       "sql_file": "fc4_os_hunting.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc4",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc4",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc4",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -8250,7 +8301,7 @@
       "datafusion_sql_implementation": "fc5_sat_cold_heating.sql",
       "sql_file": "fc5_sat_cold_heating.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc5",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc5",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc5",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -8548,7 +8599,7 @@
       "datafusion_sql_implementation": "fc6_oa_frac_mismatch.sql",
       "sql_file": "fc6_oa_frac_mismatch.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc6",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc6",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc6",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -8816,7 +8867,7 @@
       "datafusion_sql_implementation": "fc7_sat_low_heating.sql",
       "sql_file": "fc7_sat_low_heating.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc7",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc7",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc7",
       "test_coverage": [
         "tests/analytics/test_wattlab_engine.py",
         "tests/rules/test_golden_parity.py",
@@ -9120,7 +9171,7 @@
       "datafusion_sql_implementation": "fc8_sat_mat_econ.sql",
       "sql_file": "fc8_sat_mat_econ.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc8",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc8",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc8",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -9461,7 +9512,7 @@
       "datafusion_sql_implementation": "fc9_oa_sat_sp_econ.sql",
       "sql_file": "fc9_oa_sat_sp_econ.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc9",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc9",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc9",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -9784,7 +9835,7 @@
       "datafusion_sql_implementation": "fc10_mat_oa_clg.sql",
       "sql_file": "fc10_mat_oa_clg.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc10",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc10",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc10",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -10105,7 +10156,7 @@
       "datafusion_sql_implementation": "fc11_oa_sat_sp_clg.sql",
       "sql_file": "fc11_oa_sat_sp_clg.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc11",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc11",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc11",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -10452,7 +10503,7 @@
       "datafusion_sql_implementation": "fc12_sat_mat_clg.sql",
       "sql_file": "fc12_sat_mat_clg.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc12",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc12",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc12",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -10797,8 +10848,9 @@
       "datafusion_sql_implementation": "sat_high_fault.sql",
       "sql_file": "sat_high_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc13",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc13-sat-high",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc13-sat-high",
       "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py",
         "tests/rules/test_parity_inventory.py"
       ],
       "parity_status": "sql_screening",
@@ -11138,7 +11190,7 @@
       "datafusion_sql_implementation": "fc14_chw_coil_dt_inactive.sql",
       "sql_file": "fc14_chw_coil_dt_inactive.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc14",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc14",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc14",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -11514,8 +11566,10 @@
       "datafusion_sql_implementation": "fc15_hw_coil_dt_inactive.sql",
       "sql_file": "fc15_hw_coil_dt_inactive.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fc15",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fc15",
-      "test_coverage": [],
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fc15",
+      "test_coverage": [
+        "tests/qualification/test_fc_tolerance_param_kinds.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -11817,8 +11871,10 @@
       "datafusion_sql_implementation": "ahu_satdev.sql",
       "sql_file": "ahu_satdev.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-satdev",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#ahu-satdev",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-satdev",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
+        "tests/rules/test_sql_quality_contract.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -12031,8 +12087,9 @@
       "datafusion_sql_implementation": "ahu_ducthi.sql",
       "sql_file": "ahu_ducthi.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-ducthi",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#ahu-ducthi",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-ducthi",
       "test_coverage": [
+        "tests/qualification/test_stress_gate_fail_closed.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -12246,7 +12303,7 @@
       "datafusion_sql_implementation": "ahu_simul.sql",
       "sql_file": "ahu_simul.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#ahu-simul",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#ahu-simul",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#ahu-simul",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -12423,7 +12480,7 @@
       "datafusion_sql_implementation": "oat_meteo_fault.sql",
       "sql_file": "oat_meteo_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#oat-meteo",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#oat-meteo",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#oat-meteo",
       "test_coverage": [
         "tests/reporting/test_single_system_typst.py"
       ],
@@ -12600,7 +12657,7 @@
       "datafusion_sql_implementation": "econ1_stuck_closed.sql",
       "sql_file": "econ1_stuck_closed.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#econ-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-1",
       "test_coverage": [
         "tests/reporting/test_single_system_typst.py"
       ],
@@ -12813,7 +12870,7 @@
       "datafusion_sql_implementation": "economizer_fault.sql",
       "sql_file": "economizer_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-2",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#econ-2",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-2",
       "test_coverage": [
         "tests/test_wattlab_parity_diff.py"
       ],
@@ -13062,7 +13119,7 @@
       "datafusion_sql_implementation": "econ3_mech_without_econ.sql",
       "sql_file": "econ3_mech_without_econ.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-3",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#econ-3",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-3",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -13315,8 +13372,10 @@
       "datafusion_sql_implementation": "econ4_low_oa_frac.sql",
       "sql_file": "econ4_low_oa_frac.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-4",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#econ-4",
-      "test_coverage": [],
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-4",
+      "test_coverage": [
+        "tests/qualification/test_si_parity_gate_blocking.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -13517,7 +13576,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "preheat_over_f": {
+        "preheat_over": {
           "default": 2.2,
           "unit": "degF",
           "min": 0.5,
@@ -13538,7 +13597,7 @@
       "datafusion_sql_implementation": "econ5_preheat_over.sql",
       "sql_file": "econ5_preheat_over.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-5",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#econ-5",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-5",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -13588,7 +13647,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "preheat_over_f": {
+        "preheat_over": {
           "label": "Preheat over \u0394T",
           "default": 2.2,
           "min": 0.5,
@@ -13596,7 +13655,7 @@
           "step": 0.1,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "PREHEAT_OVER_F"
+          "sql_placeholder": "PREHEAT_OVER"
         },
         "htg_open_min": {
           "label": "Heating valve open minimum",
@@ -13738,7 +13797,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "econ6_oat_max_f": {
+        "econ6_oat_max": {
           "default": 25.0,
           "unit": "degF",
           "min": 15.0,
@@ -13759,7 +13818,7 @@
       "datafusion_sql_implementation": "econ6_econ_freezing.sql",
       "sql_file": "econ6_econ_freezing.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-6",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#econ-6",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-6",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -13809,7 +13868,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "econ6_oat_max_f": {
+        "econ6_oat_max": {
           "label": "Winter OAT ceiling",
           "default": 25.0,
           "min": 15.0,
@@ -13817,7 +13876,7 @@
           "step": 1.0,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "ECON6_OAT_MAX_F"
+          "sql_placeholder": "ECON6_OAT_MAX"
         },
         "econ6_damper_max": {
           "label": "Winter min-OA damper",
@@ -14006,7 +14065,7 @@
       "datafusion_sql_implementation": "econ7_ok_not_economizing.sql",
       "sql_file": "econ7_ok_not_economizing.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#econ-7",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#econ-7",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#econ-7",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -14211,7 +14270,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "mech_oat_max_f": {
+        "mech_oat_max": {
           "default": 60.0,
           "unit": "degF",
           "min": 45.0,
@@ -14224,7 +14283,7 @@
       "datafusion_sql_implementation": "mech_oat_1.sql",
       "sql_file": "mech_oat_1.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#mech-oat-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#mech-oat-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#mech-oat-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -14244,7 +14303,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "mech_oat_max_f": {
+        "mech_oat_max": {
           "label": "Mech-cool OAT ceiling",
           "default": 60.0,
           "min": 45.0,
@@ -14252,7 +14311,7 @@
           "step": 1.0,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "MECH_OAT_MAX_F"
+          "sql_placeholder": "MECH_OAT_MAX"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -14398,7 +14457,7 @@
       "datafusion_sql_implementation": "chw_noload_1.sql",
       "sql_file": "chw_noload_1.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-noload-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#chw-noload-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-noload-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -14567,7 +14626,7 @@
       "datafusion_sql_implementation": "fcu_sensor_null.sql",
       "sql_file": "fcu_sensor_null.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-sensor-null",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-sensor-null",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-sensor-null",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -14637,7 +14696,7 @@
           "step": 0.05,
           "label": "Valve open threshold"
         },
-        "coil_delta_f": {
+        "coil_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -14650,7 +14709,7 @@
       "datafusion_sql_implementation": "fcu_htg_coil.sql",
       "sql_file": "fcu_htg_coil.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-htg-coil",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-htg-coil",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-htg-coil",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -14672,7 +14731,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "VALVE_OPEN"
         },
-        "coil_delta_f": {
+        "coil_delta": {
           "label": "Minimum heating rise",
           "default": 5.4,
           "min": 1,
@@ -14680,7 +14739,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "COIL_DELTA_F"
+          "sql_placeholder": "COIL_DELTA"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -14727,7 +14786,7 @@
       "datafusion_sql_implementation": "fcu_clg_coil.sql",
       "sql_file": "fcu_clg_coil.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-clg-coil",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-clg-coil",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-clg-coil",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -14789,7 +14848,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -14802,7 +14861,7 @@
       "datafusion_sql_implementation": "fcu_valve_pass_htg.sql",
       "sql_file": "fcu_valve_pass_htg.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-valve-pass-htg",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-valve-pass-htg",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-valve-pass-htg",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -14814,7 +14873,7 @@
       "startup_delay_seconds": null,
       "confirm_seconds": 900,
       "parameters": {
-        "pass_delta_f": {
+        "pass_delta": {
           "label": "Passing temperature rise",
           "default": 5.4,
           "min": 1,
@@ -14822,7 +14881,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "PASS_DELTA_F"
+          "sql_placeholder": "PASS_DELTA"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -14856,7 +14915,7 @@
       ],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "pass_delta_f": {
+        "pass_delta": {
           "default": 5.4,
           "unit": "degF",
           "min": 1,
@@ -14869,7 +14928,7 @@
       "datafusion_sql_implementation": "fcu_valve_pass_clg.sql",
       "sql_file": "fcu_valve_pass_clg.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-valve-pass-clg",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-valve-pass-clg",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-valve-pass-clg",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -14881,7 +14940,7 @@
       "startup_delay_seconds": null,
       "confirm_seconds": 900,
       "parameters": {
-        "pass_delta_f": {
+        "pass_delta": {
           "label": "Passing temperature drop",
           "default": 5.4,
           "min": 1,
@@ -14889,7 +14948,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "PASS_DELTA_F"
+          "sql_placeholder": "PASS_DELTA"
         }
       },
       "time_semantics": "row_or_interval_per_sql_file",
@@ -14944,7 +15003,7 @@
       "datafusion_sql_implementation": "fcu_damper_pos.sql",
       "sql_file": "fcu_damper_pos.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-damper-pos",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-damper-pos",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-damper-pos",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -15037,7 +15096,7 @@
       "datafusion_sql_implementation": "fcu_co2_damper.sql",
       "sql_file": "fcu_co2_damper.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-co2-damper",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-co2-damper",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-co2-damper",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -15093,7 +15152,7 @@
       "optional_roles": [],
       "operational_proof_roles": [],
       "default_thresholds": {
-        "deadband_c": {
+        "deadband": {
           "default": 1,
           "unit": "degC",
           "min": 0,
@@ -15106,8 +15165,9 @@
       "datafusion_sql_implementation": "fcu_deadband.sql",
       "sql_file": "fcu_deadband.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-deadband",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-deadband",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-deadband",
       "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_fcu_family.py"
       ],
       "parity_status": "sql_screening",
@@ -15118,7 +15178,7 @@
       "startup_delay_seconds": null,
       "confirm_seconds": 0,
       "parameters": {
-        "deadband_c": {
+        "deadband": {
           "label": "Minimum deadband",
           "default": 1,
           "min": 0,
@@ -15181,7 +15241,7 @@
       "datafusion_sql_implementation": "fcu_mode_cycle.sql",
       "sql_file": "fcu_mode_cycle.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#fcu-mode-cycle",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fcu-mode-cycle",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fcu-mode-cycle",
       "test_coverage": [
         "tests/rules/test_fcu_family.py"
       ],
@@ -15233,7 +15293,7 @@
       "canonical_id": "VAV-1",
       "pandas_id": "VAV-1",
       "rule_id": "VAV-1",
-      "title": "Zone comfort band violation hours with confirm window",
+      "title": "Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2",
       "aliases": [],
       "kind": "diagnostic",
       "equipment_types": [],
@@ -15286,6 +15346,14 @@
           "step": 0.5,
           "label": "Zone high"
         },
+        "require_occupied": {
+          "default": 1.0,
+          "unit": "bool",
+          "min": 0.0,
+          "max": 1.0,
+          "step": 1.0,
+          "label": "Require occupied"
+        },
         "confirm_seconds": {
           "default": 900,
           "unit": "sec",
@@ -15299,9 +15367,13 @@
       "datafusion_sql_implementation": "vav1_comfort_fault.sql",
       "sql_file": "vav1_comfort_fault.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
         "tests/rules/test_quality.py",
+        "tests/rules/test_vav1_occupancy.py",
+        "tests/rules/test_vav1_t1407.py",
         "tests/test_wattlab_parity_diff.py"
       ],
       "parity_status": "sql_screening",
@@ -15361,6 +15433,16 @@
           "unit": "degF",
           "frontend_control": "slider",
           "sql_placeholder": "ZONE_T_HI"
+        },
+        "require_occupied": {
+          "label": "Require occupied",
+          "default": 1.0,
+          "min": 0.0,
+          "max": 1.0,
+          "step": 1.0,
+          "unit": "bool",
+          "frontend_control": "slider",
+          "sql_placeholder": "REQUIRE_OCCUPIED"
         },
         "confirm_seconds": {
           "label": "Confirm time",
@@ -15513,8 +15595,10 @@
       "datafusion_sql_implementation": "vav2_night_setback.sql",
       "sql_file": "vav2_night_setback.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-2",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-2",
-      "test_coverage": [],
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-2",
+      "test_coverage": [
+        "tests/rules/test_vav1_occupancy.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -15733,8 +15817,11 @@
       "datafusion_sql_implementation": "vav3_excessive_reheat.sql",
       "sql_file": "vav3_excessive_reheat.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-3",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-3",
-      "test_coverage": [],
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-3",
+      "test_coverage": [
+        "tests/ci/test_unit_contract_si_cutover_diff.py",
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -15972,7 +16059,7 @@
       "datafusion_sql_implementation": "vav4_damper_full_open.sql",
       "sql_file": "vav4_damper_full_open.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-4",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-4",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-4",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -16203,7 +16290,7 @@
       "datafusion_sql_implementation": "vav5_airflow_bias.sql",
       "sql_file": "vav5_airflow_bias.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-5",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-5",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-5",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -16423,7 +16510,7 @@
       "datafusion_sql_implementation": "vav6_reheat_free_cool.sql",
       "sql_file": "vav6_reheat_free_cool.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-6",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-6",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-6",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -16654,7 +16741,7 @@
       "datafusion_sql_implementation": "vav_reheat.sql",
       "sql_file": "vav_reheat.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-reheat",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-reheat",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-reheat",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -16841,7 +16928,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "delta_f": {
+        "delta": {
           "default": 8.0,
           "unit": "degF",
           "min": 2.0,
@@ -16862,7 +16949,7 @@
       "datafusion_sql_implementation": "vav_ahu_leave.sql",
       "sql_file": "vav_ahu_leave.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-ahu-leave",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-ahu-leave",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-ahu-leave",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -16882,7 +16969,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "delta_f": {
+        "delta": {
           "label": "Leave \u0394 vs AHU SAT",
           "default": 8.0,
           "min": 2.0,
@@ -16890,7 +16977,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "DELTA_F"
+          "sql_placeholder": "DELTA"
         },
         "flow_on_min": {
           "label": "Airflow-on min",
@@ -17077,7 +17164,7 @@
       "datafusion_sql_implementation": "vav7_min_airflow.sql",
       "sql_file": "vav7_min_airflow.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vav-7",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vav-7",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vav-7",
       "test_coverage": [
         "tests/analytics/test_vav_health.py"
       ],
@@ -17327,7 +17414,7 @@
       "datafusion_sql_implementation": "chw1_low_dt.sql",
       "sql_file": "chw1_low_dt.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#chw-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-1",
       "test_coverage": [
         "tests/rules/test_chw1_gate.py",
         "tests/rules/test_effective_catalog.py",
@@ -17541,7 +17628,7 @@
       "datafusion_sql_implementation": "chw2_dp_low.sql",
       "sql_file": "chw2_dp_low.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-2",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#chw-2",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-2",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -17752,7 +17839,7 @@
       "datafusion_sql_implementation": "chw3_supply_band.sql",
       "sql_file": "chw3_supply_band.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-3",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#chw-3",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-3",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -17960,8 +18047,10 @@
       "datafusion_sql_implementation": "chw4_flow_high.sql",
       "sql_file": "chw4_flow_high.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#chw-4",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#chw-4",
-      "test_coverage": [],
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#chw-4",
+      "test_coverage": [
+        "tests/units/test_ip_unit_declaration.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -18182,7 +18271,7 @@
       "datafusion_sql_implementation": "hp1_discharge_cold.sql",
       "sql_file": "hp1_discharge_cold.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#hp-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#hp-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#hp-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -18367,7 +18456,7 @@
       "datafusion_sql_implementation": "wx1_oa_spike.sql",
       "sql_file": "wx1_oa_spike.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#wx-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#wx-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#wx-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -18550,7 +18639,7 @@
       "datafusion_sql_implementation": "cw_opt_1.sql",
       "sql_file": "cw_opt_1.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#cw-opt-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#cw-opt-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#cw-opt-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -18753,7 +18842,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "approach_max_f": {
+        "approach_max": {
           "default": 8.0,
           "unit": "degF",
           "min": 5.0,
@@ -18774,7 +18863,7 @@
       "datafusion_sql_implementation": "cw_apr_1.sql",
       "sql_file": "cw_apr_1.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#cw-apr-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#cw-apr-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#cw-apr-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -18824,7 +18913,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "approach_max_f": {
+        "approach_max": {
           "label": "Max approach at full fan",
           "default": 8.0,
           "min": 5.0,
@@ -18832,7 +18921,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "APPROACH_MAX_F"
+          "sql_placeholder": "APPROACH_MAX"
         },
         "tower_fan_hi": {
           "label": "Tower fan full-speed threshold",
@@ -18985,7 +19074,7 @@
           "step": 0.5,
           "label": "Design approach"
         },
-        "excess_beyond_approach_f": {
+        "excess_beyond_approach": {
           "default": 5.0,
           "unit": "degF",
           "min": 2.0,
@@ -19006,7 +19095,7 @@
       "datafusion_sql_implementation": "cw_fan_1.sql",
       "sql_file": "cw_fan_1.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#cw-fan-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#cw-fan-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#cw-fan-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -19066,7 +19155,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CW_APPROACH"
         },
-        "excess_beyond_approach_f": {
+        "excess_beyond_approach": {
           "label": "Excess beyond approach",
           "default": 5.0,
           "min": 2.0,
@@ -19074,7 +19163,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "EXCESS_BEYOND_APPROACH_F"
+          "sql_placeholder": "EXCESS_BEYOND_APPROACH"
         },
         "tower_fan_hi": {
           "label": "Tower fan full-speed threshold",
@@ -19238,7 +19327,7 @@
       "datafusion_sql_implementation": "trim1_duct_static.sql",
       "sql_file": "trim1_duct_static.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#trim-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#trim-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#trim-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -19460,8 +19549,10 @@
       "datafusion_sql_implementation": "trim3_hwst.sql",
       "sql_file": "trim3_hwst.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#trim-3",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#trim-3",
-      "test_coverage": [],
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#trim-3",
+      "test_coverage": [
+        "tests/units/test_registry_role_diff_guard.py"
+      ],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
       "difference_class": "none",
@@ -19682,7 +19773,7 @@
       "datafusion_sql_implementation": "trim4_chw_reset.sql",
       "sql_file": "trim4_chw_reset.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#trim-4",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#trim-4",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#trim-4",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -19859,7 +19950,7 @@
           "step": 300.0,
           "label": "Confirm time"
         },
-        "comfort_low_f": {
+        "comfort_low": {
           "default": 70.0,
           "unit": "\u00b0F",
           "min": 50.0,
@@ -19867,7 +19958,7 @@
           "step": 0.5,
           "label": "Zone comfort low"
         },
-        "comfort_high_f": {
+        "comfort_high": {
           "default": 75.0,
           "unit": "\u00b0F",
           "min": 55.0,
@@ -19880,8 +19971,9 @@
       "datafusion_sql_implementation": "sched1_unoccupied_runtime.sql",
       "sql_file": "sched1_unoccupied_runtime.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sched-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#sched-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sched-1",
       "test_coverage": [
+        "tests/analytics/test_equipment_stamp.py",
         "tests/reporting/test_findings_smoke.py",
         "tests/rules/test_catalog_smoke.py",
         "tests/rules/test_quality.py"
@@ -19904,7 +19996,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "CONFIRM_SECONDS"
         },
-        "comfort_low_f": {
+        "comfort_low": {
           "label": "Zone comfort low",
           "default": 70.0,
           "min": 50.0,
@@ -19914,7 +20006,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "ZONE_T_LO"
         },
-        "comfort_high_f": {
+        "comfort_high": {
           "label": "Zone comfort high",
           "default": 75.0,
           "min": 55.0,
@@ -20042,7 +20134,7 @@
       "datafusion_sql_implementation": "sched247_always_on.sql",
       "sql_file": "sched247_always_on.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#sched-247",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#sched-247",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#sched-247",
       "test_coverage": [
         "tests/rules/test_parity_inventory.py",
         "tests/rules/test_sched247_proof.py",
@@ -20198,7 +20290,7 @@
           "step": 1.0,
           "label": "Require operational gate"
         },
-        "reset_err_f": {
+        "reset_err": {
           "default": 3.0,
           "unit": "degF",
           "min": 0.5,
@@ -20243,7 +20335,7 @@
       "datafusion_sql_implementation": "reset1_sat_oa_reset.sql",
       "sql_file": "reset1_sat_oa_reset.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#reset-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#reset-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#reset-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -20283,7 +20375,7 @@
           "frontend_control": "slider",
           "sql_placeholder": "REQUIRE_OPERATIONAL_GATE"
         },
-        "reset_err_f": {
+        "reset_err": {
           "label": "Reset error",
           "default": 3.0,
           "min": 0.5,
@@ -20291,7 +20383,7 @@
           "step": 0.5,
           "unit": "degF",
           "frontend_control": "slider",
-          "sql_placeholder": "RESET_ERR_F"
+          "sql_placeholder": "RESET_ERR"
         },
         "reset_sat_at_65": {
           "label": "SAT SP at 65F OAT",
@@ -20441,7 +20533,7 @@
       "datafusion_sql_implementation": "cmd1_fan_mismatch.sql",
       "sql_file": "cmd1_fan_mismatch.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#cmd-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#cmd-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#cmd-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -20614,7 +20706,7 @@
       "datafusion_sql_implementation": "oa1_low_oa_frac.sql",
       "sql_file": "oa1_low_oa_frac.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#oa-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#oa-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#oa-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -20828,7 +20920,7 @@
       "datafusion_sql_implementation": "dmp1_oa_damper_leak.sql",
       "sql_file": "dmp1_oa_damper_leak.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#dmp-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#dmp-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#dmp-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -21041,7 +21133,7 @@
       "datafusion_sql_implementation": "vlv1_clg_valve_leak.sql",
       "sql_file": "vlv1_clg_valve_leak.sql",
       "documentation_link": "docs/rules/cookbook/pandas-cookbook.md#vlv-1",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#vlv-1",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#vlv-1",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -21225,8 +21317,8 @@
       "pandas_implementation": null,
       "datafusion_sql_implementation": "avg_zone_temp.sql",
       "sql_file": "avg_zone_temp.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#avg-zone-temp",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#avg-zone-temp",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#avg-zone-temp",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -21284,8 +21376,8 @@
       "pandas_implementation": null,
       "datafusion_sql_implementation": "fan_runtime_hours.sql",
       "sql_file": "fan_runtime_hours.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#fan-runtime-hours",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fan-runtime-hours",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fan-runtime-hours",
       "test_coverage": [
         "tests/rules/test_parity_inventory.py"
       ],
@@ -21340,8 +21432,8 @@
       "pandas_implementation": null,
       "datafusion_sql_implementation": "fault_elapsed_hours.sql",
       "sql_file": "fault_elapsed_hours.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#fault-elapsed-hours",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#fault-elapsed-hours",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#fault-elapsed-hours",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -21408,8 +21500,8 @@
       "pandas_implementation": null,
       "datafusion_sql_implementation": "util_interval_fault.sql",
       "sql_file": "util_interval_fault.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#util-interval",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#util-interval",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#util-interval",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#util-interval",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -21465,8 +21557,8 @@
       "pandas_implementation": null,
       "datafusion_sql_implementation": "util_monthly_fault.sql",
       "sql_file": "util_monthly_fault.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#util-monthly",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#util-monthly",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#util-monthly",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#util-monthly",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",
@@ -21529,8 +21621,8 @@
       "pandas_implementation": null,
       "datafusion_sql_implementation": "zone_comfort_pct.sql",
       "sql_file": "zone_comfort_pct.sql",
-      "documentation_link": "docs/rules/cookbook/sql-cookbook.md#zone-comfort-pct",
-      "sql_documentation_link": "docs/rules/cookbook/sql-cookbook.md#zone-comfort-pct",
+      "documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct",
+      "sql_documentation_link": "docs/rules/cookbook/datafusion-sql-cookbook.md#zone-comfort-pct",
       "test_coverage": [],
       "parity_status": "sql_screening",
       "parity_level": "sql_screening",

@@ -408,6 +408,10 @@ def doc_for_metadata_diff(doc: Any, renames: dict[str, str]) -> Any:
 
     out = strip_registry_metadata(copy.deepcopy(doc))
     for rule in out.get("rules", []):
+        placeholders = rule.get("placeholders")
+        if isinstance(placeholders, list):
+            placeholder_renames = {old.upper(): new.upper() for old, new in renames.items()}
+            rule["placeholders"] = [placeholder_renames.get(str(p), p) for p in placeholders]
         params = rule.get("parameters")
         if not isinstance(params, dict):
             continue

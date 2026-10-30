@@ -407,7 +407,9 @@ mod tests {
             .connect(&url)
             .await
             .unwrap();
-        super::super::postgres::apply_schema(&pool).await.unwrap();
+        crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
+            .await
+            .unwrap();
         let tenant = format!("w5a-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]);
         let key = pg_key(&tenant);
 

@@ -218,9 +218,9 @@ fn temperature_bounds(role: &str) -> (f64, f64) {
         "hw-supply-temp" | "hw-return-temp" | "hot-water-supply-temp" | "hot-water-return-temp"
     );
     if hot_water {
-        (32.0, 220.0)
+        (0.0, 104.44444444444444)
     } else {
-        (-40.0, 130.0)
+        (-40.0, 54.44444444444444)
     }
 }
 
@@ -232,8 +232,8 @@ struct AdmittedUnit {
 
 /// Validate NF/site-file units and stamp declared source metadata before ingest.
 ///
-/// Range checks use °F band limits; °C portal values are converted only for that
-/// comparison. Sample values and declared units are not rewritten for SI here.
+/// Range checks use canonical °C bounds. Declared °F values are normalized only
+/// for that comparison; raw samples and declared units remain available to ingest.
 pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Result<(), UnitFlag> {
     if attr_owned(&sample.attrs, "nf_unit_policy").as_deref() == Some("applied") {
         return Ok(());
@@ -279,8 +279,8 @@ pub fn apply_nf_unit_policy(sample: &mut super::types::NormalizedSample) -> Resu
     if matches!(admitted.class, UnitClass::Celsius | UnitClass::Fahrenheit) {
         let (low, high) = temperature_bounds(&sample.role);
         let check_val = match admitted.class {
-            UnitClass::Celsius => fdd_core::celsius_to_fahrenheit(sample.val),
-            UnitClass::Fahrenheit => sample.val,
+            UnitClass::Celsius => sample.val,
+            UnitClass::Fahrenheit => (sample.val - 32.0) * 5.0 / 9.0,
             UnitClass::Percent | UnitClass::Other(_) => sample.val,
         };
         if !check_val.is_finite() || check_val < low || check_val > high {
@@ -1407,9 +1407,9 @@ mod tests {
                 low,
                 high,
             }] => {
-                assert!((canonical - 194.0).abs() < 1e-9);
+                assert!((canonical - 90.0).abs() < 1e-9);
                 assert_eq!(*low, -40.0);
-                assert_eq!(*high, 130.0);
+                assert!((*high - 54.44444444444444).abs() < 1e-9);
             }
             other => panic!("expected range flag, got {other:?}"),
         }

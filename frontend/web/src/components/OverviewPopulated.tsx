@@ -502,7 +502,7 @@ export function OverviewPopulated({
       const config: SessionConfig = {
         ...(prev?.config ?? {}),
         schema_version: prev?.config?.schema_version ?? "openfdd.session.v1",
-        unit_system: unitSystem,
+        display_units: unitSystem,
         occupancy_schedule,
         params: {
           ...(prev?.config?.params ?? {}),

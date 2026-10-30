@@ -8,10 +8,10 @@ import { useDatasetWriteAllowed } from "../hooks/useDatasetWriteAllowed";
 import { TENANT_CHANGED_EVENT } from "../api/tenantApi";
 import { RuleTuningPanel } from "./RuleTuningPanel";
 
-const UNITS_KEY = "openfdd.ui.unit_system";
+const UNITS_KEY = "openfdd.ui.display_units";
 const PREFER_WEB_OAT_KEY = "openfdd.ui.prefer_web_oat";
 const STATUS_PROOF_KEY = "openfdd.ui.use_mech_cooling_status_proof";
-const CHW_LEAVE_KEY = "openfdd.ui.chw_leave_max_f";
+const CHW_LEAVE_KEY = "openfdd.ui.chw_leave_max_c";
 
 function writeFlag(key: string, value: boolean): void {
   try {
@@ -69,7 +69,7 @@ export function OracleSidebar({ collapsed }: { collapsed: boolean }) {
     writeFlag(STATUS_PROOF_KEY, true);
     try {
       if (localStorage.getItem(CHW_LEAVE_KEY) == null) {
-        localStorage.setItem(CHW_LEAVE_KEY, "48");
+        localStorage.setItem(CHW_LEAVE_KEY, "8.8888888889");
       }
     } catch {
       /* ignore */

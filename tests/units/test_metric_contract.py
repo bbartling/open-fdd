@@ -6,10 +6,10 @@ import json
 from pathlib import Path
 
 from open_fdd.units.convert import (
-    admit_temperature_to_pack_f,
     delta_c_to_delta_f,
     delta_f_to_delta_c,
     norm_command,
+    source_temperature_to_si,
 )
 import pandas as pd
 
@@ -37,9 +37,15 @@ def test_t1284_unit_contract_check():
     assert proc.returncode == 0, "check_unit_contract.py must pass"
 
 
-def test_20c_admits_to_68f():
-    assert abs(admit_temperature_to_pack_f(20.0, "°C") - 68.0) < 1e-9
-    assert abs(admit_temperature_to_pack_f(68.0, "°F") - 68.0) < 1e-9
+def test_declared_source_temperature_normalizes_once_to_si():
+    assert abs(source_temperature_to_si(20.0, "°C") - 20.0) < 1e-9
+    assert abs(source_temperature_to_si(68.0, "°F") - 20.0) < 1e-9
+    try:
+        source_temperature_to_si(68.0, "")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("missing source unit must not imply an IP value")
 
 
 def test_delta_scale_only():
@@ -73,10 +79,9 @@ def test_auto_is_series_level_not_element_wise():
 def test_goldens_file_matches_helpers():
     cases = {c["id"]: c for c in json.loads(GOLDENS.read_text(encoding="utf-8"))["cases"]}
     c = cases["abs_20C_eq_68F"]
-    assert abs(admit_temperature_to_pack_f(c["metric"], "C") - c["imperial"]) < 1e-9
+    assert abs(source_temperature_to_si(c["input"], c["source_unit"]) - c["metric"]) < 1e-9
     d = cases["delta_5F_is_2p777C"]
-    assert abs(delta_f_to_delta_c(d["imperial"]) - d["metric"]) < 1e-12
-    p = cases["percent_declared"]
-    got = norm_command(pd.Series(p["values_percent"]), representation="percent").tolist()
-    for a, b in zip(got, p["expect_fraction"], strict=True):
-        assert abs(a - b) < 1e-12
+    assert abs(delta_f_to_delta_c(d["input"]) - d["metric"]) < 1e-12
+    p = cases["percent_alias"]
+    got = norm_command(pd.Series([p["input"]]), representation="percent").tolist()
+    assert abs(got[0] - p["input"] / 100.0) < 1e-12

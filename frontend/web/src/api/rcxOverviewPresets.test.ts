@@ -41,8 +41,8 @@ describe("RCx overview presets normalize row-only envelopes before charts", () =
         mat: 60,
         sat: 55,
         oa_damper_pct: 40,
-        delta_or_f: -22,
-        delta_mr_f: -12,
+        delta_or_c: -22,
+        delta_mr_c: -12,
         fan_on: true,
       })),
     } as never);
@@ -61,8 +61,8 @@ describe("RCx overview presets normalize row-only envelopes before charts", () =
           oa_t: 50,
           rat: 72,
           mat: 60,
-          delta_or_f: -22,
-          delta_mr_f: -12,
+          delta_or_c: -22,
+          delta_mr_c: -12,
           fan_on: false,
         },
         {
@@ -71,16 +71,16 @@ describe("RCx overview presets normalize row-only envelopes before charts", () =
           oa_t: 70,
           rat: 72,
           mat: 71,
-          delta_or_f: -2,
-          delta_mr_f: -1,
+          delta_or_c: -2,
+          delta_mr_c: -1,
           fan_on: true,
         },
         {
           ts: "2026-06-01T03:00:00Z",
           equipment_id: "SYN_AHU_E",
           fan_on: true,
-          delta_or_f: -22,
-          delta_mr_f: -12,
+          delta_or_c: -22,
+          delta_mr_c: -12,
         },
       ],
     } as never);
@@ -151,14 +151,14 @@ describe("RCx overview presets normalize row-only envelopes before charts", () =
           equipment_id: "SYN_AHU_E",
           bas_oa_t: 50,
           web_oa_t: 48,
-          delta_f: 2,
+          delta_c: 2,
         },
       ],
     } as never);
     const bas = await loadOverviewRcxPreset("SYN_SITE", "bas_vs_web_oat");
     expect(bas.figure).toBeTruthy();
-    expect(bas.env.points[0]?.bas_oat_f).toBe(50);
-    expect(bas.env.points[0]?.web_oat_f).toBe(48);
+    expect(bas.env.points[0]?.bas_oat_c).toBe(50);
+    expect(bas.env.points[0]?.web_oat_c).toBe(48);
 
     vi.mocked(postBasVsWebOat).mockResolvedValueOnce({ ...envelope, rows: [] } as never);
     const basEmpty = await loadOverviewRcxPreset("SYN_SITE", "bas_vs_web_oat");

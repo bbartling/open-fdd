@@ -137,12 +137,12 @@ async fn rcx_row_endpoints_gate_economizer_and_return_duct_setpoint() {
         row["mat"].as_f64().is_some(),
         "qualified row keeps measured MAT"
     );
-    let delta = row["delta_or_f"].as_f64().expect("delta");
+    let delta = row["delta_or_c"].as_f64().expect("delta");
     assert!(
         delta.abs() >= dt_min_c - 1e-9,
         "qualified |OAT−RAT|={delta}"
     );
-    let resid = row["mat_resid_f"].as_f64().expect("residual");
+    let resid = row["mat_resid_c"].as_f64().expect("residual");
     assert!(
         (resid - (-3.2_f64 * 5.0 / 9.0)).abs() < 1e-5,
         "MAT residual {resid} is the damper mixing difference (SI °C)"
@@ -348,14 +348,14 @@ async fn post_analytics(
     app: &axum::Router,
     path: &str,
     building_id: &str,
-    dt_min_f: Option<f64>,
+    dt_min_c: Option<f64>,
 ) -> Value {
     let mut payload = json!({
         "building_id": building_id,
         "max_points": 500,
     });
-    if let Some(dt) = dt_min_f {
-        payload["dt_min_f"] = json!(dt);
+    if let Some(dt) = dt_min_c {
+        payload["dt_min_c"] = json!(dt);
     }
     post_json(app, path, payload).await
 }

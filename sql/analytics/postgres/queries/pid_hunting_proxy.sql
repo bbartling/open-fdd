@@ -1,4 +1,7 @@
 -- Hunting proxy. One row per bound key, not a mix of two sensors.
+-- Preserve the legacy 8-unit spread by semantic role after metric-c-v2 storage:
+-- temperature (degF delta -> delta_degC), duct air pressure (in.w.c. -> Pa),
+-- and unitless percent/cmd roles (identity). These are role IDs, never site IDs.
 -- Parameters:
 --   $1 = site_id
 --   $2 = window start (timestamptz, NULL = open)
@@ -12,7 +15,11 @@ SELECT
   avg(s.val) AS avg_val,
   stddev_samp(s.val) AS stddev_val,
   CASE
-    WHEN count(*) >= 24 AND stddev_samp(s.val) IS NOT NULL AND stddev_samp(s.val) > 8.0
+    WHEN count(*) >= 24 AND stddev_samp(s.val) IS NOT NULL AND (
+      (a.role IN ('sat', 'zone_t') AND stddev_samp(s.val) > 4.444444444444445)
+      OR (a.role = 'dsp' AND stddev_samp(s.val) > 1990.72)
+      OR (a.role NOT IN ('sat', 'zone_t', 'dsp') AND stddev_samp(s.val) > 8.0)
+    )
       THEN 'HUNT_PROXY'
     ELSE 'OK'
   END AS hunt_flag

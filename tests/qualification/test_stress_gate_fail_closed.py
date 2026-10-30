@@ -297,20 +297,20 @@ class Gate09ZeroComparisonsTest(unittest.TestCase):
         self.assertEqual(self.check_economizer({"ok": False, "error": "no roles"}), 2)
 
     def test_points_without_comparable_fields_blocked(self):
-        body = {"points": [{"oat_f": 50.0}, {"rat_f": 70.0, "delta_or_f": 1.0}]}
+        body = {"points": [{"oat_f": 50.0}, {"rat_f": 70.0, "delta_or_c": 1.0}]}
         self.assertEqual(self.check_economizer(body), 2)
 
     def test_fewer_than_declared_comparisons_blocked(self):
-        pt = {"oat_f": 50.0, "rat_f": 70.0, "mat_f": 60.0, "delta_or_f": -20.0, "delta_mr_f": -10.0}
+        pt = {"oat_f": 50.0, "rat_f": 70.0, "mat_f": 60.0, "delta_or_c": -20.0, "delta_mr_c": -10.0}
         self.assertEqual(self.check_economizer({"points": [pt]}, minimum=2), 2)
         self.assertEqual(self.check_economizer({"points": [pt, dict(pt)]}, minimum=2), 0)
 
     def test_zero_valued_temperatures_are_compared(self):
-        pt = {"oat_f": 0.0, "rat_f": 0.0, "mat_f": 0.0, "delta_or_f": 0.0, "delta_mr_f": 0.0}
+        pt = {"oat_f": 0.0, "rat_f": 0.0, "mat_f": 0.0, "delta_or_c": 0.0, "delta_mr_c": 0.0}
         self.assertEqual(self.check_economizer({"points": [pt]}), 0)
 
     def test_divergent_delta_fails(self):
-        pt = {"oat_f": 50.0, "rat_f": 70.0, "mat_f": 60.0, "delta_or_f": -19.0, "delta_mr_f": -10.0}
+        pt = {"oat_f": 50.0, "rat_f": 70.0, "mat_f": 60.0, "delta_or_c": -19.0, "delta_mr_c": -10.0}
         self.assertEqual(self.check_economizer({"points": [pt]}), 1)
 
     def test_comfort_with_no_rows_blocked(self):

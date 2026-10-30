@@ -170,14 +170,14 @@ fn with_scope_meta(mut env: Value, scope: &AnalyticsSqlScope) -> Value {
 fn economizer_dt_min(raw: Option<f64>) -> f64 {
     match raw {
         Some(value) if value.is_finite() => value.max(0.0),
-        _ => crate::analytics::economizer::DEFAULT_DT_MIN_F,
+        _ => crate::analytics::economizer::DEFAULT_DT_MIN_C,
     }
 }
 
-fn empty_row_reason(query_id: &str, dt_min_f: Option<f64>) -> String {
+fn empty_row_reason(query_id: &str, dt_min_c: Option<f64>) -> String {
     match query_id {
         "economizer" => {
-            let dt = dt_min_f.unwrap_or(crate::analytics::economizer::DEFAULT_DT_MIN_F);
+            let dt = dt_min_c.unwrap_or(crate::analytics::economizer::DEFAULT_DT_MIN_C);
             format!(
                 "no qualified economizer samples: fan-on proof, |OAT−RAT| ≥ {dt:.1}°C, and a measured MAT are required; off-fan, low-delta, and missing-MAT rows are not qualified"
             )
@@ -205,10 +205,10 @@ fn finish_row_envelope(
     rows: Vec<Value>,
     scope: &AnalyticsSqlScope,
     empty_key: &str,
-    dt_min_f: Option<f64>,
+    dt_min_c: Option<f64>,
 ) -> Value {
     let warnings = if rows.is_empty() {
-        vec![empty_row_reason(empty_key, dt_min_f)]
+        vec![empty_row_reason(empty_key, dt_min_c)]
     } else {
         Vec::new()
     };
@@ -217,8 +217,8 @@ fn finish_row_envelope(
         if !warnings.is_empty() {
             obj.insert("warnings".to_string(), json!(warnings));
         }
-        if let Some(dt) = dt_min_f {
-            obj.insert("dt_min_f".to_string(), json!(dt));
+        if let Some(dt) = dt_min_c {
+            obj.insert("dt_min_c".to_string(), json!(dt));
         }
     }
     env
@@ -320,7 +320,7 @@ pub async fn bas_vs_web_oat(
             "equipment_id": r.try_get::<String, _>("equipment_id").ok(),
             "bas_oa_t": r.try_get::<f64, _>("bas_oa_t").ok(),
             "web_oa_t": r.try_get::<f64, _>("web_oa_t").ok(),
-            "delta_f": r.try_get::<f64, _>("delta_f").ok(),
+            "delta_c": r.try_get::<f64, _>("delta_c").ok(),
         }));
     }
     let mut body = finish_row_envelope(
@@ -1093,9 +1093,9 @@ pub async fn economizer_deltas(
     tsdb: &Tsdb,
     building_id: &str,
     scope: &AnalyticsSqlScope,
-    dt_min_f: f64,
+    dt_min_c: f64,
 ) -> Result<Value> {
-    let dt_min = economizer_dt_min(Some(dt_min_f));
+    let dt_min = economizer_dt_min(Some(dt_min_c));
     // Soft-OPEN: bind requested window/equipment and the |OAT−RAT| gate before aggregation.
     let rows = sqlx::query(ECONOMIZER_SQL)
         .bind(building_id)
@@ -1117,9 +1117,9 @@ pub async fn economizer_deltas(
             "mat": r.try_get::<f64, _>("mat").ok(),
             "sat": r.try_get::<f64, _>("sat").ok(),
             "oa_damper_pct": r.try_get::<f64, _>("oa_damper_pct").ok(),
-            "delta_or_f": r.try_get::<f64, _>("delta_or_f").ok(),
-            "delta_mr_f": r.try_get::<f64, _>("delta_mr_f").ok(),
-            "mat_resid_f": r.try_get::<Option<f64>, _>("mat_resid_f").ok().flatten(),
+            "delta_or_c": r.try_get::<f64, _>("delta_or_c").ok(),
+            "delta_mr_c": r.try_get::<f64, _>("delta_mr_c").ok(),
+            "mat_resid_c": r.try_get::<Option<f64>, _>("mat_resid_c").ok().flatten(),
             "fan_on": r.try_get::<bool, _>("fan_on").unwrap_or(false),
             "identifiable": r.try_get::<bool, _>("identifiable").unwrap_or(false),
         }));
@@ -1876,7 +1876,7 @@ pub async fn respond_query(
             .await
             .map(|env| env.to_json()),
         "economizer" | "rcx-ahu" => {
-            economizer_deltas(&tsdb, &building, &scope, economizer_dt_min(req.dt_min_f)).await
+            economizer_deltas(&tsdb, &building, &scope, economizer_dt_min(req.dt_min_c)).await
         }
         "rcx-vav" => role_timeseries(&tsdb, &building, "zone_t", "rcx-vav", 2000, &scope).await,
         "rcx-chiller" => {
@@ -1988,7 +1988,7 @@ mod pack_version_tests {
             "economizer must enforce absolute OAT−RAT"
         );
         assert!(
-            ECONOMIZER_SQL.contains("mat_resid_f"),
+            ECONOMIZER_SQL.contains("mat_resid_c"),
             "MAT residual is the mixing-model difference"
         );
     }

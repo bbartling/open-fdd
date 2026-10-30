@@ -65,7 +65,9 @@ async fn test_pool() -> Option<PgPool> {
         .connect(url.trim())
         .await
         .expect("test database");
-    postgres::apply_schema(&pool).await.expect("schema");
+    crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
+        .await
+        .expect("schema");
     sqlx::query("INSERT INTO site (site_id) VALUES ($1) ON CONFLICT DO NOTHING")
         .bind(SITE)
         .execute(&pool)

@@ -54,13 +54,24 @@ class ModeDelaySharedTest(unittest.TestCase):
         fan = pd.Series([False, False, True, True, True])
         self.assertEqual(fan_restart_stable(fan, 2).tolist(), [False, False, False, True, True])
 
-    def test_fc1_missing_eps_dsp_raises(self) -> None:
+    def test_fc1_uses_catalog_default_when_eps_dsp_missing(self) -> None:
         idx = pd.date_range("2026-01-05", periods=3, freq="5min", tz="UTC")
         d = pd.DataFrame(
-            {"duct-static-pressure": 1.0, "duct-static-pressure-sp": 2.0, "fan-status": 1}, index=idx
+            {"duct-static-pressure": [1.0, 1.0, 1.0], "duct-static-pressure-sp": [2.0, 2.0, 2.0], "fan-status": [1, 1, 1]},
+            index=idx,
         )
-        with self.assertRaises(KeyError):
-            cb.fc1(d, {"eps_vfd_spd": 0.13, "mode_delay_min": 10, "startup_delay_min": 0}, 300.0)
+        d.attrs["storage_abi"] = "metric-c-v2"
+        with_default = cb.fc1(
+            d,
+            {"eps_vfd_spd": 0.13, "mode_delay_min": 10, "startup_delay_min": 0, "eps_dsp": 29.8608},
+            300.0,
+        )
+        implicit = cb.fc1(
+            d,
+            {"eps_vfd_spd": 0.13, "mode_delay_min": 10, "startup_delay_min": 0},
+            300.0,
+        )
+        pd.testing.assert_series_equal(with_default, implicit)
 
 
 if __name__ == "__main__":

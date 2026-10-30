@@ -236,7 +236,9 @@ async fn postgres_prune_keeps_live_jobs_and_refuses_replay_before_the_horizon() 
                 redact_db_text(&err.to_string())
             )
         });
-    postgres::apply_schema(&pool).await.expect("ingest schema");
+    crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
+        .await
+        .expect("ingest schema");
     let tenant = format!("w7a-{}", &Uuid::new_v4().simple().to_string()[..12]);
     postgres_suite(&pool, &tenant).await;
     purge(&pool, &tenant).await;

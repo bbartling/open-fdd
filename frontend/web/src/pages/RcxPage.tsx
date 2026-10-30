@@ -60,7 +60,7 @@ function formatErr(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-const UNITS_KEY = "openfdd.ui.unit_system";
+const UNITS_KEY = "openfdd.ui.display_units";
 
 function readUnitSystem(): UnitSystem {
   return localStorage.getItem(UNITS_KEY) === "metric" ? "metric" : "imperial";

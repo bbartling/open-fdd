@@ -16,6 +16,7 @@ on:
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
       - "docs/rules/cookbook/fixtures/**"
       - "sql/analytics/**"
@@ -38,6 +39,7 @@ on:
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
       - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
       - "sql/fdd/**"
       - "open_fdd/**"
@@ -85,6 +87,9 @@ jobs:
           pip install 'psycopg[binary]>=3.1'
           pip install pyyaml
           pip install -e ".[oracle]"
+
+      - name: No-imperial product guard
+        run: bash scripts/ci/check_no_imperial_product.sh
 
       - name: Unit contract (T1284-1 baseline)
         run: python3 scripts/ci/check_unit_contract.py
@@ -154,7 +159,10 @@ jobs:
       - name: W4f analytics SI (offline P1/P2 + live SQL SI golden check)
         env:
           OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
-        run: python3 -B -m unittest tests.qualification.test_w4f_analytics_si -v
+        run: >-
+          python3 -B -m unittest
+          tests.qualification.test_w4f_analytics_si
+          tests.qualification.test_w4f_analytics_threshold_invariance -v
 
       - name: T1284-4 blocking FC1 mutation must fail gate
         run: |

@@ -211,7 +211,7 @@ export function RulesPage() {
       const nextParams = { ...sessionParams, [tuneRuleId]: payload };
       const config: SessionConfig = {
         schema_version: "openfdd_session_v1",
-        unit_system: sessionConfig?.unit_system ?? "imperial",
+        display_units: sessionConfig?.display_units ?? "imperial",
         prefer_web_oat: sessionConfig?.prefer_web_oat ?? true,
         role_map: sessionConfig?.role_map ?? {},
         params: nextParams,

@@ -5,7 +5,6 @@ pub mod error;
 pub mod models;
 pub mod role_rank;
 pub mod sensor_sweep;
-pub mod units;
 pub mod units_contract;
 pub mod validate;
 
@@ -22,11 +21,6 @@ pub use sensor_sweep::{
 
 pub use error::CoreError;
 pub use models::*;
-pub use units::{
-    celsius_to_fahrenheit, delta_c_to_delta_f, delta_f_to_delta_c, fahrenheit_to_celsius,
-    is_flow_role, is_metric_unit_system, is_pressure_role, is_temperature_role, lps_to_cfm,
-    metric_select_list, pa_to_in_wc, FLOW_ROLES, PRESSURE_ROLES, TEMPERATURE_ROLES,
-};
 pub use units_contract::{
     normalize_alias, reject_unknown_alias, ContractError as MetricContractError,
     MetricUnitsContract, ALIAS_NORMALIZE_GOLDENS_JSON, METRIC_UNITS_JSON,

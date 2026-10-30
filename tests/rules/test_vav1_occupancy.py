@@ -17,8 +17,9 @@ def _frame(temps, occupied=None):
 
 
 def test_vav1_faults_occupied_band_and_skips_unoccupied():
+    # Zone temps in SI °C; comfort band defaults 21.11–23.89 °C (W4 SI rules).
     df = _frame(
-        [80.0, 80.0, 72.0, 60.0, 85.0, 85.0],
+        [26.7, 26.7, 22.2, 15.6, 29.4, 29.4],
         ["occupied", "unoccupied", "occupied", "occupied", "0.03", "1.0"],
     )
     raw = vav1(df, {}, 300.0)
@@ -26,13 +27,13 @@ def test_vav1_faults_occupied_band_and_skips_unoccupied():
 
 
 def test_vav1_without_occupancy_is_not_assessed():
-    df = _frame([80.0, 60.0, 72.0])
+    df = _frame([26.7, 15.6, 22.2])
     raw = vav1(df, {}, 300.0)
     assert not raw.fillna(False).any()
 
 
 def test_vav1_require_occupied_off_includes_unoccupied_without_schedule():
-    df = _frame([80.0, 80.0], ["occupied", "unoccupied"])
+    df = _frame([26.7, 26.7], ["occupied", "unoccupied"])
     raw = vav1(df, {"require_occupied": 0}, 300.0)
     assert list(raw.fillna(False)) == [True, True]
 
@@ -40,12 +41,12 @@ def test_vav1_require_occupied_off_includes_unoccupied_without_schedule():
 def test_vav1_overview_calendar_gates_when_occ_column_absent():
     # Monday 2026-01-05. Default calendar is occupied 06:00–18:00 local.
     idx = pd.date_range("2026-01-05 02:00", periods=2, freq="8h", tz="America/Chicago")
-    df = pd.DataFrame({"zone-air-temp": [80.0, 80.0]}, index=idx)
+    df = pd.DataFrame({"zone-air-temp": [26.7, 26.7]}, index=idx)
     raw = vav1(df, {"occupancy_schedule": OccupancySchedule().to_dict()}, 300.0)
     assert list(raw.fillna(False)) == [False, True]
 
 
 def test_unoccupied_setback_stays_on_vav2():
-    df = _frame([80.0, 80.0], ["occupied", "unoccupied"])
+    df = _frame([26.7, 26.7], ["occupied", "unoccupied"])
     assert list(vav1(df, {}, 300.0).fillna(False)) == [True, False]
     assert list(vav2(df, {"setback_hi": 20.0}, 300.0).fillna(False)) == [False, True]

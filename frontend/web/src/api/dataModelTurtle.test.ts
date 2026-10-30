@@ -10,7 +10,7 @@ import type { PackageMappingResponse } from "./mappingApi";
 const fixture: PackageMappingResponse = {
   ok: true,
   building_id: "B1",
-  unit_system: "imperial",
+  display_units: "imperial",
   equipment: [
     {
       equipment_id: "AHU_1",

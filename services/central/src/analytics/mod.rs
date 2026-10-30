@@ -89,9 +89,9 @@ pub struct AnalyticsRequest {
     /// Gap clip for runtime Δt integration (seconds).
     #[serde(default)]
     pub max_gap_seconds: Option<f64>,
-    /// Economizer |OAT−RAT| identifiability gate (°F).
+    /// Economizer |OAT−RAT| identifiability gate (°C).
     #[serde(default)]
-    pub dt_min_f: Option<f64>,
+    pub dt_min_c: Option<f64>,
     /// Recompute even when the parquet result cache is fresh.
     #[serde(default)]
     pub refresh: bool,

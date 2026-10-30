@@ -51,7 +51,7 @@ export interface OverviewVibe19Response {
     temps_overlay: PlotlyFigure | null;
     overlay_equipment_id: string | null;
     skipped: Array<Record<string, string>>;
-    dt_min_f?: number;
+    dt_min_c?: number;
   };
   bas_vs_web_oat: {
     caption: string;

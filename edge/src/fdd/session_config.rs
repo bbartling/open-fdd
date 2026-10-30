@@ -1,7 +1,7 @@
 //! `openfdd_session_v1` session / fault settings save-load (#515).
 //!
 //! Mirrors the vibe19 `session_config.json` contract (vibe19
-//! `docs/PACKAGE_SPEC.md`): `unit_system`, `prefer_web_oat`, `chw_leave_max_f`,
+//! `docs/PACKAGE_SPEC.md`): `display_units`, `prefer_web_oat`, `chw_leave_max`,
 //! per-equipment `role_map`, per-rule `params`. Unknown keys are ignored with a
 //! warning; the deprecated `include_ahu_chw_valve` is always coerced off.
 //!
@@ -89,7 +89,7 @@ fn session_config_path_for(scope: &SessionConfigScope) -> PathBuf {
 fn default_config() -> Value {
     json!({
         "schema_version": SESSION_SCHEMA,
-        "unit_system": "imperial",
+        "display_units": "imperial",
         "prefer_web_oat": true,
         "role_map": {},
         "params": {},
@@ -159,16 +159,6 @@ pub fn get_session_config_scoped(scope: &SessionConfigScope) -> Value {
     })
 }
 
-/// Persisted `unit_system` (imperial|metric|si). Defaults to imperial.
-pub fn unit_system_from_session() -> String {
-    get_session_config()
-        .get("config")
-        .and_then(|c| c.get("unit_system"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("imperial")
-        .to_string()
-}
-
 fn json_bool(value: &Value) -> Option<bool> {
     if let Some(flag) = value.as_bool() {
         return Some(flag);
@@ -222,17 +212,17 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
     let mut out = Map::new();
     out.insert("schema_version".into(), json!(SESSION_SCHEMA));
 
-    let unit = obj
-        .get("unit_system")
+    let display_units = obj
+        .get("display_units")
         .and_then(|v| v.as_str())
         .unwrap_or("imperial")
         .to_lowercase();
-    if !matches!(unit.as_str(), "imperial" | "metric" | "si") {
+    if !matches!(display_units.as_str(), "imperial" | "metric" | "si") {
         return Err(format!(
-            "unit_system must be imperial|metric|si, got {unit:?}"
+            "display_units must be imperial|metric|si, got {display_units:?}"
         ));
     }
-    out.insert("unit_system".into(), json!(unit));
+    out.insert("display_units".into(), json!(display_units));
 
     if let Some(v) = obj.get("prefer_web_oat").and_then(|v| v.as_bool()) {
         out.insert("prefer_web_oat".into(), json!(v));
@@ -241,8 +231,8 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
     if let Some(on) = operational_proof {
         out.insert("require_operational_proof".into(), json!(on));
     }
-    if let Some(v) = obj.get("chw_leave_max_f").and_then(|v| v.as_f64()) {
-        out.insert("chw_leave_max_f".into(), json!(v));
+    if let Some(v) = obj.get("chw_leave_max").and_then(|v| v.as_f64()) {
+        out.insert("chw_leave_max".into(), json!(v));
     }
     if obj.get("include_ahu_chw_valve").and_then(|v| v.as_bool()) == Some(true) {
         warnings.push(
@@ -331,9 +321,9 @@ pub fn normalize_session_config(raw: &Value) -> Result<(Value, Vec<String>), Str
 
     let known = [
         "schema_version",
-        "unit_system",
+        "display_units",
         "prefer_web_oat",
-        "chw_leave_max_f",
+        "chw_leave_max",
         "include_ahu_chw_valve",
         "role_map",
         "params",
@@ -418,7 +408,7 @@ fn strip_site_from_path(
 }
 
 /// Remove equipment role_map entries for a deleted site; drop params keyed by building id.
-/// Does not wipe global unit_system / other sites' equipment.
+/// Does not wipe global display preference / other sites' equipment.
 pub fn strip_site_from_session_config(
     building_id: &str,
     equipment_ids: &[String],
@@ -542,15 +532,32 @@ mod tests {
     fn rejects_wrong_schema_and_bad_units() {
         let err = normalize_session_config(&json!({"schema_version": "v2"})).unwrap_err();
         assert!(err.contains("schema_version"), "{err}");
-        let err = normalize_session_config(&json!({"unit_system": "cubits"})).unwrap_err();
-        assert!(err.contains("unit_system"), "{err}");
+        let err = normalize_session_config(&json!({"display_units": "cubits"})).unwrap_err();
+        assert!(err.contains("display_units"), "{err}");
+    }
+
+    #[test]
+    fn display_preference_is_only_metadata_and_legacy_processing_key_is_ignored() {
+        let (cfg, warnings) = normalize_session_config(&json!({
+            "unit_system": "metric",
+            "chw_leave_max_f": 48.0,
+            "display_units": "metric",
+            "chw_leave_max": 8.88888888888889,
+        }))
+        .unwrap();
+        assert_eq!(cfg["display_units"], json!("metric"));
+        assert_eq!(cfg["chw_leave_max"], json!(8.88888888888889));
+        assert!(cfg.get("unit_system").is_none());
+        assert!(cfg.get("chw_leave_max_f").is_none());
+        assert!(warnings.iter().any(|w| w.contains("unit_system")));
+        assert!(warnings.iter().any(|w| w.contains("chw_leave_max_f")));
     }
 
     #[test]
     fn coerces_deprecated_flag_and_warns_unknown_keys() {
         let (cfg, warnings) = normalize_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "imperial",
+            "display_units": "imperial",
             "include_ahu_chw_valve": true,
             "mystery_key": 1,
         }))
@@ -564,7 +571,7 @@ mod tests {
     fn keeps_occupancy_schedule_calendar() {
         let (cfg, warnings) = normalize_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "imperial",
+            "display_units": "imperial",
             "occupancy_schedule": {
                 "timezone": "America/Chicago",
                 "days": {
@@ -588,7 +595,7 @@ mod tests {
     #[test]
     fn keeps_role_map_and_numeric_params_only() {
         let (cfg, warnings) = normalize_session_config(&json!({
-            "unit_system": "metric",
+            "display_units": "metric",
             "role_map": {
                 "AHU_1": {"fan_status": "supply_fan_status", "bad": 7},
             },
@@ -598,7 +605,7 @@ mod tests {
             },
         }))
         .unwrap();
-        assert_eq!(cfg["unit_system"], json!("metric"));
+        assert_eq!(cfg["display_units"], json!("metric"));
         assert_eq!(
             cfg["role_map"]["AHU_1"]["fan_status"],
             json!("supply_fan_status")
@@ -619,18 +626,18 @@ mod tests {
 
         let before = get_session_config();
         assert_eq!(before["persisted"], json!(false));
-        assert_eq!(before["config"]["unit_system"], json!("imperial"));
+        assert_eq!(before["config"]["display_units"], json!("imperial"));
 
         let out = put_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "metric",
+            "display_units": "metric",
             "params": {"FC1": {"eps_dsp": 0.25}},
         }));
         assert_eq!(out["ok"], json!(true), "{out}");
 
         let after = get_session_config();
         assert_eq!(after["persisted"], json!(true));
-        assert_eq!(after["config"]["unit_system"], json!("metric"));
+        assert_eq!(after["config"]["display_units"], json!("metric"));
         assert_eq!(after["config"]["params"]["FC1"]["eps_dsp"], json!(0.25));
 
         std::env::remove_var("OPENFDD_WORKSPACE");
@@ -648,7 +655,7 @@ mod tests {
 
         save_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "imperial",
+            "display_units": "imperial",
             "prefer_web_oat": true,
             "role_map": {
                 "AHU_1": {"fan_status": "fs"},
@@ -690,7 +697,7 @@ mod tests {
             &building_scope,
             &json!({
                 "schema_version": SESSION_SCHEMA,
-                "unit_system": "metric",
+                "display_units": "metric",
                 "params": {"FC1": {"eps_dsp": 0.3}},
             }),
         )
@@ -699,7 +706,7 @@ mod tests {
         let legacy_wrapped = SessionConfigScope::new(Some("legacy"), Some("BLDG_A"));
         let got = get_session_config_scoped(&legacy_wrapped);
         assert_eq!(got["persisted"], json!(true));
-        assert_eq!(got["config"]["unit_system"], json!("metric"));
+        assert_eq!(got["config"]["display_units"], json!("metric"));
         assert_eq!(got["config"]["params"]["FC1"]["eps_dsp"], json!(0.3));
 
         std::env::remove_var("OPENFDD_WORKSPACE");
@@ -728,7 +735,7 @@ mod tests {
             &scope_a,
             &json!({
                 "schema_version": SESSION_SCHEMA,
-                "unit_system": "metric",
+                "display_units": "metric",
                 "params": {"FC1": {"eps_dsp": 0.11}},
             }),
         )
@@ -737,7 +744,7 @@ mod tests {
             &scope_b,
             &json!({
                 "schema_version": SESSION_SCHEMA,
-                "unit_system": "imperial",
+                "display_units": "imperial",
                 "params": {"FC1": {"eps_dsp": 0.99}},
             }),
         )
@@ -745,20 +752,20 @@ mod tests {
 
         let a = get_session_config_scoped(&scope_a);
         let b = get_session_config_scoped(&scope_b);
-        assert_eq!(a["config"]["unit_system"], json!("metric"));
+        assert_eq!(a["config"]["display_units"], json!("metric"));
         assert_eq!(a["config"]["params"]["FC1"]["eps_dsp"], json!(0.11));
-        assert_eq!(b["config"]["unit_system"], json!("imperial"));
+        assert_eq!(b["config"]["display_units"], json!("imperial"));
         assert_eq!(b["config"]["params"]["FC1"]["eps_dsp"], json!(0.99));
         assert_ne!(a["path"], b["path"]);
         // Tenant-scoped reads must not leak hub-global leftovers.
         save_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "si",
+            "display_units": "si",
             "params": {"FC1": {"eps_dsp": 7.0}},
         }))
         .unwrap();
         let a2 = get_session_config_scoped(&scope_a);
-        assert_eq!(a2["config"]["unit_system"], json!("metric"));
+        assert_eq!(a2["config"]["display_units"], json!("metric"));
         assert_eq!(a2["legacy_fallback"], json!(false));
 
         std::env::remove_var("OPENFDD_WORKSPACE");
@@ -782,7 +789,7 @@ mod tests {
 
         let applied = put_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "imperial",
+            "display_units": "imperial",
             "require_operational_proof": false,
             "params": {
                 "FC1": {"eps_dsp": 0.2, "confirm_min": 20.0},
@@ -807,7 +814,7 @@ mod tests {
 
         let back_to_default = put_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "imperial",
+            "display_units": "imperial",
             "require_operational_proof": false,
             "params": {"FC1": {"eps_dsp": 0.12}},
         }));
@@ -823,7 +830,7 @@ mod tests {
 
         let reset = put_session_config(&json!({
             "schema_version": SESSION_SCHEMA,
-            "unit_system": "imperial",
+            "display_units": "imperial",
             "require_operational_proof": true,
             "params": {},
         }));

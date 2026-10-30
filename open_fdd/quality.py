@@ -60,8 +60,7 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
 
 
 def _storage_si(df: pd.DataFrame) -> bool:
-    us = str(df.attrs.get("unit_system") or "").strip().lower()
-    if us in ("metric", "si"):
+    if str(df.attrs.get("storage_abi") or "").strip().lower() == "metric-c-v2":
         return True
     for key in ("role_units", "units_map"):
         block = df.attrs.get(key)
