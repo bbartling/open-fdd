@@ -72,7 +72,6 @@ class CaptureFddIsolationPostgresTests(unittest.TestCase):
         parity.apply_schema(self.conn)
         with self.conn.cursor() as cur:
             cur.execute("DELETE FROM fdd_run WHERE site_id = %s", (self.site_id,))
-            cur.execute("DELETE FROM fdd_interval_result WHERE site_id = %s", (self.site_id,))
         self.conn.commit()
         self.base = datetime.now(timezone.utc) - timedelta(hours=2)
         _insert_fdd_run(
