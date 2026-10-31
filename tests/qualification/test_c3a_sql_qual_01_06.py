@@ -109,6 +109,16 @@ class SqlQualC3aHarnessTests(unittest.TestCase):
         )
         self.assertFalse(rtm.sv_range_scale_nondefault_ledger_waiver("FC1", "mode_delay_min", "min"))
 
+    def test_confirm_min_maps_to_registry_confirm_seconds(self) -> None:
+        rtm = _load("rtm_confirm", REPO / "scripts/qualification/c3a/rule_tuner_matrix.py")
+        cfl = _load("cfl_confirm", STRESS / "si_cutover" / "ci_fixtures_lib.py")
+        rule = next(r for r in cfl.load_rule_registry() if str(r.get("rule_id")) == "FC1")
+        reg, err = rtm._registry_param_for_catalog_tuner(rule, "confirm_min")
+        self.assertIsNone(err)
+        self.assertEqual(reg, "confirm_seconds")
+        _bad, bad_err = rtm._registry_param_for_catalog_tuner(rule, "not_a_real_tuner")
+        self.assertIsNotNone(bad_err)
+
     def test_sensor_fault_flag_mismatch_fails_full_compare(self) -> None:
         from scripts.qualification.c3b_sqlqual import qual_19_analytics_fresh as q19
 

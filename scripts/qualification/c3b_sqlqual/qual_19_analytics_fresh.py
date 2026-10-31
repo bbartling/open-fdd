@@ -189,7 +189,7 @@ def run_postgres(conn) -> list[QualCell]:
         stem for stem, count in per_body_comparisons.items() if count == 0 and stem not in EMPTY_ALLOWED_STEMS
     ]
     if missing_bodies:
-        errors.append(f"required analytics bodies without comparisons: {sorted(missing_bodies)}")
+        errors.insert(0, f"required analytics bodies without comparisons: {sorted(missing_bodies)}")
     if errors:
         return [
             QualCell(

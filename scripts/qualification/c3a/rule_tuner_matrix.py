@@ -193,7 +193,7 @@ def _compare_daily(
     pd_map = {_daily_key(r): r for r in pd_daily}
     sql_map = {_daily_key(r): r for r in sql_daily}
     compared = 0
-    mismatch = 0
+    mismatch = len(set(pd_map) ^ set(sql_map))
     for key in sorted(set(pd_map) & set(sql_map), key=repr):
         compared += 1
         pd_row = pd_map[key]
@@ -229,6 +229,21 @@ def _si_context(spec: cfl.DatasetSpec, metric: dict[str, Any]):
     return ip_frame, si_frame, equipment_id, poll
 
 
+def _registry_param_for_catalog_tuner(
+    rule: dict[str, Any], catalog_tuner: str | None
+) -> tuple[str | None, str | None]:
+    """Resolve catalog tuner key to a registry parameter name (or error)."""
+    if not catalog_tuner:
+        return None, None
+    rule_id = str(rule.get("rule_id") or "")
+    params = rule.get("parameters") or {}
+    if catalog_tuner in params:
+        return catalog_tuner, None
+    if catalog_tuner == "confirm_min" and "confirm_seconds" in params:
+        return "confirm_seconds", None
+    return None, f"{rule_id}/{catalog_tuner}: tuner not declared in registry parameters"
+
+
 def _params_si_for_case(
     rule: dict[str, Any],
     metric: dict[str, Any],
@@ -236,9 +251,14 @@ def _params_si_for_case(
     tuner_name: str | None,
     tuner_value: float | None,
 ) -> dict[str, float]:
+    registry_tuner, _err = _registry_param_for_catalog_tuner(rule, tuner_name)
+
     def param_hook(name: str, val: float) -> float:
-        if tuner_name is not None and name == tuner_name and tuner_value is not None:
-            return float(tuner_value)
+        if registry_tuner is not None and name == registry_tuner and tuner_value is not None:
+            hooked = float(tuner_value)
+            if tuner_name == "confirm_min" and registry_tuner == "confirm_seconds":
+                hooked *= 60.0
+            return hooked
         return val
 
     _params_ip, params_si = cfl.resolve_rule_params_ip_si(rule, metric, param_hook=param_hook)
@@ -285,16 +305,30 @@ def _execute_cd_case(
             params_by_rule={rule_id: params_si},
         )
     except Exception as exc:
-        conn.rollback()
-        return 0, 0, [f"{spec.building_id}/{rule_id}: {exc}"]
+        detail = str(exc)
+        try:
+            conn.rollback()
+        except Exception as rollback_exc:
+            detail = f"{exc}; rollback failed: {rollback_exc}"
+        return 0, 0, [f"{spec.building_id}/{rule_id}: {detail}"]
 
     if sql_errs:
-        conn.rollback()
+        try:
+            conn.rollback()
+        except Exception as rollback_exc:
+            return 0, 0, [
+                f"{spec.building_id}/{rule_id}: {sql_errs[0]}; rollback failed: {rollback_exc}"
+            ]
         return 0, 0, [f"{spec.building_id}/{rule_id}: {sql_errs[0]}"]
 
     pd_computed = any(str(r.get("pair_status") or "") == "computed" for r in pandas_rows)
+    sql_computed = any(str(r.get("pair_status") or "") == "computed" for r in sql_rows)
     compared, mismatch = _compare_daily(pandas_rows, sql_rows)
-    if compared == 0 and not pd_computed:
+    if compared == 0 and (pd_computed or sql_computed):
+        return 0, 0, [
+            f"{spec.building_id}/{rule_id}: zero compared cells with computed daily on a side"
+        ]
+    if compared == 0 and not pd_computed and not sql_computed:
         return 0, 0, []
     return compared, mismatch, []
 
@@ -355,6 +389,10 @@ def run_matrix(conn) -> dict[str, Any]:
                 row.status = "BLOCKED"
                 row.runner_c = "BLOCKED"
                 row.runner_d = "BLOCKED"
+            elif row.rule_id not in MATRIX_EXEC_RULE_IDS:
+                row.status = "SKIPPED"
+                row.runner_c = "SKIPPED"
+                row.runner_d = "SKIPPED"
             else:
                 row.required += len(tuner_value_cases(None if row.tuner is None else {}))
                 row.status = "PENDING"
@@ -373,7 +411,7 @@ def run_matrix(conn) -> dict[str, Any]:
                 "matrix_rows": len(rows),
                 "runner_a_b": a_status,
                 "runner_a_b_prerequisite": b_detail,
-                "per_rule_tuner": [r.to_dict() for r in rows[:24]],
+                "per_rule_tuner": [r.to_dict() for r in rows],
                 "per_rule_tuner_totals": _totals(rows),
             },
         }
@@ -404,6 +442,15 @@ def run_matrix(conn) -> dict[str, Any]:
             if str(e.get("rule_id")) == row.rule_id
         )
         pspec = (catalog_entry.get("parameters") or {}).get(row.tuner or "") if row.tuner else None
+        _reg_tuner, reg_err = _registry_param_for_catalog_tuner(rule, row.tuner)
+        if reg_err:
+            row.status = "INCOMPLETE"
+            row.runner_a = a_status
+            row.runner_b = a_status
+            row.runner_c = "INCOMPLETE"
+            row.runner_d = "INCOMPLETE"
+            errors.append(reg_err)
+            continue
         cases = tuner_value_cases(pspec if row.tuner else None)
         if row.tuner_effect == "no_op":
             cases = [cases[0]]
@@ -426,6 +473,10 @@ def run_matrix(conn) -> dict[str, Any]:
 
         row.required += len(cases) * len(eligible_specs)
         required_total += len(cases) * len(eligible_specs)
+        required_cases = len(cases) * len(eligible_specs)
+        row_exec_errors = 0
+        row_cases_compared = 0
+        row_cases_empty = 0
 
         for spec in eligible_specs:
             ip_frame, si_frame, equipment_id, poll = _si_context(spec, metric)
@@ -444,8 +495,14 @@ def run_matrix(conn) -> dict[str, Any]:
                     metric=metric,
                 )
                 if exec_errors:
+                    errors.extend(exec_errors[:1])
+                    row_exec_errors += 1
                     row.skipped += 1
                     continue
+                if compared == 0:
+                    row_cases_empty += 1
+                else:
+                    row_cases_compared += 1
                 row.compared += compared
                 compared_total += compared
                 if mismatch and sv_range_scale_nondefault_ledger_waiver(
@@ -465,10 +522,18 @@ def run_matrix(conn) -> dict[str, Any]:
             row.status = "FAIL"
             row.runner_c = "FAIL"
             row.runner_d = "FAIL"
-        elif row.compared > 0:
+        elif row_exec_errors:
+            row.status = "INCOMPLETE"
+            row.runner_c = "INCOMPLETE"
+            row.runner_d = "INCOMPLETE"
+        elif row_cases_compared + row_cases_empty == required_cases and row_cases_compared > 0:
             row.status = "PASS"
             row.runner_c = "PASS"
             row.runner_d = "PASS"
+        elif row_cases_compared + row_cases_empty < required_cases:
+            row.status = "INCOMPLETE"
+            row.runner_c = "INCOMPLETE"
+            row.runner_d = "INCOMPLETE"
         elif row.executed > 0 and row.compared == 0:
             row.status = "SKIPPED"
             row.runner_c = "SKIPPED"
@@ -495,7 +560,7 @@ def run_matrix(conn) -> dict[str, Any]:
             "matrix_rows": len(rows),
             "runner_a_b": a_status,
             "runner_a_b_prerequisite": b_detail,
-            "per_rule_tuner_sample": [r.to_dict() for r in rows[:24]],
+            "per_rule_tuner_sample": [r.to_dict() for r in rows],
             "per_rule_tuner_totals": _totals(rows),
         },
     }
