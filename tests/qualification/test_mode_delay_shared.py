@@ -14,6 +14,7 @@ from open_fdd.rules.mode_delay import (
     effective_mode_delay_min,
     fan_restart_stable,
     mode_delay_rows,
+    resolve_mode_delay_params,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -37,6 +38,11 @@ class ModeDelaySharedTest(unittest.TestCase):
     def test_effective_is_max_of_mode_and_startup(self) -> None:
         self.assertEqual(effective_mode_delay_min({"mode_delay_min": 10, "startup_delay_min": 0}), 10.0)
         self.assertEqual(effective_mode_delay_min({"mode_delay_min": 10, "startup_delay_min": 15}), 15.0)
+
+    def test_omitted_mode_delay_uses_product_default(self) -> None:
+        resolved = resolve_mode_delay_params({"startup_delay_min": 0})
+        self.assertEqual(resolved["mode_delay_min"], PRODUCT_MODE_DELAY_MIN_DEFAULT)
+        self.assertEqual(effective_mode_delay_min(resolved), 10.0)
 
     def test_missing_param_raises(self) -> None:
         with self.assertRaisesRegex(ValueError, "startup_delay_min"):

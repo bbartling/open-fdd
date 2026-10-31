@@ -1,0 +1,17 @@
+{
+  "schema": "openfdd-expected-ip-change-ledger-v1",
+  "description": "Deliberate pandas IP corrections vs frozen W0c goldens (#1437). Do not regenerate ip_goldens for these rows.",
+  "entries": [
+    {
+      "rule_id": "FC1",
+      "building_id": "SYNTH_AHU_CASE_FC1",
+      "equipment_id": "AHU_CASE_FC1",
+      "utc_day": "*",
+      "frozen_pandas_ip_fault_seconds": 28500.0,
+      "corrected_pandas_ip_fault_seconds": 28800.0,
+      "sql_ip_fault_seconds_unchanged": 28500.0,
+      "reason": "pandas _fc1_mode_stable treated omitted mode_delay_min as 0; product contract uses max(mode, startup) with catalog default 10 min",
+      "issues": ["#1437", "#1458", "#1459"]
+    }
+  ]
+}
