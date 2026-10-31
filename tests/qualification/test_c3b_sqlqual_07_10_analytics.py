@@ -34,6 +34,11 @@ class C3bMatrixOfflineTests(unittest.TestCase):
         self.assertIsNotNone(matrix)
 
     def test_runner_cli_prints_db_log_line_without_db(self) -> None:
+        no_db_env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("OPENFDD_DATABASE_URL", "OPENFDD_TEST_DATABASE_URL")
+        }
         proc = subprocess.run(
             [
                 sys.executable,
@@ -45,6 +50,7 @@ class C3bMatrixOfflineTests(unittest.TestCase):
             cwd=str(REPO),
             capture_output=True,
             text=True,
+            env=no_db_env,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
         self.assertIn("C3b DB-backed checks:", proc.stdout)
