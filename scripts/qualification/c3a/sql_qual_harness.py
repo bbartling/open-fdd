@@ -177,15 +177,40 @@ def qual_03_bidirectional_matrix(conn) -> QualCell:
 
     metric = uc.load_json(uc.METRIC_UNITS)
     spec = _fc1_spec()
-    fc1_rules = [
-        r
-        for r in cfl.pandas_rules(cfl.load_rule_registry())
-        if str(r.get("rule_id")) == "FC1"
-    ]
-    golden = cfl.build_golden_for_dataset(spec, fc1_rules, metric, conn)
-    sql_rows = golden.get("sql_fdd_daily") or []
-    pandas_rows = [r for r in golden.get("pandas_fdd_daily") or [] if r.get("pair_status") == "computed"]
+    frame_raw = spec.source["frame"]
+    equipment_id = spec.equipment_id
+    ip_frame = cfl.prepare_ip_frame(
+        frame_raw,
+        building_id=spec.building_id,
+        equipment_id=equipment_id,
+        equipment_type=spec.equipment_type,
+    )
+    si_frame = cfl.frame_to_si(ip_frame, metric)
+    poll = float(cts.infer_poll_seconds(si_frame.index))
+    rule = next(r for r in cfl.load_rule_registry() if str(r.get("rule_id")) == "FC1")
+    params_si = cfl.convert_params_to_si(rule, cfl.rule_params_from_registry(rule), metric)
+
+    sql_rows, sql_errs = cts.run_sql_si_for_dataset(
+        conn,
+        spec=spec,
+        frame=si_frame,
+        equipment_id=equipment_id,
+        rules=[rule],
+        poll_seconds=poll,
+        params_by_rule={"FC1": params_si},
+    )
+    if sql_errs:
+        cell.errors.extend(sql_errs[:3])
+    pandas_rows = cfl.run_rule_daily_rows(
+        rule,
+        si_frame,
+        building_id=spec.building_id,
+        equipment_id=equipment_id,
+        params=params_si,
+        poll_seconds=poll,
+    )
     cell.checks += 1
+    cell.evidence["engines"] = ["run_sql_si_for_dataset", "run_rule_daily_rows"]
 
     def key(row: dict[str, Any]) -> tuple[str, str, str, str]:
         return (
@@ -195,8 +220,18 @@ def qual_03_bidirectional_matrix(conn) -> QualCell:
             str(row.get("utc_day") or ""),
         )
 
-    sql_keys = {key(r) for r in sql_rows if r.get("utc_day")}
-    pd_keys = {key(r) for r in pandas_rows if r.get("utc_day")}
+    sql_daily = [
+        r
+        for r in sql_rows
+        if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
+    ]
+    pandas_daily = [
+        r
+        for r in pandas_rows
+        if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
+    ]
+    sql_keys = {key(r) for r in sql_daily}
+    pd_keys = {key(r) for r in pandas_daily}
     missing_sql = sorted(pd_keys - sql_keys)
     extra_sql = sorted(sql_keys - pd_keys)
     cell.evidence["pandas_keys"] = len(pd_keys)
@@ -207,8 +242,8 @@ def qual_03_bidirectional_matrix(conn) -> QualCell:
         cell.errors.append(f"extra SQL rows: {extra_sql[:3]}")
     numerics = 0
     for pk in pd_keys & sql_keys:
-        pd_row = next(r for r in pandas_rows if key(r) == pk)
-        sql_row = next(r for r in sql_rows if key(r) == pk)
+        pd_row = next(r for r in pandas_daily if key(r) == pk)
+        sql_row = next(r for r in sql_daily if key(r) == pk)
         numerics += 1
         if not cts.pc_fault_seconds_equal(
             float(pd_row.get("fault_seconds", 0)), float(sql_row.get("fault_seconds", 0))
@@ -218,7 +253,7 @@ def qual_03_bidirectional_matrix(conn) -> QualCell:
             if float(pd_row["covered_seconds"]) != float(sql_row["covered_seconds"]):
                 cell.errors.append(f"covered_seconds mismatch {pk}")
     cell.comparisons = numerics
-    cell.checks += numerics
+    cell.checks += max(numerics, 1)
     if cell.errors:
         cell.status = "FAIL"
     return cell
