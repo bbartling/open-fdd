@@ -1,6 +1,6 @@
 {
   "contract_id": "openfdd-metric-units-v1",
-  "contract_version": "4.0.7",
+  "contract_version": "4.0.8",
   "processing_abi_current": "metric-c-v2",
   "notes": [
     "Canonical processing and storage ABI is metric-c-v2 (°C, Δ°C, Pa, kPa, L/s, kW, kWh).",
