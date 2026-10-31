@@ -143,7 +143,9 @@ def qual_02_fresh_execution(conn, repo: Path) -> QualCell:
     golden_stub = {
         "building_id": spec.building_id,
         "equipment_id": equipment_id,
+        "equipment_type": spec.equipment_type,
         "poll_seconds": poll,
+        "dataset": {k: v for k, v in spec.source.items() if k != "frame"},
         "pandas_rules_attempted": ["FC1"],
         "pandas_fdd_daily": [],
     }
