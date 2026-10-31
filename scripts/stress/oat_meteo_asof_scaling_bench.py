@@ -259,8 +259,9 @@ def run_cancellation_recovery(
             except Exception as exc:  # noqa: BLE001
                 cancelled = "timeout" in str(exc).lower() or "cancel" in str(exc).lower()
             cur.execute("RESET statement_timeout")
-        with conn.cursor() as cur:
-            warm_s, _, _ = _time_rule(cur, sql)
+    conn.autocommit = True
+    with conn.cursor() as cur:
+        warm_s, _, _ = _time_rule(cur, sql)
     conn.close()
     return {
         "statement_timeout_ms": statement_timeout_ms,

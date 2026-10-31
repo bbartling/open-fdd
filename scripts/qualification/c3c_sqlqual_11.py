@@ -88,6 +88,7 @@ def run_sql_qual_11(
     cancel = bench.run_cancellation_recovery(
         database_url=database_url,
         web_asof_bound_seconds=bound,
+        statement_timeout_ms=25,
     )
     evidence["cancellation"] = cancel
     cells.append(
