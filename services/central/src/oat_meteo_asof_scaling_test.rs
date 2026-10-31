@@ -122,10 +122,14 @@ async fn seed_mask_fixture(pool: &sqlx::PgPool, site: &str) {
     upsert_samples(pool, batch).await;
 }
 
-async fn mask_digest(pool: &sqlx::PgPool, legacy: bool, bound: f64) -> String {
+async fn mask_digest(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    legacy: bool,
+    bound: f64,
+) -> String {
     let sql = render_mask_query(bound, legacy);
     let row = sqlx::query(&sql)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
         .expect("mask digest");
     row.try_get::<String, _>("digest").expect("digest")
@@ -154,15 +158,15 @@ async fn t1439_oat_meteo_asof_masks_match_legacy_reference() {
     fill_history_for_equipment(&mut tx, site.as_str(), "AHU_1", &roles, None, None, None)
         .await
         .expect("fill");
-    let _ = tx.commit().await;
 
     for bound in [1499.0, 1500.0, 1501.0] {
-        let legacy = mask_digest(&pool, true, bound).await;
-        let product = mask_digest(&pool, false, bound).await;
+        let legacy = mask_digest(&mut tx, true, bound).await;
+        let product = mask_digest(&mut tx, false, bound).await;
         assert_eq!(
             legacy, product,
             "assessable/raw mask mismatch at WEB_ASOF_BOUND_SECONDS={bound}"
         );
     }
+    let _ = tx.rollback().await;
     purge(&pool, &site).await;
 }
