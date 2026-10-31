@@ -31,6 +31,10 @@ pub const MAX_TIMESTAMPS: usize = 50_000;
 
 const ACCOUNTED: &[&str] = &[PRESENT, NO_SAMPLE_EXPECTED, LATE_ARRIVAL, NOT_ASSESSED];
 
+pub fn point_disposition_accounted(disposition: &str) -> bool {
+    ACCOUNTED.contains(&disposition)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expectation {
     /// No cadence and no COV rule. Samples can be `present`. An explicit empty

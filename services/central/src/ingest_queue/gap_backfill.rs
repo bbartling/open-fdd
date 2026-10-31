@@ -8,7 +8,7 @@ use crate::providers::http_policy::provider_ids_equivalent;
 
 use super::binding_state::{
     ensure_binding_row, last_stored_ts_for_device, stored_hour_starts_for_device, DeviceBindingKey,
-    EnsureBindingInput,
+    DevicePointCoverage, EnsureBindingInput,
 };
 use super::gap_planner::{default_max_span, plan_gap_windows, GapPlanInput, GapPlanResult};
 use super::model::{NewJob, QueueError};
@@ -18,6 +18,20 @@ pub fn point_keys_for_group(group: &IngestDeviceGroup) -> Vec<String> {
         .points
         .iter()
         .map(|point| point.semantic_point_id.clone())
+        .collect()
+}
+
+pub fn point_coverage_for_group(group: &IngestDeviceGroup) -> Vec<DevicePointCoverage> {
+    group
+        .points
+        .iter()
+        .map(|point| DevicePointCoverage {
+            openfdd_key: point.semantic_point_id.clone(),
+            coverage_point_id: point.source_point_id.clone(),
+            history_mode: point.history_mode.clone(),
+            cadence_secs: point.cadence_secs,
+            heartbeat_secs: point.heartbeat_secs,
+        })
         .collect()
 }
 
@@ -59,6 +73,7 @@ pub async fn plan_device_gap_backfill(
     request: DeviceGapBackfillRequest<'_>,
 ) -> Result<(GapPlanResult, Vec<NewJob>), QueueError> {
     let keys = point_keys_for_group(request.group);
+    let coverage = point_coverage_for_group(request.group);
     let binding = ensure_binding_row(
         pool,
         EnsureBindingInput {
@@ -70,8 +85,9 @@ pub async fn plan_device_gap_backfill(
     .await?;
     let stored = stored_hour_starts_for_device(
         pool,
+        &request.key,
         &request.key.canonical_site,
-        &keys,
+        &coverage,
         request.range_start,
         request.range_end,
     )
@@ -125,10 +141,22 @@ pub async fn plan_explicit_windows(
         },
     )
     .await?;
+    let coverage: Vec<DevicePointCoverage> = request
+        .point_keys
+        .iter()
+        .map(|key| DevicePointCoverage {
+            openfdd_key: key.clone(),
+            coverage_point_id: key.clone(),
+            history_mode: None,
+            cadence_secs: None,
+            heartbeat_secs: None,
+        })
+        .collect();
     let stored = stored_hour_starts_for_device(
         pool,
+        &request.key,
         &request.key.canonical_site,
-        &request.point_keys,
+        &coverage,
         range_start,
         range_end,
     )

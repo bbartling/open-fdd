@@ -37,6 +37,8 @@ mod t1423_asap_acceptance;
 #[cfg(test)]
 mod t1423_gap_planner_acceptance;
 #[cfg(test)]
+mod t1423_per_point_coverage_acceptance;
+#[cfg(test)]
 mod upgrade_acceptance;
 #[cfg(test)]
 mod writer_fence;
