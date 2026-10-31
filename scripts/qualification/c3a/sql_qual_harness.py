@@ -177,8 +177,12 @@ def qual_03_bidirectional_matrix(conn) -> QualCell:
 
     metric = uc.load_json(uc.METRIC_UNITS)
     spec = _fc1_spec()
-    rules = cfl.pandas_rules(cfl.load_rule_registry())
-    golden = cfl.build_golden_for_dataset(spec, rules, metric, conn)
+    fc1_rules = [
+        r
+        for r in cfl.pandas_rules(cfl.load_rule_registry())
+        if str(r.get("rule_id")) == "FC1"
+    ]
+    golden = cfl.build_golden_for_dataset(spec, fc1_rules, metric, conn)
     sql_rows = golden.get("sql_fdd_daily") or []
     pandas_rows = [r for r in golden.get("pandas_fdd_daily") or [] if r.get("pair_status") == "computed"]
     cell.checks += 1
