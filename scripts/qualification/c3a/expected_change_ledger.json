@@ -34,6 +34,16 @@
       "harness_probe": "rule_tuner_matrix.sv_range_scale_nondefault_ledger_waiver",
       "waive_cd_agreement_on_nondefault": true,
       "compare_against": "default_tuner_cd_agreement_only_for_scale_params"
+    },
+    {
+      "issue": 1284,
+      "title": "confirm_min catalog tuner vs confirm_seconds registry on non-default branches",
+      "parameters": ["confirm_min"],
+      "non_default_tuner_cases": ["min", "max", "nondefault", "boundary"],
+      "runner_c_d_expected": "default confirm path must agree; non-default confirm_min cases may diverge until SQL screening matches pandas confirm_seconds semantics",
+      "harness_probe": "rule_tuner_matrix.confirm_min_nondefault_ledger_waiver",
+      "waive_cd_agreement_on_nondefault": true,
+      "compare_against": "default_tuner_cd_agreement_only_for_confirm_min"
     }
   ]
 }

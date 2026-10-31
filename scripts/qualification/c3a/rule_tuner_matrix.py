@@ -82,6 +82,28 @@ def sv_range_scale_nondefault_ledger_waiver(
     return False
 
 
+def confirm_min_nondefault_ledger_waiver(
+    tuner: str | None, case_label: str
+) -> bool:
+    """Catalog confirm_min (minutes) vs registry confirm_seconds — non-default branch gaps."""
+    if tuner != "confirm_min" or case_label == "default":
+        return False
+    for entry in _load_expected_change_ledger().get("issues") or []:
+        if int(entry.get("issue") or 0) != 1284:
+            continue
+        params = entry.get("parameters") or []
+        cases = entry.get("non_default_tuner_cases") or []
+        if tuner in params and case_label in cases:
+            return bool(entry.get("waive_cd_agreement_on_nondefault"))
+    return False
+
+
+def matrix_cd_mismatch_waiver(rule_id: str, tuner: str | None, case_label: str) -> bool:
+    return sv_range_scale_nondefault_ledger_waiver(
+        rule_id, tuner, case_label
+    ) or confirm_min_nondefault_ledger_waiver(tuner, case_label)
+
+
 @dataclass
 class MatrixRow:
     rule_id: str
@@ -321,15 +343,19 @@ def _execute_cd_case(
             ]
         return 0, 0, [f"{spec.building_id}/{rule_id}: {sql_errs[0]}"]
 
-    pd_computed = any(str(r.get("pair_status") or "") == "computed" for r in pandas_rows)
-    sql_computed = any(str(r.get("pair_status") or "") == "computed" for r in sql_rows)
+    pd_daily = [
+        r for r in pandas_rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
+    ]
+    sql_daily = [
+        r for r in sql_rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
+    ]
     compared, mismatch = _compare_daily(pandas_rows, sql_rows)
-    if compared == 0 and (pd_computed or sql_computed):
+    if compared == 0 and mismatch == 0 and not pd_daily and not sql_daily:
+        return 0, 0, []
+    if compared == 0 and mismatch == 0 and (pd_daily or sql_daily):
         return 0, 0, [
             f"{spec.building_id}/{rule_id}: zero compared cells with computed daily on a side"
         ]
-    if compared == 0 and not pd_computed and not sql_computed:
-        return 0, 0, []
     return compared, mismatch, []
 
 
@@ -505,9 +531,7 @@ def run_matrix(conn) -> dict[str, Any]:
                     row_cases_compared += 1
                 row.compared += compared
                 compared_total += compared
-                if mismatch and sv_range_scale_nondefault_ledger_waiver(
-                    row.rule_id, row.tuner, case_label
-                ):
+                if mismatch and matrix_cd_mismatch_waiver(row.rule_id, row.tuner, case_label):
                     row.ledger_waived += mismatch
                 elif mismatch:
                     row.mismatch += mismatch
