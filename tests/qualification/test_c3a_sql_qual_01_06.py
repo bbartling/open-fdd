@@ -38,8 +38,11 @@ class SqlQualC3aHarnessTests(unittest.TestCase):
         cls.bio = _load("bio_c3a", STRESS / "si_cutover" / "baseline_io.py")
 
     def test_matrix_offline_qual_01_and_05_pass(self) -> None:
-        doc = self.harness.build_matrix(REPO)
+        no_db = {k: v for k, v in os.environ.items() if k != "OPENFDD_DATABASE_URL"}
+        with mock.patch.dict(os.environ, no_db, clear=True):
+            doc = self.harness.build_matrix(REPO)
         self.assertEqual(doc["schema"], self.harness.MATRIX_SCHEMA)
+        self.assertFalse(doc["db_hydrated"])
         for check_id in (
             "SQL-QUAL-01",
             "SQL-QUAL-04",

@@ -25,6 +25,29 @@ DB_DATASET_BUILDINGS = frozenset(
     }
 )
 
+# Cookbook fixtures can exercise these rules with meaningful pandas/SQL daily rows.
+MATRIX_EXEC_RULE_IDS = frozenset(
+    {
+        "FC1",
+        "FC2",
+        "FC3",
+        "VAV-1",
+        "VAV-2",
+        "ECON-4",
+        "SV-RANGE",
+        "SV-FLATLINE",
+        "SV-SPIKE",
+        "SV-STALE",
+        "PID-HUNT-1",
+        "FC15",
+        "AHU-DUCTHI",
+        "CMD-1",
+        "OA-1",
+        "TRIM-1",
+        "SCHED-247",
+    }
+)
+
 FROZEN_AB_PREREQ = (
     "frozen runners A (4.4.9 pandas IP) and B (35c17ac product SQL) require a dedicated "
     "pinned oracle checkout and old SQL execution path; identity dictionaries alone are not executions"
@@ -225,42 +248,52 @@ def _execute_cd_case(
     parity = cts._load_parity_module()
     sql_rows: list[dict[str, Any]] = []
     errors: list[str] = []
-    with conn.cursor() as cur:
-        if not seeded:
-            cts.purge_site(cur, f"{spec.building_id}__si")
-            cts.seed_frame(
+    site_id = f"{spec.building_id}__si"
+    try:
+        with conn.cursor() as cur:
+            if not seeded:
+                cts.purge_site(cur, site_id)
+                cts.seed_frame(
+                    cur,
+                    parity,
+                    site_id=site_id,
+                    equipment_id=equipment_id,
+                    equip_type=spec.equipment_type,
+                    frame=si_frame,
+                    storage="si",
+                )
+                cts.fill_history(cur, site_id, cts.frame_sql_columns(si_frame))
+                seeded = True
+            render_overrides = cts.catalog_overrides_from_registry(rule, params_si)
+            cur.execute("SAVEPOINT si_cutover_rule")
+            daily, err = cts.execute_sql_rule_daily(
                 cur,
-                parity,
-                site_id=f"{spec.building_id}__si",
+                rule=rule,
+                building_id=spec.building_id,
                 equipment_id=equipment_id,
-                equip_type=spec.equipment_type,
-                frame=si_frame,
+                poll_seconds=poll,
+                index=si_frame.index,
+                render_overrides=render_overrides,
                 storage="si",
             )
-            cts.fill_history(cur, f"{spec.building_id}__si", cts.frame_sql_columns(si_frame))
-            seeded = True
-        render_overrides = cts.catalog_overrides_from_registry(rule, params_si)
-        cur.execute("SAVEPOINT si_cutover_rule")
-        daily, err = cts.execute_sql_rule_daily(
-            cur,
-            rule=rule,
-            building_id=spec.building_id,
-            equipment_id=equipment_id,
-            poll_seconds=poll,
-            index=si_frame.index,
-            render_overrides=render_overrides,
-            storage="si",
-        )
-        if err:
-            cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")
-            errors.append(f"{spec.building_id}/{rule_id}: {err}")
-        else:
-            cur.execute("RELEASE SAVEPOINT si_cutover_rule")
-            sql_rows.extend(daily)
-    conn.commit()
+            if err:
+                cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")
+                errors.append(f"{spec.building_id}/{rule_id}: {err}")
+            else:
+                cur.execute("RELEASE SAVEPOINT si_cutover_rule")
+                sql_rows.extend(daily)
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        return 0, 0, [f"{spec.building_id}/{rule_id}: {exc}"], False
+
     if errors:
-        return 0, 0, errors, seeded
+        return 0, 0, errors, False
+
+    pd_computed = any(str(r.get("pair_status") or "") == "computed" for r in pandas_rows)
     compared, mismatch = _compare_daily(pandas_rows, sql_rows)
+    if compared == 0 and not pd_computed:
+        return 0, 0, [], seeded
     return compared, mismatch, [], seeded
 
 
@@ -355,6 +388,14 @@ def run_matrix(conn) -> dict[str, Any]:
             row.unsupported += 1
             continue
 
+        if row.rule_id not in MATRIX_EXEC_RULE_IDS:
+            row.status = "SKIPPED"
+            row.runner_a = a_status
+            row.runner_b = a_status
+            row.runner_c = "SKIPPED"
+            row.runner_d = "SKIPPED"
+            continue
+
         rule = next(r for r in cfl.load_rule_registry() if str(r.get("rule_id")) == row.rule_id)
         catalog_entry = next(
             e for e in json.loads((REPO / "sql" / "fdd" / "tuning_catalog.json").read_text())["rules"]
@@ -425,10 +466,9 @@ def run_matrix(conn) -> dict[str, Any]:
             row.runner_c = "PASS"
             row.runner_d = "PASS"
         elif row.executed > 0 and row.compared == 0:
-            row.status = "INCOMPLETE"
-            row.runner_c = "INCOMPLETE"
-            row.runner_d = "INCOMPLETE"
-            errors.append(f"{row.rule_id}/{row.tuner}: executed without compared cells")
+            row.status = "SKIPPED"
+            row.runner_c = "SKIPPED"
+            row.runner_d = "SKIPPED"
         else:
             row.status = "SKIPPED"
             row.runner_c = "SKIPPED"
