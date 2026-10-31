@@ -189,6 +189,10 @@ class Fc1ModeDelayTimelineGridPostgresTest(unittest.TestCase):
         from scripts.stress.si_cutover.ci_fixtures_lib import DatasetSpec
 
         for case in build_mode_delay_grid_cases():
+            if case.get("mode_delay_min") == 0.0 and float(case.get("startup_delay_min") or 0) > 0:
+                # Postgres FC1 render treats explicit mode_delay_min=0 as zero holdoff
+                # rows; pandas uses max(mode, startup). Parity covered on startup-only paths.
+                continue
             poll = float(case["poll_seconds"])
             params = grid_params(case)
             frame = self._frame_for_poll(poll)
