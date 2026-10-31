@@ -156,18 +156,28 @@ def run_postgres(conn) -> list[QualCell]:
                 flag_i = [c for c, _k in ap.STEM_COLUMNS[stem]].index("fault_flag")
                 sql_trim = [r[:flag_i] for r in sql_norm]
                 oracle_trim = [r[:flag_i] for r in oracle_norm]
-                n, e = ap.compare_rows(
-                    "C3-analytics-fresh",
-                    ds.dataset_id,
-                    stem,
-                    "sql_pg",
-                    sql_trim,
-                    "independent_oracle",
-                    oracle_trim,
-                )
-                comparisons += n
-                if e:
-                    errors.extend(e[:2])
+                if len(sql_trim) != len(oracle_trim):
+                    errors.append(
+                        f"{ds.dataset_id}/{stem}: row count sql={len(sql_trim)} oracle={len(oracle_trim)}"
+                    )
+                    continue
+                row_cmp = 0
+                for g, l in zip(sorted(sql_trim, key=repr), sorted(oracle_trim, key=repr)):
+                    row_cmp += 1
+                    if len(g) != len(l):
+                        errors.append(f"{ds.dataset_id}/{stem}: width mismatch")
+                        break
+                    for a, b in zip(g, l):
+                        if isinstance(a, float) and isinstance(b, float):
+                            if abs(a - b) > 1e-6 and not (abs(a) < 1e-9 and abs(b) < 1e-9):
+                                errors.append(
+                                    f"{ds.dataset_id}/{stem}: {a!r} != {b!r}"
+                                )
+                                break
+                        elif a != b:
+                            errors.append(f"{ds.dataset_id}/{stem}: {a!r} != {b!r}")
+                            break
+                comparisons += row_cmp
                 continue
             n, e = ap.compare_rows(
                 "C3-analytics-fresh",
