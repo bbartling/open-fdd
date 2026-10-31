@@ -58,10 +58,7 @@ fn render_mask_query(web_asof_bound_seconds: f64, legacy_joined: bool) -> String
         .split("web_intervals AS (")
         .next()
         .expect("head through web_dedup");
-    let after_base = product
-        .split("),\nbase AS (")
-        .nth(1)
-        .expect("base body");
+    let after_base = product.split("),\nbase AS (").nth(1).expect("base body");
     let base_body = after_base
         .split("),\nelapsed_hold AS (")
         .next()
@@ -74,7 +71,10 @@ fn render_mask_query(web_asof_bound_seconds: f64, legacy_joined: bool) -> String
         product[start..end + 2].to_string()
     };
     let mut body = format!("WITH {head}{joined}base AS ({base_body})");
-    body = body.replace("{{WEB_ASOF_BOUND_SECONDS}}", &format!("{web_asof_bound_seconds}"));
+    body = body.replace(
+        "{{WEB_ASOF_BOUND_SECONDS}}",
+        &format!("{web_asof_bound_seconds}"),
+    );
     body = body.replace("{{OAT_ERR}}", "2.777778");
     body = body.replace("{{CONFIRM_SECONDS}}", "900");
     body = body.replace("{{MAX_GAP_HOURS}}", "1.0");
@@ -99,20 +99,25 @@ async fn seed_mask_fixture(pool: &sqlx::PgPool, site: &str) {
     let t0 = Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap();
     for m in (0..240).step_by(5) {
         let ts = t0 + Duration::minutes(m);
-        let mut row = SampleRow::new(ts, site, "AHU_1.oa_t".into(), Some(12.0 + (m % 3) as f64));
-        row.equipment_id = Some("AHU_1".into());
-        row.role = Some("oa_t".into());
-        row.source_unit = Some("degC".into());
-        row.quantity = Some("absolute_temperature".into());
+        let mut row = SampleRow::new(
+            ts,
+            site,
+            String::from("AHU_1.oa_t"),
+            Some(12.0 + (m % 3) as f64),
+        );
+        row.equipment_id = Some(String::from("AHU_1"));
+        row.role = Some(String::from("oa_t"));
+        row.source_unit = Some(String::from("degC"));
+        row.quantity = Some(String::from("absolute_temperature"));
         batch.push(row);
     }
     for m in [0, 20, 25, 40, 55, 80, 120, 121, 122, 200] {
         let ts = t0 + Duration::minutes(m);
-        let mut row = SampleRow::new(ts, site, "WX.web_oa_t".into(), Some(10.0));
-        row.equipment_id = Some("WX".into());
-        row.role = Some("web_oa_t".into());
-        row.source_unit = Some("degC".into());
-        row.quantity = Some("absolute_temperature".into());
+        let mut row = SampleRow::new(ts, site, String::from("WX.web_oa_t"), Some(10.0));
+        row.equipment_id = Some(String::from("WX"));
+        row.role = Some(String::from("web_oa_t"));
+        row.source_unit = Some(String::from("degC"));
+        row.quantity = Some(String::from("absolute_temperature"));
         batch.push(row);
     }
     upsert_samples(pool, batch).await;
@@ -120,7 +125,10 @@ async fn seed_mask_fixture(pool: &sqlx::PgPool, site: &str) {
 
 async fn mask_digest(pool: &sqlx::PgPool, legacy: bool, bound: f64) -> String {
     let sql = render_mask_query(bound, legacy);
-    let row = sqlx::query(&sql).fetch_one(pool).await.expect("mask digest");
+    let row = sqlx::query(&sql)
+        .fetch_one(pool)
+        .await
+        .expect("mask digest");
     row.try_get::<String, _>("digest").expect("digest")
 }
 
