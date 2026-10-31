@@ -51,3 +51,14 @@ jobs:
         run: |
           cargo test -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
+
+      - name: T1423 ingest Postgres stress (30x, parallel)
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            echo "=== T1423 ingest_queue repeat ${i}/30 ==="
+            cargo test -p openfdd-central ingest_queue::t1423 --
+          done
+          echo "T1423 ingest_queue 30x parallel loop complete"
