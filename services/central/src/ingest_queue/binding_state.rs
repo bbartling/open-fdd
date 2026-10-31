@@ -1,6 +1,6 @@
 //! Per-device ingest binding metadata (#1423): provider data start and creation time.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
