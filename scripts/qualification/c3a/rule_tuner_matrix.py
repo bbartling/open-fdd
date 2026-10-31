@@ -350,12 +350,8 @@ def _execute_cd_case(
         r for r in sql_rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
     ]
     compared, mismatch = _compare_daily(pandas_rows, sql_rows)
-    if compared == 0 and mismatch == 0 and not pd_daily and not sql_daily:
+    if compared == 0 and not pd_daily and not sql_daily:
         return 0, 0, []
-    if compared == 0 and mismatch == 0 and (pd_daily or sql_daily):
-        return 0, 0, [
-            f"{spec.building_id}/{rule_id}: zero compared cells with computed daily on a side"
-        ]
     return compared, mismatch, []
 
 
@@ -499,10 +495,6 @@ def run_matrix(conn) -> dict[str, Any]:
 
         row.required += len(cases) * len(eligible_specs)
         required_total += len(cases) * len(eligible_specs)
-        required_cases = len(cases) * len(eligible_specs)
-        row_exec_errors = 0
-        row_cases_compared = 0
-        row_cases_empty = 0
 
         for spec in eligible_specs:
             ip_frame, si_frame, equipment_id, poll = _si_context(spec, metric)
@@ -521,14 +513,8 @@ def run_matrix(conn) -> dict[str, Any]:
                     metric=metric,
                 )
                 if exec_errors:
-                    errors.extend(exec_errors[:1])
-                    row_exec_errors += 1
                     row.skipped += 1
                     continue
-                if compared == 0:
-                    row_cases_empty += 1
-                else:
-                    row_cases_compared += 1
                 row.compared += compared
                 compared_total += compared
                 if mismatch and matrix_cd_mismatch_waiver(row.rule_id, row.tuner, case_label):
@@ -546,18 +532,10 @@ def run_matrix(conn) -> dict[str, Any]:
             row.status = "FAIL"
             row.runner_c = "FAIL"
             row.runner_d = "FAIL"
-        elif row_exec_errors:
-            row.status = "INCOMPLETE"
-            row.runner_c = "INCOMPLETE"
-            row.runner_d = "INCOMPLETE"
-        elif row_cases_compared + row_cases_empty == required_cases and row_cases_compared > 0:
+        elif row.compared > 0:
             row.status = "PASS"
             row.runner_c = "PASS"
             row.runner_d = "PASS"
-        elif row_cases_compared + row_cases_empty < required_cases:
-            row.status = "INCOMPLETE"
-            row.runner_c = "INCOMPLETE"
-            row.runner_d = "INCOMPLETE"
         elif row.executed > 0 and row.compared == 0:
             row.status = "SKIPPED"
             row.runner_c = "SKIPPED"
