@@ -32,6 +32,12 @@ impl EnvGuard {
         std::env::set_var(key, value);
         Self { key, prev }
     }
+
+    fn unset(key: &'static str) -> Self {
+        let prev = std::env::var(key).ok();
+        std::env::remove_var(key);
+        Self { key, prev }
+    }
 }
 
 impl Drop for EnvGuard {
@@ -301,6 +307,9 @@ async fn call(app: &Router, token: Option<&str>, body: Value) -> (StatusCode, Va
 async fn t1423_4_cancel_route_is_operator_scoped_and_idempotent() {
     let _env = crate::test_env_lock::lock_env_async().await;
     let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
+    // Jobs are inserted via postgres::enqueue; cancel must use the Postgres queue, not memory
+    // leaked from parallel ingest scope fixtures.
+    let _queue = EnvGuard::unset("OPENFDD_INGEST_QUEUE");
     let Some(case) = GapCase::open("cancel").await else {
         eprintln!("OPENFDD_TEST_DATABASE_URL unset; skipping T1423-4");
         return;
