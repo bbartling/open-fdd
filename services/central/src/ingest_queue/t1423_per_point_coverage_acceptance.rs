@@ -251,7 +251,6 @@ async fn t1423_6_cov_sparse_window_is_stored_without_samples() {
             cadence_secs: None,
             heartbeat_secs: None,
         }],
-        withheld: Vec::new(),
     };
     let coverage = coverage_points(&group);
     let stored = stored_hour_starts_for_device(&pool, &binding_key(), SITE, &coverage, h(0), h(2))
