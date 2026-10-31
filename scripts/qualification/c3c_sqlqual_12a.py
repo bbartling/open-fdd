@@ -181,19 +181,16 @@ def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
             )
 
     with tempfile.TemporaryDirectory(prefix="c3c-12a-") as tmp:
-        dump_path = Path(tmp) / "scratch.dump"
-        subprocess.run(
-            [
-                "pg_dump",
-                "--format=custom",
-                "--no-owner",
-                "-f",
-                str(dump_path),
-                scratch,
-            ],
-            check=True,
+        dump_path = Path(tmp) / "scratch.sql"
+        raw_sql = subprocess.check_output(
+            ["pg_dump", "--format=p", "--no-owner", "--data-only", "--column-inserts", scratch],
             env=env,
+            text=True,
         )
+        filtered = "\n".join(
+            line for line in raw_sql.splitlines() if "transaction_timeout" not in line
+        )
+        dump_path.write_text(filtered + "\n", encoding="utf-8")
         dump_bytes = dump_path.stat().st_size
         with _connect(scratch) as conn:
             conn.autocommit = True
@@ -202,7 +199,7 @@ def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
             cur.execute("DELETE FROM point_map WHERE site_id = %s", (site,))
             cur.execute("DELETE FROM site WHERE site_id = %s", (site,))
         subprocess.run(
-            ["pg_restore", "--no-owner", "--clean", "--if-exists", "--dbname", scratch, str(dump_path)],
+            ["psql", scratch, "-v", "ON_ERROR_STOP=1", "-f", str(dump_path)],
             check=True,
             env=env,
         )
