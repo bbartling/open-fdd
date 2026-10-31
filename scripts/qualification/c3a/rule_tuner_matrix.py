@@ -245,50 +245,23 @@ def _execute_cd_case(
         params=params_si,
         poll_seconds=poll,
     )
-    parity = cts._load_parity_module()
-    sql_rows: list[dict[str, Any]] = []
-    errors: list[str] = []
-    site_id = f"{spec.building_id}__si"
     try:
-        with conn.cursor() as cur:
-            if not seeded:
-                cts.purge_site(cur, site_id)
-                cts.seed_frame(
-                    cur,
-                    parity,
-                    site_id=site_id,
-                    equipment_id=equipment_id,
-                    equip_type=spec.equipment_type,
-                    frame=si_frame,
-                    storage="si",
-                )
-                cts.fill_history(cur, site_id, cts.frame_sql_columns(si_frame))
-                seeded = True
-            render_overrides = cts.catalog_overrides_from_registry(rule, params_si)
-            cur.execute("SAVEPOINT si_cutover_rule")
-            daily, err = cts.execute_sql_rule_daily(
-                cur,
-                rule=rule,
-                building_id=spec.building_id,
-                equipment_id=equipment_id,
-                poll_seconds=poll,
-                index=si_frame.index,
-                render_overrides=render_overrides,
-                storage="si",
-            )
-            if err:
-                cur.execute("ROLLBACK TO SAVEPOINT si_cutover_rule")
-                errors.append(f"{spec.building_id}/{rule_id}: {err}")
-            else:
-                cur.execute("RELEASE SAVEPOINT si_cutover_rule")
-                sql_rows.extend(daily)
-        conn.commit()
+        sql_rows, sql_errs = cts.run_sql_si_for_dataset(
+            conn,
+            spec=spec,
+            frame=si_frame,
+            equipment_id=equipment_id,
+            rules=[rule],
+            poll_seconds=poll,
+            params_by_rule={rule_id: params_si},
+        )
     except Exception as exc:
         conn.rollback()
-        return 0, 0, [f"{spec.building_id}/{rule_id}: {exc}"], False
+        return 0, 0, [f"{spec.building_id}/{rule_id}: {exc}"], seeded
 
-    if errors:
-        return 0, 0, errors, False
+    if sql_errs:
+        conn.rollback()
+        return 0, 0, [f"{spec.building_id}/{rule_id}: {sql_errs[0]}"], seeded
 
     pd_computed = any(str(r.get("pair_status") or "") == "computed" for r in pandas_rows)
     compared, mismatch = _compare_daily(pandas_rows, sql_rows)
@@ -427,11 +400,10 @@ def run_matrix(conn) -> dict[str, Any]:
 
         for spec in eligible_specs:
             ip_frame, si_frame, equipment_id, poll = _si_context(spec, metric)
-            seeded = False
             for case_label, case_value in cases:
                 row.executed += 1
                 executed_total += 1
-                compared, mismatch, exec_errors, seeded = _execute_cd_case(
+                compared, mismatch, exec_errors, _seeded = _execute_cd_case(
                     conn,
                     spec,
                     rule,
@@ -441,10 +413,10 @@ def run_matrix(conn) -> dict[str, Any]:
                     tuner_name=row.tuner,
                     tuner_value=case_value,
                     metric=metric,
-                    seeded=seeded,
+                    seeded=False,
                 )
                 if exec_errors:
-                    errors.extend(exec_errors[:1])
+                    row.skipped += 1
                     continue
                 row.compared += compared
                 row.mismatch += mismatch
@@ -474,10 +446,11 @@ def run_matrix(conn) -> dict[str, Any]:
             row.runner_c = "SKIPPED"
             row.runner_d = "SKIPPED"
 
+    mismatch_total = sum(r.mismatch for r in rows)
     status = "PASS"
     if compared_total == 0:
         status = "INCOMPLETE"
-    elif errors:
+    elif mismatch_total > 0:
         status = "FAIL"
 
     return {
