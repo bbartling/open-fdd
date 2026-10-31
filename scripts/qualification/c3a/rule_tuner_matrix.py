@@ -245,10 +245,7 @@ def _params_si_for_case(
     return params_si
 
 
-CaseResult = tuple[str, int, int, list[str]]
-
-
-def _execute_cd_cases_batched(
+def _execute_cd_case(
     conn,
     spec: cfl.DatasetSpec,
     rule: dict[str, Any],
@@ -257,88 +254,49 @@ def _execute_cd_cases_batched(
     equipment_id: str,
     poll: float,
     tuner_name: str | None,
-    cases: list[tuple[str, float | None]],
+    tuner_value: float | None,
     metric: dict[str, Any],
-) -> list[CaseResult]:
-    """One Timescale seed per spec+rule; vary tuner params via savepoints (runner C/D)."""
+) -> tuple[int, int, list[str]]:
     from open_fdd.rules import RULES_BY_ID  # noqa: PLC0415
-    from scripts.stress.si_cutover import product_sql_params as psp  # noqa: PLC0415
 
     rule_id = str(rule.get("rule_id") or "")
+    params_si = _params_si_for_case(
+        rule, metric, tuner_name=tuner_name, tuner_value=tuner_value
+    )
     if not rule.get("pandas_function") and rule_id not in RULES_BY_ID:
-        err = f"{spec.building_id}/{rule_id}: no pandas twin"
-        return [(label, 0, 0, [err]) for label, _ in cases]
+        return 0, 0, [f"{spec.building_id}/{rule_id}: no pandas twin"]
 
-    prepared: list[tuple[str, float | None, dict[str, float], list[dict[str, Any]]]] = []
-    for case_label, case_value in cases:
-        params_si = _params_si_for_case(
-            rule, metric, tuner_name=tuner_name, tuner_value=case_value
-        )
-        pandas_rows = cfl.run_rule_daily_rows(
-            rule,
-            si_frame,
-            building_id=spec.building_id,
-            equipment_id=equipment_id,
-            params=params_si,
-            poll_seconds=poll,
-        )
-        prepared.append((case_label, case_value, params_si, pandas_rows))
-
-    parity = cts._load_parity_module()
-    site_id = f"{spec.building_id}__si"
-    sql_cols = cts.history_columns_for_rules(si_frame, [rule])
-    out: list[CaseResult] = []
-
+    pandas_rows = cfl.run_rule_daily_rows(
+        rule,
+        si_frame,
+        building_id=spec.building_id,
+        equipment_id=equipment_id,
+        params=params_si,
+        poll_seconds=poll,
+    )
     try:
-        with conn.cursor() as cur:
-            cts.purge_site(cur, site_id)
-            cts.seed_frame(
-                cur,
-                parity,
-                site_id=site_id,
-                equipment_id=equipment_id,
-                equip_type=spec.equipment_type,
-                frame=si_frame,
-                storage="si",
-            )
-            cts.fill_history(cur, site_id, sql_cols)
-            conn.commit()
-
-            for case_label, _case_value, params_si, pandas_rows in prepared:
-                cur.execute("SAVEPOINT sql_qual_cd_case")
-                sql_rows, sql_err = cts.execute_sql_rule_daily(
-                    cur,
-                    rule=rule,
-                    building_id=spec.building_id,
-                    equipment_id=equipment_id,
-                    poll_seconds=poll,
-                    index=si_frame.index,
-                    render_overrides=psp.catalog_overrides_from_registry(rule, params_si),
-                    storage="si",
-                )
-                if sql_err:
-                    cur.execute("ROLLBACK TO SAVEPOINT sql_qual_cd_case")
-                    cur.execute("RELEASE SAVEPOINT sql_qual_cd_case")
-                    out.append((case_label, 0, 0, [f"{spec.building_id}/{rule_id}: {sql_err}"]))
-                    continue
-                cur.execute("RELEASE SAVEPOINT sql_qual_cd_case")
-                pd_computed = any(
-                    str(r.get("pair_status") or "") == "computed" for r in pandas_rows
-                )
-                compared, mismatch = _compare_daily(pandas_rows, sql_rows)
-                if compared == 0 and not pd_computed:
-                    out.append((case_label, 0, 0, []))
-                else:
-                    out.append((case_label, compared, mismatch, []))
+        sql_rows, sql_errs = cts.run_sql_si_for_dataset(
+            conn,
+            spec=spec,
+            frame=si_frame,
+            equipment_id=equipment_id,
+            rules=[rule],
+            poll_seconds=poll,
+            params_by_rule={rule_id: params_si},
+        )
     except Exception as exc:
         conn.rollback()
-        msg = f"{spec.building_id}/{rule_id}: {exc}"
-        if not out:
-            return [(label, 0, 0, [msg]) for label, _ in cases]
-        while len(out) < len(cases):
-            label = cases[len(out)][0]
-            out.append((label, 0, 0, [msg]))
-    return out
+        return 0, 0, [f"{spec.building_id}/{rule_id}: {exc}"]
+
+    if sql_errs:
+        conn.rollback()
+        return 0, 0, [f"{spec.building_id}/{rule_id}: {sql_errs[0]}"]
+
+    pd_computed = any(str(r.get("pair_status") or "") == "computed" for r in pandas_rows)
+    compared, mismatch = _compare_daily(pandas_rows, sql_rows)
+    if compared == 0 and not pd_computed:
+        return 0, 0, []
+    return compared, mismatch, []
 
 
 def build_matrix_rows() -> list[MatrixRow]:
@@ -422,7 +380,6 @@ def run_matrix(conn) -> dict[str, Any]:
 
     metric = uc.load_json(uc.METRIC_UNITS)
     specs = _dataset_specs()
-    cts.apply_fdd_postgres_helpers(conn)
     for row in rows:
         if row.rule_id == "SV-RATE" or row.tuner_effect == "unsupported":
             row.status = "BLOCKED"
@@ -472,20 +429,20 @@ def run_matrix(conn) -> dict[str, Any]:
 
         for spec in eligible_specs:
             ip_frame, si_frame, equipment_id, poll = _si_context(spec, metric)
-            case_results = _execute_cd_cases_batched(
-                conn,
-                spec,
-                rule,
-                si_frame=si_frame,
-                equipment_id=equipment_id,
-                poll=poll,
-                tuner_name=row.tuner,
-                cases=cases,
-                metric=metric,
-            )
-            for case_label, compared, mismatch, exec_errors in case_results:
+            for case_label, case_value in cases:
                 row.executed += 1
                 executed_total += 1
+                compared, mismatch, exec_errors = _execute_cd_case(
+                    conn,
+                    spec,
+                    rule,
+                    si_frame=si_frame,
+                    equipment_id=equipment_id,
+                    poll=poll,
+                    tuner_name=row.tuner,
+                    tuner_value=case_value,
+                    metric=metric,
+                )
                 if exec_errors:
                     row.skipped += 1
                     continue
