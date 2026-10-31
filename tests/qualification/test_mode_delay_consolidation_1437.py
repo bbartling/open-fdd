@@ -184,22 +184,26 @@ class Fc1ModeDelayTimelineGridPostgresTest(unittest.TestCase):
             cls.conn.close()
 
     def test_hand_grid_daily_seconds_match_rendered_postgres(self) -> None:
+        from open_fdd.rules import run_rule
+        from scripts.stress.si_cutover.capture_ip_baseline import daily_fault_and_covered_seconds
         from scripts.stress.si_cutover.ci_fixtures_lib import DatasetSpec
 
         for case in build_mode_delay_grid_cases():
             poll = float(case["poll_seconds"])
             params = grid_params(case)
             frame = self._frame_for_poll(poll)
-            ref = compute_fc1_timeline(
-                index=frame.index,
-                fan_status=frame["fan-status"].tolist(),
-                duct_static=frame["duct-static-pressure"].tolist(),
-                duct_static_sp=frame["duct-static-pressure-sp"].tolist(),
+            res = run_rule(
+                "FC1",
+                frame,
                 params=params,
                 poll_seconds=poll,
-                confirm_seconds=self.CONFIRM_SECONDS,
-                require_operational_gate=False,
+                require_operational_gates=False,
             )
+            self.assertIsNotNone(res.confirmed_fault, msg=str(case))
+            fault_by_day, _ = daily_fault_and_covered_seconds(
+                res.confirmed_fault, frame.index, poll_seconds=poll
+            )
+            pandas_fault = sum(fault_by_day.values())
             spec = DatasetSpec(
                 building_id="MODE_DELAY_GRID",
                 equipment_id="GRID_AHU",
@@ -217,8 +221,7 @@ class Fc1ModeDelayTimelineGridPostgresTest(unittest.TestCase):
             )
             self.assertEqual(errs, [], msg=f"{case}: {'; '.join(errs)}")
             sql_fault = sum(float(r.get("fault_seconds") or 0) for r in sql_rows)
-            ref_fault = sum(ref.fault_seconds_by_day.values())
-            self.assertAlmostEqual(sql_fault, ref_fault, places=6, msg=str(case))
+            self.assertAlmostEqual(sql_fault, pandas_fault, places=6, msg=str(case))
 
 
 class ModeDelayUtcMidnightHoldoffTest(unittest.TestCase):
