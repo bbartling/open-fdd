@@ -104,12 +104,7 @@ def _setup_fixture(cur, *, rows_per_equipment: int, equipment_count: int, web_mo
     cur.execute("ANALYZE history; ANALYZE weather;")
 
 
-def _time_rule(cur, sql: str) -> tuple[float, float, int]:
-    cur.execute("DISCARD ALL")
-    t0 = time.perf_counter()
-    cur.execute(sql)
-    cur.fetchall()
-    warm_s = time.perf_counter() - t0
+def _explain_plan(cur, sql: str) -> tuple[str, float, int]:
     cur.execute(f"EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) {sql}")
     plan = "\n".join(row[0] for row in cur.fetchall())
     exec_ms = 0.0
@@ -118,7 +113,52 @@ def _time_rule(cur, sql: str) -> tuple[float, float, int]:
             exec_ms = float(line.split("Execution Time:")[1].split(" ms")[0].strip())
             break
     subplans = plan.count("SubPlan")
+    return plan, exec_ms, subplans
+
+
+def _time_rule(cur, sql: str) -> tuple[float, float, int]:
+    cur.execute("DISCARD ALL")
+    t0 = time.perf_counter()
+    cur.execute(sql)
+    cur.fetchall()
+    warm_s = time.perf_counter() - t0
+    _, exec_ms, subplans = _explain_plan(cur, sql)
     return warm_s, exec_ms, subplans
+
+
+def _time_rule_repeated(cur, sql: str, *, repeats: int) -> dict[str, float]:
+    """Cold once, then warm repeats for median/p95 wall times."""
+    cold_s, cold_ms, _ = _time_rule(cur, sql)
+    warm: list[float] = []
+    for _ in range(max(1, repeats - 1)):
+        warm_s, _, _ = _time_rule(cur, sql)
+        warm.append(warm_s)
+    warm_sorted = sorted(warm) if warm else [cold_s]
+    mid = len(warm_sorted) // 2
+    median = warm_sorted[mid] if len(warm_sorted) % 2 else (
+        (warm_sorted[mid - 1] + warm_sorted[mid]) / 2.0
+    )
+    p95_idx = max(0, int(math.ceil(0.95 * len(warm_sorted))) - 1)
+    return {
+        "cold_wall_seconds": round(cold_s, 4),
+        "cold_explain_execution_ms": round(cold_ms, 2),
+        "warm_wall_seconds_median": round(median, 4),
+        "warm_wall_seconds_p95": round(warm_sorted[p95_idx], 4),
+        "warm_repeats": len(warm_sorted),
+    }
+
+
+def _plan_join_signals(plan: str) -> dict[str, int | bool]:
+    nested = plan.count("Nested Loop")
+    hash_join = plan.count("Hash Join")
+    merge_join = plan.count("Merge Join")
+    temp = plan.count(" temp ")
+    return {
+        "nested_loop_count": nested,
+        "hash_join_count": hash_join,
+        "merge_join_count": merge_join,
+        "temp_spill_hint": temp > 0,
+    }
 
 
 def _growth_exponent(rows: list[int], warm_seconds: list[float]) -> float:
@@ -153,24 +193,36 @@ def run_benchmark(
     size_list: list[int] = []
     for n in sizes:
         _setup_fixture(cur, rows_per_equipment=n, equipment_count=equipment_count, web_mode=web_mode)
-        cold_s, cold_ms, _ = _time_rule(cur, sql)
-        warm_s, warm_ms, subplans = _time_rule(cur, sql)
+        timing = _time_rule_repeated(cur, sql, repeats=5)
+        warm_s = timing["warm_wall_seconds_median"]
         warm_times.append(warm_s)
         size_list.append(n)
+        _, warm_ms, subplans = _time_rule(cur, sql)
+        plan, _, _ = _explain_plan(cur, sql)
         rows_out.append(
             {
                 "rows_per_equipment": n,
                 "equipment_count": equipment_count,
                 "total_history_rows": n * equipment_count,
                 "web_mode": web_mode,
-                "cold_wall_seconds": round(cold_s, 4),
-                "warm_wall_seconds": round(warm_s, 4),
+                "warm_wall_seconds": warm_s,
                 "explain_execution_ms": round(warm_ms, 2),
                 "explain_subplan_count": subplans,
-                "cold_explain_execution_ms": round(cold_ms, 2),
+                **_plan_join_signals(plan),
+                **timing,
             }
         )
     exponent = _growth_exponent(size_list, warm_times)
+    segment_slopes: list[dict] = []
+    for i in range(len(size_list) - 1):
+        seg_exp = _growth_exponent([size_list[i], size_list[i + 1]], [warm_times[i], warm_times[i + 1]])
+        segment_slopes.append(
+            {
+                "from_rows": size_list[i],
+                "to_rows": size_list[i + 1],
+                "log_log_exponent": None if math.isnan(seg_exp) else round(seg_exp, 4),
+            }
+        )
     largest = rows_out[-1] if rows_out else {}
     warm_largest = float(largest.get("warm_wall_seconds") or 0.0)
     margin = fdd_timeout_secs - warm_largest
@@ -180,9 +232,91 @@ def run_benchmark(
         "web_asof_bound_seconds": web_asof_bound_seconds,
         "fdd_run_timeout_seconds": fdd_timeout_secs,
         "warm_log_log_exponent": None if math.isnan(exponent) else round(exponent, 4),
+        "segment_log_log_slopes": segment_slopes,
         "superlinear_growth": bool(not math.isnan(exponent) and exponent > 1.1),
         "timeout_margin_seconds_largest_case": round(margin, 2),
         "cases": rows_out,
+    }
+
+
+def run_cancellation_recovery(
+    *,
+    database_url: str,
+    web_asof_bound_seconds: float,
+    statement_timeout_ms: int = 80,
+) -> dict:
+    """Prove a timed-out rule attempt releases the session for a follow-up run."""
+    sql = _render_rule(web_asof_bound_seconds=web_asof_bound_seconds)
+    conn = _connect(database_url)
+    conn.autocommit = False
+    cur = conn.cursor()
+    _setup_fixture(cur, rows_per_equipment=4700, equipment_count=1, web_mode="dense")
+    conn.commit()
+    cur.execute(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'")
+    cancelled = False
+    try:
+        cur.execute(sql)
+        cur.fetchall()
+    except Exception as exc:  # noqa: BLE001 — psycopg2 timeout class varies
+        conn.rollback()
+        cancelled = "timeout" in str(exc).lower() or "cancel" in str(exc).lower()
+    cur.execute("RESET statement_timeout")
+    conn.commit()
+    warm_s, _, _ = _time_rule(cur, sql)
+    conn.close()
+    return {
+        "statement_timeout_ms": statement_timeout_ms,
+        "cancel_or_timeout_observed": cancelled,
+        "recovery_warm_seconds": round(warm_s, 4),
+    }
+
+
+def _render_base_probe_sql(*, web_asof_bound_seconds: float) -> str:
+    """Through ``base`` CTE only — per-sample assessable/raw_fault rows."""
+    product = RULE_SQL.read_text(encoding="utf-8").replace("\r\n", "\n")
+    web_intervals = product.find("web_intervals AS (")
+    base_boundary = product.find("),\nbase AS (")
+    elapsed = product.find("),\nelapsed_hold AS (")
+    head = product[0:web_intervals]
+    joined = product[web_intervals:base_boundary + 2]
+    base_body = product[base_boundary + len("),\nbase AS (") : elapsed]
+    body = f"{head}{joined}\nbase AS ({base_body})"
+    for key, val in {
+        "{{WEB_ASOF_BOUND_SECONDS}}": str(web_asof_bound_seconds),
+        "{{OAT_ERR}}": "2.777778",
+        "{{CONFIRM_SECONDS}}": "900",
+        "{{MAX_GAP_HOURS}}": "1.0",
+    }.items():
+        body = body.replace(key, val)
+    return (
+        f"{body} "
+        "SELECT equipment_id, timestamp_utc, assessable, raw_fault FROM base ORDER BY 1, 2"
+    )
+
+
+def run_mask_boundary_digest(
+    *,
+    database_url: str,
+    web_asof_bound_seconds: float,
+) -> dict:
+    """Per-point assessable/raw counts on the disposable as-of fixture."""
+    probe = _render_base_probe_sql(web_asof_bound_seconds=web_asof_bound_seconds)
+    conn = _connect(database_url)
+    conn.autocommit = True
+    cur = conn.cursor()
+    _setup_fixture(cur, rows_per_equipment=700, equipment_count=1, web_mode="sparse")
+    cur.execute(
+        "SELECT count(*) FILTER (WHERE assessable) AS assessable_rows, "
+        "count(*) FILTER (WHERE raw_fault = 1) AS raw_fault_rows, "
+        "count(*) AS total_rows "
+        f"FROM ({probe}) s"
+    )
+    row = cur.fetchone()
+    conn.close()
+    return {
+        "assessable_rows": int(row[0]),
+        "raw_fault_rows": int(row[1]),
+        "total_rows": int(row[2]),
     }
 
 

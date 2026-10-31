@@ -1,0 +1,89 @@
+name: C3c SQL-QUAL 11 + 12A
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "scripts/qualification/c3c*.py"
+      - "scripts/qualification/run_c3c_sqlqual_11_12a.py"
+      - "scripts/qualification/c3c_db_schema.py"
+      - "scripts/stress/oat_meteo_asof_scaling_bench.py"
+      - "tests/qualification/test_c3c_sqlqual_11_12a.py"
+      - "services/central/src/t1284_3_si_cutover_test.rs"
+      - "crates/fdd_tsdb/src/si_cutover.rs"
+      - ".github/workflows/c3c-sqlqual-11-12a.yml"
+  pull_request:
+    paths:
+      - "scripts/qualification/c3c*.py"
+      - "scripts/qualification/run_c3c_sqlqual_11_12a.py"
+      - "scripts/qualification/c3c_db_schema.py"
+      - "scripts/stress/oat_meteo_asof_scaling_bench.py"
+      - "tests/qualification/test_c3c_sqlqual_11_12a.py"
+      - "services/central/src/t1284_3_si_cutover_test.rs"
+      - "crates/fdd_tsdb/src/si_cutover.rs"
+      - ".github/workflows/c3c-sqlqual-11-12a.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  c3c-sqlqual-disposable-db:
+    name: SQL-QUAL-11 + 12A disposable Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openfdd
+          POSTGRES_PASSWORD: openfdd
+          POSTGRES_DB: openfdd
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openfdd -d openfdd"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install qualification tooling
+        run: python3 -m pip install --quiet -r scripts/qualification/requirements.txt
+
+      - name: Offline C3c harness unit tests
+        run: python3 -B -m unittest tests.qualification.test_c3c_sqlqual_11_12a.C3cMatrixTests -v
+
+      - name: Run SQL-QUAL-11 + 12A matrix (disposable DB)
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+          PGPASSWORD: openfdd
+          OPENFDD_FDD_RUN_TIMEOUT_SECS: "900"
+        run: |
+          set -euo pipefail
+          python3 scripts/qualification/run_c3c_sqlqual_11_12a.py \
+            --database-url "$OPENFDD_TEST_DATABASE_URL" \
+            --ci-quick \
+            --multi-equipment 2 \
+            --run-rust-cutover \
+            --json-out "$RUNNER_TEMP/c3c-sqlqual-matrix.json" | tee "$RUNNER_TEMP/c3c-runner.log"
+          grep -q 'C3C SQL-QUAL DB bench completed' "$RUNNER_TEMP/c3c-runner.log"
+          test -s "$RUNNER_TEMP/c3c-sqlqual-matrix.json"
+          echo "C3C SQL-QUAL DB bench executed against disposable Postgres service"
+
+      - name: Upload C3c matrix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: c3c-sqlqual-matrix
+          path: ${{ runner.temp }}/c3c-sqlqual-matrix.json
+          if-no-files-found: error
