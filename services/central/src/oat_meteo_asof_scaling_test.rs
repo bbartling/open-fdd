@@ -158,6 +158,20 @@ async fn t1439_oat_meteo_asof_masks_match_legacy_reference() {
     fill_history_for_equipment(&mut tx, site.as_str(), "AHU_1", &roles, None, None, None)
         .await
         .expect("fill");
+    let rule_sql = wrap_rule_sql(
+        &render_rule_sql(&reg, rule, 300.0, 900, site.as_str(), Some("AHU_1"), None)
+            .expect("render"),
+        rule,
+    );
+    match crate::sql_pack::prepare_rule_inputs(&mut tx, site.as_str(), None, None, &rule_sql, true)
+        .await
+    {
+        Ok(crate::sql_pack::InputGate::Ready(_)) => {}
+        Ok(crate::sql_pack::InputGate::Stop(stop)) => {
+            panic!("prepare_rule_inputs stopped: {stop:?}");
+        }
+        Err(err) => panic!("prepare_rule_inputs: {err:?}"),
+    }
 
     for bound in [1499.0, 1500.0, 1501.0] {
         let legacy = mask_digest(&mut tx, true, bound).await;
