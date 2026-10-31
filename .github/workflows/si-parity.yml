@@ -21,7 +21,11 @@ on:
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
-      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
+      - "tests/qualification/test_fc6_flow_default_coherence.py"
+      - "tests/qualification/fc6_flow_boundary_reference.py"
+      - "tests/units/test_lps_per_cfm_contract.py"
+      - "scripts/ci/check_unit_contract.py"
+      - "scripts/ci/unit_contract_lib.py"
       - "sql/contract/goldens/**"
       - "docs/rules/cookbook/fixtures/**"
       - "sql/analytics/**"
@@ -49,7 +53,11 @@ on:
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
-      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
+      - "tests/qualification/test_fc6_flow_default_coherence.py"
+      - "tests/qualification/fc6_flow_boundary_reference.py"
+      - "tests/units/test_lps_per_cfm_contract.py"
+      - "scripts/ci/check_unit_contract.py"
+      - "scripts/ci/unit_contract_lib.py"
       - "sql/contract/goldens/**"
       - "sql/fdd/**"
       - "open_fdd/**"
@@ -216,7 +224,8 @@ jobs:
             tests.qualification.test_baseline_manifest_integrity \
             tests.qualification.test_capture_fdd_isolation_postgres \
             tests.qualification.test_mode_delay_shared \
-            tests.qualification.test_mode_delay_consolidation_1437 -v
+            tests.qualification.test_mode_delay_consolidation_1437 \
+            tests.qualification.test_fc6_flow_default_coherence -v
 
       - name: Qualification unit tests
         run: python3 -B -m unittest discover -s tests/qualification -p 'test_si_parity*.py' -v

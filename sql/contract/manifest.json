@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 110,
-  "pack_sha256": "f85c1043bc249c7e77acf72804ac7f46b084939e29fbb97f429ae851fc2fb1f4",
+  "pack_sha256": "d607eb534d073d89982e1133311d30bf8d4e22c77cedf0c44718d59ba24cb05e",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -432,8 +432,8 @@
     },
     {
       "path": "sql/fdd/registry.yaml",
-      "sha256": "e83c44738a51642efc9d4459ae97035c7c0b55e5d3af93a63f576b5b88d28942",
-      "bytes": 157228
+      "sha256": "083fb666e8a0534de8ea20ea7aa9584e3f4a97c73048646c49870dc3ebecc3a8",
+      "bytes": 157223
     },
     {
       "path": "sql/analytics/postgres/queries/bas_vs_web_oat.sql",

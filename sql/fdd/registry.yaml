@@ -2585,10 +2585,10 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       min_cfm_design:
         label: Design minimum outdoor airflow
-        default: 2359.73725
+        default: 2359.735
         min: 0.0
-        max: 94389.49
-        step: 47.194745
+        max: 94389.4
+        step: 47.1947
         unit: L_per_s
         ip_unit: cfm
         kind: volumetric_flow
