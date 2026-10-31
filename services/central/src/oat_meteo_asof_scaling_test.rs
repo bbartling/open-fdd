@@ -53,24 +53,23 @@ const LEGACY_JOINED: &str = r"joined AS (
 ),";
 
 fn render_mask_query(web_asof_bound_seconds: f64, legacy_joined: bool) -> String {
-    let product = include_str!("../../../sql/fdd/postgres/rules/oat_meteo_fault.sql");
-    let head = product
-        .split("web_intervals AS (")
-        .next()
-        .expect("head through web_dedup");
-    let after_base = product.split("),\nbase AS (").nth(1).expect("base body");
-    let base_body = after_base
-        .split("),\nelapsed_hold AS (")
-        .next()
-        .expect("base select");
+    let product =
+        include_str!("../../../sql/fdd/postgres/rules/oat_meteo_fault.sql").replace("\r\n", "\n");
+    let web_intervals = product
+        .find("web_intervals AS (")
+        .expect("web_intervals CTE");
+    let base_boundary = product.find("),\nbase AS (").expect("base boundary");
+    let elapsed = product
+        .find("),\nelapsed_hold AS (")
+        .expect("elapsed_hold CTE");
+    let head = &product[0..web_intervals];
     let joined = if legacy_joined {
         LEGACY_JOINED.to_string()
     } else {
-        let start = product.find("web_intervals AS (").expect("intervals");
-        let end = product.find("),\nbase AS (").expect("base");
-        product[start..end + 2].to_string()
+        product[web_intervals..base_boundary + 2].to_string()
     };
-    let mut body = format!("WITH {head}{joined}base AS ({base_body})");
+    let base_body = &product[base_boundary + "),\nbase AS (".len()..elapsed];
+    let mut body = format!("WITH {head}{joined}\nbase AS ({base_body})");
     body = body.replace(
         "{{WEB_ASOF_BOUND_SECONDS}}",
         &format!("{web_asof_bound_seconds}"),
