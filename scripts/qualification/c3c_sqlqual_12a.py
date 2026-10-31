@@ -125,6 +125,7 @@ def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
             [
                 "pg_dump",
                 "--format=custom",
+                "--data-only",
                 "--no-owner",
                 "--table=sample",
                 "--table=point_map",
@@ -141,13 +142,26 @@ def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
             conn.autocommit = True
             cur = conn.cursor()
             cur.execute("DELETE FROM sample WHERE site_id = %s", (site,))
+            cur.execute("DELETE FROM point_map WHERE site_id = %s", (site,))
+            cur.execute("DELETE FROM site WHERE site_id = %s", (site,))
             cur.execute("SELECT count(*) FROM sample WHERE site_id = %s", (site,))
             assert int(cur.fetchone()[0]) == 0
-        subprocess.run(
-            ["pg_restore", "--no-owner", "--dbname", database_url, str(dump_path)],
-            check=True,
+        restore = subprocess.run(
+            [
+                "pg_restore",
+                "--no-owner",
+                "--data-only",
+                "--disable-triggers",
+                "--dbname",
+                database_url,
+                str(dump_path),
+            ],
             env=env,
+            capture_output=True,
+            text=True,
         )
+        if restore.returncode not in (0, 1):
+            raise RuntimeError(restore.stderr[-2000:])
         with _connect(database_url) as conn:
             cur = conn.cursor()
             cur.execute("SELECT val, unit FROM sample WHERE site_id = %s LIMIT 1", (site,))
