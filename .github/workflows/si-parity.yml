@@ -26,6 +26,8 @@ on:
       - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "tests/qualification/test_fc6_flow_default_coherence.py"
       - "tests/qualification/fc6_flow_boundary_reference.py"
+      - "tests/qualification/test_c3b_sqlqual_07_10_analytics.py"
+      - "scripts/qualification/c3b_sqlqual/**"
       - "tests/units/test_lps_per_cfm_contract.py"
       - "scripts/ci/check_unit_contract.py"
       - "scripts/ci/unit_contract_lib.py"
@@ -61,6 +63,8 @@ on:
       - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "tests/qualification/test_fc6_flow_default_coherence.py"
       - "tests/qualification/fc6_flow_boundary_reference.py"
+      - "tests/qualification/test_c3b_sqlqual_07_10_analytics.py"
+      - "scripts/qualification/c3b_sqlqual/**"
       - "tests/units/test_lps_per_cfm_contract.py"
       - "scripts/ci/check_unit_contract.py"
       - "scripts/ci/unit_contract_lib.py"
@@ -236,6 +240,21 @@ jobs:
             tests.qualification.test_mode_delay_consolidation_1437 \
             tests.qualification.test_fc6_flow_default_coherence \
             tests.qualification.test_c3a_sql_qual_01_06 -v
+
+      - name: C3b SQL-QUAL-07..10 + 19 analytics (disposable Timescale)
+        env:
+          OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+          C3B_SQLQUAL_MATRIX_PATH: c3b_sqlqual_matrix.json
+        run: |
+          python3 -B scripts/qualification/c3b_sqlqual/runner.py --require-db --matrix-out "$C3B_SQLQUAL_MATRIX_PATH"
+          python3 -B -m unittest tests.qualification.test_c3b_sqlqual_07_10_analytics.C3bMatrixOfflineTests -v
+
+      - name: Upload c3b_sqlqual_matrix.json
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: c3b-sqlqual-matrix
+          path: c3b_sqlqual_matrix.json
 
       - name: Qualification unit tests
         run: python3 -B -m unittest discover -s tests/qualification -p 'test_si_parity*.py' -v
