@@ -7,10 +7,18 @@
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 
+use tokio::sync::Mutex as AsyncMutex;
+
 static ENV_LOCK: Mutex<()> = Mutex::new(());
+static ENV_ASYNC_LOCK: AsyncMutex<()> = AsyncMutex::const_new(());
 
 pub fn lock_env() -> MutexGuard<'static, ()> {
     ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Async tests that mutate `OPENFDD_*` env vars across `.await` points.
+pub async fn lock_env_async() -> tokio::sync::MutexGuard<'static, ()> {
+    ENV_ASYNC_LOCK.lock().await
 }
 
 /// Sets `OPENFDD_WORKSPACE` for the guard's lifetime, then restores the prior value.
