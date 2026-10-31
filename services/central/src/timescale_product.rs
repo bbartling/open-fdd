@@ -6546,6 +6546,9 @@ mod opaque_series_binding {
 }
 
 #[cfg(test)]
+#[path = "oat_meteo_asof_scaling_test.rs"]
+mod oat_meteo_asof_scaling_test;
+#[cfg(test)]
 #[path = "oat_meteo_bound_contract_test.rs"]
 mod oat_meteo_bound_contract_test;
 #[cfg(test)]

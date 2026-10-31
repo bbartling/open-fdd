@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 110,
-  "pack_sha256": "d607eb534d073d89982e1133311d30bf8d4e22c77cedf0c44718d59ba24cb05e",
+  "pack_sha256": "4384b0072dd6a52a9188dcc282ecee792d59a4104f2f5a0e5e0d76b80d937fa6",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -282,8 +282,8 @@
     },
     {
       "path": "sql/fdd/postgres/rules/oat_meteo_fault.sql",
-      "sha256": "8290cf0f3c9303f870a31bd3d78855a345de5f18d03eccffd9dc149ffc6c147f",
-      "bytes": 4499
+      "sha256": "b28501a13f50050d4236422a6685207efe13fb11c3d57852371145aa521c626b",
+      "bytes": 4196
     },
     {
       "path": "sql/fdd/postgres/rules/pid_hunt_1.sql",
