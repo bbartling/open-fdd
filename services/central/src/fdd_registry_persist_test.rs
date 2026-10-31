@@ -462,5 +462,46 @@ mod up03_postgres_exact_buckets {
         .expect("day2");
         assert_eq!(day1_fault, 0.0, "no fault on day 1");
         assert!(day2_fault > 0.0, "fault on day 2");
+
+        cleanup_up03_site(&pool, &site).await;
+    }
+
+    async fn cleanup_up03_site(pool: &PgPool, site: &str) {
+        let _ = sqlx::query("DELETE FROM fdd_interval_result WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM fdd_incremental_checkpoint WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM fdd_run WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM sample WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM point_map WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM role_map WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM equipment WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM building WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM site WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
     }
 }
