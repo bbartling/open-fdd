@@ -44,9 +44,9 @@ class SqlQualC3aHarnessTests(unittest.TestCase):
             "SQL-QUAL-01",
             "SQL-QUAL-04",
             "SQL-QUAL-05",
-            "SQL-QUAL-06",
         ):
             self.assertEqual(doc["summary"][check_id]["status"], "PASS", doc["summary"][check_id])
+        self.assertEqual(doc["summary"]["SQL-QUAL-06"]["status"], "INCOMPLETE")
 
     def test_runner_substitution_wrong_version_fails(self) -> None:
         idents = self.rid.record_runner_identities(REPO)
@@ -95,6 +95,34 @@ class SqlQualC3aHarnessTests(unittest.TestCase):
         self.assertIn(1469, issues)
         self.assertIn(1470, issues)
 
+    def test_sensor_fault_flag_mismatch_fails_full_compare(self) -> None:
+        from scripts.qualification.c3b_sqlqual import qual_19_analytics_fresh as q19
+
+        stem = "sensor_faults_staleness"
+        base = [
+            "E1",
+            "sat",
+            "E1.sat",
+            12,
+            "2026-01-05T12:00:00+00:00",
+            20.0,
+            22.0,
+            0.5,
+            "true",
+        ]
+        sql_row = list(base)
+        sql_row[-1] = "false"
+        oracle_match = list(base)
+        oracle_match[-1] = "false"
+        n_ok, err_ok = q19.compare_stem_rows(stem, [sql_row], [oracle_match], dataset_id="QA")
+        self.assertGreater(n_ok, 0)
+        self.assertFalse(err_ok, err_ok)
+        oracle_mismatch = list(base)
+        oracle_mismatch[-1] = "true"
+        n_bad, err_bad = q19.compare_stem_rows(stem, [sql_row], [oracle_mismatch], dataset_id="QA")
+        self.assertGreater(n_bad, 0)
+        self.assertTrue(err_bad)
+
 
 @unittest.skipUnless(
     os.environ.get("OPENFDD_DATABASE_URL", "").strip(),
@@ -112,6 +140,9 @@ class SqlQualC3aPostgresTests(unittest.TestCase):
             row = doc["summary"][check_id]
             self.assertEqual(row["status"], "PASS", row)
             self.assertGreater(row["comparisons"], 0)
+        q6 = doc["summary"]["SQL-QUAL-06"]
+        self.assertEqual(q6["status"], "PASS", q6)
+        self.assertGreater(q6["comparisons"], 0)
 
     def test_matrix_json_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
