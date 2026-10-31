@@ -28,7 +28,7 @@ joined AS (
     h.equipment_id,
     h.timestamp_utc,
     h.oa_t,
-    wi.ref_val AS ref_oa_t,
+    CAST(wi.ref_val AS double precision) AS ref_oa_t,
     CASE
       WHEN h.oa_t IS NULL THEN false
       WHEN wi.ref_val IS NULL THEN false
