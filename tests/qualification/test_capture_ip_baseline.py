@@ -829,6 +829,93 @@ class BatchPersistedScopeValidationTest(unittest.TestCase):
                 )
         self.assertIn("concurrent_non_capture_fdd_run", str(ctx.exception.reason))
 
+    def test_whole_capture_disqualified_when_interleaved_before_sql_readback(self) -> None:
+        building_id = "SYNTH_WHOLE_CAPTURE"
+        run_resp = {
+            "ok": True,
+            "run_id": "run-ci-1",
+            "window": {
+                "start": "2026-06-01T00:05:00+00:00",
+                "end": "2026-06-02T00:00:00Z",
+            },
+        }
+        guard_calls = {"n": 0}
+
+        def guard_side_effect(*_args, **_kwargs):
+            guard_calls["n"] += 1
+            if guard_calls["n"] >= 3:
+                raise capture.CaptureQualificationError(
+                    "concurrent_non_capture_fdd_run:run-afdd",
+                )
+
+        class FakeHttp:
+            def post_json(self, path, headers=None, json_body=None):
+                return run_resp
+
+            def get_json(self, path, headers=None, params=None):
+                if path == "/api/csv/import/package/mapping":
+                    return {"session_config": {"unit_system": "imperial"}, "columns": []}
+                if path == "/api/fdd/equipment":
+                    return {"equipment": [{"equipment_id": "AHU_1", "equip_type": "ahu"}]}
+                return {}
+
+        fake_conn = mock.MagicMock()
+        fake_cursor = mock.MagicMock()
+        fake_cursor.fetchone.side_effect = [(0,), (0,), (0,)] * 4
+        fake_cursor.fetchall.side_effect = [[], []]
+        fake_conn.cursor.return_value.__enter__ = mock.Mock(return_value=fake_cursor)
+        fake_conn.cursor.return_value.__exit__ = mock.Mock(return_value=False)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[]):
+                with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
+                    with mock.patch.object(
+                        capture,
+                        "validate_batch_persisted_scope",
+                        return_value=(
+                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                        ),
+                    ):
+                        with mock.patch.object(
+                            capture,
+                            "fdd_run_created_at_marker",
+                            return_value=capture.datetime.fromisoformat(
+                                "2026-06-01T00:00:00+00:00"
+                            ),
+                        ):
+                            with mock.patch.object(
+                                capture, "assert_no_interleaved_fdd_run", side_effect=guard_side_effect
+                            ):
+                                with mock.patch.object(
+                                    capture, "analytics_rows_for_site", return_value=[]
+                                ):
+                                    with mock.patch.object(capture, "post_sparql", return_value=[]):
+                                        with mock.patch.object(
+                                            capture,
+                                            "post_fdd_run_with_busy_retry",
+                                            return_value=(run_resp, {"http_attempts": []}),
+                                        ):
+                                            with self.assertRaises(capture.CaptureQualificationError):
+                                                capture.capture_site(
+                                                    FakeHttp(),
+                                                    {},
+                                                    fake_conn,
+                                                    site={
+                                                        "building_id": building_id,
+                                                        "window_start": "2026-06-01T00:00:00Z",
+                                                        "window_end": "2026-06-02T00:00:00Z",
+                                                    },
+                                                    out_dir=out_dir,
+                                                    rules=[{"rule_id": "FC1"}],
+                                                    skip_pandas=True,
+                                                    pandas_max_rules=None,
+                                                    rule_batch_size=1,
+                                                )
+
     def test_manifest_records_site_disqualifiers(self) -> None:
         meta = {
             "skip_pandas": False,

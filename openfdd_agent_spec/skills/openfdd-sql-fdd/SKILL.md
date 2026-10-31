@@ -26,7 +26,7 @@ One FDD result is `fdd_tsdb::FddResultIdentity`: data revision, model revision, 
 
 ## Typed unit and time contract
 
-- Temperatures are °F in SQL. Metric CSV values convert at query (`unit_system=metric|si`). Do not store a second copy of every rule for Celsius.
+- **Processing storage is canonical SI (`metric-c-v2`).** Values are normalized once at ingest by the single Timescale writer from engineer-declared source units. SQL rules and the pandas oracle read stored SI; display preference converts at the API/UI boundary only — never query-time imperial admission or a second stored copy per rule.
 - Timestamps are UTC `timestamptz`. Fault duration uses the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: not fault time, not covered time, and it breaks the confirmation streak. The last sample does not add a trailing interval.
 - Run one authorized tenant and building at a time. Equipment selection is `equipType` / roles, then exact id. Never a prefix or `LIKE` on `equipment_id`.
 
@@ -38,6 +38,12 @@ One FDD result is `fdd_tsdb::FddResultIdentity`: data revision, model revision, 
 4. The UI production path calls central REST, not a local pandas runner.
 5. Series overlay (`/api/fdd/.../series`) must honor Lab/`session_config` `confirm_min` and typed params the same way `/api/fdd/run` does.
 6. **SCHED-1:** numeric/`false` unoccupied and the string `unoccupied` (and related tokens). Keep `sql/fdd/postgres/rules/sched1_unoccupied_runtime.sql` aligned with pandas `sched1` in `open_fdd/rules/cookbook_catalog.py`.
+
+## SI cutover verification (SQL407 / W0c baseline)
+
+- **W0c baseline manifests** (`scripts/stress/si_cutover/baseline_io.py`): root `manifest.sha256.json` lists site-relative paths with mandatory gzip artifacts, non-empty SHA-256 digests, and window metadata. Path entries must be relative (no `..`, absolute paths, or symlinks). **Manifest digests are integrity checks only** — they prove listed bytes match the capture tree; they do **not** authenticate producer identity or pin a git revision.
+- **P1 candidate pandas provenance** (`parity_chain.verify_current_p1_oracle_provenance`): pin expected git rev and `open_fdd` tree hash **externally** via `OPENFDD_P1_EXPECTED_CANDIDATE_REV`, `OPENFDD_P1_EXPECTED_OPEN_FDD_TREE_SHA256`, or `si_parity_gate.py --expected-candidate-rev` / `--expected-open-fdd-tree-sha256`. With `OPENFDD_P1_REQUIRE_EXTERNAL_IDENTITY_PINS=1` (or `--require-p1-identity-pins`), missing pins fail closed. A tree hash recomputed inside the verifier from the same checkout must not substitute for an external pin.
+- **IP baseline capture isolation** (`capture_ip_baseline.py`): batched `/api/fdd/run` plus SQL readback runs under repeated `fdd_run` generation guards (before/after batches and SQL readback/status merge). A concurrent non-capture run between batches or during readback disqualifies the capture.
 
 ## Skill home
 

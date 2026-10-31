@@ -10,6 +10,7 @@ Uses ``scripts/ci/unit_contract_lib.py`` only — no second conversion table.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import math
 import sys
@@ -22,6 +23,118 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
+from scripts.stress.si_cutover import baseline_io as bio  # noqa: E402
+from scripts.stress.si_cutover import p1_candidate_identity as p1id  # noqa: E402
+
+FROZEN_IP_ORACLE_VERSION = "4.4.9"
+FROZEN_IP_ORACLE_GIT_HEAD = "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0"
+P1_ALGORITHM_LABEL = "current-algorithm unit commutation (not frozen 4.4.9 reproduction)"
+
+_p1_identity_pins_override: p1id.P1IdentityPins | None = None
+
+
+def set_p1_identity_pins(pins: p1id.P1IdentityPins | None) -> None:
+    """Test/gate hook: override env pins (external expected rev / tree hash)."""
+    global _p1_identity_pins_override
+    _p1_identity_pins_override = pins
+
+
+def resolve_p1_identity_pins() -> p1id.P1IdentityPins:
+    if _p1_identity_pins_override is not None:
+        return _p1_identity_pins_override
+    return p1id.pins_from_environment()
+
+
+def _open_fdd_tree_sha256(package_root: Path) -> str:
+    return p1id.open_fdd_tree_sha256(package_root)
+
+
+def expected_p1_candidate_oracle_evidence() -> dict[str, Any]:
+    """Record resolved candidate oracle metadata for P1 evidence rows."""
+    import tomllib
+
+    repo = REPO.resolve()
+    project = tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))
+    expected_version = str(project.get("project", {}).get("version") or "")
+    git_head = p1id.git_head_rev(repo)
+    pkg_root = repo / "open_fdd"
+    pins = resolve_p1_identity_pins()
+    return {
+        "repo_root": str(repo),
+        "expected_version": expected_version,
+        "expected_git_head": git_head,
+        "expected_open_fdd_tree_sha256": _open_fdd_tree_sha256(pkg_root) if pkg_root.is_dir() else "",
+        "pinned_candidate_rev": pins.expected_candidate_rev,
+        "pinned_open_fdd_tree_sha256": pins.expected_open_fdd_tree_sha256,
+        "require_external_identity_pins": pins.require_external,
+        "algorithm_label": P1_ALGORITHM_LABEL,
+    }
+
+
+def verify_current_p1_oracle_provenance() -> tuple[tuple[str, ...], dict[str, Any]]:
+    """Fail P1 when the frozen IP oracle or a foreign open_fdd install is used."""
+    pins = resolve_p1_identity_pins()
+    evidence = expected_p1_candidate_oracle_evidence()
+    errors: list[str] = []
+    if pins.require_external and not (
+        pins.expected_candidate_rev and pins.expected_open_fdd_tree_sha256
+    ):
+        errors.append(
+            "P1: external candidate identity pins required "
+            "(OPENFDD_P1_EXPECTED_CANDIDATE_REV and OPENFDD_P1_EXPECTED_OPEN_FDD_TREE_SHA256)"
+        )
+    try:
+        import open_fdd
+    except ImportError:
+        return ("P1: open_fdd not importable for candidate SI recompute",), evidence
+
+    mod_path = Path(getattr(open_fdd, "__file__", "") or "").resolve()
+    repo_root = Path(evidence["repo_root"]).resolve()
+    try:
+        if not mod_path.is_relative_to(repo_root):
+            errors.append(
+                f"P1: open_fdd loaded outside candidate repo ({mod_path}); "
+                f"expected under {repo_root}"
+            )
+    except ValueError:
+        errors.append(
+            f"P1: open_fdd loaded outside candidate repo ({mod_path}); "
+            f"expected under {repo_root}"
+        )
+
+    version = str(getattr(open_fdd, "__version__", ""))
+    expected_version = str(evidence.get("expected_version") or "")
+    if expected_version and version != expected_version:
+        errors.append(
+            f"P1: open_fdd version {version!r} != candidate pyproject {expected_version!r}"
+        )
+    if version == FROZEN_IP_ORACLE_VERSION:
+        errors.append(
+            "P1: frozen IP oracle 4.4.9 is loaded; current candidate pandas SI required"
+        )
+
+    resolved_git_head = p1id.git_head_rev(repo_root)
+    resolved_tree = _open_fdd_tree_sha256(mod_path.parent) if mod_path.is_file() else ""
+    evidence = {
+        **evidence,
+        "resolved_git_head": resolved_git_head,
+        "resolved_open_fdd_tree_sha256": resolved_tree,
+        "resolved_open_fdd_file": str(mod_path),
+        "resolved_version": version,
+    }
+    if pins.expected_candidate_rev and resolved_git_head != pins.expected_candidate_rev:
+        errors.append(
+            f"P1: resolved git HEAD {resolved_git_head!r} != pinned candidate rev "
+            f"{pins.expected_candidate_rev!r}"
+        )
+    if pins.expected_open_fdd_tree_sha256 and resolved_tree != pins.expected_open_fdd_tree_sha256:
+        errors.append(
+            "P1: imported open_fdd tree sha256 != pinned expected "
+            f"{pins.expected_open_fdd_tree_sha256}"
+        )
+    if resolved_git_head == FROZEN_IP_ORACLE_GIT_HEAD and version == FROZEN_IP_ORACLE_VERSION:
+        errors.append("P1: git HEAD matches frozen 35c17ac with 4.4.9 oracle")
+    return tuple(errors), evidence
 
 ANALYTICS_REL_TOL = 1e-6
 FAULT_SECONDS_ATOL = 0.0  # exact equality; no tolerance
@@ -51,6 +164,7 @@ class StageResult:
     mismatch_table: tuple[str, ...] = ()
     structured: tuple[dict[str, Any], ...] = ()
     pending: int = 0
+    metadata_checks: int = 0
 
 
 def rule_in_scope(rule_id: str, scope: set[str] | None) -> bool:
@@ -598,10 +712,32 @@ def compare_p0_all_goldens(
 def verify_golden_rule_attempted(golden: dict[str, Any], expected_rules: set[str]) -> StageResult:
     seen = set(golden.get("pandas_rules_attempted") or [])
     missing = sorted(expected_rules - seen)
-    errors = [f"{golden.get('building_id')}: rule dropout: {missing[:8]}…"] if missing else []
+    errors: list[str] = []
+    if missing:
+        errors.append(f"{golden.get('building_id')}: rule dropout: {missing[:8]}…")
+    computed = {
+        str(r.get("rule_id") or "")
+        for r in golden.get("pandas_fdd_daily") or []
+        if str(r.get("pair_status") or "") == "computed" and str(r.get("utc_day") or "")
+    }
+    if seen and not computed:
+        errors.append(
+            f"{golden.get('building_id')}: vacuous coverage — pandas_rules_attempted "
+            f"nonempty but zero computed daily cells"
+        )
+    sql_computed = {
+        str(r.get("rule_id") or "")
+        for r in golden.get("sql_fdd_daily") or []
+        if str(r.get("utc_day") or "")
+    }
+    if seen and not sql_computed:
+        errors.append(
+            f"{golden.get('building_id')}: vacuous coverage — attempted rules but "
+            f"sql_fdd_daily has no dated rows"
+        )
     return StageResult(
         "rule-coverage",
-        len(seen),
+        len(computed),
         tuple(errors),
     )
 
@@ -648,6 +784,35 @@ def verify_p0_carryover_all(goldens: list[dict[str, Any]]) -> StageResult:
     return StageResult("P0-carryover", comparisons, tuple(errors))
 
 
+def p1_recompute_identity_digest(golden: dict[str, Any]) -> str:
+    """Cache identity for P1 SI recompute: fixture, SQL registry, metric contract."""
+    import hashlib
+
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+
+    parts: list[str] = [
+        str(golden.get("building_id") or ""),
+        str(golden.get("dataset_id") or golden.get("source_dataset") or ""),
+        str(golden.get("poll_seconds") or ""),
+        P1_ALGORITHM_LABEL,
+    ]
+    reg_path = REPO / "sql" / "fdd" / "registry.yaml"
+    if reg_path.is_file():
+        parts.append(hashlib.sha256(reg_path.read_bytes()).hexdigest())
+    if uc.MANIFEST.is_file():
+        parts.append(uc.sha256_file(uc.MANIFEST))
+    if uc.METRIC_UNITS.is_file():
+        parts.append(uc.sha256_file(uc.METRIC_UNITS))
+    frame_path = golden.get("frame_path") or golden.get("dataset_path")
+    if frame_path:
+        fp = Path(str(frame_path))
+        if fp.is_file():
+            parts.append(hashlib.sha256(fp.read_bytes()).hexdigest())
+    else:
+        parts.append(str(golden.get("frame_sha256") or ""))
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()
+
+
 def run_p1_ip_vs_si(
     goldens: list[dict[str, Any]],
     *,
@@ -662,30 +827,27 @@ def run_p1_ip_vs_si(
     rules = cfl.load_rule_registry()
     rules_by_id = {str(r["rule_id"]): r for r in rules}
     expected = cfl.expected_pandas_rule_ids(rules)
-    errors: list[str] = []
-    structured: list[dict[str, Any]] = []
+    prov_errors, prov_evidence = verify_current_p1_oracle_provenance()
+    errors: list[str] = list(prov_errors)
+    structured: list[dict[str, Any]] = [
+        {"kind": "p1_oracle_provenance", **prov_evidence},
+    ]
     comparisons = 0
     min_required = 0
-    recompute = param_hook is not None or value_hook is not None or si_param_post_hook is not None
     for golden in goldens:
         min_required += min_p1_cells(golden)
         cov = verify_golden_rule_attempted(golden, expected)
         if cov.errors and scope is None:
             errors.extend(cov.errors)
-        if recompute:
-            si_map = cfl.recompute_si_daily_for_golden(
-                golden,
-                rules_by_id,
-                metric,
-                param_hook=param_hook,
-                value_hook=value_hook,
-                si_param_post_hook=si_param_post_hook,
-            )
-        else:
-            si_map = {
-                fdd_daily_key(row): float(row.get("fault_seconds", 0))
-                for row in golden.get("pandas_si_daily") or []
-            }
+        _ = p1_recompute_identity_digest(golden)
+        si_map = cfl.recompute_si_daily_for_golden(
+            golden,
+            rules_by_id,
+            metric,
+            param_hook=param_hook,
+            value_hook=value_hook,
+            si_param_post_hook=si_param_post_hook,
+        )
         for row in _parity_ip_rows(golden):
             rule_id = str(row.get("rule_id") or "")
             if not rule_in_scope(rule_id, scope):
@@ -1159,45 +1321,114 @@ def compare_p3_post_cutover(
     building_id: str,
     live_sql_daily: Iterable[dict[str, Any]],
     live_sample_counts: Iterable[dict[str, Any]],
+    expected_window_start: str | None = None,
+    expected_window_end: str | None = None,
 ) -> StageResult:
-    """P3 live: post-cutover SQL SI fault seconds == pre-cutover W0c IP baseline."""
+    """P3 live: post-cutover SQL SI == pre-cutover W0c IP baseline (strict key matrix)."""
     site_dir = baseline_dir / building_id
     if not site_dir.is_dir():
         return StageResult("P3", 0, (f"baseline missing site dir {site_dir}",))
+    manifest, manifest_errors = bio.verify_baseline_for_p3(
+        baseline_dir,
+        building_id=building_id,
+        expected_window_start=expected_window_start,
+        expected_window_end=expected_window_end,
+    )
+    errors: list[str] = list(manifest_errors)
+    if manifest_errors:
+        return StageResult("P3", 0, tuple(errors), metadata_checks=0)
+
     baseline = load_baseline_site_dir(site_dir)
-    base_sql = {
-        fdd_daily_key(r): r for r in baseline.get("sql_fdd_daily") or []
-    }
-    errors: list[str] = []
-    comparisons = 0
-    for row in live_sql_daily:
+    base_rows = baseline.get("sql_fdd_daily") or []
+    base_keys: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in base_rows:
         if str(row.get("building_id")) != building_id:
+            errors.append(f"P3 baseline row wrong building_id {fdd_daily_key(row)}")
             continue
+        field_errors = bio.validate_fdd_daily_row(row)
+        if field_errors:
+            errors.append(f"P3 baseline invalid {fdd_daily_key(row)}: {field_errors[0]}")
         key = fdd_daily_key(row)
-        base = base_sql.get(key)
-        if base is None:
+        if key in base_keys:
+            errors.append(f"P3 baseline duplicate key {key}")
+        base_keys[key] = row
+
+    live_rows = [r for r in live_sql_daily if str(r.get("building_id")) == building_id]
+    live_by_key: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in live_rows:
+        field_errors = bio.validate_fdd_daily_row(row)
+        if field_errors:
+            errors.append(f"P3 live invalid {fdd_daily_key(row)}: {field_errors[0]}")
+        key = fdd_daily_key(row)
+        if key in live_by_key:
+            errors.append(f"P3 live duplicate key {key}")
+        live_by_key[key] = row
+
+    sql_comparisons = 0
+    for key, base in base_keys.items():
+        live = live_by_key.get(key)
+        if live is None:
+            errors.append(f"P3 missing live SQL row for baseline key {key}")
             continue
-        comparisons += 1
-        if not fault_seconds_equal(row.get("fault_seconds", 0), base.get("fault_seconds", 0)):
+        sql_comparisons += 1
+        if not fault_seconds_equal(live.get("fault_seconds", 0), base.get("fault_seconds", 0)):
             errors.append(
-                f"P3 {key}: live_si={row.get('fault_seconds')} "
+                f"P3 {key}: live_si fault={live.get('fault_seconds')} "
                 f"ip_baseline={base.get('fault_seconds')}"
             )
+        if not fault_seconds_equal(
+            live.get("covered_seconds", 0), base.get("covered_seconds", 0)
+        ):
+            errors.append(
+                f"P3 {key}: covered live={live.get('covered_seconds')} "
+                f"baseline={base.get('covered_seconds')}"
+            )
+        if str(live.get("status", "")) != str(base.get("status", "")):
+            errors.append(
+                f"P3 {key}: status live={live.get('status')} baseline={base.get('status')}"
+            )
+
+    for key in live_by_key:
+        if key not in base_keys:
+            errors.append(f"P3 extra live SQL row not in baseline {key}")
+
+    if base_keys and sql_comparisons == 0:
+        errors.append("P3: zero real SQL comparisons despite nonempty baseline matrix")
+
+    metadata_checks = 0
     base_counts = {
         (r.get("building_id"), r.get("table")): int(r.get("row_count", 0))
         for r in baseline.get("sample_counts") or []
     }
+    live_count_keys: set[tuple[Any, Any]] = set()
     for row in live_sample_counts:
         if str(row.get("building_id")) != building_id:
             continue
         key = (row.get("building_id"), row.get("table"))
-        comparisons += 1
-        if base_counts.get(key) != int(row.get("row_count", 0)):
+        if key in live_count_keys:
+            errors.append(f"P3 duplicate sample_counts key {key}")
+        live_count_keys.add(key)
+        metadata_checks += 1
+        if key not in base_counts:
+            errors.append(f"P3 sample_counts extra key {key}")
+            continue
+        if base_counts[key] != int(row.get("row_count", 0)):
             errors.append(
                 f"P3 sample_counts {key}: live={row.get('row_count')} "
-                f"baseline={base_counts.get(key)}"
+                f"baseline={base_counts[key]}"
             )
-    return StageResult("P3", comparisons, tuple(errors))
+    for key in base_counts:
+        if key[0] != building_id:
+            continue
+        if key not in live_count_keys:
+            errors.append(f"P3 missing live sample_counts for baseline key {key}")
+
+    return StageResult(
+        "P3",
+        sql_comparisons,
+        tuple(errors),
+        metadata_checks=metadata_checks,
+    )
 
 
 def verify_pandas_errors_all(goldens: list[dict[str, Any]]) -> StageResult:

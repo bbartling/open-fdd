@@ -1,0 +1,63 @@
+{
+  "files": [
+    {
+      "bytes": 127,
+      "name": "SITE_MINI/analytics_rows.jsonl.gz",
+      "sha256": "b1be8ab99860207d8f56ddbac3ed3638af5f73a6bba7c538454deaed0e980f2e",
+      "tier": "mandatory"
+    },
+    {
+      "bytes": 111,
+      "name": "SITE_MINI/live_sample_counts.jsonl.gz",
+      "sha256": "30c3e7855f49ef3bcac41b5c34ee2890ece487196974af7a60cd64a6db2979b2",
+      "tier": "ancillary"
+    },
+    {
+      "bytes": 172,
+      "name": "SITE_MINI/live_sql_si_daily.jsonl.gz",
+      "sha256": "fac760b46080d6eb5d74e9ee8308031cf0dff6cf85060fda05d13c93b6fdc83c",
+      "tier": "ancillary"
+    },
+    {
+      "bytes": 191,
+      "name": "SITE_MINI/pandas_fdd_daily.jsonl.gz",
+      "sha256": "bc3568d701b1afdac8980b34ebd2d85461eb6c97d91f4041ab869effe9c26930",
+      "tier": "mandatory"
+    },
+    {
+      "bytes": 129,
+      "name": "SITE_MINI/persisted_runs.jsonl.gz",
+      "sha256": "c216f2bb61cc713ca05e832b47e495b0fe90bb7538f012fd047e4d60b80ed726",
+      "tier": "mandatory"
+    },
+    {
+      "bytes": 107,
+      "name": "SITE_MINI/sample_counts.jsonl.gz",
+      "sha256": "4c815aafcbd85b237dc498d1bfe6f9f66382e4c34441c3538b55b44bd406eb41",
+      "tier": "mandatory"
+    },
+    {
+      "bytes": 168,
+      "name": "SITE_MINI/sql_fdd_daily.jsonl.gz",
+      "sha256": "c869862d47baadaa6299da51a17fb1aea6fa6acbb64b354d36ded9a1c3e8b7f0",
+      "tier": "mandatory"
+    },
+    {
+      "bytes": 186,
+      "name": "SITE_MINI/unit_inventory.jsonl.gz",
+      "sha256": "a42ad0c3879d68a55f1c7debd32ad5b93e96daec7e4c8c41968a4e84e4db12f4",
+      "tier": "mandatory"
+    }
+  ],
+  "meta": {
+    "fixture": "p3_baseline_mini",
+    "sites": [
+      {
+        "building_id": "SITE_MINI",
+        "window_end": "2026-06-02T00:00:00Z",
+        "window_start": "2026-06-01T00:00:00Z"
+      }
+    ]
+  },
+  "schema": "openfdd-si-ip-baseline-manifest-v1"
+}

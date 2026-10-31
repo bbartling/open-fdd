@@ -646,6 +646,37 @@ def fetch_sql_daily_rows(
     return list(daily.values())
 
 
+def capture_sql_readback_under_isolation(
+    conn,
+    *,
+    building_id: str,
+    window_start: str,
+    window_end: str,
+    scope_marker: datetime,
+    allowed_run_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Read SQL daily rows with before/after generation guards (inter-batch + readback fence)."""
+    assert_no_interleaved_fdd_run(
+        conn,
+        building_id=building_id,
+        marker=scope_marker,
+        allowed_run_ids=allowed_run_ids,
+    )
+    rows = fetch_sql_daily_rows(
+        conn,
+        building_id=building_id,
+        window_start=window_start,
+        window_end=window_end,
+    )
+    assert_no_interleaved_fdd_run(
+        conn,
+        building_id=building_id,
+        marker=scope_marker,
+        allowed_run_ids=allowed_run_ids,
+    )
+    return rows
+
+
 def fetch_run_status_rows(
     conn,
     *,
@@ -1691,18 +1722,43 @@ def capture_site(
     if not ws or not we:
         raise RuntimeError("FDD run returned no window_start/window_end")
 
-    sql_daily = fetch_sql_daily_rows(
-        conn, building_id=building_id, window_start=ws, window_end=we
+    assert_no_interleaved_fdd_run(
+        conn,
+        building_id=building_id,
+        marker=scope_marker,
+        allowed_run_ids={str(record["run_id"]) for record in run_records if record.get("run_id")},
     )
+
+    sql_daily = capture_sql_readback_under_isolation(
+        conn,
+        building_id=building_id,
+        window_start=ws,
+        window_end=we,
+        scope_marker=scope_marker,
+        allowed_run_ids={str(record["run_id"]) for record in run_records if record.get("run_id")},
+    )
+    allowed_run_ids = {str(record["run_id"]) for record in run_records if record.get("run_id")}
     for run_record in run_records:
         batch_rules = set(run_record["rule_ids"])
         status_map = fetch_run_status_rows(
             conn, building_id=building_id, run_id=run_record["run_id"]
         )
+        assert_no_interleaved_fdd_run(
+            conn,
+            building_id=building_id,
+            marker=scope_marker,
+            allowed_run_ids=allowed_run_ids,
+        )
         merge_status(
             sql_daily,
             {key: value for key, value in status_map.items() if key[0] in batch_rules},
         )
+    assert_no_interleaved_fdd_run(
+        conn,
+        building_id=building_id,
+        marker=scope_marker,
+        allowed_run_ids=allowed_run_ids,
+    )
 
     analytics = analytics_rows_for_site(
         http, headers, building_id=building_id, window_start=ws, window_end=we
@@ -1777,6 +1833,8 @@ def capture_site(
 
     return {
         "building_id": building_id,
+        "window_start": ws,
+        "window_end": we,
         "run_id": run_records[-1]["run_id"] if run_records else "",
         "run_records": run_records,
         "sql_rows": len(sql_daily),

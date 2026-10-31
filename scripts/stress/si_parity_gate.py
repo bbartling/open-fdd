@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -35,6 +36,7 @@ from helpers import EXIT_BLOCKED, EXIT_FAIL, EXIT_PASS, record_check, run_child,
 from si_cutover import parity_chain as pc  # noqa: E402
 from si_cutover import analytics_parity as ap  # noqa: E402
 from si_cutover import ci_fixtures_lib as cfl  # noqa: E402
+from si_cutover import p1_candidate_identity as p1id  # noqa: E402
 from si_cutover.si_parity_families import (  # noqa: E402
     SI_SQL_PACK_FAMILIES,
     resolve_analytics_scope,
@@ -104,6 +106,18 @@ def _fc1_t1284_si_param_post_hook(rule_id: str, params: dict[str, float]) -> dic
     if rule_id != "FC1":
         return params
     return cfl.t1284_break_eps_dsp_si(params, rule_id=rule_id)
+
+
+def _apply_p1_identity_cli(args: argparse.Namespace) -> None:
+    rev = str(getattr(args, "expected_candidate_rev", None) or "").strip() or None
+    tree = str(getattr(args, "expected_open_fdd_tree_sha256", None) or "").strip() or None
+    if rev:
+        os.environ["OPENFDD_P1_EXPECTED_CANDIDATE_REV"] = rev
+    if tree:
+        os.environ["OPENFDD_P1_EXPECTED_OPEN_FDD_TREE_SHA256"] = tree
+    if getattr(args, "require_p1_identity_pins", False):
+        os.environ["OPENFDD_P1_REQUIRE_EXTERNAL_IDENTITY_PINS"] = "1"
+    pc.set_p1_identity_pins(p1id.pins_from_environment())
 
 
 def run_fixtures_gate(
@@ -369,6 +383,8 @@ def run_p3_cli(args: argparse.Namespace) -> int:
             building_id="SITE_MINI",
             live_sql_daily=live_sql,
             live_sample_counts=live_counts,
+            expected_window_start="2026-06-01T00:00:00Z",
+            expected_window_end="2026-06-02T00:00:00Z",
         )
         if result.errors:
             safe_print(f"FAIL P3 fixture: {'; '.join(result.errors)}")
@@ -387,8 +403,8 @@ def run_p3_cli(args: argparse.Namespace) -> int:
         safe_print("FAIL P3: sites-config must be a JSON list")
         return EXIT_FAIL
     safe_print(
-        "BLOCKED P3 live: Grok bot runs post-cutover compare on the owner stack; "
-        "cloud agents validate --p3-fixture only"
+        "BLOCKED P3 live: owner-stack adapter not run in CI; use --p3-fixture for the "
+        "mini regression fixture only (not W9 live P3)."
     )
     return EXIT_BLOCKED
 
@@ -444,7 +460,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Compare against tests/fixtures/si_cutover/p3_baseline_mini (unit test path)",
     )
+    ap.add_argument(
+        "--expected-candidate-rev",
+        metavar="GIT_SHA",
+        help="External P1 pin: git rev for candidate open_fdd (also OPENFDD_P1_EXPECTED_CANDIDATE_REV)",
+    )
+    ap.add_argument(
+        "--expected-open-fdd-tree-sha256",
+        metavar="HEX",
+        help="External P1 pin: open_fdd tree hash (OPENFDD_P1_EXPECTED_OPEN_FDD_TREE_SHA256)",
+    )
+    ap.add_argument(
+        "--require-p1-identity-pins",
+        action="store_true",
+        help="Fail P1 when external rev/tree pins are missing (OPENFDD_P1_REQUIRE_EXTERNAL_IDENTITY_PINS)",
+    )
     args = ap.parse_args(argv)
+    _apply_p1_identity_cli(args)
 
     if args.mutation_self_test:
         return run_t1284_4_mutation_self_test()

@@ -80,6 +80,8 @@ class SiParityChainTests(unittest.TestCase):
                 building_id="SITE_MINI",
                 live_sql_daily=live_sql,
                 live_sample_counts=live_counts,
+                expected_window_start="2026-06-01T00:00:00Z",
+                expected_window_end="2026-06-02T00:00:00Z",
             )
             self.assertTrue(result.errors, "1s fault drift must fail P3")
 
