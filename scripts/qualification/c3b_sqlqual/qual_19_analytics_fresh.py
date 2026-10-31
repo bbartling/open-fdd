@@ -154,18 +154,20 @@ def run_postgres(conn) -> list[QualCell]:
             oracle_norm = ap.norm_rows(stem, oracle_rows)
             if stem == "sensor_faults_staleness":
                 flag_i = [c for c, _k in ap.STEM_COLUMNS[stem]].index("fault_flag")
-                sql_norm = [r[:flag_i] for r in sql_norm]
-                oracle_norm = [r[:flag_i] for r in oracle_norm]
-                n = max(len(sql_norm), len(oracle_norm))
-                if len(sql_norm) != len(oracle_norm):
-                    errors.append(
-                        f"{ds.dataset_id}/{stem}: row count sql={len(sql_norm)} oracle={len(oracle_norm)}"
-                    )
-                    continue
-                for g, l in zip(sorted(sql_norm, key=repr), sorted(oracle_norm, key=repr)):
-                    if g != l:
-                        errors.append(f"{ds.dataset_id}/{stem}: golden={g!r} live={l!r}")
+                sql_trim = [r[:flag_i] for r in sql_norm]
+                oracle_trim = [r[:flag_i] for r in oracle_norm]
+                n, e = ap.compare_rows(
+                    "C3-analytics-fresh",
+                    ds.dataset_id,
+                    stem,
+                    "sql_pg",
+                    sql_trim,
+                    "independent_oracle",
+                    oracle_trim,
+                )
                 comparisons += n
+                if e:
+                    errors.extend(e[:2])
                 continue
             n, e = ap.compare_rows(
                 "C3-analytics-fresh",
