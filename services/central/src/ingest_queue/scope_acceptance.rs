@@ -112,6 +112,10 @@ struct Plans {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize OPENFDD_* env with sync ingest fixtures on one process-wide lock"
+)]
 async fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
     let _env = crate::test_env_lock::lock_env_async().await;
     let fix = ScopeFix::new();
