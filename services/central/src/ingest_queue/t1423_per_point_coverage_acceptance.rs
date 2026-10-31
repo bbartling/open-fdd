@@ -421,7 +421,7 @@ async fn t1423_6_sample_query_uses_openfdd_key_filter() {
          ORDER BY openfdd_key, ts",
     )
     .bind(&case.site)
-    .bind(&[key.clone()])
+    .bind(std::slice::from_ref(&key))
     .bind(h(0))
     .bind(h(1))
     .fetch_one(&case.pool)
