@@ -690,7 +690,7 @@ d["fault_confirmed"] = confirm_fault(d["fault_raw"], min_rows=max(1, FAULT_CONFI
 | `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
 | `eps_airflow` | `fraction` | Airflow fraction eps | frac | 0.15 | 0.05–1.0 |
 | `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
-| `min_L/s_design` | `volumetric_flow` | Design minimum outdoor airflow | L/s | 2359.73725 | 0.0–94389.49 |
+| `min_cfm_design` | `volumetric_flow` | Design minimum outdoor airflow | L/s | 2359.735 | 0.0–94389.4 |
 
 
 ```python
@@ -699,7 +699,7 @@ FAULT_CONFIRM_SECONDS = 600
 def fc6(d, p, poll):
     airflow_err = _gl36_value(p, "eps_airflow", "airflow_err", 0.15)
     oat_rat_min = _gl36_value(p, "delta_t_min", "oat_rat_delta_min", 5.0)
-    design_min_l_s = _f(p, "min_L/s_design", 2359.73725)
+    design_min_l_s = _f(p, "min_cfm_design", 2359.735)
     fan_on = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
     fan = _fan(d)
     rat_minus_oat = (d["return-air-temp"] - d["outside-air-temp"]).abs()
