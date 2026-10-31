@@ -1320,6 +1320,50 @@ class SqlDailyRollupTest(unittest.TestCase):
         self.assertEqual(fault_by_day.get("2026-10-11", 0.0), 0.0)
 
 
+class IntervalEvidenceDailyTest(unittest.TestCase):
+    def test_unknown_interval_marks_daily_not_assessed(self) -> None:
+        daily = [
+            {
+                "building_id": "B1",
+                "rule_id": "R1",
+                "equipment_id": "E1",
+                "utc_day": "2026-10-10",
+                "fault_seconds": 100.0,
+                "covered_seconds": 86400.0,
+                "status": "OK",
+            }
+        ]
+        capture.apply_interval_evidence_to_daily(
+            daily,
+            {
+                ("R1", "E1"): {
+                    "status": "INTERVAL_UNKNOWN",
+                    "reason_code": "series_empty_no_samples",
+                }
+            },
+        )
+        self.assertEqual(daily[0]["pair_status"], "interval_unknown")
+        self.assertIsNone(daily[0]["fault_seconds"])
+        self.assertEqual(daily[0]["interval_status"], "INTERVAL_UNKNOWN")
+
+    def test_synthetic_unknown_daily_rows(self) -> None:
+        rows = capture.apply_interval_unknown_daily_rows(
+            building_id="B1",
+            evidence_map={
+                ("R1", "E1"): {
+                    "status": "INTERVAL_UNKNOWN",
+                    "reason_code": "rule_not_in_registry",
+                }
+            },
+            window_start="2026-10-10T00:00:00Z",
+            window_end="2026-10-12T00:00:00Z",
+            daily_rows=[],
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertIsNone(rows[0]["fault_seconds"])
+        self.assertEqual(rows[0]["pair_status"], "interval_unknown")
+
+
 class FddRunBusyRetryTest(unittest.TestCase):
     def test_post_fdd_run_retries_409_then_succeeds(self) -> None:
         http = mock.MagicMock()

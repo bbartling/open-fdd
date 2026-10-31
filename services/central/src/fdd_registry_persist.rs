@@ -50,9 +50,58 @@ fn row_f64(row: &Value, key: &str) -> Option<f64> {
 
 const ELAPSED_MAX_GAP_SECONDS: i64 = 3600;
 
-/// Persisted daily buckets must not use proportional spreading; this status is
-/// stored on `fdd_run` when confirmed-series extraction cannot produce exact buckets.
-pub(crate) const INTERVAL_UNKNOWN_STATUS: &str = "INTERVAL_UNKNOWN";
+/// Daily bucket evidence could not be computed from the confirmed-fault series.
+pub(crate) const INTERVAL_EVIDENCE_UNKNOWN: &str = "INTERVAL_UNKNOWN";
+/// Daily bucket evidence was persisted from the confirmed-fault series.
+pub(crate) const INTERVAL_EVIDENCE_EXACT: &str = "INTERVAL_EXACT";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IntervalPersistReasonCode {
+    RegistryLoadFailed,
+    RuleNotInRegistry,
+    SeriesQueryFailed,
+    SeriesEmptyNoSamples,
+    SeriesExact,
+}
+
+impl IntervalPersistReasonCode {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::RegistryLoadFailed => "registry_load_failed",
+            Self::RuleNotInRegistry => "rule_not_in_registry",
+            Self::SeriesQueryFailed => "series_query_failed",
+            Self::SeriesEmptyNoSamples => "series_empty_no_samples",
+            Self::SeriesExact => "series_exact",
+        }
+    }
+}
+
+pub(crate) fn interval_persist_evidence_json(
+    status: &str,
+    reason_code: IntervalPersistReasonCode,
+    reason_detail: Option<&str>,
+) -> Value {
+    json!({
+        "status": status,
+        "reason_code": reason_code.as_str(),
+        "reason": reason_detail.unwrap_or(""),
+    })
+}
+
+fn enrich_stored_row_with_interval_evidence(body_row: &mut Value, detail: &Value) {
+    let Some(ip) = detail.get("interval_persist") else {
+        return;
+    };
+    let Some(obj) = body_row.as_object_mut() else {
+        return;
+    };
+    if let Some(status) = ip.get("status").and_then(Value::as_str) {
+        obj.insert("interval_status".into(), json!(status));
+    }
+    if let Some(code) = ip.get("reason_code").and_then(Value::as_str) {
+        obj.insert("interval_reason_code".into(), json!(code));
+    }
+}
 
 fn append_hold_to_daily_utc(
     out: &mut BTreeMap<NaiveDate, (f64, f64)>,
@@ -239,7 +288,10 @@ fn distribute_interval_buckets(
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ExactIntervalPlan {
     Buckets(Vec<BucketResult>),
-    SeriesUnavailable { reason: String },
+    SeriesUnavailable {
+        reason_code: IntervalPersistReasonCode,
+        reason_detail: String,
+    },
 }
 
 pub(crate) fn exact_interval_plan_from_confirmed_map(
@@ -249,7 +301,8 @@ pub(crate) fn exact_interval_plan_from_confirmed_map(
 ) -> Result<ExactIntervalPlan, IncrementalError> {
     if map.is_empty() {
         return Ok(ExactIntervalPlan::SeriesUnavailable {
-            reason: "confirmed_fault series empty".into(),
+            reason_code: IntervalPersistReasonCode::SeriesEmptyNoSamples,
+            reason_detail: String::new(),
         });
     }
     let buckets = interval_buckets_from_confirmed_fault_map(window, &map, sample_rows)?;
@@ -268,13 +321,15 @@ async fn exact_interval_plan_for_rule_row(
         Ok(reg) => reg,
         Err(err) => {
             return Ok(ExactIntervalPlan::SeriesUnavailable {
-                reason: err.to_string(),
+                reason_code: IntervalPersistReasonCode::RegistryLoadFailed,
+                reason_detail: err.to_string(),
             });
         }
     };
     let Some(rule) = reg.rules.iter().find(|spec| spec.rule_id == rule_id) else {
         return Ok(ExactIntervalPlan::SeriesUnavailable {
-            reason: format!("rule {rule_id} not in registry"),
+            reason_code: IntervalPersistReasonCode::RuleNotInRegistry,
+            reason_detail: rule_id.to_string(),
         });
     };
     let ws = window
@@ -296,7 +351,8 @@ async fn exact_interval_plan_for_rule_row(
     {
         Ok(map) => exact_interval_plan_from_confirmed_map(window, map, sample_rows),
         Err(err) => Ok(ExactIntervalPlan::SeriesUnavailable {
-            reason: err.to_string(),
+            reason_code: IntervalPersistReasonCode::SeriesQueryFailed,
+            reason_detail: err.to_string(),
         }),
     }
 }
@@ -401,7 +457,6 @@ pub async fn persist_registry_run_timescale(
                 let sample_rows =
                     row.get("sample_rows").and_then(Value::as_i64).unwrap_or(0) as i32;
                 if let Some(eq) = equipment_id {
-                    let mut persist_status = status.to_string();
                     let mut interval_persist: Option<Value> = None;
                     let mut interval_buckets: Option<Vec<BucketResult>> = None;
                     if item.outcome == RuleOutcome::Succeeded
@@ -419,14 +474,22 @@ pub async fn persist_registry_run_timescale(
                         .await
                         {
                             Ok(ExactIntervalPlan::Buckets(buckets)) => {
+                                interval_persist = Some(interval_persist_evidence_json(
+                                    INTERVAL_EVIDENCE_EXACT,
+                                    IntervalPersistReasonCode::SeriesExact,
+                                    None,
+                                ));
                                 interval_buckets = Some(buckets);
                             }
-                            Ok(ExactIntervalPlan::SeriesUnavailable { reason }) => {
-                                persist_status = INTERVAL_UNKNOWN_STATUS.to_string();
-                                interval_persist = Some(json!({
-                                    "status": INTERVAL_UNKNOWN_STATUS,
-                                    "reason": reason,
-                                }));
+                            Ok(ExactIntervalPlan::SeriesUnavailable {
+                                reason_code,
+                                reason_detail,
+                            }) => {
+                                interval_persist = Some(interval_persist_evidence_json(
+                                    INTERVAL_EVIDENCE_UNKNOWN,
+                                    reason_code,
+                                    Some(reason_detail.as_str()),
+                                ));
                             }
                             Err(err) => {
                                 return Err(anyhow!("interval buckets: {err}"));
@@ -458,7 +521,7 @@ pub async fn persist_registry_run_timescale(
                     .bind(poll)
                     .bind(confirm)
                     .bind(config_hash)
-                    .bind(&persist_status)
+                    .bind(status)
                     .bind(fault_seconds)
                     .bind(fault_hours)
                     .bind(sample_rows)
@@ -642,7 +705,8 @@ pub async fn active_generation_rows(
     for row in rows {
         let rule_id = row.try_get::<String, _>("rule_id")?;
         let detail: Value = row.try_get("detail")?;
-        let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+        let mut body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+        enrich_stored_row_with_interval_evidence(&mut body_row, &detail);
         out.push((rule_id, body_row));
     }
     Ok(out)
@@ -868,7 +932,8 @@ mod interval_daily_unit_tests {
         assert_eq!(
             plan,
             ExactIntervalPlan::SeriesUnavailable {
-                reason: "confirmed_fault series empty".into(),
+                reason_code: IntervalPersistReasonCode::SeriesEmptyNoSamples,
+                reason_detail: String::new(),
             }
         );
     }

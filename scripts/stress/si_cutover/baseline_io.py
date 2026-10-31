@@ -295,6 +295,8 @@ def validate_fdd_daily_row(row: dict[str, Any]) -> list[str]:
     for key in ("building_id", "rule_id", "equipment_id", "utc_day", "status"):
         if not str(row.get(key, "")).strip():
             errors.append(f"missing {key}")
+    if str(row.get("pair_status") or "") == "interval_unknown":
+        return errors
     for field in ("fault_seconds", "covered_seconds"):
         val = row.get(field)
         if val is None:

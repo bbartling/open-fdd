@@ -696,6 +696,93 @@ def fetch_run_status_rows(
     return out
 
 
+def fetch_interval_evidence_rows(
+    conn,
+    *,
+    building_id: str,
+    run_id: str,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """``detail.interval_persist`` per rule/equipment for the active generation."""
+    sql = """
+        SELECT rule_id, equipment_id, detail->'interval_persist'
+        FROM fdd_run
+        WHERE site_id = %s AND detail->>'run_id' = %s
+    """
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    with conn.cursor() as cur:
+        cur.execute(sql, (building_id, run_id))
+        for rule_id, equipment_id, payload in cur.fetchall():
+            if isinstance(payload, dict):
+                out[(rule_id, equipment_id)] = payload
+    return out
+
+
+def apply_interval_evidence_to_daily(
+    daily_rows: list[dict[str, Any]],
+    evidence_map: dict[tuple[str, str], dict[str, Any]],
+) -> None:
+    """Mark daily SQL rows unknown when interval bucket evidence was not persisted."""
+    for row in daily_rows:
+        key = (row["rule_id"], row["equipment_id"])
+        evidence = evidence_map.get(key)
+        if not evidence:
+            continue
+        interval_status = str(evidence.get("status") or "")
+        row["interval_status"] = interval_status
+        code = evidence.get("reason_code")
+        if code is not None:
+            row["interval_reason_code"] = str(code)
+        if interval_status == "INTERVAL_UNKNOWN":
+            row["pair_status"] = "interval_unknown"
+            row["fault_seconds"] = None
+            row["covered_seconds"] = None
+            row["status"] = "INTERVAL_UNKNOWN"
+
+
+def apply_interval_unknown_daily_rows(
+    *,
+    building_id: str,
+    evidence_map: dict[tuple[str, str], dict[str, Any]],
+    window_start: str,
+    window_end: str,
+    daily_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Synthetic daily rows when SQL has no buckets but interval evidence is unknown."""
+    from datetime import datetime
+
+    start = datetime.fromisoformat(window_start.replace("Z", "+00:00"))
+    end = datetime.fromisoformat(window_end.replace("Z", "+00:00"))
+    existing = {
+        (row["rule_id"], row["equipment_id"], row["utc_day"]) for row in daily_rows
+    }
+    out: list[dict[str, Any]] = []
+    for (rule_id, equipment_id), evidence in sorted(evidence_map.items()):
+        if str(evidence.get("status") or "") != "INTERVAL_UNKNOWN":
+            continue
+        day = start.date()
+        end_day = end.date()
+        while day < end_day:
+            utc_day = day.isoformat()
+            key = (rule_id, equipment_id, utc_day)
+            if key not in existing:
+                out.append(
+                    {
+                        "building_id": building_id,
+                        "rule_id": rule_id,
+                        "equipment_id": equipment_id,
+                        "utc_day": utc_day,
+                        "fault_seconds": None,
+                        "covered_seconds": None,
+                        "status": "INTERVAL_UNKNOWN",
+                        "interval_status": "INTERVAL_UNKNOWN",
+                        "interval_reason_code": str(evidence.get("reason_code") or ""),
+                        "pair_status": "interval_unknown",
+                    }
+                )
+            day = day.fromordinal(day.toordinal() + 1)
+    return out
+
+
 def no_applicable_status_rows(status_map: dict[tuple[str, str], str]) -> list[dict[str, str]]:
     """Keep persisted no-target statuses visible even when there is no equipment row."""
     out = []
@@ -1240,8 +1327,8 @@ def daily_fault_and_covered_seconds(
     """Eligible-hold seconds per UTC day — mirrors ``open_fdd.rules.base.hours_true``.
 
     SQL ``fdd_interval_result`` fault/covered seconds come from the product FDD
-    bucket writer (``services/central/src/fdd_registry_persist.rs`` distributes
-    run totals into UTC-hour buckets). The pandas oracle uses the same eligible
+    bucket writer (``services/central/src/fdd_registry_persist.rs`` exact
+    confirmed-fault daily buckets). The pandas oracle uses the same eligible
     forward-hold semantics as ``hours_true`` for fault hours; we convert to
     seconds and roll up to UTC calendar days for P0 comparison.
     """
@@ -1752,6 +1839,24 @@ def capture_site(
         merge_status(
             sql_daily,
             {key: value for key, value in status_map.items() if key[0] in batch_rules},
+        )
+        evidence_map = fetch_interval_evidence_rows(
+            conn, building_id=building_id, run_id=run_record["run_id"]
+        )
+        apply_interval_evidence_to_daily(
+            sql_daily,
+            {key: value for key, value in evidence_map.items() if key[0] in batch_rules},
+        )
+        sql_daily.extend(
+            apply_interval_unknown_daily_rows(
+                building_id=building_id,
+                evidence_map={
+                    key: value for key, value in evidence_map.items() if key[0] in batch_rules
+                },
+                window_start=ws,
+                window_end=we,
+                daily_rows=sql_daily,
+            )
         )
     assert_no_interleaved_fdd_run(
         conn,
