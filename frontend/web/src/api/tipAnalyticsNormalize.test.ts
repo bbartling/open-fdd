@@ -9,6 +9,7 @@ import {
 } from "./centralOverview";
 import { ruleResultChart } from "./vibeCharts";
 import {
+  ECONOMIZER_DT_MIN_C,
   normalizeTipOverviewEnvelope,
   tipOatBinLo,
 } from "./tipAnalyticsNormalize";
@@ -137,7 +138,7 @@ describe("C4 tip Overview known answers", () => {
       65 - (72 + (35 / 100) * (50 - 72)),
       6,
     );
-    const scatter = econDeltaScatter(env.points, 10);
+    const scatter = econDeltaScatter(env.points, ECONOMIZER_DT_MIN_C);
     expect(scatter).toBeTruthy();
     expect(scatter?.layout?.xaxis?.title).toMatch(/OAT − RAT/);
     expect(scatter?.layout?.yaxis?.title).toMatch(/MAT − RAT/);
@@ -147,6 +148,11 @@ describe("C4 tip Overview known answers", () => {
     const temps = econTempsOverlay(env.points, null);
     expect(temps.figure?.layout?.title).toMatch(/Free-cooling temps/);
     expect(temps.figure?.data?.some((t) => t.name === "OAT")).toBe(true);
+    const oatTrace = temps.figure?.data?.find((t) => t.name === "OAT");
+    expect(oatTrace?.y?.every((y) => y != null && Number.isFinite(Number(y)))).toBe(
+      true,
+    );
+    expect(temps.figure?.data?.some((t) => t.name === "SAT")).toBe(true);
     expect(temps.figure?.data?.some((t) => t.name === "OA damper %")).toBe(
       true,
     );

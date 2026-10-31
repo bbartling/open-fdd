@@ -38,7 +38,10 @@ import {
   isZoneTerminalEquipment,
 } from "../lib/overviewMetrics";
 import { naturalCompare } from "../lib/naturalSort";
-import { normalizeTipOverviewEnvelope } from "./tipAnalyticsNormalize";
+import {
+  ECONOMIZER_DT_MIN_C,
+  normalizeTipOverviewEnvelope,
+} from "./tipAnalyticsNormalize";
 
 function num(v: unknown): number | null {
   if (v == null || v === "") return null;
@@ -610,7 +613,7 @@ export function econTempsOverlay(
       mode: "lines",
       name: "OAT",
       x,
-      y: rows.map((r) => showQuantity(num(r.oat_f), unitSystem, "temperature")),
+      y: rows.map((r) => showQuantity(num(r.oa_t), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(0) },
     },
     {
@@ -618,7 +621,7 @@ export function econTempsOverlay(
       mode: "lines",
       name: "RAT",
       x,
-      y: rows.map((r) => showQuantity(num(r.rat_f), unitSystem, "temperature")),
+      y: rows.map((r) => showQuantity(num(r.rat), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(5) },
     },
     {
@@ -626,17 +629,17 @@ export function econTempsOverlay(
       mode: "lines",
       name: "MAT",
       x,
-      y: rows.map((r) => showQuantity(num(r.mat_f), unitSystem, "temperature")),
+      y: rows.map((r) => showQuantity(num(r.mat), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(3) },
     },
   ];
-  if (rows.some((r) => num(r.sat_f) != null)) {
+  if (rows.some((r) => num(r.sat) != null)) {
     data.push({
       type: "scatter",
       mode: "lines",
       name: "SAT",
       x,
-      y: rows.map((r) => showQuantity(num(r.sat_f), unitSystem, "temperature")),
+      y: rows.map((r) => showQuantity(num(r.sat), unitSystem, "temperature")),
       line: { width: 1.5, color: rainbowColor(6) },
     });
   }
@@ -792,7 +795,7 @@ export async function fetchCentralOverview(opts: {
   const t0 = performance.now();
   const building_id = opts.building_id;
   const oatErr = opts.oat_err ?? 5;
-  const dtMin = opts.dt_min_c ?? 10 * (5 / 9);
+  const dtMin = opts.dt_min_c ?? ECONOMIZER_DT_MIN_C;
   const signal = opts.signal;
 
   // Resolve package sampling *before* analytics so historical packages

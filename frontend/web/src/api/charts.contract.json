@@ -27,7 +27,7 @@
   "tip_timescale_field_aliases": {
     "notes": [
       "Soft-OPEN C4: tip Timescale /api/analytics envelopes use warehouse names;",
-      "Overview Plotly builders consume vibe19 names via tipAnalyticsNormalize."
+      "Overview Plotly builders consume SI canonical point keys (oa_t, rat, mat, sat in °C) via tipAnalyticsNormalize."
     ],
     "runtime": {
       "plant_group.ahu": "air",
@@ -41,10 +41,10 @@
     "economizer": {
       "rows": "points",
       "ts": "timestamp_utc",
-      "oa_t": "oat_f",
-      "rat": "rat_f",
-      "mat": "mat_f",
-      "sat": "sat_f",
+      "oa_t": "oa_t",
+      "rat": "rat",
+      "mat": "mat",
+      "sat": "sat",
       "oa_damper_pct": "damper_fb_pct"
     },
     "bas-vs-web-oat": {
