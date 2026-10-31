@@ -378,6 +378,16 @@ async fn purge_site(pool: &PgPool, site: &str) {
         .execute(pool)
         .await
         .expect("purge samples");
+    sqlx::query("DELETE FROM role_map WHERE building_id = $1")
+        .bind(site)
+        .execute(pool)
+        .await
+        .expect("purge role_map");
+    sqlx::query("DELETE FROM point_map WHERE site_id = $1")
+        .bind(site)
+        .execute(pool)
+        .await
+        .expect("purge point_map");
     sqlx::query("DELETE FROM equipment WHERE building_id = $1")
         .bind(site)
         .execute(pool)
