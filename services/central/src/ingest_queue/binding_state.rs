@@ -492,7 +492,6 @@ fn hour_accounted_from_samples(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
 
     fn h(n: i64) -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-06-01T00:00:00Z")
