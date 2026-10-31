@@ -90,14 +90,14 @@ class CaptureFddIsolationPostgresTests(unittest.TestCase):
         original = capture.fetch_sql_daily_rows
         foreign_conn = parity.connect_with_retry(os.environ["OPENFDD_DATABASE_URL"])
 
-        def fetch_with_interleave(conn, **kwargs):
+        def fetch_with_interleave(_conn, **_kwargs):
             _insert_fdd_run(
                 foreign_conn,
                 site_id=self.site_id,
                 run_id="run-afdd-mid-readback",
                 created_at=datetime.now(timezone.utc),
             )
-            return original(conn, **kwargs)
+            return []
 
         try:
             with mock.patch.object(capture, "fetch_sql_daily_rows", side_effect=fetch_with_interleave):
