@@ -317,6 +317,39 @@ class Sql407VerifierRegressionTests(unittest.TestCase):
                     if name == "open_fdd" or name.startswith("open_fdd."):
                         del sys.modules[name]
 
+    def test_sql407_02_p1_wrong_external_rev_pin_fails(self) -> None:
+        from scripts.stress.si_cutover import p1_candidate_identity as p1id
+
+        self.pc.set_p1_identity_pins(
+            p1id.P1IdentityPins(expected_candidate_rev="0" * 40, require_external=False)
+        )
+        try:
+            errors, _evidence = self.pc.verify_current_p1_oracle_provenance()
+            self.assertTrue(any("pinned candidate rev" in e for e in errors))
+        finally:
+            self.pc.set_p1_identity_pins(None)
+
+    def test_sql407_02_p1_wrong_external_tree_pin_fails_even_if_repo_computed(self) -> None:
+        from scripts.stress.si_cutover import p1_candidate_identity as p1id
+
+        rev, _tree = p1id.compute_repo_candidate_pins(REPO)
+        self.pc.set_p1_identity_pins(
+            p1id.P1IdentityPins(
+                expected_candidate_rev=rev,
+                expected_open_fdd_tree_sha256="f" * 64,
+                require_external=False,
+            )
+        )
+        try:
+            errors, evidence = self.pc.verify_current_p1_oracle_provenance()
+            self.assertTrue(any("tree sha256" in e for e in errors))
+            self.assertNotEqual(
+                evidence.get("resolved_open_fdd_tree_sha256"),
+                evidence.get("pinned_open_fdd_tree_sha256"),
+            )
+        finally:
+            self.pc.set_p1_identity_pins(None)
+
     def test_sql407_05_vacuous_rule_attempted_fails(self) -> None:
         golden = {
             "building_id": "B",

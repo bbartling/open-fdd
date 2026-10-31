@@ -11,6 +11,9 @@ from typing import Any
 
 MANIFEST_SCHEMA = "openfdd-si-ip-baseline-manifest-v1"
 
+# SHA-256 digests in the manifest attest file bytes on disk; they do not authenticate
+# producer identity or pin a git revision. External candidate pins cover P1 oracle provenance.
+
 MANDATORY_SITE_ARTIFACTS: tuple[str, ...] = (
     "sql_fdd_daily.jsonl.gz",
     "pandas_fdd_daily.jsonl.gz",
@@ -51,6 +54,39 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def manifest_path_errors(name: str, base_dir: Path) -> list[str]:
+    """Reject unsafe or ambiguous manifest file paths before opening files."""
+    errors: list[str] = []
+    if not name:
+        errors.append("manifest file entry missing name")
+        return errors
+    if name != Path(name).as_posix():
+        errors.append(f"manifest path must use forward slashes: {name!r}")
+    if name.startswith("/") or name.startswith("\\"):
+        errors.append(f"manifest path must not be absolute: {name}")
+    if Path(name).is_absolute():
+        errors.append(f"manifest path must not be absolute: {name}")
+    if ".." in Path(name).parts:
+        errors.append(f"manifest path must not traverse parent: {name}")
+    if "\0" in name:
+        errors.append(f"manifest path must not contain NUL: {name!r}")
+    try:
+        base_resolved = base_dir.resolve()
+        target = (base_dir / name).resolve()
+        if not target.is_relative_to(base_resolved):
+            errors.append(f"manifest path escapes baseline directory: {name}")
+    except OSError as exc:
+        errors.append(f"manifest path could not be resolved: {name}: {exc}")
+        return errors
+    walked = base_dir
+    for part in Path(name).parts:
+        walked = walked / part
+        if walked.is_symlink():
+            errors.append(f"manifest path must not use symlinks: {name}")
+            break
+    return errors
 
 
 def manifest_entry_tier(relative_posix: str) -> str:
@@ -136,6 +172,7 @@ def _validate_manifest_files(
         if not name:
             errors.append("manifest file entry missing name")
             continue
+        errors.extend(manifest_path_errors(name, base_dir))
         listed_names.add(name)
         expected = str(entry.get("sha256") or "")
         if not expected:

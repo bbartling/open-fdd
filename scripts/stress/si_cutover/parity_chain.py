@@ -24,58 +24,65 @@ if str(ROOT) not in sys.path:
 
 from scripts.ci import unit_contract_lib as uc  # noqa: E402
 from scripts.stress.si_cutover import baseline_io as bio  # noqa: E402
+from scripts.stress.si_cutover import p1_candidate_identity as p1id  # noqa: E402
 
 FROZEN_IP_ORACLE_VERSION = "4.4.9"
 FROZEN_IP_ORACLE_GIT_HEAD = "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0"
 P1_ALGORITHM_LABEL = "current-algorithm unit commutation (not frozen 4.4.9 reproduction)"
 
+_p1_identity_pins_override: p1id.P1IdentityPins | None = None
+
+
+def set_p1_identity_pins(pins: p1id.P1IdentityPins | None) -> None:
+    """Test/gate hook: override env pins (external expected rev / tree hash)."""
+    global _p1_identity_pins_override
+    _p1_identity_pins_override = pins
+
+
+def resolve_p1_identity_pins() -> p1id.P1IdentityPins:
+    if _p1_identity_pins_override is not None:
+        return _p1_identity_pins_override
+    return p1id.pins_from_environment()
+
 
 def _open_fdd_tree_sha256(package_root: Path) -> str:
-    digest = hashlib.sha256()
-    for path in sorted(package_root.rglob("*.py")):
-        if any(part in {".git", "__pycache__", ".venv", "venv"} for part in path.parts):
-            continue
-        digest.update(path.relative_to(package_root).as_posix().encode())
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
-        digest.update(b"\0")
-    return digest.hexdigest()
+    return p1id.open_fdd_tree_sha256(package_root)
 
 
 def expected_p1_candidate_oracle_evidence() -> dict[str, Any]:
-    """Pinned candidate oracle identity for current-repo P1 (not frozen 4.4.9)."""
-    import subprocess
+    """Record resolved candidate oracle metadata for P1 evidence rows."""
     import tomllib
 
     repo = REPO.resolve()
     project = tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))
     expected_version = str(project.get("project", {}).get("version") or "")
-    git_head = ""
-    try:
-        git_head = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    except (subprocess.CalledProcessError, OSError):
-        git_head = ""
+    git_head = p1id.git_head_rev(repo)
     pkg_root = repo / "open_fdd"
+    pins = resolve_p1_identity_pins()
     return {
         "repo_root": str(repo),
         "expected_version": expected_version,
         "expected_git_head": git_head,
         "expected_open_fdd_tree_sha256": _open_fdd_tree_sha256(pkg_root) if pkg_root.is_dir() else "",
+        "pinned_candidate_rev": pins.expected_candidate_rev,
+        "pinned_open_fdd_tree_sha256": pins.expected_open_fdd_tree_sha256,
+        "require_external_identity_pins": pins.require_external,
         "algorithm_label": P1_ALGORITHM_LABEL,
     }
 
 
 def verify_current_p1_oracle_provenance() -> tuple[tuple[str, ...], dict[str, Any]]:
     """Fail P1 when the frozen IP oracle or a foreign open_fdd install is used."""
-    import subprocess
-
+    pins = resolve_p1_identity_pins()
     evidence = expected_p1_candidate_oracle_evidence()
     errors: list[str] = []
+    if pins.require_external and not (
+        pins.expected_candidate_rev and pins.expected_open_fdd_tree_sha256
+    ):
+        errors.append(
+            "P1: external candidate identity pins required "
+            "(OPENFDD_P1_EXPECTED_CANDIDATE_REV and OPENFDD_P1_EXPECTED_OPEN_FDD_TREE_SHA256)"
+        )
     try:
         import open_fdd
     except ImportError:
@@ -106,32 +113,27 @@ def verify_current_p1_oracle_provenance() -> tuple[tuple[str, ...], dict[str, An
             "P1: frozen IP oracle 4.4.9 is loaded; current candidate pandas SI required"
         )
 
-    expected_tree = str(evidence.get("expected_open_fdd_tree_sha256") or "")
-    if expected_tree and mod_path.is_file():
-        actual_tree = _open_fdd_tree_sha256(mod_path.parent)
-        if actual_tree != expected_tree:
-            errors.append(
-                "P1: open_fdd source tree hash mismatch (stale or foreign implementation)"
-            )
-
-    try:
-        git_head = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        evidence = {**evidence, "resolved_git_head": git_head}
-        if git_head == FROZEN_IP_ORACLE_GIT_HEAD and version == FROZEN_IP_ORACLE_VERSION:
-            errors.append("P1: git HEAD matches frozen 35c17ac with 4.4.9 oracle")
-    except (subprocess.CalledProcessError, OSError):
-        pass
-
+    resolved_git_head = p1id.git_head_rev(repo_root)
+    resolved_tree = _open_fdd_tree_sha256(mod_path.parent) if mod_path.is_file() else ""
     evidence = {
         **evidence,
+        "resolved_git_head": resolved_git_head,
+        "resolved_open_fdd_tree_sha256": resolved_tree,
         "resolved_open_fdd_file": str(mod_path),
         "resolved_version": version,
     }
+    if pins.expected_candidate_rev and resolved_git_head != pins.expected_candidate_rev:
+        errors.append(
+            f"P1: resolved git HEAD {resolved_git_head!r} != pinned candidate rev "
+            f"{pins.expected_candidate_rev!r}"
+        )
+    if pins.expected_open_fdd_tree_sha256 and resolved_tree != pins.expected_open_fdd_tree_sha256:
+        errors.append(
+            "P1: imported open_fdd tree sha256 != pinned expected "
+            f"{pins.expected_open_fdd_tree_sha256}"
+        )
+    if resolved_git_head == FROZEN_IP_ORACLE_GIT_HEAD and version == FROZEN_IP_ORACLE_VERSION:
+        errors.append("P1: git HEAD matches frozen 35c17ac with 4.4.9 oracle")
     return tuple(errors), evidence
 
 ANALYTICS_REL_TOL = 1e-6

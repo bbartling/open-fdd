@@ -230,6 +230,81 @@ class BaselineManifestIntegrityTests(unittest.TestCase):
             )
             self.assertTrue(any("window_start mismatch" in e for e in errors))
 
+    def test_negative_manifest_path_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_min_site_tree(root)
+            rel = "../outside.txt"
+            (root / "outside.txt").write_text("x", encoding="utf-8")
+            manifest_path = root / "manifest.sha256.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema": self.bio.MANIFEST_SCHEMA,
+                        "meta": {"sites": [{"building_id": "SITE_A"}]},
+                        "files": [
+                            {
+                                "name": rel,
+                                "bytes": 1,
+                                "sha256": self.bio.sha256_file(root / "outside.txt"),
+                                "tier": "ancillary",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _, errors = self.bio.verify_baseline_for_p3(root, building_id="SITE_A")
+            self.assertTrue(any("traverse" in e or "escapes" in e for e in errors))
+
+    def test_negative_manifest_absolute_path(self) -> None:
+        errors = self.bio.manifest_path_errors("/etc/passwd", Path("/tmp/base"))
+        self.assertTrue(any("absolute" in e for e in errors))
+
+    def test_negative_manifest_symlink_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_min_site_tree(root)
+            target = root / "SITE_A" / "sql_fdd_daily.jsonl.gz"
+            link = root / "SITE_A" / "evil.jsonl.gz"
+            link.symlink_to(target)
+            rel = "SITE_A/evil.jsonl.gz"
+            manifest_path = root / "manifest.sha256.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "schema": self.bio.MANIFEST_SCHEMA,
+                        "meta": {
+                            "sites": [
+                                {
+                                    "building_id": "SITE_A",
+                                    "window_start": "2026-06-01T00:00:00Z",
+                                    "window_end": "2026-06-02T00:00:00Z",
+                                }
+                            ]
+                        },
+                        "files": [
+                            {
+                                "name": rel,
+                                "bytes": target.stat().st_size,
+                                "sha256": self.bio.sha256_file(link),
+                                "tier": "mandatory",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _, errors = self.bio.verify_baseline_for_p3(root, building_id="SITE_A")
+            self.assertTrue(any("symlink" in e for e in errors))
+
+    def test_negative_malformed_manifest_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "manifest.sha256.json").write_text("{not-json", encoding="utf-8")
+            _, errors = self.bio.verify_baseline_for_p3(root, building_id="SITE_A")
+            self.assertTrue(any("JSON invalid" in e for e in errors))
+
 
 if __name__ == "__main__":
     unittest.main()

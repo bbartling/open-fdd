@@ -15,6 +15,9 @@ on:
       - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_sql407_verifier_regressions.py"
+      - "tests/qualification/test_baseline_manifest_integrity.py"
+      - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
       - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
@@ -38,6 +41,9 @@ on:
       - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
       - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_sql407_verifier_regressions.py"
+      - "tests/qualification/test_baseline_manifest_integrity.py"
+      - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
       - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "sql/contract/goldens/**"
@@ -74,8 +80,16 @@ jobs:
           --health-retries 20
     env:
       OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+      OPENFDD_P1_REQUIRE_EXTERNAL_IDENTITY_PINS: "1"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Pin external P1 candidate identity (outside parity_chain)
+        run: |
+          rev="$(git rev-parse HEAD)"
+          tree="$(python3 -c "from pathlib import Path; from scripts.stress.si_cutover.p1_candidate_identity import compute_repo_candidate_pins; print(compute_repo_candidate_pins(Path('.'))[1])")"
+          echo "OPENFDD_P1_EXPECTED_CANDIDATE_REV=${rev}" >> "$GITHUB_ENV"
+          echo "OPENFDD_P1_EXPECTED_OPEN_FDD_TREE_SHA256=${tree}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
@@ -190,6 +204,13 @@ jobs:
 
       - name: T1284-4 unit-vector + FC1 + analytics probe self-test
         run: python3 scripts/stress/si_parity_gate.py --mutation-self-test
+
+      - name: SI cutover verifier regressions (SQL407 / C0)
+        run: |
+          python3 -B -m unittest \
+            tests.qualification.test_sql407_verifier_regressions \
+            tests.qualification.test_baseline_manifest_integrity \
+            tests.qualification.test_capture_fdd_isolation_postgres -v
 
       - name: Qualification unit tests
         run: python3 -B -m unittest discover -s tests/qualification -p 'test_si_parity*.py' -v
