@@ -153,7 +153,12 @@ async fn seed_provider_start(pool: &PgPool) {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::await_holding_lock,
+    reason = "serialize shared t1423-tenant Postgres rows with T1423-4 cancel harness"
+)]
 async fn t1423_3_gap_planner_skips_stored_and_not_expected_hours() {
+    let _env = crate::test_env_lock::lock_env();
     let Some(pool) = test_pool().await else {
         eprintln!("OPENFDD_TEST_DATABASE_URL unset; skipping T1423-3");
         return;
