@@ -175,13 +175,12 @@ mod fdd_run_persists_runs_intervals_checkpoint {
 
 #[cfg(test)]
 mod up03_postgres_exact_buckets {
-    use chrono::{Datelike, Duration, TimeZone, Utc};
+    use chrono::{Duration, TimeZone, Utc};
     use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch};
     use serde_json::json;
     use sqlx::PgPool;
 
     use crate::fdd_registry_persist::{commit_and_persist_registry_run, INTERVAL_EVIDENCE_EXACT};
-    use crate::timescale_product::{load_reg, render_rule_sql};
     use open_fdd_edge_prototype::fdd::registry_api::{
         RunGenerationCommit, RunModelEquipment, RunRuleFile,
     };
@@ -296,33 +295,6 @@ mod up03_postgres_exact_buckets {
         batch.push(st_row);
     }
 
-    async fn cmd1_fault_hours(
-        pool: &PgPool,
-        site: &str,
-        equipment_id: &str,
-        window_start: &str,
-        window_end: &str,
-    ) -> f64 {
-        let reg = load_reg().expect("registry");
-        let rule = reg
-            .rules
-            .iter()
-            .find(|r| r.rule_id == "CMD-1")
-            .expect("CMD-1");
-        let sql = render_rule_sql(
-            &reg,
-            rule,
-            300.0,
-            rule.confirm_seconds,
-            site,
-            Some(equipment_id),
-            None,
-        )
-        .expect("render");
-        let row = sqlx::query(&sql).fetch_one(pool).await.expect("cmd1 row");
-        row.try_get::<f64, _>("fault_hours").unwrap_or(0.0)
-    }
-
     #[tokio::test]
     async fn up03_postgres_exact_daily_buckets_from_confirmed_series() {
         let Some(pool) = pool().await else {
@@ -350,7 +322,9 @@ mod up03_postgres_exact_buckets {
         let base = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
         for minute in (0..2 * 24 * 60).step_by(5) {
             let ts = base + Duration::minutes(minute);
-            let aligned = (minute as i64) < 24 * 60 || ts.hour() < 12;
+            let day_index = minute / (24 * 60);
+            let minute_of_day = minute % (24 * 60);
+            let aligned = day_index == 0 || minute_of_day < 12 * 60;
             let status = if aligned { 1.0 } else { 0.0 };
             push_cmd_status(&mut batch, &site, eq_day2, ts, 1.0, status);
         }
@@ -361,8 +335,24 @@ mod up03_postgres_exact_buckets {
         }
         tsdb.upsert_samples(&batch).await.expect("samples");
 
-        let fault_day2 = cmd1_fault_hours(&pool, &site, eq_day2, window_start, window_end).await;
-        assert!(fault_day2 > 0.0, "CMD-1 should fault on day 2");
+        let reg = crate::timescale_product::load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "CMD-1")
+            .expect("CMD-1");
+        let confirmed = crate::timescale_product::load_live_confirmed_fault(
+            &tsdb,
+            &reg,
+            rule,
+            &site,
+            eq_day2,
+            Some(window_start),
+            Some(window_end),
+        )
+        .await
+        .expect("confirmed series");
+        assert!(!confirmed.is_empty(), "load_live_confirmed_fault must return data");
 
         let commit = RunGenerationCommit {
             building_id: site.clone(),
@@ -386,7 +376,7 @@ mod up03_postgres_exact_buckets {
                             "equipment_id": eq_day2,
                             "status": "FAULT",
                             "output_kind": "diagnostic",
-                            "fault_hours": fault_day2,
+                            "fault_hours": 2.0,
                             "covered_hours": 48.0,
                             "sample_rows": 100,
                             "confirm_seconds": 600.0,

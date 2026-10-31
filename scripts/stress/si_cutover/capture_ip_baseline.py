@@ -704,16 +704,26 @@ def fetch_interval_evidence_rows(
 ) -> dict[tuple[str, str], dict[str, Any]]:
     """``detail.interval_persist`` per rule/equipment for the active generation."""
     sql = """
-        SELECT rule_id, equipment_id, detail->'interval_persist'
+        SELECT rule_id, equipment_id, detail->'interval_persist' AS interval_persist
         FROM fdd_run
         WHERE site_id = %s AND detail->>'run_id' = %s
     """
     out: dict[tuple[str, str], dict[str, Any]] = {}
     with conn.cursor() as cur:
         cur.execute(sql, (building_id, run_id))
-        for rule_id, equipment_id, payload in cur.fetchall():
+        for row in cur.fetchall():
+            if isinstance(row, dict):
+                rule_id = row.get("rule_id")
+                equipment_id = row.get("equipment_id")
+                payload = row.get("interval_persist")
+            else:
+                rule_id = row[0]
+                equipment_id = row[1]
+                payload = row[2]
+            if not rule_id or not equipment_id:
+                continue
             if isinstance(payload, dict):
-                out[(rule_id, equipment_id)] = payload
+                out[(str(rule_id), str(equipment_id))] = payload
     return out
 
 
