@@ -50,15 +50,89 @@ fn row_f64(row: &Value, key: &str) -> Option<f64> {
 
 const ELAPSED_MAX_GAP_SECONDS: i64 = 3600;
 
+/// Persisted daily buckets must not use proportional spreading; this status is
+/// stored on `fdd_run` when confirmed-series extraction cannot produce exact buckets.
+pub(crate) const INTERVAL_UNKNOWN_STATUS: &str = "INTERVAL_UNKNOWN";
+
+fn append_hold_to_daily_utc(
+    out: &mut BTreeMap<NaiveDate, (f64, f64)>,
+    hold_start: DateTime<Utc>,
+    hold_seconds: f64,
+    confirmed: bool,
+    clip: Option<AnalysisWindow>,
+) {
+    if hold_seconds <= 0.0 || !hold_seconds.is_finite() {
+        return;
+    }
+    let mut remaining = hold_seconds;
+    let mut cursor = hold_start;
+    while remaining > 0.0 {
+        if let Some(window) = clip {
+            if cursor >= window.end() {
+                break;
+            }
+            if cursor < window.start() {
+                let skip = (window.start() - cursor).num_seconds() as f64;
+                if skip >= remaining {
+                    break;
+                }
+                remaining -= skip;
+                cursor = window.start();
+                continue;
+            }
+        }
+        let day = cursor.date_naive();
+        let mut segment_end = day
+            .succ_opt()
+            .and_then(|next| next.and_hms_opt(0, 0, 0))
+            .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc))
+            .filter(|midnight| *midnight > cursor)
+            .map(|midnight| {
+                let cap = (midnight - cursor).num_seconds() as f64;
+                if cap >= remaining {
+                    cursor + chrono::Duration::milliseconds((remaining * 1000.0) as i64)
+                } else {
+                    midnight
+                }
+            })
+            .unwrap_or_else(|| {
+                cursor + chrono::Duration::milliseconds((remaining * 1000.0) as i64)
+            });
+        if let Some(window) = clip {
+            if segment_end > window.end() {
+                segment_end = window.end();
+            }
+        }
+        let segment_secs = (segment_end - cursor).num_seconds();
+        if segment_secs <= 0 {
+            break;
+        }
+        let segment = segment_secs as f64;
+        let slot = out.entry(day).or_insert((0.0, 0.0));
+        slot.1 += segment;
+        if confirmed {
+            slot.0 += segment;
+        }
+        remaining -= segment;
+        cursor = segment_end;
+    }
+}
+
 /// Per-UTC-day fault/covered seconds from a confirmed_fault series (pandas hold semantics).
 fn daily_utc_fault_covered_from_confirmed_points(
     points: &[(DateTime<Utc>, bool)],
+    clip: Option<AnalysisWindow>,
 ) -> BTreeMap<NaiveDate, (f64, f64)> {
     let mut sorted = points.to_vec();
     sorted.sort_by_key(|(ts, _)| *ts);
     let mut out: BTreeMap<NaiveDate, (f64, f64)> = BTreeMap::new();
     for i in 0..sorted.len() {
         let (ts, confirmed) = sorted[i];
+        if let Some(window) = clip {
+            if ts >= window.end() {
+                continue;
+            }
+        }
         let hold = if i + 1 < sorted.len() {
             let delta = (sorted[i + 1].0 - ts).num_seconds();
             if delta > 0 && delta <= ELAPSED_MAX_GAP_SECONDS {
@@ -69,15 +143,7 @@ fn daily_utc_fault_covered_from_confirmed_points(
         } else {
             0.0
         };
-        if hold <= 0.0 {
-            continue;
-        }
-        let day = ts.date_naive();
-        let slot = out.entry(day).or_insert((0.0, 0.0));
-        slot.1 += hold;
-        if confirmed {
-            slot.0 += hold;
-        }
+        append_hold_to_daily_utc(&mut out, ts, hold, confirmed, clip);
     }
     out
 }
@@ -123,10 +189,12 @@ fn interval_buckets_from_confirmed_fault_map(
     if points.is_empty() {
         return Ok(Vec::new());
     }
-    let daily = daily_utc_fault_covered_from_confirmed_points(&points);
+    let daily = daily_utc_fault_covered_from_confirmed_points(&points, Some(window));
     interval_buckets_from_daily_utc(window, daily, sample_rows)
 }
 
+/// Legacy proportional spreading (4.0.6). Not used for persisted qualification buckets.
+#[cfg(test)]
 fn distribute_interval_buckets(
     grid: BucketGrid,
     window: AnalysisWindow,
@@ -166,6 +234,71 @@ fn distribute_interval_buckets(
         )?);
     }
     Ok(out)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ExactIntervalPlan {
+    Buckets(Vec<BucketResult>),
+    SeriesUnavailable { reason: String },
+}
+
+pub(crate) fn exact_interval_plan_from_confirmed_map(
+    window: AnalysisWindow,
+    map: HashMap<String, bool>,
+    sample_rows: i32,
+) -> Result<ExactIntervalPlan, IncrementalError> {
+    if map.is_empty() {
+        return Ok(ExactIntervalPlan::SeriesUnavailable {
+            reason: "confirmed_fault series empty".into(),
+        });
+    }
+    let buckets = interval_buckets_from_confirmed_fault_map(window, &map, sample_rows)?;
+    Ok(ExactIntervalPlan::Buckets(buckets))
+}
+
+async fn exact_interval_plan_for_rule_row(
+    tsdb: &Tsdb,
+    rule_id: &str,
+    site_id: &str,
+    equipment_id: &str,
+    window: AnalysisWindow,
+    sample_rows: i32,
+) -> Result<ExactIntervalPlan, IncrementalError> {
+    let reg = match crate::timescale_product::load_reg() {
+        Ok(reg) => reg,
+        Err(err) => {
+            return Ok(ExactIntervalPlan::SeriesUnavailable {
+                reason: err.to_string(),
+            });
+        }
+    };
+    let Some(rule) = reg.rules.iter().find(|spec| spec.rule_id == rule_id) else {
+        return Ok(ExactIntervalPlan::SeriesUnavailable {
+            reason: format!("rule {rule_id} not in registry"),
+        });
+    };
+    let ws = window
+        .start()
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let we = window
+        .end()
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    match crate::timescale_product::load_live_confirmed_fault(
+        tsdb,
+        &reg,
+        rule,
+        site_id,
+        equipment_id,
+        Some(ws.as_str()),
+        Some(we.as_str()),
+    )
+    .await
+    {
+        Ok(map) => exact_interval_plan_from_confirmed_map(window, map, sample_rows),
+        Err(err) => Ok(ExactIntervalPlan::SeriesUnavailable {
+            reason: err.to_string(),
+        }),
+    }
 }
 
 async fn model_revision_for_site(tsdb: &Tsdb, site_id: &str) -> Result<String> {
@@ -267,13 +400,46 @@ pub async fn persist_registry_run_timescale(
                 let fault_hours = row_f64(row, "fault_hours");
                 let sample_rows =
                     row.get("sample_rows").and_then(Value::as_i64).unwrap_or(0) as i32;
-                let detail = json!({
-                    "generation": prep.manifest,
-                    "run_id": prep.run_id,
-                    "dirty_reason": prep.dirty_reason,
-                    "row": row,
-                });
                 if let Some(eq) = equipment_id {
+                    let mut persist_status = status.to_string();
+                    let mut interval_persist: Option<Value> = None;
+                    let mut interval_buckets: Option<Vec<BucketResult>> = None;
+                    if item.outcome == RuleOutcome::Succeeded
+                        && row.get("output_kind").and_then(Value::as_str) != Some("metric")
+                        && fault_hours.is_some()
+                    {
+                        match exact_interval_plan_for_rule_row(
+                            tsdb,
+                            &item.rule_id,
+                            site_id,
+                            eq,
+                            window,
+                            sample_rows,
+                        )
+                        .await
+                        {
+                            Ok(ExactIntervalPlan::Buckets(buckets)) => {
+                                interval_buckets = Some(buckets);
+                            }
+                            Ok(ExactIntervalPlan::SeriesUnavailable { reason }) => {
+                                persist_status = INTERVAL_UNKNOWN_STATUS.to_string();
+                                interval_persist = Some(json!({
+                                    "status": INTERVAL_UNKNOWN_STATUS,
+                                    "reason": reason,
+                                }));
+                            }
+                            Err(err) => {
+                                return Err(anyhow!("interval buckets: {err}"));
+                            }
+                        }
+                    }
+                    let detail = json!({
+                        "generation": prep.manifest,
+                        "run_id": prep.run_id,
+                        "dirty_reason": prep.dirty_reason,
+                        "row": row,
+                        "interval_persist": interval_persist,
+                    });
                     let fault_seconds = fault_hours.map(|h| (h * 3600.0).round() as i32);
                     sqlx::query(
                         r#"
@@ -292,7 +458,7 @@ pub async fn persist_registry_run_timescale(
                     .bind(poll)
                     .bind(confirm)
                     .bind(config_hash)
-                    .bind(status)
+                    .bind(&persist_status)
                     .bind(fault_seconds)
                     .bind(fault_hours)
                     .bind(sample_rows)
@@ -300,60 +466,13 @@ pub async fn persist_registry_run_timescale(
                     .execute(&mut *tx)
                     .await?;
 
-                    if item.outcome == RuleOutcome::Succeeded
-                        && row.get("output_kind").and_then(Value::as_str) != Some("metric")
-                        && fault_hours.is_some()
-                    {
+                    if let Some(buckets) = interval_buckets {
                         use chrono_tz::UTC;
                         let horizon = RuleHorizon::new(
                             chrono::Duration::zero(),
                             chrono::Duration::seconds(confirm.round().max(0.0) as i64),
                         )?;
-                        let covered = row_f64(row, "covered_hours");
-                        let ws = window
-                            .start()
-                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                        let we = window
-                            .end()
-                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                        let mut grid = BucketGrid::UtcHour;
-                        let mut buckets: Vec<BucketResult> = Vec::new();
-                        if let Ok(reg) = crate::timescale_product::load_reg() {
-                            if let Some(rule) =
-                                reg.rules.iter().find(|spec| spec.rule_id == item.rule_id)
-                            {
-                                if let Ok(map) =
-                                    crate::timescale_product::load_live_confirmed_fault(
-                                        tsdb,
-                                        &reg,
-                                        rule,
-                                        site_id,
-                                        eq,
-                                        Some(&ws),
-                                        Some(&we),
-                                    )
-                                    .await
-                                {
-                                    if !map.is_empty() {
-                                        grid = BucketGrid::LocalDay(UTC);
-                                        buckets = interval_buckets_from_confirmed_fault_map(
-                                            window,
-                                            &map,
-                                            sample_rows,
-                                        )?;
-                                    }
-                                }
-                            }
-                        }
-                        if buckets.is_empty() {
-                            buckets = distribute_interval_buckets(
-                                grid,
-                                window,
-                                fault_hours.unwrap_or(0.0),
-                                covered,
-                                sample_rows,
-                            )?;
-                        }
+                        let grid = BucketGrid::LocalDay(UTC);
                         let scope =
                             ResultScope::new(site_id, &item.rule_id, eq, &identity, grid, horizon)?;
                         if !buckets.is_empty() {
@@ -368,6 +487,12 @@ pub async fn persist_registry_run_timescale(
                         }
                     }
                 } else {
+                    let detail = json!({
+                        "generation": prep.manifest,
+                        "run_id": prep.run_id,
+                        "dirty_reason": prep.dirty_reason,
+                        "row": row,
+                    });
                     sqlx::query(
                         r#"
                         INSERT INTO fdd_run(
@@ -637,6 +762,12 @@ mod interval_daily_unit_tests {
     use super::*;
     use chrono::{TimeZone, Utc};
 
+    fn ts(s: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(s)
+            .expect("ts")
+            .with_timezone(&Utc)
+    }
+
     #[test]
     fn daily_series_fault_only_on_one_day_not_equal_across_five() {
         let start = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
@@ -649,7 +780,7 @@ mod interval_daily_unit_tests {
                 points.push((ts, confirmed));
             }
         }
-        let daily = daily_utc_fault_covered_from_confirmed_points(&points);
+        let daily = daily_utc_fault_covered_from_confirmed_points(&points, None);
         let fault_day0 = daily
             .get(&NaiveDate::from_ymd_opt(2026, 10, 10).unwrap())
             .map(|(f, _)| *f)
@@ -660,6 +791,101 @@ mod interval_daily_unit_tests {
             .unwrap_or(0.0);
         assert!(fault_day0 > 0.0, "day 0 should have fault seconds");
         assert_eq!(fault_day1, 0.0, "day 1 should have no fault seconds");
+    }
+
+    #[test]
+    fn up03_two_day_window_fault_only_on_day_two() {
+        let start = ts("2026-10-10T00:00:00Z");
+        let end = ts("2026-10-12T00:00:00Z");
+        let window = AnalysisWindow::half_open(start, end).expect("window");
+        let mut points = Vec::new();
+        let day2 = ts("2026-10-11T00:00:00Z");
+        points.push((day2, false));
+        points.push((day2 + chrono::Duration::minutes(5), true));
+        points.push((day2 + chrono::Duration::minutes(10), true));
+        points.push((day2 + chrono::Duration::minutes(15), false));
+        let buckets =
+            interval_buckets_from_confirmed_fault_map(window, &map_from_points(&points), 4)
+                .expect("buckets");
+        let day1 = NaiveDate::from_ymd_opt(2026, 10, 10).unwrap();
+        let day2d = NaiveDate::from_ymd_opt(2026, 10, 11).unwrap();
+        let fault_day1 = bucket_fault_for_day(&buckets, day1);
+        let fault_day2 = bucket_fault_for_day(&buckets, day2d);
+        assert_eq!(fault_day1, 0.0);
+        assert!((fault_day2 - 600.0).abs() < 0.01, "fault_day2={fault_day2}");
+    }
+
+    #[test]
+    fn up03_midnight_hold_splits_five_min_each_day() {
+        let t0 = ts("2026-10-10T23:55:00Z");
+        let t1 = ts("2026-10-11T00:05:00Z");
+        let points = vec![(t0, true), (t1, true)];
+        let daily = daily_utc_fault_covered_from_confirmed_points(&points, None);
+        let d0 = NaiveDate::from_ymd_opt(2026, 10, 10).unwrap();
+        let d1 = NaiveDate::from_ymd_opt(2026, 10, 11).unwrap();
+        let (_, cov0) = daily.get(&d0).copied().unwrap_or((0.0, 0.0));
+        let (_, cov1) = daily.get(&d1).copied().unwrap_or((0.0, 0.0));
+        assert!((cov0 - 300.0).abs() < 0.01, "cov0={cov0}");
+        assert!((cov1 - 300.0).abs() < 0.01, "cov1={cov1}");
+    }
+
+    #[test]
+    fn up03_max_gap_boundary() {
+        let t0 = ts("2026-10-10T12:00:00Z");
+        let below = t0 + chrono::Duration::seconds(ELAPSED_MAX_GAP_SECONDS);
+        let above = t0 + chrono::Duration::seconds(ELAPSED_MAX_GAP_SECONDS + 1);
+        let daily_below =
+            daily_utc_fault_covered_from_confirmed_points(&[(t0, true), (below, false)], None);
+        let daily_above =
+            daily_utc_fault_covered_from_confirmed_points(&[(t0, true), (above, false)], None);
+        let day = t0.date_naive();
+        let (_, cov_below) = daily_below.get(&day).copied().unwrap_or((0.0, 0.0));
+        let (_, cov_above) = daily_above.get(&day).copied().unwrap_or((0.0, 0.0));
+        assert!((cov_below - ELAPSED_MAX_GAP_SECONDS as f64).abs() < 0.01);
+        assert_eq!(cov_above, 0.0);
+    }
+
+    #[test]
+    fn up03_clipped_window_trims_hold() {
+        let t0 = ts("2026-10-10T10:00:00Z");
+        let t1 = ts("2026-10-10T11:00:00Z");
+        let window =
+            AnalysisWindow::half_open(ts("2026-10-10T10:30:00Z"), ts("2026-10-10T11:00:00Z"))
+                .expect("window");
+        let daily =
+            daily_utc_fault_covered_from_confirmed_points(&[(t0, true), (t1, false)], Some(window));
+        let day = t0.date_naive();
+        let (_, covered) = daily.get(&day).copied().unwrap_or((0.0, 0.0));
+        assert!((covered - 1800.0).abs() < 0.01, "covered={covered}");
+    }
+
+    #[test]
+    fn up03_empty_map_is_series_unavailable() {
+        let window =
+            AnalysisWindow::half_open(ts("2026-10-10T00:00:00Z"), ts("2026-10-11T00:00:00Z"))
+                .expect("window");
+        let plan = exact_interval_plan_from_confirmed_map(window, HashMap::new(), 0).expect("plan");
+        assert_eq!(
+            plan,
+            ExactIntervalPlan::SeriesUnavailable {
+                reason: "confirmed_fault series empty".into(),
+            }
+        );
+    }
+
+    fn map_from_points(points: &[(DateTime<Utc>, bool)]) -> HashMap<String, bool> {
+        points
+            .iter()
+            .map(|(ts, flag)| (ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true), *flag))
+            .collect()
+    }
+
+    fn bucket_fault_for_day(buckets: &[BucketResult], day: NaiveDate) -> f64 {
+        buckets
+            .iter()
+            .filter(|b| b.bucket().start().date_naive() == day)
+            .map(BucketResult::fault_seconds)
+            .sum()
     }
 
     #[test]

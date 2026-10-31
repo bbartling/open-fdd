@@ -5,7 +5,9 @@ mod fdd_run_persists_runs_intervals_checkpoint {
     use serde_json::json;
     use sqlx::PgPool;
 
-    use crate::fdd_registry_persist::{commit_and_persist_registry_run, results_from_timescale};
+    use crate::fdd_registry_persist::{
+        commit_and_persist_registry_run, results_from_timescale, INTERVAL_UNKNOWN_STATUS,
+    };
     use open_fdd_edge_prototype::fdd::registry_api::{
         RunGenerationCommit, RunModelEquipment, RunRuleFile,
     };
@@ -121,8 +123,26 @@ mod fdd_run_persists_runs_intervals_checkpoint {
             .expect("persist");
         let (runs, intervals, checkpoints) = fdd_persist_counts(&tsdb, &site).await;
         assert!(runs > 0, "fdd_run rows");
-        assert_eq!(intervals, 1, "one hourly bucket for the one-hour window");
-        assert_eq!(checkpoints, 1, "one incremental checkpoint");
+        assert_eq!(
+            intervals, 0,
+            "no proportional fallback when series unavailable"
+        );
+        assert_eq!(checkpoints, 0, "no checkpoint without exact buckets");
+        let stored_status: String =
+            sqlx::query_scalar("SELECT status FROM fdd_run WHERE site_id = $1 LIMIT 1")
+                .bind(&site)
+                .fetch_one(&pool)
+                .await
+                .expect("status");
+        assert_eq!(stored_status, INTERVAL_UNKNOWN_STATUS);
+        let interval_rows: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("interval count");
+        assert_eq!(interval_rows, 0, "UP-03: no fabricated daily buckets");
         let api = results_from_timescale(&tsdb, Some(&site), &std::collections::BTreeMap::new())
             .await
             .expect("api");
