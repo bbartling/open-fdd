@@ -248,20 +248,18 @@ def run_cancellation_recovery(
     """Prove a timed-out rule attempt releases the session for a follow-up run."""
     sql = _render_rule(web_asof_bound_seconds=web_asof_bound_seconds)
     conn = _connect(database_url)
-    with conn:
-        with conn.cursor() as cur:
-            _setup_fixture(cur, rows_per_equipment=4700, equipment_count=1, web_mode="dense")
-            cur.execute(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'")
-            cancelled = False
-            try:
-                cur.execute(sql)
-                cur.fetchall()
-            except Exception as exc:  # noqa: BLE001
-                cancelled = "timeout" in str(exc).lower() or "cancel" in str(exc).lower()
-            cur.execute("RESET statement_timeout")
     conn.autocommit = True
-    with conn.cursor() as cur:
-        warm_s, _, _ = _time_rule(cur, sql)
+    cur = conn.cursor()
+    _setup_fixture(cur, rows_per_equipment=4700, equipment_count=1, web_mode="dense")
+    cur.execute(f"SET statement_timeout = '{statement_timeout_ms}ms'")
+    cancelled = False
+    try:
+        cur.execute(sql)
+        cur.fetchall()
+    except Exception as exc:  # noqa: BLE001
+        cancelled = "timeout" in str(exc).lower() or "cancel" in str(exc).lower()
+    cur.execute("RESET statement_timeout")
+    warm_s, _, _ = _time_rule(cur, sql)
     conn.close()
     return {
         "statement_timeout_ms": statement_timeout_ms,
