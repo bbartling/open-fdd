@@ -85,13 +85,13 @@ jobs:
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
       - name: Ingest driver #1423 acceptance (T1423-1, T1423-2)
-        run: cargo test -p openfdd-central t1423 -- --test-threads=1
+        run: cargo test -p openfdd-central t1423 -- --test-threads=1 --skip t1423_6
 
       - name: Central / fieldbus / MQTT contract tests
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: |
-          cargo test -p openfdd_contracts -p fdd_resources -p fdd_tsdb -p openfdd-central -p openfdd_nf_grpc -- --skip fixture_acceptance
+          cargo test -p openfdd_contracts -p fdd_resources -p fdd_tsdb -p openfdd-central -p openfdd_nf_grpc -- --skip fixture_acceptance --skip t1423_6
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
           cargo test -p openfdd-central t1405_3_trim_rules_without_reset_request_binding_not_sql_error -- --test-threads=1
@@ -344,6 +344,7 @@ jobs:
           cargo test -p openfdd-central ingest_jobs_and_gaps_contract -- --test-threads=1
           cargo test -p openfdd-central upgraded_portal_enqueues_due_windows_and_accepts_backfill -- --test-threads=1
           cargo test -p openfdd-central stale_worker_cannot_overwrite_canonical_history -- --test-threads=1
+          cargo test -p openfdd-central t1423_6 -- --test-threads=1
 
   synthetic-sql-parity:
     name: Synthetic pandas equals Timescale SQL

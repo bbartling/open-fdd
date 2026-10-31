@@ -18,7 +18,7 @@ use super::binding_state::{
     EnsureBindingInput,
 };
 
-use super::gap_backfill::point_keys_for_plan_device;
+use super::gap_backfill::{point_coverage_for_group, point_keys_for_plan_device};
 use super::gap_planner::{default_max_span, expected_start, plan_gap_windows, GapPlanInput};
 use super::model::MAX_CATCHUP_HOURS;
 use super::worker::publication_delay_secs;
@@ -127,6 +127,15 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
     } = input;
     let point_keys = point_keys_for_plan_device(plan, provider_instance_id, device_id)
         .ok_or_else(|| "device not in plan".to_string())?;
+    let group = plan
+        .groups
+        .iter()
+        .find(|group| {
+            group.equipment_id == device_id
+                && provider_ids_equivalent(&group.provider_instance_id, provider_instance_id)
+        })
+        .ok_or_else(|| "device not in plan".to_string())?;
+    let point_coverage = point_coverage_for_group(group);
     let key = DeviceBindingKey {
         tenant_id: site_cfg.tenant_id.clone(),
         canonical_site: site_cfg.building_id.clone(),
@@ -147,8 +156,9 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
     .map_err(|err| err.to_string())?;
     let stored = stored_hour_starts_for_device(
         pool,
+        &key,
         &site_cfg.building_id,
-        &point_keys,
+        &point_coverage,
         range_start,
         target_end,
     )

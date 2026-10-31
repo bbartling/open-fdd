@@ -1189,6 +1189,18 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
         &device.device_id,
     )
     .ok_or_else(|| "device not in committed plan".to_string())?;
+    let group = plan
+        .groups
+        .iter()
+        .find(|group| {
+            group.equipment_id == device.device_id
+                && crate::providers::http_policy::provider_ids_equivalent(
+                    &group.provider_instance_id,
+                    &device.provider_instance_id,
+                )
+        })
+        .ok_or_else(|| "device not in committed plan".to_string())?;
+    let point_coverage = super::gap_backfill::point_coverage_for_group(group);
     let key = super::binding_state::DeviceBindingKey {
         tenant_id: device.tenant_id.clone(),
         canonical_site: device.canonical_site.clone(),
@@ -1210,8 +1222,9 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
     .map_err(|err| err.to_string())?;
     let stored = super::binding_state::stored_hour_starts_for_device(
         pool,
+        &key,
         &device.canonical_site,
-        &point_keys,
+        &point_coverage,
         range_start,
         target_end,
     )
