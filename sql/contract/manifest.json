@@ -571,6 +571,6 @@
   "processing_abi_current": "metric-c-v2",
   "processing_abi_target": "metric-c-v2",
   "processing_abi": "metric-c-v2",
-  "metric_units_sha256": "d3d977d6623ed8428a84c3553fdd7e17a97e565e1aa8bb35b43993053b609ad7",
+  "metric_units_sha256": "6002486b0d7eb0e2442c4e3b7886179f3fae821e263086668d3410fd38f9c89f",
   "metric_storage_status": "released"
 }
