@@ -179,7 +179,11 @@ def run_postgres(conn) -> list[QualCell]:
             comparisons += n
             if e:
                 errors.extend(e[:2])
-            elif n == 0 and stem not in ("plant_health_inventory",):
+            elif n == 0:
+                if not sql_norm and not oracle_norm:
+                    continue
+                if stem in ("plant_health_inventory",):
+                    continue
                 errors.append(f"{ds.dataset_id}/{stem}: zero comparisons")
     if errors:
         return [
