@@ -39,7 +39,9 @@ def run_matrix(*, db_url: str | None, matrix_path: Path) -> QualMatrix:
 
         parity = cts._load_parity_module()
         conn = parity.connect_with_retry(db_url.strip())
+        parity.apply_schema(conn)
         cts.apply_fdd_postgres_helpers(conn)
+        conn.commit()
 
     components = []
     errors: list[str] = []
@@ -47,7 +49,9 @@ def run_matrix(*, db_url: str | None, matrix_path: Path) -> QualMatrix:
     try:
         c07 = qual_07_units.run_offline()
         if conn is not None:
+            conn.rollback()
             c07.extend(qual_07_units.run_postgres(conn))
+            conn.rollback()
         components.append(
             component_from_cells(
                 "SQL-QUAL-07",
@@ -59,7 +63,9 @@ def run_matrix(*, db_url: str | None, matrix_path: Path) -> QualMatrix:
 
         c08 = qual_08_timelines.run_offline()
         if conn is not None:
+            conn.rollback()
             c08.extend(qual_08_timelines.run_postgres(conn))
+            conn.rollback()
         components.append(
             component_from_cells(
                 "SQL-QUAL-08",
@@ -71,7 +77,9 @@ def run_matrix(*, db_url: str | None, matrix_path: Path) -> QualMatrix:
 
         c09 = qual_09_mode_delay.run_offline()
         if conn is not None:
+            conn.rollback()
             c09.extend(qual_09_mode_delay.run_postgres(conn))
+            conn.rollback()
         components.append(
             component_from_cells(
                 "SQL-QUAL-09",
@@ -83,7 +91,9 @@ def run_matrix(*, db_url: str | None, matrix_path: Path) -> QualMatrix:
 
         c10 = qual_10_duration_buckets.run_offline()
         if conn is not None:
+            conn.rollback()
             c10.extend(qual_10_duration_buckets.run_postgres(conn))
+            conn.rollback()
         components.append(
             component_from_cells(
                 "SQL-QUAL-10",
@@ -95,7 +105,9 @@ def run_matrix(*, db_url: str | None, matrix_path: Path) -> QualMatrix:
 
         c19 = qual_19_analytics_fresh.run_offline()
         if conn is not None:
+            conn.rollback()
             c19.extend(qual_19_analytics_fresh.run_postgres(conn))
+            conn.rollback()
         else:
             c19.append(
                 QualCell(

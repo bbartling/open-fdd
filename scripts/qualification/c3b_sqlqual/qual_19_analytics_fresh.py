@@ -83,6 +83,25 @@ def run_offline() -> list[QualCell]:
     return cells
 
 
+def _seed_dataset(conn, *, ds, si_frame) -> None:
+    from scripts.stress.si_cutover import ci_timescale_sql as cts
+
+    parity = cts._load_parity_module()
+    with conn.cursor() as cur:
+        cts.purge_site(cur, ds.building_id)
+        cts.seed_frame(
+            cur,
+            parity,
+            site_id=ds.building_id,
+            equipment_id=ds.equipment_id,
+            equip_type=ds.equipment_type,
+            frame=si_frame,
+            storage="si",
+        )
+        cts.fill_history(cur, ds.building_id, cts.frame_sql_columns(si_frame))
+    conn.commit()
+
+
 def run_postgres(conn) -> list[QualCell]:
     metric = _metric()
     si_params = ap.resolve_params("metric", metric)
@@ -91,26 +110,31 @@ def run_postgres(conn) -> list[QualCell]:
     comparisons = 0
     errors: list[str] = []
     for ds in ap.iter_analytics_datasets():
+        conn.rollback()
         si_frame = cfl.frame_to_si(ds.ip_frame, metric)
         ws, we = ap.window_of(si_frame)
         units = ap.role_units_of(ds.ip_frame)
-        cap2._seed_si_site(
-            conn,
-            building_id=ds.building_id,
-            equipment_id=ds.equipment_id,
-            equip_type=ds.equipment_type,
-            si_frame=si_frame,
-        )
+        try:
+            _seed_dataset(conn, ds=ds, si_frame=si_frame)
+        except Exception as exc:
+            errors.append(f"{ds.dataset_id}: seed {exc}")
+            conn.rollback()
+            continue
         for stem in stems:
-            with conn.cursor() as cur:
-                sql_rows = cap2._exec_analytics_sql(
-                    cur,
-                    stem,
-                    site_id=ds.building_id,
-                    window_start=ws,
-                    window_end=we,
-                    equipment_ids=[ds.equipment_id],
-                )
+            try:
+                with conn.cursor() as cur:
+                    sql_rows = cap2._exec_analytics_sql(
+                        cur,
+                        stem,
+                        site_id=ds.building_id,
+                        window_start=ws,
+                        window_end=we,
+                        equipment_ids=[ds.equipment_id],
+                    )
+            except Exception as exc:
+                errors.append(f"{ds.dataset_id}/{stem}: sql {exc}")
+                conn.rollback()
+                continue
             sql_norm = ap.norm_rows(stem, list(sql_rows))
             oracle_rows = ap.pandas_rows(
                 stem,

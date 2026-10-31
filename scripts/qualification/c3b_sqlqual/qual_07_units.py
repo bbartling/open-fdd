@@ -113,6 +113,7 @@ def run_postgres(conn) -> list[QualCell]:
     cur = conn.cursor()
     try:
         cts.purge_site(cur, site)
+        conn.commit()
         cts.seed_frame(
             cur,
             parity,
@@ -168,4 +169,5 @@ def run_postgres(conn) -> list[QualCell]:
             )
     finally:
         cur.close()
+        conn.rollback()
     return cells
