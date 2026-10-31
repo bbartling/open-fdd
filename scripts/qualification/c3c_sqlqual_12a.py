@@ -116,61 +116,114 @@ def _dry_run_rows_to_convert(cur, site: str) -> int:
     return int(row[0] if row else 0)
 
 
+def _admin_url(database_url: str) -> str:
+    return database_url.rsplit("/", 1)[0] + "/postgres"
+
+
+def _scratch_url(database_url: str) -> str:
+    return database_url.rsplit("/", 1)[0] + "/openfdd_c3c_scratch"
+
+
 def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
+    scratch = _scratch_url(database_url)
+    admin = _admin_url(database_url)
+    env = os.environ.copy()
+    env["PGPASSWORD"] = env.get("PGPASSWORD", "openfdd")
+
+    with _connect(database_url) as conn:
+        conn.autocommit = True
+        cur = conn.cursor()
+        cur.execute("SELECT val, unit FROM sample WHERE site_id = %s LIMIT 1", (site,))
+        source = cur.fetchone()
+        if source is None:
+            raise RuntimeError(f"missing sample row for site {site}")
+        expected_val, expected_unit = float(source[0]), source[1]
+        cur.execute("SELECT site_id, dis FROM site WHERE site_id = %s", (site,))
+        site_row = cur.fetchone()
+        cur.execute(
+            "SELECT openfdd_key, haystack_id, role, unit, quantity FROM point_map WHERE site_id = %s",
+            (site,),
+        )
+        point_rows = cur.fetchall()
+        cur.execute(
+            "SELECT ts, openfdd_key, haystack_id, val, unit, quality FROM sample WHERE site_id = %s",
+            (site,),
+        )
+        sample_rows = cur.fetchall()
+
+    subprocess.run(
+        ["psql", admin, "-v", "ON_ERROR_STOP=1", "-c", "DROP DATABASE IF EXISTS openfdd_c3c_scratch"],
+        check=True,
+        env=env,
+    )
+    subprocess.run(
+        ["psql", admin, "-v", "ON_ERROR_STOP=1", "-c", "CREATE DATABASE openfdd_c3c_scratch"],
+        check=True,
+        env=env,
+    )
+
+    with _connect(scratch) as conn:
+        conn.autocommit = True
+        cur = conn.cursor()
+        apply_si_cutover_fixture_schema(cur)
+        cur.execute("INSERT INTO site (site_id, dis) VALUES (%s, %s)", site_row)
+        for prow in point_rows:
+            cur.execute(
+                "INSERT INTO point_map (site_id, openfdd_key, haystack_id, role, unit, quantity) "
+                "VALUES (%s, %s, %s, %s, %s, %s)",
+                (site, *prow),
+            )
+        for srow in sample_rows:
+            cur.execute(
+                "INSERT INTO sample (ts, site_id, openfdd_key, haystack_id, val, unit, quality) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                (srow[0], site, srow[1], srow[2], srow[3], srow[4], srow[5]),
+            )
+
     with tempfile.TemporaryDirectory(prefix="c3c-12a-") as tmp:
-        dump_path = Path(tmp) / "site.dump"
-        env = os.environ.copy()
-        env["PGPASSWORD"] = env.get("PGPASSWORD", "openfdd")
+        dump_path = Path(tmp) / "scratch.dump"
         subprocess.run(
             [
                 "pg_dump",
                 "--format=custom",
-                "--data-only",
                 "--no-owner",
-                "--table=sample",
-                "--table=point_map",
-                "--table=site",
                 "-f",
                 str(dump_path),
-                database_url,
+                scratch,
             ],
             check=True,
             env=env,
         )
-        assert dump_path.stat().st_size > 0
-        with _connect(database_url) as conn:
+        dump_bytes = dump_path.stat().st_size
+        with _connect(scratch) as conn:
             conn.autocommit = True
             cur = conn.cursor()
             cur.execute("DELETE FROM sample WHERE site_id = %s", (site,))
             cur.execute("DELETE FROM point_map WHERE site_id = %s", (site,))
             cur.execute("DELETE FROM site WHERE site_id = %s", (site,))
-            cur.execute("SELECT count(*) FROM sample WHERE site_id = %s", (site,))
-            assert int(cur.fetchone()[0]) == 0
-        restore = subprocess.run(
-            [
-                "pg_restore",
-                "--no-owner",
-                "--data-only",
-                "--disable-triggers",
-                "--dbname",
-                database_url,
-                str(dump_path),
-            ],
+        subprocess.run(
+            ["pg_restore", "--no-owner", "--clean", "--if-exists", "--dbname", scratch, str(dump_path)],
+            check=True,
             env=env,
-            capture_output=True,
-            text=True,
         )
-        if restore.returncode not in (0, 1):
-            raise RuntimeError(restore.stderr[-2000:])
-        with _connect(database_url) as conn:
+        with _connect(scratch) as conn:
             cur = conn.cursor()
             cur.execute("SELECT val, unit FROM sample WHERE site_id = %s LIMIT 1", (site,))
             row = cur.fetchone()
-        return {
-            "dump_bytes": dump_path.stat().st_size,
-            "restored_val": float(row[0]),
-            "restored_unit": row[1],
-        }
+
+    subprocess.run(
+        ["psql", admin, "-v", "ON_ERROR_STOP=1", "-c", "DROP DATABASE IF EXISTS openfdd_c3c_scratch"],
+        check=True,
+        env=env,
+    )
+    return {
+        "scratch_database": "openfdd_c3c_scratch",
+        "dump_bytes": dump_bytes,
+        "expected_val": expected_val,
+        "expected_unit": expected_unit,
+        "restored_val": None if row is None else float(row[0]),
+        "restored_unit": None if row is None else row[1],
+    }
 
 
 def run_rust_t1284_3(*, database_url: str) -> dict[str, Any]:
