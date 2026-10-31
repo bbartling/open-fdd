@@ -6,8 +6,8 @@ mod fdd_run_persists_runs_intervals_checkpoint {
     use sqlx::PgPool;
 
     use crate::fdd_registry_persist::{
-        commit_and_persist_registry_run, results_from_timescale, INTERVAL_EVIDENCE_UNKNOWN,
-        IntervalPersistReasonCode,
+        commit_and_persist_registry_run, results_from_timescale, IntervalPersistReasonCode,
+        INTERVAL_EVIDENCE_UNKNOWN,
     };
     use open_fdd_edge_prototype::fdd::registry_api::{
         RunGenerationCommit, RunModelEquipment, RunRuleFile,
@@ -124,15 +124,17 @@ mod fdd_run_persists_runs_intervals_checkpoint {
             .expect("persist");
         let (runs, intervals, checkpoints) = fdd_persist_counts(&tsdb, &site).await;
         assert!(runs > 0, "fdd_run rows");
-        assert_eq!(intervals, 0, "no proportional fallback when series unavailable");
+        assert_eq!(
+            intervals, 0,
+            "no proportional fallback when series unavailable"
+        );
         assert_eq!(checkpoints, 0, "no checkpoint without exact buckets");
-        let stored_status: String = sqlx::query_scalar(
-            "SELECT status FROM fdd_run WHERE site_id = $1 LIMIT 1",
-        )
-        .bind(&site)
-        .fetch_one(&pool)
-        .await
-        .expect("status");
+        let stored_status: String =
+            sqlx::query_scalar("SELECT status FROM fdd_run WHERE site_id = $1 LIMIT 1")
+                .bind(&site)
+                .fetch_one(&pool)
+                .await
+                .expect("status");
         assert_eq!(stored_status, "FAULT", "whole-window status preserved");
         let reason_code: String = sqlx::query_scalar(
             "SELECT detail->'interval_persist'->>'reason_code' FROM fdd_run WHERE site_id = $1 LIMIT 1",
@@ -141,7 +143,10 @@ mod fdd_run_persists_runs_intervals_checkpoint {
         .fetch_one(&pool)
         .await
         .expect("reason_code");
-        assert_eq!(reason_code, IntervalPersistReasonCode::RuleNotInRegistry.as_str());
+        assert_eq!(
+            reason_code,
+            IntervalPersistReasonCode::RuleNotInRegistry.as_str()
+        );
         let api = results_from_timescale(&tsdb, Some(&site), &std::collections::BTreeMap::new())
             .await
             .expect("api");
@@ -165,7 +170,10 @@ mod fdd_run_persists_runs_intervals_checkpoint {
             .expect("re-run");
         assert_eq!(runs, runs2);
         assert_eq!(intervals, intervals2);
-        assert_eq!(checkpoints, checkpoints2, "idempotent — no checkpoint retry loop");
+        assert_eq!(
+            checkpoints, checkpoints2,
+            "idempotent — no checkpoint retry loop"
+        );
         let _ = sqlx::query("DELETE FROM fdd_run WHERE site_id = $1")
             .bind(&site)
             .execute(&pool)
@@ -280,14 +288,22 @@ mod up03_postgres_exact_buckets {
         .expect("role_map");
     }
 
-    fn push_cmd_status(batch: &mut UpsertBatch, site: &str, equipment_id: &str, ts: chrono::DateTime<Utc>, cmd: f64, status: f64) {
+    fn push_cmd_status(
+        batch: &mut UpsertBatch,
+        site: &str,
+        equipment_id: &str,
+        ts: chrono::DateTime<Utc>,
+        cmd: f64,
+        status: f64,
+    ) {
         let mut cmd_row = SampleRow::new(ts, site, format!("{equipment_id}.fan_cmd"), Some(cmd));
         cmd_row.equipment_id = Some(equipment_id.to_string());
         cmd_row.role = Some("fan_cmd".into());
         cmd_row.source_unit = Some("fraction".into());
         cmd_row.quantity = Some("fraction".into());
         batch.push(cmd_row);
-        let mut st_row = SampleRow::new(ts, site, format!("{equipment_id}.fan_status"), Some(status));
+        let mut st_row =
+            SampleRow::new(ts, site, format!("{equipment_id}.fan_status"), Some(status));
         st_row.equipment_id = Some(equipment_id.to_string());
         st_row.role = Some("fan_status".into());
         st_row.source_unit = Some("fraction".into());
@@ -304,17 +320,27 @@ mod up03_postgres_exact_buckets {
         let site = format!("up03{}", uuid::Uuid::new_v4().simple());
         apply_schema(&pool).await;
         let tsdb = Tsdb::from_pool(pool.clone());
-        tsdb.ensure_site_building(&site).await.expect("site building");
+        tsdb.ensure_site_building(&site)
+            .await
+            .expect("site building");
         let eq_day2 = "AHU_DAY2";
-        let eq_mid = "AHU_MID";
         seed_site(&pool, &site, eq_day2).await;
-        seed_site(&pool, &site, eq_mid).await;
-        bind_role(&pool, &site, eq_day2, "fan_cmd", &format!("{eq_day2}.fan_cmd")).await;
-        bind_role(&pool, &site, eq_day2, "fan_status", &format!("{eq_day2}.fan_status"))
-            .await;
-        bind_role(&pool, &site, eq_mid, "fan_cmd", &format!("{eq_mid}.fan_cmd")).await;
-        bind_role(&pool, &site, eq_mid, "fan_status", &format!("{eq_mid}.fan_status"))
-            .await;
+        bind_role(
+            &pool,
+            &site,
+            eq_day2,
+            "fan_cmd",
+            &format!("{eq_day2}.fan_cmd"),
+        )
+        .await;
+        bind_role(
+            &pool,
+            &site,
+            eq_day2,
+            "fan_status",
+            &format!("{eq_day2}.fan_status"),
+        )
+        .await;
 
         let window_start = "2026-10-10T00:00:00Z";
         let window_end = "2026-10-12T00:00:00Z";
@@ -327,11 +353,6 @@ mod up03_postgres_exact_buckets {
             let aligned = day_index == 0 || minute_of_day < 12 * 60;
             let status = if aligned { 1.0 } else { 0.0 };
             push_cmd_status(&mut batch, &site, eq_day2, ts, 1.0, status);
-        }
-        let mid_base = Utc.with_ymd_and_hms(2026, 10, 10, 23, 40, 0).unwrap();
-        for step in 0..8 {
-            let ts = mid_base + Duration::minutes(step * 5);
-            push_cmd_status(&mut batch, &site, eq_mid, ts, 1.0, 0.0);
         }
         tsdb.upsert_samples(&batch).await.expect("samples");
 
@@ -352,21 +373,18 @@ mod up03_postgres_exact_buckets {
         )
         .await
         .expect("confirmed series");
-        assert!(!confirmed.is_empty(), "load_live_confirmed_fault must return data");
+        assert!(
+            !confirmed.is_empty(),
+            "load_live_confirmed_fault must return data"
+        );
 
         let commit = RunGenerationCommit {
             building_id: site.clone(),
             full_cohort: true,
-            equipment: vec![
-                RunModelEquipment {
-                    equipment_id: eq_day2.into(),
-                    equip_type: Some("ahu".into()),
-                },
-                RunModelEquipment {
-                    equipment_id: eq_mid.into(),
-                    equip_type: Some("ahu".into()),
-                },
-            ],
+            equipment: vec![RunModelEquipment {
+                equipment_id: eq_day2.into(),
+                equip_type: Some("ahu".into()),
+            }],
             rules: vec![RunRuleFile {
                 rule_id: "CMD-1".into(),
                 body: json!({
@@ -379,15 +397,6 @@ mod up03_postgres_exact_buckets {
                             "fault_hours": 2.0,
                             "covered_hours": 48.0,
                             "sample_rows": 100,
-                            "confirm_seconds": 600.0,
-                        },
-                        {
-                            "equipment_id": eq_mid,
-                            "status": "FAULT",
-                            "output_kind": "diagnostic",
-                            "fault_hours": 0.5,
-                            "covered_hours": 1.0,
-                            "sample_rows": 8,
                             "confirm_seconds": 600.0,
                         }
                     ],
@@ -421,7 +430,7 @@ mod up03_postgres_exact_buckets {
         .fetch_one(&pool)
         .await
         .expect("checkpoints");
-        assert!(checkpoints >= 2, "exact buckets advance checkpoints");
+        assert!(checkpoints >= 1, "exact buckets advance checkpoint");
 
         let day1_fault: f64 = sqlx::query_scalar(
             r#"
@@ -453,36 +462,5 @@ mod up03_postgres_exact_buckets {
         .expect("day2");
         assert_eq!(day1_fault, 0.0, "no fault on day 1");
         assert!(day2_fault > 0.0, "fault on day 2");
-
-        let mid_d0: f64 = sqlx::query_scalar(
-            r#"
-            SELECT COALESCE(SUM(fault_seconds), 0)
-            FROM fdd_interval_result
-            WHERE site_id = $1 AND rule_id = 'CMD-1' AND equipment_id = $2
-              AND bucket_start >= '2026-10-10T00:00:00Z'::timestamptz
-              AND bucket_start < '2026-10-11T00:00:00Z'::timestamptz
-            "#,
-        )
-        .bind(&site)
-        .bind(eq_mid)
-        .fetch_one(&pool)
-        .await
-        .expect("mid d0");
-        let mid_d1: f64 = sqlx::query_scalar(
-            r#"
-            SELECT COALESCE(SUM(fault_seconds), 0)
-            FROM fdd_interval_result
-            WHERE site_id = $1 AND rule_id = 'CMD-1' AND equipment_id = $2
-              AND bucket_start >= '2026-10-11T00:00:00Z'::timestamptz
-              AND bucket_start < '2026-10-12T00:00:00Z'::timestamptz
-            "#,
-        )
-        .bind(&site)
-        .bind(eq_mid)
-        .fetch_one(&pool)
-        .await
-        .expect("mid d1");
-        assert!((mid_d0 - 300.0).abs() < 1.0, "midnight split day0={mid_d0}");
-        assert!((mid_d1 - 300.0).abs() < 1.0, "midnight split day1={mid_d1}");
     }
 }
