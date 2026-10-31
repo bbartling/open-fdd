@@ -117,7 +117,7 @@ struct Plans {
     reason = "serialize OPENFDD_* env with sync ingest fixtures on one process-wide lock"
 )]
 async fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
-    let _env = crate::test_env_lock::lock_env_async().await;
+    let _env = crate::test_env_lock::lock_env();
     let fix = ScopeFix::new();
     let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
     let _db = EnvGuard::unset("OPENFDD_DATABASE_URL");
