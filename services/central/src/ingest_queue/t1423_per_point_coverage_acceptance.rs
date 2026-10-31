@@ -114,7 +114,6 @@ fn two_point_group() -> IngestDeviceGroup {
                 heartbeat_secs: None,
             },
         ],
-        withheld: Vec::new(),
     }
 }
 
@@ -203,7 +202,6 @@ async fn t1423_6_internal_gap_with_current_last_sample_plans_middle_hours() {
             cadence_secs: Some(3600),
             heartbeat_secs: None,
         }],
-        withheld: Vec::new(),
     };
     let coverage = coverage_points(&group);
     let stored = stored_hour_starts_for_device(&pool, &binding_key(), SITE, &coverage, h(0), h(8))

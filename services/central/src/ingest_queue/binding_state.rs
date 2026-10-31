@@ -360,7 +360,7 @@ async fn load_receipt_accounted_hours(
     let mut cursor = range_start;
     while cursor < range_end {
         if !is_hour_start(cursor) {
-            cursor = cursor + Duration::hours(1);
+            cursor += Duration::hours(1);
             continue;
         }
         let hour_end = cursor + Duration::hours(1);
@@ -400,7 +400,7 @@ fn fully_stored_hour_starts(
     let mut cursor = range_start;
     while cursor < range_end {
         if !is_hour_start(cursor) {
-            cursor = cursor + Duration::hours(1);
+            cursor += Duration::hours(1);
             continue;
         }
         let hour_end = cursor + Duration::hours(1);
