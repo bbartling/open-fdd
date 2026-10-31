@@ -236,7 +236,7 @@ fn distribute_interval_buckets(
     Ok(out)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ExactIntervalPlan {
     Buckets(Vec<BucketResult>),
     SeriesUnavailable { reason: String },
