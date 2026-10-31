@@ -60,6 +60,27 @@ async fn cleanup(pool: &PgPool) {
         .await;
 }
 
+async fn seed_provider_start(pool: &PgPool, provider_start: DateTime<Utc>) {
+    sqlx::query(
+        "INSERT INTO ingest_device_binding (
+            tenant_id, canonical_site, provider_instance_id, device_id, model_revision,
+            binding_created_at, provider_data_start, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $6)
+         ON CONFLICT (tenant_id, canonical_site, provider_instance_id, device_id, model_revision)
+         DO UPDATE SET provider_data_start = EXCLUDED.provider_data_start",
+    )
+    .bind(TENANT)
+    .bind(SITE)
+    .bind(PROVIDER)
+    .bind(DEVICE)
+    .bind(REV)
+    .bind(h(0))
+    .bind(provider_start)
+    .execute(pool)
+    .await
+    .expect("binding row");
+}
+
 async fn insert_sample(pool: &PgPool, key: &str, at: DateTime<Utc>) {
     sqlx::query(
         "INSERT INTO sample (ts, site_id, openfdd_key, val, unit, quality)
@@ -300,6 +321,51 @@ async fn t1423_6_fully_covered_device_queues_nothing() {
     .expect("plan");
     assert_eq!(plan.counts.planned, 0, "{plan:?}");
     assert!(jobs.is_empty(), "{jobs:?}");
+    cleanup(&pool).await;
+}
+
+#[tokio::test]
+async fn t1423_6_pre_provider_start_horizon_not_gap() {
+    let Some(pool) = test_pool().await else {
+        eprintln!("OPENFDD_TEST_DATABASE_URL unset; skipping T1423-6");
+        return;
+    };
+    cleanup(&pool).await;
+    seed_provider_start(&pool, h(2)).await;
+    let group = two_point_group();
+    let (plan, jobs) = plan_device_gap_backfill(
+        &pool,
+        DeviceGapBackfillRequest {
+            key: binding_key(),
+            group: &group,
+            range_start: h(0),
+            range_end: h(5),
+            force: false,
+            now: Utc::now(),
+        },
+    )
+    .await
+    .expect("plan");
+    assert_eq!(
+        plan.counts.not_expected, 2,
+        "hours 0-1 are before provider_data_start: {plan:?}"
+    );
+    assert!(
+        plan.not_expected.iter().any(|w| w.start == h(0)),
+        "{plan:?}"
+    );
+    assert!(
+        plan.not_expected.iter().any(|w| w.start == h(1)),
+        "{plan:?}"
+    );
+    assert!(
+        plan.counts.planned > 0,
+        "hours from provider start onward should plan: {plan:?}"
+    );
+    assert!(
+        !jobs.iter().any(|job| job.logical_window_end <= h(2)),
+        "must not enqueue backfill before provider_data_start: {jobs:?}"
+    );
     cleanup(&pool).await;
 }
 

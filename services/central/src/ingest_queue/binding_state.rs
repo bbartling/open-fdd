@@ -609,4 +609,163 @@ mod tests {
             "one 15-min slot does not cover hour: {stored:?}"
         );
     }
+
+    /// Matches `plan_explicit_windows` (`history_mode` / cadence / heartbeat all `None`).
+    fn explicit_window_point(key: &str) -> DevicePointCoverage {
+        DevicePointCoverage {
+            openfdd_key: key.into(),
+            coverage_point_id: key.into(),
+            history_mode: None,
+            cadence_secs: None,
+            heartbeat_secs: None,
+        }
+    }
+
+    /// Master `d9bd6487` union-hour stored list (any key with a row marks the hour).
+    fn legacy_union_hour_starts(
+        openfdd_keys: &[String],
+        samples: &BTreeMap<String, Vec<DateTime<Utc>>>,
+        range_start: DateTime<Utc>,
+        range_end: DateTime<Utc>,
+    ) -> Vec<DateTime<Utc>> {
+        fn utc_hour_start(ts: DateTime<Utc>) -> DateTime<Utc> {
+            DateTime::from_timestamp(ts.timestamp().div_euclid(3600) * 3600, 0)
+                .expect("hour boundary")
+        }
+        let mut hours = BTreeSet::new();
+        for key in openfdd_keys {
+            let Some(series) = samples.get(key) else {
+                continue;
+            };
+            for ts in series {
+                if *ts >= range_start && *ts < range_end {
+                    hours.insert(utc_hour_start(*ts));
+                }
+            }
+        }
+        hours.into_iter().collect()
+    }
+
+    #[test]
+    fn explicit_window_unspecified_empty_hour_is_not_stored() {
+        let key = "urn:openfdd:point:site:explicit:raw";
+        let points = vec![explicit_window_point(key)];
+        let stored = fully_stored_hour_starts(
+            &points,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            h(1),
+            h(2),
+        );
+        assert!(
+            stored.is_empty(),
+            "expectation_unspecified empty hour must stay a gap: {stored:?}"
+        );
+    }
+
+    #[test]
+    fn explicit_window_unspecified_sample_in_hour_is_stored_not_assessed() {
+        let key = "urn:openfdd:point:site:explicit:raw";
+        let points = vec![explicit_window_point(key)];
+        let mut samples = BTreeMap::new();
+        samples.insert(key.into(), vec![h(1) + Duration::minutes(12)]);
+        let stored = fully_stored_hour_starts(
+            &points,
+            &samples,
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            h(1),
+            h(2),
+        );
+        assert_eq!(stored, vec![h(1)]);
+    }
+
+    #[test]
+    fn t1423_base_fail_one_present_one_missing_would_pass_under_union_hour() {
+        let p1 = "urn:openfdd:point:site:dev:p1";
+        let p2 = "urn:openfdd:point:site:dev:p2";
+        let points = vec![
+            DevicePointCoverage {
+                openfdd_key: p1.into(),
+                coverage_point_id: "src-p1".into(),
+                history_mode: None,
+                cadence_secs: None,
+                heartbeat_secs: None,
+            },
+            DevicePointCoverage {
+                openfdd_key: p2.into(),
+                coverage_point_id: "src-p2".into(),
+                history_mode: None,
+                cadence_secs: None,
+                heartbeat_secs: None,
+            },
+        ];
+        let mut samples = BTreeMap::new();
+        samples.insert(p1.into(), vec![h(2) + Duration::minutes(5)]);
+        let keys = vec![p1.into(), p2.into()];
+        let legacy = legacy_union_hour_starts(&keys, &samples, h(0), h(4));
+        assert_eq!(
+            legacy,
+            vec![h(2)],
+            "master union-hour marks hour 2 stored when only P1 has a row"
+        );
+        let stored = fully_stored_hour_starts(
+            &points,
+            &samples,
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            h(0),
+            h(4),
+        );
+        assert!(
+            stored.is_empty(),
+            "hour 2 must not be stored when P2 is missing: {stored:?}"
+        );
+    }
+
+    #[test]
+    fn t1423_base_fail_dense_peer_masks_sparse_internal_gap_under_union_hour() {
+        let dense = "urn:openfdd:point:site:dev:dense";
+        let sparse = "urn:openfdd:point:site:dev:sparse";
+        let points = vec![
+            DevicePointCoverage {
+                openfdd_key: dense.into(),
+                coverage_point_id: "src-dense".into(),
+                history_mode: None,
+                cadence_secs: None,
+                heartbeat_secs: None,
+            },
+            interval_point(sparse, 3600),
+        ];
+        let mut samples = BTreeMap::new();
+        samples.insert(
+            sparse.into(),
+            vec![h(3) + Duration::minutes(5), h(6) + Duration::minutes(5)],
+        );
+        let mut dense_series = Vec::new();
+        for hour in 0..8 {
+            dense_series.push(h(hour) + Duration::minutes(10));
+        }
+        samples.insert(dense.into(), dense_series);
+        let keys = vec![dense.into(), sparse.into()];
+        let legacy = legacy_union_hour_starts(&keys, &samples, h(0), h(8));
+        assert!(
+            legacy.contains(&h(4)) && legacy.contains(&h(5)),
+            "union-hour treats hour 4/5 as stored because dense peer has rows: {legacy:?}"
+        );
+        let stored = fully_stored_hour_starts(
+            &points,
+            &samples,
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            h(0),
+            h(8),
+        );
+        assert_eq!(stored, vec![h(3), h(6)]);
+        assert!(
+            !stored.contains(&h(4)),
+            "sparse periodic hour 4 remains a gap despite current dense max(ts): {stored:?}"
+        );
+    }
 }
