@@ -22,6 +22,7 @@ from open_fdd.rules.mode_delay import (
     effective_mode_delay_min,
     fan_restart_stable,
     mode_delay_rows,
+    resolve_mode_delay_params,
 )
 from open_fdd.rules.sensor_sweep_catalog import (
     flatline_quantity_allowed,
@@ -662,7 +663,7 @@ def _gl36_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
     Matches product SQL (render_rule.py / params.rs) via ``open_fdd.rules.mode_delay``.
     """
-    delay_min = effective_mode_delay_min(p)
+    delay_min = effective_mode_delay_min(resolve_mode_delay_params(p))
     fan_on = _fan(d) > _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
     return fan_restart_stable(fan_on, mode_delay_rows(delay_min, float(poll)))
 
@@ -672,16 +673,8 @@ def _gl36_fault(raw: pd.Series, d: pd.DataFrame, p: dict, poll: float) -> pd.Ser
 
 
 def _fc1_mode_stable(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Fan-gap mode delay only — matches postgres fc1_duct_static_low.sql mode_stable."""
-    delay_min = _f(p, "mode_delay_min", 0.0)
-    if delay_min <= 0 or d.empty:
-        return pd.Series(True, index=d.index)
-    fan_on_min = _gl36_value(p, "fan_on_min", None, FAN_ON_MIN)
-    fan = _fan(d)
-    on = fan > fan_on_min
-    samples = max(1, int(np.ceil(delay_min * 60.0 / max(float(poll), 1.0))))
-    off_in_window = (~on).astype(int).rolling(samples, min_periods=1).max().astype(bool)
-    return (on & ~off_in_window).fillna(False)
+    """Fan restart holdoff — same contract as GL36 rules and postgres FC1 (#1437, #1459)."""
+    return _gl36_mode_stable(d, p, poll)
 
 
 def _fan(d: pd.DataFrame) -> pd.Series:

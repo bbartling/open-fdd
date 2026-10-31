@@ -14,7 +14,9 @@ on:
       - "sql/fdd/**"
       - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
-      - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_mode_delay_consolidation_1437.py"
+      - "tests/qualification/fc1_mode_delay_timeline_reference.py"
+      - "tests/qualification/test_mode_delay_shared.py"
       - "tests/qualification/test_sql407_verifier_regressions.py"
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
@@ -40,7 +42,9 @@ on:
       - "sql/fdd/**"
       - "open_fdd/**"
       - "tests/fixtures/si_cutover/**"
-      - "tests/qualification/test_si_parity_chain.py"
+      - "tests/qualification/test_mode_delay_consolidation_1437.py"
+      - "tests/qualification/fc1_mode_delay_timeline_reference.py"
+      - "tests/qualification/test_mode_delay_shared.py"
       - "tests/qualification/test_sql407_verifier_regressions.py"
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
@@ -210,7 +214,9 @@ jobs:
           python3 -B -m unittest \
             tests.qualification.test_sql407_verifier_regressions \
             tests.qualification.test_baseline_manifest_integrity \
-            tests.qualification.test_capture_fdd_isolation_postgres -v
+            tests.qualification.test_capture_fdd_isolation_postgres \
+            tests.qualification.test_mode_delay_shared \
+            tests.qualification.test_mode_delay_consolidation_1437 -v
 
       - name: Qualification unit tests
         run: python3 -B -m unittest discover -s tests/qualification -p 'test_si_parity*.py' -v

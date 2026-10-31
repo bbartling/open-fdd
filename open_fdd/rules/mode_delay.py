@@ -22,6 +22,16 @@ import pandas as pd
 PRODUCT_MODE_DELAY_MIN_DEFAULT = 10.0
 
 
+def resolve_mode_delay_params(params: dict) -> dict:
+    """Merge product defaults for omitted keys; explicit values (including 0) are kept."""
+    resolved = dict(params)
+    if "mode_delay_min" not in resolved:
+        resolved["mode_delay_min"] = PRODUCT_MODE_DELAY_MIN_DEFAULT
+    if "startup_delay_min" not in resolved:
+        resolved["startup_delay_min"] = 0.0
+    return resolved
+
+
 def effective_mode_delay_min(params: dict) -> float:
     """max(mode_delay_min, startup_delay_min); ValueError naming any missing param."""
     missing = [name for name in ("mode_delay_min", "startup_delay_min") if name not in params]

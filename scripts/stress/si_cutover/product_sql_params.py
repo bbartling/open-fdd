@@ -224,13 +224,10 @@ def catalog_overrides_for_si_render(
 
 
 def product_effective_mode_delay_min(params: dict[str, float]) -> float:
-    """Product effective holdoff: runtime MODE_DELAY_MIN vs registry startup (shared rule)."""
-    from open_fdd.rules.mode_delay import effective_mode_delay_min
+    """Product effective holdoff: max(mode_delay_min, startup_delay_min) with catalog defaults."""
+    from open_fdd.rules.mode_delay import effective_mode_delay_min, resolve_mode_delay_params
 
-    defaults = runtime_defaults()
-    return effective_mode_delay_min(
-        {"mode_delay_min": defaults["MODE_DELAY_MIN"], "startup_delay_min": params["startup_delay_min"]}
-    )
+    return effective_mode_delay_min(resolve_mode_delay_params(params))
 
 
 def p0_value_mismatch_reason(rule_id: str, params: dict[str, float]) -> str | None:
