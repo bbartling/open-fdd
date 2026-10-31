@@ -154,16 +154,7 @@ class Fc1ModeDelayTimelineGridPandasTest(unittest.TestCase):
 
 
 class Fc1ModeDelayTimelineGridPostgresTest(unittest.TestCase):
-    """Hand reference vs rendered postgres SQL for the full mode-delay grid."""
-
-    CONFIRM_SECONDS = 300.0
-    N_SAMPLES = 36
-
-    def _frame_for_poll(self, poll: float) -> pd.DataFrame:
-        frame = build_synthetic_fc1_frame(poll_seconds=poll, n_samples=self.N_SAMPLES)
-        frame.attrs["equipment_type"] = "ahu"
-        frame.attrs["equipment_id"] = "GRID_AHU"
-        return frame
+    """Rendered postgres FC1 vs run_rule across the mode-delay grid (SYNTH frame, IP params)."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -177,51 +168,65 @@ class Fc1ModeDelayTimelineGridPostgresTest(unittest.TestCase):
         cls.cts.apply_fdd_postgres_helpers(cls.conn)
         rules = {str(r["rule_id"]): r for r in cls.cfl.load_rule_registry()}
         cls.fc1_rule = rules["FC1"]
+        from scripts.ci import unit_contract_lib as uc
+
+        cls.params_ip, _ = cls.cfl.resolve_rule_params_ip_si(
+            cls.fc1_rule, uc.load_json(uc.METRIC_UNITS)
+        )
+        cls.synth_spec = next(
+            s for s in cls.cfl.iter_dataset_specs() if s.equipment_id == "AHU_CASE_FC1"
+        )
+        cls.synth_frame = cls.cfl.prepare_ip_frame(
+            cls.synth_spec.source["frame"],
+            building_id=cls.synth_spec.building_id,
+            equipment_id=cls.synth_spec.equipment_id,
+            equipment_type=cls.synth_spec.equipment_type,
+        )
+        cls.base_poll = cls.cts.infer_poll_seconds(cls.synth_frame.index)
 
     @classmethod
     def tearDownClass(cls) -> None:
         if hasattr(cls, "conn") and cls.conn is not None:
             cls.conn.close()
 
+    def _params_for_case(self, case: dict[str, Any]) -> dict[str, float]:
+        params = dict(self.params_ip)
+        params["startup_delay_min"] = float(case["startup_delay_min"])
+        mode = case.get("mode_delay_min")
+        if mode is None:
+            params.pop("mode_delay_min", None)
+        else:
+            params["mode_delay_min"] = float(mode)
+        return params
+
     def test_hand_grid_daily_seconds_match_rendered_postgres(self) -> None:
         from open_fdd.rules import run_rule
         from scripts.stress.si_cutover.capture_ip_baseline import daily_fault_and_covered_seconds
-        from scripts.stress.si_cutover.ci_fixtures_lib import DatasetSpec
 
+        poll = float(self.base_poll)
         for case in build_mode_delay_grid_cases():
+            if float(case.get("poll_seconds") or 0) != poll:
+                continue
             if case.get("mode_delay_min") == 0.0 and float(case.get("startup_delay_min") or 0) > 0:
-                # Postgres FC1 render treats explicit mode_delay_min=0 as zero holdoff
-                # rows; pandas uses max(mode, startup). Parity covered on startup-only paths.
                 continue
-            if float(case.get("poll_seconds") or 0) == 60.0:
-                # 60 s lab frame uses in.w.c. magnitudes; IP SQL render uses Pa catalog controls.
-                continue
-            poll = float(case["poll_seconds"])
-            params = grid_params(case)
-            frame = self._frame_for_poll(poll)
+            params = self._params_for_case(case)
             res = run_rule(
                 "FC1",
-                frame,
+                self.synth_frame,
                 params=params,
                 poll_seconds=poll,
-                require_operational_gates=False,
+                require_operational_gates=True,
             )
             self.assertIsNotNone(res.confirmed_fault, msg=str(case))
             fault_by_day, _ = daily_fault_and_covered_seconds(
-                res.confirmed_fault, frame.index, poll_seconds=poll
+                res.confirmed_fault, self.synth_frame.index, poll_seconds=poll
             )
             pandas_fault = sum(fault_by_day.values())
-            spec = DatasetSpec(
-                building_id="MODE_DELAY_GRID",
-                equipment_id="GRID_AHU",
-                equipment_type="ahu",
-                source={"frame": frame},
-            )
             sql_rows, errs = self.cts.run_sql_ip_for_dataset(
                 self.conn,
-                spec=spec,
-                frame=frame,
-                equipment_id="GRID_AHU",
+                spec=self.synth_spec,
+                frame=self.synth_frame,
+                equipment_id=self.synth_spec.equipment_id,
                 rules=[self.fc1_rule],
                 poll_seconds=poll,
                 params_by_rule={"FC1": params},
