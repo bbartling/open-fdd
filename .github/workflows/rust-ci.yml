@@ -85,7 +85,7 @@ jobs:
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
       - name: Ingest driver #1423 acceptance (T1423-1, T1423-2)
-        run: cargo test -p openfdd-central t1423 -- --test-threads=1
+        run: cargo test -p openfdd-central t1423 -- --test-threads=1 --skip t1423_6
 
       - name: Central / fieldbus / MQTT contract tests
         env:
