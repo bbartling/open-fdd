@@ -10,6 +10,7 @@ Uses ``scripts/ci/unit_contract_lib.py`` only — no second conversion table.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import math
 import sys
@@ -27,6 +28,111 @@ from scripts.stress.si_cutover import baseline_io as bio  # noqa: E402
 FROZEN_IP_ORACLE_VERSION = "4.4.9"
 FROZEN_IP_ORACLE_GIT_HEAD = "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0"
 P1_ALGORITHM_LABEL = "current-algorithm unit commutation (not frozen 4.4.9 reproduction)"
+
+
+def _open_fdd_tree_sha256(package_root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(package_root.rglob("*.py")):
+        if any(part in {".git", "__pycache__", ".venv", "venv"} for part in path.parts):
+            continue
+        digest.update(path.relative_to(package_root).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def expected_p1_candidate_oracle_evidence() -> dict[str, Any]:
+    """Pinned candidate oracle identity for current-repo P1 (not frozen 4.4.9)."""
+    import subprocess
+    import tomllib
+
+    repo = REPO.resolve()
+    project = tomllib.loads((repo / "pyproject.toml").read_text(encoding="utf-8"))
+    expected_version = str(project.get("project", {}).get("version") or "")
+    git_head = ""
+    try:
+        git_head = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (subprocess.CalledProcessError, OSError):
+        git_head = ""
+    pkg_root = repo / "open_fdd"
+    return {
+        "repo_root": str(repo),
+        "expected_version": expected_version,
+        "expected_git_head": git_head,
+        "expected_open_fdd_tree_sha256": _open_fdd_tree_sha256(pkg_root) if pkg_root.is_dir() else "",
+        "algorithm_label": P1_ALGORITHM_LABEL,
+    }
+
+
+def verify_current_p1_oracle_provenance() -> tuple[tuple[str, ...], dict[str, Any]]:
+    """Fail P1 when the frozen IP oracle or a foreign open_fdd install is used."""
+    import subprocess
+
+    evidence = expected_p1_candidate_oracle_evidence()
+    errors: list[str] = []
+    try:
+        import open_fdd
+    except ImportError:
+        return ("P1: open_fdd not importable for candidate SI recompute",), evidence
+
+    mod_path = Path(getattr(open_fdd, "__file__", "") or "").resolve()
+    repo_root = Path(evidence["repo_root"]).resolve()
+    try:
+        if not mod_path.is_relative_to(repo_root):
+            errors.append(
+                f"P1: open_fdd loaded outside candidate repo ({mod_path}); "
+                f"expected under {repo_root}"
+            )
+    except ValueError:
+        errors.append(
+            f"P1: open_fdd loaded outside candidate repo ({mod_path}); "
+            f"expected under {repo_root}"
+        )
+
+    version = str(getattr(open_fdd, "__version__", ""))
+    expected_version = str(evidence.get("expected_version") or "")
+    if expected_version and version != expected_version:
+        errors.append(
+            f"P1: open_fdd version {version!r} != candidate pyproject {expected_version!r}"
+        )
+    if version == FROZEN_IP_ORACLE_VERSION:
+        errors.append(
+            "P1: frozen IP oracle 4.4.9 is loaded; current candidate pandas SI required"
+        )
+
+    expected_tree = str(evidence.get("expected_open_fdd_tree_sha256") or "")
+    if expected_tree and mod_path.is_file():
+        actual_tree = _open_fdd_tree_sha256(mod_path.parent)
+        if actual_tree != expected_tree:
+            errors.append(
+                "P1: open_fdd source tree hash mismatch (stale or foreign implementation)"
+            )
+
+    try:
+        git_head = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        evidence = {**evidence, "resolved_git_head": git_head}
+        if git_head == FROZEN_IP_ORACLE_GIT_HEAD and version == FROZEN_IP_ORACLE_VERSION:
+            errors.append("P1: git HEAD matches frozen 35c17ac with 4.4.9 oracle")
+    except (subprocess.CalledProcessError, OSError):
+        pass
+
+    evidence = {
+        **evidence,
+        "resolved_open_fdd_file": str(mod_path),
+        "resolved_version": version,
+    }
+    return tuple(errors), evidence
 
 ANALYTICS_REL_TOL = 1e-6
 FAULT_SECONDS_ATOL = 0.0  # exact equality; no tolerance
@@ -676,36 +782,6 @@ def verify_p0_carryover_all(goldens: list[dict[str, Any]]) -> StageResult:
     return StageResult("P0-carryover", comparisons, tuple(errors))
 
 
-def verify_current_p1_oracle_provenance() -> tuple[str, ...]:
-    """Fail P1 when the frozen 4.4.9 / 35c17ac IP oracle is substituted for current code."""
-    errors: list[str] = []
-    try:
-        import open_fdd
-    except ImportError:
-        return ("P1: open_fdd not importable for candidate SI recompute",)
-    version = str(getattr(open_fdd, "__version__", ""))
-    if version == FROZEN_IP_ORACLE_VERSION:
-        errors.append(
-            "P1: frozen IP oracle 4.4.9 is loaded; current candidate pandas SI required"
-        )
-    import subprocess
-
-    repo = REPO
-    if (repo / ".git").is_dir():
-        try:
-            head = subprocess.run(
-                ["git", "-C", str(repo), "rev-parse", "HEAD"],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-            if head == FROZEN_IP_ORACLE_GIT_HEAD and version == FROZEN_IP_ORACLE_VERSION:
-                errors.append("P1: git HEAD matches frozen 35c17ac with 4.4.9 oracle")
-        except (subprocess.CalledProcessError, OSError):
-            pass
-    return tuple(errors)
-
-
 def p1_recompute_identity_digest(golden: dict[str, Any]) -> str:
     """Cache identity for P1 SI recompute: fixture, SQL registry, metric contract."""
     import hashlib
@@ -749,8 +825,11 @@ def run_p1_ip_vs_si(
     rules = cfl.load_rule_registry()
     rules_by_id = {str(r["rule_id"]): r for r in rules}
     expected = cfl.expected_pandas_rule_ids(rules)
-    errors: list[str] = list(verify_current_p1_oracle_provenance())
-    structured: list[dict[str, Any]] = []
+    prov_errors, prov_evidence = verify_current_p1_oracle_provenance()
+    errors: list[str] = list(prov_errors)
+    structured: list[dict[str, Any]] = [
+        {"kind": "p1_oracle_provenance", **prov_evidence},
+    ]
     comparisons = 0
     min_required = 0
     for golden in goldens:
@@ -1247,19 +1326,13 @@ def compare_p3_post_cutover(
     site_dir = baseline_dir / building_id
     if not site_dir.is_dir():
         return StageResult("P3", 0, (f"baseline missing site dir {site_dir}",))
-    manifest, manifest_errors = bio.verify_site_manifest(site_dir)
+    manifest, manifest_errors = bio.verify_baseline_for_p3(
+        baseline_dir,
+        building_id=building_id,
+        expected_window_start=expected_window_start,
+        expected_window_end=expected_window_end,
+    )
     errors: list[str] = list(manifest_errors)
-    meta = manifest.get("meta") if isinstance(manifest.get("meta"), dict) else {}
-    window_start = str(meta.get("window_start") or meta.get("requested_window_start") or "")
-    window_end = str(meta.get("window_end") or meta.get("requested_window_end") or "")
-    if expected_window_start and window_start and expected_window_start != window_start:
-        errors.append(
-            f"P3 window_start mismatch: expected {expected_window_start} manifest {window_start}"
-        )
-    if expected_window_end and window_end and expected_window_end != window_end:
-        errors.append(
-            f"P3 window_end mismatch: expected {expected_window_end} manifest {window_end}"
-        )
     if manifest_errors:
         return StageResult("P3", 0, tuple(errors), metadata_checks=0)
 

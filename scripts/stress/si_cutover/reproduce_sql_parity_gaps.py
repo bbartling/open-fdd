@@ -40,7 +40,7 @@ def main() -> int:
     probes = []
     manifest_ok = ({}, [])
     with mock.patch.object(Path, "is_dir", return_value=True), mock.patch.object(
-        pc.bio, "verify_site_manifest", return_value=manifest_ok
+        pc.bio, "verify_baseline_for_p3", return_value=manifest_ok
     ), mock.patch.object(pc, "load_baseline_site_dir", return_value=baseline):
         for name, rows, counts in [
             ("missing_all_sql", [], [count]),
@@ -86,9 +86,7 @@ def main() -> int:
     ), mock.patch.object(
         pc, "verify_golden_rule_attempted", return_value=pc.StageResult("coverage", 1, ())
     ), mock.patch.object(
-        pc, "verify_current_p1_oracle_provenance", return_value=()
-    ), mock.patch.object(
-        pc, "verify_current_p1_oracle_provenance", return_value=()
+        pc, "verify_current_p1_oracle_provenance", return_value=((), {})
     ), mock.patch.object(
         cfl, "recompute_si_daily_for_golden", return_value={pc.fdd_daily_key(row): 300.0}
     ) as recompute:
@@ -117,12 +115,15 @@ def main() -> int:
             class Col2:
                 name = "fault_hours"
 
-            return [Col(), Col2()]
+            class Col3:
+                name = "covered_hours"
+
+            return [Col(), Col2(), Col3()]
 
         def fetchall(self):
             if self.queries[-1] == "OVERLAY":
                 return [("E", pd.Timestamp("2026-01-01T00:00:00Z"), True)]
-            return [("E", 300.0 / 3600.0)]
+            return [("E", 300.0 / 3600.0, 600.0 / 3600.0)]
 
     cur = Cursor()
     with mock.patch.object(cts, "render_rule_sql", return_value="ORIGINAL_AGGREGATE"), mock.patch.object(

@@ -418,6 +418,16 @@ def compare_sql_daily_rows(
                 )
         cov_a = a.get("covered_seconds")
         cov_b = b.get("covered_seconds")
+        if cov_b is not None and cov_a is None:
+            return (
+                f"{label_left} vs {label_right} {key} covered_seconds: "
+                f"aggregate missing coverage while {label_right} has {cov_b}"
+            )
+        if cov_a is not None and cov_b is None:
+            return (
+                f"{label_left} vs {label_right} {key} covered_seconds: "
+                f"{label_right} missing coverage while {label_left} has {cov_a}"
+            )
         if cov_a is not None and cov_b is not None:
             if float(cov_a) != float(cov_b):
                 return (
@@ -491,10 +501,14 @@ def _execute_original_aggregate_daily(
         return [], "aggregate no fault_hours column"
     equip_idx = columns.index("equipment_id")
     hours_idx = columns.index(hours_col)
+    cov_idx = columns.index("covered_hours") if "covered_hours" in columns else None
     hours = None
+    covered_seconds: float | None = None
     for row in fetched:
         if str(row[equip_idx]) == equipment_id:
             hours = float(row[hours_idx])
+            if cov_idx is not None:
+                covered_seconds = float(row[cov_idx]) * 3600.0
             break
     if hours is None:
         return [], "aggregate equipment missing in sql result"
@@ -511,9 +525,9 @@ def _execute_original_aggregate_daily(
             "equipment_id": equipment_id,
             "utc_day": day,
             "fault_seconds": hours * 3600.0,
-            "covered_seconds": None,
+            "covered_seconds": covered_seconds,
             "status": "FAULT" if hours > 0 else "OK",
-            "pair_status": "computed",
+            "pair_status": "aggregate_only",
             "reason": "aggregate_only_row",
         }
     ], None
@@ -631,8 +645,6 @@ def execute_sql_rule_daily(
     if agg_err:
         return [], agg_err
     for row in aggregate_rows:
-        if row.get("covered_seconds") is None:
-            row["covered_seconds"] = 0.0
         row["pair_status"] = "aggregate_fault_total_only"
         row["reason"] = "no_fault_series_overlay"
     return aggregate_rows, None

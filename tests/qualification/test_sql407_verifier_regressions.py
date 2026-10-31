@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -50,7 +51,7 @@ class Sql407VerifierRegressionTests(unittest.TestCase):
             "sample_counts": [count],
         }
         with mock.patch.object(Path, "is_dir", return_value=True), mock.patch.object(
-            self.pc.bio, "verify_site_manifest", return_value=({}, [])
+            self.pc.bio, "verify_baseline_for_p3", return_value=({}, [])
         ), mock.patch.object(self.pc, "load_baseline_site_dir", return_value=baseline):
             return self.pc.compare_p3_post_cutover(
                 baseline_dir=Path("/unused"),
@@ -100,7 +101,7 @@ class Sql407VerifierRegressionTests(unittest.TestCase):
         ), mock.patch.object(
             self.pc, "verify_golden_rule_attempted", return_value=self.pc.StageResult("coverage", 1, ())
         ), mock.patch.object(
-            self.pc, "verify_current_p1_oracle_provenance", return_value=()
+            self.pc, "verify_current_p1_oracle_provenance", return_value=((), {})
         ), mock.patch.object(
             cfl, "recompute_si_daily_for_golden", return_value={self.pc.fdd_daily_key(row): 300.0}
         ) as recompute:
@@ -132,12 +133,13 @@ class Sql407VerifierRegressionTests(unittest.TestCase):
                 return [
                     type("C", (), {"name": "equipment_id"})(),
                     type("C", (), {"name": "fault_hours"})(),
+                    type("C", (), {"name": "covered_hours"})(),
                 ]
 
             def fetchall(self):
                 if self.queries[-1] == "OVERLAY":
                     return [("E", pd.Timestamp("2026-01-01T00:00:00Z"), True)]
-                return [("E", 0.08333333333333333)]
+                return [("E", 0.08333333333333333, 0.08333333333333333)]
 
         cur = Cursor()
         with mock.patch.object(self.cts, "render_rule_sql", return_value="ORIGINAL_AGGREGATE"), mock.patch.object(
@@ -166,12 +168,12 @@ class Sql407VerifierRegressionTests(unittest.TestCase):
 
             @property
             def description(self):
-                return [type("C", (), {"name": "equipment_id"})(), type("C", (), {"name": "fault_hours"})()]
+                return [type("C", (), {"name": "equipment_id"})(), type("C", (), {"name": "fault_hours"})(), type("C", (), {"name": "covered_hours"})()]
 
             def fetchall(self):
                 if self.queries[-1] == "OVERLAY":
                     return [("E", pd.Timestamp("2026-01-01T00:00:00Z"), True)]
-                return [("E", 0.16666666666666666)]
+                return [("E", 0.16666666666666666, 0.16666666666666666)]
 
         cur = Cursor()
         with mock.patch.object(self.cts, "render_rule_sql", return_value="AGG"), mock.patch.object(
@@ -187,6 +189,133 @@ class Sql407VerifierRegressionTests(unittest.TestCase):
             )
         self.assertIsNotNone(error)
         self.assertIn("ORIGINAL_AGGREGATE", error)
+
+    def test_sql407_03_aggregate_coverage_zero_fails(self) -> None:
+        class Cursor:
+            def __init__(self):
+                self.queries: list[str] = []
+
+            def execute(self, query):
+                self.queries.append(query)
+
+            @property
+            def description(self):
+                return [
+                    type("C", (), {"name": "equipment_id"})(),
+                    type("C", (), {"name": "fault_hours"})(),
+                    type("C", (), {"name": "covered_hours"})(),
+                ]
+
+            def fetchall(self):
+                if self.queries[-1] == "OVERLAY":
+                    return [("E", pd.Timestamp("2026-01-01T00:00:00Z"), True)]
+                return [("E", 300.0 / 3600.0, 0.0)]
+
+        cur = Cursor()
+        with mock.patch.object(self.cts, "render_rule_sql", return_value="AGG"), mock.patch.object(
+            self.cts, "rewrite_fault_series", return_value="OVERLAY"
+        ):
+            _rows, error = self.cts.execute_sql_rule_daily(
+                cur,
+                rule={"rule_id": "FC1", "sql_file": "fixture.sql"},
+                building_id="QA",
+                equipment_id="E",
+                poll_seconds=300,
+                index=pd.date_range("2026-01-01T00:00:00Z", periods=2, freq="5min"),
+            )
+        self.assertIsNotNone(error)
+        self.assertIn("covered_seconds", error)
+
+    def test_sql407_03_aggregate_coverage_nine_hundred_fails(self) -> None:
+        class Cursor:
+            def __init__(self):
+                self.queries: list[str] = []
+
+            def execute(self, query):
+                self.queries.append(query)
+
+            @property
+            def description(self):
+                return [
+                    type("C", (), {"name": "equipment_id"})(),
+                    type("C", (), {"name": "fault_hours"})(),
+                    type("C", (), {"name": "covered_hours"})(),
+                ]
+
+            def fetchall(self):
+                if self.queries[-1] == "OVERLAY":
+                    return [("E", pd.Timestamp("2026-01-01T00:00:00Z"), True)]
+                return [("E", 300.0 / 3600.0, 900.0 / 3600.0)]
+
+        cur = Cursor()
+        with mock.patch.object(self.cts, "render_rule_sql", return_value="AGG"), mock.patch.object(
+            self.cts, "rewrite_fault_series", return_value="OVERLAY"
+        ):
+            _rows, error = self.cts.execute_sql_rule_daily(
+                cur,
+                rule={"rule_id": "FC1", "sql_file": "fixture.sql"},
+                building_id="QA",
+                equipment_id="E",
+                poll_seconds=300,
+                index=pd.date_range("2026-01-01T00:00:00Z", periods=2, freq="5min"),
+            )
+        self.assertIsNotNone(error)
+        self.assertIn("covered_seconds", error)
+
+    def test_sql407_03_no_overlay_keeps_unknown_coverage(self) -> None:
+        class Cursor:
+            @property
+            def description(self):
+                return [
+                    type("C", (), {"name": "equipment_id"})(),
+                    type("C", (), {"name": "fault_hours"})(),
+                ]
+
+            def execute(self, _query):
+                return None
+
+            def fetchall(self):
+                return [("E", 0.0)]
+
+        cur = Cursor()
+        with mock.patch.object(self.cts, "render_rule_sql", return_value="AGG"), mock.patch.object(
+            self.cts, "rewrite_fault_series", return_value=None
+        ):
+            rows, error = self.cts.execute_sql_rule_daily(
+                cur,
+                rule={"rule_id": "FC1", "sql_file": "fixture.sql"},
+                building_id="QA",
+                equipment_id="E",
+                poll_seconds=300,
+                index=pd.date_range("2026-01-01T00:00:00Z", periods=2, freq="5min"),
+            )
+        self.assertIsNone(error)
+        self.assertEqual(rows[0].get("covered_seconds"), None)
+        self.assertEqual(rows[0].get("pair_status"), "aggregate_fault_total_only")
+
+    def test_sql407_02_p1_foreign_open_fdd_outside_repo_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            foreign = Path(tmp) / "foreign_open_fdd"
+            pkg = foreign / "open_fdd"
+            pkg.mkdir(parents=True)
+            (pkg / "__init__.py").write_text('__version__ = "5.0.0"\n', encoding="utf-8")
+            (foreign / "pyproject.toml").write_text(
+                '[project]\nversion = "5.0.0"\n', encoding="utf-8"
+            )
+            sys.path.insert(0, str(foreign))
+            try:
+                for name in list(sys.modules):
+                    if name == "open_fdd" or name.startswith("open_fdd."):
+                        del sys.modules[name]
+                errors, evidence = self.pc.verify_current_p1_oracle_provenance()
+                self.assertTrue(errors)
+                self.assertIn("outside candidate repo", " ".join(errors))
+                self.assertIn("resolved_open_fdd_file", evidence)
+            finally:
+                sys.path[:] = [p for p in sys.path if p != str(foreign)]
+                for name in list(sys.modules):
+                    if name == "open_fdd" or name.startswith("open_fdd."):
+                        del sys.modules[name]
 
     def test_sql407_05_vacuous_rule_attempted_fails(self) -> None:
         golden = {

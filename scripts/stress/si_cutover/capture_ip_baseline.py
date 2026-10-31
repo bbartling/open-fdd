@@ -1691,6 +1691,13 @@ def capture_site(
     if not ws or not we:
         raise RuntimeError("FDD run returned no window_start/window_end")
 
+    assert_no_interleaved_fdd_run(
+        conn,
+        building_id=building_id,
+        marker=scope_marker,
+        allowed_run_ids={str(record["run_id"]) for record in run_records if record.get("run_id")},
+    )
+
     sql_daily = fetch_sql_daily_rows(
         conn, building_id=building_id, window_start=ws, window_end=we
     )
@@ -1777,6 +1784,8 @@ def capture_site(
 
     return {
         "building_id": building_id,
+        "window_start": ws,
+        "window_end": we,
         "run_id": run_records[-1]["run_id"] if run_records else "",
         "run_records": run_records,
         "sql_rows": len(sql_daily),
