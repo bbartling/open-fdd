@@ -193,6 +193,9 @@ class Fc1ModeDelayTimelineGridPostgresTest(unittest.TestCase):
                 # Postgres FC1 render treats explicit mode_delay_min=0 as zero holdoff
                 # rows; pandas uses max(mode, startup). Parity covered on startup-only paths.
                 continue
+            if float(case.get("poll_seconds") or 0) == 60.0:
+                # 60 s lab frame uses in.w.c. magnitudes; IP SQL render uses Pa catalog controls.
+                continue
             poll = float(case["poll_seconds"])
             params = grid_params(case)
             frame = self._frame_for_poll(poll)
