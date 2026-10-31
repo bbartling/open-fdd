@@ -53,6 +53,34 @@ FROZEN_AB_PREREQ = (
     "pinned oracle checkout and old SQL execution path; identity dictionaries alone are not executions"
 )
 
+LEDGER_PATH = Path(__file__).resolve().parent / "expected_change_ledger.json"
+
+_SV_RANGE_SCALE_PARAMS = frozenset(
+    {"range_scale_temperature", "range_scale_humidity", "range_scale_pressure"}
+)
+
+
+def _load_expected_change_ledger() -> dict[str, Any]:
+    return json.loads(LEDGER_PATH.read_text(encoding="utf-8"))
+
+
+def sv_range_scale_nondefault_ledger_waiver(
+    rule_id: str, tuner: str | None, case_label: str
+) -> bool:
+    """True when a C/D mismatch is an expected SV-RANGE scale geometry gap (#1408 ledger)."""
+    if rule_id != "SV-RANGE" or not tuner or tuner not in _SV_RANGE_SCALE_PARAMS:
+        return False
+    if case_label == "default":
+        return False
+    for entry in _load_expected_change_ledger().get("issues") or []:
+        if int(entry.get("issue") or 0) != 1408:
+            continue
+        params = entry.get("parameters") or []
+        cases = entry.get("non_default_tuner_cases") or []
+        if tuner in params and case_label in cases:
+            return bool(entry.get("waive_cd_agreement_on_nondefault"))
+    return False
+
 
 @dataclass
 class MatrixRow:
@@ -65,6 +93,7 @@ class MatrixRow:
     mismatch: int = 0
     skipped: int = 0
     unsupported: int = 0
+    ledger_waived: int = 0
     runner_a: str = "BLOCKED"
     runner_b: str = "BLOCKED"
     runner_c: str = "PENDING"
@@ -83,6 +112,7 @@ class MatrixRow:
             "mismatch": self.mismatch,
             "skipped": self.skipped,
             "unsupported": self.unsupported,
+            "ledger_waived": self.ledger_waived,
             "runner_a": self.runner_a,
             "runner_b": self.runner_b,
             "runner_c": self.runner_c,
@@ -419,9 +449,13 @@ def run_matrix(conn) -> dict[str, Any]:
                     row.skipped += 1
                     continue
                 row.compared += compared
-                row.mismatch += mismatch
                 compared_total += compared
-                if mismatch:
+                if mismatch and sv_range_scale_nondefault_ledger_waiver(
+                    row.rule_id, row.tuner, case_label
+                ):
+                    row.ledger_waived += mismatch
+                elif mismatch:
+                    row.mismatch += mismatch
                     errors.append(
                         f"{row.rule_id}/{row.tuner}/{case_label}@{spec.building_id}: "
                         f"{mismatch} mismatches in {compared} cells"
@@ -477,6 +511,7 @@ def _totals(rows: list[MatrixRow]) -> dict[str, int]:
         "mismatch": sum(r.mismatch for r in rows),
         "skipped": sum(r.skipped for r in rows),
         "unsupported": sum(r.unsupported for r in rows),
+        "ledger_waived": sum(r.ledger_waived for r in rows),
     }
 
 

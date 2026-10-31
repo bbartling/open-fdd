@@ -97,6 +97,17 @@ class SqlQualC3aHarnessTests(unittest.TestCase):
         issues = {item["issue"] for item in ledger.get("issues") or []}
         self.assertIn(1469, issues)
         self.assertIn(1470, issues)
+        self.assertIn(1408, issues)
+
+    def test_sv_range_scale_ledger_waiver(self) -> None:
+        rtm = _load("rtm_waiver", REPO / "scripts/qualification/c3a/rule_tuner_matrix.py")
+        self.assertFalse(
+            rtm.sv_range_scale_nondefault_ledger_waiver("SV-RANGE", "range_scale_temperature", "default")
+        )
+        self.assertTrue(
+            rtm.sv_range_scale_nondefault_ledger_waiver("SV-RANGE", "range_scale_temperature", "min")
+        )
+        self.assertFalse(rtm.sv_range_scale_nondefault_ledger_waiver("FC1", "mode_delay_min", "min"))
 
     def test_sensor_fault_flag_mismatch_fails_full_compare(self) -> None:
         from scripts.qualification.c3b_sqlqual import qual_19_analytics_fresh as q19

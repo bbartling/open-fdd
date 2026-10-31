@@ -431,6 +431,10 @@ def qual_06_rule_matrix(conn) -> QualCell:
         cell.errors.append("FC1 expected-change ledger probe missing mode_delay default reason")
     else:
         cell.comparisons += 1
+    if not rtm.sv_range_scale_nondefault_ledger_waiver("SV-RANGE", "range_scale_temperature", "min"):
+        cell.errors.append("SV-RANGE scale ledger waiver probe missing for non-default min case")
+    else:
+        cell.comparisons += 1
     cell.evidence["expected_change_ledger"] = _load_ledger()
 
     if cell.errors:

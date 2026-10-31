@@ -22,6 +22,18 @@
       "harness_probe": "SQL-QUAL-04 aggregate_vs_overlay",
       "waive_four_way_agreement": false,
       "compare_against": "paired_aggregate_and_overlay_seconds"
+    },
+    {
+      "issue": 1408,
+      "title": "SV-RANGE range_scale_* non-default: SQL multiplies bound literals, pandas scales half-width around midpoint",
+      "affected_rules": ["SV-RANGE"],
+      "parameters": ["range_scale_temperature", "range_scale_humidity", "range_scale_pressure"],
+      "non_default_tuner_cases": ["min", "max", "nondefault", "boundary"],
+      "runner_c_d_expected": "default scale (1.0) must agree; non-default scale cases may diverge until SQL screening port matches pandas sweep geometry",
+      "independent_oracle": "open_fdd.rules.cookbook_catalog._sweep_range vs sql/fdd/postgres/rules/sv_range.sql RANGE_SCALE_* placeholders",
+      "harness_probe": "rule_tuner_matrix.sv_range_scale_nondefault_ledger_waiver",
+      "waive_cd_agreement_on_nondefault": true,
+      "compare_against": "default_tuner_cd_agreement_only_for_scale_params"
     }
   ]
 }
