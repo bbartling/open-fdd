@@ -27,12 +27,16 @@ from unit_contract_lib import (  # noqa: E402
     convert_to_canonical,
     derive_tuner_effect,
     assert_ip_unit_declared,
+    assert_ip_unit_cfm_si_values,
     assert_unit_matches_kind,
+    iter_ip_unit_cfm_params,
+    lps_per_cfm_contract,
     load_json,
     normalize_alias,
     registry_param_blocks,
     registry_param_kind,
     sha256_file,
+    REJECTED_LPS_PER_CFM,
 )
 
 
@@ -247,6 +251,35 @@ def check_pa_per_in_wc_product_sites() -> None:
     print(f"PASS PA_PER_IN_WC contract parity ({contract}) across Python + SPA sites")
 
 
+def check_lps_per_cfm_ip_unit_si_values() -> None:
+    """Every ip_unit cfm control stores L/s defaults/min/max/step as cfm×LPS_PER_CFM."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    metric = load_json(METRIC_UNITS)
+    lps = lps_per_cfm_contract(metric)
+    if abs(lps - REJECTED_LPS_PER_CFM) < 1e-12:
+        fail(f"contract LPS_PER_CFM must not equal rejected factor {REJECTED_LPS_PER_CFM}")
+    from open_fdd.units.convert import LPS_PER_CFM as py_lps
+
+    if abs(py_lps - lps) > 1e-9:
+        fail(f"open_fdd.units.convert.LPS_PER_CFM={py_lps} != contract {lps}")
+
+    import yaml
+
+    registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
+    tuning = load_json(TUNING)
+    count = 0
+    for label, doc in (("registry", registry), ("tuning", tuning)):
+        for rule_id, key, param in iter_ip_unit_cfm_params(doc, label):
+            where = f"{label} {rule_id}.{key}"
+            try:
+                assert_ip_unit_cfm_si_values(metric, where, param)
+            except AssertionError as exc:
+                fail(str(exc))
+            count += 1
+    print(f"PASS ip_unit cfm L/s parameters match LPS_PER_CFM ({count} controls)")
+
+
 def check_metadata_only_diff() -> None:
     try:
         assert_metadata_only_registry_diff()
@@ -271,6 +304,7 @@ def main() -> int:
     check_tuning_catalog()
     check_goldens_roundtrip()
     check_pa_per_in_wc_product_sites()
+    check_lps_per_cfm_ip_unit_si_values()
     check_metadata_only_diff()
     print("All unit contract checks passed.")
     return 0

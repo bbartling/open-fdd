@@ -300,6 +300,62 @@ def _float_close(a: float, b: float, *, rel: float = 1e-6, abs_tol: float = 1e-6
     return abs(a - b) <= max(abs_tol, rel * max(abs(a), abs(b), 1.0))
 
 
+REJECTED_LPS_PER_CFM = 0.47194745
+
+
+def lps_per_cfm_contract(metric: dict[str, Any]) -> float:
+    return float((metric.get("constants") or {})["LPS_PER_CFM"])
+
+
+def param_satisfies_ip_unit_cfm_contract(metric: dict[str, Any], param: dict[str, Any]) -> bool:
+    try:
+        assert_ip_unit_cfm_si_values(metric, "contract", param)
+    except AssertionError:
+        return False
+    return True
+
+
+def assert_ip_unit_cfm_si_values(metric: dict[str, Any], where: str, param: dict[str, Any]) -> None:
+    """Every L/s default/min/max/step with ip_unit cfm equals implied cfm × LPS_PER_CFM."""
+    if param.get("ip_unit") != "cfm":
+        return
+    unit = str(param.get("unit") or "")
+    if unit not in ("L_per_s", "L/s"):
+        raise AssertionError(f"{where}: ip_unit cfm requires L/s storage unit, got {unit!r}")
+    lps = lps_per_cfm_contract(metric)
+    if abs(lps - 0.471947) > 1e-9:
+        raise AssertionError(f"{where}: unexpected LPS_PER_CFM constant {lps}")
+    for field in _VALUE_FIELDS:
+        if field not in param:
+            continue
+        value = float(param[field])
+        if value == 0.0:
+            continue
+        cfm_source = round(value / lps)
+        expected = cfm_source * lps
+        if not _float_close(value, expected, rel=1e-9, abs_tol=1e-9):
+            raise AssertionError(
+                f"{where}.{field}: {value} L/s != round(cfm)×LPS_PER_CFM "
+                f"({cfm_source}×{lps}={expected})"
+            )
+        wrong = cfm_source * REJECTED_LPS_PER_CFM
+        if _float_close(value, wrong, rel=1e-9, abs_tol=1e-9) and not _float_close(
+            value, expected, rel=1e-12, abs_tol=1e-12
+        ):
+            raise AssertionError(
+                f"{where}.{field}: matches rejected factor {REJECTED_LPS_PER_CFM}"
+            )
+
+
+def iter_ip_unit_cfm_params(doc: Any, label: str) -> list[tuple[str, str, dict[str, Any]]]:
+    out: list[tuple[str, str, dict[str, Any]]] = []
+    for rule_id, params in _params_by_rule(doc, label).items():
+        for key, param in params.items():
+            if param.get("ip_unit") == "cfm":
+                out.append((rule_id, key, param))
+    return out
+
+
 def _rename_map() -> dict[str, str]:
     renames = load_json(RENAME_MAP).get("renames")
     if not isinstance(renames, dict):
@@ -350,8 +406,21 @@ def validate_param_si_change(
                 f"{where}: kind changed {master_kind} -> {branch_kind} without a unit change"
             )
         for field in _VALUE_FIELDS:
-            if master.get(field) != branch.get(field):
-                raise AssertionError(f"{where}.{field}: value changed without a unit change")
+            if field not in master and field not in branch:
+                continue
+            if field not in master or field not in branch:
+                raise AssertionError(f"{where}.{field}: present on only one side of the cutover")
+            mv = master.get(field)
+            bv = branch.get(field)
+            if mv == bv:
+                continue
+            if (
+                branch.get("ip_unit") == "cfm"
+                and param_satisfies_ip_unit_cfm_contract(metric, branch)
+                and not param_satisfies_ip_unit_cfm_contract(metric, master)
+            ):
+                continue
+            raise AssertionError(f"{where}.{field}: value changed without a unit change")
         return
     if branch_kind not in QUANTITY_KINDS:
         raise AssertionError(
