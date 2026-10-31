@@ -45,12 +45,18 @@ def _render_rule(*, web_asof_bound_seconds: float) -> str:
 
 def _connect(url: str):
     try:
-        import psycopg2
+        import psycopg
     except ImportError as exc:  # pragma: no cover - env specific
         raise SystemExit(
-            "psycopg2 required: pip install psycopg2-binary or use system python3-psycopg2"
+            "psycopg required: pip install 'psycopg[binary]' (see scripts/qualification/requirements.txt)"
         ) from exc
-    return psycopg2.connect(url)
+    return psycopg.connect(url)
+
+
+def _executemany(cur, sql: str, rows: list[tuple]) -> None:
+    if not rows:
+        return
+    cur.executemany(sql, rows)
 
 
 def _setup_fixture(cur, *, rows_per_equipment: int, equipment_count: int, web_mode: str) -> None:
@@ -78,11 +84,7 @@ def _setup_fixture(cur, *, rows_per_equipment: int, equipment_count: int, web_mo
         ts = (t0 + timedelta(minutes=5 * i)).isoformat()
         for eq in eqs:
             hist.append((eq, ts, 10.0 + (i % 7) * 0.1, None))
-    import psycopg2.extras
-
-    psycopg2.extras.execute_values(
-        cur, "INSERT INTO history VALUES %s", hist, page_size=5000
-    )
+    _executemany(cur, "INSERT INTO history VALUES (%s, %s, %s, %s)", hist)
     n_web = max(50, rows_per_equipment // 20)
     web_rows: list[tuple[str, float]] = []
     if web_mode == "sparse":
@@ -98,9 +100,7 @@ def _setup_fixture(cur, *, rows_per_equipment: int, equipment_count: int, web_mo
         for j in range(n_web):
             ts = (t0 + timedelta(minutes=5 * j * step)).isoformat()
             web_rows.append((ts, 9.5))
-    psycopg2.extras.execute_values(
-        cur, "INSERT INTO weather VALUES %s", web_rows, page_size=5000
-    )
+    _executemany(cur, "INSERT INTO weather VALUES (%s, %s)", web_rows)
     cur.execute("ANALYZE history; ANALYZE weather;")
 
 
@@ -248,21 +248,19 @@ def run_cancellation_recovery(
     """Prove a timed-out rule attempt releases the session for a follow-up run."""
     sql = _render_rule(web_asof_bound_seconds=web_asof_bound_seconds)
     conn = _connect(database_url)
-    conn.autocommit = False
-    cur = conn.cursor()
-    _setup_fixture(cur, rows_per_equipment=4700, equipment_count=1, web_mode="dense")
-    conn.commit()
-    cur.execute(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'")
-    cancelled = False
-    try:
-        cur.execute(sql)
-        cur.fetchall()
-    except Exception as exc:  # noqa: BLE001 — psycopg2 timeout class varies
-        conn.rollback()
-        cancelled = "timeout" in str(exc).lower() or "cancel" in str(exc).lower()
-    cur.execute("RESET statement_timeout")
-    conn.commit()
-    warm_s, _, _ = _time_rule(cur, sql)
+    with conn:
+        with conn.cursor() as cur:
+            _setup_fixture(cur, rows_per_equipment=4700, equipment_count=1, web_mode="dense")
+            cur.execute(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'")
+            cancelled = False
+            try:
+                cur.execute(sql)
+                cur.fetchall()
+            except Exception as exc:  # noqa: BLE001
+                cancelled = "timeout" in str(exc).lower() or "cancel" in str(exc).lower()
+            cur.execute("RESET statement_timeout")
+        with conn.cursor() as cur:
+            warm_s, _, _ = _time_rule(cur, sql)
     conn.close()
     return {
         "statement_timeout_ms": statement_timeout_ms,
