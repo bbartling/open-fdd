@@ -379,6 +379,17 @@ async fn apply_schema(pool: &PgPool) {
             equipment_id text,
             PRIMARY KEY (site_id, openfdd_key)
         )",
+        "CREATE TABLE IF NOT EXISTS analytics_result (
+            building_id text NOT NULL,
+            query_id text NOT NULL,
+            query_version text NOT NULL,
+            window_key text NOT NULL,
+            config_hash text NOT NULL,
+            stale boolean NOT NULL DEFAULT false,
+            payload jsonb NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (building_id, query_id, query_version, window_key, config_hash)
+        )",
     ] {
         crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
     }
