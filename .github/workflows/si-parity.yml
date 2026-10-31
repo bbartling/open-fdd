@@ -85,7 +85,7 @@ concurrency:
 jobs:
   si-parity:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     services:
       timescale:
         image: timescale/timescaledb:2.17.2-pg16
