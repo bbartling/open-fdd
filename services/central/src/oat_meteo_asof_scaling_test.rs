@@ -69,7 +69,7 @@ fn render_mask_query(web_asof_bound_seconds: f64, legacy_joined: bool) -> String
         product[web_intervals..base_boundary + 2].to_string()
     };
     let base_body = &product[base_boundary + "),\nbase AS (".len()..elapsed];
-    let mut body = format!("WITH {head}{joined}\nbase AS ({base_body})");
+    let mut body = format!("{head}{joined}\nbase AS ({base_body})");
     body = body.replace(
         "{{WEB_ASOF_BOUND_SECONDS}}",
         &format!("{web_asof_bound_seconds}"),
@@ -78,13 +78,13 @@ fn render_mask_query(web_asof_bound_seconds: f64, legacy_joined: bool) -> String
     body = body.replace("{{CONFIRM_SECONDS}}", "900");
     body = body.replace("{{MAX_GAP_HOURS}}", "1.0");
     format!(
-        "WITH mask_rows AS ({body}) \
+        "{body} \
          SELECT md5(string_agg(row_sig, E'\\n' ORDER BY equipment_id, timestamp_utc)) AS digest \
          FROM ( \
            SELECT equipment_id, timestamp_utc, \
              equipment_id || '|' || timestamp_utc::text || '|' || assessable::text \
              || '|' || COALESCE(raw_fault::text, 'null') AS row_sig \
-           FROM mask_rows \
+           FROM base \
          ) s"
     )
 }
