@@ -245,6 +245,7 @@ jobs:
           python3 -B -m unittest tests.qualification.test_c3b_sqlqual_07_10_analytics.C3bMatrixOfflineTests -v
 
       - name: Upload c3b_sqlqual_matrix.json
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: c3b-sqlqual-matrix

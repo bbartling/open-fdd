@@ -5,8 +5,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pandas as pd
-
 REPO = Path(__file__).resolve().parents[3]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
@@ -31,7 +29,7 @@ def run_offline() -> list[QualCell]:
         params=params,
         poll_seconds=300.0,
         confirm_seconds=300.0,
-        require_operational_gate=False,
+        require_operational_gate=True,
     )
     ref_total = sum(ref.fault_seconds_by_day.values())
     if ref_total > 0:
@@ -66,42 +64,31 @@ def run_postgres(conn) -> list[QualCell]:
         params=params,
         poll_seconds=300.0,
         confirm_seconds=300.0,
-        require_operational_gate=False,
+        require_operational_gate=True,
     )
     ref_total = sum(ref.fault_seconds_by_day.values())
     site = "C3B_QUAL10"
     equip = str(frame.attrs.get("equipment_id") or "AHU_CASE_FC1")
-    cur = conn.cursor()
-    try:
-        parity = cts._load_parity_module()
-        cts.purge_site(cur, site)
-        cts.seed_frame(
-            cur,
-            parity,
-            site_id=site,
-            equipment_id=equip,
-            equip_type="ahu",
-            frame=frame,
-            storage="si",
-        )
-        cts.fill_history(cur, site, cts.frame_sql_columns(frame))
-        conn.commit()
-        daily, err = cts.execute_sql_rule_daily(
-            cur,
-            rule=fc1,
-            building_id=site,
-            equipment_id=equip,
-            poll_seconds=300.0,
-            index=frame.index,
-            render_overrides=params,
-            storage="si",
-        )
-    finally:
-        cur.close()
-    if err:
-        cells.append(QualCell("10_pg_aggregate_overlay_oracle", "FAIL", 0, err))
+    spec = cfl.DatasetSpec(
+        building_id=site,
+        equipment_id=equip,
+        equipment_type="ahu",
+        source={"frame": frame},
+    )
+    sql_rows, errs = cts.run_sql_ip_for_dataset(
+        conn,
+        spec=spec,
+        frame=frame,
+        equipment_id=equip,
+        rules=[fc1],
+        poll_seconds=300.0,
+        params_by_rule={"FC1": params},
+    )
+    conn.commit()
+    if errs:
+        cells.append(QualCell("10_pg_aggregate_overlay_oracle", "FAIL", 0, "; ".join(errs[:5])))
         return cells
-    sql_total = sum(float(r.get("fault_seconds") or 0) for r in daily)
+    sql_total = sum(float(r.get("fault_seconds") or 0) for r in sql_rows)
     ok = abs(sql_total - ref_total) < 1e-3
     cells.append(
         QualCell(
@@ -111,7 +98,7 @@ def run_postgres(conn) -> list[QualCell]:
             detail=f"sql={sql_total} oracle={ref_total}",
         )
     )
-    covered = [r.get("covered_seconds") for r in daily if r.get("covered_seconds") is not None]
+    covered = [r.get("covered_seconds") for r in sql_rows if r.get("covered_seconds") is not None]
     if covered and all(float(c) > 0 for c in covered):
         cells.append(QualCell("10_pg_coverage_not_zero", "PASS", comparisons=len(covered)))
     else:

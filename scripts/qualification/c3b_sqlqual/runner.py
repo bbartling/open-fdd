@@ -181,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
     failed = [comp.id for comp in matrix.components if comp.status == "FAIL"]
     if failed:
         print(f"C3b matrix FAIL components: {', '.join(failed)}", file=sys.stderr)
+        for err in matrix.errors[:12]:
+            print(f"C3b matrix error: {err}", file=sys.stderr)
         return 1
     if args.require_db and not matrix.db_hydrated:
         print("C3b require-db but matrix not hydrated", file=sys.stderr)

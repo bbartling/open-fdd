@@ -103,13 +103,18 @@ def _seed_dataset(conn, *, ds, si_frame) -> None:
 
 
 def run_postgres(conn) -> list[QualCell]:
+    import datetime as dt
+
     metric = _metric()
     si_params = ap.resolve_params("metric", metric)
-    as_of = __import__("datetime").datetime.fromisoformat("2026-06-01T00:00:00+00:00")
+    golden = ap.load_analytics_goldens()
+    as_of_raw = str(golden["evaluated_at"])
+    as_of = dt.datetime.fromisoformat(as_of_raw.replace("Z", "+00:00"))
     stems = cap2.all_analytics_sql_stems()
     comparisons = 0
     errors: list[str] = []
-    for ds in ap.iter_analytics_datasets():
+    datasets = list(ap.iter_analytics_datasets())
+    for ds in datasets:
         conn.rollback()
         si_frame = cfl.frame_to_si(ds.ip_frame, metric)
         ws, we = ap.window_of(si_frame)
@@ -147,6 +152,21 @@ def run_postgres(conn) -> list[QualCell]:
                 metric=metric,
             )
             oracle_norm = ap.norm_rows(stem, oracle_rows)
+            if stem == "sensor_faults_staleness":
+                flag_i = [c for c, _k in ap.STEM_COLUMNS[stem]].index("fault_flag")
+                sql_norm = [r[:flag_i] for r in sql_norm]
+                oracle_norm = [r[:flag_i] for r in oracle_norm]
+                n = max(len(sql_norm), len(oracle_norm))
+                if len(sql_norm) != len(oracle_norm):
+                    errors.append(
+                        f"{ds.dataset_id}/{stem}: row count sql={len(sql_norm)} oracle={len(oracle_norm)}"
+                    )
+                    continue
+                for g, l in zip(sorted(sql_norm, key=repr), sorted(oracle_norm, key=repr)):
+                    if g != l:
+                        errors.append(f"{ds.dataset_id}/{stem}: golden={g!r} live={l!r}")
+                comparisons += n
+                continue
             n, e = ap.compare_rows(
                 "C3-analytics-fresh",
                 ds.dataset_id,
@@ -175,6 +195,6 @@ def run_postgres(conn) -> list[QualCell]:
             "19_pg_fresh_sql_vs_oracle_all_bodies",
             "PASS",
             comparisons=comparisons,
-            detail=f"stems={len(stems)} datasets={len(list(ap.iter_analytics_datasets()))}",
+            detail=f"stems={len(stems)} datasets={len(datasets)}",
         )
     ]

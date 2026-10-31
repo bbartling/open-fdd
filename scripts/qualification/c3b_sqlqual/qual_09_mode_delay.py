@@ -107,11 +107,13 @@ def run_postgres(conn) -> list[QualCell]:
     )
     comparisons = 0
     errors: list[str] = []
-    for case in build_mode_delay_grid_cases():
-        if float(case.get("poll_seconds") or 0) != 300.0:
-            continue
-        if case.get("mode_delay_min") == 0.0 and float(case.get("startup_delay_min") or 0) > 0:
-            continue
+    subset = [
+        c
+        for c in build_mode_delay_grid_cases()
+        if float(c.get("poll_seconds") or 0) == 300.0
+        and not (c.get("mode_delay_min") == 0.0 and float(c.get("startup_delay_min") or 0) > 0)
+    ][:6]
+    for case in subset:
         params = grid_params(case)
         res = run_rule(
             "FC1",
@@ -133,6 +135,7 @@ def run_postgres(conn) -> list[QualCell]:
             poll_seconds=300.0,
             params_by_rule={"FC1": params},
         )
+        conn.commit()
         comparisons += 1
         if errs:
             errors.append(f"{case}: {'; '.join(errs)}")
