@@ -832,21 +832,21 @@ async fn harness(fix: &ScopeFix) -> (Arc<AppState>, Router, Plans) {
         *plane = ControlPlane {
             tenants: vec![
                 TenantRecord {
-                    id: fix.tenant_a.into(),
+                    id: fix.tenant_a.clone(),
                     name: "A".into(),
                     building_ids: vec![
-                        fix.site_a.into(),
-                        fix.site_shared.into(),
-                        fix.site_bare.into(),
+                        fix.site_a.clone(),
+                        fix.site_shared.clone(),
+                        fix.site_bare.clone(),
                     ],
                 },
                 TenantRecord {
-                    id: fix.tenant_b.into(),
+                    id: fix.tenant_b.clone(),
                     name: "B".into(),
-                    building_ids: vec![fix.site_b.into(), fix.site_shared.into()],
+                    building_ids: vec![fix.site_b.clone(), fix.site_shared.clone()],
                 },
                 TenantRecord {
-                    id: fix.tenant_empty.into(),
+                    id: fix.tenant_empty.clone(),
                     name: "Empty".into(),
                     building_ids: Vec::new(),
                 },
