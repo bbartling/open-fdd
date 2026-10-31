@@ -559,6 +559,9 @@ describe("mechFigure history_rows honesty", () => {
     await fetchCentralOverview({ building_id: "BUILDING_100" });
     const cached = vi.mocked(postRuntime).mock.calls.at(-1)?.[0] as { refresh?: boolean };
     expect(cached.refresh).toBeUndefined();
+    expect(vi.mocked(postEconomizer).mock.calls[0]?.[0]).toMatchObject({
+      dt_min_c: ECONOMIZER_DT_MIN_C,
+    });
     await fetchCentralOverview({ building_id: "BUILDING_100", refresh: true });
     expect(vi.mocked(postRuntime).mock.calls.at(-1)?.[0]).toMatchObject({
       refresh: true,
