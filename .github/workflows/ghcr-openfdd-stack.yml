@@ -71,6 +71,21 @@ jobs:
           cargo test -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
+      - name: Ingest scope + T1406 overlay stress (30x, parallel)
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            echo "=== ingest scope matrix repeat ${i}/30 ==="
+            cargo test -p openfdd-central ingest_idempotency_backfill_and_metrics_are_tenant_scoped --
+          done
+          for i in $(seq 1 30); do
+            echo "=== T1406 overlay repeat ${i}/30 ==="
+            cargo test -p openfdd-central t1406_model_point_engineer_overlay_controls --
+          done
+          echo "ingest scope + T1406 overlay 30x parallel loop complete"
+
       - name: React sole product UI
         run: |
           test -f frontend/web/package.json

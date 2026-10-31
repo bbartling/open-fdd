@@ -1330,15 +1330,37 @@ mod tests {
     )]
     async fn t1406_model_point_engineer_overlay_controls() {
         let _env = crate::test_env_lock::lock_env();
+        let _mt = EnvGuard::unset("OPENFDD_MULTI_TENANT");
         let workspace = tempfile::tempdir().expect("workspace");
         let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
         let _audit = EnvGuard::unset("OPENFDD_AUDIT_LOG_PATH");
+        let suffix = &uuid::Uuid::new_v4().simple().to_string()[..10];
+        let bid = format!("T1406_OVR_{suffix}");
+        let pid = format!("pt-oa-{suffix}");
         let state = app_state("t1406-point-overlay-secret");
         let app = crate::routes::router(Arc::clone(&state));
-        let bid = "T1406_OVERLAY";
-        let pid = "pt-oa-t";
         let operator = token(&state, "op-t1406", Role::Operator);
         let viewer = token(&state, "viewer-t1406", Role::Viewer);
+
+        let (status, json) = call(
+            &app,
+            "POST",
+            "/api/model/point",
+            &operator,
+            Some(json!({
+                "confirm": true,
+                "building_id": bid,
+                "equipment_id": "AHU_1",
+                "point_id": pid,
+                "quantity": "absolute_temperature"
+            })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{json}");
+        assert_eq!(
+            json.get("error").and_then(|v| v.as_str()),
+            Some("unit required when quantity is set")
+        );
 
         let bad_unit = json!({
             "confirm": true,
@@ -1428,7 +1450,7 @@ mod tests {
                 overlay_path.parent().expect("parent"),
             )
             .expect("load");
-        let entry = store.points.get(pid).expect("entry");
+        let entry = store.points.get(&pid).expect("entry");
         assert_eq!(entry.unit.as_deref(), Some("degF"));
         assert!(entry.primary_reference);
 
