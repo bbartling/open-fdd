@@ -16,38 +16,30 @@ web_dedup AS (
   FROM web_points
   GROUP BY timestamp_utc
 ),
+web_intervals AS (
+  SELECT
+    timestamp_utc AS ref_ts,
+    ref_val,
+    LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) AS next_ref_ts
+  FROM web_dedup
+),
 joined AS (
   SELECT
     h.equipment_id,
     h.timestamp_utc,
     h.oa_t,
-    (
-      SELECT d.ref_val
-      FROM web_dedup d
-      WHERE d.timestamp_utc <= h.timestamp_utc
-      ORDER BY d.timestamp_utc DESC
-      LIMIT 1
-    ) AS ref_oa_t,
+    wi.ref_val AS ref_oa_t,
     CASE
       WHEN h.oa_t IS NULL THEN false
-      WHEN (
-        SELECT d.ref_val
-        FROM web_dedup d
-        WHERE d.timestamp_utc <= h.timestamp_utc
-        ORDER BY d.timestamp_utc DESC
-        LIMIT 1
-      ) IS NULL THEN false
-      WHEN DATEDIFF('second', (
-        SELECT d.timestamp_utc
-        FROM web_dedup d
-        WHERE d.timestamp_utc <= h.timestamp_utc
-        ORDER BY d.timestamp_utc DESC
-        LIMIT 1
-      ), h.timestamp_utc) > {{WEB_ASOF_BOUND_SECONDS}}
+      WHEN wi.ref_val IS NULL THEN false
+      WHEN DATEDIFF('second', wi.ref_ts, h.timestamp_utc) > {{WEB_ASOF_BOUND_SECONDS}}
       THEN false
       ELSE true
     END AS assessable
   FROM history h
+  LEFT JOIN web_intervals wi
+    ON h.timestamp_utc >= wi.ref_ts
+   AND (wi.next_ref_ts IS NULL OR h.timestamp_utc < wi.next_ref_ts)
 ),
 base AS (
   SELECT

@@ -11,7 +11,7 @@ use super::*;
 const HELPERS: &str = include_str!("../../../sql/fdd/postgres/postgres_helpers.sql");
 const PACK_RUNTIME: &str = include_str!("../../../sql/schema/06_fdd_pack_runtime.sql");
 
-async fn pool() -> Option<sqlx::PgPool> {
+pub(super) async fn pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .filter(|v| !v.trim().is_empty())?;
@@ -22,7 +22,7 @@ async fn pool() -> Option<sqlx::PgPool> {
         .ok()
 }
 
-async fn apply_schema(pool: &sqlx::PgPool) {
+pub(super) async fn apply_schema(pool: &sqlx::PgPool) {
     crate::portal_inventory_fixtures::apply_schema(pool).await;
     crate::series_binding::ensure_authorized_series(pool).await;
     let mut conn = pool.acquire().await.expect("conn");
@@ -44,7 +44,7 @@ async fn apply_schema(pool: &sqlx::PgPool) {
         .expect("unlock");
 }
 
-async fn purge(pool: &sqlx::PgPool, site: &str) {
+pub(super) async fn purge(pool: &sqlx::PgPool, site: &str) {
     for sql in [
         "DELETE FROM sample WHERE site_id = $1",
         "DELETE FROM role_map WHERE building_id = $1",
@@ -57,7 +57,7 @@ async fn purge(pool: &sqlx::PgPool, site: &str) {
     }
 }
 
-async fn seed_site(pool: &sqlx::PgPool, site: &str) {
+pub(super) async fn seed_site(pool: &sqlx::PgPool, site: &str) {
     sqlx::query("INSERT INTO site (site_id, dis) VALUES ($1, $1) ON CONFLICT DO NOTHING")
         .bind(site)
         .execute(pool)
@@ -83,7 +83,7 @@ async fn seed_site(pool: &sqlx::PgPool, site: &str) {
     }
 }
 
-async fn bind_point(
+pub(super) async fn bind_point(
     pool: &sqlx::PgPool,
     site: &str,
     equipment_id: &str,
@@ -119,7 +119,7 @@ async fn bind_point(
     .expect("role_map");
 }
 
-async fn upsert_samples(pool: &sqlx::PgPool, batch: UpsertBatch) {
+pub(super) async fn upsert_samples(pool: &sqlx::PgPool, batch: UpsertBatch) {
     let tsdb = Tsdb::from_pool(pool.clone());
     tsdb.upsert_samples_stats(&batch).await.expect("upsert");
 }

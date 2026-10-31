@@ -6551,6 +6551,9 @@ mod oat_meteo_bound_contract_test;
 #[cfg(test)]
 #[path = "oat_meteo_t1404_test.rs"]
 mod oat_meteo_t1404_test;
+#[cfg(test)]
+#[path = "oat_meteo_asof_scaling_test.rs"]
+mod oat_meteo_asof_scaling_test;
 
 #[cfg(test)]
 #[path = "t1405_trim_column_contract_test.rs"]
