@@ -344,6 +344,7 @@ jobs:
           cargo test -p openfdd-central ingest_jobs_and_gaps_contract -- --test-threads=1
           cargo test -p openfdd-central upgraded_portal_enqueues_due_windows_and_accepts_backfill -- --test-threads=1
           cargo test -p openfdd-central stale_worker_cannot_overwrite_canonical_history -- --test-threads=1
+          cargo test -p openfdd-central t1423_6 -- --test-threads=1
 
   synthetic-sql-parity:
     name: Synthetic pandas equals Timescale SQL
