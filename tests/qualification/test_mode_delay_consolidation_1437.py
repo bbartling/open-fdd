@@ -201,6 +201,14 @@ class ModeDelayPostgresParityTest(unittest.TestCase):
                 return spec
         self.fail("AHU_CASE_FC1 dataset missing")
 
+    def _fc1_params_ip(self, fc1_rule):
+        from scripts.ci import unit_contract_lib as uc
+
+        params_ip, _params_si = self.cfl.resolve_rule_params_ip_si(
+            fc1_rule, uc.load_json(uc.METRIC_UNITS)
+        )
+        return params_ip
+
     def test_fc1_pandas_daily_matches_rendered_postgres_default_params(self) -> None:
         spec = self._synth_fc1_spec()
         rules = {str(r["rule_id"]): r for r in self.cfl.load_rule_registry()}
@@ -212,7 +220,7 @@ class ModeDelayPostgresParityTest(unittest.TestCase):
             equipment_type=spec.equipment_type,
         )
         poll = self.cts.infer_poll_seconds(frame.index)
-        params = self.cfl.rule_params_from_registry(fc1_rule)
+        params = self._fc1_params_ip(fc1_rule)
         rows = self.cfl.run_rule_daily_rows(
             fc1_rule,
             frame,
@@ -253,8 +261,8 @@ class ModeDelayPostgresParityTest(unittest.TestCase):
             equipment_type=spec.equipment_type,
         )
         poll = self.cts.infer_poll_seconds(frame.index)
-        params = self.cfl.rule_params_from_registry(fc1_rule)
-        params = {k: v for k, v in params.items() if k != "mode_delay_min"}
+        params = dict(self._fc1_params_ip(fc1_rule))
+        params.pop("mode_delay_min", None)
         rows = self.cfl.run_rule_daily_rows(
             fc1_rule,
             frame,
