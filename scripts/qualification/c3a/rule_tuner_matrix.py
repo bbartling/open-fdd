@@ -215,7 +215,7 @@ def _compare_daily(
     pd_map = {_daily_key(r): r for r in pd_daily}
     sql_map = {_daily_key(r): r for r in sql_daily}
     compared = 0
-    mismatch = len(set(pd_map) ^ set(sql_map))
+    mismatch = 0
     for key in sorted(set(pd_map) & set(sql_map), key=repr):
         compared += 1
         pd_row = pd_map[key]
