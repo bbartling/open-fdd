@@ -1,6 +1,15 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { combineOverviewFreshness, fetchCentralOverview } from "./centralOverview";
+import {
+  combineOverviewFreshness,
+  econDeltaScatter,
+  econTempsOverlay,
+  fetchCentralOverview,
+} from "./centralOverview";
 import { RAINBOW_PALETTE } from "./plotlyTheme";
+import {
+  ECONOMIZER_DT_MIN_C,
+  normalizeTipEconomizerPoints,
+} from "./tipAnalyticsNormalize";
 
 vi.mock("./mappingApi", () => ({
   getSessionConfig: vi.fn(async () => ({ ok: true, config: {} })),
@@ -193,6 +202,7 @@ vi.mock("./analyticsApi", () => ({
       oa_t: 55 + i,
       rat: 72,
       mat: 65 + i * 0.5,
+      sat: 58 + i * 0.1,
       damper_fb_pct: 40,
       delta_or_c: 55 + i - 72,
       delta_mr_c: 65 + i * 0.5 - 72,
@@ -264,6 +274,12 @@ describe("fetchCentralOverview", () => {
       (t) => t.name === "OAT",
     );
     expect(oatLine?.line).toMatchObject({ color: RAINBOW_PALETTE[0] });
+    expect(oatLine?.y?.every((y) => y != null && Number.isFinite(Number(y)))).toBe(
+      true,
+    );
+    expect(
+      out.economizer_free_cooling.temps_overlay?.data?.some((t) => t.name === "SAT"),
+    ).toBe(true);
     expect(out.devices_by_type).toEqual([
       { type: "AHU", count: 1 },
       { type: "VAV", count: 1 },
@@ -550,6 +566,124 @@ describe("mechFigure history_rows honesty", () => {
     expect(vi.mocked(postEconomizer).mock.calls.at(-1)?.[0]).toMatchObject({
       refresh: true,
     });
+  });
+});
+
+describe("econTempsOverlay SI keys (#1284)", () => {
+  const baseRow = {
+    equipment_id: "RTU_A",
+    fan_on: true,
+    damper_fb_pct: 40,
+  };
+
+  it("maps canonical oa_t/rat/mat/sat to finite trace y (regression vs oat_f)", () => {
+    const points = [
+      {
+        ...baseRow,
+        timestamp_utc: "2026-04-01T10:00:00Z",
+        oa_t: 15,
+        rat: 22,
+        mat: 20,
+        sat: 18,
+      },
+      {
+        ...baseRow,
+        timestamp_utc: "2026-04-01T11:00:00Z",
+        oa_t: 16,
+        rat: 22,
+        mat: 21,
+        sat: null,
+      },
+      {
+        ...baseRow,
+        timestamp_utc: "2026-04-01T12:00:00Z",
+        oa_t: 14,
+        rat: 22,
+        mat: 19.5,
+        sat: 17.5,
+      },
+    ];
+    const { figure } = econTempsOverlay(points, "RTU_A", "metric");
+    expect(figure).toBeTruthy();
+    const names = ["OAT", "RAT", "MAT", "SAT"];
+    for (const name of names) {
+      const trace = figure!.data.find((t) => t.name === name);
+      expect(trace, name).toBeTruthy();
+      const ys = (trace!.y ?? []) as Array<number | null>;
+      expect(ys[0] != null && Number.isFinite(Number(ys[0]))).toBe(true);
+      if (name === "SAT") {
+        expect(ys[1]).toBeNull();
+      } else {
+        expect(ys[1] != null && Number.isFinite(Number(ys[1]))).toBe(true);
+      }
+      expect(ys[2] != null && Number.isFinite(Number(ys[2]))).toBe(true);
+    }
+    const oat = figure!.data.find((t) => t.name === "OAT");
+    expect(oat?.x).toEqual([
+      "2026-04-01T10:00:00Z",
+      "2026-04-01T11:00:00Z",
+      "2026-04-01T12:00:00Z",
+    ]);
+  });
+
+  it("omits SAT trace when sat is absent on every row", () => {
+    const points = Array.from({ length: 4 }, (_, i) => ({
+      ...baseRow,
+      timestamp_utc: `2026-04-02T0${i}:00:00Z`,
+      oa_t: 10 + i,
+      rat: 20,
+      mat: 18 + i * 0.2,
+    }));
+    const { figure } = econTempsOverlay(points, null, "imperial");
+    expect(figure?.data.some((t) => t.name === "SAT")).toBe(false);
+    expect(figure?.data.some((t) => t.name === "OAT")).toBe(true);
+  });
+});
+
+describe("ECONOMIZER_DT_MIN_C gate (#1284)", () => {
+  function row(deltaOrC: number) {
+    return {
+      equipment_id: "AHU_X",
+      timestamp_utc: "2026-04-01T00:00:00Z",
+      oa_t: 20,
+      rat: 20 - deltaOrC,
+      mat: 21,
+      sat: 19,
+      fan_on: true,
+      delta_or_c: deltaOrC,
+      delta_mr_c: 1,
+      damper_fb_pct: 50,
+    };
+  }
+
+  it("straddles 50/9 °C for identifiable flag", () => {
+    const low = normalizeTipEconomizerPoints([row(5.5)], [], ECONOMIZER_DT_MIN_C);
+    const edge = normalizeTipEconomizerPoints([row(5.56)], [], ECONOMIZER_DT_MIN_C);
+    const high = normalizeTipEconomizerPoints([row(5.6)], [], ECONOMIZER_DT_MIN_C);
+    expect(low[0]?.identifiable).toBe(false);
+    expect(edge[0]?.identifiable).toBe(true);
+    expect(high[0]?.identifiable).toBe(true);
+  });
+
+  it("keeps the same scatter point count across display unit systems", () => {
+    const rows = Array.from({ length: 6 }, (_, i) => ({
+      ...row(-12 - i),
+      timestamp_utc: `2026-04-01T0${i}:00:00Z`,
+      identifiable: true,
+    }));
+    const metric = econDeltaScatter(rows, ECONOMIZER_DT_MIN_C, "metric");
+    const imperial = econDeltaScatter(rows, ECONOMIZER_DT_MIN_C, "imperial");
+    const countMarkers = (fig: typeof metric) =>
+      fig?.data.filter((t) => t.mode === "markers" && t.name === "AHU_X").length ??
+      0;
+    expect(countMarkers(metric)).toBe(1);
+    expect(countMarkers(imperial)).toBe(1);
+    expect(metric?.meta?.point_count).toBe(imperial?.meta?.point_count);
+  });
+
+  it("equals backend DEFAULT_DT_MIN_C (50/9 °C)", () => {
+    expect(ECONOMIZER_DT_MIN_C).toBeCloseTo(50 / 9, 12);
+    expect(ECONOMIZER_DT_MIN_C).toBeCloseTo(5.555555555555556, 6);
   });
 });
 

@@ -20,9 +20,33 @@ import { getPackageMapping, getSessionConfig } from "./mappingApi";
 import { scheduleReferenceFromSession } from "./occupancySchedule";
 import type { PlotlyFigure } from "./plotDataset";
 import { rcxPresetTables, type RcxPresetTable } from "./rcxPresetTables";
-import type { UnitSystem } from "./roleUnits";
-import { normalizeTipOverviewEnvelope } from "./tipAnalyticsNormalize";
+import {
+  displayScalar,
+  displayUnitLabel,
+  type UnitSystem,
+} from "./roleUnits";
+import {
+  ECONOMIZER_DT_MIN_C,
+  normalizeTipOverviewEnvelope,
+} from "./tipAnalyticsNormalize";
 import { isAbortError } from "../session/scopedLoad";
+
+function econIdentifiableThresholdLabel(unitSystem: UnitSystem): string {
+  const shown = displayScalar(
+    ECONOMIZER_DT_MIN_C,
+    "K_diff",
+    unitSystem,
+    "temperature_delta",
+  );
+  const unit = displayUnitLabel("K_diff", unitSystem, "temperature_delta");
+  if (shown == null) return `|OAT−RAT| ≥ ${ECONOMIZER_DT_MIN_C}`;
+  const digits = unitSystem === "metric" ? 1 : 0;
+  return `|OAT−RAT| ≥ ${shown.toFixed(digits)}${unit}`;
+}
+
+function econEmptyMessage(unitSystem: UnitSystem): string {
+  return `No qualified economizer samples. Fan-on proof, ${econIdentifiableThresholdLabel(unitSystem)}, and a measured MAT are required.`;
+}
 
 export const OVERVIEW_RCX_PRESET_IDS = [
   "ahu_motor_weekly",
@@ -85,7 +109,7 @@ export async function loadOverviewRcxPreset(
   const body = {
     building_id: buildingId,
     max_points: 4000,
-    dt_min_c: 10,
+    dt_min_c: ECONOMIZER_DT_MIN_C,
     ...window,
     ...(refresh ? { refresh: true } : {}),
   };
@@ -142,7 +166,7 @@ export async function loadOverviewRcxPreset(
     });
     const points = env.points ?? [];
     if (presetId === "economizer_delta") {
-      const figure = econDeltaScatter(points, 10, unitSystem);
+      const figure = econDeltaScatter(points, ECONOMIZER_DT_MIN_C, unitSystem);
       return {
         figure,
         companion: null,
@@ -150,8 +174,7 @@ export async function loadOverviewRcxPreset(
         tables: rcxPresetTables(presetId, env),
         error: figure
           ? undefined
-          : env.warnings[0] ??
-            "No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ 10°F, and a measured MAT are required.",
+          : env.warnings[0] ?? econEmptyMessage(unitSystem),
       };
     }
     if (presetId === "economizer_mat_resid") {
@@ -163,8 +186,7 @@ export async function loadOverviewRcxPreset(
         tables: rcxPresetTables(presetId, env),
         error: figure
           ? undefined
-          : env.warnings[0] ??
-            "No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ 10°F, and a measured MAT are required.",
+          : env.warnings[0] ?? econEmptyMessage(unitSystem),
       };
     }
     const overlay = econTempsOverlay(points, overlayEq ?? null, unitSystem);
@@ -175,8 +197,7 @@ export async function loadOverviewRcxPreset(
       tables: rcxPresetTables(presetId, env),
       error: overlay.figure
         ? undefined
-        : env.warnings[0] ??
-          "No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ 10°F, and a measured MAT are required.",
+        : env.warnings[0] ?? econEmptyMessage(unitSystem),
     };
   }
   if (presetId === "bas_vs_web_oat") {

@@ -117,8 +117,8 @@ export function normalizeTipMechRows(
   });
 }
 
-/** Default |OAT−RAT| gate (°C, ~10°F equivalent), matching the economizer request default (SI). */
-export const ECONOMIZER_DT_MIN_C = 10 * (5 / 9);
+/** Default |OAT−RAT| gate (°C): 50/9 °C ≡ 10 Δ°F (Guideline 36 / backend DEFAULT_DT_MIN_C). */
+export const ECONOMIZER_DT_MIN_C = 50 / 9;
 
 /** Fan-on is qualified only when the row proves it. Missing is not on. */
 export function explicitFanOn(v: unknown): boolean {
