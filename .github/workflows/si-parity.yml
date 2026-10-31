@@ -18,6 +18,8 @@ on:
       - "tests/qualification/fc1_mode_delay_timeline_reference.py"
       - "tests/qualification/test_mode_delay_shared.py"
       - "tests/qualification/test_sql407_verifier_regressions.py"
+      - "tests/qualification/test_c3a_sql_qual_01_06.py"
+      - "scripts/qualification/c3a/**"
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
@@ -51,6 +53,8 @@ on:
       - "tests/qualification/fc1_mode_delay_timeline_reference.py"
       - "tests/qualification/test_mode_delay_shared.py"
       - "tests/qualification/test_sql407_verifier_regressions.py"
+      - "tests/qualification/test_c3a_sql_qual_01_06.py"
+      - "scripts/qualification/c3a/**"
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
@@ -230,7 +234,8 @@ jobs:
             tests.qualification.test_capture_fdd_isolation_postgres \
             tests.qualification.test_mode_delay_shared \
             tests.qualification.test_mode_delay_consolidation_1437 \
-            tests.qualification.test_fc6_flow_default_coherence -v
+            tests.qualification.test_fc6_flow_default_coherence \
+            tests.qualification.test_c3a_sql_qual_01_06 -v
 
       - name: Qualification unit tests
         run: python3 -B -m unittest discover -s tests/qualification -p 'test_si_parity*.py' -v

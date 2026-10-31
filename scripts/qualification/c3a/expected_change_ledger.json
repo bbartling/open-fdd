@@ -1,0 +1,27 @@
+{
+  "schema": "openfdd-sql-qual-expected-change-ledger-v1",
+  "issues": [
+    {
+      "issue": 1469,
+      "title": "Mode delay default uses runtime MODE_DELAY_MIN not silent zero",
+      "affected_rules": ["FC1", "FC2", "FC3", "FC4", "FC5", "FC6", "FC7", "FC8", "FC9", "FC10", "FC11", "FC12", "FC13", "FC14", "FC15", "FC13-SAT-HIGH"],
+      "runner_a_expected": "historical IP pandas omitted mode_delay_min behaved as 0 in some paths",
+      "runner_c_d_expected": "max(mode_delay_min, startup_delay_min) with product default 10 min from runtime_defaults.json",
+      "independent_oracle": "tests/qualification/fc1_mode_delay_timeline_reference.py",
+      "harness_probe": "product_sql_params.MODE_DELAY_DEFAULT_VS_STARTUP",
+      "waive_four_way_agreement": false,
+      "compare_against": "independent_timeline_and_explicit_default"
+    },
+    {
+      "issue": 1470,
+      "title": "Startup delay extends mode holdoff; defaults consolidated in SQL render",
+      "affected_rules": ["FC1", "FC2", "FC3", "FC4", "FC5", "FC6", "FC7", "FC8", "FC9", "FC10", "FC11", "FC12", "FC13", "FC14", "FC15", "FC13-SAT-HIGH"],
+      "runner_b_expected": "35c17ac aggregate SQL could disagree with overlay when only aggregate mutated",
+      "runner_d_expected": "shipped aggregate and fault-series overlay both execute; coverage preserved",
+      "independent_oracle": "scripts/stress/si_cutover/ci_timescale_sql.execute_sql_rule_daily",
+      "harness_probe": "SQL-QUAL-04 aggregate_vs_overlay",
+      "waive_four_way_agreement": false,
+      "compare_against": "paired_aggregate_and_overlay_seconds"
+    }
+  ]
+}
