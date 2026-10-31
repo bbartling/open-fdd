@@ -1,6 +1,6 @@
 {
   "golden_id": "openfdd-unit-vectors-v3",
-  "contract_version": "4.0.7",
+  "contract_version": "4.0.8",
   "processing_abi": "metric-c-v2",
   "cases": [
     {

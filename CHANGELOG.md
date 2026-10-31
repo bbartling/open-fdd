@@ -4,6 +4,21 @@
 
 ## Unreleased
 
+## 4.0.8 — 2026-10-31
+
+Workspace patch after the C2 product-fix and C3 SQL-QUAL qualification rows on master. `/api/health` and `/api/version` report `4.0.8+<sha>`. Contract pack versions move to `4.0.8-softopen`; `metric_storage_status` remains `released` (set at 4.0.7 W7). PyPI `open-fdd` stays **5.0.0**. No new SQL rule or analytics body changes in this bump PR.
+
+- **#1469** — FC1 mode-delay defaults aligned with the product SQL contract.
+- **#1470** — FC6 `min_cfm_design` L/s defaults match the LPS_PER_CFM contract.
+- **#1471** — RCx economizer overlay SI keys and unified `dt_min` gate.
+- **#1472** — Per-point ingest stored-hour coverage for gap planning (#1423).
+- **#1473** — OAT-METEO web as-of interval join (#1439 scaling).
+- **#1474** — Analytics cache integration fixture creates `role_map` and `point_map` for purge.
+- **#1475** — Cookbook FC6 `min_cfm_design` SI sync to LPS_PER_CFM contract.
+- **#1476** — SQL-QUAL-11 OAT-METEO bench and SQL-QUAL-12A disposable cutover harness.
+- **#1477** — SQL-QUAL-01..06 harness (runners A–D, Postgres matrix).
+- **#1478** — SQL-QUAL-07..10 and 19 analytics fresh Postgres harness.
+
 ### open-fdd 5.0.0 (PyPI)
 
 Breaking: the pandas oracle and offline report path treat historian/package

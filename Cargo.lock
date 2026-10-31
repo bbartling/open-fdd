@@ -779,7 +779,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "fdd_core"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -793,7 +793,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_csv"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -806,7 +806,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_resources"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "serde",
@@ -818,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_rules"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_store"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -847,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_tsdb"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1906,7 +1906,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "open_fdd_edge_prototype"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "base64 0.22.1",
  "bcrypt",
@@ -1945,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-central"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -1988,7 +1988,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-mcp"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "base64 0.22.1",
  "reqwest 0.12.28",
@@ -1999,7 +1999,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_contracts"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "chrono",
  "serde",
@@ -2011,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_nf_grpc"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "chrono",
  "http",
