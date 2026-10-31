@@ -21,6 +21,7 @@ on:
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "tests/qualification/test_fc6_flow_default_coherence.py"
       - "tests/qualification/fc6_flow_boundary_reference.py"
       - "tests/units/test_lps_per_cfm_contract.py"
@@ -53,6 +54,7 @@ on:
       - "tests/qualification/test_baseline_manifest_integrity.py"
       - "tests/qualification/test_capture_fdd_isolation_postgres.py"
       - "tests/qualification/test_w4f_analytics_si.py"
+      - "tests/qualification/test_w4f_analytics_threshold_invariance.py"
       - "tests/qualification/test_fc6_flow_default_coherence.py"
       - "tests/qualification/fc6_flow_boundary_reference.py"
       - "tests/units/test_lps_per_cfm_contract.py"
@@ -119,6 +121,9 @@ jobs:
 
       - name: Unit contract (T1284-1 baseline)
         run: python3 scripts/ci/check_unit_contract.py
+
+      - name: LPS per cfm contract unit tests (T1284 FC6 law)
+        run: python3 -m pytest tests/units/test_lps_per_cfm_contract.py -v
 
       - name: Frozen ip goldens (Timescale regen must match committed)
         run: python3 scripts/ci/check_ip_goldens_frozen.py

@@ -522,7 +522,7 @@ WHERE equipment_id = 'equip:your-ahu'
 | `fan_on_min` | `fraction` | Fan-on command min | frac | 0.01 | 0.0–1.0 |
 | `eps_airflow` | `fraction` | Airflow fraction eps | frac | 0.15 | 0.05–1.0 |
 | `confirm_seconds` | `duration_seconds` | Confirm time | s | 600.0 | 0.0–3600.0 |
-| `min_L/s_design` | `volumetric_flow` | Design minimum outdoor airflow | L/s | 2359.735 | 0.0–94389.4 |
+| `min_L/s_design` | `volumetric_flow` | Design minimum outdoor airflow | L/s | 2359.73725 | 0.0–94389.49 |
 
 
 ```sql
