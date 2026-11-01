@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, InlineAlert } from "./widgets";
-import { getFddResults } from "../api/fddApi";
+import { getFddResults, type FddResultRow } from "../api/fddApi";
 import { postBasVsWebOat } from "../api/analyticsApi";
 import { plantEquipmentFamilies } from "../lib/plantEquipment";
 import { isWeatherEquipment, pickWeatherFaultRow } from "../lib/overviewMetrics";
@@ -18,11 +18,52 @@ function fmtHours(v: unknown): string {
 }
 
 function triFault(status: unknown, hours: unknown): string {
-  const h = typeof hours === "number" ? hours : Number(hours);
   const st = String(status ?? "").toUpperCase();
+  if (st === "INTERVAL_UNKNOWN" || st === "NOT_ASSESSED") return "unknown";
+  const h = typeof hours === "number" ? hours : Number(hours);
   if (st === "FAULT" || (Number.isFinite(h) && h > 0)) return "true";
   if (st === "PASS") return "false";
-  return "unknown";
+  if (!Number.isFinite(h)) return "unknown";
+  return "false";
+}
+
+/** Aggregate child WX fault tri-state: any true → true; else any unknown → unknown; else false. */
+export function aggregateWxFaultTriState(rows: FddResultRow[]): string {
+  if (rows.length === 0) {
+    return "unknown";
+  }
+  let sawUnknown = false;
+  for (const r of rows) {
+    const child = triFault(r.status, r.fault_hours);
+    if (child === "true") {
+      return "true";
+    }
+    if (child === "unknown") {
+      sawUnknown = true;
+    }
+  }
+  return sawUnknown ? "unknown" : "false";
+}
+
+function sumKnownFaultHours(rows: FddResultRow[]): number | null {
+  let any = false;
+  let sum = 0;
+  for (const r of rows) {
+    if (String(r.interval_status ?? "") === "INTERVAL_UNKNOWN") {
+      return null;
+    }
+    const st = String(r.status ?? "").toUpperCase();
+    if (st === "INTERVAL_UNKNOWN" || st === "NOT_ASSESSED") {
+      return null;
+    }
+    const h = typeof r.fault_hours === "number" ? r.fault_hours : Number(r.fault_hours);
+    if (!Number.isFinite(h)) {
+      return null;
+    }
+    any = true;
+    sum += h;
+  }
+  return any ? sum : null;
 }
 
 /** Web vs local outside-air sensors — drybulb + humidity with fault hours. */
@@ -72,7 +113,7 @@ export function WeatherHealthSection({
         }
         const refresh = overviewQueryRequestsRefresh(buildingId, "weather-health");
         const [fddRows, bas] = await Promise.all([
-          getFddResults(buildingId).catch(() => [] as Array<Record<string, unknown>>),
+          getFddResults(buildingId).catch((): FddResultRow[] => []),
           postBasVsWebOat({
             building_id: buildingId,
             max_points: 4000,
@@ -117,35 +158,9 @@ export function WeatherHealthSection({
           local_tag: "oa_h",
           web_tag: "web_oa_h",
           rule_id: "SENSOR-HI/LO",
-          fault:
-            wxRules.length > 0
-              ? wxRules.some(
-                  (r) =>
-                    triFault(r.status, r.fault_hours) === "true",
-                )
-                ? "true"
-                : "false"
-              : "unknown",
-          fault_h: fmtHours(
-            wxRules.reduce(
-              (sum, r) =>
-                sum +
-                (typeof r.fault_hours === "number"
-                  ? r.fault_hours
-                  : Number(r.fault_hours) || 0),
-              0,
-            ),
-          ),
-          total_fault_h: fmtHours(
-            wxRules.reduce(
-              (sum, r) =>
-                sum +
-                (typeof r.fault_hours === "number"
-                  ? r.fault_hours
-                  : Number(r.fault_hours) || 0),
-              0,
-            ),
-          ),
+          fault: aggregateWxFaultTriState(wxRules),
+          fault_h: fmtHours(sumKnownFaultHours(wxRules)),
+          total_fault_h: fmtHours(sumKnownFaultHours(wxRules)),
         });
 
         setRows(out);

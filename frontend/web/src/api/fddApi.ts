@@ -99,6 +99,8 @@ export interface FddResultRow {
   missing_roles?: string[];
   notes?: unknown;
   run_id?: string | null;
+  interval_status?: string | null;
+  interval_reason_code?: string | null;
 }
 
 export interface FddRunResponse {
@@ -417,6 +419,8 @@ export function resultsToCsvArtifact(rows: FddResultRow[]): string {
     "metric_sample_rows",
     "metric_provenance_source",
     "metric_config_fingerprint",
+    "interval_status",
+    "interval_reason_code",
   ];
   const escape = (v: unknown) => {
     const s = v == null ? "" : String(v);
@@ -454,6 +458,8 @@ export function resultsToCsvArtifact(rows: FddResultRow[]): string {
         r.metric?.coverage?.sample_rows ?? "",
         r.metric?.provenance?.source ?? "",
         r.metric?.provenance?.config_fingerprint ?? "",
+        r.interval_status ?? "",
+        r.interval_reason_code ?? "",
       ]
         .map(escape)
         .join(","),

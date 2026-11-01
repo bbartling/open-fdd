@@ -22,6 +22,7 @@ mod db_lifecycle;
 #[cfg(test)]
 mod diagnostic_matrix_api;
 mod durable_storage;
+mod effective_run_context;
 mod engineering_bundle;
 mod eplus_runner;
 mod fdd_registry_persist;

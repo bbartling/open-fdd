@@ -43,6 +43,14 @@ use crate::state::AppState;
 const MAX_RECENT_CYCLES: usize = 50;
 const AFDD_RUNS_PREFIX: &str = "state/afdd/runs";
 
+/// Successful registry chunk stand-in so a cycle test can reach the interval gate.
+#[cfg(test)]
+static TEST_AFDD_REGISTRY_CHUNK: Mutex<Option<Value>> = Mutex::new(None);
+
+/// When set, interval-evidence connect takes the scheduler's connect-failure arm.
+#[cfg(test)]
+static TEST_INTERVAL_CONNECT_FAIL: Mutex<Option<String>> = Mutex::new(None);
+
 /// Polls `from` into `into` until either is set or the guard drops (M70-01).
 struct CancelBridge {
     stop: Arc<AtomicBool>,
@@ -712,7 +720,22 @@ impl AfddSchedulerRuntime {
                     payload["equipment_id"] = json!(equipment_id);
                 }
                 // Wave-X C6: one SQL executor — never call the retired DF stub.
-                let result = if crate::timescale_historian::historian_is_timescale() {
+                let chunk_stub: Option<Value> = {
+                    #[cfg(test)]
+                    {
+                        TEST_AFDD_REGISTRY_CHUNK
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .clone()
+                    }
+                    #[cfg(not(test))]
+                    {
+                        None
+                    }
+                };
+                let result = if let Some(stub) = chunk_stub {
+                    stub
+                } else if crate::timescale_historian::historian_is_timescale() {
                     match crate::timescale_product::run_fdd_registry(&payload).await {
                         Ok(v) => v,
                         Err(error) => json!({
@@ -773,9 +796,70 @@ impl AfddSchedulerRuntime {
                 break;
             }
         }
-        drop(compute);
 
         let rules_clean = !cancelled && chunks_failed == 0 && rules_failed == 0;
+        let mut interval_readiness = crate::fdd_registry_persist::IntervalEvidenceReadiness::Ready;
+        let mut interval_check_error: Option<String> = None;
+        if rules_clean && crate::timescale_historian::historian_is_timescale() {
+            let repair_budget = crate::fdd_registry_persist::RepairBudget {
+                max_pairs: 32,
+                max_duration: StdDuration::from_secs(45),
+                cancel: cancel.clone(),
+            };
+            let connect_override: Option<String> = {
+                #[cfg(test)]
+                {
+                    TEST_INTERVAL_CONNECT_FAIL
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .clone()
+                }
+                #[cfg(not(test))]
+                {
+                    None
+                }
+            };
+            let connected = if let Some(reason) = connect_override {
+                Err(anyhow::anyhow!(reason))
+            } else {
+                fdd_tsdb::Tsdb::connect_from_env()
+                    .await
+                    .map_err(anyhow::Error::from)
+            };
+            match connected {
+                Ok(tsdb) => {
+                    match crate::fdd_registry_persist::interval_evidence_readiness_for_active_run(
+                        &tsdb,
+                        scope,
+                        true,
+                        &repair_budget,
+                    )
+                    .await
+                    {
+                        Ok(readiness) => interval_readiness = readiness,
+                        Err(err) => {
+                            interval_readiness =
+                                crate::fdd_registry_persist::IntervalEvidenceReadiness::CheckFailed {
+                                    reason: err.to_string(),
+                                };
+                        }
+                    }
+                }
+                Err(err) => {
+                    interval_readiness =
+                        crate::fdd_registry_persist::IntervalEvidenceReadiness::CheckFailed {
+                            reason: format!("Timescale connect for interval evidence: {err:#}"),
+                        };
+                }
+            }
+        }
+        drop(compute);
+
+        if let crate::fdd_registry_persist::IntervalEvidenceReadiness::CheckFailed { reason } =
+            &interval_readiness
+        {
+            interval_check_error = Some(reason.clone());
+        }
         let status = if cancelled {
             "cancelled"
         } else if chunks_failed > 0 || rules_failed > 0 {
@@ -785,7 +869,11 @@ impl AfddSchedulerRuntime {
         } else {
             "completed"
         };
-        let ok = status == "completed";
+        let interval_blocks_checkpoint = !matches!(
+            interval_readiness,
+            crate::fdd_registry_persist::IntervalEvidenceReadiness::Ready
+        );
+        let ok = status == "completed" && !interval_blocks_checkpoint;
         let record = AfddCycleRecord {
             run_id,
             scope: scope.to_string(),
@@ -799,12 +887,16 @@ impl AfddSchedulerRuntime {
             chunk_seconds: Some(chunk_seconds),
             result_scope: result_scope_for(trigger).to_string(),
             ok,
-            error: if ok {
+            error: if interval_check_error.is_some() {
+                interval_check_error.clone()
+            } else if ok {
                 None
             } else {
                 last_error.or_else(|| {
                     Some(if cancelled {
                         "AFDD cycle cancelled under budget/pressure".into()
+                    } else if interval_blocks_checkpoint {
+                        "AFDD interval evidence pending; checkpoint held".into()
                     } else {
                         "AFDD registry cycle failed or partial".into()
                     })
@@ -816,7 +908,11 @@ impl AfddSchedulerRuntime {
         };
 
         self.persist_run_record(&record)?;
-        if advance_checkpoint && rules_clean {
+        if afdd_may_persist_scheduler_checkpoint(
+            advance_checkpoint,
+            rules_clean,
+            &interval_readiness,
+        ) {
             self.persist_checkpoint_for_building(
                 scope,
                 &AfddSchedulerCheckpoint {
@@ -951,6 +1047,19 @@ pub(crate) fn collect_known_afdd_buildings(state: &AppState) -> Vec<String> {
         }
     }
     ids.into_iter().collect()
+}
+
+pub(crate) fn afdd_may_persist_scheduler_checkpoint(
+    advance_checkpoint: bool,
+    rules_clean: bool,
+    readiness: &crate::fdd_registry_persist::IntervalEvidenceReadiness,
+) -> bool {
+    advance_checkpoint
+        && rules_clean
+        && matches!(
+            readiness,
+            crate::fdd_registry_persist::IntervalEvidenceReadiness::Ready
+        )
 }
 
 fn result_scope_for(trigger: &str) -> &'static str {
@@ -1344,6 +1453,28 @@ mod tests {
     }
 
     #[test]
+    fn r1484_checkpoint_advance_requires_interval_ready() {
+        use crate::fdd_registry_persist::IntervalEvidenceReadiness;
+        assert!(afdd_may_persist_scheduler_checkpoint(
+            true,
+            true,
+            &IntervalEvidenceReadiness::Ready
+        ));
+        assert!(!afdd_may_persist_scheduler_checkpoint(
+            true,
+            true,
+            &IntervalEvidenceReadiness::Pending
+        ));
+        assert!(!afdd_may_persist_scheduler_checkpoint(
+            true,
+            true,
+            &IntervalEvidenceReadiness::CheckFailed {
+                reason: "db".into(),
+            }
+        ));
+    }
+
+    #[test]
     fn t1403_2_explicit_building_ids_select_subset() {
         let config = AfddConfig {
             scope_building_ids: vec!["site-b".into(), "site-a".into()],
@@ -1707,5 +1838,118 @@ mod contract_timescale {
         for site in &sites {
             let _ = tsdb.purge_building(site).await;
         }
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while execute_cycle_chunked reads the historian"
+    )]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn r1484_execute_cycle_holds_checkpoint_until_interval_check_recovers() {
+        let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(fixture_database_url);
+        let Some(url) = url else {
+            eprintln!("skip r1484 execute_cycle: no disposable database URL");
+            return;
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        struct ClearHooks;
+        impl Drop for ClearHooks {
+            fn drop(&mut self) {
+                *TEST_AFDD_REGISTRY_CHUNK
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+                *TEST_INTERVAL_CONNECT_FAIL
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            }
+        }
+        let _clear = ClearHooks;
+        let site = format!("r1484{}", uuid::Uuid::new_v4().simple());
+        assert_disposable(&site);
+        let storage = tempfile::tempdir().expect("afdd state dir");
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", storage.path().display()),
+        );
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        std::env::set_var("OPENFDD_AFDD_CHUNK_HOURS", "1");
+        let store = CanonicalStateStore::from_env().expect("state store");
+        let runtime = AfddSchedulerRuntime {
+            config: Mutex::new(AfddConfig::default()),
+            store,
+            scope_locks: DashMap::new(),
+            status: Mutex::new(RuntimeStatus::default()),
+            scheduled_buildings: Mutex::new(Vec::new()),
+            chunk_env: AfddChunkEnv::from_env(),
+        };
+        let start = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
+        let end = start + Duration::hours(1);
+        let held = start - Duration::hours(1);
+        runtime
+            .persist_checkpoint_for_building(
+                &site,
+                &AfddSchedulerCheckpoint {
+                    last_completed_at_utc: held,
+                    analyzed_through_utc: held,
+                },
+            )
+            .expect("seed checkpoint");
+        *TEST_AFDD_REGISTRY_CHUNK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some(json!({"ok": true, "rules_succeeded": 1}));
+        *TEST_INTERVAL_CONNECT_FAIL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            Some("injected connect refusal".into());
+        let window = AfddCycleWindow {
+            start_utc: start,
+            end_utc: end,
+            scheduled_for_utc: end,
+            catch_up: false,
+        };
+        let failed = runtime
+            .execute_cycle_chunked(&site, "scheduled", window.clone(), true, None)
+            .await
+            .expect("cycle with connect failure");
+        assert!(
+            !failed.ok,
+            "connect failure must not count as a clean cycle"
+        );
+        let reason = failed.error.unwrap_or_default();
+        assert!(
+            reason.contains("Timescale connect for interval evidence")
+                && reason.contains("injected connect refusal"),
+            "cycle reason must be the connect failure: {reason}"
+        );
+        let held_cp = runtime
+            .checkpoint_for_building(&site)
+            .expect("checkpoint")
+            .expect("seeded checkpoint");
+        assert_eq!(
+            held_cp.analyzed_through_utc, held,
+            "scheduler checkpoint stays put when interval connect fails"
+        );
+        *TEST_INTERVAL_CONNECT_FAIL
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+        let recovered = runtime
+            .execute_cycle_chunked(&site, "scheduled", window, true, None)
+            .await
+            .expect("retry after connect restored");
+        assert!(
+            recovered.ok,
+            "restored connect with no unknown evidence advances: {:?}",
+            recovered.error
+        );
+        let advanced = runtime
+            .checkpoint_for_building(&site)
+            .expect("checkpoint")
+            .expect("advanced checkpoint");
+        assert_eq!(advanced.analyzed_through_utc, end);
     }
 }

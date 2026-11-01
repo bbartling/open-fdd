@@ -412,7 +412,7 @@ async fn t1423_6_sample_query_uses_openfdd_key_filter() {
     };
     case.cleanup().await;
     let key = case.point_key("p1");
-    let explain: (String,) = sqlx::query_as(
+    let explain: Vec<(String,)> = sqlx::query_as(
         "EXPLAIN (FORMAT TEXT)
          SELECT openfdd_key, ts
          FROM sample
@@ -424,13 +424,18 @@ async fn t1423_6_sample_query_uses_openfdd_key_filter() {
     .bind(std::slice::from_ref(&key))
     .bind(h(0))
     .bind(h(1))
-    .fetch_one(&case.pool)
+    .fetch_all(&case.pool)
     .await
     .expect("explain");
+    let plan = explain
+        .iter()
+        .map(|(line,)| line.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let plan_lower = plan.to_lowercase();
     assert!(
-        explain.0.to_lowercase().contains("sample"),
-        "expected sample scan in plan: {}",
-        explain.0
+        plan_lower.contains("sample") && plan_lower.contains("openfdd_key"),
+        "expected the sample scan to filter openfdd_key: {plan}"
     );
     case.cleanup().await;
 }
