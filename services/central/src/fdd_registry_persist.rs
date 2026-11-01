@@ -444,9 +444,11 @@ pub async fn repair_unknown_interval_evidence_for_run(
         };
         let detail: Value = row.try_get("detail")?;
         let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
-        let poll: f64 = row.try_get("poll_seconds")?;
-        let run_ctx =
-            crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, poll);
+        let poll: i32 = row.try_get("poll_seconds")?;
+        let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(
+            &body_row,
+            f64::from(poll),
+        );
         let window =
             AnalysisWindow::half_open(row.try_get("window_start")?, row.try_get("window_end")?)
                 .map_err(|e| anyhow!("repair window: {e}"))?;
