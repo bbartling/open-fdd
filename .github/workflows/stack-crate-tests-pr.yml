@@ -51,7 +51,8 @@ jobs:
         run: |
           cargo test -p openfdd-central up03_postgres_exact_daily_buckets_from_confirmed_series -- --nocapture --test-threads=1
           cargo test -p openfdd-central up03_postgres_integration_ci -- --nocapture --test-threads=1
-          cargo test -p openfdd-central -- --skip fixture_acceptance --skip up03_postgres_exact_daily_buckets_from_confirmed_series --skip up03_postgres_integration_ci
+          cargo test -p openfdd-central -- --skip fixture_acceptance --skip up03_postgres_exact_daily_buckets_from_confirmed_series --skip up03_postgres_integration_ci --skip t1423_6
+          cargo test -p openfdd-central t1423_6 -- --test-threads=1
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
       - name: T1423 ingest Postgres stress (30x, parallel)
