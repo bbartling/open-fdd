@@ -70,10 +70,10 @@ async fn test_pool() -> Option<PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())?;
-    for attempt in 0..6 {
+    for attempt in 0..10 {
         match PgPoolOptions::new()
             .max_connections(1)
-            .acquire_timeout(std::time::Duration::from_secs(10))
+            .acquire_timeout(std::time::Duration::from_secs(15))
             .connect(&url)
             .await
         {
@@ -83,8 +83,12 @@ async fn test_pool() -> Option<PgPool> {
                     .expect("schema");
                 return Some(pool);
             }
-            Err(sqlx::Error::PoolTimedOut) if attempt + 1 < 6 => {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            Err(err) if attempt + 1 < 10 => {
+                eprintln!(
+                    "site_backfill test_pool attempt {} failed: {err}; retrying",
+                    attempt + 1
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
             }
             Err(err) => {
                 panic!("test database: {err}");
