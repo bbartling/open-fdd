@@ -201,7 +201,7 @@ mod up03_postgres_exact_buckets {
             .ok()
             .filter(|v| !v.trim().is_empty())?;
         match sqlx::postgres::PgPoolOptions::new()
-            .max_connections(5)
+            .max_connections(10)
             .connect(&url)
             .await
         {
@@ -549,7 +549,7 @@ mod up03_postgres_integration {
             .ok()
             .filter(|v| !v.trim().is_empty())?;
         match sqlx::postgres::PgPoolOptions::new()
-            .max_connections(5)
+            .max_connections(10)
             .connect(&url)
             .await
         {
