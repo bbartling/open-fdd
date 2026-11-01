@@ -15,6 +15,140 @@ use open_fdd_edge_prototype::fdd::registry_api::{
 };
 use serde_json::{json, Value};
 use sqlx::{Postgres, Row, Transaction};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration as StdDuration, Instant};
+
+const FDD_REGISTRY_SITE_LOCK_CLASS: i32 = 1484;
+
+/// AFDD scheduler: interval evidence gate after a clean rule cycle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum IntervalEvidenceReadiness {
+    Ready,
+    Pending,
+    CheckFailed { reason: String },
+}
+
+/// Bounded repair work during an AFDD cycle (pairs and wall time).
+#[derive(Debug, Clone)]
+pub(crate) struct RepairBudget {
+    pub max_pairs: u32,
+    pub max_duration: StdDuration,
+    pub cancel: Option<Arc<AtomicBool>>,
+}
+
+impl Default for RepairBudget {
+    fn default() -> Self {
+        Self {
+            max_pairs: 32,
+            max_duration: StdDuration::from_secs(45),
+            cancel: None,
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) static TEST_INTERVAL_EVIDENCE_INJECT: std::sync::Mutex<
+    Option<IntervalEvidenceReadiness>,
+> = std::sync::Mutex::new(None);
+
+/// When set, the series load runs `SELECT 1/0` inside the interval savepoint.
+#[cfg(test)]
+pub(crate) static TEST_FORCE_SERIES_STATEMENT_ERROR: AtomicBool = AtomicBool::new(false);
+
+/// Pauses repair after the out-of-transaction pair read so another generation can commit.
+#[cfg(test)]
+pub(crate) struct RepairPauseGate {
+    pub arrived: Arc<tokio::sync::Notify>,
+    pub release: AtomicBool,
+    pub release_notify: Arc<tokio::sync::Notify>,
+}
+
+#[cfg(test)]
+pub(crate) static TEST_REPAIR_PAUSE: std::sync::Mutex<Option<Arc<RepairPauseGate>>> =
+    std::sync::Mutex::new(None);
+
+async fn lock_site_registry_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1), $2)")
+        .bind(site_id)
+        .bind(FDD_REGISTRY_SITE_LOCK_CLASS)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn active_run_id_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT run_id
+        FROM (
+            SELECT detail->>'run_id' AS run_id, MAX(created_at) AS latest
+            FROM fdd_run
+            WHERE site_id = $1 AND detail->'generation' IS NOT NULL
+            GROUP BY detail->>'run_id'
+        ) runs
+        ORDER BY latest DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(site_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row.and_then(|r| r.try_get("run_id").ok()))
+}
+
+async fn delete_interval_buckets_overlapping_window_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+    rule_id: &str,
+    equipment_id: &str,
+    window: AnalysisWindow,
+    scope_digest: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    match scope_digest {
+        Some(digest) => {
+            sqlx::query(
+                r#"
+                DELETE FROM fdd_interval_result
+                WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                  AND scope_digest = md5($4)
+                  AND bucket_start < $6 AND bucket_end > $5
+                "#,
+            )
+            .bind(site_id)
+            .bind(rule_id)
+            .bind(equipment_id)
+            .bind(digest)
+            .bind(window.start())
+            .bind(window.end())
+            .execute(&mut **tx)
+            .await?;
+        }
+        None => {
+            sqlx::query(
+                r#"
+                DELETE FROM fdd_interval_result
+                WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                  AND bucket_start < $5 AND bucket_end > $4
+                "#,
+            )
+            .bind(site_id)
+            .bind(rule_id)
+            .bind(equipment_id)
+            .bind(window.start())
+            .bind(window.end())
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
+}
 
 fn parse_window(start: Option<&str>, end: Option<&str>) -> Result<AnalysisWindow> {
     let start = start
@@ -62,6 +196,8 @@ pub(crate) enum IntervalPersistReasonCode {
     SeriesQueryFailed,
     SeriesEmptyNoSamples,
     SeriesExact,
+    /// Stored input or model identity no longer matches the historian. The row stays unknown.
+    RevisionDrift,
 }
 
 impl IntervalPersistReasonCode {
@@ -72,6 +208,7 @@ impl IntervalPersistReasonCode {
             Self::SeriesQueryFailed => "series_query_failed",
             Self::SeriesEmptyNoSamples => "series_empty_no_samples",
             Self::SeriesExact => "series_exact",
+            Self::RevisionDrift => "full_re_evaluation_required",
         }
     }
 }
@@ -348,12 +485,41 @@ async fn exact_interval_plan_for_rule_row(
         window_end: Some(we.as_str()),
         ctx: run_ctx,
     };
-    match crate::timescale_product::load_live_confirmed_fault_in_tx(tx, &fault_query).await {
-        Ok(map) => exact_interval_plan_from_confirmed_map(window, map, sample_rows),
-        Err(err) => Ok(ExactIntervalPlan::SeriesUnavailable {
-            reason_code: IntervalPersistReasonCode::SeriesQueryFailed,
-            reason_detail: err.to_string(),
-        }),
+    const SAVEPOINT: &str = "interval_series_load";
+    sqlx::query(&format!("SAVEPOINT {SAVEPOINT}"))
+        .execute(&mut **tx)
+        .await?;
+    #[cfg(test)]
+    if TEST_FORCE_SERIES_STATEMENT_ERROR.load(Ordering::SeqCst) {
+        let forced = sqlx::query("SELECT 1/0").execute(&mut **tx).await;
+        if let Err(err) = forced {
+            let _ = sqlx::query(&format!("ROLLBACK TO SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await;
+            return Ok(ExactIntervalPlan::SeriesUnavailable {
+                reason_code: IntervalPersistReasonCode::SeriesQueryFailed,
+                reason_detail: err.to_string(),
+            });
+        }
+    }
+    let load_result =
+        crate::timescale_product::load_live_confirmed_fault_in_tx(tx, &fault_query).await;
+    match load_result {
+        Ok(map) => {
+            sqlx::query(&format!("RELEASE SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await?;
+            exact_interval_plan_from_confirmed_map(window, map, sample_rows)
+        }
+        Err(err) => {
+            let _ = sqlx::query(&format!("ROLLBACK TO SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await;
+            Ok(ExactIntervalPlan::SeriesUnavailable {
+                reason_code: IntervalPersistReasonCode::SeriesQueryFailed,
+                reason_detail: err.to_string(),
+            })
+        }
     }
 }
 
@@ -364,21 +530,15 @@ async fn clear_interval_buckets_in_tx(
     equipment_id: &str,
     window: AnalysisWindow,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        r#"
-        DELETE FROM fdd_interval_result
-        WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
-          AND bucket_start >= $4 AND bucket_start < $5
-        "#,
+    delete_interval_buckets_overlapping_window_in_tx(
+        tx,
+        site_id,
+        rule_id,
+        equipment_id,
+        window,
+        None,
     )
-    .bind(site_id)
-    .bind(rule_id)
-    .bind(equipment_id)
-    .bind(window.start())
-    .bind(window.end())
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
+    .await
 }
 
 /// Active generation rows whose interval evidence is still unknown for a run id.
@@ -417,32 +577,119 @@ pub async fn repair_unknown_interval_evidence_for_run(
     tsdb: &Tsdb,
     site_id: &str,
     run_id: &str,
+    budget: &RepairBudget,
 ) -> Result<u32> {
     let pairs = interval_unknown_pairs_for_run(tsdb, site_id, run_id).await?;
     if pairs.is_empty() {
         return Ok(0);
     }
+    #[cfg(test)]
+    {
+        let pause_gate = TEST_REPAIR_PAUSE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if let Some(gate) = pause_gate {
+            gate.arrived.notify_one();
+            while !gate.release.load(Ordering::SeqCst) {
+                gate.release_notify.notified().await;
+            }
+        }
+    }
+    let started = Instant::now();
     let mut repaired = 0u32;
-    for (rule_id, equipment_id) in pairs {
+    let mut stopped_early = false;
+    for (pair_idx, (rule_id, equipment_id)) in pairs.into_iter().enumerate() {
+        if pair_idx as u32 >= budget.max_pairs
+            || started.elapsed() >= budget.max_duration
+            || budget
+                .cancel
+                .as_ref()
+                .is_some_and(|c| c.load(Ordering::SeqCst))
+        {
+            stopped_early = true;
+            break;
+        }
+        let mut tx = tsdb.pool().begin().await?;
+        lock_site_registry_tx(&mut tx, site_id).await?;
+        let active = active_run_id_in_tx(&mut tx, site_id).await?;
+        if active.as_deref() != Some(run_id) {
+            let _ = tx.rollback().await;
+            continue;
+        }
         let row = sqlx::query(
             r#"
             SELECT window_start, window_end, poll_seconds, confirm_min, sample_count, detail
             FROM fdd_run
             WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
               AND detail->>'run_id' = $4
+              AND detail->'interval_persist'->>'status' = $5
             LIMIT 1
+            FOR UPDATE
             "#,
         )
         .bind(site_id)
         .bind(&rule_id)
         .bind(&equipment_id)
         .bind(run_id)
-        .fetch_optional(tsdb.pool())
+        .bind(INTERVAL_EVIDENCE_UNKNOWN)
+        .fetch_optional(&mut *tx)
         .await?;
         let Some(row) = row else {
+            let _ = tx.rollback().await;
             continue;
         };
         let detail: Value = row.try_get("detail")?;
+        let stored_data_revision = detail
+            .get("persisted_data_revision")
+            .and_then(Value::as_u64);
+        let stored_model_revision = detail
+            .get("persisted_model_revision")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let through_revision = fdd_tsdb::current_data_revision(&mut *tx, site_id).await?;
+        let current_model_revision =
+            crate::timescale_product::read_model_revision_string_in_tx(&mut tx, site_id)
+                .await
+                .map_err(|e| anyhow!(e))?;
+        if stored_data_revision != Some(through_revision)
+            || stored_model_revision.as_deref() != Some(current_model_revision.as_str())
+        {
+            let mut detail_mut = detail.clone();
+            if let Some(obj) = detail_mut.as_object_mut() {
+                obj.insert(
+                    "interval_persist".into(),
+                    interval_persist_evidence_json(
+                        INTERVAL_EVIDENCE_UNKNOWN,
+                        IntervalPersistReasonCode::RevisionDrift,
+                        Some("full re-evaluation required"),
+                    ),
+                );
+            }
+            let updated = sqlx::query(
+                r#"
+                UPDATE fdd_run SET detail = $5
+                WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                  AND detail->>'run_id' = $4
+                  AND detail->'interval_persist'->>'status' = $6
+                "#,
+            )
+            .bind(site_id)
+            .bind(&rule_id)
+            .bind(&equipment_id)
+            .bind(run_id)
+            .bind(&detail_mut)
+            .bind(INTERVAL_EVIDENCE_UNKNOWN)
+            .execute(&mut *tx)
+            .await?;
+            if updated.rows_affected() != 1 {
+                let _ = tx.rollback().await;
+                continue;
+            }
+            tx.commit().await?;
+            continue;
+        }
+        let model_revision = stored_model_revision.unwrap_or(current_model_revision);
         let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
         let poll: i32 = row.try_get("poll_seconds")?;
         let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(
@@ -453,7 +700,6 @@ pub async fn repair_unknown_interval_evidence_for_run(
             AnalysisWindow::half_open(row.try_get("window_start")?, row.try_get("window_end")?)
                 .map_err(|e| anyhow!("repair window: {e}"))?;
         let sample_rows = row.try_get::<Option<i32>, _>("sample_count")?.unwrap_or(0);
-        let mut tx = tsdb.pool().begin().await?;
         let plan = exact_interval_plan_for_rule_row(
             &mut tx,
             &rule_id,
@@ -466,9 +712,6 @@ pub async fn repair_unknown_interval_evidence_for_run(
         .await?;
         match plan {
             ExactIntervalPlan::Buckets(buckets) if !buckets.is_empty() => {
-                let through_revision =
-                    fdd_tsdb::current_data_revision(tsdb.pool(), site_id).await?;
-                let model_revision = model_revision_for_site(tsdb, site_id).await?;
                 let confirm = run_ctx.confirm_seconds as f64;
                 let rule_params = RuleParameters::try_from_pairs([
                     ("confirm_min", confirm.to_string()),
@@ -510,11 +753,12 @@ pub async fn repair_unknown_interval_evidence_for_run(
                         ),
                     );
                 }
-                sqlx::query(
+                let updated = sqlx::query(
                     r#"
                     UPDATE fdd_run SET detail = $5
                     WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
                       AND detail->>'run_id' = $4
+                      AND detail->'interval_persist'->>'status' = $6
                     "#,
                 )
                 .bind(site_id)
@@ -522,8 +766,13 @@ pub async fn repair_unknown_interval_evidence_for_run(
                 .bind(&equipment_id)
                 .bind(run_id)
                 .bind(&detail_mut)
+                .bind(INTERVAL_EVIDENCE_UNKNOWN)
                 .execute(&mut *tx)
                 .await?;
+                if updated.rows_affected() != 1 {
+                    let _ = tx.rollback().await;
+                    continue;
+                }
                 tx.commit().await?;
                 repaired += 1;
             }
@@ -532,37 +781,79 @@ pub async fn repair_unknown_interval_evidence_for_run(
             }
         }
     }
+    if stopped_early {
+        return Err(anyhow!(
+            "interval repair stopped before completion; retry required"
+        ));
+    }
     Ok(repaired)
 }
 
-/// Whether the active registry generation still has interval-unknown rows (optional bounded repair).
-pub(crate) async fn interval_evidence_pending_for_active_run(
+/// Whether interval evidence is ready for AFDD checkpoint advance (optional bounded repair).
+pub(crate) async fn interval_evidence_readiness_for_active_run(
     tsdb: &Tsdb,
     site_id: &str,
     attempt_repair: bool,
-) -> Result<bool> {
+    budget: &RepairBudget,
+) -> Result<IntervalEvidenceReadiness> {
+    #[cfg(test)]
+    if let Ok(guard) = TEST_INTERVAL_EVIDENCE_INJECT.lock() {
+        if let Some(inject) = guard.as_ref() {
+            return Ok(inject.clone());
+        }
+    }
     let Some(manifest) = active_generation_manifest(tsdb, site_id).await? else {
-        return Ok(false);
+        return Ok(IntervalEvidenceReadiness::Ready);
     };
     let Some(run_id) = manifest
         .get("run_id")
         .and_then(Value::as_str)
         .filter(|s| !s.is_empty())
     else {
-        return Ok(false);
+        return Ok(IntervalEvidenceReadiness::Ready);
     };
     let mut pending = !interval_unknown_pairs_for_run(tsdb, site_id, run_id)
         .await?
         .is_empty();
     if pending && attempt_repair {
-        let repaired = repair_unknown_interval_evidence_for_run(tsdb, site_id, run_id).await?;
-        if repaired > 0 {
-            pending = !interval_unknown_pairs_for_run(tsdb, site_id, run_id)
-                .await?
-                .is_empty();
+        if let Err(err) =
+            repair_unknown_interval_evidence_for_run(tsdb, site_id, run_id, budget).await
+        {
+            return Ok(IntervalEvidenceReadiness::CheckFailed {
+                reason: err.to_string(),
+            });
         }
+        pending = !interval_unknown_pairs_for_run(tsdb, site_id, run_id)
+            .await?
+            .is_empty();
     }
-    Ok(pending)
+    if pending {
+        Ok(IntervalEvidenceReadiness::Pending)
+    } else {
+        Ok(IntervalEvidenceReadiness::Ready)
+    }
+}
+
+/// Whether the active registry generation still has interval-unknown rows (optional bounded repair).
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) async fn interval_evidence_pending_for_active_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    attempt_repair: bool,
+) -> Result<bool> {
+    match interval_evidence_readiness_for_active_run(
+        tsdb,
+        site_id,
+        attempt_repair,
+        &RepairBudget::default(),
+    )
+    .await
+    {
+        Ok(IntervalEvidenceReadiness::Ready) => Ok(false),
+        Ok(IntervalEvidenceReadiness::Pending) => Ok(true),
+        Ok(IntervalEvidenceReadiness::CheckFailed { reason }) => Err(anyhow!(reason)),
+        Err(err) => Err(err),
+    }
 }
 
 async fn model_revision_for_site(tsdb: &Tsdb, site_id: &str) -> Result<String> {
@@ -596,6 +887,9 @@ pub async fn persist_registry_run_timescale(
     let poll = commit.poll_seconds.round().max(1.0) as i32;
 
     let mut tx = tsdb.pool().begin().await?;
+    lock_site_registry_tx(&mut tx, site_id)
+        .await
+        .map_err(|e| anyhow!("registry lock: {e}"))?;
     if commit.full_cohort {
         sqlx::query("DELETE FROM fdd_run WHERE site_id = $1")
             .bind(site_id)
@@ -723,6 +1017,8 @@ pub async fn persist_registry_run_timescale(
                         "dirty_reason": prep.dirty_reason,
                         "row": row,
                         "interval_persist": interval_persist,
+                        "persisted_data_revision": through_revision,
+                        "persisted_model_revision": model_revision,
                     });
                     let fault_seconds = fault_hours.map(|h| (h * 3600.0).round() as i32);
                     sqlx::query(

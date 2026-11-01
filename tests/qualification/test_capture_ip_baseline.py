@@ -1418,6 +1418,48 @@ class IntervalEvidenceDailyTest(unittest.TestCase):
         self.assertEqual(days, ["2026-10-30"])
 
 
+class UtcDaysOverlappingWindowTest(unittest.TestCase):
+    def test_offset_start_maps_to_prior_utc_day(self) -> None:
+        days = capture.utc_days_overlapping_window(
+            "2026-11-01T00:30+02:00",
+            "2026-11-01T01:30+02:00",
+        )
+        self.assertEqual(days, ["2026-10-31"])
+
+    def test_offset_spanning_two_utc_days(self) -> None:
+        days = capture.utc_days_overlapping_window(
+            "2026-10-31T23:30-05:00",
+            "2026-11-01T20:30-05:00",
+        )
+        self.assertEqual(days, ["2026-11-01", "2026-11-02"])
+
+    def test_reversed_window_empty(self) -> None:
+        self.assertEqual(
+            capture.utc_days_overlapping_window(
+                "2026-10-10T12:00:00Z",
+                "2026-10-10T12:00:00Z",
+            ),
+            [],
+        )
+
+
+class BaselineIoIntervalUnknownTest(unittest.TestCase):
+    def test_fault_status_still_requires_null_seconds(self) -> None:
+        row = {
+            "building_id": "B1",
+            "rule_id": "R1",
+            "equipment_id": "E1",
+            "utc_day": "2026-10-10",
+            "pair_status": "interval_unknown",
+            "interval_status": "INTERVAL_UNKNOWN",
+            "status": "FAULT",
+            "fault_seconds": 300.0,
+            "covered_seconds": 600.0,
+        }
+        errors = baseline_io.validate_fdd_daily_row(row)
+        self.assertTrue(errors)
+
+
 class FddRunBusyRetryTest(unittest.TestCase):
     def test_post_fdd_run_retries_409_then_succeeds(self) -> None:
         http = mock.MagicMock()

@@ -27,6 +27,24 @@ function triFault(status: unknown, hours: unknown): string {
   return "false";
 }
 
+/** Aggregate child WX fault tri-state: any true → true; else any unknown → unknown; else false. */
+export function aggregateWxFaultTriState(rows: FddResultRow[]): string {
+  if (rows.length === 0) {
+    return "unknown";
+  }
+  let sawUnknown = false;
+  for (const r of rows) {
+    const child = triFault(r.status, r.fault_hours);
+    if (child === "true") {
+      return "true";
+    }
+    if (child === "unknown") {
+      sawUnknown = true;
+    }
+  }
+  return sawUnknown ? "unknown" : "false";
+}
+
 function sumKnownFaultHours(rows: FddResultRow[]): number | null {
   let any = false;
   let sum = 0;
@@ -140,15 +158,7 @@ export function WeatherHealthSection({
           local_tag: "oa_h",
           web_tag: "web_oa_h",
           rule_id: "SENSOR-HI/LO",
-          fault:
-            wxRules.length > 0
-              ? wxRules.some(
-                  (r) =>
-                    triFault(r.status, r.fault_hours) === "true",
-                )
-                ? "true"
-                : "false"
-              : "unknown",
+          fault: aggregateWxFaultTriState(wxRules),
           fault_h: fmtHours(sumKnownFaultHours(wxRules)),
           total_fault_h: fmtHours(sumKnownFaultHours(wxRules)),
         });

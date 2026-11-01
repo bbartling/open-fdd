@@ -3540,6 +3540,56 @@ pub(crate) async fn read_analytics_cache_input_from(
     }
 }
 
+fn model_revision_hash_rows(
+    equipment: &[sqlx::postgres::PgRow],
+    roles: &[sqlx::postgres::PgRow],
+    points: &[sqlx::postgres::PgRow],
+    si_cutover_count: Option<i64>,
+) -> Result<String, String> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"openfdd-model-v1");
+    for row in equipment {
+        hash_line(
+            &mut hasher,
+            &format!(
+                "equip\t{}\t{}\t{}",
+                text_cell(row, 0)?,
+                text_cell(row, 1)?,
+                text_cell(row, 2)?
+            ),
+        );
+    }
+    for row in roles {
+        hash_line(
+            &mut hasher,
+            &format!(
+                "role\t{}\t{}\t{}\t{}",
+                text_cell(row, 0)?,
+                text_cell(row, 1)?,
+                text_cell(row, 2)?,
+                text_cell(row, 3)?
+            ),
+        );
+    }
+    for row in points {
+        hash_line(
+            &mut hasher,
+            &format!(
+                "point\t{}\t{}\t{}\t{}\t{}",
+                text_cell(row, 0)?,
+                text_cell(row, 1)?,
+                text_cell(row, 2)?,
+                text_cell(row, 3)?,
+                text_cell(row, 4)?
+            ),
+        );
+    }
+    if let Some(count) = si_cutover_count {
+        hash_line(&mut hasher, &format!("si_cutover_ledger\t{count}"));
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
 pub async fn read_model_revision_string(tsdb: &Tsdb, building_id: &str) -> Result<String, String> {
     let equipment = sqlx::query(
         r#"
@@ -3578,55 +3628,85 @@ pub async fn read_model_revision_string(tsdb: &Tsdb, building_id: &str) -> Resul
     .fetch_all(tsdb.pool())
     .await
     .map_err(|err| public_db_error("model revision", &err))?;
-
-    let mut hasher = Sha256::new();
-    hasher.update(b"openfdd-model-v1");
-    for row in &equipment {
-        hash_line(
-            &mut hasher,
-            &format!(
-                "equip\t{}\t{}\t{}",
-                text_cell(row, 0)?,
-                text_cell(row, 1)?,
-                text_cell(row, 2)?
-            ),
-        );
-    }
-    for row in &roles {
-        hash_line(
-            &mut hasher,
-            &format!(
-                "role\t{}\t{}\t{}\t{}",
-                text_cell(row, 0)?,
-                text_cell(row, 1)?,
-                text_cell(row, 2)?,
-                text_cell(row, 3)?
-            ),
-        );
-    }
-    for row in &points {
-        hash_line(
-            &mut hasher,
-            &format!(
-                "point\t{}\t{}\t{}\t{}\t{}",
-                text_cell(row, 0)?,
-                text_cell(row, 1)?,
-                text_cell(row, 2)?,
-                text_cell(row, 3)?,
-                text_cell(row, 4)?
-            ),
-        );
-    }
-    if let Ok(count) = sqlx::query_scalar::<_, i64>(
+    let si_cutover_count = sqlx::query_scalar::<_, i64>(
         "SELECT count(*)::bigint FROM unit_migration WHERE site_id = $1",
     )
     .bind(building_id)
     .fetch_one(tsdb.pool())
     .await
-    {
-        hash_line(&mut hasher, &format!("si_cutover_ledger\t{count}"));
-    }
-    Ok(hex::encode(hasher.finalize()))
+    .ok();
+    model_revision_hash_rows(&equipment, &roles, &points, si_cutover_count)
+}
+
+pub(crate) async fn read_model_revision_string_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    building_id: &str,
+) -> Result<String, String> {
+    let equipment = sqlx::query(
+        r#"
+        SELECT equipment_id, COALESCE(equip_type, ''), COALESCE(parent_equipment_id, '')
+        FROM equipment
+        WHERE building_id = $1
+        ORDER BY equipment_id
+        "#,
+    )
+    .bind(building_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|err| public_db_error("model revision", &err))?;
+    let roles = sqlx::query(
+        r#"
+        SELECT equipment_id, openfdd_key, role, COALESCE(unit, '')
+        FROM role_map
+        WHERE building_id = $1
+        ORDER BY equipment_id, openfdd_key, role
+        "#,
+    )
+    .bind(building_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|err| public_db_error("model revision", &err))?;
+    let points = sqlx::query(
+        r#"
+        SELECT COALESCE(equipment_id, ''), openfdd_key, COALESCE(role, ''),
+               COALESCE(unit, ''), haystack_id
+        FROM point_map
+        WHERE site_id = $1
+        ORDER BY openfdd_key, haystack_id
+        "#,
+    )
+    .bind(building_id)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|err| public_db_error("model revision", &err))?;
+    // Optional table. A missing relation must not abort the caller's transaction.
+    let si_cutover_count = {
+        const SAVEPOINT: &str = "model_revision_si";
+        sqlx::query(&format!("SAVEPOINT {SAVEPOINT}"))
+            .execute(&mut **tx)
+            .await
+            .map_err(|err| public_db_error("model revision", &err))?;
+        let count = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*)::bigint FROM unit_migration WHERE site_id = $1",
+        )
+        .bind(building_id)
+        .fetch_one(&mut **tx)
+        .await
+        .ok();
+        if count.is_none() {
+            sqlx::query(&format!("ROLLBACK TO SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await
+                .map_err(|err| public_db_error("model revision", &err))?;
+        } else {
+            sqlx::query(&format!("RELEASE SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await
+                .map_err(|err| public_db_error("model revision", &err))?;
+        }
+        count
+    };
+    model_revision_hash_rows(&equipment, &roles, &points, si_cutover_count)
 }
 
 fn hash_line(hasher: &mut Sha256, line: &str) {

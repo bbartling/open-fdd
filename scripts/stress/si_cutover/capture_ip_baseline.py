@@ -757,19 +757,24 @@ def utc_days_overlapping_window(window_start: str, window_end: str) -> list[str]
     end = datetime.fromisoformat(window_end.replace("Z", "+00:00"))
     if start.tzinfo is None:
         start = start.replace(tzinfo=timezone.utc)
+    else:
+        start = start.astimezone(timezone.utc)
     if end.tzinfo is None:
         end = end.replace(tzinfo=timezone.utc)
+    else:
+        end = end.astimezone(timezone.utc)
+    if end <= start:
+        return []
     out: list[str] = []
     day = start.date()
-    while True:
+    end_day = end.date()
+    while day <= end_day:
         day_start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
         day_end = day_start + timedelta(days=1)
         overlap_start = max(start, day_start)
         overlap_end = min(end, day_end)
         if overlap_start < overlap_end:
             out.append(day.isoformat())
-        if day >= end.date():
-            break
         day = day + timedelta(days=1)
     return out
 
