@@ -1691,23 +1691,21 @@ LIMIT $4
     .await
     .ok()
     .flatten()
-    .unwrap_or_else(|| crate::effective_run_context::EffectiveRunContext {
+    .unwrap_or(crate::effective_run_context::EffectiveRunContext {
         poll_seconds: 300.0,
         confirm_seconds: rule.confirm_seconds,
         session_override: None,
     });
-    let mut fault_map = match load_live_confirmed_fault(
-        &tsdb,
-        &reg,
+    let fault_query = crate::effective_run_context::LiveConfirmedFaultQuery {
+        reg: &reg,
         rule,
         building_id,
         equipment_id,
         window_start,
         window_end,
-        &run_ctx,
-    )
-    .await
-    {
+        ctx: &run_ctx,
+    };
+    let mut fault_map = match load_live_confirmed_fault(&tsdb, &fault_query).await {
         Ok(map) => map,
         Err(err) => {
             tracing::warn!(
@@ -2328,14 +2326,15 @@ fn decode_confirmed_fault_cell(
 
 pub(crate) async fn load_live_confirmed_fault_in_tx(
     tx: &mut Transaction<'_, Postgres>,
-    reg: &RuleRegistry,
-    rule: &RuleSpec,
-    building_id: &str,
-    equipment_id: &str,
-    window_start: Option<&str>,
-    window_end: Option<&str>,
-    ctx: &crate::effective_run_context::EffectiveRunContext,
+    query: &crate::effective_run_context::LiveConfirmedFaultQuery<'_>,
 ) -> Result<HashMap<String, bool>, ConfirmedFaultLoadError> {
+    let rule = query.rule;
+    let equipment_id = query.equipment_id;
+    let building_id = query.building_id;
+    let window_start = query.window_start;
+    let window_end = query.window_end;
+    let ctx = query.ctx;
+    let reg = query.reg;
     if rule_is_metric(rule) || !safe_ident(equipment_id) {
         return Ok(HashMap::new());
     }
@@ -2354,11 +2353,11 @@ pub(crate) async fn load_live_confirmed_fault_in_tx(
         return Ok(HashMap::new());
     };
     let roles = history_roles_for_rule(rule);
-    ensure_history_table(&mut **tx, &roles)
+    ensure_history_table(tx, &roles)
         .await
-        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
+        .map_err(ConfirmedFaultLoadError::Query)?;
     let n = fill_history_for_equipment(
-        &mut **tx,
+        tx,
         building_id,
         equipment_id,
         &roles,
@@ -2367,12 +2366,12 @@ pub(crate) async fn load_live_confirmed_fault_in_tx(
         None,
     )
     .await
-    .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
+    .map_err(ConfirmedFaultLoadError::Query)?;
     if n == 0 {
         return Ok(HashMap::new());
     }
     match crate::sql_pack::prepare_rule_inputs(
-        &mut **tx,
+        tx,
         building_id,
         window_start,
         window_end,
@@ -2393,13 +2392,13 @@ pub(crate) async fn load_live_confirmed_fault_in_tx(
     let rows = sqlx::query(&series_sql)
         .fetch_all(&mut **tx)
         .await
-        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
+        .map_err(ConfirmedFaultLoadError::Query)?;
     let mut map = HashMap::new();
     for row in rows {
         let Some(ts) = row
             .try_get::<DateTime<Utc>, _>("timestamp_utc")
             .ok()
-            .map(|t| ts_key(t))
+            .map(ts_key)
         else {
             continue;
         };
@@ -2412,30 +2411,14 @@ pub(crate) async fn load_live_confirmed_fault_in_tx(
 
 pub(crate) async fn load_live_confirmed_fault(
     tsdb: &Tsdb,
-    reg: &RuleRegistry,
-    rule: &RuleSpec,
-    building_id: &str,
-    equipment_id: &str,
-    window_start: Option<&str>,
-    window_end: Option<&str>,
-    ctx: &crate::effective_run_context::EffectiveRunContext,
+    query: &crate::effective_run_context::LiveConfirmedFaultQuery<'_>,
 ) -> Result<HashMap<String, bool>, ConfirmedFaultLoadError> {
     let mut tx = tsdb
         .pool()
         .begin()
         .await
-        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
-    let map = load_live_confirmed_fault_in_tx(
-        &mut tx,
-        reg,
-        rule,
-        building_id,
-        equipment_id,
-        window_start,
-        window_end,
-        ctx,
-    )
-    .await?;
+        .map_err(ConfirmedFaultLoadError::Query)?;
+    let map = load_live_confirmed_fault_in_tx(&mut tx, query).await?;
     let _ = tx.rollback().await;
     Ok(map)
 }
@@ -2458,18 +2441,18 @@ pub(crate) async fn preview_confirmed_fault_for_rule(
         confirm_seconds: rule.confirm_seconds,
         session_override: None,
     };
-    load_live_confirmed_fault(
-        &tsdb,
-        &reg,
+    let query = crate::effective_run_context::LiveConfirmedFaultQuery {
+        reg: &reg,
         rule,
         building_id,
         equipment_id,
-        None,
-        None,
-        &ctx,
-    )
-    .await
-    .map_err(|e| anyhow!("{e}"))
+        window_start: None,
+        window_end: None,
+        ctx: &ctx,
+    };
+    load_live_confirmed_fault(&tsdb, &query)
+        .await
+        .map_err(|e| anyhow!("{e}"))
 }
 
 fn load_confirmed_fault_hint(

@@ -339,18 +339,16 @@ async fn exact_interval_plan_for_rule_row(
     let we = window
         .end()
         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    match crate::timescale_product::load_live_confirmed_fault_in_tx(
-        tx,
-        &reg,
+    let fault_query = crate::effective_run_context::LiveConfirmedFaultQuery {
+        reg: &reg,
         rule,
         site_id,
         equipment_id,
-        Some(ws.as_str()),
-        Some(we.as_str()),
-        run_ctx,
-    )
-    .await
-    {
+        window_start: Some(ws.as_str()),
+        window_end: Some(we.as_str()),
+        ctx: run_ctx,
+    };
+    match crate::timescale_product::load_live_confirmed_fault_in_tx(tx, &fault_query).await {
         Ok(map) => exact_interval_plan_from_confirmed_map(window, map, sample_rows),
         Err(err) => Ok(ExactIntervalPlan::SeriesUnavailable {
             reason_code: IntervalPersistReasonCode::SeriesQueryFailed,
@@ -448,7 +446,7 @@ pub async fn repair_unknown_interval_evidence_for_run(
         let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
         let poll: f64 = row.try_get("poll_seconds")?;
         let run_ctx =
-            crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, poll as f64);
+            crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, poll);
         let window =
             AnalysisWindow::half_open(row.try_get("window_start")?, row.try_get("window_end")?)
                 .map_err(|e| anyhow!("repair window: {e}"))?;
@@ -637,7 +635,7 @@ pub async fn persist_registry_run_timescale(
                 if let Some(eq) = equipment_id {
                     let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(
                         row,
-                        poll as f64,
+                        f64::from(poll),
                     );
                     let mut interval_persist: Option<Value> = None;
                     let mut interval_buckets: Option<Vec<BucketResult>> = None;

@@ -367,18 +367,18 @@ mod up03_postgres_exact_buckets {
             confirm_seconds: 600,
             session_override: None,
         };
-        let confirmed = crate::timescale_product::load_live_confirmed_fault(
-            &tsdb,
-            &reg,
+        let query = crate::effective_run_context::LiveConfirmedFaultQuery {
+            reg: &reg,
             rule,
-            &site,
-            eq_day2,
-            Some(window_start),
-            Some(window_end),
-            &ctx,
-        )
-        .await
-        .expect("confirmed series");
+            building_id: &site,
+            equipment_id: eq_day2,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            ctx: &ctx,
+        };
+        let confirmed = crate::timescale_product::load_live_confirmed_fault(&tsdb, &query)
+            .await
+            .expect("confirmed series");
         assert!(
             !confirmed.is_empty(),
             "load_live_confirmed_fault must return data"

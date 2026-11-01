@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use fdd_rules::RuleSpec;
+use fdd_rules::{RuleRegistry, RuleSpec};
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,14 +33,17 @@ impl EffectiveRunContext {
             session_override,
         }
     }
+}
 
-    pub(crate) fn for_rule_catalog(rule: &RuleSpec, poll_seconds: f64) -> Self {
-        Self {
-            poll_seconds: poll_seconds.max(1.0),
-            confirm_seconds: rule.confirm_seconds,
-            session_override: None,
-        }
-    }
+/// Inputs for loading a confirmed_fault series inside an open transaction.
+pub(crate) struct LiveConfirmedFaultQuery<'a> {
+    pub reg: &'a RuleRegistry,
+    pub rule: &'a RuleSpec,
+    pub building_id: &'a str,
+    pub equipment_id: &'a str,
+    pub window_start: Option<&'a str>,
+    pub window_end: Option<&'a str>,
+    pub ctx: &'a EffectiveRunContext,
 }
 
 fn session_params_from_json(value: &Value) -> Option<HashMap<String, f64>> {
