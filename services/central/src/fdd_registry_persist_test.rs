@@ -201,7 +201,7 @@ mod up03_postgres_exact_buckets {
             .ok()
             .filter(|v| !v.trim().is_empty())?;
         match sqlx::postgres::PgPoolOptions::new()
-            .max_connections(3)
+            .max_connections(5)
             .connect(&url)
             .await
         {
@@ -326,7 +326,10 @@ mod up03_postgres_exact_buckets {
             return;
         };
         let site = format!("up03{}", uuid::Uuid::new_v4().simple());
-        apply_schema(&pool).await;
+        {
+            let _lock = crate::test_env_lock::lock_env();
+            apply_schema(&pool).await;
+        }
         let tsdb = Tsdb::from_pool(pool.clone());
         tsdb.ensure_site_building(&site)
             .await
@@ -547,7 +550,7 @@ mod up03_postgres_integration {
             .ok()
             .filter(|v| !v.trim().is_empty())?;
         match sqlx::postgres::PgPoolOptions::new()
-            .max_connections(3)
+            .max_connections(5)
             .connect(&url)
             .await
         {
@@ -821,8 +824,10 @@ mod up03_postgres_integration {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
         };
-        let _lock = crate::test_env_lock::lock_env();
-        apply_schema(&pool).await;
+        {
+            let _lock = crate::test_env_lock::lock_env();
+            apply_schema(&pool).await;
+        }
         scenario_exact_unknown_exact(pool.clone()).await;
         scenario_scheduler_unknown_repair_checkpoint_gate(pool.clone()).await;
         scenario_confirm_zero_uses_row_run_context(pool).await;
