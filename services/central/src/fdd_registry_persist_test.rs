@@ -809,7 +809,6 @@ mod up03_postgres_integration {
     #[tokio::test]
     async fn up03_postgres_exact_unknown_exact_same_window() {
         eprintln!("{CI_MARKER}: up03_postgres_exact_unknown_exact_same_window executing");
-        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
@@ -995,7 +994,6 @@ mod up03_postgres_integration {
     #[tokio::test]
     async fn up03_postgres_scheduler_unknown_repair_checkpoint_gate() {
         eprintln!("{CI_MARKER}: up03_postgres_scheduler_unknown_repair_checkpoint_gate executing");
-        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
@@ -1101,7 +1099,6 @@ mod up03_postgres_integration {
     #[tokio::test]
     async fn up03_postgres_confirm_zero_uses_row_run_context() {
         eprintln!("{CI_MARKER}: up03_postgres_confirm_zero_uses_row_run_context executing");
-        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
