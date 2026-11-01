@@ -21,6 +21,8 @@ Host vertical sizing and a manually chosen replica count are not an autoscaler.
 
 Replicas coordinate only when `OPENFDD_DATABASE_URL` is set. The worker applies `sql/schema/04_ingest_queue.sql` on connect. Without that URL the worker stays idle unless `OPENFDD_INGEST_QUEUE=memory` is set for a single process. Memory mode is not replica-safe.
 
+**Backend precedence (no silent fallback):** when `OPENFDD_DATABASE_URL` is non-empty, every queue operation uses the shared Postgres pool. `OPENFDD_INGEST_QUEUE=memory` does not override a configured URL; memory applies only when no database URL is set. A Postgres connection or query failure returns an error to the caller. The process does not fall back to process-local memory while a database URL is configured.
+
 `OPENFDD_PROVIDER_POLL_MODE=legacy` plus `OPENFDD_ALLOW_UNSAFE_POLLER=1` restores independent site loops. That path is not safe with more than one process. API role still refuses it.
 
 ## Job identity

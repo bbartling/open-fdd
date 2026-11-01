@@ -23,6 +23,8 @@ pub(crate) mod test_schema;
 mod worker;
 
 #[cfg(test)]
+mod client_mode_precedence;
+#[cfg(test)]
 mod durability;
 #[cfg(test)]
 mod ledger_contract;

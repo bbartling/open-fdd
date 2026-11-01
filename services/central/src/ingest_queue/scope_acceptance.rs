@@ -22,6 +22,7 @@ use crate::providers::committed_model::{
 use crate::state::AppState;
 use crate::tenant::{ControlPlane, TenantRecord};
 
+use super::client::{Coordination, QueueClient};
 use super::model::{ClaimRequest, FinishOutcome, FinishRequest, JobCounts, NewJob};
 
 const DEVICE: &str = "AHU_1";
@@ -111,52 +112,112 @@ struct Plans {
     shared_b: String,
 }
 
-#[tokio::test]
-#[expect(
-    clippy::await_holding_lock,
-    reason = "serialize OPENFDD_* env with sync ingest fixtures on one process-wide lock"
-)]
-async fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
-    let _env = crate::test_env_lock::lock_env();
-    let fix = ScopeFix::new();
-    let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
-    let _db = EnvGuard::unset("OPENFDD_DATABASE_URL");
-    let _queue = EnvGuard::set("OPENFDD_INGEST_QUEUE", "memory");
-    let workspace = tempfile::tempdir().unwrap();
-    let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
+#[test]
+fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
+    crate::test_env_lock::run_env_locked(async {
+        let fix = ScopeFix::new();
+        let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
+        let _db = EnvGuard::unset("OPENFDD_DATABASE_URL");
+        let _queue = EnvGuard::set("OPENFDD_INGEST_QUEUE", "memory");
+        let workspace = tempfile::tempdir().unwrap();
+        let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
 
-    run_matrix(&fix).await;
+        emit_scope_receipt("memory", QueueClient::coordination());
+        run_matrix(&fix).await;
 
-    let required = std::env::var("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED")
+        let required = ingest_scope_database_required();
+        let url = test_database_url();
+        match url {
+            Some(url) => {
+                std::env::set_var("OPENFDD_DATABASE_URL", &url);
+                let pool = PgPoolOptions::new()
+                    .max_connections(2)
+                    .connect(&url)
+                    .await
+                    .expect("ingest scope postgres fixture");
+                crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
+                    .await
+                    .expect("ingest schema");
+                let lease = snapshot_scheduler(&pool).await;
+                purge_fixture(&pool, &fix).await;
+                let _queue_pg = EnvGuard::unset("OPENFDD_INGEST_QUEUE");
+                emit_scope_receipt("postgres", QueueClient::coordination());
+                run_matrix(&fix).await;
+                purge_fixture(&pool, &fix).await;
+                restore_scheduler(&pool, lease, &fix).await;
+            }
+            None if required => {
+                panic!("OPENFDD_TEST_DATABASE_URL is required for the ingest scope fixture")
+            }
+            None => {}
+        }
+    });
+}
+
+fn ingest_scope_database_required() -> bool {
+    std::env::var("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED")
         .ok()
-        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"));
-    let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
+        .is_some_and(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+}
+
+fn test_database_url() -> Option<String> {
+    std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    match url {
-        Some(url) => {
-            std::env::set_var("OPENFDD_DATABASE_URL", &url);
-            let pool = PgPoolOptions::new()
-                .max_connections(2)
-                .connect(&url)
-                .await
-                .expect("ingest scope postgres fixture");
-            crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
-                .await
-                .expect("ingest schema");
-            let lease = snapshot_scheduler(&pool).await;
-            purge_fixture(&pool, &fix).await;
-            let _queue_pg = EnvGuard::unset("OPENFDD_INGEST_QUEUE");
-            run_matrix(&fix).await;
-            purge_fixture(&pool, &fix).await;
-            restore_scheduler(&pool, lease, &fix).await;
-        }
-        None if required => {
-            panic!("OPENFDD_TEST_DATABASE_URL is required for the ingest scope fixture")
-        }
-        None => {}
+        .filter(|value| !value.is_empty())
+}
+
+fn emit_scope_receipt(phase: &str, coordination: Coordination) {
+    let backend = match coordination {
+        Coordination::Postgres => "postgres",
+        Coordination::ExplicitMemory => "memory",
+        Coordination::Unavailable => "unavailable",
+    };
+    let connection = std::env::var("OPENFDD_DATABASE_URL")
+        .ok()
+        .map(|value| redact_database_url(&value));
+    eprintln!(
+        "SCOPE_TEST_RECEIPT phase={phase} backend={backend} coordination={backend} connection={connection:?}"
+    );
+}
+
+fn redact_database_url(url: &str) -> String {
+    if url.contains('@') {
+        let host = url.split('@').nth(1).unwrap_or("redacted");
+        return format!("postgres://redacted@{host}");
     }
+    "postgres://redacted".into()
+}
+
+#[test]
+#[should_panic(expected = "OPENFDD_TEST_DATABASE_URL is required")]
+fn ingest_scope_database_required_fail_closed_without_url() {
+    crate::test_env_lock::run_env_locked(async {
+        let _req = EnvGuard::set("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED", "1");
+        let _url = EnvGuard::unset("OPENFDD_TEST_DATABASE_URL");
+        let _db = EnvGuard::unset("OPENFDD_DATABASE_URL");
+        if ingest_scope_database_required() && test_database_url().is_none() {
+            panic!("OPENFDD_TEST_DATABASE_URL is required for the ingest scope fixture");
+        }
+    });
+}
+
+#[tokio::test]
+async fn ingest_scope_invalid_database_url_fails_connect() {
+    let _lock = crate::test_env_lock::lock_env();
+    let _req = EnvGuard::set("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED", "1");
+    let bad = "postgres://openfdd:openfdd@127.0.0.1:9/openfdd_nope";
+    let _test = EnvGuard::set("OPENFDD_TEST_DATABASE_URL", bad);
+    let err = PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(std::time::Duration::from_secs(2))
+        .connect(bad)
+        .await;
+    assert!(
+        err.is_err(),
+        "invalid database URL must fail closed, not skip"
+    );
+    eprintln!("SCOPE_TEST_RECEIPT phase=invalid_url backend=postgres connection=refused");
 }
 
 async fn run_matrix(fix: &ScopeFix) {

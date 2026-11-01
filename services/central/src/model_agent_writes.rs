@@ -1323,13 +1323,9 @@ mod tests {
         fdd_tsdb::clear_shared_pool();
     }
 
-    #[tokio::test]
-    #[expect(
-        clippy::await_holding_lock,
-        reason = "serialize OPENFDD_WORKSPACE for model point overlay API"
-    )]
-    async fn t1406_model_point_engineer_overlay_controls() {
-        let _env = crate::test_env_lock::lock_env();
+    #[test]
+    fn t1406_model_point_engineer_overlay_controls() {
+        crate::test_env_lock::run_env_locked(async {
         let _mt = EnvGuard::unset("OPENFDD_MULTI_TENANT");
         let workspace = tempfile::tempdir().expect("workspace");
         let _ws = crate::test_env_lock::WorkspaceEnv::set(workspace.path());
@@ -1456,6 +1452,7 @@ mod tests {
 
         use fdd_core::sensor_sweep::sweep_assessable_sql_role;
         assert!(!sweep_assessable_sql_role("oa_t", entry.unit.as_deref()));
+        });
     }
 
     #[tokio::test]

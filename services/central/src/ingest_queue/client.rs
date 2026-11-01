@@ -367,7 +367,7 @@ impl QueueClient {
     }
 
     async fn pool_if_configured(&self) -> Result<Option<PgPool>, QueueError> {
-        if explicit_memory() || !database_url_present() {
+        if !database_url_present() {
             return Ok(None);
         }
         let mut guard = self.postgres.lock().await;
