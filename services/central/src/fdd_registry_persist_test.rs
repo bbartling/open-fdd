@@ -806,16 +806,27 @@ mod up03_postgres_integration {
             .await;
     }
 
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize UP-03 disposable Postgres integration against shared DDL"
+    )]
     #[tokio::test]
-    async fn up03_postgres_exact_unknown_exact_same_window() {
-        eprintln!("{CI_MARKER}: up03_postgres_exact_unknown_exact_same_window executing");
+    async fn up03_postgres_integration_ci() {
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
         };
+        let _lock = crate::test_env_lock::lock_env();
+        apply_schema(&pool).await;
+        scenario_exact_unknown_exact(&pool).await;
+        scenario_scheduler_unknown_repair_checkpoint_gate(&pool).await;
+        scenario_confirm_zero_uses_row_run_context(&pool).await;
+    }
+
+    async fn scenario_exact_unknown_exact(pool: &PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_exact_unknown_exact_same_window executing");
         let site = format!("up3e{}", uuid::Uuid::new_v4().simple());
         let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
-        apply_schema(&pool).await;
         let tsdb = Tsdb::from_pool(pool.clone());
         tsdb.ensure_site_building(&site).await.expect("site");
         seed_site(&pool, &site, &equipment_id).await;
@@ -991,16 +1002,10 @@ mod up03_postgres_integration {
         purge_site(&pool, &site).await;
     }
 
-    #[tokio::test]
-    async fn up03_postgres_scheduler_unknown_repair_checkpoint_gate() {
+    async fn scenario_scheduler_unknown_repair_checkpoint_gate(pool: &PgPool) {
         eprintln!("{CI_MARKER}: up03_postgres_scheduler_unknown_repair_checkpoint_gate executing");
-        let Some(pool) = pool().await else {
-            eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
-            return;
-        };
         let site = format!("up3s{}", uuid::Uuid::new_v4().simple());
         let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
-        apply_schema(&pool).await;
         let tsdb = Tsdb::from_pool(pool.clone());
         tsdb.ensure_site_building(&site).await.expect("site");
         seed_site(&pool, &site, &equipment_id).await;
@@ -1096,16 +1101,10 @@ mod up03_postgres_integration {
         purge_site(&pool, &site).await;
     }
 
-    #[tokio::test]
-    async fn up03_postgres_confirm_zero_uses_row_run_context() {
+    async fn scenario_confirm_zero_uses_row_run_context(pool: &PgPool) {
         eprintln!("{CI_MARKER}: up03_postgres_confirm_zero_uses_row_run_context executing");
-        let Some(pool) = pool().await else {
-            eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
-            return;
-        };
         let site = format!("up3c{}", uuid::Uuid::new_v4().simple());
         let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
-        apply_schema(&pool).await;
         let tsdb = Tsdb::from_pool(pool.clone());
         tsdb.ensure_site_building(&site).await.expect("site");
         seed_site(&pool, &site, &equipment_id).await;
