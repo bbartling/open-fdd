@@ -527,7 +527,7 @@ mod up03_postgres_integration {
         active_generation_manifest, commit_and_persist_registry_run,
         exact_interval_plan_from_confirmed_map, interval_evidence_pending_for_active_run,
         repair_unknown_interval_evidence_for_run, IntervalPersistReasonCode,
-        INTERVAL_EVIDENCE_EXACT, INTERVAL_EVIDENCE_UNKNOWN,
+        INTERVAL_EVIDENCE_EXACT,
     };
     use open_fdd_edge_prototype::fdd::registry_api::{
         RunGenerationCommit, RunModelEquipment, RunRuleFile,
@@ -708,7 +708,7 @@ mod up03_postgres_integration {
             window_start: Some(window_start.into()),
             window_end: Some(window_end.into()),
             watermark: None,
-            poll_seconds: poll_seconds,
+            poll_seconds,
             pack: json!({ "pack_version": "test-pack" }),
         }
     }
@@ -1102,7 +1102,7 @@ mod up03_postgres_integration {
         let base = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
         for step in 0..36 {
             let ts = base + Duration::minutes(step * 5);
-            let mismatched = step >= 2 && step < 14;
+            let mismatched = (2..14).contains(&step);
             let status = if mismatched { 0.0 } else { 1.0 };
             push_cmd_status(&mut batch, &site, &equipment_id, ts, 1.0, status);
         }
