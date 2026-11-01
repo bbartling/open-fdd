@@ -818,12 +818,12 @@ mod up03_postgres_integration {
         };
         let _lock = crate::test_env_lock::lock_env();
         apply_schema(&pool).await;
-        scenario_exact_unknown_exact(&pool).await;
-        scenario_scheduler_unknown_repair_checkpoint_gate(&pool).await;
-        scenario_confirm_zero_uses_row_run_context(&pool).await;
+        scenario_exact_unknown_exact(pool.clone()).await;
+        scenario_scheduler_unknown_repair_checkpoint_gate(pool.clone()).await;
+        scenario_confirm_zero_uses_row_run_context(pool).await;
     }
 
-    async fn scenario_exact_unknown_exact(pool: &PgPool) {
+    async fn scenario_exact_unknown_exact(pool: PgPool) {
         eprintln!("{CI_MARKER}: up03_postgres_exact_unknown_exact_same_window executing");
         let site = format!("up3e{}", uuid::Uuid::new_v4().simple());
         let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
@@ -1002,7 +1002,7 @@ mod up03_postgres_integration {
         purge_site(&pool, &site).await;
     }
 
-    async fn scenario_scheduler_unknown_repair_checkpoint_gate(pool: &PgPool) {
+    async fn scenario_scheduler_unknown_repair_checkpoint_gate(pool: PgPool) {
         eprintln!("{CI_MARKER}: up03_postgres_scheduler_unknown_repair_checkpoint_gate executing");
         let site = format!("up3s{}", uuid::Uuid::new_v4().simple());
         let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
@@ -1101,7 +1101,7 @@ mod up03_postgres_integration {
         purge_site(&pool, &site).await;
     }
 
-    async fn scenario_confirm_zero_uses_row_run_context(pool: &PgPool) {
+    async fn scenario_confirm_zero_uses_row_run_context(pool: PgPool) {
         eprintln!("{CI_MARKER}: up03_postgres_confirm_zero_uses_row_run_context executing");
         let site = format!("up3c{}", uuid::Uuid::new_v4().simple());
         let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
