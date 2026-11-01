@@ -19,6 +19,10 @@ pub fn lock_env() -> MutexGuard<'static, ()> {
 }
 
 /// Run an async test body while holding [`lock_env`] for the entire call.
+#[expect(
+    clippy::await_holding_lock,
+    reason = "process-wide OPENFDD_* serialization; lock must cover async test bodies"
+)]
 pub fn run_env_locked<F, T>(future: F) -> T
 where
     F: Future<Output = T>,
