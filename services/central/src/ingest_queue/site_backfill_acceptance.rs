@@ -70,16 +70,28 @@ async fn test_pool() -> Option<PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
         .ok()
         .filter(|value| !value.trim().is_empty())?;
-    let pool = PgPoolOptions::new()
-        .max_connections(1)
-        .acquire_timeout(std::time::Duration::from_secs(60))
-        .connect(&url)
-        .await
-        .expect("test database");
-    crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
-        .await
-        .expect("schema");
-    Some(pool)
+    for attempt in 0..6 {
+        match PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(10))
+            .connect(&url)
+            .await
+        {
+            Ok(pool) => {
+                crate::ingest_queue::test_schema::apply_ingest_queue_schema(&pool)
+                    .await
+                    .expect("schema");
+                return Some(pool);
+            }
+            Err(sqlx::Error::PoolTimedOut) if attempt + 1 < 6 => {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+            Err(err) => {
+                panic!("test database: {err}");
+            }
+        }
+    }
+    None
 }
 
 async fn cleanup(pool: &PgPool) {
