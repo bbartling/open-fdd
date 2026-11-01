@@ -21,7 +21,10 @@ ROOT = Path(__file__).resolve().parents[1]
 ADR = ROOT / "docs" / "architecture" / "adr-001-react-rust-modernization.md"
 MIG_README = ROOT / "docs" / "migration" / "react-rust" / "README.md"
 
+ARCHIVED_REACT_SPA = ROOT / "archive" / "product-ui" / "react-spa-v4"
+
 FRONTEND_ROOTS = (
+    ARCHIVED_REACT_SPA,
     ROOT / "frontend",
     ROOT / "web",
     ROOT / "apps" / "web",
@@ -162,14 +165,13 @@ def check_react_clients(errors: list[str]) -> None:
 def check_instruction_alignment(errors: list[str]) -> None:
     ui_root = ROOT / "services" / "ui"
     if ui_root.exists():
-        errors.append("services/ui must not exist (use frontend/web as sole product UI)")
-    frontend_readme = ROOT / "frontend" / "README.md"
-    if frontend_readme.is_file():
-        text = frontend_readme.read_text(encoding="utf-8")
-        if "Do not recreate a React UI here" in text and "Phase 1" not in text:
-            errors.append(
-                "frontend/README.md must authorize React as the product UI"
-            )
+        errors.append(
+            "services/ui must not exist (React SPA is archived under archive/product-ui/react-spa-v4)"
+        )
+    if not ARCHIVED_REACT_SPA.is_dir():
+        errors.append(
+            "missing archived React SPA at archive/product-ui/react-spa-v4"
+        )
 
 
 def main() -> int:

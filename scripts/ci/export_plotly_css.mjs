@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regenerate frontend/web/public/plotly.css from the vendored plotly.min.js.
+ * Regenerate archive/product-ui/react-spa-v4/public/plotly.css from plotly.min.js.
  * Run after upgrading public/plotly.min.js (needs Playwright chromium).
  */
 import { chromium } from "playwright";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const webRoot = join(here, "../../frontend/web");
+const webRoot = join(here, "../../archive/product-ui/react-spa-v4");
 const plotlyJs = readFileSync(join(webRoot, "public/plotly.min.js"), "utf8");
 const outPath = join(webRoot, "public/plotly.css");
 
