@@ -27,6 +27,7 @@ use super::model::{ClaimRequest, FinishOutcome, FinishRequest, JobCounts, NewJob
 
 const DEVICE: &str = "AHU_1";
 
+#[derive(Clone)]
 struct ScopeFix {
     prefix: String,
     tenant_a: String,
@@ -114,8 +115,12 @@ struct Plans {
 
 #[test]
 fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
+    let fix = ScopeFix::new();
+    let required = ingest_scope_database_required();
+    let url = test_database_url();
+
     crate::test_env_lock::run_env_locked(async {
-        let fix = ScopeFix::new();
+        let fix = fix.clone();
         let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
         let _db = EnvGuard::unset("OPENFDD_DATABASE_URL");
         let _queue = EnvGuard::set("OPENFDD_INGEST_QUEUE", "memory");
@@ -124,14 +129,18 @@ fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
 
         emit_scope_receipt("memory", QueueClient::coordination());
         run_matrix(&fix).await;
+    });
 
-        let required = ingest_scope_database_required();
-        let url = test_database_url();
-        match url {
-            Some(url) => {
+    match url {
+        Some(url) => {
+            crate::test_env_lock::run_env_locked(async {
+                let fix = fix.clone();
+                let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
+                let _queue_pg = EnvGuard::unset("OPENFDD_INGEST_QUEUE");
                 std::env::set_var("OPENFDD_DATABASE_URL", &url);
                 let pool = PgPoolOptions::new()
                     .max_connections(2)
+                    .acquire_timeout(std::time::Duration::from_secs(30))
                     .connect(&url)
                     .await
                     .expect("ingest scope postgres fixture");
@@ -140,18 +149,17 @@ fn ingest_idempotency_backfill_and_metrics_are_tenant_scoped() {
                     .expect("ingest schema");
                 let lease = snapshot_scheduler(&pool).await;
                 purge_fixture(&pool, &fix).await;
-                let _queue_pg = EnvGuard::unset("OPENFDD_INGEST_QUEUE");
                 emit_scope_receipt("postgres", QueueClient::coordination());
                 run_matrix(&fix).await;
                 purge_fixture(&pool, &fix).await;
                 restore_scheduler(&pool, lease, &fix).await;
-            }
-            None if required => {
-                panic!("OPENFDD_TEST_DATABASE_URL is required for the ingest scope fixture")
-            }
-            None => {}
+            });
         }
-    });
+        None if required => {
+            panic!("OPENFDD_TEST_DATABASE_URL is required for the ingest scope fixture")
+        }
+        None => {}
+    }
 }
 
 fn ingest_scope_database_required() -> bool {

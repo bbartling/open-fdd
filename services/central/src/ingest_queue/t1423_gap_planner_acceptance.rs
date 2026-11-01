@@ -74,6 +74,7 @@ impl GapCase {
             .filter(|value| !value.trim().is_empty())?;
         let pool = PgPoolOptions::new()
             .max_connections(3)
+            .acquire_timeout(std::time::Duration::from_secs(30))
             .connect(url.trim())
             .await
             .expect("test database");
