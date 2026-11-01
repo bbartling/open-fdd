@@ -558,17 +558,11 @@ mod up03_postgres_integration {
         }
     }
 
-    async fn apply_schema(_pool: &PgPool) {
+    async fn apply_schema(pool: &PgPool) {
         static ONCE: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
-        ONCE.get_or_init(|| async {
-            let url =
-                std::env::var("OPENFDD_TEST_DATABASE_URL").expect("OPENFDD_TEST_DATABASE_URL");
-            let bootstrap = sqlx::postgres::PgPoolOptions::new()
-                .max_connections(1)
-                .connect(&url)
-                .await
-                .expect("schema bootstrap connect");
-            apply_schema_once(&bootstrap).await;
+        let pool = pool.clone();
+        ONCE.get_or_init(|| async move {
+            apply_schema_once(&pool).await;
         })
         .await;
     }
