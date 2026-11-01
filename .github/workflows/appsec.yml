@@ -100,6 +100,8 @@ jobs:
         run: python3 -B -m unittest discover -s tests/security -v
       - name: Qualification unittests
         run: python3 -B -m unittest discover -s tests/qualification -v
+      - name: NF portal operator tools (offline pytest)
+        run: python3 -m pip install --quiet pytest && python3 -m pytest -q scripts/nf_tools/tests
       - name: Haystack known-answer and broken-control suite (offline)
         run: |
           python3 -B scripts/qualification/semantic/qualify.py suite \
