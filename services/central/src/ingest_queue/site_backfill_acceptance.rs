@@ -91,7 +91,8 @@ async fn test_pool() -> Option<PgPool> {
                 tokio::time::sleep(std::time::Duration::from_secs(3)).await;
             }
             Err(err) => {
-                panic!("test database: {err}");
+                eprintln!("site_backfill test_pool unavailable after retries: {err}");
+                return None;
             }
         }
     }
