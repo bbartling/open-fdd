@@ -320,7 +320,6 @@ mod up03_postgres_exact_buckets {
     )]
     #[tokio::test]
     async fn up03_postgres_exact_daily_buckets_from_confirmed_series() {
-        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
@@ -816,18 +815,16 @@ mod up03_postgres_integration {
 
     #[expect(
         clippy::await_holding_lock,
-        reason = "serialize UP-03 disposable Postgres integration against shared DDL"
+        reason = "serialize UP-03 disposable Postgres integration (CI runs --test-threads=1)"
     )]
     #[tokio::test]
     async fn up03_postgres_integration_ci() {
+        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
         };
-        {
-            let _lock = crate::test_env_lock::lock_env();
-            apply_schema(&pool).await;
-        }
+        apply_schema(&pool).await;
         scenario_exact_unknown_exact(pool.clone()).await;
         scenario_scheduler_unknown_repair_checkpoint_gate(pool.clone()).await;
         scenario_confirm_zero_uses_row_run_context(pool).await;

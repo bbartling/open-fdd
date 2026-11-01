@@ -49,7 +49,8 @@ jobs:
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: |
-          cargo test -p openfdd-central -- --skip fixture_acceptance
+          cargo test -p openfdd-central up03_postgres -- --nocapture --test-threads=1
+          cargo test -p openfdd-central -- --skip fixture_acceptance --skip up03_postgres
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
       - name: T1423 ingest Postgres stress (30x, parallel)
