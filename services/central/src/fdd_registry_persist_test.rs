@@ -551,7 +551,22 @@ mod up03_postgres_integration {
         }
     }
 
-    async fn apply_schema(pool: &PgPool) {
+    async fn apply_schema(_pool: &PgPool) {
+        static ONCE: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
+        ONCE.get_or_init(|| async {
+            let url =
+                std::env::var("OPENFDD_TEST_DATABASE_URL").expect("OPENFDD_TEST_DATABASE_URL");
+            let bootstrap = sqlx::postgres::PgPoolOptions::new()
+                .max_connections(1)
+                .connect(&url)
+                .await
+                .expect("schema bootstrap connect");
+            apply_schema_once(&bootstrap).await;
+        })
+        .await;
+    }
+
+    async fn apply_schema_once(pool: &PgPool) {
         crate::portal_inventory_fixtures::apply_schema(pool).await;
         crate::series_binding::ensure_authorized_series(pool).await;
         let mut conn = pool.acquire().await.expect("conn");
@@ -794,6 +809,7 @@ mod up03_postgres_integration {
     #[tokio::test]
     async fn up03_postgres_exact_unknown_exact_same_window() {
         eprintln!("{CI_MARKER}: up03_postgres_exact_unknown_exact_same_window executing");
+        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
@@ -979,6 +995,7 @@ mod up03_postgres_integration {
     #[tokio::test]
     async fn up03_postgres_scheduler_unknown_repair_checkpoint_gate() {
         eprintln!("{CI_MARKER}: up03_postgres_scheduler_unknown_repair_checkpoint_gate executing");
+        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
@@ -1084,6 +1101,7 @@ mod up03_postgres_integration {
     #[tokio::test]
     async fn up03_postgres_confirm_zero_uses_row_run_context() {
         eprintln!("{CI_MARKER}: up03_postgres_confirm_zero_uses_row_run_context executing");
+        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
