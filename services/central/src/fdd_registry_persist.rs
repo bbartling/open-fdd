@@ -533,6 +533,36 @@ pub async fn repair_unknown_interval_evidence_for_run(
     Ok(repaired)
 }
 
+/// Whether the active registry generation still has interval-unknown rows (optional bounded repair).
+pub(crate) async fn interval_evidence_pending_for_active_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    attempt_repair: bool,
+) -> Result<bool> {
+    let Some(manifest) = active_generation_manifest(tsdb, site_id).await? else {
+        return Ok(false);
+    };
+    let Some(run_id) = manifest
+        .get("run_id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    else {
+        return Ok(false);
+    };
+    let mut pending = !interval_unknown_pairs_for_run(tsdb, site_id, run_id)
+        .await?
+        .is_empty();
+    if pending && attempt_repair {
+        let repaired = repair_unknown_interval_evidence_for_run(tsdb, site_id, run_id).await?;
+        if repaired > 0 {
+            pending = !interval_unknown_pairs_for_run(tsdb, site_id, run_id)
+                .await?
+                .is_empty();
+        }
+    }
+    Ok(pending)
+}
+
 async fn model_revision_for_site(tsdb: &Tsdb, site_id: &str) -> Result<String> {
     crate::timescale_product::read_model_revision_string(tsdb, site_id)
         .await
