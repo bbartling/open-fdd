@@ -19,6 +19,7 @@ mod csv_session_scope;
 mod csv_site_export;
 mod cutover;
 mod db_lifecycle;
+mod effective_run_context;
 #[cfg(test)]
 mod diagnostic_matrix_api;
 mod durable_storage;

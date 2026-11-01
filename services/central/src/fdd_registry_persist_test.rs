@@ -362,7 +362,7 @@ mod up03_postgres_exact_buckets {
             .iter()
             .find(|r| r.rule_id == "CMD-1")
             .expect("CMD-1");
-        let ctx = crate::fdd_registry_persist::EffectiveRunContext {
+        let ctx = crate::effective_run_context::EffectiveRunContext {
             poll_seconds: 300.0,
             confirm_seconds: 600,
             session_override: None,
@@ -516,7 +516,7 @@ mod up03_postgres_exact_buckets {
 mod up03_effective_run_context_unit {
     use serde_json::json;
 
-    use crate::fdd_registry_persist::EffectiveRunContext;
+    use crate::effective_run_context::EffectiveRunContext;
 
     #[test]
     fn row_poll_and_confirm_override_commit_defaults() {

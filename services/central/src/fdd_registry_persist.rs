@@ -16,55 +16,6 @@ use open_fdd_edge_prototype::fdd::registry_api::{
 use serde_json::{json, Value};
 use sqlx::{Postgres, Row, Transaction};
 
-/// Immutable effective-run identity for aggregate, interval series, persist, and API.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct EffectiveRunContext {
-    pub poll_seconds: f64,
-    pub confirm_seconds: u32,
-    pub session_override: Option<HashMap<String, f64>>,
-}
-
-impl EffectiveRunContext {
-    pub(crate) fn from_run_row(row: &Value, commit_poll: f64) -> Self {
-        let poll = row
-            .get("poll_seconds")
-            .and_then(Value::as_f64)
-            .filter(|v| v.is_finite() && *v > 0.0)
-            .unwrap_or(commit_poll)
-            .max(1.0);
-        let confirm = row
-            .get("confirm_seconds")
-            .and_then(Value::as_f64)
-            .filter(|v| v.is_finite() && *v >= 0.0)
-            .map(|v| v.round() as u32)
-            .unwrap_or(0);
-        let session_override = row
-            .get("session_params")
-            .and_then(session_params_from_json);
-        Self {
-            poll_seconds: poll,
-            confirm_seconds: confirm,
-            session_override,
-        }
-    }
-}
-
-fn session_params_from_json(value: &Value) -> Option<HashMap<String, f64>> {
-    let obj = value.as_object()?;
-    let mut out = HashMap::new();
-    for (k, v) in obj {
-        let n = v.as_f64().or_else(|| v.as_i64().map(|i| i as f64))?;
-        if n.is_finite() {
-            out.insert(k.clone(), n);
-        }
-    }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
-}
-
 fn parse_window(start: Option<&str>, end: Option<&str>) -> Result<AnalysisWindow> {
     let start = start
         .filter(|s| !s.is_empty())
@@ -365,7 +316,7 @@ async fn exact_interval_plan_for_rule_row(
     equipment_id: &str,
     window: AnalysisWindow,
     sample_rows: i32,
-    run_ctx: &EffectiveRunContext,
+    run_ctx: &crate::effective_run_context::EffectiveRunContext,
 ) -> Result<ExactIntervalPlan, IncrementalError> {
     let reg = match crate::timescale_product::load_reg() {
         Ok(reg) => reg,
@@ -496,7 +447,7 @@ pub async fn repair_unknown_interval_evidence_for_run(
         let detail: Value = row.try_get("detail")?;
         let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
         let poll: f64 = row.try_get("poll_seconds")?;
-        let run_ctx = EffectiveRunContext::from_run_row(&body_row, poll as f64);
+        let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, poll as f64);
         let window = AnalysisWindow::half_open(
             row.try_get("window_start")?,
             row.try_get("window_end")?,
@@ -696,7 +647,7 @@ pub async fn persist_registry_run_timescale(
                 let sample_rows =
                     row.get("sample_rows").and_then(Value::as_i64).unwrap_or(0) as i32;
                 if let Some(eq) = equipment_id {
-                    let run_ctx = EffectiveRunContext::from_run_row(row, poll as f64);
+                    let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(row, poll as f64);
                     let mut interval_persist: Option<Value> = None;
                     let mut interval_buckets: Option<Vec<BucketResult>> = None;
                     if item.outcome == RuleOutcome::Succeeded
@@ -970,7 +921,7 @@ pub async fn effective_run_context_for_active_row(
     site_id: &str,
     rule_id: &str,
     equipment_id: &str,
-) -> Result<Option<EffectiveRunContext>> {
+) -> Result<Option<crate::effective_run_context::EffectiveRunContext>> {
     let manifest = active_generation_manifest(tsdb, site_id).await?;
     let Some(manifest) = manifest else {
         return Ok(None);
@@ -1000,7 +951,7 @@ pub async fn effective_run_context_for_active_row(
     let detail: Value = row.try_get("detail")?;
     let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
     let poll: i32 = row.try_get("poll_seconds")?;
-    Ok(Some(EffectiveRunContext::from_run_row(
+    Ok(Some(crate::effective_run_context::EffectiveRunContext::from_run_row(
         &body_row,
         f64::from(poll),
     )))

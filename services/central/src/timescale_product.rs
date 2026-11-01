@@ -1691,7 +1691,7 @@ LIMIT $4
     .await
     .ok()
     .flatten()
-    .unwrap_or_else(|| crate::fdd_registry_persist::EffectiveRunContext {
+    .unwrap_or_else(|| crate::effective_run_context::EffectiveRunContext {
         poll_seconds: 300.0,
         confirm_seconds: rule.confirm_seconds,
         session_override: None,
@@ -2334,7 +2334,7 @@ pub(crate) async fn load_live_confirmed_fault_in_tx(
     equipment_id: &str,
     window_start: Option<&str>,
     window_end: Option<&str>,
-    ctx: &crate::fdd_registry_persist::EffectiveRunContext,
+    ctx: &crate::effective_run_context::EffectiveRunContext,
 ) -> Result<HashMap<String, bool>, ConfirmedFaultLoadError> {
     if rule_is_metric(rule) || !safe_ident(equipment_id) {
         return Ok(HashMap::new());
@@ -2417,7 +2417,7 @@ pub(crate) async fn load_live_confirmed_fault(
     equipment_id: &str,
     window_start: Option<&str>,
     window_end: Option<&str>,
-    ctx: &crate::fdd_registry_persist::EffectiveRunContext,
+    ctx: &crate::effective_run_context::EffectiveRunContext,
 ) -> Result<HashMap<String, bool>, ConfirmedFaultLoadError> {
     let mut tx = tsdb
         .pool()
@@ -2452,7 +2452,7 @@ pub(crate) async fn preview_confirmed_fault_for_rule(
         .find(|rule| rule.rule_id == rule_id)
         .ok_or_else(|| anyhow!("missing rule {rule_id}"))?;
     let tsdb = Tsdb::connect_from_env().await?;
-    let ctx = crate::fdd_registry_persist::EffectiveRunContext {
+    let ctx = crate::effective_run_context::EffectiveRunContext {
         poll_seconds: 300.0,
         confirm_seconds: rule.confirm_seconds,
         session_override: None,
