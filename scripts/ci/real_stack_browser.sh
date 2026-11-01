@@ -203,14 +203,14 @@ require_playwright() {
     echo "FAIL: required tool missing: npx" >&2
     missing=1
   fi
-  if [[ ! -x frontend/web/node_modules/.bin/playwright ]]; then
-    echo "FAIL: frontend/web Playwright is not installed (npm ci && playwright install)" >&2
+  if [[ ! -x archive/product-ui/react-spa-v4/node_modules/.bin/playwright ]]; then
+    echo "FAIL: archive/product-ui/react-spa-v4 Playwright is not installed (npm ci && playwright install)" >&2
     missing=1
   fi
   local spec
   for spec in "${REQUIRED_SPECS[@]}"; do
-    if [[ ! -f "frontend/web/$spec" ]]; then
-      echo "FAIL: required browser spec missing: frontend/web/$spec" >&2
+    if [[ ! -f "archive/product-ui/react-spa-v4/$spec" ]]; then
+      echo "FAIL: required browser spec missing: archive/product-ui/react-spa-v4/$spec" >&2
       missing=1
     fi
   done
@@ -261,7 +261,7 @@ run_playwright() {
   rm -f "$expects" "$report"
   set +e
   (
-    cd frontend/web
+    cd archive/product-ui/react-spa-v4
     # One --reporter value. A second flag replaces the first, and the JSON
     # report never reaches the gate.
     PLAYWRIGHT_JSON_OUTPUT_FILE="$report" \

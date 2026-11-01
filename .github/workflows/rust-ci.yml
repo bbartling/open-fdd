@@ -151,8 +151,8 @@ jobs:
 
       - name: React sole product UI
         run: |
-          test -f frontend/web/package.json
-          test -f frontend/web/Dockerfile
+          test -f archive/product-ui/react-spa-v4/package.json
+          test -f archive/product-ui/react-spa-v4/Dockerfile
           test -f docker/compose.react.yml
           ! test -d services/ui
           ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
@@ -172,7 +172,7 @@ jobs:
           test -f archive/ot-edge/unmaintained/crates/openfdd_mqtt/Cargo.toml
 
   react-web:
-    name: React web (frontend/web)
+    name: React web (archive/product-ui/react-spa-v4)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -183,9 +183,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/web/package-lock.json
+          cache-dependency-path: archive/product-ui/react-spa-v4/package-lock.json
       - name: typecheck, lint, test, build
-        working-directory: frontend/web
+        working-directory: archive/product-ui/react-spa-v4
         run: |
           npm ci
           npm run typecheck
@@ -217,9 +217,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/web/package-lock.json
+          cache-dependency-path: archive/product-ui/react-spa-v4/package-lock.json
       - name: Install Playwright
-        working-directory: frontend/web
+        working-directory: archive/product-ui/react-spa-v4
         run: |
           npm ci
           npx playwright install --with-deps chromium

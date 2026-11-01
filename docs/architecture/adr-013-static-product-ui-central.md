@@ -13,7 +13,7 @@ nav_exclude: true
 
 ## Context
 
-Open-FDD 4.0 ships the React SPA in `openfdd-web`. The NF Bench Viz reference demonstrates a dark, modular static shell that talks to same-origin APIs. Operators want that UX without Clerk/LAN auth, BACnet control, or secrets from the reference tree.
+Open-FDD 4.0 shipped the React SPA in `openfdd-web`; source moves to `archive/product-ui/react-spa-v4` while static UI becomes default on central. The NF Bench Viz reference demonstrates a dark, modular static shell that talks to same-origin APIs. Operators want that UX without Clerk/LAN auth, BACnet control, or secrets from the reference tree.
 
 ## Decision
 

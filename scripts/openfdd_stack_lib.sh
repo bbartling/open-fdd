@@ -110,15 +110,15 @@ openfdd_stack_export_image_env() {
   openfdd_stack_apply_image_tag OPENFDD_MCP_IMAGE mcp "$tag"
 }
 
-# True when frontend/web is dirty or has commits not in origin/master (or master).
+# True when archive/product-ui/react-spa-v4 is dirty or has commits not in origin/master (or master).
 openfdd_stack_frontend_unmerged() {
   local root="${1:-}"
   [[ -n "$root" ]] || return 1
   git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 1
-  if ! git -C "$root" diff --quiet -- frontend/web; then
+  if ! git -C "$root" diff --quiet -- archive/product-ui/react-spa-v4; then
     return 0
   fi
-  if ! git -C "$root" diff --quiet --cached -- frontend/web; then
+  if ! git -C "$root" diff --quiet --cached -- archive/product-ui/react-spa-v4; then
     return 0
   fi
   local base=""
@@ -129,7 +129,7 @@ openfdd_stack_frontend_unmerged() {
   else
     return 1
   fi
-  if [[ -n "$(git -C "$root" log --oneline "$base"..HEAD -- frontend/web 2>/dev/null || true)" ]]; then
+  if [[ -n "$(git -C "$root" log --oneline "$base"..HEAD -- archive/product-ui/react-spa-v4 2>/dev/null || true)" ]]; then
     return 0
   fi
   return 1
@@ -148,7 +148,7 @@ openfdd_stack_guard_ghcr_web() {
   local root
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   if openfdd_stack_frontend_unmerged "$root"; then
-    echo "ERROR: frontend/web is dirty or not on master, but OPENFDD_WEB_IMAGE=${OPENFDD_WEB_IMAGE} is GHCR." >&2
+    echo "ERROR: archive/product-ui/react-spa-v4 is dirty or not on master, but OPENFDD_WEB_IMAGE=${OPENFDD_WEB_IMAGE} is GHCR." >&2
     echo "That published image does not contain this branch. Agents must not demo it." >&2
     echo "Serve a local bundle (npm run build + compose.web.local-overview.yml)," >&2
     echo "then ./scripts/openfdd_demo_gate.sh --local-web" >&2

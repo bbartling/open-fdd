@@ -81,8 +81,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --all-targets
       - run: |
-          test -f frontend/web/package.json
-          test -f frontend/web/Dockerfile
+          test -f archive/product-ui/react-spa-v4/package.json
+          test -f archive/product-ui/react-spa-v4/Dockerfile
           test -f docker/compose.react.yml
           ! test -d services/ui
           ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
@@ -129,7 +129,7 @@ jobs:
           }
 
           build_one openfdd-central services/central/Dockerfile .
-          build_one openfdd-web frontend/web/Dockerfile frontend/web
+          build_one openfdd-web archive/product-ui/react-spa-v4/Dockerfile archive/product-ui/react-spa-v4
 
   publish-mcp:
     needs: [validate, test]

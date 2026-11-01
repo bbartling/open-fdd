@@ -33,9 +33,9 @@ else
   docker build \
     --build-arg OPENFDD_GIT_SHA=ci-smoke \
     --build-arg OPENFDD_WEB_VERSION=0.0.0-ci \
-    -f frontend/web/Dockerfile \
+    -f archive/product-ui/react-spa-v4/Dockerfile \
     -t "$WEB_IMAGE" \
-    frontend/web >/dev/null
+    archive/product-ui/react-spa-v4 >/dev/null
   docker run --rm --entrypoint sh "$WEB_IMAGE" -c 'test -f /usr/share/nginx/html/index.html'
 fi
 
