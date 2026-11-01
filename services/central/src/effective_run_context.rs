@@ -26,9 +26,7 @@ impl EffectiveRunContext {
             .filter(|v| v.is_finite() && *v >= 0.0)
             .map(|v| v.round() as u32)
             .unwrap_or(0);
-        let session_override = row
-            .get("session_params")
-            .and_then(session_params_from_json);
+        let session_override = row.get("session_params").and_then(session_params_from_json);
         Self {
             poll_seconds: poll,
             confirm_seconds: confirm,

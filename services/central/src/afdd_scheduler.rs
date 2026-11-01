@@ -785,12 +785,11 @@ impl AfddSchedulerRuntime {
                     if let Some(run_id) = manifest
                         .and_then(|m| m.get("run_id").and_then(Value::as_str).map(str::to_string))
                     {
-                        if let Ok(pairs) = crate::fdd_registry_persist::interval_unknown_pairs_for_run(
-                            &tsdb,
-                            scope,
-                            &run_id,
-                        )
-                        .await
+                        if let Ok(pairs) =
+                            crate::fdd_registry_persist::interval_unknown_pairs_for_run(
+                                &tsdb, scope, &run_id,
+                            )
+                            .await
                         {
                             interval_evidence_pending = !pairs.is_empty();
                             if interval_evidence_pending {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, InlineAlert } from "./widgets";
-import { getFddResults } from "../api/fddApi";
+import { getFddResults, type FddResultRow } from "../api/fddApi";
 import { postBasVsWebOat } from "../api/analyticsApi";
 import { plantEquipmentFamilies } from "../lib/plantEquipment";
 import { isWeatherEquipment, pickWeatherFaultRow } from "../lib/overviewMetrics";
@@ -27,7 +27,7 @@ function triFault(status: unknown, hours: unknown): string {
   return "false";
 }
 
-function sumKnownFaultHours(rows: Array<Record<string, unknown>>): number | null {
+function sumKnownFaultHours(rows: FddResultRow[]): number | null {
   let any = false;
   let sum = 0;
   for (const r of rows) {
@@ -95,7 +95,7 @@ export function WeatherHealthSection({
         }
         const refresh = overviewQueryRequestsRefresh(buildingId, "weather-health");
         const [fddRows, bas] = await Promise.all([
-          getFddResults(buildingId).catch(() => [] as Array<Record<string, unknown>>),
+          getFddResults(buildingId).catch((): FddResultRow[] => []),
           postBasVsWebOat({
             building_id: buildingId,
             max_points: 4000,

@@ -447,12 +447,11 @@ pub async fn repair_unknown_interval_evidence_for_run(
         let detail: Value = row.try_get("detail")?;
         let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
         let poll: f64 = row.try_get("poll_seconds")?;
-        let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, poll as f64);
-        let window = AnalysisWindow::half_open(
-            row.try_get("window_start")?,
-            row.try_get("window_end")?,
-        )
-        .map_err(|e| anyhow!("repair window: {e}"))?;
+        let run_ctx =
+            crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, poll as f64);
+        let window =
+            AnalysisWindow::half_open(row.try_get("window_start")?, row.try_get("window_end")?)
+                .map_err(|e| anyhow!("repair window: {e}"))?;
         let sample_rows = row.try_get::<Option<i32>, _>("sample_count")?.unwrap_or(0);
         let mut tx = tsdb.pool().begin().await?;
         let plan = exact_interval_plan_for_rule_row(
@@ -467,7 +466,8 @@ pub async fn repair_unknown_interval_evidence_for_run(
         .await?;
         match plan {
             ExactIntervalPlan::Buckets(buckets) if !buckets.is_empty() => {
-                let through_revision = fdd_tsdb::current_data_revision(tsdb.pool(), site_id).await?;
+                let through_revision =
+                    fdd_tsdb::current_data_revision(tsdb.pool(), site_id).await?;
                 let model_revision = model_revision_for_site(tsdb, site_id).await?;
                 let confirm = run_ctx.confirm_seconds as f64;
                 let rule_params = RuleParameters::try_from_pairs([
@@ -495,22 +495,10 @@ pub async fn repair_unknown_interval_evidence_for_run(
                     chrono::Duration::seconds(confirm.round().max(0.0) as i64),
                 )?;
                 let grid = BucketGrid::LocalDay(UTC);
-                let scope = ResultScope::new(
-                    site_id,
-                    &rule_id,
-                    &equipment_id,
-                    &identity,
-                    grid,
-                    horizon,
-                )?;
-                replace_scope_results_in_tx(
-                    &mut tx,
-                    &scope,
-                    window,
-                    through_revision,
-                    &buckets,
-                )
-                .await?;
+                let scope =
+                    ResultScope::new(site_id, &rule_id, &equipment_id, &identity, grid, horizon)?;
+                replace_scope_results_in_tx(&mut tx, &scope, window, through_revision, &buckets)
+                    .await?;
                 let mut detail_mut = detail.clone();
                 if let Some(obj) = detail_mut.as_object_mut() {
                     obj.insert(
@@ -647,7 +635,10 @@ pub async fn persist_registry_run_timescale(
                 let sample_rows =
                     row.get("sample_rows").and_then(Value::as_i64).unwrap_or(0) as i32;
                 if let Some(eq) = equipment_id {
-                    let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(row, poll as f64);
+                    let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(
+                        row,
+                        poll as f64,
+                    );
                     let mut interval_persist: Option<Value> = None;
                     let mut interval_buckets: Option<Vec<BucketResult>> = None;
                     if item.outcome == RuleOutcome::Succeeded
@@ -951,10 +942,9 @@ pub async fn effective_run_context_for_active_row(
     let detail: Value = row.try_get("detail")?;
     let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
     let poll: i32 = row.try_get("poll_seconds")?;
-    Ok(Some(crate::effective_run_context::EffectiveRunContext::from_run_row(
-        &body_row,
-        f64::from(poll),
-    )))
+    Ok(Some(
+        crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, f64::from(poll)),
+    ))
 }
 
 pub async fn commit_and_persist_registry_run(

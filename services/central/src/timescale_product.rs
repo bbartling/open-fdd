@@ -2403,7 +2403,8 @@ pub(crate) async fn load_live_confirmed_fault_in_tx(
         else {
             continue;
         };
-        let flag = decode_confirmed_fault_cell(&row, &ts).map_err(ConfirmedFaultLoadError::Decode)?;
+        let flag =
+            decode_confirmed_fault_cell(&row, &ts).map_err(ConfirmedFaultLoadError::Decode)?;
         map.insert(ts, flag);
     }
     Ok(map)
@@ -2457,9 +2458,18 @@ pub(crate) async fn preview_confirmed_fault_for_rule(
         confirm_seconds: rule.confirm_seconds,
         session_override: None,
     };
-    load_live_confirmed_fault(&tsdb, &reg, rule, building_id, equipment_id, None, None, &ctx)
-        .await
-        .map_err(|e| anyhow!("{e}"))
+    load_live_confirmed_fault(
+        &tsdb,
+        &reg,
+        rule,
+        building_id,
+        equipment_id,
+        None,
+        None,
+        &ctx,
+    )
+    .await
+    .map_err(|e| anyhow!("{e}"))
 }
 
 fn load_confirmed_fault_hint(
@@ -2911,6 +2921,10 @@ async fn ensure_history_table(conn: &mut PgConnection, roles: &[String]) -> Resu
             crate::series_binding::quote_ident(r)
         ));
     }
+    sqlx::query("DROP TABLE IF EXISTS history")
+        .execute(&mut *conn)
+        .await
+        .context("drop temp history")?;
     sqlx::query(&format!(
         "CREATE TEMP TABLE history ({cols}) ON COMMIT DROP"
     ))
