@@ -210,22 +210,23 @@ fn ingest_scope_database_required_fail_closed_without_url() {
     });
 }
 
-#[tokio::test]
-async fn ingest_scope_invalid_database_url_fails_connect() {
-    let _lock = crate::test_env_lock::lock_env();
-    let _req = EnvGuard::set("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED", "1");
-    let bad = "postgres://openfdd:openfdd@127.0.0.1:9/openfdd_nope";
-    let _test = EnvGuard::set("OPENFDD_TEST_DATABASE_URL", bad);
-    let err = PgPoolOptions::new()
-        .max_connections(1)
-        .acquire_timeout(std::time::Duration::from_secs(2))
-        .connect(bad)
-        .await;
-    assert!(
-        err.is_err(),
-        "invalid database URL must fail closed, not skip"
-    );
-    eprintln!("SCOPE_TEST_RECEIPT phase=invalid_url backend=postgres connection=refused");
+#[test]
+fn ingest_scope_invalid_database_url_fails_connect() {
+    crate::test_env_lock::run_env_locked(async {
+        let _req = EnvGuard::set("OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED", "1");
+        let bad = "postgres://openfdd:openfdd@127.0.0.1:9/openfdd_nope";
+        let _test = EnvGuard::set("OPENFDD_TEST_DATABASE_URL", bad);
+        let err = PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(2))
+            .connect(bad)
+            .await;
+        assert!(
+            err.is_err(),
+            "invalid database URL must fail closed, not skip"
+        );
+        eprintln!("SCOPE_TEST_RECEIPT phase=invalid_url backend=postgres connection=refused");
+    });
 }
 
 async fn run_matrix(fix: &ScopeFix) {

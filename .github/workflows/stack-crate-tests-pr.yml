@@ -51,7 +51,7 @@ jobs:
           OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED: "1"
         run: |
           set -euo pipefail
-          cargo test -p openfdd-central -- --skip fixture_acceptance --test-threads=4
+          cargo test -p openfdd-central -- --skip fixture_acceptance --test-threads=2
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
       - name: Ingest scope receipts (Postgres pass required)

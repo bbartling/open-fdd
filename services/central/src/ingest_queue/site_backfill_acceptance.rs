@@ -71,8 +71,8 @@ async fn test_pool() -> Option<PgPool> {
         .ok()
         .filter(|value| !value.trim().is_empty())?;
     let pool = PgPoolOptions::new()
-        .max_connections(2)
-        .acquire_timeout(std::time::Duration::from_secs(30))
+        .max_connections(1)
+        .acquire_timeout(std::time::Duration::from_secs(60))
         .connect(&url)
         .await
         .expect("test database");
