@@ -2392,7 +2392,7 @@ pub(crate) async fn load_live_confirmed_fault_in_tx(
     let rows = sqlx::query(&series_sql)
         .fetch_all(&mut **tx)
         .await
-        .map_err(ConfirmedFaultLoadError::Query)?;
+        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
     let mut map = HashMap::new();
     for row in rows {
         let Some(ts) = row
@@ -2417,7 +2417,7 @@ pub(crate) async fn load_live_confirmed_fault(
         .pool()
         .begin()
         .await
-        .map_err(ConfirmedFaultLoadError::Query)?;
+        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
     let map = load_live_confirmed_fault_in_tx(&mut tx, query).await?;
     let _ = tx.rollback().await;
     Ok(map)

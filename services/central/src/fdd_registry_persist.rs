@@ -342,7 +342,7 @@ async fn exact_interval_plan_for_rule_row(
     let fault_query = crate::effective_run_context::LiveConfirmedFaultQuery {
         reg: &reg,
         rule,
-        site_id,
+        building_id: site_id,
         equipment_id,
         window_start: Some(ws.as_str()),
         window_end: Some(we.as_str()),
