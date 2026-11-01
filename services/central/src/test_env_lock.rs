@@ -3,9 +3,6 @@
 //! Multiple modules (`tenant`, `tenant_budget`, ...) must share one lock - a
 //! per-module `ENV_LOCK` does not serialize across modules and flakes
 //! (e.g. `tenant::tests::resolve_on_scopes_buildings` vs budget flag tests).
-//!
-//! Sync and async tests share `ENV_LOCK`. Async callers use `lock_env_async()` so
-//! acquisition does not stall the executor; the guard may be held across `.await`.
 
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
@@ -14,11 +11,6 @@ static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 pub fn lock_env() -> MutexGuard<'static, ()> {
     ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-/// Async tests that mutate `OPENFDD_*` env vars across `.await` points.
-pub async fn lock_env_async() -> MutexGuard<'static, ()> {
-    tokio::task::block_in_place(|| lock_env())
 }
 
 /// Sets `OPENFDD_WORKSPACE` for the guard's lifetime, then restores the prior value.

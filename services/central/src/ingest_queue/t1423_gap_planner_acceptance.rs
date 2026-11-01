@@ -309,7 +309,7 @@ async fn call(app: &Router, token: Option<&str>, body: Value) -> (StatusCode, Va
     reason = "serialize OPENFDD_* env with ingest scope fixture on one process-wide lock"
 )]
 async fn t1423_4_cancel_route_is_operator_scoped_and_idempotent() {
-    let _env = crate::test_env_lock::lock_env_async().await;
+    let _env = crate::test_env_lock::lock_env();
     let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
     // Jobs are inserted via postgres::enqueue; cancel must use the Postgres queue, not memory
     // leaked from parallel ingest scope fixtures.
