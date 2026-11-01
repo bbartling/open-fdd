@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-FDD · Model tree</title>
+<link rel="stylesheet" href="/app/assets/css/bench.css">
+<style>
+  main { max-width: 1200px; grid-template-columns: 1fr; display: grid; }
+  #tree { height: 760px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌳 Model tree</h1>
+    <div class="sub" id="sub">read-only · Open-FDD Haystack snapshot</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill">read-only</span>
+  <a class="pill" href="/app/">← dashboard</a>
+</header>
+<main>
+  <div id="err"></div>
+  <section class="panel">
+    <h2>Haystack tree <span class="hint">Wave C · central SPARQL / RDF</span></h2>
+    <div id="tree"><p class="hint" style="padding:12px">Tree visualization loads after model APIs are wired.</p></div>
+    <div class="detail" id="detail"><span class="hint">Select a node.</span></div>
+  </section>
+</main>
+<script type="module">
+  import { readToken } from "/app/assets/js/session.js";
+  if (!readToken()) {
+    location.replace("/app/");
+  }
+</script>
+</body>
+</html>

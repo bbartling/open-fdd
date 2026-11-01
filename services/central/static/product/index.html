@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-FDD</title>
+<link rel="stylesheet" href="/app/assets/css/bench.css">
+</head>
+<body>
+<div id="loginGate">
+  <section class="panel">
+    <h1 style="margin:0 0 8px;font-size:18px">Sign in</h1>
+    <p class="hint">JWT session · same-origin <code>/api</code></p>
+    <form id="loginForm">
+      <label>Username<input name="username" autocomplete="username" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit" class="btn primary">Continue</button>
+      <p class="login-err" id="loginErr" hidden></p>
+    </form>
+  </section>
+</div>
+
+<header>
+  <div>
+    <h1>⚡ Open-FDD</h1>
+    <div class="sub" id="sub">Loading…</div>
+  </div>
+  <div class="spacer"></div>
+  <label class="scope">site <select id="sitePick"></select></label>
+  <label class="scope">equip <select id="equipPick" disabled><option value="">—</option></select></label>
+  <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">offline</span></span>
+  <span class="pill" id="clock"></span>
+  <button type="button" class="btn" id="logoutBtn" hidden>Sign out</button>
+</header>
+<nav class="tabs" id="tabs">
+  <button type="button" data-tab="overview" class="on">Overview</button>
+  <button type="button" data-tab="charts">Charts</button>
+  <button type="button" data-tab="points">Points <span class="count" id="nPoints">0</span></button>
+  <button type="button" data-tab="model">Model &amp; RDF</button>
+</nav>
+
+<main>
+  <div id="err"></div>
+
+  <section class="tab on" id="tab-overview">
+    <div class="stats" id="summary"></div>
+    <section class="cards" id="cards"></section>
+    <section class="panel">
+      <h2>Equipment status <span class="hint">Wave C: binary points from historian</span></h2>
+      <div class="chips" id="chips"></div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-charts">
+    <section class="panel">
+      <h2>Weather vs sensors <span class="hint">ECharts vendored in Wave C</span></h2>
+      <div class="chart" id="wxChart">Chart placeholder</div>
+    </section>
+    <section class="panel">
+      <h2>Temperatures
+        <span class="seg" id="range">
+          <button type="button" data-h="6">6h</button><button type="button" data-h="24" class="on">24h</button>
+          <button type="button" data-h="72">3d</button><button type="button" data-h="168">7d</button>
+        </span>
+      </h2>
+      <div class="chart tall" id="tempChart">Chart placeholder</div>
+    </section>
+    <section class="grid2">
+      <div class="panel">
+        <h2>Hour-of-day heatmap <span class="hint">Wave C</span></h2>
+        <div class="chart" id="heatChart">Chart placeholder</div>
+      </div>
+      <div class="panel">
+        <h2>Outdoor air <span class="hint">Wave C</span></h2>
+        <div class="chart" id="psyChart">Chart placeholder</div>
+      </div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-points">
+    <section class="panel">
+      <h2>Point data
+        <input type="search" id="pointFilter" placeholder="filter markers (Wave C)">
+        <span class="hint" id="pointHint"></span>
+      </h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Role</th><th>Updated</th></tr></thead>
+        <tbody id="pointRows"><tr><td colspan="5" class="sub">Sign in and select a site.</td></tr></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>History <span class="hint" id="histHint">Wave C</span></h2>
+      <div class="chart short" id="histChart">Chart placeholder</div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-model">
+    <div class="stats" id="modelStats"></div>
+    <section class="grid57">
+      <div class="panel">
+        <h2>Model tree <span class="hint"><a href="/app/tree.html">standalone tree</a></span></h2>
+        <div id="tree"><p class="hint" style="padding:12px">Tree renders in Wave C (SPARQL / RDF APIs).</p></div>
+      </div>
+      <div style="display:grid;gap:18px;align-content:start">
+        <div class="detail" id="detail"><span class="hint">Select a node (Wave C).</span></div>
+        <div class="panel">
+          <h2>Model checks</h2>
+          <div id="checks" class="hint">Pending model sync data.</div>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>RDF (Turtle) <span class="hint">GET /api/model/ttl</span></h2>
+      <pre class="ttl" id="ttl"># Load site to fetch TTL…</pre>
+    </section>
+  </section>
+</main>
+<footer>Open-FDD static product UI · central <code>/app/</code> · API <code>/api/*</code> ·
+  <a href="/app/tree.html">model tree</a></footer>
+
+<script type="module" src="/app/assets/js/app.js"></script>
+</body>
+</html>

@@ -11,7 +11,7 @@ connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 | Layer | Responsibility |
 | --- | --- |
 | **central** | NF ingest (portal HTTPS REST or LAN gRPC, per site), **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). Ingest is the Normal Framework API (portal HTTPS REST or LAN gRPC, chosen per site with `transport: rest|grpc`, no automatic fallback) and CSV only, through one Timescale telemetry writer. Timescale/PostgreSQL only: Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies ([storage mandate](openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory), [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
-| **web** | React product UI (`frontend/web`) — sole product UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
+| **web** | React product UI (`frontend/web`) — default portal UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)); opt-in static Bench Viz shell on central `/app/` ([ADR-013](docs/architecture/adr-013-static-product-ui-central.md), Wave B–F) |
 | **fieldbus** | Archived OT drivers (BACnet / Modbus / Haystack wire). Not in the `portal` recipe. |
 | **mqtt** | Archived Mosquitto MQTTS broker. Not in the `portal` recipe. |
 | **timescale** | Sole product historian + SQL FDD store (`openfdd-timescale`) |
