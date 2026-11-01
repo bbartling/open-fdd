@@ -67,6 +67,7 @@ mod sql_anomaly_fixtures;
 mod sql_pack;
 mod starter_seed;
 mod state;
+mod static_product;
 #[cfg(test)]
 mod t1284_2_ingest_si_test;
 #[cfg(test)]
@@ -148,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(cutover::router())
         .merge(vibe21::router(Arc::clone(&state)))
         .merge(openapi::router())
+        .merge(static_product::router())
         .layer(middleware::from_fn(contract::request_id_middleware))
         .layer(TraceLayer::new_for_http());
 

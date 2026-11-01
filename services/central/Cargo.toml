@@ -40,7 +40,7 @@ axum = { version = "0.8", features = ["macros"] }
 bytes = "1"
 tokio = { version = "1", features = ["full"] }
 tower = { version = "0.5", features = ["limit"] }
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

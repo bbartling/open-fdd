@@ -1514,6 +1514,35 @@ mod contract_timescale {
         .await;
     }
 
+    /// Minimal registry table for interval-evidence reads on a cold Postgres (publisher order).
+    const FDD_RUN_REGISTRY_DDL: &str = r#"
+CREATE TABLE IF NOT EXISTS fdd_run (
+  run_id        bigserial PRIMARY KEY,
+  site_id       text NOT NULL,
+  equipment_id  text NOT NULL,
+  rule_id       text NOT NULL,
+  window_start  timestamptz NOT NULL,
+  window_end    timestamptz NOT NULL,
+  poll_seconds  integer NOT NULL DEFAULT 300,
+  confirm_min   double precision NOT NULL DEFAULT 0,
+  config_hash   text,
+  status        text NOT NULL,
+  fault_seconds integer,
+  fault_hours   double precision,
+  sample_count  integer,
+  detail        jsonb,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS fdd_run_site_rule_idx
+  ON fdd_run (site_id, rule_id, window_end DESC);
+"#;
+
+    async fn ensure_fdd_run_registry_schema(pool: &sqlx::PgPool) {
+        for statement in crate::db_lifecycle::statements(FDD_RUN_REGISTRY_DDL) {
+            crate::test_ddl::execute_idempotent_ddl(pool, &statement).await;
+        }
+    }
+
     #[expect(
         clippy::await_holding_lock,
         reason = "serialize OPENFDD_* env while the disposable historian fixture is connected"
@@ -1877,6 +1906,12 @@ mod contract_timescale {
         std::env::set_var("OPENFDD_DATABASE_URL", &url);
         std::env::set_var("OPENFDD_HISTORIAN", "timescale");
         std::env::set_var("OPENFDD_AFDD_CHUNK_HOURS", "1");
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .connect(url.trim())
+            .await
+            .expect("connect for r1484 registry schema");
+        ensure_fdd_run_registry_schema(&pool).await;
         let store = CanonicalStateStore::from_env().expect("state store");
         let runtime = AfddSchedulerRuntime {
             config: Mutex::new(AfddConfig::default()),

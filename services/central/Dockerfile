@@ -28,6 +28,8 @@ COPY sql_rules /app/sql_rules
 COPY sql /app/sql
 COPY rule_tuning /app/rule_tuning
 COPY fixtures/starter /app/fixtures/starter
+COPY services/central/static/product /app/static/product
+ENV OPENFDD_STATIC_PRODUCT_DIR=/app/static/product
 ENV OPENFDD_CENTRAL_HOST=0.0.0.0
 ENV OPENFDD_IMAGE_NAME=ghcr.io/bbartling/openfdd-central
 ENV OPENFDD_SQL_RULES_DIR=/app/sql_rules
