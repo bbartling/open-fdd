@@ -444,6 +444,41 @@ describe("vibeCharts", () => {
     expect(byName.get("AHU_1 · return")?.y).toEqual([0.4]);
   });
 
+  it("ruleResultChart preserves null confirmed_fault samples (not ok)", () => {
+    const fig = ruleResultChart(
+      [
+        { timestamp_utc: "2026-03-01T00:00:00Z", zone_t: 70 },
+        { timestamp_utc: "2026-03-01T01:00:00Z", zone_t: 71 },
+        { timestamp_utc: "2026-03-01T02:00:00Z", zone_t: 72 },
+      ],
+      {
+        equipmentId: "AHU_1",
+        ruleId: "FC1",
+        roles: ["zone_t"],
+        confirmedFault: [1, null, 0],
+      },
+    );
+    const fault = fig?.data.find((t) => t.name === "confirmed_fault");
+    expect(fault?.y).toEqual([1, null, 0]);
+    expect(fault?.connectgaps).toBe(false);
+  });
+
+  it("withConfirmedFaultLane preserves null fault samples", () => {
+    const base = ruleResultChart(
+      [{ timestamp_utc: "2026-03-01T00:00:00Z", oa_t: 50 }],
+      { equipmentId: "AHU_1", ruleId: "OAT-METEO", roles: ["oa_t"] },
+    );
+    expect(base).toBeTruthy();
+    const fig = withConfirmedFaultLane(base!, {
+      equipmentId: "AHU_1",
+      ruleId: "OAT-METEO",
+      faultX: ["2026-03-01T00:00:00Z", "2026-03-01T01:00:00Z"],
+      confirmedFault: [null, 1],
+    });
+    const fault = fig.data.find((t) => t.name === "confirmed_fault");
+    expect(fault?.y).toEqual([null, 1]);
+  });
+
   it("economizer delta scatter scales a temperature difference without the 32°F offset", () => {
     const points = Array.from({ length: 5 }, () => ({
       identifiable: true,

@@ -29,6 +29,14 @@ function shownStored(
   return displayStoredQuantity(n, quantity, unit, unitSystem);
 }
 
+/** Plot lane for confirmed_fault — preserve null gaps (never map unknown to ok). */
+function confirmedFaultPlotY(v: boolean | number | null | undefined): number | null {
+  if (v == null) return null;
+  if (v === true || v === 1) return 1;
+  if (v === false || v === 0) return 0;
+  return null;
+}
+
 /** Outlier red — vibe19 charts.py stroke for z-score outliers. */
 export const OUTLIER_RED = "#dc2626";
 
@@ -803,9 +811,10 @@ export function ruleResultChart(
       mode: "lines",
       name: "confirmed_fault",
       x,
-      y: fault.map((v) => (v === true || v === 1 ? 1 : 0)),
+      y: fault.map((v) => confirmedFaultPlotY(v)),
       yaxis: yname,
       line: { width: 0.8, color: "rgba(220,38,38,0.9)", shape: "hv" },
+      connectgaps: false,
       fill: "tozeroy",
       fillcolor: "rgba(239,68,68,0.35)",
     });
@@ -937,9 +946,10 @@ export function withConfirmedFaultLane(
       mode: "lines",
       name: "confirmed_fault",
       x: opts.faultX,
-      y: fault.map((v) => (v === true || v === 1 ? 1 : 0)),
+      y: fault.map((v) => confirmedFaultPlotY(v)),
       yaxis: "y2",
       line: { width: 0.8, color: "rgba(220,38,38,0.9)", shape: "hv" },
+      connectgaps: false,
       fill: "tozeroy",
       fillcolor: "rgba(239,68,68,0.35)",
     },

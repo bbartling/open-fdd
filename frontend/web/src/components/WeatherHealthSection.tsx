@@ -18,11 +18,34 @@ function fmtHours(v: unknown): string {
 }
 
 function triFault(status: unknown, hours: unknown): string {
-  const h = typeof hours === "number" ? hours : Number(hours);
   const st = String(status ?? "").toUpperCase();
+  if (st === "INTERVAL_UNKNOWN" || st === "NOT_ASSESSED") return "unknown";
+  const h = typeof hours === "number" ? hours : Number(hours);
   if (st === "FAULT" || (Number.isFinite(h) && h > 0)) return "true";
   if (st === "PASS") return "false";
-  return "unknown";
+  if (!Number.isFinite(h)) return "unknown";
+  return "false";
+}
+
+function sumKnownFaultHours(rows: Array<Record<string, unknown>>): number | null {
+  let any = false;
+  let sum = 0;
+  for (const r of rows) {
+    if (String(r.interval_status ?? "") === "INTERVAL_UNKNOWN") {
+      return null;
+    }
+    const st = String(r.status ?? "").toUpperCase();
+    if (st === "INTERVAL_UNKNOWN" || st === "NOT_ASSESSED") {
+      return null;
+    }
+    const h = typeof r.fault_hours === "number" ? r.fault_hours : Number(r.fault_hours);
+    if (!Number.isFinite(h)) {
+      return null;
+    }
+    any = true;
+    sum += h;
+  }
+  return any ? sum : null;
 }
 
 /** Web vs local outside-air sensors — drybulb + humidity with fault hours. */
@@ -126,26 +149,8 @@ export function WeatherHealthSection({
                 ? "true"
                 : "false"
               : "unknown",
-          fault_h: fmtHours(
-            wxRules.reduce(
-              (sum, r) =>
-                sum +
-                (typeof r.fault_hours === "number"
-                  ? r.fault_hours
-                  : Number(r.fault_hours) || 0),
-              0,
-            ),
-          ),
-          total_fault_h: fmtHours(
-            wxRules.reduce(
-              (sum, r) =>
-                sum +
-                (typeof r.fault_hours === "number"
-                  ? r.fault_hours
-                  : Number(r.fault_hours) || 0),
-              0,
-            ),
-          ),
+          fault_h: fmtHours(sumKnownFaultHours(wxRules)),
+          total_fault_h: fmtHours(sumKnownFaultHours(wxRules)),
         });
 
         setRows(out);

@@ -13,7 +13,7 @@ use fdd_rules::{
 use fdd_tsdb::Tsdb;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use sqlx::{Column, PgConnection, Row};
+use sqlx::{Column, PgConnection, Postgres, Row, Transaction};
 
 use crate::analytics::{envelope_with_engine, AnalyticsEnvelope, AnalyticsQuery, AnalyticsRequest};
 
@@ -1682,6 +1682,20 @@ LIMIT $4
         }
         out_rows.push(row);
     }
+    let run_ctx = crate::fdd_registry_persist::effective_run_context_for_active_row(
+        &tsdb,
+        building_id,
+        &rule.rule_id,
+        equipment_id,
+    )
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_else(|| crate::fdd_registry_persist::EffectiveRunContext {
+        poll_seconds: 300.0,
+        confirm_seconds: rule.confirm_seconds,
+        session_override: None,
+    });
     let mut fault_map = match load_live_confirmed_fault(
         &tsdb,
         &reg,
@@ -1690,6 +1704,7 @@ LIMIT $4
         equipment_id,
         window_start,
         window_end,
+        &run_ctx,
     )
     .await
     {
@@ -1704,7 +1719,7 @@ LIMIT $4
             HashMap::new()
         }
     };
-    if fault_map.is_empty() {
+    if fault_map.is_empty() && !crate::timescale_historian::historian_is_timescale() {
         if let Ok(hint) = load_confirmed_fault_hint(building_id, equipment_id, &rule.rule_id) {
             fault_map = hint;
         }
@@ -1721,6 +1736,10 @@ LIMIT $4
                 }
                 fault_ts.push(json!(ts));
                 fault_y.push(json!(if *flag { 1 } else { 0 }));
+            } else if fault_map.is_empty() {
+                if let Some(obj) = row.as_object_mut() {
+                    obj.insert("confirmed_fault".into(), Value::Null);
+                }
             }
         }
     }
@@ -2235,37 +2254,111 @@ fn ts_key(ts: DateTime<Utc>) -> String {
     ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-pub(crate) async fn load_live_confirmed_fault(
-    tsdb: &Tsdb,
+/// Decode failure for a confirmed_fault SQL cell — never treated as valid false.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConfirmedFaultDecodeError {
+    Null { timestamp: String },
+    TypeMismatch { timestamp: String },
+}
+
+impl std::fmt::Display for ConfirmedFaultDecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Null { timestamp } => write!(f, "confirmed_fault null at {timestamp}"),
+            Self::TypeMismatch { timestamp } => {
+                write!(f, "confirmed_fault type mismatch at {timestamp}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConfirmedFaultDecodeError {}
+
+#[derive(Debug)]
+pub enum ConfirmedFaultLoadError {
+    Render(anyhow::Error),
+    Query(anyhow::Error),
+    Decode(ConfirmedFaultDecodeError),
+}
+
+impl std::fmt::Display for ConfirmedFaultLoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Render(e) => write!(f, "render: {e}"),
+            Self::Query(e) => write!(f, "query: {e}"),
+            Self::Decode(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl std::error::Error for ConfirmedFaultLoadError {}
+
+fn decode_confirmed_fault_cell(
+    row: &sqlx::postgres::PgRow,
+    ts: &str,
+) -> Result<bool, ConfirmedFaultDecodeError> {
+    if let Ok(opt) = row.try_get::<Option<i32>, _>("confirmed_fault") {
+        return match opt {
+            Some(v) => Ok(v != 0),
+            None => Err(ConfirmedFaultDecodeError::Null {
+                timestamp: ts.to_string(),
+            }),
+        };
+    }
+    if let Ok(opt) = row.try_get::<Option<i64>, _>("confirmed_fault") {
+        return match opt {
+            Some(v) => Ok(v != 0),
+            None => Err(ConfirmedFaultDecodeError::Null {
+                timestamp: ts.to_string(),
+            }),
+        };
+    }
+    if let Ok(opt) = row.try_get::<Option<bool>, _>("confirmed_fault") {
+        return match opt {
+            Some(v) => Ok(v),
+            None => Err(ConfirmedFaultDecodeError::Null {
+                timestamp: ts.to_string(),
+            }),
+        };
+    }
+    Err(ConfirmedFaultDecodeError::TypeMismatch {
+        timestamp: ts.to_string(),
+    })
+}
+
+pub(crate) async fn load_live_confirmed_fault_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
     reg: &RuleRegistry,
     rule: &RuleSpec,
     building_id: &str,
     equipment_id: &str,
     window_start: Option<&str>,
     window_end: Option<&str>,
-) -> Result<HashMap<String, bool>> {
+    ctx: &crate::fdd_registry_persist::EffectiveRunContext,
+) -> Result<HashMap<String, bool>, ConfirmedFaultLoadError> {
     if rule_is_metric(rule) || !safe_ident(equipment_id) {
         return Ok(HashMap::new());
     }
-    // Poll sizes row-framed detection windows only. Confirmation is
-    // CONFIRM_SECONDS of eligible elapsed time inside the rendered SQL.
+    let session = ctx.session_override.as_ref();
     let rendered = render_rule_sql(
         reg,
         rule,
-        300.0,
-        rule.confirm_seconds,
+        ctx.poll_seconds,
+        ctx.confirm_seconds,
         building_id,
         Some(equipment_id),
-        None,
-    )?;
+        session,
+    )
+    .map_err(ConfirmedFaultLoadError::Render)?;
     let Some(series_sql) = rewrite_rule_sql_to_fault_series(&rendered, equipment_id) else {
         return Ok(HashMap::new());
     };
     let roles = history_roles_for_rule(rule);
-    let mut tx = tsdb.pool().begin().await?;
-    ensure_history_table(&mut tx, &roles).await?;
+    ensure_history_table(&mut **tx, &roles)
+        .await
+        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
     let n = fill_history_for_equipment(
-        &mut tx,
+        &mut **tx,
         building_id,
         equipment_id,
         &roles,
@@ -2273,13 +2366,13 @@ pub(crate) async fn load_live_confirmed_fault(
         window_end,
         None,
     )
-    .await?;
+    .await
+    .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
     if n == 0 {
-        let _ = tx.rollback().await;
         return Ok(HashMap::new());
     }
     match crate::sql_pack::prepare_rule_inputs(
-        &mut tx,
+        &mut **tx,
         building_id,
         window_start,
         window_end,
@@ -2290,43 +2383,59 @@ pub(crate) async fn load_live_confirmed_fault(
     {
         Ok(crate::sql_pack::InputGate::Ready(_)) => {}
         Ok(crate::sql_pack::InputGate::Stop(stop)) => {
-            let _ = tx.rollback().await;
             if stop.status == "SCHEMA_INCOMPATIBLE" {
-                return Err(anyhow!("{}", stop.notes));
+                return Err(ConfirmedFaultLoadError::Query(anyhow!("{}", stop.notes)));
             }
             return Ok(HashMap::new());
         }
-        Err(err) => {
-            let _ = tx.rollback().await;
-            return Err(err);
-        }
+        Err(err) => return Err(ConfirmedFaultLoadError::Query(err)),
     }
     let rows = sqlx::query(&series_sql)
-        .fetch_all(&mut *tx)
+        .fetch_all(&mut **tx)
         .await
-        .context("confirmed_fault series")?;
-    let _ = tx.rollback().await;
+        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
     let mut map = HashMap::new();
     for row in rows {
         let Some(ts) = row
             .try_get::<DateTime<Utc>, _>("timestamp_utc")
             .ok()
-            .map(ts_key)
+            .map(|t| ts_key(t))
         else {
             continue;
         };
-        let flag = row
-            .try_get::<i32, _>("confirmed_fault")
-            .ok()
-            .or_else(|| {
-                row.try_get::<i64, _>("confirmed_fault")
-                    .ok()
-                    .map(|v| v as i32)
-            })
-            .unwrap_or(0)
-            != 0;
+        let flag = decode_confirmed_fault_cell(&row, &ts).map_err(ConfirmedFaultLoadError::Decode)?;
         map.insert(ts, flag);
     }
+    Ok(map)
+}
+
+pub(crate) async fn load_live_confirmed_fault(
+    tsdb: &Tsdb,
+    reg: &RuleRegistry,
+    rule: &RuleSpec,
+    building_id: &str,
+    equipment_id: &str,
+    window_start: Option<&str>,
+    window_end: Option<&str>,
+    ctx: &crate::fdd_registry_persist::EffectiveRunContext,
+) -> Result<HashMap<String, bool>, ConfirmedFaultLoadError> {
+    let mut tx = tsdb
+        .pool()
+        .begin()
+        .await
+        .map_err(|e| ConfirmedFaultLoadError::Query(e.into()))?;
+    let map = load_live_confirmed_fault_in_tx(
+        &mut tx,
+        reg,
+        rule,
+        building_id,
+        equipment_id,
+        window_start,
+        window_end,
+        ctx,
+    )
+    .await?;
+    let _ = tx.rollback().await;
     Ok(map)
 }
 
@@ -2343,7 +2452,14 @@ pub(crate) async fn preview_confirmed_fault_for_rule(
         .find(|rule| rule.rule_id == rule_id)
         .ok_or_else(|| anyhow!("missing rule {rule_id}"))?;
     let tsdb = Tsdb::connect_from_env().await?;
-    load_live_confirmed_fault(&tsdb, &reg, rule, building_id, equipment_id, None, None).await
+    let ctx = crate::fdd_registry_persist::EffectiveRunContext {
+        poll_seconds: 300.0,
+        confirm_seconds: rule.confirm_seconds,
+        session_override: None,
+    };
+    load_live_confirmed_fault(&tsdb, &reg, rule, building_id, equipment_id, None, None, &ctx)
+        .await
+        .map_err(|e| anyhow!("{e}"))
 }
 
 fn load_confirmed_fault_hint(
@@ -4161,6 +4277,17 @@ pub async fn run_fdd_registry(payload: &Value) -> Result<Value> {
                                 "note": "confirm aggregate from eligible elapsed time"
                             },
                         });
+                        if let Some(ref overrides) = session_override {
+                            if let Some(obj) = row_json.as_object_mut() {
+                                obj.insert(
+                                    "session_params".into(),
+                                    json!(overrides
+                                        .iter()
+                                        .map(|(k, v)| (k.clone(), json!(v)))
+                                        .collect::<serde_json::Map<_, _>>()),
+                                );
+                            }
+                        }
                         if rule.rule_id.eq_ignore_ascii_case("OAT-METEO") {
                             if let Some(ref fill) = oat_fill {
                                 if let Some(ref site_oa) = fill.site_oa_t {

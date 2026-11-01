@@ -16,6 +16,55 @@ use open_fdd_edge_prototype::fdd::registry_api::{
 use serde_json::{json, Value};
 use sqlx::{Postgres, Row, Transaction};
 
+/// Immutable effective-run identity for aggregate, interval series, persist, and API.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct EffectiveRunContext {
+    pub poll_seconds: f64,
+    pub confirm_seconds: u32,
+    pub session_override: Option<HashMap<String, f64>>,
+}
+
+impl EffectiveRunContext {
+    pub(crate) fn from_run_row(row: &Value, commit_poll: f64) -> Self {
+        let poll = row
+            .get("poll_seconds")
+            .and_then(Value::as_f64)
+            .filter(|v| v.is_finite() && *v > 0.0)
+            .unwrap_or(commit_poll)
+            .max(1.0);
+        let confirm = row
+            .get("confirm_seconds")
+            .and_then(Value::as_f64)
+            .filter(|v| v.is_finite() && *v >= 0.0)
+            .map(|v| v.round() as u32)
+            .unwrap_or(0);
+        let session_override = row
+            .get("session_params")
+            .and_then(session_params_from_json);
+        Self {
+            poll_seconds: poll,
+            confirm_seconds: confirm,
+            session_override,
+        }
+    }
+}
+
+fn session_params_from_json(value: &Value) -> Option<HashMap<String, f64>> {
+    let obj = value.as_object()?;
+    let mut out = HashMap::new();
+    for (k, v) in obj {
+        let n = v.as_f64().or_else(|| v.as_i64().map(|i| i as f64))?;
+        if n.is_finite() {
+            out.insert(k.clone(), n);
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 fn parse_window(start: Option<&str>, end: Option<&str>) -> Result<AnalysisWindow> {
     let start = start
         .filter(|s| !s.is_empty())
@@ -310,12 +359,13 @@ pub(crate) fn exact_interval_plan_from_confirmed_map(
 }
 
 async fn exact_interval_plan_for_rule_row(
-    tsdb: &Tsdb,
+    tx: &mut Transaction<'_, Postgres>,
     rule_id: &str,
     site_id: &str,
     equipment_id: &str,
     window: AnalysisWindow,
     sample_rows: i32,
+    run_ctx: &EffectiveRunContext,
 ) -> Result<ExactIntervalPlan, IncrementalError> {
     let reg = match crate::timescale_product::load_reg() {
         Ok(reg) => reg,
@@ -338,14 +388,15 @@ async fn exact_interval_plan_for_rule_row(
     let we = window
         .end()
         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    match crate::timescale_product::load_live_confirmed_fault(
-        tsdb,
+    match crate::timescale_product::load_live_confirmed_fault_in_tx(
+        tx,
         &reg,
         rule,
         site_id,
         equipment_id,
         Some(ws.as_str()),
         Some(we.as_str()),
+        run_ctx,
     )
     .await
     {
@@ -355,6 +406,194 @@ async fn exact_interval_plan_for_rule_row(
             reason_detail: err.to_string(),
         }),
     }
+}
+
+async fn clear_interval_buckets_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+    rule_id: &str,
+    equipment_id: &str,
+    window: AnalysisWindow,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        DELETE FROM fdd_interval_result
+        WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+          AND bucket_start >= $4 AND bucket_start < $5
+        "#,
+    )
+    .bind(site_id)
+    .bind(rule_id)
+    .bind(equipment_id)
+    .bind(window.start())
+    .bind(window.end())
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Active generation rows whose interval evidence is still unknown for a run id.
+pub async fn interval_unknown_pairs_for_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+) -> Result<Vec<(String, String)>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT rule_id, equipment_id
+        FROM fdd_run
+        WHERE site_id = $1
+          AND detail->>'run_id' = $2
+          AND equipment_id <> ''
+          AND detail->'interval_persist'->>'status' = $3
+        "#,
+    )
+    .bind(site_id)
+    .bind(run_id)
+    .bind(INTERVAL_EVIDENCE_UNKNOWN)
+    .fetch_all(tsdb.pool())
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let rule_id = row.try_get::<String, _>("rule_id").ok()?;
+            let equipment_id = row.try_get::<String, _>("equipment_id").ok()?;
+            Some((rule_id, equipment_id))
+        })
+        .collect())
+}
+
+/// Re-attempt interval persist for unknown pairs on an existing run (bounded repair).
+pub async fn repair_unknown_interval_evidence_for_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+) -> Result<u32> {
+    let pairs = interval_unknown_pairs_for_run(tsdb, site_id, run_id).await?;
+    if pairs.is_empty() {
+        return Ok(0);
+    }
+    let mut repaired = 0u32;
+    for (rule_id, equipment_id) in pairs {
+        let row = sqlx::query(
+            r#"
+            SELECT window_start, window_end, poll_seconds, confirm_min, sample_count, detail
+            FROM fdd_run
+            WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+              AND detail->>'run_id' = $4
+            LIMIT 1
+            "#,
+        )
+        .bind(site_id)
+        .bind(&rule_id)
+        .bind(&equipment_id)
+        .bind(run_id)
+        .fetch_optional(tsdb.pool())
+        .await?;
+        let Some(row) = row else {
+            continue;
+        };
+        let detail: Value = row.try_get("detail")?;
+        let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+        let poll: f64 = row.try_get("poll_seconds")?;
+        let run_ctx = EffectiveRunContext::from_run_row(&body_row, poll as f64);
+        let window = AnalysisWindow::half_open(
+            row.try_get("window_start")?,
+            row.try_get("window_end")?,
+        )
+        .map_err(|e| anyhow!("repair window: {e}"))?;
+        let sample_rows = row.try_get::<Option<i32>, _>("sample_count")?.unwrap_or(0);
+        let mut tx = tsdb.pool().begin().await?;
+        let plan = exact_interval_plan_for_rule_row(
+            &mut tx,
+            &rule_id,
+            site_id,
+            &equipment_id,
+            window,
+            sample_rows,
+            &run_ctx,
+        )
+        .await?;
+        match plan {
+            ExactIntervalPlan::Buckets(buckets) if !buckets.is_empty() => {
+                let through_revision = fdd_tsdb::current_data_revision(tsdb.pool(), site_id).await?;
+                let model_revision = model_revision_for_site(tsdb, site_id).await?;
+                let confirm = run_ctx.confirm_seconds as f64;
+                let rule_params = RuleParameters::try_from_pairs([
+                    ("confirm_min", confirm.to_string()),
+                    ("poll_seconds", run_ctx.poll_seconds.to_string()),
+                ])
+                .map_err(|e| anyhow!("repair params: {e}"))?;
+                let pack_ver = detail
+                    .get("generation")
+                    .and_then(|g| g.get("pack_version"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                let identity = FddResultIdentity::new(
+                    through_revision,
+                    &model_revision,
+                    rule_params,
+                    pack_ver,
+                    window,
+                    QualityPolicy::DropBad,
+                    SchedulePolicy::Sched1,
+                );
+                use chrono_tz::UTC;
+                let horizon = RuleHorizon::new(
+                    chrono::Duration::zero(),
+                    chrono::Duration::seconds(confirm.round().max(0.0) as i64),
+                )?;
+                let grid = BucketGrid::LocalDay(UTC);
+                let scope = ResultScope::new(
+                    site_id,
+                    &rule_id,
+                    &equipment_id,
+                    &identity,
+                    grid,
+                    horizon,
+                )?;
+                replace_scope_results_in_tx(
+                    &mut tx,
+                    &scope,
+                    window,
+                    through_revision,
+                    &buckets,
+                )
+                .await?;
+                let mut detail_mut = detail.clone();
+                if let Some(obj) = detail_mut.as_object_mut() {
+                    obj.insert(
+                        "interval_persist".into(),
+                        interval_persist_evidence_json(
+                            INTERVAL_EVIDENCE_EXACT,
+                            IntervalPersistReasonCode::SeriesExact,
+                            None,
+                        ),
+                    );
+                }
+                sqlx::query(
+                    r#"
+                    UPDATE fdd_run SET detail = $5
+                    WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                      AND detail->>'run_id' = $4
+                    "#,
+                )
+                .bind(site_id)
+                .bind(&rule_id)
+                .bind(&equipment_id)
+                .bind(run_id)
+                .bind(&detail_mut)
+                .execute(&mut *tx)
+                .await?;
+                tx.commit().await?;
+                repaired += 1;
+            }
+            _ => {
+                let _ = tx.rollback().await;
+            }
+        }
+    }
+    Ok(repaired)
 }
 
 async fn model_revision_for_site(tsdb: &Tsdb, site_id: &str) -> Result<String> {
@@ -457,6 +696,7 @@ pub async fn persist_registry_run_timescale(
                 let sample_rows =
                     row.get("sample_rows").and_then(Value::as_i64).unwrap_or(0) as i32;
                 if let Some(eq) = equipment_id {
+                    let run_ctx = EffectiveRunContext::from_run_row(row, poll as f64);
                     let mut interval_persist: Option<Value> = None;
                     let mut interval_buckets: Option<Vec<BucketResult>> = None;
                     if item.outcome == RuleOutcome::Succeeded
@@ -464,12 +704,13 @@ pub async fn persist_registry_run_timescale(
                         && fault_hours.is_some()
                     {
                         match exact_interval_plan_for_rule_row(
-                            tsdb,
+                            &mut tx,
                             &item.rule_id,
                             site_id,
                             eq,
                             window,
                             sample_rows,
+                            &run_ctx,
                         )
                         .await
                         {
@@ -490,6 +731,14 @@ pub async fn persist_registry_run_timescale(
                                     reason_code,
                                     Some(reason_detail.as_str()),
                                 ));
+                                clear_interval_buckets_in_tx(
+                                    &mut tx,
+                                    site_id,
+                                    &item.rule_id,
+                                    eq,
+                                    window,
+                                )
+                                .await?;
                             }
                             Err(err) => {
                                 return Err(anyhow!("interval buckets: {err}"));
@@ -659,10 +908,14 @@ async fn copy_parent_runs(
 pub async fn active_generation_manifest(tsdb: &Tsdb, building_id: &str) -> Result<Option<Value>> {
     let row = sqlx::query(
         r#"
-        SELECT detail
-        FROM fdd_run
-        WHERE site_id = $1
-        ORDER BY created_at DESC
+        SELECT generation
+        FROM (
+            SELECT detail->'generation' AS generation, MAX(created_at) AS latest
+            FROM fdd_run
+            WHERE site_id = $1 AND detail->'generation' IS NOT NULL
+            GROUP BY detail->>'run_id', detail->'generation'
+        ) runs
+        ORDER BY latest DESC
         LIMIT 1
         "#,
     )
@@ -672,8 +925,7 @@ pub async fn active_generation_manifest(tsdb: &Tsdb, building_id: &str) -> Resul
     let Some(row) = row else {
         return Ok(None);
     };
-    let detail: Value = row.try_get("detail")?;
-    Ok(detail.get("generation").cloned())
+    Ok(row.try_get("generation")?)
 }
 
 /// Build flat rule rows for the active Timescale generation (rule_id, row body).
@@ -710,6 +962,48 @@ pub async fn active_generation_rows(
         out.push((rule_id, body_row));
     }
     Ok(out)
+}
+
+/// Latest run context for plot/series for one rule × equipment on the active generation.
+pub async fn effective_run_context_for_active_row(
+    tsdb: &Tsdb,
+    site_id: &str,
+    rule_id: &str,
+    equipment_id: &str,
+) -> Result<Option<EffectiveRunContext>> {
+    let manifest = active_generation_manifest(tsdb, site_id).await?;
+    let Some(manifest) = manifest else {
+        return Ok(None);
+    };
+    let run_id = manifest.get("run_id").and_then(Value::as_str).unwrap_or("");
+    if run_id.is_empty() {
+        return Ok(None);
+    }
+    let row = sqlx::query(
+        r#"
+        SELECT poll_seconds, detail
+        FROM fdd_run
+        WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+          AND detail->>'run_id' = $4
+        LIMIT 1
+        "#,
+    )
+    .bind(site_id)
+    .bind(rule_id)
+    .bind(equipment_id)
+    .bind(run_id)
+    .fetch_optional(tsdb.pool())
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let detail: Value = row.try_get("detail")?;
+    let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+    let poll: i32 = row.try_get("poll_seconds")?;
+    Ok(Some(EffectiveRunContext::from_run_row(
+        &body_row,
+        f64::from(poll),
+    )))
 }
 
 pub async fn commit_and_persist_registry_run(

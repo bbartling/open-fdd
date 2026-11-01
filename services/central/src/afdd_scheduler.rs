@@ -776,6 +776,47 @@ impl AfddSchedulerRuntime {
         drop(compute);
 
         let rules_clean = !cancelled && chunks_failed == 0 && rules_failed == 0;
+        let mut interval_evidence_pending = false;
+        if rules_clean && crate::timescale_historian::historian_is_timescale() {
+            if let Ok(tsdb) = fdd_tsdb::Tsdb::connect_from_env().await {
+                if let Ok(manifest) =
+                    crate::fdd_registry_persist::active_generation_manifest(&tsdb, scope).await
+                {
+                    if let Some(run_id) = manifest
+                        .and_then(|m| m.get("run_id").and_then(Value::as_str).map(str::to_string))
+                    {
+                        if let Ok(pairs) = crate::fdd_registry_persist::interval_unknown_pairs_for_run(
+                            &tsdb,
+                            scope,
+                            &run_id,
+                        )
+                        .await
+                        {
+                            interval_evidence_pending = !pairs.is_empty();
+                            if interval_evidence_pending {
+                                let repaired = crate::fdd_registry_persist::repair_unknown_interval_evidence_for_run(
+                                    &tsdb,
+                                    scope,
+                                    &run_id,
+                                )
+                                .await
+                                .unwrap_or(0);
+                                if repaired > 0 {
+                                    let pairs_after = crate::fdd_registry_persist::interval_unknown_pairs_for_run(
+                                        &tsdb,
+                                        scope,
+                                        &run_id,
+                                    )
+                                    .await
+                                    .unwrap_or_default();
+                                    interval_evidence_pending = !pairs_after.is_empty();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         let status = if cancelled {
             "cancelled"
         } else if chunks_failed > 0 || rules_failed > 0 {
@@ -816,7 +857,8 @@ impl AfddSchedulerRuntime {
         };
 
         self.persist_run_record(&record)?;
-        if advance_checkpoint && rules_clean {
+        let interval_checkpoint_clean = !interval_evidence_pending;
+        if advance_checkpoint && rules_clean && interval_checkpoint_clean {
             self.persist_checkpoint_for_building(
                 scope,
                 &AfddSchedulerCheckpoint {

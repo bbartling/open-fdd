@@ -362,6 +362,11 @@ mod up03_postgres_exact_buckets {
             .iter()
             .find(|r| r.rule_id == "CMD-1")
             .expect("CMD-1");
+        let ctx = crate::fdd_registry_persist::EffectiveRunContext {
+            poll_seconds: 300.0,
+            confirm_seconds: 600,
+            session_override: None,
+        };
         let confirmed = crate::timescale_product::load_live_confirmed_fault(
             &tsdb,
             &reg,
@@ -370,6 +375,7 @@ mod up03_postgres_exact_buckets {
             eq_day2,
             Some(window_start),
             Some(window_end),
+            &ctx,
         )
         .await
         .expect("confirmed series");
@@ -503,5 +509,20 @@ mod up03_postgres_exact_buckets {
             .bind(site)
             .execute(pool)
             .await;
+    }
+}
+
+#[cfg(test)]
+mod up03_effective_run_context_unit {
+    use serde_json::json;
+
+    use crate::fdd_registry_persist::EffectiveRunContext;
+
+    #[test]
+    fn row_poll_and_confirm_override_commit_defaults() {
+        let row = json!({"confirm_seconds": 0.0, "poll_seconds": 60.0});
+        let ctx = EffectiveRunContext::from_run_row(&row, 300.0);
+        assert_eq!(ctx.confirm_seconds, 0);
+        assert!((ctx.poll_seconds - 60.0).abs() < f64::EPSILON);
     }
 }

@@ -749,6 +749,31 @@ def apply_interval_evidence_to_daily(
             row["status"] = "INTERVAL_UNKNOWN"
 
 
+def utc_days_overlapping_window(window_start: str, window_end: str) -> list[str]:
+    """UTC calendar days with nonempty half-open overlap with [start, end)."""
+    from datetime import datetime, timedelta, timezone
+
+    start = datetime.fromisoformat(window_start.replace("Z", "+00:00"))
+    end = datetime.fromisoformat(window_end.replace("Z", "+00:00"))
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    out: list[str] = []
+    day = start.date()
+    while True:
+        day_start = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc)
+        day_end = day_start + timedelta(days=1)
+        overlap_start = max(start, day_start)
+        overlap_end = min(end, day_end)
+        if overlap_start < overlap_end:
+            out.append(day.isoformat())
+        if day >= end.date():
+            break
+        day = day + timedelta(days=1)
+    return out
+
+
 def apply_interval_unknown_daily_rows(
     *,
     building_id: str,
@@ -758,10 +783,6 @@ def apply_interval_unknown_daily_rows(
     daily_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Synthetic daily rows when SQL has no buckets but interval evidence is unknown."""
-    from datetime import datetime
-
-    start = datetime.fromisoformat(window_start.replace("Z", "+00:00"))
-    end = datetime.fromisoformat(window_end.replace("Z", "+00:00"))
     existing = {
         (row["rule_id"], row["equipment_id"], row["utc_day"]) for row in daily_rows
     }
@@ -769,10 +790,7 @@ def apply_interval_unknown_daily_rows(
     for (rule_id, equipment_id), evidence in sorted(evidence_map.items()):
         if str(evidence.get("status") or "") != "INTERVAL_UNKNOWN":
             continue
-        day = start.date()
-        end_day = end.date()
-        while day < end_day:
-            utc_day = day.isoformat()
+        for utc_day in utc_days_overlapping_window(window_start, window_end):
             key = (rule_id, equipment_id, utc_day)
             if key not in existing:
                 out.append(
@@ -789,7 +807,6 @@ def apply_interval_unknown_daily_rows(
                         "pair_status": "interval_unknown",
                     }
                 )
-            day = day.fromordinal(day.toordinal() + 1)
     return out
 
 

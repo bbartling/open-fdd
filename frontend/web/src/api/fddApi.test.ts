@@ -182,6 +182,19 @@ describe("fddApi", () => {
     ]);
     expect(metricCsv.startsWith("rule_id,equipment_id")).toBe(true);
     expect(metricCsv).toContain("avg_zone_temp");
+    const intervalCsv = resultsToCsvArtifact([
+      {
+        rule_id: "FC1",
+        equipment_id: "AHU_1",
+        status: "FAULT",
+        fault_hours: 1.2,
+        interval_status: "INTERVAL_UNKNOWN",
+        interval_reason_code: "series_empty_no_samples",
+      },
+    ]);
+    expect(intervalCsv).toContain("interval_status");
+    expect(intervalCsv).toContain("INTERVAL_UNKNOWN");
+    expect(intervalCsv).toContain("series_empty_no_samples");
     expect(metricCsv).toContain("72.4");
     expect(metricCsv).toContain("degF");
     expect(metricCsv).toContain("metric_window_unknown");

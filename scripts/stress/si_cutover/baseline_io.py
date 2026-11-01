@@ -296,6 +296,12 @@ def validate_fdd_daily_row(row: dict[str, Any]) -> list[str]:
         if not str(row.get(key, "")).strip():
             errors.append(f"missing {key}")
     if str(row.get("pair_status") or "") == "interval_unknown":
+        if str(row.get("interval_status") or "") != "INTERVAL_UNKNOWN":
+            errors.append("interval_unknown pair requires INTERVAL_UNKNOWN interval_status")
+        if str(row.get("status") or "") == "INTERVAL_UNKNOWN" and (
+            row.get("fault_seconds") is not None or row.get("covered_seconds") is not None
+        ):
+            errors.append("interval_unknown must not carry numeric fault/covered seconds")
         return errors
     for field in ("fault_seconds", "covered_seconds"):
         val = row.get(field)
