@@ -596,50 +596,53 @@ class CaptureFixtureStack(unittest.TestCase):
             with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[sql_row]):
                 with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
                     with mock.patch.object(
-                        capture,
-                        "validate_batch_persisted_scope",
-                        return_value=(
-                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
-                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
-                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
-                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
-                        ),
+                        capture, "fetch_interval_evidence_rows", return_value={}
                     ):
                         with mock.patch.object(
                             capture,
-                            "fdd_run_created_at_marker",
-                            return_value=capture.datetime.fromisoformat(
-                                "2026-06-01T00:00:00+00:00"
+                            "validate_batch_persisted_scope",
+                            return_value=(
+                                capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                                capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                                capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                                capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
                             ),
                         ):
-                            with mock.patch.object(capture, "assert_no_interleaved_fdd_run"):
-                                with mock.patch.object(
-                                    capture, "analytics_rows_for_site", return_value=[]
-                                ):
-                                    with mock.patch.object(capture, "post_sparql", return_value=[]):
-                                        with mock.patch.object(
-                                            capture,
-                                            "post_fdd_run_with_busy_retry",
-                                            side_effect=fake_run,
-                                        ):
-                                            summary = capture.capture_site(
-                                                FakeHttp(),
-                                                {},
-                                                fake_conn,
-                                                site={
-                                                    "building_id": building_id,
-                                                    "window_start": "2026-06-01T00:00:00Z",
-                                                    "window_end": "2026-06-02T03:00:00Z",
-                                                },
-                                                out_dir=out_dir,
-                                                rules=[
-                                                    {"rule_id": "FC1"},
-                                                    {"rule_id": "FC2"},
-                                                ],
-                                                skip_pandas=True,
-                                                pandas_max_rules=None,
-                                                rule_batch_size=1,
-                                            )
+                            with mock.patch.object(
+                                capture,
+                                "fdd_run_created_at_marker",
+                                return_value=capture.datetime.fromisoformat(
+                                    "2026-06-01T00:00:00+00:00"
+                                ),
+                            ):
+                                with mock.patch.object(capture, "assert_no_interleaved_fdd_run"):
+                                    with mock.patch.object(
+                                        capture, "analytics_rows_for_site", return_value=[]
+                                    ):
+                                        with mock.patch.object(capture, "post_sparql", return_value=[]):
+                                            with mock.patch.object(
+                                                capture,
+                                                "post_fdd_run_with_busy_retry",
+                                                side_effect=fake_run,
+                                            ):
+                                                summary = capture.capture_site(
+                                                    FakeHttp(),
+                                                    {},
+                                                    fake_conn,
+                                                    site={
+                                                        "building_id": building_id,
+                                                        "window_start": "2026-06-01T00:00:00Z",
+                                                        "window_end": "2026-06-02T03:00:00Z",
+                                                    },
+                                                    out_dir=out_dir,
+                                                    rules=[
+                                                        {"rule_id": "FC1"},
+                                                        {"rule_id": "FC2"},
+                                                    ],
+                                                    skip_pandas=True,
+                                                    pandas_max_rules=None,
+                                                    rule_batch_size=1,
+                                                )
             self.assertEqual(summary["building_id"], building_id)
             site_dir = out_dir / building_id
             for name in (
@@ -871,50 +874,53 @@ class BatchPersistedScopeValidationTest(unittest.TestCase):
             with mock.patch.object(capture, "fetch_sql_daily_rows", return_value=[]):
                 with mock.patch.object(capture, "fetch_run_status_rows", return_value={}):
                     with mock.patch.object(
-                        capture,
-                        "validate_batch_persisted_scope",
-                        return_value=(
-                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
-                            capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
-                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
-                            capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
-                        ),
+                        capture, "fetch_interval_evidence_rows", return_value={}
                     ):
                         with mock.patch.object(
                             capture,
-                            "fdd_run_created_at_marker",
-                            return_value=capture.datetime.fromisoformat(
-                                "2026-06-01T00:00:00+00:00"
+                            "validate_batch_persisted_scope",
+                            return_value=(
+                                capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                                capture.datetime.fromisoformat("2026-06-01T00:05:00+00:00"),
+                                capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
+                                capture.datetime.fromisoformat("2026-06-02T00:00:00+00:00"),
                             ),
                         ):
                             with mock.patch.object(
-                                capture, "assert_no_interleaved_fdd_run", side_effect=guard_side_effect
+                                capture,
+                                "fdd_run_created_at_marker",
+                                return_value=capture.datetime.fromisoformat(
+                                    "2026-06-01T00:00:00+00:00"
+                                ),
                             ):
                                 with mock.patch.object(
-                                    capture, "analytics_rows_for_site", return_value=[]
+                                    capture, "assert_no_interleaved_fdd_run", side_effect=guard_side_effect
                                 ):
-                                    with mock.patch.object(capture, "post_sparql", return_value=[]):
-                                        with mock.patch.object(
-                                            capture,
-                                            "post_fdd_run_with_busy_retry",
-                                            return_value=(run_resp, {"http_attempts": []}),
-                                        ):
-                                            with self.assertRaises(capture.CaptureQualificationError):
-                                                capture.capture_site(
-                                                    FakeHttp(),
-                                                    {},
-                                                    fake_conn,
-                                                    site={
-                                                        "building_id": building_id,
-                                                        "window_start": "2026-06-01T00:00:00Z",
-                                                        "window_end": "2026-06-02T00:00:00Z",
-                                                    },
-                                                    out_dir=out_dir,
-                                                    rules=[{"rule_id": "FC1"}],
-                                                    skip_pandas=True,
-                                                    pandas_max_rules=None,
-                                                    rule_batch_size=1,
-                                                )
+                                    with mock.patch.object(
+                                        capture, "analytics_rows_for_site", return_value=[]
+                                    ):
+                                        with mock.patch.object(capture, "post_sparql", return_value=[]):
+                                            with mock.patch.object(
+                                                capture,
+                                                "post_fdd_run_with_busy_retry",
+                                                return_value=(run_resp, {"http_attempts": []}),
+                                            ):
+                                                with self.assertRaises(capture.CaptureQualificationError):
+                                                    capture.capture_site(
+                                                        FakeHttp(),
+                                                        {},
+                                                        fake_conn,
+                                                        site={
+                                                            "building_id": building_id,
+                                                            "window_start": "2026-06-01T00:00:00Z",
+                                                            "window_end": "2026-06-02T00:00:00Z",
+                                                        },
+                                                        out_dir=out_dir,
+                                                        rules=[{"rule_id": "FC1"}],
+                                                        skip_pandas=True,
+                                                        pandas_max_rules=None,
+                                                        rule_batch_size=1,
+                                                    )
 
     def test_manifest_records_site_disqualifiers(self) -> None:
         meta = {
@@ -1318,6 +1324,50 @@ class SqlDailyRollupTest(unittest.TestCase):
         )
         self.assertGreater(fault_by_day.get("2026-10-10", 0.0), 0.0)
         self.assertEqual(fault_by_day.get("2026-10-11", 0.0), 0.0)
+
+
+class IntervalEvidenceDailyTest(unittest.TestCase):
+    def test_unknown_interval_marks_daily_not_assessed(self) -> None:
+        daily = [
+            {
+                "building_id": "B1",
+                "rule_id": "R1",
+                "equipment_id": "E1",
+                "utc_day": "2026-10-10",
+                "fault_seconds": 100.0,
+                "covered_seconds": 86400.0,
+                "status": "OK",
+            }
+        ]
+        capture.apply_interval_evidence_to_daily(
+            daily,
+            {
+                ("R1", "E1"): {
+                    "status": "INTERVAL_UNKNOWN",
+                    "reason_code": "series_empty_no_samples",
+                }
+            },
+        )
+        self.assertEqual(daily[0]["pair_status"], "interval_unknown")
+        self.assertIsNone(daily[0]["fault_seconds"])
+        self.assertEqual(daily[0]["interval_status"], "INTERVAL_UNKNOWN")
+
+    def test_synthetic_unknown_daily_rows(self) -> None:
+        rows = capture.apply_interval_unknown_daily_rows(
+            building_id="B1",
+            evidence_map={
+                ("R1", "E1"): {
+                    "status": "INTERVAL_UNKNOWN",
+                    "reason_code": "rule_not_in_registry",
+                }
+            },
+            window_start="2026-10-10T00:00:00Z",
+            window_end="2026-10-12T00:00:00Z",
+            daily_rows=[],
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertIsNone(rows[0]["fault_seconds"])
+        self.assertEqual(rows[0]["pair_status"], "interval_unknown")
 
 
 class FddRunBusyRetryTest(unittest.TestCase):
