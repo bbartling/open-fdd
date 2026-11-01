@@ -314,8 +314,13 @@ mod up03_postgres_exact_buckets {
         batch.push(st_row);
     }
 
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize disposable Postgres CMD-1 bucket fixture against shared DDL"
+    )]
     #[tokio::test]
     async fn up03_postgres_exact_daily_buckets_from_confirmed_series() {
+        let _lock = crate::test_env_lock::lock_env();
         let Some(pool) = pool().await else {
             eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
             return;
