@@ -14,36 +14,35 @@
     },
     {
       "issue": 1470,
-      "title": "Startup delay extends mode holdoff; defaults consolidated in SQL render",
-      "affected_rules": ["FC1", "FC2", "FC3", "FC4", "FC5", "FC6", "FC7", "FC8", "FC9", "FC10", "FC11", "FC12", "FC13", "FC14", "FC15", "FC13-SAT-HIGH"],
+      "title": "FC6 flow factor (flow_factor) geometry aligned between pandas cookbook and shipped SQL",
+      "affected_rules": ["FC6"],
       "runner_b_expected": "35c17ac aggregate SQL could disagree with overlay when only aggregate mutated",
-      "runner_d_expected": "shipped aggregate and fault-series overlay both execute; coverage preserved",
-      "independent_oracle": "scripts/stress/si_cutover/ci_timescale_sql.execute_sql_rule_daily",
+      "runner_d_expected": "shipped aggregate and fault-series overlay both execute; FC6 flow_factor branch matches pandas",
+      "independent_oracle": "open_fdd.rules.cookbook_catalog FC6 flow paths vs sql/fdd/postgres/rules/fc6.sql",
       "harness_probe": "SQL-QUAL-04 aggregate_vs_overlay",
       "waive_four_way_agreement": false,
       "compare_against": "paired_aggregate_and_overlay_seconds"
     },
     {
       "issue": 1408,
-      "title": "SV-RANGE range_scale_* non-default: SQL multiplies bound literals, pandas scales half-width around midpoint",
+      "title": "SV-RANGE range_scale_* must use midpoint half-width geometry (pandas _sweep_range)",
       "affected_rules": ["SV-RANGE"],
       "parameters": ["range_scale_temperature", "range_scale_humidity", "range_scale_pressure"],
-      "non_default_tuner_cases": ["min", "max", "nondefault", "boundary"],
-      "runner_c_d_expected": "default scale (1.0) must agree; non-default scale cases may diverge until SQL screening port matches pandas sweep geometry",
-      "independent_oracle": "open_fdd.rules.cookbook_catalog._sweep_range vs sql/fdd/postgres/rules/sv_range.sql RANGE_SCALE_* placeholders",
-      "harness_probe": "rule_tuner_matrix.sv_range_scale_nondefault_ledger_waiver",
-      "waive_cd_agreement_on_nondefault": true,
-      "compare_against": "default_tuner_cd_agreement_only_for_scale_params"
+      "runner_c_d_expected": "current pandas C and current SQL D agree on default and non-default scale tuners",
+      "independent_oracle": "open_fdd.rules.cookbook_catalog._sweep_range vs sql/fdd/postgres/rules/sv_range.sql",
+      "harness_probe": "rule_tuner_matrix daily C/D compare (no waiver)",
+      "waive_four_way_agreement": false,
+      "compare_against": "current_implementation_cd_agreement"
     },
     {
       "issue": 1284,
-      "title": "confirm_min catalog tuner vs confirm_seconds registry on non-default branches",
+      "title": "confirm_min catalog minutes map to confirm_seconds on both engines without double conversion",
       "parameters": ["confirm_min"],
-      "non_default_tuner_cases": ["min", "max", "nondefault", "boundary"],
-      "runner_c_d_expected": "default confirm path must agree; non-default confirm_min cases may diverge until SQL screening matches pandas confirm_seconds semantics",
-      "harness_probe": "rule_tuner_matrix.confirm_min_nondefault_ledger_waiver",
-      "waive_cd_agreement_on_nondefault": true,
-      "compare_against": "default_tuner_cd_agreement_only_for_confirm_min"
+      "runner_c_d_expected": "default and non-default confirm_min tuner cases agree on elapsed confirmation seconds",
+      "independent_oracle": "registry confirm_seconds + catalog confirm_min with explicit ×60 hook",
+      "harness_probe": "rule_tuner_matrix boundary/effective confirm checks (no waiver)",
+      "waive_four_way_agreement": false,
+      "compare_against": "current_implementation_cd_agreement"
     }
   ]
 }

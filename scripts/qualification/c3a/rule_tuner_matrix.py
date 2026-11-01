@@ -55,8 +55,9 @@ FROZEN_AB_PREREQ = (
 
 LEDGER_PATH = Path(__file__).resolve().parent / "expected_change_ledger.json"
 
-_SV_RANGE_SCALE_PARAMS = frozenset(
-    {"range_scale_temperature", "range_scale_humidity", "range_scale_pressure"}
+CD_SUBSET_SCOPE_NOTE = (
+    "Cookbook C/D subset: rules in MATRIX_EXEC_RULE_IDS on COOKBOOK_FC1/FC2/VAV1 only; "
+    "full SQL-QUAL-06 / A–D qualification requires frozen A/B executions and complete rule families"
 )
 
 
@@ -64,44 +65,35 @@ def _load_expected_change_ledger() -> dict[str, Any]:
     return json.loads(LEDGER_PATH.read_text(encoding="utf-8"))
 
 
-def sv_range_scale_nondefault_ledger_waiver(
-    rule_id: str, tuner: str | None, case_label: str
-) -> bool:
-    """True when a C/D mismatch is an expected SV-RANGE scale geometry gap (#1408 ledger)."""
-    if rule_id != "SV-RANGE" or not tuner or tuner not in _SV_RANGE_SCALE_PARAMS:
-        return False
-    if case_label == "default":
-        return False
-    for entry in _load_expected_change_ledger().get("issues") or []:
-        if int(entry.get("issue") or 0) != 1408:
-            continue
-        params = entry.get("parameters") or []
-        cases = entry.get("non_default_tuner_cases") or []
-        if tuner in params and case_label in cases:
-            return bool(entry.get("waive_cd_agreement_on_nondefault"))
-    return False
+@dataclass
+class DailyCompareResult:
+    compared_cells: int = 0
+    numeric_mismatch: int = 0
+    shape_mismatch: int = 0
+    duplicate_keys: int = 0
+
+    @property
+    def total_mismatch(self) -> int:
+        return self.numeric_mismatch + self.shape_mismatch + self.duplicate_keys
 
 
-def confirm_min_nondefault_ledger_waiver(
-    tuner: str | None, case_label: str
-) -> bool:
-    """Catalog confirm_min (minutes) vs registry confirm_seconds — non-default branch gaps."""
-    if tuner != "confirm_min" or case_label == "default":
-        return False
-    for entry in _load_expected_change_ledger().get("issues") or []:
-        if int(entry.get("issue") or 0) != 1284:
-            continue
-        params = entry.get("parameters") or []
-        cases = entry.get("non_default_tuner_cases") or []
-        if tuner in params and case_label in cases:
-            return bool(entry.get("waive_cd_agreement_on_nondefault"))
-    return False
+@dataclass
+class CaseCompareResult:
+    daily: DailyCompareResult
+    both_empty: bool = False
+    errors: list[str] = field(default_factory=list)
 
+    @property
+    def meaningfully_compared(self) -> bool:
+        return self.daily.compared_cells > 0 and not self.errors
 
-def matrix_cd_mismatch_waiver(rule_id: str, tuner: str | None, case_label: str) -> bool:
-    return sv_range_scale_nondefault_ledger_waiver(
-        rule_id, tuner, case_label
-    ) or confirm_min_nondefault_ledger_waiver(tuner, case_label)
+    @property
+    def case_pass(self) -> bool:
+        if self.errors:
+            return False
+        if self.both_empty:
+            return False
+        return self.daily.total_mismatch == 0 and self.daily.compared_cells > 0
 
 
 @dataclass
@@ -110,12 +102,15 @@ class MatrixRow:
     tuner: str | None
     tuner_effect: str
     required: int = 0
-    executed: int = 0
-    compared: int = 0
-    mismatch: int = 0
+    attempted: int = 0
+    cases_compared: int = 0
+    compared_cells: int = 0
+    numeric_mismatch: int = 0
+    shape_mismatch: int = 0
+    case_failures: int = 0
+    case_insufficient: int = 0
     skipped: int = 0
     unsupported: int = 0
-    ledger_waived: int = 0
     runner_a: str = "BLOCKED"
     runner_b: str = "BLOCKED"
     runner_c: str = "PENDING"
@@ -129,12 +124,15 @@ class MatrixRow:
             "tuner": self.tuner,
             "tuner_effect": self.tuner_effect,
             "required": self.required,
-            "executed": self.executed,
-            "compared": self.compared,
-            "mismatch": self.mismatch,
+            "attempted": self.attempted,
+            "cases_compared": self.cases_compared,
+            "compared_cells": self.compared_cells,
+            "numeric_mismatch": self.numeric_mismatch,
+            "shape_mismatch": self.shape_mismatch,
+            "case_failures": self.case_failures,
+            "case_insufficient": self.case_insufficient,
             "skipped": self.skipped,
             "unsupported": self.unsupported,
-            "ledger_waived": self.ledger_waived,
             "runner_a": self.runner_a,
             "runner_b": self.runner_b,
             "runner_c": self.runner_c,
@@ -203,34 +201,63 @@ def _daily_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
     )
 
 
+def _daily_rows_computed(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        r for r in rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
+    ]
+
+
+def _daily_map_with_duplicates(
+    rows: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, str, str, str], dict[str, Any]], list[tuple[str, str, str, str]]]:
+    out: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    dupes: list[tuple[str, str, str, str]] = []
+    for row in rows:
+        key = _daily_key(row)
+        if key in out:
+            dupes.append(key)
+        out[key] = row
+    return out, dupes
+
+
+def _coverage_equal(pd_row: dict[str, Any], sql_row: dict[str, Any]) -> bool:
+    pd_cov = pd_row.get("covered_seconds")
+    sql_cov = sql_row.get("covered_seconds")
+    if pd_cov is None and sql_cov is None:
+        return True
+    if pd_cov is None or sql_cov is None:
+        return False
+    return float(pd_cov) == float(sql_cov)
+
+
 def _compare_daily(
     pandas_rows: list[dict[str, Any]], sql_rows: list[dict[str, Any]]
-) -> tuple[int, int]:
-    pd_daily = [
-        r for r in pandas_rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
-    ]
-    sql_daily = [
-        r for r in sql_rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
-    ]
-    pd_map = {_daily_key(r): r for r in pd_daily}
-    sql_map = {_daily_key(r): r for r in sql_daily}
-    compared = 0
-    mismatch = 0
-    for key in sorted(set(pd_map) & set(sql_map), key=repr):
-        compared += 1
-        pd_row = pd_map[key]
-        sql_row = sql_map[key]
+) -> DailyCompareResult:
+    pd_daily = _daily_rows_computed(pandas_rows)
+    sql_daily = _daily_rows_computed(sql_rows)
+    pd_map, pd_dupes = _daily_map_with_duplicates(pd_daily)
+    sql_map, sql_dupes = _daily_map_with_duplicates(sql_daily)
+    result = DailyCompareResult(
+        duplicate_keys=len(set(pd_dupes)) + len(set(sql_dupes)),
+    )
+    if result.duplicate_keys:
+        result.shape_mismatch += result.duplicate_keys
+    all_keys = set(pd_map) | set(sql_map)
+    for key in sorted(all_keys, key=repr):
+        pd_row = pd_map.get(key)
+        sql_row = sql_map.get(key)
+        if pd_row is None or sql_row is None:
+            result.shape_mismatch += 1
+            continue
+        result.compared_cells += 1
         if not cts.pc_fault_seconds_equal(
             float(pd_row.get("fault_seconds", 0)), float(sql_row.get("fault_seconds", 0))
         ):
-            mismatch += 1
+            result.numeric_mismatch += 1
             continue
-        pd_cov = pd_row.get("covered_seconds")
-        sql_cov = sql_row.get("covered_seconds")
-        if pd_cov is not None and sql_cov is not None:
-            if float(pd_cov) != float(sql_cov):
-                mismatch += 1
-    return compared, mismatch
+        if not _coverage_equal(pd_row, sql_row):
+            result.numeric_mismatch += 1
+    return result
 
 
 def _dataset_specs() -> list[cfl.DatasetSpec]:
@@ -298,7 +325,7 @@ def _execute_cd_case(
     tuner_name: str | None,
     tuner_value: float | None,
     metric: dict[str, Any],
-) -> tuple[int, int, list[str]]:
+) -> CaseCompareResult:
     from open_fdd.rules import RULES_BY_ID  # noqa: PLC0415
 
     rule_id = str(rule.get("rule_id") or "")
@@ -306,7 +333,10 @@ def _execute_cd_case(
         rule, metric, tuner_name=tuner_name, tuner_value=tuner_value
     )
     if not rule.get("pandas_function") and rule_id not in RULES_BY_ID:
-        return 0, 0, [f"{spec.building_id}/{rule_id}: no pandas twin"]
+        return CaseCompareResult(
+            daily=DailyCompareResult(),
+            errors=[f"{spec.building_id}/{rule_id}: no pandas twin"],
+        )
 
     pandas_rows = cfl.run_rule_daily_rows(
         rule,
@@ -332,27 +362,33 @@ def _execute_cd_case(
             conn.rollback()
         except Exception as rollback_exc:
             detail = f"{exc}; rollback failed: {rollback_exc}"
-        return 0, 0, [f"{spec.building_id}/{rule_id}: {detail}"]
+        return CaseCompareResult(
+            daily=DailyCompareResult(),
+            errors=[f"{spec.building_id}/{rule_id}: {detail}"],
+        )
 
     if sql_errs:
         try:
             conn.rollback()
         except Exception as rollback_exc:
-            return 0, 0, [
-                f"{spec.building_id}/{rule_id}: {sql_errs[0]}; rollback failed: {rollback_exc}"
-            ]
-        return 0, 0, [f"{spec.building_id}/{rule_id}: {sql_errs[0]}"]
+            return CaseCompareResult(
+                daily=DailyCompareResult(),
+                errors=[
+                    f"{spec.building_id}/{rule_id}: {sql_errs[0]}; rollback failed: {rollback_exc}"
+                ],
+            )
+        return CaseCompareResult(
+            daily=DailyCompareResult(),
+            errors=[f"{spec.building_id}/{rule_id}: {sql_errs[0]}"],
+        )
 
-    pd_daily = [
-        r for r in pandas_rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
-    ]
-    sql_daily = [
-        r for r in sql_rows if r.get("utc_day") and str(r.get("pair_status") or "") == "computed"
-    ]
-    compared, mismatch = _compare_daily(pandas_rows, sql_rows)
-    if compared == 0 and not pd_daily and not sql_daily:
-        return 0, 0, []
-    return compared, mismatch, []
+    pd_daily = _daily_rows_computed(pandas_rows)
+    sql_daily = _daily_rows_computed(sql_rows)
+    daily = _compare_daily(pandas_rows, sql_rows)
+    both_empty = not pd_daily and not sql_daily
+    if both_empty:
+        return CaseCompareResult(daily=daily, both_empty=True, errors=[])
+    return CaseCompareResult(daily=daily, both_empty=False, errors=[])
 
 
 def build_matrix_rows() -> list[MatrixRow]:
@@ -393,14 +429,57 @@ def build_matrix_rows() -> list[MatrixRow]:
     return rows
 
 
+def _row_terminal_status(row: MatrixRow) -> str:
+    if row.numeric_mismatch or row.shape_mismatch or row.case_failures:
+        return "FAIL"
+    if row.required == 0:
+        return "SKIPPED"
+    if row.cases_compared < row.required:
+        return "INCOMPLETE"
+    if row.case_insufficient:
+        return "INCOMPLETE"
+    if row.cases_compared == row.required and row.required > 0:
+        return "PASS"
+    return "INCOMPLETE"
+
+
+def _aggregate_matrix_status(rows: list[MatrixRow], *, cells_compared: int) -> str:
+    if cells_compared == 0:
+        return "INCOMPLETE"
+    for row in rows:
+        if row.rule_id not in MATRIX_EXEC_RULE_IDS:
+            continue
+        if row.tuner_effect == "unsupported" or row.rule_id == "SV-RATE":
+            continue
+        st = _row_terminal_status(row)
+        if st in ("FAIL", "INCOMPLETE"):
+            return st
+    if any(r.numeric_mismatch or r.shape_mismatch for r in rows):
+        return "FAIL"
+    return "PASS"
+
+
+def _cd_subset_smoke_status(rows: list[MatrixRow], *, cells_compared: int) -> str:
+    """Small cookbook C/D smoke: checker ran real comparisons without false PASS."""
+    if cells_compared <= 0:
+        return "INCOMPLETE"
+    for row in rows:
+        if row.rule_id not in MATRIX_EXEC_RULE_IDS:
+            continue
+        if row.cases_compared > 0 and row.case_failures == 0 and row.shape_mismatch == 0:
+            return "PASS"
+    return "INCOMPLETE"
+
+
 def run_matrix(conn) -> dict[str, Any]:
     """Execute runner C/D comparisons; frozen A/B remain explicitly BLOCKED."""
     from scripts.ci import unit_contract_lib as uc  # noqa: PLC0415
 
     rows = build_matrix_rows()
     errors: list[str] = []
-    compared_total = 0
-    executed_total = 0
+    cells_compared_total = 0
+    cases_compared_total = 0
+    attempted_total = 0
     required_total = 0
     a_status, b_detail = _frozen_ab_blocked()
 
@@ -425,12 +504,15 @@ def run_matrix(conn) -> dict[str, Any]:
             row.detail = b_detail
         return {
             "status": "INCOMPLETE",
-            "compared": 0,
-            "executed": 0,
+            "cd_subset_smoke": "INCOMPLETE",
+            "compared_cells": 0,
+            "cases_compared": 0,
+            "attempted": 0,
             "required": sum(r.required for r in rows),
             "errors": errors,
             "evidence": {
                 "matrix_rows": len(rows),
+                "cd_subset_scope": CD_SUBSET_SCOPE_NOTE,
                 "runner_a_b": a_status,
                 "runner_a_b_prerequisite": b_detail,
                 "per_rule_tuner": [r.to_dict() for r in rows],
@@ -499,9 +581,9 @@ def run_matrix(conn) -> dict[str, Any]:
         for spec in eligible_specs:
             ip_frame, si_frame, equipment_id, poll = _si_context(spec, metric)
             for case_label, case_value in cases:
-                row.executed += 1
-                executed_total += 1
-                compared, mismatch, exec_errors = _execute_cd_case(
+                row.attempted += 1
+                attempted_total += 1
+                case_result = _execute_cd_case(
                     conn,
                     spec,
                     rule,
@@ -512,54 +594,61 @@ def run_matrix(conn) -> dict[str, Any]:
                     tuner_value=case_value,
                     metric=metric,
                 )
-                if exec_errors:
-                    row.skipped += 1
+                prefix = f"{row.rule_id}/{row.tuner}/{case_label}@{spec.building_id}"
+                if case_result.errors:
+                    row.case_failures += 1
+                    errors.extend(f"{prefix}: {e}" for e in case_result.errors)
                     continue
-                row.compared += compared
-                compared_total += compared
-                if mismatch and matrix_cd_mismatch_waiver(row.rule_id, row.tuner, case_label):
-                    row.ledger_waived += mismatch
-                elif mismatch:
-                    row.mismatch += mismatch
+                daily = case_result.daily
+                row.compared_cells += daily.compared_cells
+                cells_compared_total += daily.compared_cells
+                row.numeric_mismatch += daily.numeric_mismatch
+                row.shape_mismatch += daily.shape_mismatch
+                if case_result.both_empty:
+                    row.case_insufficient += 1
+                    errors.append(f"{prefix}: both sides empty — insufficient-data (no silent credit)")
+                    continue
+                if daily.total_mismatch:
                     errors.append(
-                        f"{row.rule_id}/{row.tuner}/{case_label}@{spec.building_id}: "
-                        f"{mismatch} mismatches in {compared} cells"
+                        f"{prefix}: shape={daily.shape_mismatch + daily.duplicate_keys} "
+                        f"numeric={daily.numeric_mismatch} in {daily.compared_cells} cells"
                     )
+                    row.case_failures += 1
+                    continue
+                if case_result.case_pass:
+                    row.cases_compared += 1
+                    cases_compared_total += 1
 
         row.runner_a = a_status
         row.runner_b = a_status
-        if row.mismatch:
-            row.status = "FAIL"
-            row.runner_c = "FAIL"
-            row.runner_d = "FAIL"
-        elif row.compared > 0:
-            row.status = "PASS"
+        row.status = _row_terminal_status(row)
+        if row.status == "PASS":
             row.runner_c = "PASS"
             row.runner_d = "PASS"
-        elif row.executed > 0 and row.compared == 0:
-            row.status = "SKIPPED"
-            row.runner_c = "SKIPPED"
-            row.runner_d = "SKIPPED"
+        elif row.status == "FAIL":
+            row.runner_c = "FAIL"
+            row.runner_d = "FAIL"
+        elif row.status == "INCOMPLETE":
+            row.runner_c = "INCOMPLETE"
+            row.runner_d = "INCOMPLETE"
         else:
-            row.status = "SKIPPED"
-            row.runner_c = "SKIPPED"
-            row.runner_d = "SKIPPED"
+            row.runner_c = row.status
+            row.runner_d = row.status
 
-    mismatch_total = sum(r.mismatch for r in rows)
-    status = "PASS"
-    if compared_total == 0:
-        status = "INCOMPLETE"
-    elif mismatch_total > 0:
-        status = "FAIL"
+    status = _aggregate_matrix_status(rows, cells_compared=cells_compared_total)
+    smoke = _cd_subset_smoke_status(rows, cells_compared=cells_compared_total)
 
     return {
         "status": status,
-        "compared": compared_total,
-        "executed": executed_total,
+        "cd_subset_smoke": smoke,
+        "compared_cells": cells_compared_total,
+        "cases_compared": cases_compared_total,
+        "attempted": attempted_total,
         "required": required_total,
         "errors": errors,
         "evidence": {
             "matrix_rows": len(rows),
+            "cd_subset_scope": CD_SUBSET_SCOPE_NOTE,
             "runner_a_b": a_status,
             "runner_a_b_prerequisite": b_detail,
             "per_rule_tuner_sample": [r.to_dict() for r in rows],
@@ -571,12 +660,15 @@ def run_matrix(conn) -> dict[str, Any]:
 def _totals(rows: list[MatrixRow]) -> dict[str, int]:
     return {
         "required": sum(r.required for r in rows),
-        "executed": sum(r.executed for r in rows),
-        "compared": sum(r.compared for r in rows),
-        "mismatch": sum(r.mismatch for r in rows),
+        "attempted": sum(r.attempted for r in rows),
+        "cases_compared": sum(r.cases_compared for r in rows),
+        "compared_cells": sum(r.compared_cells for r in rows),
+        "numeric_mismatch": sum(r.numeric_mismatch for r in rows),
+        "shape_mismatch": sum(r.shape_mismatch for r in rows),
+        "case_failures": sum(r.case_failures for r in rows),
+        "case_insufficient": sum(r.case_insufficient for r in rows),
         "skipped": sum(r.skipped for r in rows),
         "unsupported": sum(r.unsupported for r in rows),
-        "ledger_waived": sum(r.ledger_waived for r in rows),
     }
 
 
@@ -585,7 +677,7 @@ def mutation_self_credit_guard() -> tuple[int, list[str]]:
     errors: list[str] = []
     offline = run_matrix(None)
     comparisons = 0
-    if offline["compared"] != 0:
+    if offline["compared_cells"] != 0:
         errors.append("offline SQL-QUAL-06 must not self-credit runner C/D comparisons")
     else:
         comparisons += 1

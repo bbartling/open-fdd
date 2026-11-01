@@ -420,36 +420,33 @@ def qual_06_rule_matrix(conn) -> QualCell:
 
     result = rtm.run_matrix(conn)
     cell.evidence.update(result["evidence"])
-    cell.comparisons += int(result["compared"])
-    cell.checks += int(result["required"])
+    cell.evidence["cd_subset_smoke"] = result.get("cd_subset_smoke", "INCOMPLETE")
+    cell.comparisons += int(result.get("compared_cells") or 0)
+    cell.checks += int(result.get("required") or 0)
     cell.errors.extend(result["errors"])
 
-    # Ledger-driven expected change: FC1 mode delay default (#1469).
+    # Ledger-driven expected change: FC1 mode delay default (#1469) — historical A/B vs C/D only.
     rules = {str(r["rule_id"]): r for r in registry}
     fc1_params = cfl.rule_params_from_registry(rules["FC1"])
     if psp.p0_value_mismatch_reason("FC1", fc1_params) != psp.MODE_DELAY_DEFAULT_VS_STARTUP:
         cell.errors.append("FC1 expected-change ledger probe missing mode_delay default reason")
     else:
         cell.comparisons += 1
-    if not rtm.sv_range_scale_nondefault_ledger_waiver("SV-RANGE", "range_scale_temperature", "min"):
-        cell.errors.append("SV-RANGE scale ledger waiver probe missing for non-default min case")
-    else:
-        cell.comparisons += 1
     cell.evidence["expected_change_ledger"] = _load_ledger()
 
     if cell.errors:
         cell.status = "FAIL"
-    elif conn is None or int(result["compared"]) == 0:
+    elif conn is None or int(result.get("compared_cells") or 0) == 0:
         cell.status = "INCOMPLETE"
         cell.evidence["db_matrix"] = (
             "PENDING until disposable Postgres is available"
             if conn is None
-            else "zero runner C/D comparisons"
+            else "zero runner C/D compared cells"
         )
     elif result["status"] == "PASS":
         cell.status = "PASS"
     else:
-        cell.status = "INCOMPLETE"
+        cell.status = result["status"]
     return cell
 
 
