@@ -6,12 +6,22 @@ on:
     paths:
       - "scripts/qualification/c3a/**"
       - "tests/qualification/test_c3a_sql_qual_01_06.py"
+      - "scripts/stress/si_cutover/**"
+      - "sql/fdd/postgres/rules/**"
+      - "sql/fdd/tuning_catalog.json"
+      - "sql/fdd/registry.yaml"
+      - "open_fdd/rules/**"
       - ".github/workflows/sql-qual-c3a.yml"
   pull_request:
     branches: [master, main]
     paths:
       - "scripts/qualification/c3a/**"
       - "tests/qualification/test_c3a_sql_qual_01_06.py"
+      - "scripts/stress/si_cutover/**"
+      - "sql/fdd/postgres/rules/**"
+      - "sql/fdd/tuning_catalog.json"
+      - "sql/fdd/registry.yaml"
+      - "open_fdd/rules/**"
       - ".github/workflows/sql-qual-c3a.yml"
 
 concurrency:

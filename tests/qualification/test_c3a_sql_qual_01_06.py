@@ -97,6 +97,7 @@ class SqlQualC3aHarnessTests(unittest.TestCase):
         issues = {item["issue"] for item in ledger.get("issues") or []}
         self.assertIn(1469, issues)
         self.assertIn(1470, issues)
+        self.assertIn(1477, issues)
         self.assertIn(1408, issues)
         self.assertIn(1284, issues)
         for item in ledger.get("issues") or []:
