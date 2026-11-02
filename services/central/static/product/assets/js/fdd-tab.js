@@ -105,18 +105,23 @@ async function loadPlot() {
     }
     return;
   }
-  const samplingWindow = analyticsWindowFromSampling(mapping?.equipment ?? []);
-  const body = await fetchFddPlotSeries(buildingId, equipId, selectedRuleId, samplingWindow);
-  const roles = body.roles || [];
-  const rows = body.rows || [];
-  const built = fddPlotOption(rows, roles, body.has_confirmed_fault);
-  mountChart($("fddChart"), built.option);
-  plotLineSeries = built.lineSeries;
-  $("plotHint").textContent = `${roles.length} roles · ${rows.length} rows`;
-  renderPreviewTable(
-    $("fddPreviewTable"),
-    recentSeriesPreviewFromLines(plotLineSeries, previewRows),
-  );
+  try {
+    const samplingWindow = analyticsWindowFromSampling(mapping?.equipment ?? []);
+    const body = await fetchFddPlotSeries(buildingId, equipId, selectedRuleId, samplingWindow);
+    const roles = body.roles || [];
+    const rows = body.rows || [];
+    const built = fddPlotOption(rows, roles, body.has_confirmed_fault);
+    mountChart($("fddChart"), built.option);
+    plotLineSeries = built.lineSeries;
+    $("plotHint").textContent = `${roles.length} roles · ${rows.length} rows`;
+    renderPreviewTable(
+      $("fddPreviewTable"),
+      recentSeriesPreviewFromLines(plotLineSeries, previewRows),
+    );
+  } catch (err) {
+    $("plotHint").textContent = err.message || "FDD plot failed.";
+    throw err;
+  }
 }
 
 async function loadInspect() {

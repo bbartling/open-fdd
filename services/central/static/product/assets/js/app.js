@@ -94,9 +94,6 @@ function renderTab(name) {
     resizeRcxCharts();
   }
   if (name === "fdd") {
-    if (ctx) {
-      onFddSiteChange(scope.site, ctx).catch((err) => showErr(err.message));
-    }
     resizeFddCharts();
   }
   if (name === "points" && selectedPointId) {
