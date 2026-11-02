@@ -279,6 +279,24 @@ run_playwright() {
   if [[ "$status" -ne 0 || "$report_status" -ne 0 ]]; then
     return 1
   fi
+  local static_report
+  static_report="$(mktemp)"
+  set +e
+  (
+    cd archive/product-ui/react-spa-v4
+    PLAYWRIGHT_JSON_OUTPUT_FILE="$static_report" \
+      OPENFDD_PLAYWRIGHT_BASE_URL="http://127.0.0.1:8080" \
+      npx playwright test e2e/static-product-csp.spec.ts \
+        --retries=0 \
+        --reporter=json
+  )
+  status=$?
+  set -e
+  echo "static product CSP playwright exit ${status}"
+  rm -f "$static_report"
+  if [[ "$status" -ne 0 ]]; then
+    return 1
+  fi
 }
 
 cleanup_disposable() {

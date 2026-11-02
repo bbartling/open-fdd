@@ -87,11 +87,13 @@ export function inspectChartOption(equipmentId, rows, roles, unitSystem = "metri
 }
 
 /** FDD rule chart: roles on y, confirmed_fault on secondary axis. */
+const FAULT_ROLE_KEYS = new Set(["confirmed_fault", "fault"]);
+
 export function fddPlotOption(rows, roles, hasConfirmedFault) {
-  const timestamps = rows.map((r) => r.timestamp_utc || r.ts).filter(Boolean);
   const series = [];
   const lineSeries = [];
-  for (const role of roles) {
+  const plotRoles = (roles || []).filter((r) => !FAULT_ROLE_KEYS.has(r));
+  for (const role of plotRoles) {
     const data = rows
       .map((r) => {
         const t = r.timestamp_utc || r.ts;

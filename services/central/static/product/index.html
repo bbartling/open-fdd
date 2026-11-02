@@ -36,11 +36,9 @@
   <button type="button" data-tab="overview" class="on">Overview</button>
   <button type="button" data-tab="charts">Charts</button>
   <button type="button" data-tab="points">Points <span class="count" id="nPoints">0</span></button>
+  <button type="button" data-tab="rcx">RCx</button>
+  <button type="button" data-tab="fdd">FDD</button>
   <button type="button" data-tab="model">Model</button>
-</nav>
-<nav class="tabs subnav">
-  <a class="tab-link" href="/app/rcx.html">RCx plots</a>
-  <a class="tab-link" href="/app/fdd.html">FDD plots</a>
 </nav>
 
 <main>
@@ -97,6 +95,56 @@
     <section class="panel">
       <h2>History <span class="hint" id="histHint">select a point</span></h2>
       <div class="chart short" id="histChart"></div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-rcx">
+    <section class="panel">
+      <h2>RCx preset
+        <select id="presetPick" aria-label="RCx preset"></select>
+        <button type="button" class="btn" id="refreshRcxBtn">Refresh analytics</button>
+        <span class="hint" id="rcxLoadMsg"></span>
+      </h2>
+      <div class="chart tall" id="mainChart"></div>
+    </section>
+    <section class="panel" id="companionPanel" hidden>
+      <h2>Companion</h2>
+      <div class="chart" id="companionChart"></div>
+    </section>
+    <section class="panel">
+      <h2>Series preview
+        <select id="rcxPreviewPick" aria-label="Preview rows"></select>
+      </h2>
+      <div id="rcxPreviewTable"></div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-fdd">
+    <section class="grid2">
+      <div class="panel">
+        <h2>Rules
+          <select id="statusFilter" aria-label="Status filter"></select>
+          <label class="scope">equip <select id="fddEquipPick"></select></label>
+          <button type="button" class="btn primary" id="runBtn">Run selected</button>
+          <button type="button" class="btn" id="rerunRuleBtn">Re-run after rule update</button>
+          <span class="hint" id="runMsg"></span>
+        </h2>
+        <div id="ruleList" class="rule-list"></div>
+      </div>
+      <div class="panel">
+        <h2>FDD chart <span class="hint" id="plotHint"></span></h2>
+        <div class="chart tall" id="fddChart"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Inspect overlay</h2>
+      <div id="inspectHost"><div class="chart" id="inspectChart"></div></div>
+    </section>
+    <section class="panel">
+      <h2>Series preview
+        <select id="fddPreviewPick" aria-label="Preview rows"></select>
+      </h2>
+      <div id="fddPreviewTable"></div>
     </section>
   </section>
 

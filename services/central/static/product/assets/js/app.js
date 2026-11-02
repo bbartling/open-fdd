@@ -24,6 +24,8 @@ import {
 } from "./charts.js";
 import { renderModelChecks, renderModelTree, resizeTree } from "./tree-view.js";
 import { fetchInspectSeries } from "./analytics.js";
+import { bindRcxTab, onRcxSiteChange, refreshRcxTab, resizeRcxCharts } from "./rcx-tab.js";
+import { bindFddTab, onFddSiteChange, resizeFddCharts } from "./fdd-tab.js";
 
 const $ = (id) => document.getElementById(id);
 let activeTab = "overview";
@@ -86,6 +88,13 @@ function renderTab(name) {
     renderModelTree(modelTree, scope.site, scope.equip || "", $("detail"), $("tree"));
     renderModelChecks(modelTree, scope.site, $("checks"));
     resizeTree();
+  }
+  if (name === "rcx") {
+    refreshRcxTab().catch((err) => showErr(err.message));
+    resizeRcxCharts();
+  }
+  if (name === "fdd") {
+    resizeFddCharts();
   }
   if (name === "points" && selectedPointId) {
     renderPointHistory(
@@ -312,6 +321,9 @@ async function applySite() {
     renderPointsTable();
     renderModelTree(modelTree, scope.site, scope.equip, $("detail"), $("tree"));
     renderModelChecks(modelTree, scope.site, $("checks"));
+    onRcxSiteChange(scope.site, ctx.mapping);
+    await onFddSiteChange(scope.site, ctx);
+    await refreshRcxTab().catch(() => {});
     setLive(true, `live · ${new Date().toLocaleTimeString()}`);
     if (activeTab === "charts") {
       await refreshChartsTab({
@@ -458,6 +470,8 @@ function bindTabs() {
   window.addEventListener("resize", () => {
     resizeCharts();
     resizeTree();
+    resizeRcxCharts();
+    resizeFddCharts();
   });
 }
 
@@ -493,6 +507,12 @@ async function bootApp() {
   setInterval(tickClock, 30_000);
   bindTabs();
   bindSparql();
+  bindRcxTab();
+  bindFddTab();
+  const tabFromQuery = new URLSearchParams(location.search).get("tab");
+  if (tabFromQuery) {
+    renderTab(tabFromQuery);
+  }
   await loadSites();
 }
 

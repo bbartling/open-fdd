@@ -1,8 +1,14 @@
 import { postAnalytics } from "./analytics.js";
 import { analyticsWindowFromSampling } from "./window-policy.js";
-import { displayTempC, tempAxisLabel } from "./role-units.js";
+import { displayTempC, displayDeltaC, tempAxisLabel } from "./role-units.js";
+import {
+  ECONOMIZER_DT_MIN_C,
+  normalizeTipOverviewEnvelope,
+  isIdentifiablePoint,
+  tipOatBinLo,
+} from "./tip-analytics-normalize.js";
 
-export const ECONOMIZER_DT_MIN_C = 50 / 9;
+export { ECONOMIZER_DT_MIN_C };
 
 export const OVERVIEW_RCX_PRESET_IDS = [
   "ahu_motor_weekly",
@@ -21,11 +27,7 @@ const PLANT_FOR = {
   chiller_motor_weekly: "chiller",
 };
 
-function econEmptyMessage() {
-  return `No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ ${ECONOMIZER_DT_MIN_C.toFixed(1)} °C, and a measured MAT are required.`;
-}
-
-function analyticsBody(buildingId, window, refresh) {
+function analyticsPostBody(buildingId, window, refresh) {
   return {
     building_id: buildingId,
     max_points: 4000,
@@ -35,30 +37,41 @@ function analyticsBody(buildingId, window, refresh) {
   };
 }
 
+function econEmptyMessage() {
+  return `No qualified economizer samples. Fan-on proof, |OAT−RAT| ≥ ${ECONOMIZER_DT_MIN_C.toFixed(1)} °C, and a measured MAT are required.`;
+}
+
 export async function loadOverviewRcxPreset(buildingId, presetId, mapping, refresh) {
   const window = analyticsWindowFromSampling(mapping?.equipment ?? []);
-  const body = analyticsBody(buildingId, window, refresh);
+  const body = analyticsPostBody(buildingId, window, refresh);
   const unitSystem = "metric";
 
   if (presetId in PLANT_FOR) {
-    const env = await postAnalytics("/api/analytics/runtime", body);
-    const chart = weeklyMotorChart(env?.rows ?? [], PLANT_FOR[presetId]);
+    const env = normalizeTipOverviewEnvelope(
+      "runtime",
+      await postAnalytics("/api/analytics/runtime", body),
+    );
+    const chart = weeklyMotorChart(env.rows ?? [], PLANT_FOR[presetId]);
     return {
       chart,
       lineSeries: chart?.lineSeries ?? [],
-      error: chart ? undefined : env?.warnings?.[0] ?? "No motor weekly series for this plant.",
+      error: chart ? undefined : env.warnings?.[0] ?? "No motor weekly series for this plant.",
       env,
     };
   }
   if (presetId === "mech_cooling_oat_bins") {
-    const env = await postAnalytics("/api/analytics/mechanical-cooling", body);
-    const chart = mechCoolingChart(env?.rows ?? []);
+    const env = normalizeTipOverviewEnvelope(
+      "mechanical-cooling",
+      await postAnalytics("/api/analytics/mechanical-cooling", body),
+    );
+    const chart = mechCoolingChart(env.rows ?? []);
     return {
       chart,
-      lineSeries: chart?.lineSeries ?? [],
+      lineSeries: [],
       error: chart
         ? undefined
-        : env?.warnings?.[0] ?? "No mechanical-cooling outdoor-air bins.",
+        : env.warnings?.[0] ??
+          "No mechanical-cooling outdoor-air bins. Compressor or chiller status with outdoor air is required.",
       env,
     };
   }
@@ -67,14 +80,18 @@ export async function loadOverviewRcxPreset(buildingId, presetId, mapping, refre
     presetId === "economizer_mat_resid" ||
     presetId === "economizer_temps_overlay"
   ) {
-    const env = await postAnalytics("/api/analytics/economizer", body);
-    const points = env?.points ?? env?.rows ?? [];
+    const env = normalizeTipOverviewEnvelope(
+      "economizer",
+      await postAnalytics("/api/analytics/economizer", body),
+      { dtMinC: body.dt_min_c },
+    );
+    const points = env.points ?? [];
     if (presetId === "economizer_delta") {
       const chart = economizerDeltaChart(points, unitSystem);
       return {
         chart,
         lineSeries: [],
-        error: chart ? undefined : env?.warnings?.[0] ?? econEmptyMessage(),
+        error: chart ? undefined : env.warnings?.[0] ?? econEmptyMessage(),
         env,
       };
     }
@@ -83,7 +100,7 @@ export async function loadOverviewRcxPreset(buildingId, presetId, mapping, refre
       return {
         chart,
         lineSeries: chart?.lineSeries ?? [],
-        error: chart ? undefined : env?.warnings?.[0] ?? econEmptyMessage(),
+        error: chart ? undefined : env.warnings?.[0] ?? econEmptyMessage(),
         env,
       };
     }
@@ -91,45 +108,38 @@ export async function loadOverviewRcxPreset(buildingId, presetId, mapping, refre
     return {
       chart,
       lineSeries: chart?.lineSeries ?? [],
-      error: chart ? undefined : env?.warnings?.[0] ?? econEmptyMessage(),
+      error: chart ? undefined : env.warnings?.[0] ?? econEmptyMessage(),
       env,
     };
   }
   if (presetId === "bas_vs_web_oat") {
-    const env = await postAnalytics("/api/analytics/bas-vs-web-oat", body);
-    const chart = basVsWebChart(env?.rows ?? [], unitSystem);
-    const companion = basVsWebHistChart(env?.rows ?? [], unitSystem);
+    const raw = await postAnalytics("/api/analytics/bas-vs-web-oat", body);
+    const env = normalizeTipOverviewEnvelope("bas-vs-web-oat", raw);
+    const chart = basVsWebChart(env.points ?? [], unitSystem);
+    const companion = basVsWebHistChart(raw.rows ?? [], unitSystem);
     return {
       chart,
       companion,
       lineSeries: chart?.lineSeries ?? [],
-      error: chart ? undefined : env?.warnings?.[0] ?? "No BAS vs web OAT overlay.",
+      error: chart ? undefined : env.warnings?.[0] ?? "No coincident BAS and web outdoor-air samples for this site and window.",
       env,
     };
   }
   return { chart: null, lineSeries: [], error: "Unknown preset.", env: null };
 }
 
-function num(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function ts(row) {
-  return row.timestamp_utc || row.ts || row.time;
-}
-
 function weeklyMotorChart(rows, plantGroup) {
-  const filtered = rows.filter((r) => {
-    const pg = String(r.plant_group || r.kind || "").toLowerCase();
-    return pg === plantGroup || pg === "ahu" && plantGroup === "air";
-  });
+  const filtered = rows.filter(
+    (r) =>
+      String(r.kind) === "weekly_equipment" &&
+      String(r.plant_group || "").toLowerCase() === plantGroup,
+  );
   const byEquip = new Map();
   for (const r of filtered) {
     const id = r.equipment_id || r.label;
     const week = r.week_label || r.week;
-    const hours = num(r.run_hours ?? r.runtime_hours);
-    if (!id || !week || hours == null) continue;
+    const hours = Number(r.run_hours ?? r.runtime_hours);
+    if (!id || !week || !Number.isFinite(hours)) continue;
     if (!byEquip.has(id)) byEquip.set(id, []);
     byEquip.get(id).push([week, hours]);
   }
@@ -154,12 +164,14 @@ function weeklyMotorChart(rows, plantGroup) {
 
 function mechCoolingChart(rows) {
   const bins = rows
+    .filter((r) => String(r.kind) === "oat_bin")
     .map((r) => ({
       label: r.oat_bin || r.bin_label,
-      hours: num(r.run_hours ?? r.hours),
+      hours: Number(r.run_hours ?? r.hours),
+      sort: tipOatBinLo(String(r.oat_bin || r.bin_label || "")),
     }))
-    .filter((b) => b.label && b.hours != null)
-    .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+    .filter((b) => b.label && Number.isFinite(b.hours))
+    .sort((a, b) => a.sort - b.sort);
   if (!bins.length) return null;
   return {
     option: {
@@ -173,25 +185,18 @@ function mechCoolingChart(rows) {
   };
 }
 
-function pickPoint(row, ...keys) {
-  for (const k of keys) {
-    const v = num(row[k]);
-    if (v != null) return v;
-  }
-  return null;
-}
-
 function economizerDeltaChart(points, unitSystem) {
-  const data = [];
-  for (const p of points) {
-    const oat = pickPoint(p, "oa_t", "oat", "bas_oat_c");
-    const rat = pickPoint(p, "rat", "return_air_t");
-    const mat = pickPoint(p, "mat", "mixed_air_t");
-    if (oat == null || rat == null || mat == null) continue;
-    if (Math.abs(oat - rat) < ECONOMIZER_DT_MIN_C) continue;
-    data.push([displayTempC(oat - rat, unitSystem), displayTempC(mat - rat, unitSystem)]);
-  }
-  if (!data.length) return null;
+  const usable = points.filter(
+    (p) =>
+      isIdentifiablePoint(p) &&
+      p.delta_or_c != null &&
+      p.delta_mr_c != null,
+  );
+  if (usable.length < 5) return null;
+  const data = usable.map((p) => [
+    displayDeltaC(p.delta_or_c, unitSystem),
+    displayDeltaC(p.delta_mr_c, unitSystem),
+  ]);
   return {
     option: {
       backgroundColor: "transparent",
@@ -205,48 +210,54 @@ function economizerDeltaChart(points, unitSystem) {
 }
 
 function economizerMatResidChart(points, unitSystem) {
+  const usable = points.filter((p) => isIdentifiablePoint(p) && p.mat_resid_c != null);
+  if (usable.length < 5) return null;
   const lineSeries = [];
-  const xs = [];
-  const ys = [];
-  for (const p of points) {
-    const t = ts(p);
-    const mat = pickPoint(p, "mat", "mixed_air_t");
-    const resid = pickPoint(p, "mat_residual", "mat_resid");
-    if (!t || resid == null) continue;
-    xs.push(t);
-    ys.push(displayTempC(resid, unitSystem));
+  const byEq = new Map();
+  for (const p of usable) {
+    const eq = p.equipment_id || "AHU";
+    if (!byEq.has(eq)) byEq.set(eq, []);
+    byEq.get(eq).push(p);
   }
-  if (!xs.length) return null;
-  lineSeries.push({ name: "MAT residual", data: xs.map((x, i) => [x, ys[i]]) });
+  const series = [];
+  for (const [eq, rows] of byEq) {
+    const data = rows
+      .map((r) => [r.timestamp_utc, displayDeltaC(r.mat_resid_c, unitSystem)])
+      .filter((d) => d[0]);
+    lineSeries.push({ name: eq, data });
+    series.push({ name: eq, type: "line", showSymbol: false, data });
+  }
   return {
     option: {
       backgroundColor: "transparent",
       tooltip: { trigger: "axis" },
       xAxis: { type: "time", axisLabel: { color: "#8899bb" } },
       yAxis: { name: tempAxisLabel(unitSystem), axisLabel: { color: "#8899bb" } },
-      series: [{ name: "MAT residual", type: "line", showSymbol: false, data: lineSeries[0].data }],
+      legend: { textStyle: { color: "#c9d2e8" } },
+      series,
     },
     lineSeries,
   };
 }
 
 function economizerTempsOverlayChart(points, unitSystem) {
+  const usable = points.filter((p) => isIdentifiablePoint(p));
   const roles = [
     ["OAT", "oa_t"],
     ["RAT", "rat"],
     ["MAT", "mat"],
     ["SAT", "sat"],
-    ["OA damper %", "oa_damper_pct"],
+    ["OA damper %", "damper_fb_pct"],
   ];
   const lineSeries = [];
   const series = [];
   for (const [label, key] of roles) {
     const data = [];
-    for (const p of points) {
-      const t = ts(p);
-      let v = pickPoint(p, key);
-      if (v == null) continue;
-      if (key !== "oa_damper_pct") v = displayTempC(v, unitSystem);
+    for (const p of usable) {
+      const t = p.timestamp_utc;
+      let v = p[key];
+      if (t == null || v == null) continue;
+      if (key !== "damper_fb_pct") v = displayTempC(v, unitSystem);
       data.push([t, v]);
     }
     if (!data.length) continue;
@@ -267,18 +278,14 @@ function economizerTempsOverlayChart(points, unitSystem) {
   };
 }
 
-function basVsWebChart(rows, unitSystem) {
+function basVsWebChart(points, unitSystem) {
   const lineSeries = [];
-  const bas = [];
-  const web = [];
-  for (const r of rows) {
-    const t = ts(r);
-    const b = pickPoint(r, "bas_oat_c", "bas_oa_t", "oa_t");
-    const w = pickPoint(r, "web_oat_c", "web_oa_t", "web-outside-air-temp");
-    if (!t) continue;
-    if (b != null) bas.push([t, displayTempC(b, unitSystem)]);
-    if (w != null) web.push([t, displayTempC(w, unitSystem)]);
-  }
+  const bas = points
+    .filter((p) => p.bas_oat_c != null)
+    .map((p) => [p.timestamp_utc, displayTempC(p.bas_oat_c, unitSystem)]);
+  const web = points
+    .filter((p) => p.web_oat_c != null)
+    .map((p) => [p.timestamp_utc, displayTempC(p.web_oat_c, unitSystem)]);
   if (!bas.length && !web.length) return null;
   const series = [];
   if (bas.length) {
@@ -303,31 +310,30 @@ function basVsWebChart(rows, unitSystem) {
 }
 
 function basVsWebHistChart(rows, unitSystem) {
-  const deltas = [];
-  for (const r of rows) {
-    const b = pickPoint(r, "bas_oat_c", "bas_oa_t", "oa_t");
-    const w = pickPoint(r, "web_oat_c", "web_oa_t");
-    if (b == null || w == null) continue;
-    deltas.push(displayTempC(b - w, unitSystem));
-  }
-  if (!deltas.length) return null;
-  const buckets = new Map();
-  const step = unitSystem === "imperial" ? 2 : 1;
-  for (const d of deltas) {
-    const k = Math.round(d / step) * step;
-    buckets.set(k, (buckets.get(k) || 0) + 1);
-  }
-  const keys = [...buckets.keys()].sort((a, b) => a - b);
+  const histRows = rows.filter(
+    (r) => String(r.kind) === "delta_hist" || r.count != null,
+  );
+  if (!histRows.length) return null;
+  const sorted = [...histRows].sort(
+    (a, b) => (Number(a.bin_lo_f) || 0) - (Number(b.bin_lo_f) || 0),
+  );
+  const labels = sorted.map((r) => {
+    const lo = Number(r.bin_lo_f);
+    return Number.isFinite(lo) ? String(displayDeltaC(lo, unitSystem)) : String(r.bin_label || "");
+  });
+  const counts = sorted.map((r) => Number(r.count)).filter(Number.isFinite);
+  if (!counts.length) return null;
   return {
     option: {
       backgroundColor: "transparent",
-      title: { text: "BAS − web deviation", textStyle: { color: "#c9d2e8", fontSize: 12 } },
-      xAxis: { type: "category", data: keys.map(String), axisLabel: { color: "#8899bb" } },
+      title: {
+        text: "BAS vs web outdoor-air temperature deviation",
+        textStyle: { color: "#c9d2e8", fontSize: 12 },
+      },
+      xAxis: { type: "category", data: labels, axisLabel: { color: "#8899bb" } },
       yAxis: { type: "value", name: "count", axisLabel: { color: "#8899bb" } },
-      series: [{ type: "bar", data: keys.map((k) => buckets.get(k)), itemStyle: { color: "#f8961e" } }],
+      series: [{ type: "bar", data: counts, itemStyle: { color: "#f8961e" } }],
     },
     lineSeries: [],
   };
 }
-
-export { basVsWebHistChart };

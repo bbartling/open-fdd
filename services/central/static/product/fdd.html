@@ -2,62 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="0;url=/app/?tab=fdd">
 <title>Open-FDD · FDD</title>
 <link rel="stylesheet" href="/app/assets/css/bench.css">
 </head>
-<body>
-<div id="loginGate">
-  <section class="panel">
-    <h1 class="login-title">Sign in</h1>
-    <form id="loginForm">
-      <label>Username<input name="username" autocomplete="username" required></label>
-      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
-      <button type="submit" class="btn primary">Continue</button>
-      <p class="login-err" id="loginErr" hidden></p>
-    </form>
-  </section>
-</div>
-<header>
-  <div><h1>⚡ FDD plots</h1><div class="sub">Rule series · confirm_min from session</div></div>
-  <div class="spacer"></div>
-  <label class="scope">site <select id="sitePick"></select></label>
-  <label class="scope">equip <select id="equipPick"></select></label>
-  <button type="button" class="btn" id="logoutBtn" hidden>Sign out</button>
-</header>
-<nav class="tabs">
-  <a class="tab-link" href="/app/">Overview</a>
-  <a class="tab-link" href="/app/rcx.html">RCx</a>
-  <a class="tab-link on" href="/app/fdd.html">FDD</a>
-  <a class="tab-link" href="/app/tree.html">Model tree</a>
-</nav>
-<main>
-  <div id="err"></div>
-  <section class="grid2">
-    <div class="panel">
-      <h2>Rules
-        <select id="statusFilter" aria-label="Status filter"></select>
-        <button type="button" class="btn primary" id="runBtn">Run selected</button>
-        <span class="hint" id="runMsg"></span>
-      </h2>
-      <div id="ruleList" class="rule-list"></div>
-    </div>
-    <div class="panel">
-      <h2>FDD chart <span class="hint" id="plotHint"></span></h2>
-      <div class="chart tall" id="fddChart"></div>
-    </div>
-  </section>
-  <section class="panel">
-    <h2>Inspect overlay</h2>
-    <div id="inspectHost"><div class="chart" id="inspectChart"></div></div>
-  </section>
-  <section class="panel">
-    <h2>Series preview
-      <select id="previewPick" aria-label="Preview rows"></select>
-    </h2>
-    <div id="previewTable"></div>
-  </section>
-</main>
-<script type="module" src="/app/assets/js/fdd-page.js"></script>
+<body class="tree-page">
+<p class="hint"><a href="/app/?tab=fdd">Open FDD tab</a></p>
 </body>
 </html>

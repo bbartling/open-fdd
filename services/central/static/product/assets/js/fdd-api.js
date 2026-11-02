@@ -1,5 +1,5 @@
 import { apiFetch } from "./api.js";
-import { confirmMinForRule } from "./site-data.js";
+import { effectiveRunParams, confirmMinForRule } from "./rule-params.js";
 
 export async function getFddRules() {
   const body = await apiFetch("/api/fdd/rules");
@@ -14,23 +14,42 @@ export async function getFddResults(buildingId) {
   return body.results ?? [];
 }
 
+export async function fetchSessionConfig(buildingId) {
+  return apiFetch(`/api/fdd/session-config?building_id=${encodeURIComponent(buildingId)}`).catch(
+    () => null,
+  );
+}
+
 export async function runFdd(buildingId, equipmentId, ruleIds, sessionConfig, rulesMeta) {
+  const sessionParams = effectiveRunParams(sessionConfig);
   const params = {};
   for (const ruleId of ruleIds) {
     const meta = rulesMeta.find((r) => r.rule_id === ruleId);
-    const confirmMin = confirmMinForRule(sessionConfig, ruleId, meta);
+    const fromBag = sessionParams[ruleId]?.confirm_min;
+    const confirmMin =
+      fromBag != null && Number.isFinite(fromBag)
+        ? fromBag
+        : confirmMinForRule(sessionConfig, ruleId, meta);
     if (confirmMin != null) {
-      params[ruleId] = { confirm_min: confirmMin };
+      params[ruleId] = { ...sessionParams[ruleId], confirm_min: confirmMin };
+    } else if (sessionParams[ruleId]) {
+      params[ruleId] = { ...sessionParams[ruleId] };
     }
   }
   const body = {
     building_id: buildingId,
     equipment_id: equipmentId,
     rule_ids: ruleIds,
-    mode: "interactive",
+    mode: "registry",
     params,
   };
   return apiFetch("/api/fdd/run", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** After Lab rule update: refetch session_config and re-run with confirm_min. */
+export async function rerunFddAfterRuleUpdate(buildingId, equipmentId, ruleId, rulesMeta) {
+  const sessionConfig = await fetchSessionConfig(buildingId);
+  return runFdd(buildingId, equipmentId, [ruleId], sessionConfig, rulesMeta);
 }
 
 export async function fetchFddPlotSeries(buildingId, equipmentId, ruleId, window) {

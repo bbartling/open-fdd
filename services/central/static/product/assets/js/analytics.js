@@ -18,22 +18,36 @@ export function isoRange(hoursBack) {
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
-export function analyticsBody(buildingId, equipmentIds, hoursBack, maxPoints = 2500) {
-  const { start, end } = isoRange(hoursBack);
-  return {
-    query: {
-      building_id: buildingId,
-      equipment_ids: equipmentIds,
-      start,
-      end,
-      max_points: maxPoints,
-    },
+/**
+ * Central AnalyticsRequest uses #[serde(flatten)] on query — fields must be top-level.
+ * @param {string} buildingId
+ * @param {string[]} equipmentIds
+ * @param {number|{start?:string,end?:string}} windowOrHours
+ */
+export function analyticsBody(buildingId, equipmentIds, windowOrHours, maxPoints = 2500) {
+  let start;
+  let end;
+  if (typeof windowOrHours === "object" && windowOrHours) {
+    start = windowOrHours.start;
+    end = windowOrHours.end;
+  } else {
+    const range = isoRange(Number(windowOrHours) || 24);
+    start = range.start;
+    end = range.end;
+  }
+  const body = {
+    building_id: buildingId,
+    equipment_ids: equipmentIds,
+    max_points: maxPoints,
   };
+  if (start) body.start = start;
+  if (end) body.end = end;
+  return body;
 }
 
 /** Wide inspect time series for one equipment (`analytics.points` rows). */
-export async function fetchInspectSeries(buildingId, equipmentId, hoursBack, columns) {
-  const body = analyticsBody(buildingId, [equipmentId], hoursBack);
+export async function fetchInspectSeries(buildingId, equipmentId, windowOrHours, columns) {
+  const body = analyticsBody(buildingId, [equipmentId], windowOrHours);
   if (columns?.length) {
     body.series = { columns };
   }
@@ -41,8 +55,8 @@ export async function fetchInspectSeries(buildingId, equipmentId, hoursBack, col
   return env?.points || [];
 }
 
-export async function fetchBasVsWeb(buildingId, equipmentIds, hoursBack) {
-  const body = analyticsBody(buildingId, equipmentIds, hoursBack, 1500);
+export async function fetchBasVsWeb(buildingId, equipmentIds, windowOrHours) {
+  const body = analyticsBody(buildingId, equipmentIds, windowOrHours, 1500);
   const env = await postAnalytics("/api/analytics/bas-vs-web-oat", body);
   return env?.rows || [];
 }

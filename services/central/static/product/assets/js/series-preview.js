@@ -16,6 +16,19 @@ function timestampMillis(raw) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+function uniqueColumnName(base, used) {
+  const trimmed = (base || "series").trim() || "series";
+  if (!used.has(trimmed)) {
+    used.add(trimmed);
+    return trimmed;
+  }
+  let i = 2;
+  while (used.has(`${trimmed} (${i})`)) i += 1;
+  const name = `${trimmed} (${i})`;
+  used.add(name);
+  return name;
+}
+
 /**
  * @param {{ name: string, data: Array<[string, number|null]> }[]} lineSeries
  */
@@ -36,9 +49,7 @@ export function recentSeriesPreviewFromLines(lineSeries, limit) {
   const columns = ["timestamp"];
   const maps = [];
   for (const s of lineSeries) {
-    let name = (s.name || "series").trim() || "series";
-    while (used.has(name)) name = `${name} (2)`;
-    used.add(name);
+    const name = uniqueColumnName(s.name, used);
     columns.push(name);
     const m = new Map();
     for (const [x, y] of s.data || []) {
@@ -60,13 +71,38 @@ export function recentSeriesPreviewFromLines(lineSeries, limit) {
 
 export function renderPreviewTable(container, table) {
   if (!container) return;
+  container.replaceChildren();
   if (!table?.rows?.length) {
-    container.innerHTML = `<p class="hint">No time-series preview for this chart.</p>`;
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "No time-series preview for this chart.";
+    container.appendChild(p);
     return;
   }
-  const head = table.columns.map((c) => `<th>${c}</th>`).join("");
-  const body = table.rows
-    .map((r) => `<tr>${table.columns.map((c) => `<td>${r[c] ?? ""}</td>`).join("")}</tr>`)
-    .join("");
-  container.innerHTML = `<div class="tablewrap"><table class="bac"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const wrap = document.createElement("div");
+  wrap.className = "tablewrap";
+  const el = document.createElement("table");
+  el.className = "bac";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const c of table.columns) {
+    const th = document.createElement("th");
+    th.textContent = c;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  el.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const r of table.rows) {
+    const tr = document.createElement("tr");
+    for (const c of table.columns) {
+      const td = document.createElement("td");
+      td.textContent = r[c] ?? "";
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  el.appendChild(tbody);
+  wrap.appendChild(el);
+  container.appendChild(wrap);
 }

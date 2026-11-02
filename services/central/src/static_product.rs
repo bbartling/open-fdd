@@ -179,19 +179,23 @@ mod tests {
     fn vendored_echarts_assets_present() {
         let vendor = static_root().join("assets/vendor");
         assert!(
-            vendor.join("echarts.min.js").is_file(),
-            "echarts.min.js must be vendored under static product assets"
+            vendor.join("echarts.esm.min.js").is_file(),
+            "echarts.esm.min.js must be vendored under static product assets"
         );
         assert!(
             vendor.join("LICENSE.echarts.txt").is_file(),
             "ECharts LICENSE must ship beside vendor JS"
         );
-        for sidecar in ["echarts.min.js.version", "echarts.esm.min.js.version"] {
+        for sidecar in ["echarts.esm.min.js.version"] {
             assert!(
                 vendor.join(sidecar).is_file(),
                 "{sidecar} must record vendored ECharts version"
             );
         }
+        assert!(
+            !vendor.join("echarts.min.js").exists(),
+            "unused UMD echarts.min.js must not ship; import echarts.esm.min.js only"
+        );
     }
 
     #[test]
@@ -254,12 +258,13 @@ mod tests {
 
     #[tokio::test]
     async fn serves_vendored_echarts_with_csp() {
+        let _lock = crate::test_env_lock::lock_env();
         let _guard = EnvGuard::set(ENV_ENABLE, "1");
         let app = router();
         let response = app
             .oneshot(
                 Request::builder()
-                    .uri("/app/assets/vendor/echarts.min.js")
+                    .uri("/app/assets/vendor/echarts.esm.min.js")
                     .body(Body::empty())
                     .expect("request"),
             )
@@ -276,6 +281,7 @@ mod tests {
 
     #[tokio::test]
     async fn index_html_served_with_csp() {
+        let _lock = crate::test_env_lock::lock_env();
         let _guard = EnvGuard::set(ENV_ENABLE, "1");
         let app = router();
         let response = app

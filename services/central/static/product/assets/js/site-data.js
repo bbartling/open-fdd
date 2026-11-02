@@ -1,5 +1,6 @@
 import { apiFetch } from "./api.js";
 import { isBoolRole, normalizeTags, roleOf } from "./tags.js";
+import { confirmMinForRule as confirmMinForRuleImpl } from "./rule-params.js";
 
 /** Historian + package mapping for Charts / Points / FDD / RCx (not Model tab). */
 
@@ -86,11 +87,7 @@ function buildOperationalModel(buildingId, mapping, historian) {
 }
 
 export function confirmMinForRule(sessionConfig, ruleId, ruleMeta) {
-  const params = sessionConfig?.config?.params?.[ruleId];
-  if (params && typeof params.confirm_min === "number") return params.confirm_min;
-  if (ruleMeta?.confirm_min != null) return ruleMeta.confirm_min;
-  if (ruleMeta?.confirm_seconds != null) return ruleMeta.confirm_seconds / 60;
-  return undefined;
+  return confirmMinForRuleImpl(sessionConfig, ruleId, ruleMeta);
 }
 
 export { roleOf };

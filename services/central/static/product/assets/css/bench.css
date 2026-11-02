@@ -251,8 +251,47 @@ main {
 table.bac tr.pick {
   cursor: pointer;
 }
+table.bac tr.pick:hover td {
+  background: #16203b;
+}
 table.bac tr.pick.sel {
   background: #1a2848;
+}
+.card.flash {
+  animation: flash 0.9s ease-out;
+}
+@keyframes flash {
+  from {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  to {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.chip .state {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.chip.on .state {
+  color: var(--good);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: -1px;
 }
 .checklist {
   margin: 0;
