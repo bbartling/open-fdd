@@ -46,7 +46,7 @@ pub fn router() -> Router {
     Router::new()
         .route("/app", get(|| async { Redirect::temporary("/app/") }))
         .nest_service(
-            "/app",
+            "/app/",
             ServeDir::new(root).append_index_html_on_directories(true),
         )
         .layer(middleware::from_fn(apply_static_product_headers))
