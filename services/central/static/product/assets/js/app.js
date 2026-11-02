@@ -509,10 +509,6 @@ async function bootApp() {
   bindSparql();
   bindRcxTab();
   bindFddTab();
-  const tabFromQuery = new URLSearchParams(location.search).get("tab");
-  if (tabFromQuery) {
-    renderTab(tabFromQuery);
-  }
   await loadSites();
 }
 
@@ -525,6 +521,10 @@ async function boot() {
   }
   $("loginGate").hidden = true;
   $("logoutBtn").hidden = false;
+  const tabFromQuery = new URLSearchParams(location.search).get("tab");
+  if (tabFromQuery) {
+    renderTab(tabFromQuery);
+  }
   await bootApp();
 }
 

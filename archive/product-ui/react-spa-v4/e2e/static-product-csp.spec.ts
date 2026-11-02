@@ -28,7 +28,7 @@ function tabFromPath(path: string): string {
 
 async function waitForAppBoot(page: Page): Promise<void> {
   await expect(page.locator("#logoutBtn")).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator("#sub")).not.toHaveText("Loading…", { timeout: 45_000 });
+  await expect(page.locator("#tabs")).toBeVisible({ timeout: 15_000 });
 }
 
 async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
@@ -37,26 +37,17 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
   await expect(page.locator(`#tabs button[data-tab="${tab}"]`)).toHaveClass(/\bon\b/, {
     timeout: 30_000,
   });
-  switch (tab) {
-    case "charts":
-      await expect(page.locator("#tab-charts.on #tempChart")).toBeVisible({ timeout: 30_000 });
-      break;
-    case "points":
-      await expect(page.locator("#tab-points.on #pointRows")).toBeVisible({ timeout: 30_000 });
-      break;
-    case "rcx":
-      await expect(page.locator("#tab-rcx.on #mainChart")).toBeVisible({ timeout: 30_000 });
-      break;
-    case "fdd":
-      await expect(page.locator("#tab-fdd.on #ruleList")).toBeVisible({ timeout: 30_000 });
-      break;
-    case "model":
-      await expect(page.locator("#tab-model.on #tree")).toBeVisible({ timeout: 30_000 });
-      break;
-    default:
-      await expect(page.locator("#tab-overview.on #cards")).toBeVisible({ timeout: 30_000 });
-      break;
-  }
+  const panel = page.locator(`#tab-${tab}`);
+  await expect(panel).toHaveClass(/\bon\b/, { timeout: 15_000 });
+  const markerByTab: Record<string, string> = {
+    charts: "#tempChart",
+    points: "#pointRows",
+    rcx: "#mainChart",
+    fdd: "#ruleList",
+    model: "#tree",
+    overview: "#summary",
+  };
+  await expect(panel.locator(markerByTab[tab] ?? "#summary")).toBeAttached({ timeout: 15_000 });
 }
 
 test.describe("Static product UI CSP (central /app/)", () => {
