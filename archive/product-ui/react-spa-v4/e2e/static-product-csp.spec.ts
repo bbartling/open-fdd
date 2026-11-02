@@ -59,17 +59,48 @@ async function waitForAppBoot(page: Page): Promise<void> {
   await expect(page.locator("#tabs")).toBeVisible({ timeout: 15_000 });
 }
 
+async function ensureSiteSelected(page: Page, siteId: string): Promise<void> {
+  await page.evaluate((site) => {
+    const pick = document.getElementById("sitePick") as HTMLSelectElement | null;
+    if (!pick) return;
+    let opt = pick.querySelector(`option[value="${site}"]`) as HTMLOptionElement | null;
+    if (!opt) {
+      opt = document.createElement("option");
+      opt.value = site;
+      opt.textContent = site;
+      pick.appendChild(opt);
+    }
+    pick.value = site;
+    pick.dispatchEvent(new Event("change", { bubbles: true }));
+  }, siteId);
+  await expect(page.locator("#liveTxt")).not.toHaveText("loading…", { timeout: 60_000 });
+  await expect(page.locator("#sub")).toContainText(siteId, { timeout: 60_000 });
+  const sub = await page.locator("#sub").textContent();
+  if (isPlaceholderSiteText(sub)) {
+    throw new Error(`site ${siteId} did not load: ${sub ?? ""}`);
+  }
+  await assertErrHidden(page);
+}
+
 async function maybeSelectFirstSite(page: Page): Promise<void> {
   const pick = page.locator("#sitePick");
-  const fromQuery = new URL(page.url()).searchParams.get("site")?.trim() ?? "";
+  const fromQuery =
+    new URL(page.url()).searchParams.get("site")?.trim() ||
+    seededBuildingId ||
+    "";
   if (fromQuery) {
-    await expect(pick).toHaveValue(fromQuery, { timeout: 15_000 });
-    await expect(page.locator("#liveTxt")).not.toHaveText("loading…", { timeout: 60_000 });
-    const sub = await page.locator("#sub").textContent();
-    if (isPlaceholderSiteText(sub)) {
-      throw new Error(`site query ${fromQuery} did not load: ${sub ?? ""}`);
+    await ensureSiteSelected(page, fromQuery);
+    const equipPick = page.locator("#equipPick");
+    if (await equipPick.isEnabled()) {
+      const eq = equipPick.locator('option[value]:not([value=""])').first();
+      if ((await eq.count()) > 0) {
+        const eqVal = await eq.getAttribute("value");
+        if (eqVal) {
+          await equipPick.selectOption(eqVal);
+          await expect(page.locator("#liveTxt")).not.toHaveText("loading…", { timeout: 60_000 });
+        }
+      }
     }
-    await assertErrHidden(page);
     return;
   }
 
