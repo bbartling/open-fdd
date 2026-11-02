@@ -52,7 +52,7 @@ services:
   web:
     image: ${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:nightly}
     build:
-      context: ../frontend/web
+      context: ../archive/product-ui/react-spa-v4
       dockerfile: Dockerfile
       args:
         OPENFDD_GIT_SHA: ${OPENFDD_GIT_SHA:-unknown}

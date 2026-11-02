@@ -44,14 +44,14 @@ jobs:
           test -f docker/compose.csv.yml
           test -f docker/compose.react.yml
           test -f services/central/Dockerfile
-          test -f frontend/web/package.json
-          test -f frontend/web/Dockerfile
+          test -f archive/product-ui/react-spa-v4/package.json
+          test -f archive/product-ui/react-spa-v4/Dockerfile
           ! test -d services/ui
           test -f Dockerfile.mcp
           test -f .env.example
           test -d edge
           test -d services/central
-          test -d frontend/web
+          test -d archive/product-ui/react-spa-v4
           test -d workspace
           test ! -f Dockerfile
           test ! -f docker/compose.edge.rust.yml

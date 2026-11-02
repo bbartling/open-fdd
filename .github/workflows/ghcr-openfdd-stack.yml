@@ -74,9 +74,9 @@ jobs:
 
       - name: React sole product UI
         run: |
-          test -f frontend/web/package.json
-          test -f frontend/web/package-lock.json
-          test -f frontend/web/Dockerfile
+          test -f archive/product-ui/react-spa-v4/package.json
+          test -f archive/product-ui/react-spa-v4/package-lock.json
+          test -f archive/product-ui/react-spa-v4/Dockerfile
           test -f docker/compose.react.yml
           grep -q '3000:8080' docker/compose.react.yml
           ! test -d services/ui
@@ -88,8 +88,8 @@ jobs:
             --build-arg OPENFDD_GIT_SHA=ci-test \
             --build-arg OPENFDD_WEB_VERSION=0.0.0-ci \
             -t openfdd-web:ci \
-            -f frontend/web/Dockerfile \
-            frontend/web
+            -f archive/product-ui/react-spa-v4/Dockerfile \
+            archive/product-ui/react-spa-v4
           docker run --rm --entrypoint cat openfdd-web:ci /usr/share/nginx/html/version.json | grep openfdd-web
           docker run --rm --entrypoint sh openfdd-web:ci -c 'test -f /usr/share/nginx/html/index.html'
           ! docker run --rm --entrypoint sh openfdd-web:ci -c 'command -v python3 || command -v python' 2>/dev/null
@@ -222,8 +222,8 @@ jobs:
         uses: docker/build-push-action@v6
         timeout-minutes: 30
         with:
-          context: frontend/web
-          file: frontend/web/Dockerfile
+          context: archive/product-ui/react-spa-v4
+          file: archive/product-ui/react-spa-v4/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.vars.outputs.web_tags }}

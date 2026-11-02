@@ -53,8 +53,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Guard product UI path
         run: |
-          test -f frontend/web/package.json
-          test -f frontend/web/Dockerfile
+          test -f archive/product-ui/react-spa-v4/package.json
+          test -f archive/product-ui/react-spa-v4/Dockerfile
           test -f docker/compose.react.yml
           ! test -d services/ui
           ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
@@ -74,7 +74,7 @@ jobs:
       - name: Hadolint web (React)
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: frontend/web/Dockerfile
+          dockerfile: archive/product-ui/react-spa-v4/Dockerfile
           failure-threshold: error
           ignore: DL3008
       - name: Hadolint MCP

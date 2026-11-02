@@ -239,7 +239,9 @@ def check_pa_per_in_wc_product_sites() -> None:
     if "const PA_PER_IN_WC: f64 = 248.84" not in sweep_text:
         fail("sensor_sweep.rs must define PA_PER_IN_WC = 248.84")
 
-    ts_path = ROOT / "frontend" / "web" / "src" / "api" / "roleUnits.ts"
+    ts_path = (
+        ROOT / "archive" / "product-ui" / "react-spa-v4" / "src" / "api" / "roleUnits.ts"
+    )
     text = ts_path.read_text(encoding="utf-8")
     match = re.search(r"export const INWC_TO_PA = ([0-9.]+);", text)
     if not match:

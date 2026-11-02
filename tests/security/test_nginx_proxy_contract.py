@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts/qualification"))
 
 from cache_retention_preview_health import check_nginx  # noqa: E402
 
-NGINX = ROOT / "frontend" / "web" / "nginx.conf"
+NGINX = ROOT / "archive" / "product-ui" / "react-spa-v4" / "nginx.conf"
 
 
 class NginxProxyContractTest(unittest.TestCase):

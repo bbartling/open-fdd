@@ -84,7 +84,7 @@ Never delete one cookbook because the other engine “won.”
 | Kind | Owner |
 | --- | --- |
 | Portable report builders / schemas | `open_fdd.reporting` (PyPI) |
-| Product download UX | React SPA (`frontend/web`) |
+| Product download UX | Static UI on central `/app/`; React SPA archived at `archive/product-ui/react-spa-v4` |
 
 ---
 

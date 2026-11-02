@@ -23,7 +23,7 @@ PRODUCT_ROOTS = (
     "services/central/src",
     "edge/src",
     "crates",
-    "frontend/web/src",
+    "archive/product-ui/react-spa-v4/src",
     "sql_rules",
     "open_fdd",
     "tools/wattlab_export",
