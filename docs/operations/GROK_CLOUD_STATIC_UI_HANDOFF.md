@@ -19,7 +19,7 @@ Paste this file into a Cursor cloud agent. You are the implementing agent. Do no
 
 - [x] **Wave A.** Cold `fdd_run` schema, publisher order guard, PR 1486, publisher run 41342471455, web image `sha-0dfa112`. Do not retag `698ea2d`. Do not re-pin the live stack.
 - [x] **Wave B.** ADR-013 and the `/app/` Bench Viz shell (`services/central/static/product/`, `OPENFDD_STATIC_PRODUCT_UI=1`). Charts and the model tree stay placeholders until Wave C.
-- [ ] **Frontend source.** PR 1487 moves `frontend/web` to `archive/product-ui/react-spa-v4` (not under `archive/ot-edge/`). Tests that still open `frontend/web` must follow that path. Keep building `openfdd-web` from the archived Dockerfile until Wave F.
+- [x] **Frontend source.** PR 1487 moves `frontend/web` to `archive/product-ui/react-spa-v4` (not under `archive/ot-edge/`). Tests that still open `frontend/web` must follow that path. Keep building `openfdd-web` from the archived Dockerfile until Wave F. Merged as 06cb796c (PR 1487).
 - [ ] **Wave C.** Model tree and SPARQL (`GET /api/model/ttl`, `POST /api/model/sparql`). Vendor ECharts under `services/central/static/product/assets/vendor/` (no jsDelivr). Charts, points, and history from Timescale. Do not change SQL equations. Draft PR 1488 is only the SPARQL box.
 - [ ] **Wave D.** Three schedule cards (model sync, history, AFDD) on existing durable jobs. An earlier unknown chunk holds the cycle checkpoint even when a later chunk is exact.
 - [ ] **Wave E.** CSV, admin, synthetic demo, static real-stack smoke. Replace React-only guards with static-asset, role, and no-Node-on-central checks. ZAP and the old-frontend soak stay DEFERRED, not passed.
