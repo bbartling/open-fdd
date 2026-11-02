@@ -61,6 +61,16 @@ function renderRuleList() {
   const host = $("ruleList");
   if (!host) return;
   host.replaceChildren();
+  if (!buildingId) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = "Pick a site to load FDD rules.";
+    host.appendChild(p);
+    if ($("plotHint")) {
+      $("plotHint").textContent = "Pick a site for FDD plots.";
+    }
+    return;
+  }
   const list = filteredRules();
   const byStatus = statusMap();
   if (!selectedRuleId || !list.some((r) => r.rule_id === selectedRuleId)) {
@@ -210,6 +220,7 @@ export function bindFddTab() {
     await rerunFddAfterRuleUpdate(buildingId, equipId, selectedRuleId, rules);
     await refreshFddData();
   });
+  renderRuleList();
 }
 
 export async function onFddSiteChange(site, ctx) {
