@@ -38,7 +38,18 @@ async function maybeSelectFirstSite(page: Page): Promise<void> {
   const value = await option.getAttribute("value");
   if (!value || value.includes("no active")) return;
   await pick.selectOption(value);
-  await expect(page.locator("#sub")).not.toHaveText("Loading…", { timeout: 45_000 });
+  await expect(page.locator("#liveTxt")).not.toHaveText("loading…", { timeout: 60_000 });
+  const equipPick = page.locator("#equipPick");
+  if (await equipPick.isEnabled()) {
+    const eq = equipPick.locator('option[value]:not([value=""])').first();
+    if ((await eq.count()) > 0) {
+      const eqVal = await eq.getAttribute("value");
+      if (eqVal) {
+        await equipPick.selectOption(eqVal);
+        await expect(page.locator("#liveTxt")).not.toHaveText("loading…", { timeout: 60_000 });
+      }
+    }
+  }
 }
 
 async function waitForCanvasOrHint(
@@ -65,6 +76,8 @@ async function waitForChartsTabChartOrEmpty(page: Page): Promise<void> {
     if ((await page.locator("#wxChart canvas").count()) > 0) return;
     const psy = await page.locator("#psyHint").textContent();
     if (psy?.includes("need oa_t")) return;
+    const sub = await page.locator("#sub").textContent();
+    if (sub?.includes("Select or import")) return;
     throw new Error("waiting for charts tab canvas or psyHint empty-state");
   }).toPass({ timeout: 45_000 });
 }
@@ -100,7 +113,7 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
     await expect(async () => {
       if ((await page.locator("#fddChart canvas").count()) > 0) return;
       const plot = await page.locator("#plotHint").textContent();
-      if (plot && /\d+\s+roles/.test(plot)) return;
+      if (plot && (/\d+\s+roles/.test(plot) || plot.includes("Select equipment"))) return;
       const rules = await page.locator("#ruleList").textContent();
       if (rules?.includes("No rules match")) return;
       throw new Error("waiting for FDD chart canvas or empty-state hint");

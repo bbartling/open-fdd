@@ -76,7 +76,7 @@ function renderTab(name) {
   if (name === "charts") {
     refreshChartsTab({
       buildingId: scope.site,
-      equipId: scope.equip,
+      equipId: scope.equip || ctx?.model?.equips[0]?.id,
       cardPoints: chartState.cardPoints,
       history: chartState.history,
       rangeHours: chartState.rangeHours,
@@ -328,7 +328,7 @@ async function applySite() {
     if (activeTab === "charts") {
       await refreshChartsTab({
         buildingId: scope.site,
-        equipId: scope.equip,
+        equipId: scope.equip || ctx.model.equips[0]?.id,
         cardPoints: chartState.cardPoints,
         history: chartState.history,
         rangeHours: chartState.rangeHours,

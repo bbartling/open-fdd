@@ -53,7 +53,11 @@ export function onRcxSiteChange(site, siteMapping) {
 }
 
 export async function refreshRcxTab(refresh = false) {
-  if (!buildingId || !$("mainChart")) return;
+  if (!$("mainChart")) return;
+  if (!buildingId) {
+    $("rcxLoadMsg").textContent = "Pick a site to load RCx presets.";
+    return;
+  }
   disposeChart($("mainChart"));
   disposeChart($("companionChart"));
   $("companionPanel").hidden = true;

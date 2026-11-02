@@ -95,7 +95,16 @@ function renderRuleList() {
 }
 
 async function loadPlot() {
-  if (!buildingId || !equipId || !selectedRuleId) return;
+  if (!buildingId || !equipId || !selectedRuleId) {
+    if ($("plotHint")) {
+      $("plotHint").textContent = !equipId
+        ? "Select equipment for FDD plot."
+        : !selectedRuleId
+          ? "Select a rule to plot."
+          : "";
+    }
+    return;
+  }
   const samplingWindow = analyticsWindowFromSampling(mapping?.equipment ?? []);
   const body = await fetchFddPlotSeries(buildingId, equipId, selectedRuleId, samplingWindow);
   const roles = body.roles || [];
