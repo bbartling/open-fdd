@@ -8,7 +8,7 @@ CENTRAL="${OPENFDD_STATIC_UI_CENTRAL_BASE:-http://127.0.0.1:8080}"
 ADMIN_USER="${OPENFDD_ADMIN_USER:-admin}"
 ADMIN_PASS="${OPENFDD_ADMIN_PASSWORD:?OPENFDD_ADMIN_PASSWORD required}"
 
-ZIP="$(mktemp)"
+ZIP="$(mktemp --suffix=.zip)"
 trap 'rm -f "$ZIP"' EXIT
 
 BUILDING_ID="$(
@@ -29,7 +29,7 @@ fi
 IMPORT_JSON="$(
   curl -fsS -X POST "$CENTRAL/api/csv/import/package" \
     -H "Authorization: Bearer $TOKEN" \
-    -F "file=@${ZIP};type=application/zip"
+    -F "file=@${ZIP};filename=openfdd_package.zip;type=application/zip"
 )"
 if ! python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("ok") else 1)' <<<"$IMPORT_JSON"; then
   echo "FAIL: package import for static UI browser seed" >&2
