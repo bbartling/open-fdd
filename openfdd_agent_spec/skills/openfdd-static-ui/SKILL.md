@@ -27,11 +27,11 @@ description: >-
 
 ## RCx preset IDs
 
-`ahu_motor_weekly`, `boiler_motor_weekly`, `chiller_motor_weekly`, `economizer_delta`, `economizer_mat_resid`, `economizer_temps_overlay`, `mech_cooling_oat_bins`, `bas_vs_web_oat` — loaders in `assets/js/rcx-presets.js`, page `rcx.html` + `rcx-page.js`.
+`ahu_motor_weekly`, `boiler_motor_weekly`, `chiller_motor_weekly`, `economizer_delta`, `economizer_mat_resid`, `economizer_temps_overlay`, `mech_cooling_oat_bins`, `bas_vs_web_oat` — loaders in `assets/js/rcx-presets.js`, **`index.html?tab=rcx`** + **`rcx-tab.js`**.
 
 ## FDD plots
 
-`fdd.html` + `fdd-page.js` — rules list, status filter, `/api/fdd/run` with session `confirm_min`, `/api/fdd/plot` + inspect overlay via `chart-kit.js` / `fdd-api.js`.
+**`index.html?tab=fdd`** + **`fdd-tab.js`** — rules list, status filter, `/api/fdd/run` with session `confirm_min`, `/api/fdd/plot` + inspect overlay via `chart-kit.js` / `fdd-api.js`.
 
 ## Related
 

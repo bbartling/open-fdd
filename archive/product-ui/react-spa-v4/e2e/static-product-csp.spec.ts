@@ -31,9 +31,48 @@ async function waitForAppBoot(page: Page): Promise<void> {
   await expect(page.locator("#tabs")).toBeVisible({ timeout: 15_000 });
 }
 
+async function maybeSelectFirstSite(page: Page): Promise<void> {
+  const pick = page.locator("#sitePick");
+  const option = pick.locator('option[value]:not([value=""])').first();
+  if ((await option.count()) === 0) return;
+  const value = await option.getAttribute("value");
+  if (!value || value.includes("no active")) return;
+  await pick.selectOption(value);
+  await expect(page.locator("#sub")).not.toHaveText("Loading…", { timeout: 45_000 });
+}
+
+async function waitForCanvasOrHint(
+  page: Page,
+  hostSelector: string,
+  hintSelector: string,
+  hintReady: (text: string | null) => boolean,
+): Promise<void> {
+  await expect(async () => {
+    if ((await page.locator(`${hostSelector} canvas`).count()) > 0) {
+      return;
+    }
+    const text = await page.locator(hintSelector).textContent();
+    if (hintReady(text)) {
+      return;
+    }
+    throw new Error(`waiting for chart canvas or hint (${hostSelector}, ${hintSelector})`);
+  }).toPass({ timeout: 45_000 });
+}
+
+async function waitForChartsTabChartOrEmpty(page: Page): Promise<void> {
+  await expect(async () => {
+    if ((await page.locator("#tempChart canvas").count()) > 0) return;
+    if ((await page.locator("#wxChart canvas").count()) > 0) return;
+    const psy = await page.locator("#psyHint").textContent();
+    if (psy?.includes("need oa_t")) return;
+    throw new Error("waiting for charts tab canvas or psyHint empty-state");
+  }).toPass({ timeout: 45_000 });
+}
+
 async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
   const tab = tabFromPath(path);
   await waitForAppBoot(page);
+  await maybeSelectFirstSite(page);
   await expect(page.locator(`#tabs button[data-tab="${tab}"]`)).toHaveClass(/\bon\b/, {
     timeout: 30_000,
   });
@@ -48,6 +87,25 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
     overview: "#summary",
   };
   await expect(panel.locator(markerByTab[tab] ?? "#summary")).toBeAttached({ timeout: 15_000 });
+
+  if (tab === "charts") {
+    await waitForChartsTabChartOrEmpty(page);
+  }
+  if (tab === "rcx") {
+    await waitForCanvasOrHint(page, "#mainChart", "#rcxLoadMsg", (text) =>
+      Boolean(text && text !== "Loading…"),
+    );
+  }
+  if (tab === "fdd") {
+    await expect(async () => {
+      if ((await page.locator("#fddChart canvas").count()) > 0) return;
+      const plot = await page.locator("#plotHint").textContent();
+      if (plot && /\d+\s+roles/.test(plot)) return;
+      const rules = await page.locator("#ruleList").textContent();
+      if (rules?.includes("No rules match")) return;
+      throw new Error("waiting for FDD chart canvas or empty-state hint");
+    }).toPass({ timeout: 45_000 });
+  }
 }
 
 test.describe("Static product UI CSP (central /app/)", () => {
