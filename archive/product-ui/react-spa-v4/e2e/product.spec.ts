@@ -31,12 +31,19 @@ async function openOverviewDevMetrics(page: import("@playwright/test").Page) {
   if (await metrics.isVisible().catch(() => false)) {
     return;
   }
-  const expander = page.getByTestId("overview-dev-metrics");
-  await expect(expander).toBeVisible({ timeout: 20_000 });
-  const btn = expander.getByRole("button");
-  await btn.scrollIntoViewIfNeeded();
-  await btn.click({ timeout: 20_000 });
-  await expect(metrics).toBeVisible({ timeout: 20_000 });
+  await expect(async () => {
+    if (await metrics.isVisible().catch(() => false)) {
+      return;
+    }
+    const expander = page.getByTestId("overview-dev-metrics");
+    if (!(await expander.isVisible().catch(() => false))) {
+      throw new Error("overview-dev-metrics expander not visible");
+    }
+    await expander.getByRole("button").click({ timeout: 5_000 });
+    if (!(await metrics.isVisible().catch(() => false))) {
+      throw new Error("overview-react-ui still hidden after expand");
+    }
+  }).toPass({ timeout: 30_000 });
 }
 
 test.describe("react product workflows (real stack)", () => {
