@@ -110,6 +110,12 @@
       </div>
     </section>
     <section class="panel">
+      <h2>SPARQL <span class="hint">POST /api/model/sparql · read-only SELECT/ASK</span></h2>
+      <textarea id="sparqlQuery" rows="4" style="width:100%;background:#0a0f1e;color:#e6ebf5;border:1px solid var(--line);border-radius:8px;font:12px ui-monospace,Consolas,monospace">SELECT * WHERE { ?s ?p ?o } LIMIT 20</textarea>
+      <p><button type="button" class="btn" id="sparqlRun">Run</button></p>
+      <pre class="ttl" id="sparqlOut">Sign in and pick a site.</pre>
+    </section>
+    <section class="panel">
       <h2>RDF (Turtle) <span class="hint">GET /api/model/ttl</span></h2>
       <pre class="ttl" id="ttl"># Load site to fetch TTL…</pre>
     </section>

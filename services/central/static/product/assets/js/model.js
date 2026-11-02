@@ -19,6 +19,13 @@ export async function loadBuildingContext(buildingId) {
   };
 }
 
+export async function runSparql(buildingId, query) {
+  return apiFetch("/api/model/sparql", {
+    method: "POST",
+    body: JSON.stringify({ building_id: buildingId, query }),
+  });
+}
+
 export function esc(text) {
   return String(text ?? "")
     .replace(/&/g, "&amp;")

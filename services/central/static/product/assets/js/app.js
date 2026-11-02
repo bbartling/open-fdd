@@ -1,6 +1,6 @@
 import { clearSession, readToken, writeToken } from "./session.js";
 import { apiFetch, login } from "./api.js";
-import { esc, loadBuildingContext } from "./model.js";
+import { esc, loadBuildingContext, runSparql } from "./model.js";
 
 const $ = (id) => document.getElementById(id);
 let activeTab = "overview";
@@ -117,6 +117,27 @@ async function loadSites() {
   }
 }
 
+function bindSparql() {
+  const btn = $("sparqlRun");
+  if (!btn) {
+    return;
+  }
+  btn.addEventListener("click", async () => {
+    const out = $("sparqlOut");
+    if (!scope.site) {
+      out.textContent = "Pick a site first.";
+      return;
+    }
+    out.textContent = "Running…";
+    try {
+      const result = await runSparql(scope.site, $("sparqlQuery").value);
+      out.textContent = JSON.stringify(result, null, 2);
+    } catch (err) {
+      out.textContent = err.message || String(err);
+    }
+  });
+}
+
 function bindTabs() {
   $("tabs").addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-tab]");
@@ -166,6 +187,7 @@ async function bootApp() {
   tickClock();
   setInterval(tickClock, 30_000);
   bindTabs();
+  bindSparql();
   await loadSites();
 }
 
