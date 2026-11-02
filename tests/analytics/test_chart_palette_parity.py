@@ -14,8 +14,9 @@ import pandas as pd
 from open_fdd.analytics.charts import RAINBOW_PALETTE, equipment_inspection_chart
 
 ROOT = Path(__file__).resolve().parents[2]
-REACT_THEME = ROOT / "frontend" / "web" / "src" / "api" / "plotlyTheme.ts"
-CONTRACT = ROOT / "frontend" / "web" / "src" / "api" / "charts.contract.json"
+_SPA = ROOT / "archive" / "product-ui" / "react-spa-v4" / "src" / "api"
+REACT_THEME = _SPA / "plotlyTheme.ts"
+CONTRACT = _SPA / "charts.contract.json"
 
 
 def _react_rainbow_palette() -> list[str]:
