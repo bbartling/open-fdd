@@ -123,7 +123,7 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
       const plot = (await page.locator("#plotHint").textContent())?.trim() ?? "";
       if (plot.length > 0) return;
       const rules = await page.locator("#ruleList").textContent();
-      if (rules?.includes("No rules match")) return;
+      if (rules?.includes("No rules match") || rules?.includes("Pick a site")) return;
       const err = (await page.locator("#err.show").textContent())?.trim() ?? "";
       if (err.length > 0) return;
       throw new Error("waiting for FDD chart canvas or empty-state hint");
