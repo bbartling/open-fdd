@@ -362,11 +362,13 @@ pub async fn inspect_equipment(
     let limit = max_points.clamp(50, 8000) as i64;
     let bound = binding_keys(&tsdb, building_id, eq).await?;
     let ambiguous = ambiguous_bindings(&bound);
-    let unique: Vec<String> = selected
+    let mut unique: Vec<String> = selected
         .iter()
         .filter(|role| bound.get(*role).is_some_and(|keys| keys.len() == 1))
         .cloned()
         .collect();
+    unique.sort();
+    unique.dedup();
     // One key per role. A second key stays out of the pivot instead of being maxed.
     let mut max_cols = String::new();
     for role in &unique {
