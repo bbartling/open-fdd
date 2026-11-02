@@ -279,6 +279,12 @@ run_playwright() {
   if [[ "$status" -ne 0 || "$report_status" -ne 0 ]]; then
     return 1
   fi
+  OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="$(
+    OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
+      bash "$ROOT/scripts/ci/seed_static_ui_browser_site.sh"
+  )"
+  export OPENFDD_STATIC_UI_BROWSER_BUILDING_ID
+  echo "OPENFDD_STATIC_UI_BROWSER_BUILDING_ID=$OPENFDD_STATIC_UI_BROWSER_BUILDING_ID"
   local static_report
   static_report="$(mktemp)"
   set +e
@@ -372,14 +378,6 @@ run_stack() {
   docker image inspect "localhost/openfdd-ci-browser-web:${PROJECT}" >/dev/null
   compose up -d --pull never --no-build --wait --wait-timeout 300
   wait_healthy
-
-  # Starter seed is off in CI; seed one generic CSV site before static /app/ CSP tests.
-  OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="$(
-    OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
-      bash "$ROOT/scripts/ci/seed_static_ui_browser_site.sh"
-  )"
-  export OPENFDD_STATIC_UI_BROWSER_BUILDING_ID
-  echo "OPENFDD_STATIC_UI_BROWSER_BUILDING_ID=$OPENFDD_STATIC_UI_BROWSER_BUILDING_ID"
 
   local report
   report="$(mktemp)"
