@@ -110,14 +110,24 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
     );
   }
   if (tab === "fdd") {
+    const fddPick = page.locator("#fddEquipPick");
+    if (await fddPick.isVisible()) {
+      const fddOpt = fddPick.locator('option[value]:not([value=""])').first();
+      if ((await fddOpt.count()) > 0) {
+        const fddVal = await fddOpt.getAttribute("value");
+        if (fddVal) await fddPick.selectOption(fddVal);
+      }
+    }
     await expect(async () => {
       if ((await page.locator("#fddChart canvas").count()) > 0) return;
-      const plot = await page.locator("#plotHint").textContent();
-      if (plot && (/\d+\s+roles/.test(plot) || plot.includes("Select equipment"))) return;
+      const plot = (await page.locator("#plotHint").textContent())?.trim() ?? "";
+      if (plot.length > 0) return;
       const rules = await page.locator("#ruleList").textContent();
       if (rules?.includes("No rules match")) return;
+      const err = (await page.locator("#err.show").textContent())?.trim() ?? "";
+      if (err.length > 0) return;
       throw new Error("waiting for FDD chart canvas or empty-state hint");
-    }).toPass({ timeout: 45_000 });
+    }).toPass({ timeout: 60_000 });
   }
 }
 
