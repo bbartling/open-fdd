@@ -26,31 +26,35 @@ function tabFromPath(path: string): string {
   return url.searchParams.get("tab") || "overview";
 }
 
+async function waitForAppBoot(page: Page): Promise<void> {
+  await expect(page.locator("#logoutBtn")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("#sub")).not.toHaveText("Loading…", { timeout: 45_000 });
+}
+
 async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
   const tab = tabFromPath(path);
+  await waitForAppBoot(page);
+  await expect(page.locator(`#tabs button[data-tab="${tab}"]`)).toHaveClass(/\bon\b/, {
+    timeout: 30_000,
+  });
   switch (tab) {
     case "charts":
-      await expect(page.locator("#tab-charts.on")).toBeVisible({ timeout: 30_000 });
-      await page.locator("#tempChart canvas").waitFor({ state: "attached", timeout: 45_000 });
+      await expect(page.locator("#tab-charts.on #tempChart")).toBeVisible({ timeout: 30_000 });
       break;
     case "points":
-      await expect(page.locator("#tab-points.on")).toBeVisible({ timeout: 30_000 });
-      await expect(page.locator("#pointRows")).toBeVisible({ timeout: 30_000 });
+      await expect(page.locator("#tab-points.on #pointRows")).toBeVisible({ timeout: 30_000 });
       break;
     case "rcx":
-      await expect(page.locator("#tab-rcx.on")).toBeVisible({ timeout: 30_000 });
-      await page.locator("#mainChart canvas").waitFor({ state: "attached", timeout: 45_000 });
+      await expect(page.locator("#tab-rcx.on #mainChart")).toBeVisible({ timeout: 30_000 });
       break;
     case "fdd":
-      await expect(page.locator("#tab-fdd.on")).toBeVisible({ timeout: 30_000 });
-      await expect(page.locator("#ruleList")).toBeVisible({ timeout: 30_000 });
+      await expect(page.locator("#tab-fdd.on #ruleList")).toBeVisible({ timeout: 30_000 });
       break;
     case "model":
-      await expect(page.locator("#tab-model.on")).toBeVisible({ timeout: 30_000 });
-      await expect(page.locator("#tree")).toBeVisible({ timeout: 30_000 });
+      await expect(page.locator("#tab-model.on #tree")).toBeVisible({ timeout: 30_000 });
       break;
     default:
-      await expect(page.locator("#summary .stat").first()).toBeVisible({ timeout: 45_000 });
+      await expect(page.locator("#tab-overview.on #cards")).toBeVisible({ timeout: 30_000 });
       break;
   }
 }
