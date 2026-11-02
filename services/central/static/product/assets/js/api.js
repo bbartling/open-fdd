@@ -1,4 +1,12 @@
-import { readToken } from "./session.js";
+import { clearSession, readToken } from "./session.js";
+
+function showLoginGateAfterUnauthorized() {
+  clearSession();
+  const gate = document.getElementById("loginGate");
+  if (gate) gate.hidden = false;
+  const logout = document.getElementById("logoutBtn");
+  if (logout) logout.hidden = true;
+}
 
 export async function apiFetch(path, init = {}) {
   const headers = new Headers(init.headers || {});
@@ -14,6 +22,9 @@ export async function apiFetch(path, init = {}) {
   const isJson = contentType.includes("application/json");
   const payload = isJson ? await response.json().catch(() => null) : await response.text();
   if (!response.ok) {
+    if (response.status === 401 && readToken()) {
+      showLoginGateAfterUnauthorized();
+    }
     const message =
       (payload && typeof payload === "object" && (payload.error || payload.message)) ||
       response.statusText;

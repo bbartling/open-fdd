@@ -96,8 +96,8 @@ function renderRuleList() {
 
 async function loadPlot() {
   if (!buildingId || !equipId || !selectedRuleId) return;
-  const window = analyticsWindowFromSampling(mapping?.equipment ?? []);
-  const body = await fetchFddPlotSeries(buildingId, equipId, selectedRuleId, window);
+  const samplingWindow = analyticsWindowFromSampling(mapping?.equipment ?? []);
+  const body = await fetchFddPlotSeries(buildingId, equipId, selectedRuleId, samplingWindow);
   const roles = body.roles || [];
   const rows = body.rows || [];
   const built = fddPlotOption(rows, roles, body.has_confirmed_fault);
@@ -118,8 +118,8 @@ async function loadInspect() {
   const roles = [...required, ...optional.filter(Boolean)].filter(
     (r) => r !== "confirmed_fault" && r !== "fault",
   );
-  const window = analyticsWindowFromSampling(mapping?.equipment ?? []);
-  const rows = await fetchInspectSeries(buildingId, equipId, window, roles);
+  const samplingWindow = analyticsWindowFromSampling(mapping?.equipment ?? []);
+  const rows = await fetchInspectSeries(buildingId, equipId, samplingWindow, roles);
   const built = inspectChartOption(equipId, rows, roles);
   $("inspectHost").style.height = `${built.heightPx}px`;
   mountChart($("inspectChart"), built.option);
@@ -184,7 +184,10 @@ export function bindFddTab() {
       await refreshFddData();
       $("runMsg").textContent = "session applied";
     } catch (err) {
-      $("runMsg").textContent = "failed";
+      const msg = err.message || String(err);
+      $("runMsg").textContent = msg;
+      $("err").textContent = msg;
+      $("err").classList.add("show");
     }
   });
   window.addEventListener(RULES_UPDATED, async () => {
@@ -216,9 +219,17 @@ export async function onFddSiteChange(site, ctx) {
     });
   }
   if (pick) {
-    pick.innerHTML =
-      `<option value="">— select —</option>` +
-      equips.map((e) => `<option value="${e.id}">${e.name || e.id}</option>`).join("");
+    pick.replaceChildren();
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "— select —";
+    pick.appendChild(blank);
+    for (const e of equips) {
+      const opt = document.createElement("option");
+      opt.value = e.id;
+      opt.textContent = e.name || e.id;
+      pick.appendChild(opt);
+    }
     pick.value = equipId;
   }
   renderRuleList();

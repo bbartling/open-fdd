@@ -254,6 +254,66 @@ mod tests {
         }
     }
 
+    #[test]
+    fn static_js_modules_reachable_from_html_entries() {
+        use std::collections::HashSet;
+
+        let js_root = static_root().join("assets/js");
+        for retired in ["fdd-page.js", "rcx-page.js", "page-shell.js"] {
+            assert!(
+                !js_root.join(retired).exists(),
+                "{retired} must not ship; use index.html + tab modules"
+            );
+        }
+
+        let mut reachable: HashSet<String> = HashSet::new();
+        let mut stack = vec!["app.js".to_string(), "tree-page.js".to_string()];
+        while let Some(rel) = stack.pop() {
+            if !reachable.insert(rel.clone()) {
+                continue;
+            }
+            let path = js_root.join(&rel);
+            assert!(path.is_file(), "static JS module missing: {rel}");
+            let src = fs::read_to_string(&path).expect("read js");
+            for import in js_local_imports(&src) {
+                let sub = import.trim_start_matches("./");
+                if !reachable.contains(sub) {
+                    stack.push(sub.to_string());
+                }
+            }
+        }
+
+        let mut all_js = Vec::new();
+        walk_js(&js_root, &mut all_js);
+        for path in all_js {
+            let rel = path
+                .strip_prefix(&js_root)
+                .expect("under js root")
+                .to_string_lossy()
+                .into_owned();
+            assert!(
+                reachable.contains(&rel),
+                "{rel} is not reachable from app.js / tree-page.js imports"
+            );
+        }
+    }
+
+    fn js_local_imports(src: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        for (needle, quote) in [("from \"./", '"'), ("from './", '\'')] {
+            let mut rest = src;
+            while let Some(idx) = rest.find(needle) {
+                let after = &rest[idx + needle.len()..];
+                let Some(end) = after.find(quote) else {
+                    break;
+                };
+                out.push(format!("./{}", &after[..end]));
+                rest = &after[end + 1..];
+            }
+        }
+        out
+    }
+
     #[tokio::test]
     async fn serves_vendored_echarts_with_csp() {
         let app = {

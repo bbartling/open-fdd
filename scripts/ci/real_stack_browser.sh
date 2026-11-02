@@ -291,10 +291,14 @@ run_playwright() {
         --reporter=json
   )
   status=$?
+  report_status=0
+  if [[ "$status" -eq 0 ]]; then
+    python3 "$ROOT/scripts/ci/playwright_required_report.py" "$static_report" || report_status=$?
+  fi
   set -e
   echo "static product CSP playwright exit ${status}"
   rm -f "$static_report"
-  if [[ "$status" -ne 0 ]]; then
+  if [[ "$status" -ne 0 || "$report_status" -ne 0 ]]; then
     return 1
   fi
 }
