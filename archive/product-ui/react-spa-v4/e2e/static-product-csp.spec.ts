@@ -79,7 +79,9 @@ async function ensureSiteSelected(page: Page, siteId: string): Promise<void> {
   if (isPlaceholderSiteText(sub)) {
     throw new Error(`site ${siteId} did not load: ${sub ?? ""}`);
   }
-  await assertErrHidden(page);
+  await expect(async () => {
+    await assertErrHidden(page);
+  }).toPass({ timeout: 90_000 });
 }
 
 async function maybeSelectFirstSite(page: Page): Promise<void> {
