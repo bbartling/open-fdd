@@ -167,12 +167,12 @@ jobs:
           test -f VERSION
           grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' VERSION
           test ! -d services/fieldbus
-
-      - name: Static product JS unit tests
-        run: node --test services/central/static/product/assets/js/*.test.mjs
           test ! -d services/mqtt
           test ! -d crates/openfdd_mqtt
           test -f archive/ot-edge/unmaintained/crates/openfdd_mqtt/Cargo.toml
+
+      - name: Static product JS unit tests
+        run: node --test services/central/static/product/assets/js/*.test.mjs
 
   react-web:
     name: React web (archive/product-ui/react-spa-v4)

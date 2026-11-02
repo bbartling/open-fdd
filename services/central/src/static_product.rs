@@ -186,12 +186,10 @@ mod tests {
             vendor.join("LICENSE.echarts.txt").is_file(),
             "ECharts LICENSE must ship beside vendor JS"
         );
-        for sidecar in ["echarts.esm.min.js.version"] {
-            assert!(
-                vendor.join(sidecar).is_file(),
-                "{sidecar} must record vendored ECharts version"
-            );
-        }
+        assert!(
+            vendor.join("echarts.esm.min.js.version").is_file(),
+            "echarts.esm.min.js.version must record vendored ECharts version"
+        );
         assert!(
             !vendor.join("echarts.min.js").exists(),
             "unused UMD echarts.min.js must not ship; import echarts.esm.min.js only"
@@ -258,9 +256,11 @@ mod tests {
 
     #[tokio::test]
     async fn serves_vendored_echarts_with_csp() {
-        let _lock = crate::test_env_lock::lock_env();
-        let _guard = EnvGuard::set(ENV_ENABLE, "1");
-        let app = router();
+        let app = {
+            let _lock = crate::test_env_lock::lock_env();
+            let _guard = EnvGuard::set(ENV_ENABLE, "1");
+            router()
+        };
         let response = app
             .oneshot(
                 Request::builder()
@@ -281,9 +281,11 @@ mod tests {
 
     #[tokio::test]
     async fn index_html_served_with_csp() {
-        let _lock = crate::test_env_lock::lock_env();
-        let _guard = EnvGuard::set(ENV_ENABLE, "1");
-        let app = router();
+        let app = {
+            let _lock = crate::test_env_lock::lock_env();
+            let _guard = EnvGuard::set(ENV_ENABLE, "1");
+            router()
+        };
         let response = app
             .oneshot(
                 Request::builder()
