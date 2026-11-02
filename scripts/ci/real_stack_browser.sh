@@ -376,7 +376,7 @@ run_stack() {
   # Starter seed is off in CI; seed one generic CSV site before static /app/ CSP tests.
   OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="$(
     OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
-      "$ROOT/scripts/ci/seed_static_ui_browser_site.sh"
+      bash "$ROOT/scripts/ci/seed_static_ui_browser_site.sh"
   )"
   export OPENFDD_STATIC_UI_BROWSER_BUILDING_ID
   echo "OPENFDD_STATIC_UI_BROWSER_BUILDING_ID=$OPENFDD_STATIC_UI_BROWSER_BUILDING_ID"
