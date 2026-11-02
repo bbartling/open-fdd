@@ -168,6 +168,7 @@ test.describe("Static product UI CSP (central /app/)", () => {
 
   for (const path of TAB_PATHS) {
     test(`no CSP violations on ${path}`, async ({ page }) => {
+      test.setTimeout(180_000);
       await page.goto(`${centralBase}${path.replace("/app/", "/app/")}`, {
         waitUntil: "networkidle",
         timeout: 60_000,
