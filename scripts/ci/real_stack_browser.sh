@@ -286,6 +286,8 @@ run_playwright() {
     cd archive/product-ui/react-spa-v4
     PLAYWRIGHT_JSON_OUTPUT_FILE="$static_report" \
       OPENFDD_PLAYWRIGHT_BASE_URL="http://127.0.0.1:8080" \
+      OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
+      OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="${OPENFDD_STATIC_UI_BROWSER_BUILDING_ID:-}" \
       npx playwright test e2e/static-product-csp.spec.ts \
         --retries=0 \
         --reporter=json
@@ -370,6 +372,14 @@ run_stack() {
   docker image inspect "localhost/openfdd-ci-browser-web:${PROJECT}" >/dev/null
   compose up -d --pull never --no-build --wait --wait-timeout 300
   wait_healthy
+
+  # Starter seed is off in CI; seed one generic CSV site before static /app/ CSP tests.
+  OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="$(
+    OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
+      "$ROOT/scripts/ci/seed_static_ui_browser_site.sh"
+  )"
+  export OPENFDD_STATIC_UI_BROWSER_BUILDING_ID
+  echo "OPENFDD_STATIC_UI_BROWSER_BUILDING_ID=$OPENFDD_STATIC_UI_BROWSER_BUILDING_ID"
 
   local report
   report="$(mktemp)"

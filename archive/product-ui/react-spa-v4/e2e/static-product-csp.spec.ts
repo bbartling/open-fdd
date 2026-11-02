@@ -6,6 +6,8 @@ import { ensureProductSession } from "./session";
 const centralBase =
   process.env.OPENFDD_STATIC_UI_BASE_URL ?? "http://127.0.0.1:8080";
 
+const seededBuildingId = (process.env.OPENFDD_STATIC_UI_BROWSER_BUILDING_ID ?? "").trim();
+
 type CspViolation = {
   violatedDirective: string;
   blockedURI: string;
@@ -21,9 +23,35 @@ const TAB_PATHS = [
   "/app/?tab=model",
 ];
 
-function tabFromPath(path: string): string {
+function pathWithSite(path: string): string {
+  if (!seededBuildingId) return path;
   const url = new URL(path, centralBase);
+  url.searchParams.set("site", seededBuildingId);
+  return `${url.pathname}${url.search}`;
+}
+
+function tabFromPath(path: string): string {
+  const url = new URL(pathWithSite(path), centralBase);
   return url.searchParams.get("tab") || "overview";
+}
+
+function isPlaceholderSiteText(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim();
+  return (
+    t.includes("Pick a site") ||
+    t.includes("Select or import") ||
+    t.includes("Select equipment") ||
+    t.includes("no active session")
+  );
+}
+
+async function assertErrHidden(page: Page): Promise<void> {
+  const err = page.locator("#err.show");
+  if ((await err.count()) === 0) return;
+  const msg = (await err.textContent())?.trim() ?? "";
+  if (msg.length > 0) {
+    throw new Error(`#err visible: ${msg}`);
+  }
 }
 
 async function waitForAppBoot(page: Page): Promise<void> {
@@ -33,12 +61,38 @@ async function waitForAppBoot(page: Page): Promise<void> {
 
 async function maybeSelectFirstSite(page: Page): Promise<void> {
   const pick = page.locator("#sitePick");
+  const fromQuery = new URL(page.url()).searchParams.get("site")?.trim() ?? "";
+  if (fromQuery) {
+    await expect(pick).toHaveValue(fromQuery, { timeout: 15_000 });
+    await expect(page.locator("#liveTxt")).not.toHaveText("loading…", { timeout: 60_000 });
+    const sub = await page.locator("#sub").textContent();
+    if (isPlaceholderSiteText(sub)) {
+      throw new Error(`site query ${fromQuery} did not load: ${sub ?? ""}`);
+    }
+    await assertErrHidden(page);
+    return;
+  }
+
   const option = pick.locator('option[value]:not([value=""])').first();
-  if ((await option.count()) === 0) return;
+  if ((await option.count()) === 0) {
+    failIfRequired(
+      "no selectable site in #sitePick (seed CSV import or set OPENFDD_STATIC_UI_BROWSER_BUILDING_ID)",
+    );
+    return;
+  }
   const value = await option.getAttribute("value");
-  if (!value || value.includes("no active")) return;
+  if (!value || value.includes("no active")) {
+    failIfRequired("site picker has no active building id");
+    return;
+  }
   await pick.selectOption(value);
   await expect(page.locator("#liveTxt")).not.toHaveText("loading…", { timeout: 60_000 });
+  const sub = await page.locator("#sub").textContent();
+  if (isPlaceholderSiteText(sub)) {
+    throw new Error(`selected site did not load: ${sub ?? ""}`);
+  }
+  await assertErrHidden(page);
+
   const equipPick = page.locator("#equipPick");
   if (await equipPick.isEnabled()) {
     const eq = equipPick.locator('option[value]:not([value=""])').first();
@@ -52,40 +106,49 @@ async function maybeSelectFirstSite(page: Page): Promise<void> {
   }
 }
 
-async function waitForCanvasOrHint(
-  page: Page,
-  hostSelector: string,
-  hintSelector: string,
-  hintReady: (text: string | null) => boolean,
-): Promise<void> {
-  await expect(async () => {
-    if ((await page.locator(`${hostSelector} canvas`).count()) > 0) {
-      return;
-    }
-    const text = await page.locator(hintSelector).textContent();
-    if (hintReady(text)) {
-      return;
-    }
-    throw new Error(`waiting for chart canvas or hint (${hostSelector}, ${hintSelector})`);
-  }).toPass({ timeout: 45_000 });
+async function requireCanvas(page: Page, hostSelector: string): Promise<void> {
+  await expect(page.locator(`${hostSelector} canvas`)).toHaveCount(1, { timeout: 60_000 });
 }
 
-async function waitForChartsTabChartOrEmpty(page: Page): Promise<void> {
+async function waitForChartsTab(page: Page): Promise<void> {
+  await requireCanvas(page, "#tempChart");
+}
+
+async function waitForRcxTab(page: Page): Promise<void> {
+  await requireCanvas(page, "#mainChart");
+}
+
+async function waitForFddTab(page: Page): Promise<void> {
+  const fddPick = page.locator("#fddEquipPick");
+  if (await fddPick.isVisible()) {
+    const fddOpt = fddPick.locator('option[value]:not([value=""])').first();
+    if ((await fddOpt.count()) > 0) {
+      const fddVal = await fddOpt.getAttribute("value");
+      if (fddVal) await fddPick.selectOption(fddVal);
+    }
+  }
   await expect(async () => {
-    if ((await page.locator("#tempChart canvas").count()) > 0) return;
-    if ((await page.locator("#wxChart canvas").count()) > 0) return;
-    const psy = await page.locator("#psyHint").textContent();
-    if (psy?.includes("need oa_t")) return;
-    const sub = await page.locator("#sub").textContent();
-    if (sub?.includes("Select or import")) return;
-    throw new Error("waiting for charts tab canvas or psyHint empty-state");
-  }).toPass({ timeout: 45_000 });
+    await assertErrHidden(page);
+    if ((await page.locator("#fddChart canvas").count()) > 0) return;
+    const plot = (await page.locator("#plotHint").textContent())?.trim() ?? "";
+    if (plot.length > 0 && !isPlaceholderSiteText(plot)) return;
+    const rules = (await page.locator("#ruleList").textContent()) ?? "";
+    if (rules.includes("No rules match")) return;
+    const psy = (await page.locator("#psyHint").textContent()) ?? "";
+    if (psy.includes("need oa_t")) return;
+    throw new Error("waiting for #fddChart canvas or allowed FDD empty-state");
+  }).toPass({ timeout: 90_000 });
+}
+
+async function waitForModelTab(page: Page): Promise<void> {
+  await requireCanvas(page, "#tree");
 }
 
 async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
   const tab = tabFromPath(path);
   await waitForAppBoot(page);
   await maybeSelectFirstSite(page);
+  await assertErrHidden(page);
   await expect(page.locator(`#tabs button[data-tab="${tab}"]`)).toHaveClass(/\bon\b/, {
     timeout: 30_000,
   });
@@ -101,33 +164,19 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
   };
   await expect(panel.locator(markerByTab[tab] ?? "#summary")).toBeAttached({ timeout: 15_000 });
 
+  const sub = await page.locator("#sub").textContent();
+  if (isPlaceholderSiteText(sub)) {
+    throw new Error(`tab ${tab} still on placeholder site copy: ${sub ?? ""}`);
+  }
+
   if (tab === "charts") {
-    await waitForChartsTabChartOrEmpty(page);
-  }
-  if (tab === "rcx") {
-    await waitForCanvasOrHint(page, "#mainChart", "#rcxLoadMsg", (text) =>
-      Boolean(text && text !== "Loading…"),
-    );
-  }
-  if (tab === "fdd") {
-    const fddPick = page.locator("#fddEquipPick");
-    if (await fddPick.isVisible()) {
-      const fddOpt = fddPick.locator('option[value]:not([value=""])').first();
-      if ((await fddOpt.count()) > 0) {
-        const fddVal = await fddOpt.getAttribute("value");
-        if (fddVal) await fddPick.selectOption(fddVal);
-      }
-    }
-    await expect(async () => {
-      if ((await page.locator("#fddChart canvas").count()) > 0) return;
-      const plot = (await page.locator("#plotHint").textContent())?.trim() ?? "";
-      if (plot.length > 0) return;
-      const rules = await page.locator("#ruleList").textContent();
-      if (rules?.includes("No rules match") || rules?.includes("Pick a site")) return;
-      const err = (await page.locator("#err.show").textContent())?.trim() ?? "";
-      if (err.length > 0) return;
-      throw new Error("waiting for FDD chart canvas or empty-state hint");
-    }).toPass({ timeout: 60_000 });
+    await waitForChartsTab(page);
+  } else if (tab === "rcx") {
+    await waitForRcxTab(page);
+  } else if (tab === "fdd") {
+    await waitForFddTab(page);
+  } else if (tab === "model") {
+    await waitForModelTab(page);
   }
 }
 
@@ -135,6 +184,11 @@ test.describe("Static product UI CSP (central /app/)", () => {
   test.beforeAll(async ({ request }) => {
     if (process.env.OPENFDD_PLAYWRIGHT_SKIP === "1") {
       failIfRequired("OPENFDD_PLAYWRIGHT_SKIP=1");
+    }
+    if (stackRequired && !seededBuildingId) {
+      failIfRequired(
+        "OPENFDD_STATIC_UI_BROWSER_BUILDING_ID unset (run seed_static_ui_browser_site before static CSP spec)",
+      );
     }
     let res;
     try {
@@ -169,12 +223,14 @@ test.describe("Static product UI CSP (central /app/)", () => {
   for (const path of TAB_PATHS) {
     test(`no CSP violations on ${path}`, async ({ page }) => {
       test.setTimeout(180_000);
-      await page.goto(`${centralBase}${path.replace("/app/", "/app/")}`, {
+      const target = pathWithSite(path);
+      await page.goto(`${centralBase}${target}`, {
         waitUntil: "networkidle",
         timeout: 60_000,
       });
       await expect(page.locator("#loginGate")).toBeHidden({ timeout: 30_000 });
       await waitForTabRenderMarker(page, path);
+      await assertErrHidden(page);
       const violations = await page.evaluate(
         () => (window as unknown as { __cspViolations?: CspViolation[] }).__cspViolations ?? [],
       );
