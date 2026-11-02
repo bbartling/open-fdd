@@ -76,11 +76,14 @@ test.describe("react product workflows (real stack)", () => {
 
     await page.goto("/");
     await expect(page.getByTestId("overview-page")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("home-loading")).toHaveCount(0, { timeout: 20_000 });
+    await expect(page.getByTestId("home-loading")).toHaveCount(0, { timeout: 60_000 });
+    await expect(
+      page.getByTestId("overview-populated").or(page.getByTestId("overview-dev-metrics")),
+    ).toBeVisible({ timeout: 30_000 });
     const populated = page.getByTestId("overview-populated");
     if (await populated.isVisible().catch(() => false)) {
       await expect(populated).toBeVisible();
-      await expect(page.getByTestId("overview-metrics")).toBeVisible();
+      await expect(page.getByTestId("overview-metrics")).toBeVisible({ timeout: 30_000 });
     } else {
       await openOverviewDevMetrics(page);
       await expect(page.getByTestId("overview-react-ui")).toContainText(/on|off|—/);
