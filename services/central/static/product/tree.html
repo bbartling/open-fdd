@@ -5,34 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open-FDD · Model tree</title>
 <link rel="stylesheet" href="/app/assets/css/bench.css">
-<style>
-  main { max-width: 1200px; grid-template-columns: 1fr; display: grid; }
-  #tree { height: 760px; }
-</style>
 </head>
-<body>
+<body class="tree-page">
 <header>
   <div>
     <h1>🌳 Model tree</h1>
     <div class="sub" id="sub">read-only · Open-FDD Haystack snapshot</div>
   </div>
   <div class="spacer"></div>
+  <label class="scope">site <select id="sitePick"></select></label>
   <span class="pill">read-only</span>
   <a class="pill" href="/app/">← dashboard</a>
 </header>
-<main>
+<main class="tree-main">
   <div id="err"></div>
   <section class="panel">
-    <h2>Haystack tree <span class="hint">Wave C · central SPARQL / RDF</span></h2>
-    <div id="tree"><p class="hint" style="padding:12px">Tree visualization loads after model APIs are wired.</p></div>
+    <h2>Haystack tree <span class="hint">agent-context + package mapping</span></h2>
+    <div id="tree" class="tree-host tree-host-tall"></div>
     <div class="detail" id="detail"><span class="hint">Select a node.</span></div>
   </section>
 </main>
-<script type="module">
-  import { readToken } from "/app/assets/js/session.js";
-  if (!readToken()) {
-    location.replace("/app/");
-  }
-</script>
+<script type="module" src="/app/assets/js/tree-page.js"></script>
 </body>
 </html>

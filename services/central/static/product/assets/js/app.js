@@ -1,11 +1,44 @@
 import { clearSession, readToken, writeToken } from "./session.js";
 import { apiFetch, login } from "./api.js";
-import { esc, loadBuildingContext, runSparql } from "./model.js";
+import {
+  applyLatestFromSeries,
+  displayName,
+  esc,
+  fmtPoint,
+  GENERIC,
+  has,
+  isBoolRole,
+  isTemp,
+  loadBuildingContext,
+  roleOf,
+  runSparql,
+} from "./model.js";
+import {
+  disposeSparklines,
+  loadScopeHistory,
+  refreshChartsTab,
+  renderOverviewSpark,
+  renderPointHistory,
+  resizeCharts,
+} from "./charts.js";
+import { renderModelChecks, renderModelTree, resizeTree } from "./tree-view.js";
+import { fetchInspectSeries } from "./analytics.js";
 
 const $ = (id) => document.getElementById(id);
 let activeTab = "overview";
-let scope = { site: "" };
+let scope = { site: "", equip: "" };
 let ctx = null;
+let chartState = {
+  history: new Map(),
+  inspectRows: [],
+  rangeHours: 24,
+  histHours: 24,
+  heatRole: "sat",
+  cardPoints: [],
+  weatherPoints: [],
+  statusPoints: [],
+};
+let selectedPointId = null;
 
 function showErr(msg) {
   const el = $("err");
@@ -35,6 +68,69 @@ function renderTab(name) {
   document.querySelectorAll("main > section.tab").forEach((sec) => {
     sec.classList.toggle("on", sec.id === `tab-${name}`);
   });
+  if (name === "charts") {
+    refreshChartsTab({
+      buildingId: scope.site,
+      equipId: scope.equip,
+      cardPoints: chartState.cardPoints,
+      history: chartState.history,
+      rangeHours: chartState.rangeHours,
+      heatRole: chartState.heatRole,
+    }).catch((err) => showErr(err.message));
+    resizeCharts();
+  }
+  if (name === "model") {
+    renderModelTree(ctx.model, scope.site, scope.equip || "", $("detail"), $("tree"));
+    renderModelChecks(ctx.model, scope.site, $("checks"), ctx.mapping);
+    resizeTree();
+  }
+  if (name === "points" && selectedPointId) {
+    renderPointHistory(
+      ctx.model.points.find((p) => p.id === selectedPointId),
+      chartState.inspectRows,
+      chartState.histHours,
+    );
+  }
+}
+
+function siteEquipIds() {
+  return ctx.model.equips.map((e) => e.id);
+}
+
+function inScopeEquip(p) {
+  if (!p.equipRef) return false;
+  if (scope.equip) return p.equipRef === scope.equip;
+  return siteEquipIds().includes(p.equipRef);
+}
+
+function rankPoint(p) {
+  return (has(p, "sensor") ? 0 : 2) + (isTemp(p) ? 0 : 1);
+}
+
+function recomputeScopedSets() {
+  const tagged = ctx.model.points.filter((p) => p.siteRef === scope.site);
+  const equipPts = tagged.filter(inScopeEquip);
+  chartState.cardPoints = equipPts
+    .filter((p) => !isBoolRole(p) && (has(p, "sensor") || has(p, "sp")))
+    .sort((a, b) => rankPoint(a) - rankPoint(b) || displayName(a).localeCompare(displayName(b)));
+  chartState.statusPoints = equipPts
+    .filter(isBoolRole)
+    .sort((a, b) => a.equipRef.localeCompare(b.equipRef) || displayName(a).localeCompare(displayName(b)));
+  chartState.weatherPoints = tagged
+    .filter((p) => has(p, "weather") || roleOf(p) === "web_oa_t")
+    .sort((a, b) => displayName(a).localeCompare(displayName(b)));
+}
+
+function fillEquipPicker() {
+  const pick = $("equipPick");
+  const equips = ctx.model.equips;
+  pick.disabled = !equips.length;
+  pick.innerHTML =
+    `<option value="">all equips (${equips.length})</option>` +
+    equips
+      .map((e) => `<option value="${esc(e.id)}">${esc(e.name || e.id)}</option>`)
+      .join("");
+  pick.value = scope.equip;
 }
 
 function renderSummary() {
@@ -43,20 +139,142 @@ function renderSummary() {
     summary.innerHTML = "";
     return;
   }
+  const tagged = ctx.model.points.filter((p) => p.siteRef === scope.site);
   const v = ctx.health?.version ?? "—";
   summary.innerHTML = `
     <div class="stat"><b>${esc(v)}</b><span>build</span></div>
-    <div class="stat"><b>${esc(scope.site || "—")}</b><span>site</span></div>
-    <div class="stat"><b>${ctx.points.length}</b><span>points</span></div>
-    <div class="stat"><b>${ctx.equips.length}</b><span>equip</span></div>`;
+    <div class="stat"><b>${ctx.model.equips.length}</b><span>equip</span></div>
+    <div class="stat"><b>${tagged.length}</b><span>points</span></div>
+    <div class="stat"><b>${chartState.cardPoints.length}</b><span>chart sensors</span></div>`;
 }
 
-function renderPlaceholderCards() {
-  $("cards").innerHTML = `
-    <article class="card"><div class="name">Historian</div><div class="val">${esc(ctx?.health?.historian ?? "—")}</div><div class="delta">Wave C: live cards</div></article>
-    <article class="card"><div class="name">AFDD</div><div class="val">${ctx?.health?.afdd_scheduler ? "on" : "—"}<small></small></div><div class="delta">Schedule tab Wave D</div></article>`;
-  $("chips").innerHTML = `<span class="chip"><span class="led"></span><span class="state">pending</span> status chips</span>`;
-  $("nPoints").textContent = String(ctx?.points?.length ?? 0);
+function renderCards() {
+  disposeSparklines();
+  const cards = chartState.cardPoints.slice(0, 12);
+  $("cards").innerHTML = cards
+    .map(
+      (p, i) => `
+    <article class="card" id="card-${i}" title="${esc((p.tags || []).join(" "))}">
+      <div class="name">${esc(displayName(p))}</div>
+      <div class="desc">${esc(p.equipRef || "")} · ${esc(roleOf(p))}</div>
+      <div class="val"><span id="val-${i}">–</span><small>${esc(p.unit || "")}</small></div>
+      <div class="delta" id="delta-${i}">&nbsp;</div>
+      <div class="spark" id="spark-${i}"></div>
+    </article>`,
+    )
+    .join("");
+  cards.forEach((p, i) => {
+    $(`val-${i}`).textContent = fmtPoint(p);
+    renderOverviewSpark(i, p, chartState.history);
+  });
+  $("nPoints").textContent = String(ctx.model.points.filter((p) => p.siteRef === scope.site).length);
+}
+
+function renderChips() {
+  const chips = chartState.statusPoints;
+  $("chips").innerHTML = chips.length
+    ? chips
+        .map((p) => {
+          const on = (p.latest?.value ?? 0) > 0.5;
+          return `<span class="chip ${on ? "on" : ""}" title="${esc(displayName(p))}">
+      <span class="led"></span>${esc(displayName(p))}<span class="state">${on ? "on" : "off"}</span></span>`;
+        })
+        .join("")
+    : `<span class="sub">No status/cmd roles on scoped equipment.</span>`;
+}
+
+function fillHeatPicker() {
+  const pick = $("heatPick");
+  if (!pick) return;
+  pick.innerHTML = chartState.cardPoints
+    .filter(isTemp)
+    .map(
+      (p) =>
+        `<option value="${esc(roleOf(p))}">${esc(displayName(p))} (${esc(roleOf(p))})</option>`,
+    )
+    .join("");
+  if (!pick.options.length && chartState.cardPoints[0]) {
+    pick.innerHTML = `<option value="${esc(roleOf(chartState.cardPoints[0]))}">${esc(displayName(chartState.cardPoints[0]))}</option>`;
+  }
+  pick.value = chartState.heatRole;
+}
+
+function renderModelStats() {
+  const el = $("modelStats");
+  if (!el || !ctx) return;
+  const tree = ctx.agentCtx?.model_tree;
+  el.innerHTML = `
+    <div class="stat"><b>${esc(tree?.source || "—")}</b><span>tree source</span></div>
+    <div class="stat"><b>${tree?.equipment_count ?? ctx.model.equips.length}</b><span>equip</span></div>
+    <div class="stat"><b>${tree?.point_count ?? ctx.model.points.length}</b><span>points</span></div>`;
+}
+
+function pointRowsFiltered() {
+  const tokens = ($("pointFilter")?.value || "")
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .filter(Boolean);
+  return ctx.model.points
+    .filter((p) => p.siteRef === scope.site)
+    .filter((p) => !scope.equip || inScopeEquip(p) || has(p, "weather"))
+    .filter((p) => {
+      if (!tokens.length) return true;
+      return tokens.every(
+        (t) =>
+          (p.tags || []).some((m) => m.toLowerCase() === t) ||
+          displayName(p).toLowerCase().includes(t) ||
+          roleOf(p).toLowerCase().includes(t),
+      );
+    })
+    .sort(
+      (a, b) =>
+        (has(b, "point") - has(a, "point")) ||
+        (a.equipRef || "").localeCompare(b.equipRef || "") ||
+        rankPoint(a) - rankPoint(b) ||
+        displayName(a).localeCompare(displayName(b)),
+    );
+}
+
+function renderPointsTable() {
+  const rows = pointRowsFiltered();
+  $("pointHint").textContent = `${rows.length} shown`;
+  $("pointRows").innerHTML = rows
+    .map((p) => {
+      const tags = (p.tags || [])
+        .filter((t) => !GENERIC.has(t))
+        .map((t) => `<span class="tag">${esc(t)}</span>`)
+        .join("");
+      const ts = p.latest?.ts ? new Date(p.latest.ts).toLocaleString() : "–";
+      return `<tr class="pick ${selectedPointId === p.id ? "sel" : ""}" data-id="${esc(p.id)}">
+      <td>${esc(displayName(p))}<div class="sub">${esc(roleOf(p))}</div></td>
+      <td><div class="tags">${tags || `<span class="sub">—</span>`}</div></td>
+      <td class="num">${esc(fmtPoint(p))}</td>
+      <td class="sub">${esc(p.equipRef || "—")}</td>
+      <td class="sub">${ts}</td></tr>`;
+    })
+    .join("") || `<tr><td colspan="5" class="sub">No points match.</td></tr>`;
+}
+
+async function loadHistoryBundle() {
+  const equipId = scope.equip || ctx.model.equips[0]?.id;
+  if (!equipId) {
+    chartState.history = new Map();
+    chartState.inspectRows = [];
+    return;
+  }
+  scope.equip = scope.equip || equipId;
+  recomputeScopedSets();
+  const { rows, history } = await loadScopeHistory(
+    scope.site,
+    equipId,
+    chartState.cardPoints,
+    chartState.weatherPoints,
+    168,
+  );
+  chartState.inspectRows = rows;
+  chartState.history = history;
+  const roles = [...history.keys()];
+  applyLatestFromSeries(ctx.model.points, rows, roles);
 }
 
 async function applySite() {
@@ -65,16 +283,59 @@ async function applySite() {
     return;
   }
   setLive(true, "loading…");
+  showErr("");
   try {
     ctx = await loadBuildingContext(scope.site);
-    $("sub").textContent = `${scope.site} · ${ctx.health?.version ?? "Open-FDD"} · static preview`;
+    scope.equip = "";
+    $("sub").textContent = `${scope.site} · ${ctx.health?.version ?? "Open-FDD"} · static UI`;
     $("ttl").textContent = ctx.ttl;
+    fillEquipPicker();
+    recomputeScopedSets();
+    await loadHistoryBundle();
+    fillHeatPicker();
     renderSummary();
-    renderPlaceholderCards();
+    renderModelStats();
+    renderCards();
+    renderChips();
+    renderPointsTable();
+    renderModelTree(ctx.model, scope.site, scope.equip, $("detail"), $("tree"));
+    renderModelChecks(ctx.model, scope.site, $("checks"), ctx.mapping);
     setLive(true, `live · ${new Date().toLocaleTimeString()}`);
+    if (activeTab === "charts") {
+      await refreshChartsTab({
+        buildingId: scope.site,
+        equipId: scope.equip,
+        cardPoints: chartState.cardPoints,
+        history: chartState.history,
+        rangeHours: chartState.rangeHours,
+        heatRole: chartState.heatRole,
+      });
+    }
   } catch (err) {
     showErr(err.message || String(err));
     setLive(false, "error");
+  }
+}
+
+async function applyEquip() {
+  scope.equip = $("equipPick").value;
+  recomputeScopedSets();
+  fillHeatPicker();
+  await loadHistoryBundle();
+  renderSummary();
+  renderCards();
+  renderChips();
+  renderPointsTable();
+  renderModelTree(ctx.model, scope.site, scope.equip || "", $("detail"), $("tree"));
+  if (activeTab === "charts") {
+    await refreshChartsTab({
+      buildingId: scope.site,
+      equipId: scope.equip || ctx.model.equips[0]?.id,
+      cardPoints: chartState.cardPoints,
+      history: chartState.history,
+      rangeHours: chartState.rangeHours,
+      heatRole: chartState.heatRole,
+    });
   }
 }
 
@@ -118,11 +379,7 @@ async function loadSites() {
 }
 
 function bindSparql() {
-  const btn = $("sparqlRun");
-  if (!btn) {
-    return;
-  }
-  btn.addEventListener("click", async () => {
+  $("sparqlRun")?.addEventListener("click", async () => {
     const out = $("sparqlOut");
     if (!scope.site) {
       out.textContent = "Pick a site first.";
@@ -141,17 +398,54 @@ function bindSparql() {
 function bindTabs() {
   $("tabs").addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-tab]");
-    if (!btn) {
-      return;
-    }
+    if (!btn) return;
     renderTab(btn.dataset.tab);
   });
   $("range")?.addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-h]");
-    if (!btn) {
-      return;
-    }
+    if (!btn) return;
     $("range").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === btn));
+    chartState.rangeHours = Number(btn.dataset.h);
+    refreshChartsTab({
+      buildingId: scope.site,
+      equipId: scope.equip || ctx?.model?.equips[0]?.id,
+      cardPoints: chartState.cardPoints,
+      history: chartState.history,
+      rangeHours: chartState.rangeHours,
+      heatRole: chartState.heatRole,
+    }).catch((err) => showErr(err.message));
+  });
+  $("heatPick")?.addEventListener("change", () => {
+    chartState.heatRole = $("heatPick").value;
+    refreshChartsTab({
+      buildingId: scope.site,
+      equipId: scope.equip || ctx?.model?.equips[0]?.id,
+      cardPoints: chartState.cardPoints,
+      history: chartState.history,
+      rangeHours: chartState.rangeHours,
+      heatRole: chartState.heatRole,
+    }).catch((err) => showErr(err.message));
+  });
+  $("pointFilter")?.addEventListener("input", () => renderPointsTable());
+  $("pointRows")?.addEventListener("click", async (ev) => {
+    const row = ev.target.closest("tr[data-id]");
+    if (!row) return;
+    selectedPointId = row.dataset.id;
+    renderPointsTable();
+    const point = ctx.model.points.find((p) => p.id === selectedPointId);
+    $("histHint").textContent = point ? `${displayName(point)} · ${roleOf(point)}` : "";
+    const equipId = point?.equipRef || scope.equip || ctx.model.equips[0]?.id;
+    if (point && equipId) {
+      chartState.inspectRows = await fetchInspectSeries(scope.site, equipId, chartState.histHours, [
+        roleOf(point),
+      ]);
+      applyLatestFromSeries([point], chartState.inspectRows, [roleOf(point)]);
+      renderPointHistory(point, chartState.inspectRows, chartState.histHours);
+    }
+  });
+  window.addEventListener("resize", () => {
+    resizeCharts();
+    resizeTree();
   });
 }
 
@@ -164,9 +458,7 @@ function bindAuth() {
     try {
       const body = await login(data.get("username"), data.get("password"));
       const token = body.token || body.access_token;
-      if (!token) {
-        throw new Error("Login response missing token");
-      }
+      if (!token) throw new Error("Login response missing token");
       writeToken(token);
       gate.hidden = true;
       $("logoutBtn").hidden = false;
@@ -181,6 +473,7 @@ function bindAuth() {
     location.reload();
   });
   $("sitePick").addEventListener("change", () => applySite());
+  $("equipPick").addEventListener("change", () => applyEquip());
 }
 
 async function bootApp() {

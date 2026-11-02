@@ -9,7 +9,7 @@
 <body>
 <div id="loginGate">
   <section class="panel">
-    <h1 style="margin:0 0 8px;font-size:18px">Sign in</h1>
+    <h1 class="login-title">Sign in</h1>
     <p class="hint">JWT session · same-origin <code>/api</code></p>
     <form id="loginForm">
       <label>Username<input name="username" autocomplete="username" required></label>
@@ -46,15 +46,15 @@
     <div class="stats" id="summary"></div>
     <section class="cards" id="cards"></section>
     <section class="panel">
-      <h2>Equipment status <span class="hint">Wave C: binary points from historian</span></h2>
+      <h2>Equipment status <span class="hint">Bool / status roles from historian</span></h2>
       <div class="chips" id="chips"></div>
     </section>
   </section>
 
   <section class="tab" id="tab-charts">
     <section class="panel">
-      <h2>Weather vs sensors <span class="hint">ECharts vendored in Wave C</span></h2>
-      <div class="chart" id="wxChart">Chart placeholder</div>
+      <h2>Weather vs sensors <span class="hint">BAS vs web OAT · Timescale</span></h2>
+      <div class="chart" id="wxChart"></div>
     </section>
     <section class="panel">
       <h2>Temperatures
@@ -63,16 +63,18 @@
           <button type="button" data-h="72">3d</button><button type="button" data-h="168">7d</button>
         </span>
       </h2>
-      <div class="chart tall" id="tempChart">Chart placeholder</div>
+      <div class="chart tall" id="tempChart"></div>
     </section>
     <section class="grid2">
       <div class="panel">
-        <h2>Hour-of-day heatmap <span class="hint">Wave C</span></h2>
-        <div class="chart" id="heatChart">Chart placeholder</div>
+        <h2>Hour-of-day heatmap
+          <select id="heatPick" class="heat-pick" aria-label="Heatmap role"></select>
+        </h2>
+        <div class="chart" id="heatChart"></div>
       </div>
       <div class="panel">
-        <h2>Outdoor air <span class="hint">Wave C</span></h2>
-        <div class="chart" id="psyChart">Chart placeholder</div>
+        <h2>Outdoor air <span class="hint" id="psyHint">temp × humidity</span></h2>
+        <div class="chart" id="psyChart"></div>
       </div>
     </section>
   </section>
@@ -80,17 +82,17 @@
   <section class="tab" id="tab-points">
     <section class="panel">
       <h2>Point data
-        <input type="search" id="pointFilter" placeholder="filter markers (Wave C)">
+        <input type="search" id="pointFilter" placeholder="filter tags or roles">
         <span class="hint" id="pointHint"></span>
       </h2>
       <div class="tablewrap"><table class="bac">
-        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Role</th><th>Updated</th></tr></thead>
+        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Equip</th><th>Updated</th></tr></thead>
         <tbody id="pointRows"><tr><td colspan="5" class="sub">Sign in and select a site.</td></tr></tbody>
       </table></div>
     </section>
     <section class="panel">
-      <h2>History <span class="hint" id="histHint">Wave C</span></h2>
-      <div class="chart short" id="histChart">Chart placeholder</div>
+      <h2>History <span class="hint" id="histHint">select a point</span></h2>
+      <div class="chart short" id="histChart"></div>
     </section>
   </section>
 
@@ -99,10 +101,10 @@
     <section class="grid57">
       <div class="panel">
         <h2>Model tree <span class="hint"><a href="/app/tree.html">standalone tree</a></span></h2>
-        <div id="tree"><p class="hint" style="padding:12px">Tree renders in Wave C (SPARQL / RDF APIs).</p></div>
+        <div id="tree" class="tree-host"></div>
       </div>
-      <div style="display:grid;gap:18px;align-content:start">
-        <div class="detail" id="detail"><span class="hint">Select a node (Wave C).</span></div>
+      <div class="model-side">
+        <div class="detail" id="detail"><span class="hint">Select a node.</span></div>
         <div class="panel">
           <h2>Model checks</h2>
           <div id="checks" class="hint">Pending model sync data.</div>
@@ -111,7 +113,7 @@
     </section>
     <section class="panel">
       <h2>SPARQL <span class="hint">POST /api/model/sparql · read-only SELECT/ASK</span></h2>
-      <textarea id="sparqlQuery" rows="4" style="width:100%;background:#0a0f1e;color:#e6ebf5;border:1px solid var(--line);border-radius:8px;font:12px ui-monospace,Consolas,monospace">SELECT * WHERE { ?s ?p ?o } LIMIT 20</textarea>
+      <textarea id="sparqlQuery" class="sparql-input" rows="4">SELECT * WHERE { ?s ?p ?o } LIMIT 20</textarea>
       <p><button type="button" class="btn" id="sparqlRun">Run</button></p>
       <pre class="ttl" id="sparqlOut">Sign in and pick a site.</pre>
     </section>

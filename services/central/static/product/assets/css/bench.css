@@ -206,11 +206,58 @@ main {
   background: var(--panel2);
   border-radius: 10px;
   border: 1px dashed var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-height: 200px;
+}
+.chart.chart-ready {
+  border-style: solid;
+}
+.login-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.sparql-input {
+  width: 100%;
+  background: #0a0f1e;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 12px ui-monospace, Consolas, monospace;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.model-side {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+.tree-host {
+  width: 100%;
+  min-height: 520px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.tree-host-tall {
+  min-height: 760px;
+}
+.tree-page main.tree-main {
+  max-width: 1200px;
+  display: grid;
+}
+.heat-pick {
+  margin-left: auto;
+  max-width: 220px;
+}
+table.bac tr.pick {
+  cursor: pointer;
+}
+table.bac tr.pick.sel {
+  background: #1a2848;
+}
+.checklist {
+  margin: 0;
+  padding-left: 1.2rem;
   color: var(--muted);
-  font-size: 13px;
 }
 .chart.tall {
   height: 420px;
