@@ -47,3 +47,20 @@ export function displayName(point) {
 export function unitLabel(point) {
   return point.unit || "";
 }
+
+export function normalizeTags(rawTags, role) {
+  const tags = Array.isArray(rawTags) ? [...rawTags] : [];
+  if (!tags.includes("point")) tags.push("point");
+  if (role.includes("web") || role === "web_oa_t") {
+    if (!tags.includes("weather")) tags.push("weather");
+  }
+  if (role.endsWith("_status") || role.endsWith("_cmd")) {
+    if (!tags.includes("sensor")) tags.push("sensor");
+  }
+  if (isTemp({ role, tags })) {
+    for (const t of ["sensor", "temp"]) {
+      if (!tags.includes(t)) tags.push(t);
+    }
+  }
+  return tags;
+}

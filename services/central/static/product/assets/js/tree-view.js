@@ -132,17 +132,15 @@ function showDetail(node, detailEl) {
     <table class="bac">${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>`;
 }
 
-export function renderModelChecks(model, siteId, checksEl, mapping) {
+export function renderModelChecks(model, siteId, checksEl) {
   if (!checksEl) return;
   const onSite = model.points.filter((p) => p.siteRef === siteId);
   const tagged = onSite.filter((p) => has(p, "point") || p.tags?.length);
-  const validation = mapping?.validation;
-  const status = validation?.status || "unknown";
   checksEl.innerHTML = `
     <ul class="checklist">
-      <li>${tagged.length ? "✓" : "○"} ${tagged.length} mapped points on site</li>
-      <li>${model.equips.length ? "✓" : "○"} ${model.equips.length} equipment in model</li>
-      <li>package validation: <b>${esc(status)}</b></li>
+      <li>${tagged.length ? "✓" : "○"} ${tagged.length} TTL points on site</li>
+      <li>${model.equips.length ? "✓" : "○"} ${model.equips.length} equipment in TTL tree</li>
+      <li>Model data from <code>GET /api/model/ttl</code> only</li>
     </ul>`;
 }
 

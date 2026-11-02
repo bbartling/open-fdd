@@ -494,3 +494,49 @@ footer {
   color: var(--hot);
   font-size: 0.9rem;
 }
+nav.subnav {
+  padding: 0 24px 8px;
+  border-bottom: 1px solid var(--line);
+  gap: 8px;
+}
+a.tab-link {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+a.tab-link.on,
+a.tab-link:hover {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--panel2);
+}
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow: auto;
+}
+.rule-pick {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--text);
+  cursor: pointer;
+}
+.rule-pick.sel {
+  border-color: var(--accent);
+}
+.rule-pick .rule-id {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}

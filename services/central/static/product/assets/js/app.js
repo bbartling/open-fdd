@@ -9,10 +9,11 @@ import {
   has,
   isBoolRole,
   isTemp,
-  loadBuildingContext,
   roleOf,
   runSparql,
 } from "./model.js";
+import { loadModelFromTtl } from "./ttl-model.js";
+import { loadSiteData } from "./site-data.js";
 import {
   disposeSparklines,
   loadScopeHistory,
@@ -28,6 +29,8 @@ const $ = (id) => document.getElementById(id);
 let activeTab = "overview";
 let scope = { site: "", equip: "" };
 let ctx = null;
+/** TTL-only tree for Model tab; operational points from historian/mapping elsewhere. */
+let modelTree = null;
 let chartState = {
   history: new Map(),
   inspectRows: [],
@@ -80,8 +83,8 @@ function renderTab(name) {
     resizeCharts();
   }
   if (name === "model") {
-    renderModelTree(ctx.model, scope.site, scope.equip || "", $("detail"), $("tree"));
-    renderModelChecks(ctx.model, scope.site, $("checks"), ctx.mapping);
+    renderModelTree(modelTree, scope.site, scope.equip || "", $("detail"), $("tree"));
+    renderModelChecks(modelTree, scope.site, $("checks"));
     resizeTree();
   }
   if (name === "points" && selectedPointId) {
@@ -201,12 +204,11 @@ function fillHeatPicker() {
 
 function renderModelStats() {
   const el = $("modelStats");
-  if (!el || !ctx) return;
-  const tree = ctx.agentCtx?.model_tree;
+  if (!el || !modelTree) return;
   el.innerHTML = `
-    <div class="stat"><b>${esc(tree?.source || "—")}</b><span>tree source</span></div>
-    <div class="stat"><b>${tree?.equipment_count ?? ctx.model.equips.length}</b><span>equip</span></div>
-    <div class="stat"><b>${tree?.point_count ?? ctx.model.points.length}</b><span>points</span></div>`;
+    <div class="stat"><b>TTL</b><span>tree source</span></div>
+    <div class="stat"><b>${modelTree.equips.length}</b><span>equip</span></div>
+    <div class="stat"><b>${modelTree.points.length}</b><span>points</span></div>`;
 }
 
 function pointRowsFiltered() {
@@ -285,7 +287,17 @@ async function applySite() {
   setLive(true, "loading…");
   showErr("");
   try {
-    ctx = await loadBuildingContext(scope.site);
+    const { ttl, model: ttlModel } = await loadModelFromTtl(scope.site, apiFetch);
+    const siteData = await loadSiteData(scope.site);
+    modelTree = ttlModel;
+    ctx = {
+      buildingId: scope.site,
+      health: await apiFetch("/api/health"),
+      ttl,
+      model: siteData.model,
+      mapping: siteData.mapping,
+      sessionConfig: siteData.sessionConfig,
+    };
     scope.equip = "";
     $("sub").textContent = `${scope.site} · ${ctx.health?.version ?? "Open-FDD"} · static UI`;
     $("ttl").textContent = ctx.ttl;
@@ -298,8 +310,8 @@ async function applySite() {
     renderCards();
     renderChips();
     renderPointsTable();
-    renderModelTree(ctx.model, scope.site, scope.equip, $("detail"), $("tree"));
-    renderModelChecks(ctx.model, scope.site, $("checks"), ctx.mapping);
+    renderModelTree(modelTree, scope.site, scope.equip, $("detail"), $("tree"));
+    renderModelChecks(modelTree, scope.site, $("checks"));
     setLive(true, `live · ${new Date().toLocaleTimeString()}`);
     if (activeTab === "charts") {
       await refreshChartsTab({
@@ -326,7 +338,7 @@ async function applyEquip() {
   renderCards();
   renderChips();
   renderPointsTable();
-  renderModelTree(ctx.model, scope.site, scope.equip || "", $("detail"), $("tree"));
+  renderModelTree(modelTree, scope.site, scope.equip || "", $("detail"), $("tree"));
   if (activeTab === "charts") {
     await refreshChartsTab({
       buildingId: scope.site,

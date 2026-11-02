@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn static_html_has_no_external_scripts_or_inline_styles() {
         let root = static_root();
-        for name in ["index.html", "tree.html"] {
+        for name in ["index.html", "tree.html", "rcx.html", "fdd.html"] {
             let path = root.join(name);
             let html = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(
@@ -186,6 +186,28 @@ mod tests {
             vendor.join("LICENSE.echarts.txt").is_file(),
             "ECharts LICENSE must ship beside vendor JS"
         );
+        for sidecar in ["echarts.min.js.version", "echarts.esm.min.js.version"] {
+            assert!(
+                vendor.join(sidecar).is_file(),
+                "{sidecar} must record vendored ECharts version"
+            );
+        }
+    }
+
+    #[test]
+    fn static_product_js_avoids_eval() {
+        let js_root = static_root().join("assets/js");
+        let mut files = Vec::new();
+        walk_js(&js_root, &mut files);
+        for path in files {
+            let src = fs::read_to_string(&path).expect("read js");
+            let rel = path.strip_prefix(static_root()).unwrap_or(&path);
+            assert!(
+                !src.contains("eval(") && !src.contains("new Function"),
+                "{} must not use eval or Function constructor",
+                rel.display()
+            );
+        }
     }
 
     fn walk_js(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
