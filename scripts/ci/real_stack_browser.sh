@@ -293,7 +293,47 @@ run_playwright() {
   status=$?
   report_status=0
   if [[ "$status" -eq 0 ]]; then
-    python3 "$ROOT/scripts/ci/playwright_required_report.py" "$static_report" || report_status=$?
+    python3 - "$static_report" <<'PY' || report_status=$?
+import json
+import sys
+from pathlib import Path
+
+raw = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = raw.find("{")
+if start < 0:
+    print("FAIL: static product CSP JSON report has no object", file=sys.stderr)
+    sys.exit(1)
+report = json.loads(raw[start:])
+
+
+def walk(suite: dict) -> None:
+    for spec in suite.get("specs") or []:
+        for test in spec.get("tests") or []:
+            if not isinstance(test, dict):
+                continue
+            results = test.get("results") or []
+            status = results[-1].get("status") if results else ""
+            tests_run.append(str(spec.get("title") or "spec"))
+            if status in {"passed", "expected"}:
+                tests_ok.append(1)
+    for child in suite.get("suites") or []:
+        if isinstance(child, dict):
+            walk(child)
+
+
+tests_run: list[str] = []
+tests_ok: list[int] = []
+for suite in report.get("suites") or []:
+    if isinstance(suite, dict):
+        walk(suite)
+
+print(f"static-product-csp: tests_run={len(tests_run)} tests_passed={len(tests_ok)}")
+if len(tests_run) < 1:
+    print("FAIL: zero static product CSP tests in JSON report", file=sys.stderr)
+    sys.exit(1)
+if len(tests_ok) != len(tests_run):
+    sys.exit(1)
+PY
   fi
   set -e
   echo "static product CSP playwright exit ${status}"
