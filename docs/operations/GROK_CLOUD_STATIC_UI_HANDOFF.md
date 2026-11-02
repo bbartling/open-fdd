@@ -24,7 +24,7 @@ Paste this file into a Cursor cloud agent. You are the implementing agent. Do no
 - [ ] **Wave D.** Three schedule cards (model sync, history, AFDD) on existing durable jobs. An earlier unknown chunk holds the cycle checkpoint even when a later chunk is exact.
 - [ ] **Wave E.** CSV, admin, synthetic demo, static real-stack smoke. Replace React-only guards with static-asset, role, and no-Node-on-central checks. ZAP and the old-frontend soak stay DEFERRED, not passed.
 - [ ] **Wave F.** Remove the `openfdd-web` container from the default portal compose. Central `/app/` is the product UI. Next patch (confirm master; likely 4.0.9). Publish. Keep the last `openfdd-web` image as rollback. Do not drop the volume or the API. Do not re-pin the live stack.
-- [ ] **Rust pin.** Separate PR, not a UI wave. Product Axum is already 0.8.9 in `Cargo.lock` via `axum = "0.8"`; write `0.8.9` in `services/central/Cargo.toml`. Same-major bumps for `tower-http`, `tokio`, `sqlx`, and `utoipa` where crates.io is newer. Leave the `tonic` 0.12 / Axum 0.7.9 copy until tonic can build on Axum 0.8. Do not edit `archive/`. This does not block Waves C–F.
+- [x] **Rust pin.** Separate PR, not a UI wave. Product Axum is already 0.8.9 in `Cargo.lock` via `axum = "0.8"`; write `0.8.9` in `services/central/Cargo.toml`. Same-major bumps for `tower-http`, `tokio`, `sqlx`, and `utoipa` where crates.io is newer. Leave the `tonic` 0.12 / Axum 0.7.9 copy until tonic can build on Axum 0.8. Do not edit `archive/`. This does not block Waves C–F. Merged as 0fbb405d (PR 1489).
 
 ## Local Linux checkpoints (this host only)
 
