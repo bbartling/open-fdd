@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Prove a disposable loopback stack is the product central + Timescale SPA.
+"""Prove a disposable loopback stack is product central + Timescale.
 
 Refuses non-loopback bases (Railway and any other remote host). Requires the
-SPA shell, a healthy Timescale-backed central, auth on, and starter seed off.
+static product UI shell at /app/, a healthy Timescale-backed central, auth on,
+and starter seed off.
 """
 
 from __future__ import annotations
@@ -40,9 +41,9 @@ def loopback_problem(base: str) -> str | None:
 def problems(spa_status: int, spa_body: bytes, health: dict[str, Any], auth: dict[str, Any]) -> list[str]:
     found: list[str] = []
     if spa_status != 200:
-        found.append(f"SPA HTTP {spa_status}")
-    if b'id="root"' not in spa_body and b"id='root'" not in spa_body:
-        found.append("SPA body has no root element")
+        found.append(f"static product UI HTTP {spa_status}")
+    if b'id="loginGate"' not in spa_body and b"id='loginGate'" not in spa_body:
+        found.append("static product UI body has no loginGate element")
     if health.get("ok") is not True:
         found.append("central ok is not true")
     if health.get("service") != "openfdd-central":
@@ -89,10 +90,15 @@ def check_base(base: str, timeout: float) -> tuple[int, list[str]]:
     if problem:
         return 1, [f"FAIL: {problem}"]
     root = base.rstrip("/")
+    api_root = root
+    if root.endswith("/app"):
+        api_root = root[: -len("/app")]
+    elif "/app/" in root:
+        api_root = root.split("/app/", 1)[0]
     try:
         spa_status, spa_body = _get(f"{root}/", timeout)
-        health_status, health_body = _get(f"{root}/api/health", timeout)
-        auth_status, auth_body = _get(f"{root}/api/auth/status", timeout)
+        health_status, health_body = _get(f"{api_root}/api/health", timeout)
+        auth_status, auth_body = _get(f"{api_root}/api/auth/status", timeout)
     except Exception as exc:
         return 1, [f"FAIL: {exc}"]
     if health_status != 200:
@@ -109,7 +115,7 @@ def check_base(base: str, timeout: float) -> tuple[int, list[str]]:
         return 1, [f"FAIL: {item}" for item in found]
     return 0, [
         "stack-health:"
-        " spa=200"
+        " static_ui=200"
         " service=openfdd-central"
         " timescale_ok=true"
         " historian=timescale"
@@ -134,10 +140,15 @@ def _healthy() -> dict[str, Any]:
 
 def self_test() -> int:
     failures: list[str] = []
-    good = problems(200, b'<div id="root"></div>', _healthy(), {"ok": True, "auth_required": True})
+    good = problems(
+        200,
+        b'<div id="loginGate"></div>',
+        _healthy(),
+        {"ok": True, "auth_required": True},
+    )
     if good:
         failures.append(f"healthy proof was rejected: {good}")
-    if loopback_problem("http://127.0.0.1:3000") is not None:
+    if loopback_problem("http://127.0.0.1:8080/app") is not None:
         failures.append("loopback base was rejected")
     if loopback_problem("http://openfdd.railway.app") is None:
         failures.append("Railway host was accepted")
@@ -145,17 +156,32 @@ def self_test() -> int:
         failures.append("remote host was accepted")
     seeded = _healthy()
     seeded["starter_seed"] = "seeded"
-    if not problems(200, b'<div id="root"></div>', seeded, {"ok": True, "auth_required": True}):
+    if not problems(
+        200,
+        b'<div id="loginGate"></div>',
+        seeded,
+        {"ok": True, "auth_required": True},
+    ):
         failures.append("seeded starter was accepted")
     offline = _healthy()
     offline["timescale_ok"] = False
-    if not problems(200, b'<div id="root"></div>', offline, {"ok": True, "auth_required": True}):
+    if not problems(
+        200,
+        b'<div id="loginGate"></div>',
+        offline,
+        {"ok": True, "auth_required": True},
+    ):
         failures.append("timescale_ok false was accepted")
-    open_auth = problems(200, b'<div id="root"></div>', _healthy(), {"ok": True, "auth_required": False})
+    open_auth = problems(
+        200,
+        b'<div id="loginGate"></div>',
+        _healthy(),
+        {"ok": True, "auth_required": False},
+    )
     if not open_auth:
         failures.append("auth_required false was accepted")
-    if not problems(500, b'<div id="root"></div>', _healthy(), {"ok": True, "auth_required": True}):
-        failures.append("SPA HTTP 500 was accepted")
+    if not problems(500, b'<div id="loginGate"></div>', _healthy(), {"ok": True, "auth_required": True}):
+        failures.append("static UI HTTP 500 was accepted")
     if failures:
         print("browser_stack_health --self-test FAILED:", file=sys.stderr)
         for item in failures:

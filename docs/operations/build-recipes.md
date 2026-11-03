@@ -9,7 +9,7 @@ nav_exclude: true
 # Build recipes
 
 Open-FDD ships named product recipes. The **4.0 default** is the **`portal`** recipe:
-`openfdd-central` + `openfdd-web` + Timescale (`docker/compose.portal.yml`,
+`openfdd-central` (static product UI at `/app/`) + Timescale (`docker/compose.portal.yml`,
 `compose.timescale.yml`, optional `compose.local.yml`). Ingest is the Normal
 Framework portal API and CSV — no MQTT broker or fieldbus on this path. Compose
 helpers below also map onto legacy Recipe 1 / Recipe 2 names where those still
@@ -17,7 +17,7 @@ apply for archived OT labs.
 
 | Named recipe | Best for | Services | Arch | Guide |
 | --- | --- | --- | --- | --- |
-| **portal (4.0 default)** | NF + CSV lab / production UI | central + web + Timescale | **linux/amd64** (web/arm per publish) | [Local hosting](LOCAL_HOSTING.md) · [Local deployment](LOCAL_DEPLOYMENT.md) |
+| **portal (4.0 default)** | NF + CSV lab / production UI | central + Timescale (UI on central `/app/`) | **linux/amd64** (+ arm64 per publish) | [Local hosting](LOCAL_HOSTING.md) · [Local deployment](LOCAL_DEPLOYMENT.md) |
 | **Recipe 1 — cloud hub** (historical; Railway / cloud hosting retired) | cloud MQTTS hub | `openfdd-mqtt` + `openfdd-central` + `openfdd-web` | **linux/amd64 only** | Retired — use portal + [Local hosting](LOCAL_HOSTING.md) |
 | **Recipe 2 — OT edge** | Historical (archived OT): LAN/VPN OT host | `openfdd-central` + `openfdd-web` + protocol (fieldbus/…) | **amd64 + arm64** | [Local stack](../quick-start/local-stack.md) · [VM deployment](VM_DEPLOYMENT.md) |
 
@@ -32,7 +32,7 @@ Do **not** treat “fieldbus-only on-prem + hub-only in cloud” as the only top
 | Image | Role |
 |-------|------|
 | `ghcr.io/bbartling/openfdd-central` | API + FDD engine (Timescale SQL rule registry, `sql/fdd`) |
-| `ghcr.io/bbartling/openfdd-web` | React engineering UI (container port `8080`; local Compose maps host `3000`) |
+| `ghcr.io/bbartling/openfdd-web` | **Rollback-only** React SPA (`docker/compose.react.yml`; host `:3000`) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | BACnet/IP poller, publishes over MQTTS |
 | `ghcr.io/bbartling/openfdd-bacnet-modbus` | Split BACnet edge process (`bacnet-modbus` Docker target) |
 | `ghcr.io/bbartling/openfdd-haystack` | Split outbound Haystack HTTP edge process (`haystack` Docker target) |
@@ -47,7 +47,7 @@ See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html
 
 | Helper | Named recipe | Compose file | Services | Use |
 |--------|--------------|--------------|----------|-----|
-| **`portal`** | **4.0 default** | `compose.portal.yml` + `compose.timescale.yml` (+ `compose.local.yml`) | central + web + Timescale | NF portal sites, CSV packages, AFDD, analytics cache |
+| **`portal`** | **4.0 default** | `compose.portal.yml` + `compose.timescale.yml` (+ `compose.local.yml`) | central + Timescale | NF portal sites, CSV packages, AFDD, analytics cache; UI **`/app/`** |
 | `csv` | **Recipe 2** (no protocol) | `docker/compose.csv.yml` | central + web (`OPENFDD_MQTT_ENABLED=0`) | IT dashboard / CSV-package / broker-free edge |
 | `standalone` | **Recipe 2** (+ optional local mqtt) | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
 | `central` | **Recipe 1** shape | `docker/compose.central.yml` | mqtt + central + web | hub for remote edges |

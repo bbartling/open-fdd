@@ -1,7 +1,9 @@
-# Open-FDD 4.0 product recipe: central + React web + Timescale overlay.
+# Open-FDD 4.0 product recipe: central (static UI at /app/) + Timescale overlay.
 # No MQTT broker, no fieldbus, no certificate kit, no OT listener.
 # Timescale is added by scripts/openfdd_stack_lib.sh (compose.timescale.yml).
 # Provider secrets stay in host env / secret refs. This file only forwards names.
+#
+# React rollback: docker/compose.react.yml (+ optional compose.local.yml overlays).
 
 name: openfdd-portal
 
@@ -25,8 +27,7 @@ services:
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
       OPENFDD_AGENT_PASSWORD: ${OPENFDD_AGENT_PASSWORD:-}
       OPENFDD_ALLOW_OPEN_BIND: ${OPENFDD_ALLOW_OPEN_BIND:-}
-      OPENFDD_REACT_UI: "1"
-      OPENFDD_UI_GENERATION_DEFAULT: react
+      OPENFDD_STATIC_PRODUCT_UI: ${OPENFDD_STATIC_PRODUCT_UI:-1}
       OPENFDD_PROVIDER_SITES: ${OPENFDD_PROVIDER_SITES:-}
       OPENFDD_PROVIDER_POLL: ${OPENFDD_PROVIDER_POLL:-}
       OPENFDD_PROVIDER_MAX_CONCURRENT: ${OPENFDD_PROVIDER_MAX_CONCURRENT:-}
@@ -46,20 +47,5 @@ services:
       - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - ../workspace:/workspace
-    logging: *openfdd-logging
-    restart: unless-stopped
-
-  web:
-    image: ${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:nightly}
-    build:
-      context: ../archive/product-ui/react-spa-v4
-      dockerfile: Dockerfile
-      args:
-        OPENFDD_GIT_SHA: ${OPENFDD_GIT_SHA:-unknown}
-        OPENFDD_WEB_VERSION: ${OPENFDD_WEB_VERSION:-0.1.0}
-    ports:
-      - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:8080"
-    depends_on:
-      - central
     logging: *openfdd-logging
     restart: unless-stopped

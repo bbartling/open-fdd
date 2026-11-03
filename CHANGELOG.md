@@ -4,6 +4,15 @@
 
 ## Unreleased
 
+## 4.0.9 — 2026-11-03
+
+Workspace patch for **static product UI Wave F**: the default portal compose serves the Bench Viz shell from central at `/app/` (`OPENFDD_STATIC_PRODUCT_UI=1`); the `openfdd-web` container is removed from `docker/compose.portal.yml`. Rollback remains `docker/compose.react.yml` plus the archived SPA and GHCR `openfdd-web` (rollback-only publish). `/api/health` and `/api/version` report `4.0.9+<sha>`. PyPI `open-fdd` stays **5.0.0**. No SQL equation or contract identity changes (SI distribution remains `4.0.8-softopen.1`, docs/packaging only).
+
+- **Static UI Waves A–F** — central `/app/` is the default product UI; real-stack browser CI runs against portal compose without `openfdd-web`.
+- **Wave D** — schedule cards (model sync, history ingest, AFDD) on durable jobs; AFDD checkpoint fix when an earlier chunk is unknown and a later chunk is exact.
+- **CI** — memory-pressure test isolation in Rust Stack CI (browser job unchanged triggers).
+- **SI SQL contract** — portable distribution manifest and consumer verify (#1492); scientific pack `4.0.8-softopen.1` (metadata/docs only on this bump).
+
 ## 4.0.8 — 2026-10-31
 
 Workspace patch after the C2 product-fix and C3 SQL-QUAL qualification rows on master. `/api/health` and `/api/version` report `4.0.8+<sha>`. Contract pack versions move to `4.0.8-softopen`; `metric_storage_status` remains `released` (set at 4.0.7 W7). PyPI `open-fdd` stays **5.0.0**. No new SQL rule or analytics body changes in this bump PR.
