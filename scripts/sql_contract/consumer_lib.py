@@ -297,10 +297,18 @@ def verify_analytics_execute_smoke(conn, artifact_root: Path, receipt: VerifyRec
             (site, "EQ1"),
         )
         try:
+            import re
+
             from scripts.stress.si_cutover.ci_analytics_p2 import _dollar_sql_to_psycopg
 
-            # NULL $2 selects all equipment (inventory query); avoids text[] polymorphic bind.
-            bind_sql, bind_params = _dollar_sql_to_psycopg(sql, (site, None))
+            # Smoke: drop optional equipment scope so only building_id is bound (portable client bind).
+            scoped = re.sub(
+                r"\(\s*\$2::text\[\][\s\S]*?\)",
+                "TRUE",
+                sql,
+                count=1,
+            )
+            bind_sql, bind_params = _dollar_sql_to_psycopg(scoped, (site,))
             cur.execute(bind_sql, bind_params)
             rows = cur.fetchall()
         except Exception as exc:
