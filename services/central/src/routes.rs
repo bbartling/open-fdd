@@ -9350,9 +9350,10 @@ mod version_tests {
 
     #[test]
     fn site_building_row_parses_string_and_object_ids() {
+        use std::collections::BTreeSet;
         let rows = [
-            json!("SITE_A"),
-            json!({"id": "SITE_B", "building_id": "SITE_B"}),
+            serde_json::Value::String("SITE_A".into()),
+            serde_json::json!({"id": "SITE_B", "building_id": "SITE_B"}),
         ];
         let mut ids = BTreeSet::new();
         for row in &rows {
