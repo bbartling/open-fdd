@@ -299,7 +299,8 @@ def verify_analytics_execute_smoke(conn, artifact_root: Path, receipt: VerifyRec
         try:
             from scripts.stress.si_cutover.ci_analytics_p2 import _dollar_sql_to_psycopg
 
-            bind_sql, bind_params = _dollar_sql_to_psycopg(sql, (site, ["EQ1"]))
+            # NULL $2 selects all equipment (inventory query); avoids text[] polymorphic bind.
+            bind_sql, bind_params = _dollar_sql_to_psycopg(sql, (site, None))
             cur.execute(bind_sql, bind_params)
             rows = cur.fetchall()
         except Exception as exc:
