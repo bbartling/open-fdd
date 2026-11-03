@@ -1,9 +1,9 @@
 //! Swagger UI + OpenAPI JSON for central.
 
+use crate::openapi_inventory::{OpenApiPolicyAddon, RouteInventoryAddon};
 use axum::Router;
-use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
-use utoipa::Modify;
 use utoipa::OpenApi;
+use utoipa_swagger_ui::Config;
 
 use crate::auth::{JwtClaims, Role};
 use crate::models::*;
@@ -439,23 +439,17 @@ mod live_routes {
         TenantBudgetConfig,
         TenantBudgetsResponse,
     )),
-    modifiers(&SecurityAddon),
+    modifiers(&RouteInventoryAddon, &OpenApiPolicyAddon),
     info(
         title = "Open-FDD Central API",
-        version = "3.5.4",
+        version = "0.0.0",
         description = "Open-FDD Central control plane — Normal Framework API (portal HTTPS REST or LAN gRPC, per site) and CSV ingest, Timescale historian, and FDD.\n\n\
-            **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
-            except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
-            Binding a non-loopback address without a strong JWT secret and admin password **fails closed**. \
-            JWT is not multi-building tenancy.\n\n\
-            **Wave L:** `OPENFDD_MULTI_TENANT` defaults **OFF**. Health/tenants/`/api/auth/me` echo `multi_tenant=false` \
-            and `active_tenant_id=legacy`. `POST /api/tenants/select` is a no-op for `legacy` while OFF. \
-            Per-tenant budgets (`OPENFDD_TENANT_BUDGETS`) stay disabled unless multi-tenant mode is ON. \
-            JWT `tenant_ids` + select remint are for Tier-2 lab enablement (single domain first).\n\n\
-            **Logins:** `admin` + `OPENFDD_ADMIN_PASSWORD` → admin JWT; `agent` + `OPENFDD_AGENT_PASSWORD` → operator JWT \
-            (preferred for Railway MCP / Cursor). Admins may also `POST /api/auth/agent-token` for short-lived operator JWTs.\n\n\
-            **Claims:** `sub` (subject), `role` one of `viewer`, `operator`, `admin`. \
-            Operator and admin JWTs are for portal and CSV writes when auth is enabled."
+            **Auth:** when JWT auth is enabled, use **Authorize** with a bearer token from `POST /api/auth/login` \
+            (no bearer required on that route or on `GET /api/auth/status`). `GET /api/health` is liveness-only. \
+            Open mode is loopback-only; binding a non-loopback address without a strong JWT secret and admin password fails closed.\n\n\
+            **Multi-tenant:** `OPENFDD_MULTI_TENANT` defaults OFF. `POST /api/tenants/select` is a no-op for `legacy` while OFF.\n\n\
+            **Agent tokens:** admins may `POST /api/auth/agent-token` with an admin bearer to mint short-lived operator JWTs.\n\n\
+            **Claims:** `sub`, `role` (`viewer`, `operator`, `admin`). No credentials are embedded in this document."
     ),
     tags(
         (name = "central", description = "Open-FDD Central control plane"),
@@ -469,23 +463,18 @@ mod live_routes {
 )]
 pub struct ApiDoc;
 
-struct SecurityAddon;
-
-impl Modify for SecurityAddon {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        if let Some(components) = openapi.components.as_mut() {
-            components.add_security_scheme(
-                "bearerAuth",
-                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
-            );
-        }
-    }
-}
-
 /// Swagger UI at `/docs`; OpenAPI JSON at `/openapi.json` (mounted once by SwaggerUi).
 pub fn router() -> Router {
-    Router::new()
-        .merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))
+    Router::new().merge(
+        utoipa_swagger_ui::SwaggerUi::new("/docs")
+            .url("/openapi.json", ApiDoc::openapi())
+            .config(
+                Config::default()
+                    .validator_url("none")
+                    .persist_authorization(true)
+                    .try_it_out_enabled(true),
+            ),
+    )
 }
 
 #[cfg(test)]
@@ -496,28 +485,5 @@ mod tests {
     fn openapi_router_builds_without_overlapping_routes() {
         // Axum panics on duplicate path+method; this was the nightly central crash (#502).
         let _ = router();
-    }
-
-    #[test]
-    fn openapi_lists_live_jobs_analytics_datasets_reports_routes() {
-        // OFDD-071: /openapi.json must advertise the live routes an operator uses,
-        // not just the original edge/command/auth subset.
-        let doc = ApiDoc::openapi();
-        let paths = doc.paths.paths;
-        for expected in [
-            "/api/jobs",
-            "/api/jobs/{job_id}",
-            "/api/datasets",
-            "/api/fdd/results",
-            "/api/analytics/economizer",
-            "/api/reports",
-            "/api/reports/engineering-findings",
-            "/api/sites/buildings",
-        ] {
-            assert!(
-                paths.contains_key(expected),
-                "missing OpenAPI path {expected}"
-            );
-        }
     }
 }

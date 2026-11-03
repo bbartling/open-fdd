@@ -44,6 +44,7 @@ mod occupancy_calendar;
 #[cfg(test)]
 mod one_writer_fixtures;
 mod openapi;
+mod openapi_inventory;
 mod operator_schedule;
 #[cfg(test)]
 mod package_preflight_fixtures;
