@@ -39,7 +39,12 @@ def _load_capture():
 capture = _load_capture()
 baseline_io = importlib.import_module("si_cutover.baseline_io")
 baseline_history = importlib.import_module("si_cutover.baseline_history")
-IP_ORACLE_ROOT = Path(os.environ.get("OPENFDD_IP_ORACLE_ROOT", "/tmp/open-fdd-wt-407-ipbase"))
+IP_ORACLE_ROOT = Path(
+    os.environ.get(
+        "OPENFDD_IP_ORACLE_ROOT",
+        str(Path(tempfile.gettempdir()) / "open-fdd-ip-oracle-test"),
+    )
+)
 IP_ORACLE_COMMIT = "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0"
 
 

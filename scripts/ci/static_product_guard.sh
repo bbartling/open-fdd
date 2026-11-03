@@ -44,4 +44,11 @@ grep -q 'debian:bookworm-slim' services/central/Dockerfile
 grep -q 'openfdd-central' services/central/Dockerfile
 ! grep -qE 'node:|npm |python3' services/central/Dockerfile
 
+bash -n scripts/ci/forbid_port_3000_product_docs.sh
+./scripts/ci/forbid_port_3000_product_docs.sh
+
+echo "== csv recipe: central-only static UI =="
+! grep -qE '^[[:space:]]*web:' docker/compose.csv.yml
+grep -q 'OPENFDD_STATIC_PRODUCT_UI' docker/compose.csv.yml
+
 echo "PASS static_product_guard.sh"

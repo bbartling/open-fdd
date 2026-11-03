@@ -1,5 +1,5 @@
-# HTTP edge for React SPA — hit http://<machine-ip>/ → web nginx (lab / LAN).
-# Same-origin /api* + /twins* → central. Default for react / react-ot recipes.
+# HTTP edge for React SPA rollback — hit http://<machine-ip>/ → web nginx (lab / LAN).
+# Not used by portal / csv (see Caddyfile.central.*). Default for react / react-ot only.
 #
 #   OPENFDD_CADDY=1 ./scripts/openfdd_stack_up.sh react-ot
 #   (react recipes default Caddy on unless OPENFDD_CADDY=0)

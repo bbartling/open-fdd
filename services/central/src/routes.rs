@@ -1,6 +1,6 @@
 //! Central REST + OpenAPI routes.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -124,6 +124,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health/diagnostics", get(health_diagnostics))
         .route("/api/providers/health", get(providers::providers_health))
         .route("/api/providers/sites", get(providers::providers_sites))
+        .route("/api/sites/buildings", get(site_buildings_list))
         .route("/api/ingest/jobs", get(ingest_queue::http::list_jobs))
         .route(
             "/api/ingest/jobs/{job_id}",
@@ -5501,6 +5502,82 @@ async fn merge_historian_datasets(state: &AppState, body: &mut Value) {
     }
 }
 
+/// Tenant-scoped building ids for the static UI site picker (provider sites + CSV/historian).
+#[utoipa::path(
+    get,
+    path = "/api/sites/buildings",
+    tag = "central",
+    responses(
+        (status = 200, description = "De-duplicated building list for the signed-in tenant", body = serde_json::Value),
+        (status = 401, description = "Auth required when JWT secret is configured")
+    )
+)]
+pub async fn site_buildings_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    let ctx = resolve_tenant_context_for_user(&user);
+    let mut ids = BTreeSet::new();
+
+    for site in state.providers.sites_config() {
+        let id = site.building_id.trim();
+        if !id.is_empty() && ctx.allow_building(id) {
+            ids.insert(id.to_string());
+        }
+    }
+
+    let mut package_body = tokio::task::spawn_blocking(
+        open_fdd_edge_prototype::csv_ingest::package::list_package_buildings_handler,
+    )
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package buildings task: {e}")}));
+    merge_historian_building_ids(&state, &mut package_body).await;
+    if crate::tenant::multi_tenant_enabled() {
+        if let Some(arr) = package_body
+            .get_mut("buildings")
+            .and_then(|v| v.as_array_mut())
+        {
+            ctx.retain_allowed_package_buildings(arr);
+        }
+    }
+    if let Some(arr) = package_body.get("buildings").and_then(|v| v.as_array()) {
+        for row in arr {
+            let id = row
+                .as_str()
+                .or_else(|| row.get("id").and_then(|v| v.as_str()))
+                .or_else(|| row.get("building_id").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .trim();
+            if !id.is_empty() && ctx.allow_building(id) {
+                ids.insert(id.to_string());
+            }
+        }
+    }
+
+    for id in historian_and_provider_ids(&state).await {
+        if ctx.allow_building(&id) {
+            ids.insert(id);
+        }
+    }
+
+    let buildings: Vec<Value> = ids
+        .into_iter()
+        .map(|id| {
+            json!({
+                "id": id,
+                "building_id": id,
+            })
+        })
+        .collect();
+    Ok(Json(json!({"ok": true, "buildings": buildings})))
+}
+
 pub async fn csv_import_package_buildings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -9269,5 +9346,28 @@ mod version_tests {
             zw.finish().unwrap();
         }
         cursor.into_inner()
+    }
+
+    #[test]
+    fn site_building_row_parses_string_and_object_ids() {
+        let rows = [
+            json!("SITE_A"),
+            json!({"id": "SITE_B", "building_id": "SITE_B"}),
+        ];
+        let mut ids = BTreeSet::new();
+        for row in &rows {
+            let id = row
+                .as_str()
+                .or_else(|| row.get("id").and_then(|v| v.as_str()))
+                .or_else(|| row.get("building_id").and_then(|v| v.as_str()))
+                .unwrap_or("")
+                .trim();
+            if !id.is_empty() {
+                ids.insert(id.to_string());
+            }
+        }
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains("SITE_A"));
+        assert!(ids.contains("SITE_B"));
     }
 }

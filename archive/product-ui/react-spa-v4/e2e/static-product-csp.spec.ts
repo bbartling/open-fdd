@@ -257,6 +257,22 @@ test.describe("Static product UI CSP (central /app/)", () => {
     await ensureProductSession(page, request);
   });
 
+  test("site picker lists seeded building from /api/sites/buildings", async ({ page }) => {
+    if (!seededBuildingId) {
+      failIfRequired(
+        "OPENFDD_STATIC_UI_BROWSER_BUILDING_ID unset (seed_static_ui_browser_site before static CSP spec)",
+      );
+      return;
+    }
+    await page.goto(`${centralBase}/app/`, { waitUntil: "networkidle", timeout: 60_000 });
+    await expect(page.locator("#loginGate")).toBeHidden({ timeout: 30_000 });
+    await waitForAppBoot(page);
+    await expect(page.locator(`#sitePick option[value="${seededBuildingId}"]`)).toHaveCount(1, {
+      timeout: 30_000,
+    });
+    await expect(page.locator("#sitePick")).toHaveValue(seededBuildingId, { timeout: 15_000 });
+  });
+
   for (const path of TAB_PATHS) {
     test(`no CSP violations on ${path}`, async ({ page }) => {
       test.setTimeout(180_000);

@@ -71,7 +71,7 @@ cd ~/open-fdd
 curl -s http://127.0.0.1:8080/api/health | jq '{version, image_tag}'
 ```
 
-Open the UI at `http://<host>:3000`. When `OPENFDD_JWT_SECRET` is set, sign in
+Open the UI at `http://<host>:8080/app/`. When `OPENFDD_JWT_SECRET` is set, sign in
 with the admin/operator/viewer password from `OPENFDD_ADMIN_PASSWORD`.
 
 Reach the UI over Tailscale, VPN, or a reverse proxy — not raw public internet.

@@ -1,0 +1,38 @@
+# HTTPS edge for Open-FDD Central static UI (/app/) + same-origin /api + /docs.
+# Default for portal / csv when OPENFDD_CADDY=1 and OPENFDD_CADDY_TLS is not 0.
+#
+#   OPENFDD_CADDY=1 ./scripts/openfdd_stack_up.sh portal --caddy
+#
+# Product CSP and security headers are set by central; Caddy adds transport hygiene only.
+
+{
+	admin off
+}
+
+http://{$OPENFDD_PUBLIC_HOST:localhost} {
+	redir https://{host}{uri} permanent
+}
+
+https://{$OPENFDD_PUBLIC_HOST:localhost} {
+	encode gzip zstd
+	tls internal
+
+	@blocked path /.env /.git /.git/* /wp-admin /wp-admin/* /xmlrpc.php
+	respond @blocked 404
+
+	redir /login /auth 302
+
+	reverse_proxy {$OPENFDD_CADDY_UPSTREAM:central:8080} {
+		header_up Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+		flush_interval -1
+	}
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+}

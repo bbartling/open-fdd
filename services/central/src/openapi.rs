@@ -356,6 +356,7 @@ mod live_routes {
         crate::routes::health,
         crate::routes::health_diagnostics,
         crate::routes::list_tenants,
+        crate::routes::site_buildings_list,
         crate::routes::select_tenant,
         crate::routes::list_tenant_budgets,
         crate::routes::ingest_stats,

@@ -78,7 +78,9 @@ def lint_caddyfile(text: str) -> list[str]:
     if not re.search(r"(?m)^\s*tls\s+", text):
         errs.append("Caddyfile must enable tls")
     if "reverse_proxy" not in text:
-        errs.append("Caddyfile must reverse_proxy to web")
+        errs.append("Caddyfile must reverse_proxy to central or web")
+    elif "reverse_proxy web:8080" not in text and "reverse_proxy central:8080" not in text:
+        errs.append("Caddyfile must reverse_proxy to central:8080 or web:8080")
     if "Strict-Transport-Security" not in text:
         errs.append("Caddyfile should set Strict-Transport-Security")
     if "OPENFDD_PUBLIC_HOST" not in text:

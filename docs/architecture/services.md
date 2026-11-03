@@ -21,16 +21,16 @@ ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
 
 | Container | Image | Role |
 |-----------|-------|------|
-| `central` | `openfdd-central` | REST API (`:8080`), JWT auth, Timescale historian, Timescale SQL FDD engine, reports, MCP API surface |
-| `ui` | `openfdd-web` | React product SPA (`:3000`); talks to central REST for SQL FDD |
+| `central` | `openfdd-central` | REST API (`:8080`), static product UI at `/app/` when `OPENFDD_STATIC_PRODUCT_UI=1`, Timescale SQL FDD, reports, MCP API surface |
+| `web` (rollback) | `openfdd-web` | Optional React SPA rollback (`docker/compose.react.yml`) |
 | `fieldbus` | `openfdd-fieldbus` | Fixed 300 s health-only field poll; publishes the full versioned snapshot over MQTTS, local authenticated HTTP, or both |
 | `mqtt` | `openfdd-mqtt` | Mosquitto broker, MQTTS on `:8883` |
 | `mcp` | `openfdd-mcp` | Slim Rust MCP server for external agents |
 
 ```text
 ┌──────────────────────┐        ┌──────────────────────────────┐
-│ ui (React :3000) │───────▶│ central (:8080)              │
-└──────────────────────┘  REST  │ JWT · historian · SQL FDD    │
+│ Browser /app/    │───────▶│ central (:8080)              │
+└──────────────────────┘  REST  │ static UI · JWT · SQL FDD    │
                                  └──────────────────────────────┘
                                           ▲ MQTTS (8883, optional)
                                           │

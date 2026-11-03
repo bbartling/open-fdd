@@ -78,10 +78,10 @@ The default Compose recipe persists application data in `/opt/open-fdd/workspace
 From an approved LAN/VPN client:
 
 ```text
-http://<vm-hostname-or-ip>:3000
+http://<vm-hostname-or-ip>:8080/app/
 ```
 
-The React web container proxies browser API traffic to central over the Compose network. Users normally need access only to port `3000`.
+Open-FDD Central serves the product UI on central `:8080` (`/app/`). Users normally need access only to port `8080` (or HTTPS `:443` when Caddy fronts the stack).
 
 Central liveness on the VM:
 
@@ -89,13 +89,13 @@ Central liveness on the VM:
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
-If IT wants HTTPS and a friendly hostname such as `https://openfdd.example.internal`, put the web service behind the organization's existing reverse proxy/load balancer and TLS policy. Keep central private; proxy the browser to the web container rather than publishing central directly to users.
+If IT wants HTTPS and a friendly hostname such as `https://openfdd.example.internal`, use `OPENFDD_CADDY=1` on the portal recipe (`tls internal`) or put central behind the organization's reverse proxy. Keep direct `:8080` on loopback when possible.
 
 ## Firewall recommendation
 
 For a dashboard-only VM:
 
-- allow inbound TCP `3000` only from trusted LAN/VPN networks, or expose only the organization's reverse proxy on `443`;
+- allow inbound TCP `8080` (or Caddy `443`) only from trusted LAN/VPN networks, or expose only the organization's reverse proxy on `443`;
 - keep central `8080` bound to `127.0.0.1` unless administrators genuinely need direct API access;
 - do not expose BACnet, MQTT, or fieldbus ports merely because those images exist;
 - never expose Open-FDD directly to the public internet without an independent security review.
@@ -118,7 +118,7 @@ Verify after update:
 
 ```bash
 curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/app/
 ```
 
 The UI sidebar should show the running central release as `<semver>+<shortsha>`.

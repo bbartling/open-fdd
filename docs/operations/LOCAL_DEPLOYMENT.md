@@ -14,16 +14,17 @@ Open-FDD is **local-first**. The typical bench path is a GHCR-pulled Compose sta
 
 | Fact | Implication for agents |
 |------|------------------------|
-| Dashboard + API are **plain HTTP** on the LAN | Expect `http://127.0.0.1:3000` (UI) and `http://127.0.0.1:8080` (API). **No product TLS termination on local Compose yet.** Login passwords and Bearer JWTs travel in the clear — **trusted/isolated LAN or VPN only**. For shared/untrusted networks, terminate TLS on an ops reverse proxy in front of Compose. |
-| Intended exposure | Host firewall / VPN / OT LAN only. Do **not** advertise local `:3000`/`:8080` to the public internet. |
+| Dashboard + API on the LAN | Default product UI is **Open-FDD Central** at `http://127.0.0.1:8080/app/` (same-origin `/api` on `:8080`). Plain HTTP is the default behind a firewall; optional Caddy (`OPENFDD_CADDY=1` on `portal` / `csv`) terminates **HTTPS** with `tls internal` and proxies to central. Login passwords and Bearer JWTs travel in the clear on plain HTTP — **trusted/isolated LAN or VPN only**. |
+| Intended exposure | Host firewall / VPN / OT LAN only. Do **not** advertise local `:8080` (or Caddy `:443`) to the public internet. React rollback is optional — see [LOCAL_HOSTING.md](LOCAL_HOSTING.md). |
 | Cloud hosting | Retired. Railway and cloud web-app hosting are prohibited; hosting is the local single-host stack ([LOCAL_HOSTING.md](LOCAL_HOSTING.md)). |
 | Auth still required | Admin / agent JWT on central even over HTTP — never skip auth “because it’s local.” |
 
 If a customer needs HTTPS on-prem, use the supported **Caddy standalone HTTPS**
 paths (operator-provided cert, managed local CA, or explicit lab self-signed) —
 see [`SECURITY_QUALIFICATION_POLICY.md`](SECURITY_QUALIFICATION_POLICY.md) and
-`deploy/caddy/Caddyfile.standalone.https*`. Default `react-ot` / `csv` Compose
-helpers remain plain HTTP behind a firewall. Do not claim production TLS or a
+`deploy/caddy/Caddyfile.standalone.https*`. Portal / csv Caddy overlays use
+`docker/caddy/Caddyfile.central.https` (or `.http` when `OPENFDD_CADDY_TLS=0`).
+Do not claim production TLS or a
 Nessus trust closeout from lab self-signed alone.
 
 ## Recipes
@@ -33,7 +34,8 @@ Named product recipes: **Recipe 1** cloud hub (mqtt+central+web, amd64) · **Rec
 | Helper | Named recipe | Compose | Use |
 |--------|--------------|---------|-----|
 | **`edge` + `compose.edge.railway.yml` (removed, historical)** | optional WAN → Recipe 1 | fieldbus only → hub MQTTS (historical) | Legacy (archived OT edge) |
-| `csv` / `react` | **Recipe 2** (no/optional protocol) | web + central | Local CSV / broker-free edge lab |
+| `portal` / `csv` | **4.0 portal** | central `/app/` (+ Timescale for `csv`) | Default product UI + CSV lab |
+| `react` | **Recipe 2 rollback** | web + central | Archived React SPA (`compose.react.yml`) |
 | `react-ot` / `standalone` | **Recipe 2** (+ local mqtt optional) | + fieldbus (+ mqtt) | Optional local OT lab (not closeout; no Pis) |
 
 Docs: [build-recipes.md](build-recipes.md) · agent: [`CONTAINER_AGENT.md`](../../openfdd_agent_spec/CONTAINER_AGENT.md) · skill [`openfdd-stack-ghcr`](../../openfdd_agent_spec/skills/openfdd-stack-ghcr/SKILL.md).
@@ -50,7 +52,7 @@ export OPENFDD_IMAGE_TAG="$SHA"
 ./scripts/openfdd_maint_update_resume.sh react-ot "$SHA" --skip-maintenance
 
 curl -sf http://127.0.0.1:8080/api/health | jq '{ok,version,service}'
-# UI: http://127.0.0.1:3000   (or host LAN IP :3000 behind firewall)
+# UI: http://127.0.0.1:8080/app/   (or https://<host>/app/ with OPENFDD_CADDY=1)
 # Fieldbus health (react-ot): http://127.0.0.1:8081
 ```
 
