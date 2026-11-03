@@ -1,9 +1,7 @@
 //! Swagger UI + OpenAPI JSON for central.
 
-mod openapi_inventory;
-
+use crate::openapi_inventory::{OpenApiPolicyAddon, RouteInventoryAddon};
 use axum::Router;
-use openapi_inventory::{OpenApiPolicyAddon, RouteInventoryAddon};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::Config;
 
