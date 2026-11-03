@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use serde::Deserialize;
 use utoipa::openapi::path::{HttpMethod, Operation, PathItem};
-use utoipa::openapi::{OpenApi, RefOr, Response, Responses};
+use utoipa::openapi::{OpenApi, RefOr, Response};
 use utoipa::Modify;
 
 /// Product central route modules (must stay aligned with `main.rs` merges).
@@ -360,7 +360,7 @@ fn operation_slot<'a>(item: &'a mut PathItem, method: HttpMethod) -> &'a mut Opt
     }
 }
 
-fn operation_ref(item: &PathItem, method: &HttpMethod) -> Option<&Operation> {
+fn operation_ref<'a>(item: &'a PathItem, method: &HttpMethod) -> Option<&'a Operation> {
     match method {
         HttpMethod::Get => item.get.as_ref(),
         HttpMethod::Post => item.post.as_ref(),
