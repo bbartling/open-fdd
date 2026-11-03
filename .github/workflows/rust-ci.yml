@@ -159,7 +159,7 @@ jobs:
           toolchain: 1.95.0
 
       - name: Static product Rust unit tests
-        run: cargo test -p openfdd-central static_product:: -- --nocapture
+        run: cargo test -p openfdd-central 'static_product::' -- --nocapture
 
       - name: Product tree guards
         run: |
