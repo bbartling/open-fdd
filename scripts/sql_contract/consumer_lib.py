@@ -291,10 +291,10 @@ def verify_analytics_execute_smoke(conn, artifact_root: Path, receipt: VerifyRec
         )
         cur.execute(
             """
-            INSERT INTO equipment(building_id, equipment_id, dis, equip_type)
-            VALUES (%s, %s, %s, 'ahu')
+            INSERT INTO equipment(building_id, equipment_id, equip_type)
+            VALUES (%s, %s, 'ahu')
             """,
-            (site, "EQ1", "EQ1"),
+            (site, "EQ1"),
         )
         try:
             cur.execute(sql, (site, ["EQ1"]))
@@ -383,15 +383,15 @@ def run_installed_verify(
             t1 = "2026-06-01T00:05:00+00:00"
             cur.execute(
                 """
-                INSERT INTO sample(site_id, timestamp_utc, equipment_id, role, value)
-                VALUES (%s, %s, 'E', 'fan-status', 1),
-                       (%s, %s, 'E', 'fan-status', 0)
+                INSERT INTO sample(ts, site_id, openfdd_key, val)
+                VALUES (%s, %s, 'E.fan-status', 1),
+                       (%s, %s, 'E.fan-status', 0)
                 """,
-                (site, t0, site, t1),
+                (t0, site, t1, site),
             )
             cur.execute(
                 """
-                SELECT timestamp_utc FROM sample WHERE site_id = %s ORDER BY timestamp_utc
+                SELECT ts FROM sample WHERE site_id = %s ORDER BY ts
                 """,
                 (site,),
             )
