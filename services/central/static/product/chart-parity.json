@@ -1,0 +1,365 @@
+{
+  "version": 1,
+  "charts": [
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#ruleResultChart",
+      "new_renderer": "assets/js/fdd-charts.js#ruleResultChartOption",
+      "endpoint": "GET /api/fdd/plot",
+      "png_stem": "fdd_{rule_id}_{equipment_id}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#expandFddPlotRoles",
+      "new_renderer": "assets/js/fdd-charts.js#expandFddPlotRoles",
+      "endpoint": "GET /api/fdd/plot",
+      "png_stem": "fdd_{rule_id}_{equipment_id}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#withConfirmedFaultLane",
+      "new_renderer": "assets/js/fdd-charts.js#oatMeteoFddOption",
+      "endpoint": "POST /api/analytics/bas-vs-web-oat + GET /api/fdd/plot",
+      "png_stem": "fdd_OAT-METEO_weather",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#sensorHealthHeatmap",
+      "new_renderer": "assets/js/sensor-charts.js#sensorHealthHeatmapOption",
+      "endpoint": "POST /api/analytics/sensor-health",
+      "png_stem": "sensor_health",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#sensorFaultChart",
+      "new_renderer": "assets/js/sensor-charts.js#sensorFaultChartOption",
+      "endpoint": "POST /api/analytics/sensor-fault",
+      "png_stem": "sensor_fault",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#deriveSensorFaultMasks",
+      "new_renderer": "assets/js/sensor-charts.js#deriveSensorFaultMasks",
+      "endpoint": "internal",
+      "png_stem": null,
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#equipmentInspectionChart",
+      "new_renderer": "assets/js/chart-kit.js#inspectChartOption",
+      "endpoint": "POST /api/analytics/inspect",
+      "png_stem": "{equipment_id}_inspect",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#weeklyPlantFigures",
+      "new_renderer": "assets/js/overview-rcx-charts.js#weeklyMotorOption",
+      "endpoint": "POST /api/analytics/runtime",
+      "png_stem": "ahu_motor_weekly",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#weeklyPlantFigures",
+      "new_renderer": "assets/js/overview-rcx-charts.js#weeklyMotorOption",
+      "endpoint": "POST /api/analytics/runtime",
+      "png_stem": "boiler_motor_weekly",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#weeklyPlantFigures",
+      "new_renderer": "assets/js/overview-rcx-charts.js#weeklyMotorOption",
+      "endpoint": "POST /api/analytics/runtime",
+      "png_stem": "chiller_motor_weekly",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#mechFigure",
+      "new_renderer": "assets/js/overview-rcx-charts.js#mechCoolingOption",
+      "endpoint": "POST /api/analytics/mechanical-cooling",
+      "png_stem": "mech_cooling_oat_bins",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#econDeltaScatter",
+      "new_renderer": "assets/js/overview-rcx-charts.js#economizerDeltaOption",
+      "endpoint": "POST /api/analytics/economizer",
+      "png_stem": "economizer_free_cooling_delta",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#econMatResidual",
+      "new_renderer": "assets/js/overview-rcx-charts.js#economizerMatResidOption",
+      "endpoint": "POST /api/analytics/economizer",
+      "png_stem": "economizer_mat_residual",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#econTempsOverlay",
+      "new_renderer": "assets/js/overview-rcx-charts.js#economizerTempsOverlayOption",
+      "endpoint": "POST /api/analytics/economizer",
+      "png_stem": "economizer_temps_oa_damper",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#basOverlay",
+      "new_renderer": "assets/js/overview-rcx-charts.js#basOverlayOption",
+      "endpoint": "POST /api/analytics/bas-vs-web-oat",
+      "png_stem": "bas_vs_web_oat",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/centralOverview.ts#basHist",
+      "new_renderer": "assets/js/overview-rcx-charts.js#basHistOption",
+      "endpoint": "POST /api/analytics/bas-vs-web-oat",
+      "png_stem": "bas_web_oat_deviation_hist",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#multiEquipmentTimeseries",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#multiEquipmentTimeseriesOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#oatScatter",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#oatScatterOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#multiEquipmentBox",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#multiEquipmentBoxOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#rankingBars",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#rankingBarsOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#comfortDonut",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#comfortDonutOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#meteringCharts",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#meteringChartsOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#vavHealthWorstBars",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#vavHealthWorstBarsOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#vavHealthDonut",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#vavHealthDonutOption",
+      "endpoint": "POST /api/analytics/rcx/preset",
+      "png_stem": "rcx_{family}_{preset}",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#summaryPeerBullet",
+      "new_renderer": "assets/js/fuel-charts.js#summaryPeerBulletOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_summary_bullet",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#summaryPeerBars",
+      "new_renderer": "assets/js/fuel-charts.js#summaryPeerBarsOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_summary_bullet",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#rankedSiteEui",
+      "new_renderer": "assets/js/fuel-charts.js#rankedSiteEuiOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_ranked_eui",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#rolling12Eui",
+      "new_renderer": "assets/js/fuel-charts.js#rolling12EuiOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_roll12",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#intensityHeatmapForFuel",
+      "new_renderer": "assets/js/fuel-charts.js#intensityHeatmapForFuelOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_intensity_elec",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#intensityHeatmap",
+      "new_renderer": "assets/js/fuel-charts.js#intensityHeatmapOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_intensity_gas",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#stackedFuel",
+      "new_renderer": "assets/js/fuel-charts.js#stackedFuelOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_stacked",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#monthlyLines",
+      "new_renderer": "assets/js/fuel-charts.js#monthlyLinesOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_monthly",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#demandHeatmap",
+      "new_renderer": "assets/js/fuel-charts.js#demandHeatmapOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_demand",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#weatherScatter",
+      "new_renderer": "assets/js/fuel-charts.js#weatherScatterOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_weather",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#weatherResidualBars",
+      "new_renderer": "assets/js/fuel-charts.js#weatherResidualBarsOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_weather",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#demandPeakDualAxis",
+      "new_renderer": "assets/js/fuel-charts.js#demandPeakDualAxisOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_demand_peak",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/fuelCharts.ts#peakVsCoolSeason",
+      "new_renderer": "assets/js/fuel-charts.js#peakVsCoolSeasonOption",
+      "endpoint": "POST /api/analytics/fuel",
+      "png_stem": "fuel_peak_cool",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/components/MvChangePointPanel.tsx",
+      "new_renderer": "assets/js/mv-charts.js#mvChartOption",
+      "endpoint": "POST /api/analytics/mv",
+      "png_stem": "mv_change_point",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#seriesRowsToFigure",
+      "new_renderer": null,
+      "endpoint": null,
+      "png_stem": null,
+      "status": "dropped:internal-helper"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#rowsToBarFigure",
+      "new_renderer": null,
+      "endpoint": null,
+      "png_stem": null,
+      "status": "dropped:internal-helper"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4/src/api/vibeCharts.ts#outlierEquipmentIds",
+      "new_renderer": "assets/js/rcx-vibe-charts.js#outlierEquipmentIds",
+      "endpoint": "internal",
+      "png_stem": null,
+      "status": "ported"
+    }
+  ],
+  "required_archive_builders": [
+    "ruleResultChart",
+    "expandFddPlotRoles",
+    "withConfirmedFaultLane",
+    "sensorHealthHeatmap",
+    "sensorFaultChart",
+    "deriveSensorFaultMasks",
+    "equipmentInspectionChart",
+    "weeklyPlantFigures",
+    "mechFigure",
+    "econDeltaScatter",
+    "econMatResidual",
+    "econTempsOverlay",
+    "basOverlay",
+    "basHist",
+    "multiEquipmentTimeseries",
+    "oatScatter",
+    "multiEquipmentBox",
+    "rankingBars",
+    "comfortDonut",
+    "meteringCharts",
+    "vavHealthWorstBars",
+    "vavHealthDonut",
+    "summaryPeerBullet",
+    "summaryPeerBars",
+    "rankedSiteEui",
+    "rolling12Eui",
+    "intensityHeatmapForFuel",
+    "intensityHeatmap",
+    "stackedFuel",
+    "monthlyLines",
+    "demandHeatmap",
+    "weatherScatter",
+    "weatherResidualBars",
+    "demandPeakDualAxis",
+    "peakVsCoolSeason",
+    "MvChangePointPanel",
+    "seriesRowsToFigure",
+    "rowsToBarFigure",
+    "outlierEquipmentIds"
+  ],
+  "tables": [
+    {
+      "old_builder": "archive/product-ui/react-spa-v4 HealthMatrixSection",
+      "new_renderer": "assets/js/app.js#renderSummary",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4 VavHealthSection",
+      "new_renderer": "dropped:overview-matrices-via-api",
+      "status": "dropped:api-driven-table"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4 WeatherHealthSection",
+      "new_renderer": "assets/js/charts.js#renderBasVsWeb",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4 DataHealthCard",
+      "new_renderer": "assets/js/app.js#renderSummary",
+      "status": "ported"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4 SqlAnomalySection",
+      "new_renderer": "dropped:typst-oracle-path",
+      "status": "dropped:offline-report"
+    },
+    {
+      "old_builder": "archive/product-ui/react-spa-v4 PlantHealthSections",
+      "new_renderer": "dropped:overview-matrices-via-api",
+      "status": "dropped:api-driven-table"
+    }
+  ]
+}

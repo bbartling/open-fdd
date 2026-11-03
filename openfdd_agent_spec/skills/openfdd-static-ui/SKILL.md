@@ -1,18 +1,18 @@
 ---
 name: openfdd-static-ui
 description: >-
-  Maintain the Open-FDD static product UI on central (`services/central/static/product`,
-  served at `/app/`; default portal compose sets OPENFDD_STATIC_PRODUCT_UI=1 on central).
-  Lean HTML pages, modular JS,
-  vendored ECharts (no CDN), same-origin `/api` only, strict CSP without unsafe-eval.
+  Maintain Open-FDD Central — static product UI on central (`services/central/static/product`,
+  served at `/app/`; default portal compose sets OPENFDD_STATIC_PRODUCT_UI=1).
+  Bench Viz layout, light blueprint + dark toggle, vendored ECharts, chart-parity matrix.
 ---
 
-# Open-FDD static product UI (central `/app/`)
+# Open-FDD Central (static product UI on `/app/`)
 
 ## When to use
 
 - Editing `services/central/static/product/` (HTML, CSS, JS) or `static_product.rs`
 - RCx / FDD plot parity vs archived React SPA (`archive/product-ui/react-spa-v4`)
+- Chart themes, PNG download stems, fault swim lane, Overview RCx fidelity
 - Model tree + SPARQL (TTL-only on Model tab)
 - CSV upload/export, hub admin read surfaces, synthetic M&V demo (Ops tab)
 - Vendoring chart libraries under `assets/vendor/`
@@ -22,11 +22,28 @@ description: >-
 1. **Same-origin `/api` only** — no CDN scripts, no `/api/v1`, no inline `style=""` or non-module scripts.
 2. **CSP** — product CSP is `script-src 'self'` without `unsafe-inline` / `unsafe-eval`. Product JS must not call `eval` or `new Function`. ECharts ships full build; use canvas renderer paths exercised by RCx/FDD/Inspect charts only.
 3. **Model tab** — tree and checks from **`GET /api/model/ttl`** and **`POST /api/model/sparql`** only. Do not call `/api/model/agent-context` on Model pages.
-4. **Operational data** — historian points, package mapping, FDD session config, analytics, and FDD run/plot may use their existing `/api` routes from `assets/js/site-data.js`, `rcx-presets.js`, `fdd-api.js`.
+4. **Operational data** — historian points, package mapping, FDD session config, analytics, and FDD run/plot use existing `/api` routes from `site-data.js`, `rcx-presets.js`, `fdd-api.js`.
 5. **ECharts** — vendored under `assets/vendor/` with `.version` sidecar + `LICENSE.echarts.txt`. Pin latest stable; update sidecar when replacing files.
-6. **Lean pages** — `index.html`, `tree.html`, `rcx.html`, `fdd.html` link CSS + module scripts only; logic lives in `assets/js/`.
-7. **Parity** — match archived SPA behavior for Overview RCx presets, economizer gate (`ECONOMIZER_DT_MIN_C`), `analyticsWindowFromSampling`, FDD status filters, `confirm_min` on run, inspect title/stacking, series preview 10/20/50/100/500. SI storage; metric display default (imperial toggle deferred).
-8. **Dynamic text** — use `textContent` / DOM APIs; never inject HTML strings from API responses.
+6. **Themes** — `assets/js/chart-theme.js` registers `ofdd-light` (blueprint) and `ofdd-dark` (Bench Viz). Default is **light**; header toggle persists in `localStorage` (`openfdd-ui-theme`). `mountChart` re-inits on toggle. CSS tokens: `bench.css` `:root` + `[data-theme="dark"]`.
+7. **Renderers** — return theme-free ECharts options (no hardcoded `#c9d2e8` / `#8899bb` in chart modules). Use `rainbowColor`, `toolboxSaveAsImage(stem)`.
+8. **Chart parity** — `services/central/static/product/chart-parity.json` maps each archived Plotly builder → JS export + PNG stem. **Adding or changing a chart requires updating the matrix and a shape test** in `assets/js/*.test.mjs` (`node --test services/central/static/product/assets/js/*.test.mjs`).
+9. **FDD fault lane** — stacked unit-family grids (`fdd-charts.js#ruleResultChartOption`); bottom `confirmed_fault` grid; `connectNulls: false`; unknown fault → `[t, null]`; OAT-METEO uses weather overlay + lane (`oatMeteoFddOption`). RCx presets must **not** include a fault lane (`rcxOptionHasFaultLane`).
+10. **Lean pages** — `index.html`, `tree.html`, `rcx.html`, `fdd.html` link CSS + module scripts only; logic lives in `assets/js/`.
+11. **Parity** — match archived SPA behavior for Overview RCx presets, economizer gate (`ECONOMIZER_DT_MIN_C`), `analyticsWindowFromSampling`, FDD status filters, `confirm_min` on run, inspect title/stacking, series preview 10/20/50/100/500. SI storage; metric display default.
+12. **Dynamic text** — use `textContent` / DOM APIs; never inject HTML strings from API responses.
+
+## Chart modules
+
+| Area | Module |
+| --- | --- |
+| Theme / mount | `chart-theme.js`, `chart-kit.js` |
+| FDD plots | `fdd-charts.js` |
+| Overview RCx | `overview-rcx-charts.js`, `rcx-presets.js` |
+| Generic RCx | `rcx-vibe-charts.js` |
+| Fuel | `fuel-charts.js` |
+| Sensor | `sensor-charts.js` |
+| M&V | `mv-charts.js` |
+| Bench Charts tab | `charts.js` |
 
 ## Tabs (index.html)
 
@@ -39,24 +56,6 @@ description: >-
 | **Ops** | `operations-tab.js` | CSV import/export, admin read, synthetic M&V |
 | Model | `tree-view.js`, `ttl-model.js` | TTL + SPARQL |
 
-## Ops tab (Wave E)
-
-**`index.html?tab=ops`** + **`operations-tab.js`**
-
-- **CSV card** — multipart `POST /api/csv/import/package`; list `GET /api/csv/import/package/buildings`; session-scoped site from header `?site=`; export via ephemeral `POST /api/jobs` + `POST /api/jobs/{id}/exports` (`kind: csv`) and authenticated download of `download_url`.
-- **Admin card** — hub admin only (`GET /api/auth/me` → `hub_admin`); read-only tables from `/api/admin/users`, `/api/admin/tenants`, `/api/admin/historian-limits`.
-- **Synthetic demo card** — deterministic seed in `mv-demo-seed.js`; `POST /api/analytics/mv` with ECharts scatter (no Plotly).
-
-Styles: `assets/css/operations.css`.
-
-## RCx preset IDs
-
-`ahu_motor_weekly`, `boiler_motor_weekly`, `chiller_motor_weekly`, `economizer_delta`, `economizer_mat_resid`, `economizer_temps_overlay`, `mech_cooling_oat_bins`, `bas_vs_web_oat` — loaders in `assets/js/rcx-presets.js`, **`index.html?tab=rcx`** + **`rcx-tab.js`**.
-
-## FDD plots
-
-**`index.html?tab=fdd`** + **`fdd-tab.js`** — rules list, status filter, `/api/fdd/run` with session `confirm_min`, `/api/fdd/plot` + inspect overlay via `chart-kit.js` / `fdd-api.js`.
-
 ## CI smoke (no central image build)
 
 Against a running central with static UI enabled:
@@ -65,19 +64,17 @@ Against a running central with static UI enabled:
 OPENFDD_ADMIN_PASSWORD='…' ./scripts/ci/static_ui_smoke.sh
 ```
 
-Optional: `OPENFDD_STATIC_UI_BASE=http://127.0.0.1:8080`.
+Asset/policy gate: `./scripts/ci/static_product_guard.sh`. Rust asset tests: `cargo test -p openfdd-central 'static_product::'`. JS parity/shape tests:
 
-Asset/policy gate: `./scripts/ci/static_product_guard.sh` (portal compose has no `openfdd-web`; rollback tree + `docker/compose.react.yml` required). Rust asset tests: `cargo test -p openfdd-central 'static_product::'`.
+```bash
+node --test services/central/static/product/assets/js/*.test.mjs
+```
 
-Real-stack browser CI uses the default portal compose (central + Timescale, static UI only): `static_ui_smoke.sh` then Playwright `e2e/static-product-csp.spec.ts` (`scripts/ci/real_stack_browser.sh`).
-
-**Rollback:** `docker/compose.react.yml` + GHCR `openfdd-web` (same `OPENFDD_IMAGE_TAG` / `OPENFDD_WEB_IMAGE`). Set `OPENFDD_STATIC_PRODUCT_UI=0` on central when running the React container on `:3000`.
-
-**Deferred (not Wave E):** ZAP AF and legacy React-only frontend soak — unchanged; do not mark passed.
+**Rollback:** `docker/compose.react.yml` + GHCR `openfdd-web`. Set `OPENFDD_STATIC_PRODUCT_UI=0` when running the React container on `:3000`.
 
 ## Related
 
 - ADR: [`docs/architecture/adr-013-static-product-ui-central.md`](../../../docs/architecture/adr-013-static-product-ui-central.md)
-- Handoff: [`docs/operations/GROK_CLOUD_STATIC_UI_HANDOFF.md`](../../../docs/operations/GROK_CLOUD_STATIC_UI_HANDOFF.md)
+- Parity matrix: [`services/central/static/product/chart-parity.json`](../../../services/central/static/product/chart-parity.json)
 - Archived React reference: [`archive/product-ui/react-spa-v4/`](../../../archive/product-ui/react-spa-v4/)
-- [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — historical SPA; new plot work lands here
+- [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — historical SPA only

@@ -14,6 +14,8 @@ import {
 } from "./fdd-status.js";
 import { analyticsWindowFromSampling } from "./window-policy.js";
 import { mountChart, resizeCharts, fddPlotOption, inspectChartOption } from "./chart-kit.js";
+import { expandFddPlotRoles, isOatMeteoRule, oatMeteoFddOption } from "./fdd-charts.js";
+import { postAnalytics, analyticsBody } from "./analytics.js";
 import { fetchInspectSeries } from "./analytics.js";
 import { RULES_UPDATED } from "./rule-params.js";
 import {
@@ -118,9 +120,29 @@ async function loadPlot() {
   try {
     const samplingWindow = analyticsWindowFromSampling(mapping?.equipment ?? []);
     const body = await fetchFddPlotSeries(buildingId, equipId, selectedRuleId, samplingWindow);
-    const roles = body.roles || [];
     const rows = body.rows || [];
-    const built = fddPlotOption(rows, roles, body.has_confirmed_fault);
+    const roles = expandFddPlotRoles(selectedRuleId, body.roles || [], rows);
+    const confirmedFault = body.has_confirmed_fault
+      ? rows.map((r) => r.confirmed_fault ?? r.fault)
+      : undefined;
+    let built;
+    if (isOatMeteoRule(selectedRuleId)) {
+      const win = analyticsWindowFromSampling(mapping?.equipment ?? []);
+      const abody = analyticsBody(buildingId, [equipId], win, 1500);
+      const weatherEnv = await postAnalytics("/api/analytics/bas-vs-web-oat", abody);
+      const points = weatherEnv?.points ?? weatherEnv?.rows ?? [];
+      built = oatMeteoFddOption(
+        points,
+        rows.map((r) => r.timestamp_utc ?? r.ts),
+        confirmedFault,
+        { ruleId: selectedRuleId, equipmentId: equipId, roles },
+      );
+    } else {
+      built = fddPlotOption(rows, roles, body.has_confirmed_fault, {
+        ruleId: selectedRuleId,
+        equipmentId: equipId,
+      });
+    }
     mountChart($("fddChart"), built.option);
     plotLineSeries = built.lineSeries;
     $("plotHint").textContent = `${roles.length} roles · ${rows.length} rows`;
