@@ -1,29 +1,19 @@
 import * as echarts from "../vendor/echarts.esm.min.js";
 import { fetchBasVsWeb, fetchInspectSeries } from "./analytics.js";
 import { displayName, has, isTemp, roleOf, unitLabel } from "./tags.js";
+import { rainbowColor, toolboxSaveAsImage } from "./chart-theme.js";
+import { basOverlayOption } from "./overview-rcx-charts.js";
 
 export const PALETTE = [
-  "#4cc9f0",
-  "#f8961e",
-  "#f94144",
-  "#90be6d",
-  "#b5179e",
-  "#f9c74f",
-  "#43aa8b",
+  "#2563eb",
+  "#ea580c",
+  "#dc2626",
+  "#16a34a",
+  "#7c3aed",
+  "#ca8a04",
+  "#0d9488",
   "#577590",
 ];
-
-const axisStyle = {
-  axisLine: { lineStyle: { color: "#2b3858" } },
-  axisLabel: { color: "#8a96b3" },
-  splitLine: { lineStyle: { color: "#1c2640" } },
-};
-const tooltip = {
-  trigger: "axis",
-  backgroundColor: "#0f1730ee",
-  borderColor: "#2b3858",
-  textStyle: { color: "#e6ebf5" },
-};
 
 const charts = new Map();
 
@@ -145,47 +135,17 @@ export function renderOverviewSpark(i, point, history) {
 export function renderBasVsWeb(rows) {
   const chart = chartEl("wxChart");
   if (!chart) return;
-  if (!rows.length) {
+  const points = rows.map((row) => ({
+    timestamp_utc: row.ts ?? row.timestamp_utc,
+    bas_oat_c: row.bas_oa_t ?? row.bas_oat_c,
+    web_oat_c: row.web_oa_t ?? row.web_oat_c,
+  }));
+  const built = basOverlayOption(points, "metric", 2, "charts_weather_vs_oat");
+  if (!built?.option) {
     chart.clear();
     return;
   }
-  const bas = [];
-  const web = [];
-  for (const row of rows) {
-    const t = parseTs(row.ts);
-    if (t == null) continue;
-    if (row.bas_oa_t != null) bas.push([t, row.bas_oa_t]);
-    if (row.web_oa_t != null) web.push([t, row.web_oa_t]);
-  }
-  chart.setOption({
-    color: ["#f8961e", "#4cc9f0"],
-    tooltip,
-    legend: { top: 0, textStyle: { color: "#c9d2e8" } },
-    grid: { left: 50, right: 50, top: 36, bottom: 60 },
-    xAxis: { type: "time", ...axisStyle },
-    yAxis: {
-      type: "value",
-      scale: true,
-      name: "°C",
-      nameTextStyle: { color: "#8a96b3" },
-      ...axisStyle,
-    },
-    dataZoom: [
-      { type: "inside" },
-      {
-        type: "slider",
-        height: 18,
-        bottom: 8,
-        borderColor: "#2b3858",
-        fillerColor: "#4cc9f022",
-        textStyle: { color: "#8a96b3" },
-      },
-    ],
-    series: [
-      { name: "BAS OAT", type: "line", showSymbol: false, smooth: true, data: bas },
-      { name: "Web OAT", type: "line", showSymbol: false, smooth: true, data: web },
-    ],
-  });
+  chart.setOption(built.option, true);
 }
 
 export function renderTempTrend(points, history, rangeHours) {
@@ -195,41 +155,111 @@ export function renderTempTrend(points, history, rangeHours) {
   const bucket = rangeHours > 24 ? 5 * 60_000 : 60_000;
   chart.setOption(
     {
+      backgroundColor: "transparent",
       color: PALETTE,
-      tooltip,
-      legend: { top: 0, textStyle: { color: "#c9d2e8" } },
+      tooltip: { trigger: "axis" },
+      legend: { top: 0 },
+      toolbox: toolboxSaveAsImage("charts_temps"),
       grid: { left: 50, right: 20, top: 36, bottom: 70 },
-      xAxis: { type: "time", ...axisStyle },
+      xAxis: { type: "time" },
       yAxis: {
         type: "value",
         scale: true,
         name: unitLabel(temps[0]) || "°C",
-        nameTextStyle: { color: "#8a96b3" },
-        ...axisStyle,
       },
-      dataZoom: [
-        { type: "inside" },
-        {
-          type: "slider",
-          height: 22,
-          bottom: 12,
-          borderColor: "#2b3858",
-          fillerColor: "#4cc9f022",
-          textStyle: { color: "#8a96b3" },
-        },
-      ],
-      series: temps.map((p) => ({
+      dataZoom: [{ type: "inside" }, { type: "slider", height: 22, bottom: 12 }],
+      series: temps.map((p, i) => ({
         name: displayName(p),
         type: "line",
         showSymbol: false,
         smooth: 0.2,
         sampling: "lttb",
-        lineStyle: { width: 1.6 },
+        lineStyle: { width: 1.6, color: rainbowColor(i) },
         data: downsample(since(history.get(roleOf(p)) || [], rangeHours), bucket),
       })),
     },
     { replaceMerge: ["series"] },
   );
+}
+
+function dailyStats(history, role, rangeHours) {
+  const byDay = new Map();
+  for (const [t, v] of since(history.get(role) || [], rangeHours)) {
+    const day = new Date(t).toISOString().slice(0, 10);
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(v);
+  }
+  const days = [...byDay.keys()].sort();
+  const min = [];
+  const mean = [];
+  const max = [];
+  for (const d of days) {
+    const vals = byDay.get(d);
+    min.push([d, Math.min(...vals)]);
+    max.push([d, Math.max(...vals)]);
+    mean.push([d, vals.reduce((a, b) => a + b, 0) / vals.length]);
+  }
+  return { days, min, mean, max };
+}
+
+export function renderDailyMinMax(points, history, rangeHours) {
+  const chart = chartEl("dailyChart");
+  if (!chart) return;
+  const p = points.find(isTemp) || points[0];
+  if (!p) {
+    chart.clear();
+    return;
+  }
+  const { days, min, mean, max } = dailyStats(history, roleOf(p), rangeHours);
+  chart.setOption({
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis" },
+    toolbox: toolboxSaveAsImage("charts_daily_min_mean_max"),
+    legend: { top: 0 },
+    grid: { left: 50, right: 20, top: 36, bottom: 48 },
+    xAxis: { type: "category", data: days },
+    yAxis: { type: "value", scale: true, name: unitLabel(p) || "°C" },
+    series: [
+      { name: "min", type: "line", data: min.map(([, v]) => v), showSymbol: false },
+      { name: "mean", type: "line", data: mean.map(([, v]) => v), showSymbol: false },
+      { name: "max", type: "line", data: max.map(([, v]) => v), showSymbol: false },
+    ],
+  });
+}
+
+export function renderRuntimeBool(points, history, rangeHours) {
+  const chart = chartEl("runtimeChart");
+  if (!chart) return;
+  const status = points.find((p) => roleOf(p).includes("status") || roleOf(p).includes("cmd"));
+  if (!status) {
+    chart.clear();
+    return;
+  }
+  const role = roleOf(status);
+  const byDay = new Map();
+  for (const [t, v] of since(history.get(role) || [], rangeHours)) {
+    const day = new Date(t).toISOString().slice(0, 10);
+    const on = Number(v) > 0.5 ? 1 : 0;
+    const e = byDay.get(day) ?? { on: 0, n: 0 };
+    e.on += on;
+    e.n += 1;
+    byDay.set(day, e);
+  }
+  const days = [...byDay.keys()].sort();
+  const hours = days.map((d) => {
+    const e = byDay.get(d);
+    const frac = e.n ? e.on / e.n : 0;
+    return +(frac * 24).toFixed(2);
+  });
+  chart.setOption({
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis" },
+    toolbox: toolboxSaveAsImage("charts_runtime"),
+    grid: { left: 50, right: 20, top: 24, bottom: 48 },
+    xAxis: { type: "category", data: days },
+    yAxis: { type: "value", name: "run hours (est.)" },
+    series: [{ type: "bar", data: hours, itemStyle: { color: rainbowColor(2) } }],
+  });
 }
 
 export function renderHeatmap(points, history, heatRole) {
@@ -259,20 +289,16 @@ export function renderHeatmap(points, history, heatRole) {
   const vals = data.map((d) => d[2]);
   chart.setOption(
     {
-      tooltip: {
-        position: "top",
-        backgroundColor: "#0f1730ee",
-        borderColor: "#2b3858",
-        textStyle: { color: "#e6ebf5" },
-      },
+      backgroundColor: "transparent",
+      tooltip: { position: "top" },
+      toolbox: toolboxSaveAsImage("charts_hour_heatmap"),
       grid: { left: 80, right: 20, top: 10, bottom: 80 },
       xAxis: {
         type: "category",
         data: [...Array(24).keys()].map(String),
-        ...axisStyle,
         splitArea: { show: false },
       },
-      yAxis: { type: "category", data: days, ...axisStyle },
+      yAxis: { type: "category", data: days },
       visualMap: {
         min: Math.min(...vals, 0),
         max: Math.max(...vals, 1),
@@ -281,7 +307,6 @@ export function renderHeatmap(points, history, heatRole) {
         left: "center",
         bottom: 0,
         itemHeight: 220,
-        textStyle: { color: "#8a96b3" },
         inRange: {
           color: ["#3a0ca3", "#4361ee", "#4cc9f0", "#f9c74f", "#f8961e", "#f94144"],
         },
@@ -290,7 +315,7 @@ export function renderHeatmap(points, history, heatRole) {
         {
           type: "heatmap",
           data,
-          itemStyle: { borderColor: "#121a30", borderWidth: 2, borderRadius: 3 },
+          itemStyle: { borderWidth: 2, borderRadius: 3 },
         },
       ],
     },
@@ -318,11 +343,9 @@ export function renderPsychrometric(points, history, hintEl) {
     .map(([k, tv]) => [tv, rhAt.get(k), new Date(k).getHours() + new Date(k).getMinutes() / 60, k]);
   chart.setOption(
     {
-      tooltip: {
-        backgroundColor: "#0f1730ee",
-        borderColor: "#2b3858",
-        textStyle: { color: "#e6ebf5" },
-      },
+      backgroundColor: "transparent",
+      tooltip: { trigger: "item" },
+      toolbox: toolboxSaveAsImage("charts_temp_rh"),
       grid: { left: 50, right: 70, top: 20, bottom: 40 },
       xAxis: {
         type: "value",
@@ -330,15 +353,11 @@ export function renderPsychrometric(points, history, hintEl) {
         name: unitLabel(oat) || "°C",
         nameLocation: "center",
         nameGap: 26,
-        nameTextStyle: { color: "#8a96b3" },
-        ...axisStyle,
       },
       yAxis: {
         type: "value",
         scale: true,
         name: "%RH",
-        nameTextStyle: { color: "#8a96b3" },
-        ...axisStyle,
       },
       visualMap: {
         dimension: 2,
@@ -349,7 +368,6 @@ export function renderPsychrometric(points, history, hintEl) {
         itemHeight: 180,
         calculable: false,
         text: ["24h", "0h"],
-        textStyle: { color: "#8a96b3" },
         inRange: {
           color: ["#3a0ca3", "#4361ee", "#4cc9f0", "#f9c74f", "#f8961e", "#3a0ca3"],
         },
@@ -368,27 +386,17 @@ export function renderPointHistory(point, rows, hours) {
   const data = downsample(seriesFromInspect(rows, role), hours > 24 ? 5 * 60_000 : 60_000);
   chart.setOption(
     {
-      tooltip,
+      backgroundColor: "transparent",
+      tooltip: { trigger: "axis" },
+      toolbox: toolboxSaveAsImage(`${String(point.equipRef || "point").replace(/[^\w.-]+/g, "_")}_history`),
       grid: { left: 50, right: 20, top: 20, bottom: 50 },
-      xAxis: { type: "time", ...axisStyle },
+      xAxis: { type: "time" },
       yAxis: {
         type: "value",
         scale: true,
         name: point.kind === "Bool" ? "on / off" : unitLabel(point) || role,
-        nameTextStyle: { color: "#8a96b3" },
-        ...axisStyle,
       },
-      dataZoom: [
-        { type: "inside" },
-        {
-          type: "slider",
-          height: 18,
-          bottom: 6,
-          borderColor: "#2b3858",
-          fillerColor: "#4cc9f022",
-          textStyle: { color: "#8a96b3" },
-        },
-      ],
+      dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 6 }],
       series: [
         {
           name: displayName(point),
@@ -396,8 +404,8 @@ export function renderPointHistory(point, rows, hours) {
           showSymbol: false,
           sampling: "lttb",
           step: point.kind === "Bool" ? "end" : false,
-          lineStyle: { width: 1.6, color: "#4cc9f0" },
-          areaStyle: { opacity: 0.08, color: "#4cc9f0" },
+          lineStyle: { width: 1.6, color: rainbowColor(0) },
+          areaStyle: { opacity: 0.08 },
           data,
         },
       ],
@@ -414,4 +422,6 @@ export async function refreshChartsTab(state) {
   renderTempTrend(cardPoints, history, rangeHours);
   renderHeatmap(cardPoints, history, heatRole);
   renderPsychrometric(cardPoints, history, document.getElementById("psyHint"));
+  renderDailyMinMax(cardPoints, history, rangeHours);
+  renderRuntimeBool(cardPoints, history, rangeHours);
 }

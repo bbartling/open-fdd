@@ -1,4 +1,17 @@
 :root {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --panel2: #f1f5f9;
+  --line: #cbd5e1;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #2563eb;
+  --warm: #ea580c;
+  --hot: #dc2626;
+  --cool: #1e3a8a;
+  --good: #059669;
+}
+[data-theme="dark"] {
   --bg: #0b1020;
   --panel: #121a30;
   --panel2: #18223d;
@@ -16,10 +29,13 @@
 }
 body {
   margin: 0;
-  background: radial-gradient(1200px 600px at 10% -10%, #1b2a55 0%, var(--bg) 55%);
+  background: linear-gradient(180deg, #eff6ff 0%, var(--bg) 40%);
   color: var(--text);
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   min-height: 100vh;
+}
+[data-theme="dark"] body {
+  background: radial-gradient(1200px 600px at 10% -10%, #1b2a55 0%, var(--bg) 55%);
 }
 a {
   color: var(--accent);
@@ -81,7 +97,7 @@ nav.tabs {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: #0d1428ee;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(6px);
 }
 nav.tabs button {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open-FDD</title>
+<title>Open-FDD Central</title>
 <link rel="stylesheet" href="/app/assets/css/bench.css">
 <link rel="stylesheet" href="/app/assets/css/schedules.css">
 <link rel="stylesheet" href="/app/assets/css/operations.css">
@@ -24,7 +24,7 @@
 
 <header>
   <div>
-    <h1>⚡ Open-FDD</h1>
+    <h1>⚡ Open-FDD Central</h1>
     <div class="sub" id="sub">Loading…</div>
   </div>
   <div class="spacer"></div>
@@ -32,6 +32,7 @@
   <label class="scope">equip <select id="equipPick" disabled><option value="">—</option></select></label>
   <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">offline</span></span>
   <span class="pill" id="clock"></span>
+  <button type="button" class="btn" id="themeToggle" title="Toggle light / dark chart theme">Theme</button>
   <button type="button" class="btn" id="logoutBtn" hidden>Sign out</button>
 </header>
 <nav class="tabs" id="tabs">
@@ -70,6 +71,16 @@
         </span>
       </h2>
       <div class="chart tall" id="tempChart"></div>
+    </section>
+    <section class="grid2">
+      <div class="panel">
+        <h2>Daily min / mean / max</h2>
+        <div class="chart" id="dailyChart"></div>
+      </div>
+      <div class="panel">
+        <h2>Runtime (bool / status)</h2>
+        <div class="chart" id="runtimeChart"></div>
+      </div>
     </section>
     <section class="grid2">
       <div class="panel">
