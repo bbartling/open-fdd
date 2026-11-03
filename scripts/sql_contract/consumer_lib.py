@@ -303,8 +303,8 @@ def verify_analytics_execute_smoke(conn, artifact_root: Path, receipt: VerifyRec
 
             # Smoke: drop optional equipment scope so only building_id is bound (portable client bind).
             scoped = re.sub(
-                r"\(\s*\$2::text\[\][\s\S]*?\)",
-                "TRUE",
+                r"\s+AND\s+\(\s*\$2::text\[\][\s\S]*?\)",
+                "",
                 sql,
                 count=1,
             )
