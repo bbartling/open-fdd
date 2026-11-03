@@ -54,7 +54,7 @@ Warehouse-dialect templates under `sql/fdd/warehouse/` (if present) are **not** 
 ## Asset inventory (summary)
 
 - Scientific ledger: 110 files in `sql/contract/manifest.json` (schema, 77 Postgres FDD rules + registry, 19 analytics bodies + analytics registry, contract goldens, metric metadata).
-- Distribution companions: 3 files in `sql/contract/distribution_manifest.json` → `companion_files`.
+- Distribution companions: 6 files in `sql/contract/distribution_manifest.json` → `companion_files` (renderer/tuning plus required product schema DDL not in the 110-file ledger).
 
 ### Nineteen analytics SQL bodies
 

@@ -10,8 +10,8 @@
     "scientific_pack_sha256": "For each path in sql/contract/manifest.json files[] in order: SHA256.update(path_utf8 + NUL + file_sha256_hex + NUL); final hex digest.",
     "distribution_sha256": "SHA256(scientific_pack_sha256_utf8 + NUL + companion_merkle + NUL); companion_merkle uses the same per-file update as scientific pack."
   },
-  "distribution_sha256": "89d4f8a9ae4b43a8eaf505582325186c49a6ed643233a927f1728090be2c6000",
-  "source_revision": "da127349864ffedfbdb1c6dbd1ab121f550d265a",
+  "distribution_sha256": "b1b8979e09421fb1b9351b726bee14a14b36d5ac185697dbd47978a0e2243dae",
+  "source_revision": "9a7b9d65f0914d3d2b91cfdf99a461a6a024e407",
   "companion_files": [
     {
       "path": "sql/fdd/tuning_catalog.json",
@@ -27,6 +27,21 @@
       "path": "sql/fdd/render_rule.py",
       "sha256": "758502b001abd2e873b0bbf2e75a99ffdadb6cca3d514b6b108efd894d0a2e9e",
       "bytes": 4264
+    },
+    {
+      "path": "sql/schema/05_portal_inventory.sql",
+      "sha256": "ff6ecdaf65af2ea36dc0e32ff73cd5086350184bfff3ca478c02d25d1963932b",
+      "bytes": 958
+    },
+    {
+      "path": "sql/schema/11_point_map_binding_metadata.sql",
+      "sha256": "6f88a0d3f4425963dbce9249a9e9b874fb79d211c0d457e573d006bf0dda6266",
+      "bytes": 564
+    },
+    {
+      "path": "sql/schema/07_opaque_series_binding.sql",
+      "sha256": "bbd0f58fe6e1f53f9fc3cb66c855b7f508e3a09717893eb8abf35217e6e7fe2c",
+      "bytes": 1871
     }
   ],
   "install_order": {

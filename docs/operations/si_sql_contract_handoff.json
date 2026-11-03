@@ -6,7 +6,7 @@
   "scientific_pack_sha256": "b33b4209ee2962e78c64cdc1b07851d1baf0e265b7543e28699e2bbff762b6a0",
   "distribution_id": "openfdd-si-sql-distribution-v1",
   "distribution_version": "4.0.8-softopen-dist-20261103",
-  "distribution_sha256": "89d4f8a9ae4b43a8eaf505582325186c49a6ed643233a927f1728090be2c6000",
+  "distribution_sha256": "b1b8979e09421fb1b9351b726bee14a14b36d5ac185697dbd47978a0e2243dae",
   "source_revision": "da127349864ffedfbdb1c6dbd1ab121f550d265a",
   "export_command": "python3 scripts/sql_contract/export_distribution.py --out /tmp/openfdd-si-dist --write-committed-manifest",
   "verify_command": "OPENFDD_VERIFY_REPO=$PWD OPENFDD_SI_ARTIFACT_ROOT=/tmp/openfdd-si-dist OPENFDD_SI_EXPECTED_SOURCE_REV=$(git rev-parse HEAD) OPENFDD_DATABASE_URL=postgresql://\u2026 python3 scripts/sql_contract/verify_installed.py",
@@ -27,7 +27,10 @@
   "companion_files": [
     "sql/fdd/tuning_catalog.json",
     "sql/fdd/runtime_defaults.json",
-    "sql/fdd/render_rule.py"
+    "sql/fdd/render_rule.py",
+    "sql/schema/05_portal_inventory.sql",
+    "sql/schema/11_point_map_binding_metadata.sql",
+    "sql/schema/07_opaque_series_binding.sql"
   ],
   "analytics_bodies": [
     "bas_vs_web_oat",

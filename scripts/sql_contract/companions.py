@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# Renderer/binder + tuning defaults (paths relative to repo / artifact root).
+# Renderer/binder + tuning defaults + product schema DDL required for analytics/FDD smoke
+# but outside the 110-file scientific ledger (see distribution_manifest.json).
 COMPANION_RELPATHS: tuple[str, ...] = (
     "sql/fdd/tuning_catalog.json",
     "sql/fdd/runtime_defaults.json",
     "sql/fdd/render_rule.py",
+    "sql/schema/05_portal_inventory.sql",
+    "sql/schema/11_point_map_binding_metadata.sql",
+    "sql/schema/07_opaque_series_binding.sql",
 )
 
 SCHEMA_INSTALL_ORDER: tuple[str, ...] = (
