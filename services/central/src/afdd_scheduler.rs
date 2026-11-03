@@ -1948,6 +1948,7 @@ CREATE INDEX IF NOT EXISTS fdd_run_site_rule_idx
             return;
         };
         let _lock = crate::test_env_lock::lock_env();
+        let _pressure = fdd_resources::TestPressureGuard::normal();
         struct ClearHooks;
         impl Drop for ClearHooks {
             fn drop(&mut self) {
@@ -2067,6 +2068,7 @@ CREATE INDEX IF NOT EXISTS fdd_run_site_rule_idx
             return;
         };
         let _lock = crate::test_env_lock::lock_env();
+        let _pressure = fdd_resources::TestPressureGuard::normal();
         struct ClearHooks;
         impl Drop for ClearHooks {
             fn drop(&mut self) {

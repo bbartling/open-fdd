@@ -7,9 +7,11 @@
 //! (`OPENFDD_MEMORY_SHED_FRACTION` / `OPENFDD_MEMORY_ABORT_FRACTION`), not
 //! Railway-hardcoded GB.
 
+use std::sync::Mutex;
+
 use serde::Serialize;
 
-use crate::cgroup::{discover_capacity, CapacityDiscovery};
+use crate::cgroup::{discover_capacity, CapacityDiscovery, CpuDiscovery, MemoryDiscovery};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -80,7 +82,63 @@ fn critical_pct() -> f64 {
         .unwrap_or(abort_fraction() * 100.0)
 }
 
+static TEST_PRESSURE_OVERRIDE: Mutex<Option<PressureSnapshot>> = Mutex::new(None);
+
+/// Test-only: pin `sample_pressure()` to a deterministic snapshot (cleared on drop).
+#[doc(hidden)]
+pub struct TestPressureGuard;
+
+impl TestPressureGuard {
+    /// Low fixed usage so integration tests do not depend on runner ambient RSS.
+    pub fn normal() -> Self {
+        set_test_pressure_override(Some(evaluate_pressure(&test_capacity_low_usage())));
+        Self
+    }
+}
+
+impl Drop for TestPressureGuard {
+    fn drop(&mut self) {
+        set_test_pressure_override(None);
+    }
+}
+
+#[doc(hidden)]
+pub fn set_test_pressure_override(snapshot: Option<PressureSnapshot>) {
+    match TEST_PRESSURE_OVERRIDE.lock() {
+        Ok(mut guard) => *guard = snapshot,
+        Err(poison) => *poison.into_inner() = snapshot,
+    }
+}
+
+fn test_capacity_low_usage() -> CapacityDiscovery {
+    CapacityDiscovery {
+        memory: MemoryDiscovery {
+            available: true,
+            hard_limit_bytes: Some(16 * 1024 * 1024 * 1024),
+            current_bytes: Some(64 * 1024 * 1024),
+            high_bytes: None,
+            peak_bytes: None,
+            source: "test_override".into(),
+            hierarchy_complete: true,
+            notes: vec![],
+        },
+        cpu: CpuDiscovery {
+            logical_cores: 2,
+            cpuset_cores: Some(2),
+            quota_cores: Some(2.0),
+            effective_cores: 2,
+            source: "test".into(),
+            notes: vec![],
+        },
+    }
+}
+
 pub fn sample_pressure() -> PressureSnapshot {
+    if let Ok(guard) = TEST_PRESSURE_OVERRIDE.lock() {
+        if let Some(snap) = guard.as_ref() {
+            return snap.clone();
+        }
+    }
     evaluate_pressure(&discover_capacity())
 }
 
@@ -232,6 +290,23 @@ mod tests {
         assert_eq!(snap.shed_state, ShedState::Ok);
         assert!(!snap.defer_expensive_compute);
         assert!(!snap.abort_in_flight);
+    }
+
+    #[test]
+    fn sample_pressure_uses_test_override_when_set() {
+        let _guard = super::TestPressureGuard::normal();
+        let pinned = sample_pressure();
+        assert!(!pinned.defer_expensive_compute);
+        assert_eq!(pinned.state, PressureState::Ok);
+    }
+
+    #[test]
+    fn sample_pressure_override_can_simulate_shed() {
+        let shed = evaluate_pressure(&disc(1000, 760));
+        assert!(shed.defer_expensive_compute);
+        set_test_pressure_override(Some(shed));
+        assert!(sample_pressure().defer_expensive_compute);
+        set_test_pressure_override(None);
     }
 
     #[test]

@@ -47,18 +47,14 @@ jobs:
         run: trivy fs --exit-code 1 --severity HIGH,CRITICAL .
 
   dashboard-audit:
-    name: React sole product UI
+    name: Product UI guards (static + archived React)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Guard product UI path
+      - name: Static product UI + rollback guards
         run: |
-          test -f archive/product-ui/react-spa-v4/package.json
-          test -f archive/product-ui/react-spa-v4/Dockerfile
-          test -f docker/compose.react.yml
-          ! test -d services/ui
-          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
-          ! test -f workspace/dashboard/package.json
+          chmod +x scripts/ci/static_product_guard.sh
+          ./scripts/ci/static_product_guard.sh
 
   dockerfile-lint:
     name: Hadolint

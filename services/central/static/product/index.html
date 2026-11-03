@@ -6,6 +6,7 @@
 <title>Open-FDD</title>
 <link rel="stylesheet" href="/app/assets/css/bench.css">
 <link rel="stylesheet" href="/app/assets/css/schedules.css">
+<link rel="stylesheet" href="/app/assets/css/operations.css">
 </head>
 <body>
 <div id="loginGate">
@@ -40,6 +41,7 @@
   <button type="button" data-tab="rcx">RCx</button>
   <button type="button" data-tab="fdd">FDD</button>
   <button type="button" data-tab="schedules">Schedules</button>
+  <button type="button" data-tab="ops">Ops</button>
   <button type="button" data-tab="model">Model</button>
 </nav>
 
@@ -213,6 +215,62 @@
       </article>
     </section>
     <p class="hint" id="schedLoadMsg" hidden></p>
+  </section>
+
+  <section class="tab" id="tab-ops">
+    <section class="ops-grid">
+      <article class="panel ops-card">
+        <h2>CSV package <span class="hint">upload · registry · export</span></h2>
+        <p class="hint">Session site: <span id="csvSessionSite">—</span></p>
+        <form id="csvUploadForm" class="ops-form">
+          <label>openfdd_package_v1 zip
+            <input id="csvPackageFile" type="file" accept=".zip,application/zip" required>
+          </label>
+          <button type="submit" class="btn primary">Import package</button>
+        </form>
+        <p class="ops-msg" id="csvUploadMsg" hidden></p>
+        <pre class="ttl ops-pre" id="csvImportResult"></pre>
+        <h3 class="hint">Registered package sites</h3>
+        <div class="tablewrap">
+          <table class="ops-table">
+            <thead><tr><th>building_id</th><th></th></tr></thead>
+            <tbody id="csvBuildingsBody"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn" id="csvExportBtn" disabled>Export site CSV zip</button>
+        <p class="ops-msg" id="csvExportMsg" hidden></p>
+      </article>
+      <article class="panel ops-card">
+        <h2>Hub admin <span class="hint">users · tenants · limits</span></h2>
+        <p class="ops-denied" id="adminDenied" hidden>Hub admin only.</p>
+        <div id="adminPanel" hidden>
+          <h3 class="hint">Users</h3>
+          <div class="tablewrap">
+            <table class="ops-table">
+              <thead><tr><th>username</th><th>role</th><th>tenants</th></tr></thead>
+              <tbody id="adminUsersBody"></tbody>
+            </table>
+          </div>
+          <h3 class="hint">Tenants</h3>
+          <div class="tablewrap">
+            <table class="ops-table">
+              <thead><tr><th>id</th><th>name</th></tr></thead>
+              <tbody id="adminTenantsBody"></tbody>
+            </table>
+          </div>
+          <h3 class="hint">Historian limits</h3>
+          <table class="ops-table" id="adminLimitsBody"></table>
+        </div>
+      </article>
+      <article class="panel ops-card">
+        <h2>Synthetic demo <span class="hint">POST /api/analytics/mv</span></h2>
+        <p class="hint">Deterministic IPMVP-style twin seed (no live campus bills).</p>
+        <button type="button" class="btn primary" id="demoMvRun">Run demo seed</button>
+        <p class="ops-msg" id="demoMvMsg" hidden></p>
+        <div class="chart ops-chart" id="demoMvChart"></div>
+        <table class="ops-table" id="demoMvSummary"></table>
+      </article>
+    </section>
   </section>
 
   <section class="tab" id="tab-model">
