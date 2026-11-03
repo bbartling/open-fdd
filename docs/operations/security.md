@@ -10,7 +10,7 @@ nav_exclude: true
 
 ## Deployment posture
 
-Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API on **:8080** and the `openfdd-web` React container serves the engineering UI on **:3000**.
+Open-FDD is **local-first** for LAN, VPN, or OT networks. Central binds the API and the default product UI at **`/app/`** on **:8080**. Optional Caddy terminates HTTPS in front of central for portal/csv recipes. The archived `openfdd-web` React container remains rollback-only (`docker/compose.react.yml`).
 
 {: .warning }
 Open-FDD is **not internet-ready**. LAN / VPN / OT only until the checklist below is complete **and** independently reviewed.

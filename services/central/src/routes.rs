@@ -1,6 +1,6 @@
 //! Central REST + OpenAPI routes.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -14,9 +14,10 @@ use bytes::Bytes;
 use chrono::Utc;
 #[cfg(test)]
 use openfdd_contracts::ConnectorScope;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tower::limit::ConcurrencyLimitLayer;
+use utoipa::ToSchema;
 
 use crate::actions;
 use crate::analytics::{self, AnalyticsQuery, AnalyticsRequest};
@@ -124,6 +125,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/health/diagnostics", get(health_diagnostics))
         .route("/api/providers/health", get(providers::providers_health))
         .route("/api/providers/sites", get(providers::providers_sites))
+        .route("/api/sites/buildings", get(sites_buildings_list))
         .route("/api/ingest/jobs", get(ingest_queue::http::list_jobs))
         .route(
             "/api/ingest/jobs/{job_id}",
@@ -5425,6 +5427,103 @@ pub async fn csv_import_package_mapping_haystack_projection(
 pub struct PackageBuildingsQuery {
     #[serde(default)]
     pub building_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct SiteBuildingRow {
+    pub building_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SitesBuildingsResponse {
+    pub ok: bool,
+    pub buildings: Vec<SiteBuildingRow>,
+}
+
+/// Tenant-scoped building ids for the static UI site picker (provider + CSV + historian).
+#[utoipa::path(
+    get,
+    path = "/api/sites/buildings",
+    tag = "central",
+    responses(
+        (status = 200, description = "De-duplicated building ids visible to the caller", body = SitesBuildingsResponse),
+        (status = 401, description = "Auth required when JWT secret is configured")
+    )
+)]
+pub async fn sites_buildings_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<SitesBuildingsResponse>, (StatusCode, Json<Value>)> {
+    let user = state.auth.user_from_headers(&headers).map_err(|e| {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e})),
+        )
+    })?;
+    let ctx = resolve_tenant_context_for_user(&user);
+    let buildings = collect_visible_site_buildings(&state, &ctx).await;
+    Ok(Json(SitesBuildingsResponse {
+        ok: true,
+        buildings,
+    }))
+}
+
+async fn collect_visible_site_buildings(
+    state: &AppState,
+    ctx: &crate::tenant::TenantContext,
+) -> Vec<SiteBuildingRow> {
+    let mut by_id: BTreeMap<String, SiteBuildingRow> = BTreeMap::new();
+
+    for site in state.providers.sites_config() {
+        let id = site.building_id.trim();
+        if id.is_empty() || !ctx.allow_building(id) {
+            continue;
+        }
+        by_id.insert(
+            id.to_string(),
+            SiteBuildingRow {
+                building_id: id.to_string(),
+                source: Some("provider".into()),
+            },
+        );
+    }
+
+    let pkg = tokio::task::spawn_blocking(
+        open_fdd_edge_prototype::csv_ingest::package::list_package_buildings_handler,
+    )
+    .await
+    .unwrap_or_else(|e| json!({"ok": false, "error": format!("package buildings task: {e}")}));
+
+    if let Some(arr) = pkg.get("buildings").and_then(|v| v.as_array()) {
+        for value in arr {
+            let id = match value {
+                Value::String(s) => s.trim(),
+                _ => crate::tenant::TenantContext::package_building_list_id(value)
+                    .unwrap_or_default(),
+            };
+            if id.is_empty() || !ctx.allow_building(id) {
+                continue;
+            }
+            by_id.entry(id.to_string()).or_insert(SiteBuildingRow {
+                building_id: id.to_string(),
+                source: Some("csv_package".into()),
+            });
+        }
+    }
+
+    for id in historian_and_provider_ids(state).await {
+        if !ctx.allow_building(&id) {
+            continue;
+        }
+        by_id.entry(id.clone()).or_insert(SiteBuildingRow {
+            building_id: id,
+            source: Some("historian".into()),
+        });
+    }
+
+    by_id.into_values().collect()
 }
 
 /// List ingested package buildings under workspace csv_buildings.

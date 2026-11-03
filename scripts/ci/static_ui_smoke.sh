@@ -4,7 +4,6 @@
 # with OPENFDD_STATIC_PRODUCT_UI=1.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BASE="${OPENFDD_STATIC_UI_BASE:-http://127.0.0.1:8080}"
 ADMIN_USER="${OPENFDD_ADMIN_USER:-admin}"
 ADMIN_PASS="${OPENFDD_ADMIN_PASSWORD:-}"

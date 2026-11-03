@@ -56,6 +56,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Workspace MSRV (Cargo.toml rust-version)
+        run: |
+          msrv="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          test -n "$msrv"
+          rustup toolchain install "$msrv" --profile minimal
+          cargo "+$msrv" check -p openfdd-central
+
       - name: Format
         run: cargo fmt --all --check
 
@@ -154,6 +161,9 @@ jobs:
         run: |
           chmod +x scripts/ci/static_product_guard.sh
           ./scripts/ci/static_product_guard.sh
+          bash -n scripts/ci/forbid_product_ui_port_3000_docs.sh
+          chmod +x scripts/ci/forbid_product_ui_port_3000_docs.sh
+          ./scripts/ci/forbid_product_ui_port_3000_docs.sh
 
       - name: Product tree guards
         run: |
@@ -266,7 +276,11 @@ jobs:
           bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.react.yml
           test -f docker/compose.caddy.react.yml
+          test -f docker/compose.caddy.central.yml
+          test -f docker/compose.caddy.central.http.yml
           test -f docker/caddy/Caddyfile.react.http
+          test -f docker/caddy/Caddyfile.central.https
+          test -f docker/caddy/Caddyfile.central.http
           test -f docs/mcp-agents/companion-wattlab-energyplus.md
           test -f docs/mcp-agents/dual-site-mcp-it.md
 

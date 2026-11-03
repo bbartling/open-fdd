@@ -1,5 +1,6 @@
 import { clearSession, readToken, writeToken } from "./session.js";
 import { apiFetch, login } from "./api.js";
+import { populateSitePicker } from "./sites.js";
 import {
   applyLatestFromSeries,
   displayName,
@@ -388,34 +389,7 @@ async function applyEquip() {
 
 async function loadSites() {
   const pick = $("sitePick");
-  pick.innerHTML = "";
-  try {
-    const sessions = await apiFetch("/api/sessions/buildings");
-    const buildings = sessions?.buildings ?? sessions?.items ?? [];
-    if (Array.isArray(buildings) && buildings.length) {
-      for (const row of buildings) {
-        const id = row.building_id ?? row.id ?? row;
-        const opt = document.createElement("option");
-        opt.value = id;
-        opt.textContent = id;
-        pick.appendChild(opt);
-      }
-    } else {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "(no active session — use ?site= or CSV import)";
-      pick.appendChild(opt);
-    }
-  } catch {
-    const opt = document.createElement("option");
-    opt.value = new URLSearchParams(location.search).get("site") || "";
-    opt.textContent = opt.value || "default";
-    pick.appendChild(opt);
-  }
-  const fromQuery = new URLSearchParams(location.search).get("site");
-  if (fromQuery) {
-    pick.value = fromQuery;
-  }
+  await populateSitePicker(pick);
   scope.site = pick.value;
   if (scope.site) {
     await applySite();
@@ -545,6 +519,7 @@ function bindThemeToggle() {
 }
 
 async function bootApp() {
+  void sensorHealthHeatmapOption;
   bindThemeToggle();
   tickClock();
   setInterval(tickClock, 30_000);
