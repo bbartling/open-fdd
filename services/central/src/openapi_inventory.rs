@@ -515,10 +515,10 @@ impl Modify for OpenApiPolicyAddon {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::router_source::{
         collect_router_routes_from_sources, parse_routes_from_source, strip_cfg_test_modules,
     };
+    use super::*;
     use crate::openapi::ApiDoc;
     use utoipa::OpenApi as _;
 
