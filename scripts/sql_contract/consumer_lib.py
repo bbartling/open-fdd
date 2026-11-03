@@ -297,9 +297,10 @@ def verify_analytics_execute_smoke(conn, artifact_root: Path, receipt: VerifyRec
             (site, "EQ1"),
         )
         try:
-            # Product analytics bodies use postgres $n placeholders; psycopg expects %s.
-            bind_sql = sql.replace("$1", "%s").replace("$2", "%s")
-            cur.execute(bind_sql, (site, ["EQ1"]))
+            from scripts.stress.si_cutover.ci_analytics_p2 import _dollar_sql_to_psycopg
+
+            bind_sql, bind_params = _dollar_sql_to_psycopg(sql, (site, ["EQ1"]))
+            cur.execute(bind_sql, bind_params)
             rows = cur.fetchall()
         except Exception as exc:
             receipt.add("analytics_execute_smoke", "FAIL", detail=str(exc))
