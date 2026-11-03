@@ -48,7 +48,7 @@ See [Release channels](release-channels.html) and [GHCR images](ghcr-images.html
 | Helper | Named recipe | Compose file | Services | Use |
 |--------|--------------|--------------|----------|-----|
 | **`portal`** | **4.0 default** | `compose.portal.yml` + `compose.timescale.yml` (+ `compose.local.yml`) | central + Timescale | NF portal sites, CSV packages, AFDD, analytics cache; UI **`/app/`** |
-| `csv` | **Recipe 2** (no protocol) | `docker/compose.csv.yml` | central + web (`OPENFDD_MQTT_ENABLED=0`) | IT dashboard / CSV-package / broker-free edge |
+| `csv` | **Recipe 2** (no protocol) | `docker/compose.csv.yml` | central (`OPENFDD_MQTT_ENABLED=0`; UI **`/app/`**) | IT dashboard / CSV-package / broker-free edge |
 | `standalone` | **Recipe 2** (+ optional local mqtt) | `docker/compose.standalone.yml` | mqtt + central + web + fieldbus | single OT-connected host |
 | `central` | **Recipe 1** shape | `docker/compose.central.yml` | mqtt + central + web | hub for remote edges |
 | `edge` | optional WAN path | `docker/compose.edge.yml` | fieldbus only | remote OT publisher → Recipe 1 |
