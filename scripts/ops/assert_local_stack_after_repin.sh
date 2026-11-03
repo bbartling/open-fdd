@@ -6,17 +6,17 @@
 #
 # Checks (read-only): /api/health ok, Timescale historian, dual_write false,
 # /api/version carries the expected sha, AFDD scheduler status reachable,
-# web SPA answers, and (unless --skip-containers) running central/web containers
+# product UI at /app/ answers, and (unless --skip-containers) running central container
 # use the pinned tag.
 # Base URL defaults to http://127.0.0.1:8080 (OPENFDD_API_BASE overrides);
-# web defaults to http://127.0.0.1:3000 (OPENFDD_WEB_BASE overrides).
+# product UI defaults to http://127.0.0.1:8080/app/ (OPENFDD_WEB_BASE overrides).
 # Exit 0 = PASS, 2 = FAIL. Never prints secrets.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_FILE="$ROOT/.env"
 BASE="${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
-WEB="${OPENFDD_WEB_BASE:-http://127.0.0.1:3000}"
+WEB="${OPENFDD_WEB_BASE:-http://127.0.0.1:8080/app}"
 EXPECT_SHA="${OPENFDD_IMAGE_TAG:-}"
 HEALTH_WAIT_SECS="${OPENFDD_HEALTH_WAIT_SECS:-180}"
 SKIP_CONTAINERS=0
@@ -122,12 +122,12 @@ case "$code" in
 esac
 
 code="$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$WEB/" || true)"
-[[ "$code" == "200" ]] && pass "web SPA $WEB/ 200" || fail "web SPA $WEB/ HTTP ${code:-none}"
+[[ "$code" == "200" ]] && pass "product UI $WEB/ 200" || fail "product UI $WEB/ HTTP ${code:-none}"
 
 if [[ "$SKIP_CONTAINERS" -eq 0 && -n "$EXPECT_SHA" ]] && command -v docker >/dev/null 2>&1; then
   project=""
   [[ -f "$ENV_FILE" ]] && project="$(grep -E '^COMPOSE_PROJECT_NAME=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)"
-  for svc in central web; do
+  for svc in central; do
     filter=(--filter "label=com.docker.compose.service=$svc")
     [[ -n "$project" ]] && filter+=(--filter "label=com.docker.compose.project=$project")
     img="$(docker ps "${filter[@]}" --format '{{.Image}}' | head -1)"

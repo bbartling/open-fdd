@@ -22,7 +22,10 @@ case "$RECIPE" in
     docker pull "$OPENFDD_CENTRAL_IMAGE"
     docker pull "$OPENFDD_WEB_IMAGE"
     ;;
-  csv|portal)
+  portal)
+    docker pull "$OPENFDD_CENTRAL_IMAGE"
+    ;;
+  csv)
     docker pull "$OPENFDD_CENTRAL_IMAGE"
     docker pull "$OPENFDD_WEB_IMAGE"
     ;;

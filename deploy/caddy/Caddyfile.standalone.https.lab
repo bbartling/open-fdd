@@ -10,7 +10,7 @@ http://{$OPENFDD_PUBLIC_HOST} {
 	encode gzip
 	tls /certs/lab.crt /certs/lab.key
 
-	reverse_proxy web:8080
+	reverse_proxy central:8080
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

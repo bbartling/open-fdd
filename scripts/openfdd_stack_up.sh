@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
 Usage: openfdd_stack_up.sh [portal|standalone|central|edge|csv|react|react-ot] [--build|--no-pull] [--caddy]
 
 Recipes:
-  portal      4.0 default: central + React web + Timescale (no MQTT, no fieldbus)
+  portal      4.0 default: central static UI at /app/ + Timescale (no MQTT, no fieldbus)
   central     archived OT mqtt + central (no fieldbus)
   csv         central + React web (openfdd-web)
   react       archived OT: mqtt + central + React web (no fieldbus)
@@ -60,11 +60,13 @@ case "$RECIPE" in
     ;;
 esac
 
-# React product recipes: Caddy :80 is the default LAN ingress (blank-/login class bugs).
-if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+# React rollback recipes: Caddy :80 is the default LAN ingress (blank-/login class bugs).
+if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   if [[ -z "${OPENFDD_CADDY+x}" ]]; then
     export OPENFDD_CADDY=1
   fi
+fi
+if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   if [[ -z "${OPENFDD_JWT_SECRET:-}" && -f "$ROOT/.env" ]]; then
     # shellcheck disable=SC1091
     set -a && source "$ROOT/.env" && set +a
@@ -78,7 +80,7 @@ fi
 mapfile -t ARGS < <(openfdd_stack_compose_args "$RECIPE")
 [[ ${#ARGS[@]} -ge 2 ]] || { echo "ERROR: no compose files for recipe=$RECIPE" >&2; exit 1; }
 openfdd_stack_export_image_env
-if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   openfdd_stack_guard_ghcr_web
 fi
 cd "$ROOT"
@@ -104,7 +106,7 @@ fi
 
 # React SPA image is often compose-build until GHCR publishes openfdd-web.
 # Never `--build` the whole stack (would rebuild Rust from local Dockerfiles).
-if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
+if [[ "$RECIPE" == "react" || "$RECIPE" == "react-ot" ]]; then
   if [[ "$DO_BUILD" -eq 1 ]] || ! docker image inspect "$OPENFDD_WEB_IMAGE" >/dev/null 2>&1; then
     echo "NOTE: building openfdd-web locally (image not present or --build): $OPENFDD_WEB_IMAGE"
     docker compose "${ARGS[@]}" build web
@@ -121,7 +123,11 @@ fi
 
 if [[ "$RECIPE" != "edge" ]]; then
   openfdd_stack_wait_health
-  echo "UI: http://127.0.0.1:3000  API: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
+  if [[ "$RECIPE" == "portal" ]]; then
+    echo "UI: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}/app/  API: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
+  else
+    echo "UI: http://127.0.0.1:3000  API: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
+  fi
   if [[ "$RECIPE" == "react-ot" ]]; then
     echo "Fieldbus: http://127.0.0.1:8081"
   fi

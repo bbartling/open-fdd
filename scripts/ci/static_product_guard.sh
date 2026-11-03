@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Product UI guards: static /app/ assets on central + archived React rollback tree.
-# Replaces React-only CI checks for Wave E+ (openfdd-web container retires in Wave F).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 STATIC="$ROOT/services/central/static/product"
+PORTAL="$ROOT/docker/compose.portal.yml"
 
 echo "== static product asset guards =="
 
@@ -22,10 +22,16 @@ test -f "$STATIC/assets/vendor/echarts.esm.min.js.version"
 
 echo "OK static product tree"
 
-echo "== archived React rollback (Wave F retires container, not source) =="
+echo "== default portal recipe: central static UI, no openfdd-web =="
+grep -q 'OPENFDD_STATIC_PRODUCT_UI' "$PORTAL"
+! grep -qE '^[[:space:]]*web:' "$PORTAL"
+! grep -q 'openfdd-web' "$PORTAL"
+
+echo "== archived React rollback (compose.react.yml + GHCR openfdd-web) =="
 test -f archive/product-ui/react-spa-v4/package.json
 test -f archive/product-ui/react-spa-v4/Dockerfile
 test -f docker/compose.react.yml
+grep -q '3000:8080' docker/compose.react.yml
 
 echo "== retired product UI paths stay absent =="
 ! test -d services/ui

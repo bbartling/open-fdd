@@ -15,8 +15,8 @@ Remote access is LAN/VPN to the host; there is no public cloud web host.
 
 ## Stack
 
-One host runs central + web + Timescale from the repo checkout, pulled from GHCR
-and pinned to an immutable `sha-<7>`:
+One host runs central (static product UI) + Timescale from the repo checkout,
+pulled from GHCR and pinned to an immutable `sha-<7>`:
 
 ```bash
 docker compose --env-file .env \
@@ -27,9 +27,10 @@ docker compose --env-file .env \
 
 | Service | Host bind (default) | Notes |
 | --- | --- | --- |
-| central | `127.0.0.1:8080` | `GET /api/health` (`historian:"timescale"`, `dual_write:false`) |
-| web | `127.0.0.1:3000` → container `8080` | React SPA, proxies `/api` to `central:8080` |
+| central | `127.0.0.1:8080` | API + static product UI at **`/app/`** (`OPENFDD_STATIC_PRODUCT_UI=1`) |
 | timescale | `127.0.0.1:5432` | project-scoped named volume |
+
+**React rollback (optional):** add `-f docker/compose.react.yml` (or `./scripts/openfdd_stack_up.sh react`) to run the archived `openfdd-web` container on host `:3000`. Pin the same `OPENFDD_IMAGE_TAG` on `OPENFDD_WEB_IMAGE` when pulling rollback images.
 
 ## `.env` (gitignored, repo root)
 
@@ -47,16 +48,16 @@ single-host recipe (`docker/compose.local.yml`):
 After `Publish Open-FDD stack to GHCR` is green on the merge sha:
 
 ```bash
-./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web   # choose the image
+./scripts/ghcr_newest_by_created.py openfdd-central   # portal default (rollback web optional)
 ./scripts/check_ghcr_tip_stack.sh sha-<7>                         # tip gate
 ./scripts/openfdd_local_repin.sh sha-<7> --dry-run                # preview
 ./scripts/openfdd_local_repin.sh sha-<7>                          # pin + pull + up + assert
 ```
 
 `openfdd_local_repin.sh` edits only `OPENFDD_IMAGE_TAG` in `.env` (`--env-file`
-to point elsewhere), runs `compose pull central web`, then the same
+to point elsewhere), runs `compose pull central`, then the same
 `up -d --no-build`, then the assert below. With no tag it resolves the newest
-central/web by OCI `created` and refuses if they differ.
+central by OCI `created`. Rollback `openfdd-web` pulls are separate (`compose.react.yml`).
 
 ## Validate
 
@@ -67,8 +68,7 @@ python scripts/softopen/run_softopen_local.py --building-id <id> --assert-stack
 ```
 
 The assert checks health `ok`, Timescale historian, `dual_write:false`, the
-health version `+<sha>`, AFDD scheduler status, the web SPA, and that the running
-central/web containers use the pinned tag. Exit `0` = PASS, `2` = FAIL.
+health version `+<sha>`, AFDD scheduler status, the product UI at `http://127.0.0.1:8080/app/`, and that the running central container uses the pinned tag. Exit `0` = PASS, `2` = FAIL.
 
 ## FDD results (Timescale) and legacy manifest files
 

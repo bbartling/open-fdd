@@ -2,7 +2,8 @@
 name: openfdd-static-ui
 description: >-
   Maintain the Open-FDD static product UI on central (`services/central/static/product`,
-  served at `/app/` when OPENFDD_STATIC_PRODUCT_UI=1). Lean HTML pages, modular JS,
+  served at `/app/`; default portal compose sets OPENFDD_STATIC_PRODUCT_UI=1 on central).
+  Lean HTML pages, modular JS,
   vendored ECharts (no CDN), same-origin `/api` only, strict CSP without unsafe-eval.
 ---
 
@@ -66,9 +67,11 @@ OPENFDD_ADMIN_PASSWORD='…' ./scripts/ci/static_ui_smoke.sh
 
 Optional: `OPENFDD_STATIC_UI_BASE=http://127.0.0.1:8080`.
 
-Asset/policy gate: `./scripts/ci/static_product_guard.sh` (replaces React-only workflow guards until Wave F). Rust asset tests: `cargo test -p openfdd-central 'static_product::'` (same Rust Stack CI central test batch as other unit tests).
+Asset/policy gate: `./scripts/ci/static_product_guard.sh` (portal compose has no `openfdd-web`; rollback tree + `docker/compose.react.yml` required). Rust asset tests: `cargo test -p openfdd-central 'static_product::'`.
 
-Real-stack browser CI runs `static_ui_smoke.sh` before Playwright (`scripts/ci/real_stack_browser.sh`).
+Real-stack browser CI uses the default portal compose (central + Timescale, static UI only): `static_ui_smoke.sh` then Playwright `e2e/static-product-csp.spec.ts` (`scripts/ci/real_stack_browser.sh`).
+
+**Rollback:** `docker/compose.react.yml` + GHCR `openfdd-web` (same `OPENFDD_IMAGE_TAG` / `OPENFDD_WEB_IMAGE`). Set `OPENFDD_STATIC_PRODUCT_UI=0` on central when running the React container on `:3000`.
 
 **Deferred (not Wave E):** ZAP AF and legacy React-only frontend soak — unchanged; do not mark passed.
 
