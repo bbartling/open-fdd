@@ -370,7 +370,7 @@ fn operation_slot(item: &mut PathItem, method: HttpMethod) -> &mut Option<Operat
     }
 }
 
-fn operation_ref(item: &PathItem, method: &HttpMethod) -> Option<&Operation> {
+fn operation_ref<'a>(item: &'a PathItem, method: &HttpMethod) -> Option<&'a Operation> {
     match method {
         HttpMethod::Get => item.get.as_ref(),
         HttpMethod::Post => item.post.as_ref(),
@@ -463,6 +463,7 @@ impl Modify for OpenApiPolicyAddon {
 mod tests {
     use super::*;
     use crate::openapi::ApiDoc;
+    use utoipa::OpenApi as _;
 
     #[test]
     fn openapi_info_version_matches_product_version_file() {
