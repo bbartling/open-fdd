@@ -72,9 +72,6 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Static product UI (central /app/ assets)
-        run: cargo test -p openfdd-central 'static_product::' -- --nocapture
-
       - name: Edge lib and MCP tests
         run: cargo test --all-targets -p open_fdd_edge_prototype -p openfdd-mcp -- --test-threads=1
 
@@ -111,6 +108,7 @@ jobs:
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
           cargo test -p openfdd-central t1405_3_trim_rules_without_reset_request_binding_not_sql_error -- --test-threads=1
+          cargo test -p openfdd-central 'static_product::' -- --nocapture
 
       - name: Architecture / MQTT cutover gates
         run: bash scripts/gates/run_all_gates.sh --quick

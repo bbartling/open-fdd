@@ -22,6 +22,6 @@ pub use in_flight::{
     InFlightGuard, MemoryTrip,
 };
 pub use pressure::{
-    evaluate_pressure, memory_budget_json, sample_pressure, PressureSnapshot, PressureState,
-    ShedState,
+    evaluate_pressure, memory_budget_json, sample_pressure, set_test_pressure_override,
+    PressureSnapshot, PressureState, ShedState, TestPressureGuard,
 };
