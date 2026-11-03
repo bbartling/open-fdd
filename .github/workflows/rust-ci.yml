@@ -61,7 +61,10 @@ jobs:
           msrv="$(awk -F'"' '/^rust-version/{print $2; exit}' Cargo.toml)"
           test -n "$msrv"
           rustup toolchain install "$msrv" --profile minimal
-          cargo "+$msrv" check -p openfdd-central -p openfdd-mcp --locked
+          # Dependency floor (Axum 0.8.9 transitives). openfdd-central also uses std APIs
+          # stabilized after MSRV; the main job builds central on toolchain 1.95.0.
+          cargo "+$msrv" check -p openfdd-mcp --locked
+          cargo "+$msrv" check -p fdd_core -p fdd_rules -p fdd_tsdb -p open_fdd_edge_prototype --locked
 
       - name: Format
         run: cargo fmt --all --check
