@@ -389,7 +389,7 @@ pub struct RouteInventoryAddon;
 impl Modify for RouteInventoryAddon {
     fn modify(&self, openapi: &mut OpenApi) {
         let router = collect_router_routes();
-        for key in router {
+        for key in &router {
             let Some(http_method) = http_method_from_str(&key.method) else {
                 continue;
             };
@@ -399,7 +399,21 @@ impl Modify for RouteInventoryAddon {
                 *slot = Some(stub_operation(&key.method, &key.path));
             }
         }
+        if let Err(detail) = verify_openapi_inventory(openapi, &router) {
+            panic!("OpenAPI route inventory: {detail}");
+        }
     }
+}
+
+/// Router ↔ spec parity (also exercised by unit tests).
+pub fn verify_openapi_inventory(
+    openapi: &OpenApi,
+    router: &BTreeSet<RouteKey>,
+) -> Result<(), String> {
+    let spec = collect_openapi_routes(openapi);
+    let allowlist = load_allowlist();
+    assert_allowlist_shrink_only(&spec, &allowlist.entries)?;
+    compare_router_and_openapi(router, &spec, &allowlist_route_keys(&allowlist.entries))
 }
 
 /// Sets info.version from repo `VERSION` and applies bearer security on operations.
@@ -479,12 +493,7 @@ mod tests {
     fn openapi_route_inventory_matches_axum_router_both_ways() {
         let doc = ApiDoc::openapi();
         let router = collect_router_routes();
-        let spec = collect_openapi_routes(&doc);
-        let allowlist = load_allowlist();
-        assert_allowlist_shrink_only(&spec, &allowlist.entries)
-            .expect("allowlist entries documented in OpenAPI — shrink allowlist");
-        compare_router_and_openapi(&router, &spec, &allowlist_route_keys(&allowlist.entries))
-            .expect("router ↔ OpenAPI inventory mismatch");
+        verify_openapi_inventory(&doc, &router).expect("router ↔ OpenAPI inventory mismatch");
     }
 
     #[test]
