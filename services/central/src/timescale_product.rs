@@ -405,7 +405,10 @@ LIMIT $4
 "#,
         max_cols_outer = unique
             .iter()
-            .map(|r| format!(", {}", crate::series_binding::quote_ident(&inspect_pivot_value_alias(r))))
+            .map(|r| format!(
+                ", {}",
+                crate::series_binding::quote_ident(&inspect_pivot_value_alias(r))
+            ))
             .collect::<String>(),
         max_cols = max_cols,
     );
