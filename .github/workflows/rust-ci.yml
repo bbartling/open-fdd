@@ -72,6 +72,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Static product UI (central /app/ assets)
+        run: cargo test -p openfdd-central 'static_product::' -- --nocapture
+
       - name: Edge lib and MCP tests
         run: cargo test --all-targets -p open_fdd_edge_prototype -p openfdd-mcp -- --test-threads=1
 
@@ -153,13 +156,6 @@ jobs:
         run: |
           chmod +x scripts/ci/static_product_guard.sh
           ./scripts/ci/static_product_guard.sh
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-
-      - name: Static product Rust unit tests
-        run: cargo test -p openfdd-central 'static_product::' -- --nocapture
 
       - name: Product tree guards
         run: |

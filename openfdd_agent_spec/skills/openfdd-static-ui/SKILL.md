@@ -66,7 +66,7 @@ OPENFDD_ADMIN_PASSWORD='…' ./scripts/ci/static_ui_smoke.sh
 
 Optional: `OPENFDD_STATIC_UI_BASE=http://127.0.0.1:8080`.
 
-Asset/policy gate: `./scripts/ci/static_product_guard.sh` (replaces React-only workflow guards until Wave F).
+Asset/policy gate: `./scripts/ci/static_product_guard.sh` (replaces React-only workflow guards until Wave F). Rust asset tests: `cargo test -p openfdd-central 'static_product::'` (Rust Stack CI job).
 
 Real-stack browser CI runs `static_ui_smoke.sh` before Playwright (`scripts/ci/real_stack_browser.sh`).
 
