@@ -33,6 +33,7 @@ import {
   readThemePreference,
   writeThemePreference,
 } from "./chart-theme.js";
+import "./chart-registry.js";
 import { remountAllCharts } from "./chart-kit.js";
 
 const $ = (id) => document.getElementById(id);
