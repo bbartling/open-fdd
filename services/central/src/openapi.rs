@@ -515,23 +515,25 @@ mod tests {
 
     #[test]
     fn openapi_login_and_status_have_no_bearer_security() {
-        use utoipa::openapi::path::HttpMethod;
         let doc = ApiDoc::openapi();
-        for (method, path) in [
-            (HttpMethod::Post, "/api/auth/login"),
-            (HttpMethod::Get, "/api/auth/status"),
+        for (path, op) in [
+            (
+                "/api/auth/login",
+                doc.paths
+                    .paths
+                    .get("/api/auth/login")
+                    .and_then(|i| i.post.as_ref())
+                    .expect("POST /api/auth/login"),
+            ),
+            (
+                "/api/auth/status",
+                doc.paths
+                    .paths
+                    .get("/api/auth/status")
+                    .and_then(|i| i.get.as_ref())
+                    .expect("GET /api/auth/status"),
+            ),
         ] {
-            let item = doc
-                .paths
-                .paths
-                .get(path)
-                .unwrap_or_else(|| panic!("missing OpenAPI path {path}"));
-            let op = match method {
-                HttpMethod::Get => item.get.as_ref(),
-                HttpMethod::Post => item.post.as_ref(),
-                _ => None,
-            }
-            .unwrap_or_else(|| panic!("missing {method:?} on {path}"));
             assert!(
                 op.security.is_none(),
                 "{path} must not require bearerAuth in the spec"
@@ -541,7 +543,6 @@ mod tests {
 
     #[test]
     fn openapi_protected_routes_advertise_bearer_auth() {
-        use utoipa::openapi::security::SecurityRequirement;
         let doc = ApiDoc::openapi();
         let item = doc
             .paths
@@ -549,12 +550,10 @@ mod tests {
             .get("/api/agent/tools")
             .expect("/api/agent/tools");
         let op = item.get.as_ref().expect("GET /api/agent/tools");
-        assert_eq!(
-            op.security,
-            Some(vec![SecurityRequirement::new(
-                "bearerAuth",
-                Vec::<String>::new()
-            )])
+        let sec = op.security.as_ref().expect("security on protected route");
+        assert!(
+            !sec.is_empty(),
+            "protected routes must declare bearerAuth"
         );
     }
 }

@@ -77,11 +77,7 @@ fn strip_cfg_test_modules(text: &str) -> String {
         let mod_start = text[after..]
             .find("mod ")
             .map(|i| after + i)
-            .filter(|&i| {
-                text[after..i]
-                    .chars()
-                    .all(|c| c.is_whitespace())
-            });
+            .filter(|&i| text[after..i].chars().all(|c| c.is_whitespace()));
         let Some(mod_start) = mod_start else {
             out.push_str("#[cfg(test)]");
             cursor = after;
@@ -296,28 +292,25 @@ pub fn assert_allowlist_shrink_only(
     Ok(())
 }
 
-pub fn route_is_public_bearer_exempt(method: HttpMethod, path: &str) -> bool {
+pub fn route_is_public_bearer_exempt(method: &HttpMethod, path: &str) -> bool {
     matches!(
         (method, path),
-        (HttpMethod::Get, "/api/health")
-            | (HttpMethod::Get, "/api/auth/status")
-            | (HttpMethod::Post, "/api/auth/login")
+        (&HttpMethod::Get, "/api/health")
+            | (&HttpMethod::Get, "/api/auth/status")
+            | (&HttpMethod::Post, "/api/auth/login")
     )
 }
 
 fn stub_operation(method: &str, path: &str) -> Operation {
     let summary = format!("{method} {path}");
-    let mut responses = Responses::new();
-    responses.responses.insert(
+    let mut op = Operation::new();
+    op.tags = Some(vec![tag_for_path(path)]);
+    op.summary = Some(summary);
+    op.responses.responses.insert(
         "200".into(),
-        RefOr::T(Response::new(Some("JSON response envelope"))),
+        RefOr::T(Response::new("JSON response envelope")),
     );
-    Operation {
-        tags: Some(vec![tag_for_path(path)]),
-        summary: Some(summary),
-        responses,
-        ..Operation::new()
-    }
+    op
 }
 
 fn tag_for_path(path: &str) -> String {
@@ -364,11 +357,10 @@ fn operation_slot<'a>(item: &'a mut PathItem, method: HttpMethod) -> &'a mut Opt
         HttpMethod::Head => &mut item.head,
         HttpMethod::Options => &mut item.options,
         HttpMethod::Trace => &mut item.trace,
-        HttpMethod::Query => &mut item.query,
     }
 }
 
-fn operation_ref(item: &PathItem, method: HttpMethod) -> Option<&Operation> {
+fn operation_ref(item: &PathItem, method: &HttpMethod) -> Option<&Operation> {
     match method {
         HttpMethod::Get => item.get.as_ref(),
         HttpMethod::Post => item.post.as_ref(),
@@ -378,7 +370,6 @@ fn operation_ref(item: &PathItem, method: HttpMethod) -> Option<&Operation> {
         HttpMethod::Head => item.head.as_ref(),
         HttpMethod::Options => item.options.as_ref(),
         HttpMethod::Trace => item.trace.as_ref(),
-        HttpMethod::Query => item.query.as_ref(),
     }
 }
 
@@ -412,7 +403,9 @@ impl Modify for OpenApiPolicyAddon {
     fn modify(&self, openapi: &mut OpenApi) {
         openapi.info.version = product_version().to_string();
 
-        use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityRequirement, SecurityScheme};
+        use utoipa::openapi::security::{
+            Http, HttpAuthScheme, SecurityRequirement, SecurityScheme,
+        };
         if let Some(components) = openapi.components.as_mut() {
             components.add_security_scheme(
                 "bearerAuth",
@@ -444,10 +437,10 @@ impl Modify for OpenApiPolicyAddon {
                 HttpMethod::Options,
                 HttpMethod::Trace,
             ] {
-                if operation_ref(item, method).is_none() {
+                if operation_ref(item, &method).is_none() {
                     continue;
                 }
-                let exempt = route_is_public_bearer_exempt(method, &path);
+                let exempt = route_is_public_bearer_exempt(&method, &path);
                 if let Some(op) = operation_slot(item, method).as_mut() {
                     if exempt {
                         op.security = None;
@@ -473,7 +466,10 @@ mod tests {
         )
         "#;
         let routes = parse_routes_from_source(src);
-        assert!(routes.contains(&RouteKey::new("GET", "/api/csv/import/sessions/{session_id}")));
+        assert!(routes.contains(&RouteKey::new(
+            "GET",
+            "/api/csv/import/sessions/{session_id}"
+        )));
         assert!(routes.contains(&RouteKey::new(
             "DELETE",
             "/api/csv/import/sessions/{session_id}"
