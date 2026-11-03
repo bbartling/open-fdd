@@ -50,7 +50,41 @@ pub fn central_src_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")
 }
 
+#[derive(Debug, Deserialize)]
+struct RouterRouteEntry {
+    method: String,
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RouterRoutesFile {
+    schema_version: String,
+    entries: Vec<RouterRouteEntry>,
+}
+
 pub fn collect_router_routes() -> BTreeSet<RouteKey> {
+    router_routes_from_embedded()
+}
+
+fn router_routes_from_embedded() -> BTreeSet<RouteKey> {
+    let raw = include_str!("../openapi_router_routes.json");
+    let file: RouterRoutesFile =
+        serde_json::from_str(raw).unwrap_or_else(|e| panic!("openapi_router_routes.json: {e}"));
+    if file.schema_version != "openfdd_openapi_router_routes_v1" {
+        panic!(
+            "openapi_router_routes.json schema_version mismatch: {}",
+            file.schema_version
+        );
+    }
+    file
+        .entries
+        .iter()
+        .map(|e| RouteKey::new(&e.method, &e.path))
+        .collect()
+}
+
+/// Dev/CI only: parse live router sources (used to refresh `openapi_router_routes.json`).
+pub fn collect_router_routes_from_sources() -> BTreeSet<RouteKey> {
     let mut routes = BTreeSet::new();
     for file in ROUTE_SOURCE_FILES {
         let path = central_src_dir().join(file);
@@ -495,6 +529,16 @@ mod tests {
         let doc = ApiDoc::openapi();
         let router = collect_router_routes();
         verify_openapi_inventory(&doc, &router).expect("router ↔ OpenAPI inventory mismatch");
+    }
+
+    #[test]
+    fn embedded_router_routes_match_live_sources() {
+        let embedded = collect_router_routes();
+        let live = collect_router_routes_from_sources();
+        assert_eq!(
+            embedded, live,
+            "openapi_router_routes.json is stale — regenerate from central router sources"
+        );
     }
 
     #[test]
