@@ -162,6 +162,17 @@ class InstalledSiContractConsumerTests(unittest.TestCase):
         seen = {c["check_id"] for c in doc.checks}
         self.assertTrue(required.issubset(seen))
 
+    def test_negative_superseded_scientific_pack_sha256_pin(self) -> None:
+        superseded = "742b9bcf4e3873665ed4f64378888826b54998ee6ef845a8eed6f720f16c6260"
+        with tempfile.TemporaryDirectory() as tmp:
+            art = Path(tmp) / "old_pack_pin"
+            shutil.copytree(self.artifact_root, art)
+            dist_path = art / "distribution_manifest.json"
+            dist = json.loads(dist_path.read_text(encoding="utf-8"))
+            dist["scientific_pack_sha256"] = superseded
+            dist_path.write_text(json.dumps(dist, indent=2) + "\n", encoding="utf-8")
+            self._run_verify(art, expect_ok=False, skip_db=True)
+
     def test_negative_stale_source_pin(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             art = Path(tmp) / "stale_pin"

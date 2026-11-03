@@ -23,6 +23,11 @@ from scripts.sql_contract.pack_digest import (
     sha256_file,
 )
 
+# Prior scientific identity (documentation-byte delta only); must not be re-pinned on new artifacts.
+SUPERSEDED_SCIENTIFIC_PACK_SHA256: dict[str, str] = {
+    "742b9bcf4e3873665ed4f64378888826b54998ee6ef845a8eed6f720f16c6260": "4.0.8-softopen",
+}
+
 
 @dataclass
 class VerifyReceipt:
@@ -106,6 +111,14 @@ def verify_integrity(artifact_root: Path, *, expected_source_revision: str | Non
         receipt.add("scientific_pack_digest", "PASS", comparisons=len(manifest.get("files") or []))
 
     pinned_pack = str(dist_doc.get("scientific_pack_sha256") or "")
+    if pinned_pack in SUPERSEDED_SCIENTIFIC_PACK_SHA256:
+        prior_ver = SUPERSEDED_SCIENTIFIC_PACK_SHA256[pinned_pack]
+        receipt.add(
+            "superseded_scientific_pack_pin",
+            "FAIL",
+            detail=f"pack_sha256 {pinned_pack[:16]}… is superseded ({prior_ver}); pin {manifest.get('contract_version')}",
+        )
+        receipt.ok = False
     if pack and pinned_pack != pack:
         receipt.add(
             "distribution_binds_scientific_pack",

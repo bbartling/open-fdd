@@ -29,7 +29,7 @@ from scripts.sql_contract.pack_digest import (  # noqa: E402
 )
 
 DISTRIBUTION_ID = "openfdd-si-sql-distribution-v1"
-DISTRIBUTION_VERSION = "4.0.8-softopen-dist-20261103"
+DISTRIBUTION_VERSION = "4.0.8-softopen.1-dist-20261103"
 VERIFY_SCRIPT = Path(__file__).resolve().parent / "verify_installed.py"
 
 

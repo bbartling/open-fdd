@@ -2,14 +2,25 @@
   "schema": "openfdd-si-sql-handoff-v1",
   "processing_abi": "metric-c-v2",
   "scientific_contract_id": "openfdd-sql-schema-fdd-v1",
-  "scientific_contract_version": "4.0.8-softopen",
-  "scientific_pack_sha256": "b33b4209ee2962e78c64cdc1b07851d1baf0e265b7543e28699e2bbff762b6a0",
+  "scientific_contract_version": "4.0.8-softopen.1",
+  "scientific_pack_sha256": "82efa9027adbe0e3e75e64365474b238e74cc0fed307caf6187b80063c7d3422",
+  "superseded_scientific_identity": {
+    "contract_version": "4.0.8-softopen",
+    "pack_sha256": "742b9bcf4e3873665ed4f64378888826b54998ee6ef845a8eed6f720f16c6260",
+    "supersession_reason": "documentation_bytes_only_under_retired_version_string",
+    "changed_ledger_files": [
+      "sql/contract/README.md",
+      "sql/contract/metric_units.json"
+    ],
+    "unchanged_surface": "no SQL, DDL, constant, or equation file bytes changed versus superseded pack",
+    "verifier_rejects_old_pack_pin": true
+  },
   "distribution_id": "openfdd-si-sql-distribution-v1",
-  "distribution_version": "4.0.8-softopen-dist-20261103",
-  "distribution_sha256": "b1b8979e09421fb1b9351b726bee14a14b36d5ac185697dbd47978a0e2243dae",
-  "source_revision": "faa5f3a7a776731c957b1691f864f66a28f15a6d",
+  "distribution_version": "4.0.8-softopen.1-dist-20261103",
+  "distribution_sha256": "7db7d2cc7fa24d5d482f3294dc3c53f8134bde7bf02b22bfd7352d3c1b13f94a",
+  "source_revision": "094e9be32e3a950831aa7b72a69031ea47557acc",
   "export_command": "python3 scripts/sql_contract/export_distribution.py --out /tmp/openfdd-si-dist --write-committed-manifest",
-  "verify_command": "OPENFDD_VERIFY_REPO=$PWD OPENFDD_SI_ARTIFACT_ROOT=/tmp/openfdd-si-dist OPENFDD_SI_EXPECTED_SOURCE_REV=$(git rev-parse HEAD) OPENFDD_DATABASE_URL=postgresql://\u2026 python3 scripts/sql_contract/verify_installed.py",
+  "verify_command": "OPENFDD_VERIFY_REPO=$PWD OPENFDD_SI_ARTIFACT_ROOT=/tmp/openfdd-si-dist OPENFDD_SI_EXPECTED_SOURCE_REV=$(git rev-parse HEAD) OPENFDD_DATABASE_URL=postgresql://… python3 scripts/sql_contract/verify_installed.py",
   "ci_workflow": ".github/workflows/si-parity.yml",
   "ci_job": "si-installed-artifact-consumer",
   "install_order": {
@@ -54,9 +65,7 @@
     "topology_equipment"
   ],
   "supported_rule_count": 77,
-  "unsupported_rule_ids": [
-    "SV-RATE"
-  ],
+  "unsupported_rule_ids": ["SV-RATE"],
   "receipts": {
     "installed_consumer": "installed_consumer_receipt.json from verify_installed.py",
     "si_parity_matrix": "si-parity job artifacts (not duplicated here)"
@@ -70,7 +79,7 @@
   "upstream_fixes": [],
   "upstream_fix_classification": "no class-A shared SQL defect reproduced",
   "consumer_upgrade_sequence": [
-    "pin distribution_sha256 + scientific_pack_sha256 + source_revision",
+    "pin distribution_sha256 + scientific_pack_sha256 + scientific_contract_version 4.0.8-softopen.1",
     "export artifact outside checkout and verify",
     "adapt bindings/metadata only",
     "rehearse SI admission and tuners on synthetic goldens",

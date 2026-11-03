@@ -7,10 +7,24 @@ Soft-OPEN dependency artifact for generic downstream consumers. **Not** full liv
 | Field | Value |
 | --- | --- |
 | Processing ABI | `metric-c-v2` |
-| Scientific contract | `openfdd-sql-schema-fdd-v1` @ `4.0.8-softopen` |
-| Scientific `pack_sha256` | see `sql/contract/manifest.json` (110-file Merkle ledger) |
-| Distribution | `openfdd-si-sql-distribution-v1` @ `4.0.8-softopen-dist-20261103` |
-| Distribution `distribution_sha256` | see `sql/contract/distribution_manifest.json` |
+| Scientific contract | `openfdd-sql-schema-fdd-v1` @ `4.0.8-softopen.1` |
+| Scientific `pack_sha256` | `82efa9027adbe0e3e75e64365474b238e74cc0fed307caf6187b80063c7d3422` |
+| Distribution | `openfdd-si-sql-distribution-v1` @ `4.0.8-softopen.1-dist-20261103` |
+| Distribution `distribution_sha256` | `7db7d2cc7fa24d5d482f3294dc3c53f8134bde7bf02b22bfd7352d3c1b13f94a` |
+
+### Superseded scientific identity (do not re-pin)
+
+| Field | Value |
+| --- | --- |
+| `contract_version` | `4.0.8-softopen` |
+| `pack_sha256` | `742b9bcf4e3873665ed4f64378888826b54998ee6ef845a8eed6f720f16c6260` |
+
+That pin is retired because **documentation bytes only** changed under the same version string (brief-forbidden silent reinterpretation). No SQL, DDL, constant, or equation file bytes changed versus the superseded pack. Ledger files whose hashes differ are:
+
+- `sql/contract/README.md` — SI consumer language (metric-c-v2 shipped SQL; distribution pointer)
+- `sql/contract/metric_units.json` — `notes[]` only (same processing ABI `metric-c-v2`)
+
+Current `4.0.8-softopen.1` additionally bumps version metadata in `sql/analytics/registry.json` and `sql/contract/successor_bundle/manifest.softopen.json` (still no equation/DDL body edits).
 
 The scientific digest is **unchanged in definition**. The distribution digest additionally binds renderer/tuning companions (`tuning_catalog.json`, `runtime_defaults.json`, `render_rule.py`).
 
