@@ -76,8 +76,7 @@ fn router_routes_from_embedded() -> BTreeSet<RouteKey> {
             file.schema_version
         );
     }
-    file
-        .entries
+    file.entries
         .iter()
         .map(|e| RouteKey::new(&e.method, &e.path))
         .collect()
