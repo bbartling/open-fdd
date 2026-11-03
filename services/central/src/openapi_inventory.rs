@@ -42,7 +42,8 @@ pub fn normalize_openapi_path(path: &str) -> String {
 }
 
 pub fn product_version() -> &'static str {
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../VERSION")).trim()
+    // Workspace `version` is kept in sync with repo `VERSION` by `scripts/check_version_sync.sh`.
+    env!("CARGO_PKG_VERSION")
 }
 
 pub fn central_src_dir() -> PathBuf {
