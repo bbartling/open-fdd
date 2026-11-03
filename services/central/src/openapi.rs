@@ -1,9 +1,11 @@
 //! Swagger UI + OpenAPI JSON for central.
 
+mod openapi_inventory;
+
 use axum::Router;
-use utoipa::openapi::security::{Http, HttpAuthScheme, SecurityScheme};
-use utoipa::Modify;
+use openapi_inventory::{OpenApiPolicyAddon, RouteInventoryAddon};
 use utoipa::OpenApi;
+use utoipa_swagger_ui::Config;
 
 use crate::auth::{JwtClaims, Role};
 use crate::models::*;
@@ -439,23 +441,17 @@ mod live_routes {
         TenantBudgetConfig,
         TenantBudgetsResponse,
     )),
-    modifiers(&SecurityAddon),
+    modifiers(&RouteInventoryAddon, &OpenApiPolicyAddon),
     info(
         title = "Open-FDD Central API",
-        version = "3.5.4",
+        version = "0.0.0",
         description = "Open-FDD Central control plane — Normal Framework API (portal HTTPS REST or LAN gRPC, per site) and CSV ingest, Timescale historian, and FDD.\n\n\
-            **Auth:** set `OPENFDD_JWT_SECRET` to require `Authorization: Bearer <JWT>` on all `/api/*` routes \
-            except liveness, login, and non-sensitive capabilities. Open mode is **loopback-only**. \
-            Binding a non-loopback address without a strong JWT secret and admin password **fails closed**. \
-            JWT is not multi-building tenancy.\n\n\
-            **Wave L:** `OPENFDD_MULTI_TENANT` defaults **OFF**. Health/tenants/`/api/auth/me` echo `multi_tenant=false` \
-            and `active_tenant_id=legacy`. `POST /api/tenants/select` is a no-op for `legacy` while OFF. \
-            Per-tenant budgets (`OPENFDD_TENANT_BUDGETS`) stay disabled unless multi-tenant mode is ON. \
-            JWT `tenant_ids` + select remint are for Tier-2 lab enablement (single domain first).\n\n\
-            **Logins:** `admin` + `OPENFDD_ADMIN_PASSWORD` → admin JWT; `agent` + `OPENFDD_AGENT_PASSWORD` → operator JWT \
-            (preferred for Railway MCP / Cursor). Admins may also `POST /api/auth/agent-token` for short-lived operator JWTs.\n\n\
-            **Claims:** `sub` (subject), `role` one of `viewer`, `operator`, `admin`. \
-            Operator and admin JWTs are for portal and CSV writes when auth is enabled."
+            **Auth:** when JWT auth is enabled, use **Authorize** with a bearer token from `POST /api/auth/login` \
+            (no bearer required on that route or on `GET /api/auth/status`). `GET /api/health` is liveness-only. \
+            Open mode is loopback-only; binding a non-loopback address without a strong JWT secret and admin password fails closed.\n\n\
+            **Multi-tenant:** `OPENFDD_MULTI_TENANT` defaults OFF. `POST /api/tenants/select` is a no-op for `legacy` while OFF.\n\n\
+            **Agent tokens:** admins may `POST /api/auth/agent-token` with an admin bearer to mint short-lived operator JWTs.\n\n\
+            **Claims:** `sub`, `role` (`viewer`, `operator`, `admin`). No credentials are embedded in this document."
     ),
     tags(
         (name = "central", description = "Open-FDD Central control plane"),
@@ -469,23 +465,18 @@ mod live_routes {
 )]
 pub struct ApiDoc;
 
-struct SecurityAddon;
-
-impl Modify for SecurityAddon {
-    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        if let Some(components) = openapi.components.as_mut() {
-            components.add_security_scheme(
-                "bearerAuth",
-                SecurityScheme::Http(Http::new(HttpAuthScheme::Bearer)),
-            );
-        }
-    }
-}
-
 /// Swagger UI at `/docs`; OpenAPI JSON at `/openapi.json` (mounted once by SwaggerUi).
 pub fn router() -> Router {
-    Router::new()
-        .merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url("/openapi.json", ApiDoc::openapi()))
+    Router::new().merge(
+        utoipa_swagger_ui::SwaggerUi::new("/docs")
+            .url("/openapi.json", ApiDoc::openapi())
+            .config(
+                Config::default()
+                    .validator_url("none")
+                    .persist_authorization(true)
+                    .try_it_out_enabled(true),
+            ),
+    )
 }
 
 #[cfg(test)]
@@ -499,25 +490,73 @@ mod tests {
     }
 
     #[test]
-    fn openapi_lists_live_jobs_analytics_datasets_reports_routes() {
-        // OFDD-071: /openapi.json must advertise the live routes an operator uses,
-        // not just the original edge/command/auth subset.
+    fn openapi_info_version_matches_product_version_file() {
         let doc = ApiDoc::openapi();
-        let paths = doc.paths.paths;
-        for expected in [
-            "/api/jobs",
-            "/api/jobs/{job_id}",
-            "/api/datasets",
-            "/api/fdd/results",
-            "/api/analytics/economizer",
-            "/api/reports",
-            "/api/reports/engineering-findings",
-            "/api/sites/buildings",
+        assert_eq!(
+            doc.info.version,
+            openapi_inventory::product_version(),
+            "OpenAPI info.version must track repo VERSION"
+        );
+    }
+
+    #[test]
+    fn openapi_route_inventory_matches_axum_router_both_ways() {
+        let doc = ApiDoc::openapi();
+        let router = openapi_inventory::collect_router_routes();
+        let spec = openapi_inventory::collect_openapi_routes(&doc);
+        let allowlist = openapi_inventory::load_allowlist();
+        openapi_inventory::assert_allowlist_shrink_only(&spec, &allowlist.entries)
+            .expect("allowlist entries documented in OpenAPI — shrink allowlist");
+        openapi_inventory::compare_router_and_openapi(
+            &router,
+            &spec,
+            &openapi_inventory::allowlist_route_keys(&allowlist.entries),
+        )
+        .expect("router ↔ OpenAPI inventory mismatch");
+    }
+
+    #[test]
+    fn openapi_login_and_status_have_no_bearer_security() {
+        use utoipa::openapi::path::HttpMethod;
+        let doc = ApiDoc::openapi();
+        for (method, path) in [
+            (HttpMethod::Post, "/api/auth/login"),
+            (HttpMethod::Get, "/api/auth/status"),
         ] {
+            let item = doc
+                .paths
+                .paths
+                .get(path)
+                .unwrap_or_else(|| panic!("missing OpenAPI path {path}"));
+            let op = match method {
+                HttpMethod::Get => item.get.as_ref(),
+                HttpMethod::Post => item.post.as_ref(),
+                _ => None,
+            }
+            .unwrap_or_else(|| panic!("missing {method:?} on {path}"));
             assert!(
-                paths.contains_key(expected),
-                "missing OpenAPI path {expected}"
+                op.security.is_none(),
+                "{path} must not require bearerAuth in the spec"
             );
         }
+    }
+
+    #[test]
+    fn openapi_protected_routes_advertise_bearer_auth() {
+        use utoipa::openapi::security::SecurityRequirement;
+        let doc = ApiDoc::openapi();
+        let item = doc
+            .paths
+            .paths
+            .get("/api/agent/tools")
+            .expect("/api/agent/tools");
+        let op = item.get.as_ref().expect("GET /api/agent/tools");
+        assert_eq!(
+            op.security,
+            Some(vec![SecurityRequirement::new(
+                "bearerAuth",
+                Vec::<String>::new()
+            )])
+        );
     }
 }
