@@ -1,38 +1,32 @@
 # UI serve strategy
 
-> **Updated 2026-07-27.** Product UI is React SPA (`frontend/web`), not a Vite/Caddy SPA.
+> **Updated 2026-11.** Product UI is **Open-FDD Central** static assets at `/app/` on `openfdd-central`.
 
-## Production
+## Production (portal / csv)
 
-The UI is served by the `openfdd-web` container: React from `frontend/web`,
-listening on **:8080** in-container (published as **:3000**). Central owns the
-API on **:8080**. The UI calls central over the compose network (or host
-`localhost` in local dev). Optional Caddy fronts the LAN on **:80**.
+Central serves the Bench Viz static shell when `OPENFDD_STATIC_PRODUCT_UI=1`
+(default on `docker/compose.portal.yml` and `docker/compose.csv.yml`).
 
 | Surface | Behavior |
 | --- | --- |
-| UI browser | React on `:3000` (host) → `:8080` (container nginx) |
-| UI via Caddy (optional) | `http://<host>/` → `web:8080` (`OPENFDD_CADDY=1` / `compose.caddy.react.yml`) |
-| API | Central on `:8080` (`/api/health`, JWT routes, FDD) |
-| API via Caddy | `http://<host>/api*` → `central:8080` |
-| Docs / OpenAPI | Served by central on `:8080` |
+| UI browser | `http://<host>:8080/app/` (central static product tree) |
+| UI via Caddy (optional) | `OPENFDD_CADDY=1` → `docker/compose.caddy.central.yml` — HTTPS `tls internal`, HTTP → HTTPS redirect; reverse proxy to `central:8080` |
+| API | Same origin on central `:8080` (`/api/*`, JWT routes, FDD) |
+| Docs / OpenAPI | Central on `:8080` (`/docs`, `/openapi.json`) |
 
-## Docker
+Caddy does **not** replace central security headers or CSP.
 
-`frontend/web/Dockerfile` builds the React image from the open-fdd repo
-(Python + `open-fdd[oracle]` + app code). Image:
-`ghcr.io/bbartling/openfdd-web`.
+## React rollback
 
-Historical Vite/Caddy SPA notes and cutover plans live under
-`docs/frontend/REACT_TYPESCRIPT_CUTOVER_PLAN.md` (obsolete) and
-`docs/archive/deployment/`.
+`docker/compose.react.yml` + GHCR `openfdd-web` publishes host `:3000` → container nginx `:8080`.
+Use the same `OPENFDD_IMAGE_TAG` pin on `OPENFDD_WEB_IMAGE` when pulling rollback images.
 
 ## Verification
 
 ```bash
-./scripts/openfdd_stack_up.sh standalone
+./scripts/openfdd_stack_up.sh portal --no-pull
 curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
+curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/app/
 ```
 
 ## Security

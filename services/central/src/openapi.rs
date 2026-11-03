@@ -356,6 +356,7 @@ mod live_routes {
         crate::routes::health,
         crate::routes::health_diagnostics,
         crate::routes::list_tenants,
+        crate::routes::sites_buildings_list,
         crate::routes::select_tenant,
         crate::routes::list_tenant_budgets,
         crate::routes::ingest_stats,
@@ -417,6 +418,8 @@ mod live_routes {
         AuditSinkHealth,
         crate::tenant::TenantsListResponse,
         crate::tenant::TenantRecord,
+        crate::routes::SiteBuildingRow,
+        crate::routes::SitesBuildingsResponse,
         IngestStatsResponse,
         AgentToolsResponse,
         AgentTool,
@@ -509,6 +512,7 @@ mod tests {
             "/api/analytics/economizer",
             "/api/reports",
             "/api/reports/engineering-findings",
+            "/api/sites/buildings",
         ] {
             assert!(
                 paths.contains_key(expected),

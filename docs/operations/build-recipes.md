@@ -105,7 +105,7 @@ Pull without starting:
 ./scripts/openfdd_stack_pull.sh csv   # or standalone|central|edge|mcp|all
 ```
 
-After `csv` boot: UI on `http://<host>:3000`, API health on `http://<host>:8080/api/health`.
+After `csv` boot: UI on `http://<host>:8080/app/`, API health on `http://<host>:8080/api/health`.
 
 ## Recipes in detail
 
