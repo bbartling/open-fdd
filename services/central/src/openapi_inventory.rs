@@ -127,7 +127,9 @@ pub fn parse_routes_from_source(text: &str) -> BTreeSet<RouteKey> {
             continue;
         };
         if api_path.starts_with("/api") {
-            let handler = &text[start + handler_start_offset(&text[start..])..handler_end];
+            let handler_begin = start + handler_start_offset(&text[start..]);
+            let handler_end_abs = start + handler_end;
+            let handler = &text[handler_begin..handler_end_abs];
             for method in infer_methods(handler) {
                 routes.insert(RouteKey::new(method, api_path));
             }
@@ -243,7 +245,15 @@ impl AllowlistEntry {
 
 pub fn load_allowlist() -> AllowlistFile {
     let raw = include_str!("../openapi_route_allowlist.json");
-    serde_json::from_str(raw).unwrap_or_else(|e| panic!("openapi_route_allowlist.json: {e}"))
+    let file: AllowlistFile =
+        serde_json::from_str(raw).unwrap_or_else(|e| panic!("openapi_route_allowlist.json: {e}"));
+    if file.schema_version != "openfdd_openapi_route_allowlist_v1" {
+        panic!(
+            "openapi_route_allowlist.json schema_version mismatch: {}",
+            file.schema_version
+        );
+    }
+    file
 }
 
 pub fn allowlist_route_keys(entries: &[AllowlistEntry]) -> BTreeSet<RouteKey> {
@@ -347,7 +357,7 @@ fn http_method_from_str(method: &str) -> Option<HttpMethod> {
     }
 }
 
-fn operation_slot<'a>(item: &'a mut PathItem, method: HttpMethod) -> &'a mut Option<Operation> {
+fn operation_slot(item: &mut PathItem, method: HttpMethod) -> &mut Option<Operation> {
     match method {
         HttpMethod::Get => &mut item.get,
         HttpMethod::Post => &mut item.post,
@@ -360,7 +370,7 @@ fn operation_slot<'a>(item: &'a mut PathItem, method: HttpMethod) -> &'a mut Opt
     }
 }
 
-fn operation_ref<'a>(item: &'a PathItem, method: &HttpMethod) -> Option<&'a Operation> {
+fn operation_ref(item: &PathItem, method: &HttpMethod) -> Option<&Operation> {
     match method {
         HttpMethod::Get => item.get.as_ref(),
         HttpMethod::Post => item.post.as_ref(),
@@ -383,11 +393,7 @@ impl Modify for RouteInventoryAddon {
             let Some(http_method) = http_method_from_str(&key.method) else {
                 continue;
             };
-            let entry = openapi
-                .paths
-                .paths
-                .entry(key.path.clone())
-                .or_insert_with(PathItem::default);
+            let entry = openapi.paths.paths.entry(key.path.clone()).or_default();
             let slot = operation_slot(entry, http_method);
             if slot.is_none() {
                 *slot = Some(stub_operation(&key.method, &key.path));
@@ -456,6 +462,70 @@ impl Modify for OpenApiPolicyAddon {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::openapi::ApiDoc;
+
+    #[test]
+    fn openapi_info_version_matches_product_version_file() {
+        let doc = ApiDoc::openapi();
+        assert_eq!(
+            doc.info.version,
+            product_version(),
+            "OpenAPI info.version must track repo VERSION"
+        );
+    }
+
+    #[test]
+    fn openapi_route_inventory_matches_axum_router_both_ways() {
+        let doc = ApiDoc::openapi();
+        let router = collect_router_routes();
+        let spec = collect_openapi_routes(&doc);
+        let allowlist = load_allowlist();
+        assert_allowlist_shrink_only(&spec, &allowlist.entries)
+            .expect("allowlist entries documented in OpenAPI — shrink allowlist");
+        compare_router_and_openapi(&router, &spec, &allowlist_route_keys(&allowlist.entries))
+            .expect("router ↔ OpenAPI inventory mismatch");
+    }
+
+    #[test]
+    fn openapi_login_and_status_have_no_bearer_security() {
+        let doc = ApiDoc::openapi();
+        for (path, op) in [
+            (
+                "/api/auth/login",
+                doc.paths
+                    .paths
+                    .get("/api/auth/login")
+                    .and_then(|i| i.post.as_ref())
+                    .expect("POST /api/auth/login"),
+            ),
+            (
+                "/api/auth/status",
+                doc.paths
+                    .paths
+                    .get("/api/auth/status")
+                    .and_then(|i| i.get.as_ref())
+                    .expect("GET /api/auth/status"),
+            ),
+        ] {
+            assert!(
+                op.security.is_none(),
+                "{path} must not require bearerAuth in the spec"
+            );
+        }
+    }
+
+    #[test]
+    fn openapi_protected_routes_advertise_bearer_auth() {
+        let doc = ApiDoc::openapi();
+        let item = doc
+            .paths
+            .paths
+            .get("/api/agent/tools")
+            .expect("/api/agent/tools");
+        let op = item.get.as_ref().expect("GET /api/agent/tools");
+        let sec = op.security.as_ref().expect("security on protected route");
+        assert!(!sec.is_empty(), "protected routes must declare bearerAuth");
+    }
 
     #[test]
     fn parse_route_call_finds_chained_methods() {
