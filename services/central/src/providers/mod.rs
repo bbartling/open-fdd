@@ -39,6 +39,8 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::warn;
 
+use crate::ingest_queue::schedule::IngestSchedule;
+use crate::operator_schedule;
 use committed_model::CommittedModelStore;
 use config::{load_sites_from_env, SiteConfig, SiteConfigFailure};
 use error::safe_operator_code;
@@ -236,6 +238,8 @@ pub struct Runtime {
     pub(crate) models: StdMutex<CommittedModelStore>,
     pub(crate) health: Mutex<ProvidersHealthBody>,
     hourly: Mutex<Option<store::HourlyStore>>,
+    operator_schedules: StdMutex<operator_schedule::OperatorSiteScheduleStore>,
+    state_store: StdMutex<Option<crate::canonical_state::CanonicalStateStore>>,
 }
 
 impl Runtime {
@@ -342,6 +346,20 @@ impl Runtime {
             site_health.push(health_row(site, &models, status, message));
         }
         site_health.extend(loaded.failures.iter().map(failure_row));
+        let (operator_schedules, state_store) =
+            match crate::canonical_state::CanonicalStateStore::from_env() {
+                Ok(store) => (
+                    operator_schedule::OperatorSiteScheduleStore::load(&store).unwrap_or_default(),
+                    Some(store),
+                ),
+                Err(error) => {
+                    warn!(%error, "operator site schedules not loaded from canonical state");
+                    (
+                        operator_schedule::OperatorSiteScheduleStore::default(),
+                        None,
+                    )
+                }
+            };
         Arc::new(Self {
             sites: loaded.sites,
             models: StdMutex::new(models),
@@ -353,7 +371,93 @@ impl Runtime {
                 registry: registry::registrations(),
             }),
             hourly: Mutex::new(None),
+            operator_schedules: StdMutex::new(operator_schedules),
+            state_store: StdMutex::new(state_store),
         })
+    }
+
+    pub fn effective_poll_secs(&self, building_id: &str) -> u64 {
+        let base = self
+            .sites
+            .iter()
+            .find(|site| site.building_id == building_id)
+            .map(|site| site.poll_secs)
+            .unwrap_or(300);
+        let guard = self
+            .operator_schedules
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        operator_schedule::effective_poll_secs(base, guard.entry(building_id))
+    }
+
+    pub fn effective_ingest_schedule(&self, tenant_id: &str, building_id: &str) -> IngestSchedule {
+        let base = self
+            .sites
+            .iter()
+            .find(|site| site.tenant_id == tenant_id && site.building_id == building_id)
+            .map(|site| site.schedule)
+            .unwrap_or(IngestSchedule::Periodic);
+        let guard = self
+            .operator_schedules
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        operator_schedule::effective_ingest_schedule(base, guard.entry(building_id)).unwrap_or(base)
+    }
+
+    pub fn update_operator_site_schedule(
+        &self,
+        building_id: &str,
+        patch: operator_schedule::OperatorSiteScheduleEntry,
+    ) -> Result<operator_schedule::OperatorSiteScheduleEntry, String> {
+        if !self
+            .sites
+            .iter()
+            .any(|site| site.building_id == building_id)
+        {
+            return Err("site_not_found".into());
+        }
+        if patch.poll_secs.is_some() {
+            let secs = patch.poll_secs.unwrap_or(300);
+            if !(15..=3600).contains(&secs) {
+                return Err("poll_secs_out_of_range".into());
+            }
+        }
+        if patch.schedule_mode.is_some() || patch.schedule_timezone.is_some() {
+            let base = self
+                .sites
+                .iter()
+                .find(|site| site.building_id == building_id)
+                .map(|site| site.schedule)
+                .unwrap_or(IngestSchedule::Periodic);
+            operator_schedule::effective_ingest_schedule(base, Some(&patch))?;
+        }
+        let mut guard = self
+            .operator_schedules
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let mut merged = guard.entry(building_id).cloned().unwrap_or_default();
+        if let Some(poll_secs) = patch.poll_secs {
+            merged.poll_secs = Some(poll_secs);
+        }
+        if let Some(mode) = patch.schedule_mode {
+            merged.schedule_mode = Some(mode);
+        }
+        if let Some(tz) = patch.schedule_timezone {
+            merged.schedule_timezone = Some(tz);
+        }
+        guard.upsert(building_id, merged.clone());
+        let snapshot = guard.clone();
+        drop(guard);
+        let store = self
+            .state_store
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        if let Some(store) = store.as_ref() {
+            snapshot
+                .persist(store)
+                .map_err(|err| format!("persist operator schedules: {err:#}"))?;
+        }
+        Ok(merged)
     }
 
     /// Live plan for this tick. A failed activation leaves the last valid plan.
@@ -466,6 +570,10 @@ impl Runtime {
                 registry: Vec::new(),
             }),
             hourly: Mutex::new(None),
+            operator_schedules: StdMutex::new(
+                operator_schedule::OperatorSiteScheduleStore::default(),
+            ),
+            state_store: StdMutex::new(None),
         })
     }
 

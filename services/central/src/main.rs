@@ -44,10 +44,12 @@ mod occupancy_calendar;
 #[cfg(test)]
 mod one_writer_fixtures;
 mod openapi;
+mod operator_schedule;
 #[cfg(test)]
 mod package_preflight_fixtures;
 #[cfg(test)]
 mod portal_inventory_fixtures;
+mod product_schedules;
 mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;
@@ -145,6 +147,7 @@ async fn main() -> anyhow::Result<()> {
             Arc::clone(&state),
             Arc::clone(&afdd_runtime),
         ))
+        .merge(product_schedules::router(Arc::clone(&state)))
         .merge(sql_anomaly::router(Arc::clone(&state)))
         .merge(cutover::router())
         .merge(vibe21::router(Arc::clone(&state)))

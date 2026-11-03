@@ -52,6 +52,13 @@ pub(crate) static TEST_INTERVAL_EVIDENCE_INJECT: std::sync::Mutex<
     Option<IntervalEvidenceReadiness>,
 > = std::sync::Mutex::new(None);
 
+/// When set, interval readiness through any `through_utc` strictly before this instant
+/// returns `Pending` (multi-hour AFDD checkpoint tests).
+#[cfg(test)]
+pub(crate) static TEST_INTERVAL_PENDING_BEFORE_UTC: std::sync::Mutex<
+    Option<chrono::DateTime<chrono::Utc>>,
+> = std::sync::Mutex::new(None);
+
 /// When set, the series load runs `SELECT 1/0` inside the interval savepoint.
 #[cfg(test)]
 pub(crate) static TEST_FORCE_SERIES_STATEMENT_ERROR: AtomicBool = AtomicBool::new(false);
@@ -547,21 +554,50 @@ pub async fn interval_unknown_pairs_for_run(
     site_id: &str,
     run_id: &str,
 ) -> Result<Vec<(String, String)>> {
-    let rows = sqlx::query(
-        r#"
-        SELECT rule_id, equipment_id
-        FROM fdd_run
-        WHERE site_id = $1
-          AND detail->>'run_id' = $2
-          AND equipment_id <> ''
-          AND detail->'interval_persist'->>'status' = $3
-        "#,
-    )
-    .bind(site_id)
-    .bind(run_id)
-    .bind(INTERVAL_EVIDENCE_UNKNOWN)
-    .fetch_all(tsdb.pool())
-    .await?;
+    interval_unknown_pairs_for_run_through(tsdb, site_id, run_id, None).await
+}
+
+pub async fn interval_unknown_pairs_for_run_through(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+    through_utc: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<Vec<(String, String)>> {
+    let rows = if let Some(through) = through_utc {
+        sqlx::query(
+            r#"
+            SELECT rule_id, equipment_id
+            FROM fdd_run
+            WHERE site_id = $1
+              AND detail->>'run_id' = $2
+              AND equipment_id <> ''
+              AND detail->'interval_persist'->>'status' = $3
+              AND window_end <= $4
+            "#,
+        )
+        .bind(site_id)
+        .bind(run_id)
+        .bind(INTERVAL_EVIDENCE_UNKNOWN)
+        .bind(through)
+        .fetch_all(tsdb.pool())
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT rule_id, equipment_id
+            FROM fdd_run
+            WHERE site_id = $1
+              AND detail->>'run_id' = $2
+              AND equipment_id <> ''
+              AND detail->'interval_persist'->>'status' = $3
+            "#,
+        )
+        .bind(site_id)
+        .bind(run_id)
+        .bind(INTERVAL_EVIDENCE_UNKNOWN)
+        .fetch_all(tsdb.pool())
+        .await?
+    };
     Ok(rows
         .into_iter()
         .filter_map(|row| {
@@ -790,6 +826,43 @@ pub async fn repair_unknown_interval_evidence_for_run(
 }
 
 /// Whether interval evidence is ready for AFDD checkpoint advance (optional bounded repair).
+pub(crate) async fn interval_evidence_readiness_for_run_through(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+    through_utc: chrono::DateTime<chrono::Utc>,
+    attempt_repair: bool,
+    budget: &RepairBudget,
+) -> Result<IntervalEvidenceReadiness> {
+    #[cfg(test)]
+    if let Ok(guard) = TEST_INTERVAL_PENDING_BEFORE_UTC.lock() {
+        if guard.as_ref().is_some_and(|cutoff| through_utc <= *cutoff) {
+            return Ok(IntervalEvidenceReadiness::Pending);
+        }
+    }
+    let mut pending =
+        !interval_unknown_pairs_for_run_through(tsdb, site_id, run_id, Some(through_utc))
+            .await?
+            .is_empty();
+    if pending && attempt_repair {
+        if let Err(err) =
+            repair_unknown_interval_evidence_for_run(tsdb, site_id, run_id, budget).await
+        {
+            return Ok(IntervalEvidenceReadiness::CheckFailed {
+                reason: err.to_string(),
+            });
+        }
+        pending = !interval_unknown_pairs_for_run_through(tsdb, site_id, run_id, Some(through_utc))
+            .await?
+            .is_empty();
+    }
+    if pending {
+        Ok(IntervalEvidenceReadiness::Pending)
+    } else {
+        Ok(IntervalEvidenceReadiness::Ready)
+    }
+}
+
 pub(crate) async fn interval_evidence_readiness_for_active_run(
     tsdb: &Tsdb,
     site_id: &str,
@@ -812,26 +885,15 @@ pub(crate) async fn interval_evidence_readiness_for_active_run(
     else {
         return Ok(IntervalEvidenceReadiness::Ready);
     };
-    let mut pending = !interval_unknown_pairs_for_run(tsdb, site_id, run_id)
-        .await?
-        .is_empty();
-    if pending && attempt_repair {
-        if let Err(err) =
-            repair_unknown_interval_evidence_for_run(tsdb, site_id, run_id, budget).await
-        {
-            return Ok(IntervalEvidenceReadiness::CheckFailed {
-                reason: err.to_string(),
-            });
-        }
-        pending = !interval_unknown_pairs_for_run(tsdb, site_id, run_id)
-            .await?
-            .is_empty();
-    }
-    if pending {
-        Ok(IntervalEvidenceReadiness::Pending)
-    } else {
-        Ok(IntervalEvidenceReadiness::Ready)
-    }
+    interval_evidence_readiness_for_run_through(
+        tsdb,
+        site_id,
+        run_id,
+        chrono::DateTime::<chrono::Utc>::MAX_UTC,
+        attempt_repair,
+        budget,
+    )
+    .await
 }
 
 /// Whether the active registry generation still has interval-unknown rows (optional bounded repair).

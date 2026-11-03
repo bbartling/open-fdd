@@ -21,6 +21,7 @@ const TAB_PATHS = [
   "/app/?tab=rcx",
   "/app/?tab=fdd",
   "/app/?tab=model",
+  "/app/?tab=schedules",
 ];
 
 function pathWithSite(path: string): string {

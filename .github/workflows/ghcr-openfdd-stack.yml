@@ -69,6 +69,7 @@ jobs:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: |
           cargo test -p openfdd-central r1484_execute_cycle_holds_checkpoint_until_interval_check_recovers -- --test-threads=1
+          cargo test -p openfdd-central r_wave_d_multi_hour_earlier_chunk_holds_checkpoint -- --test-threads=1
           cargo test -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
