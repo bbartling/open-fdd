@@ -11,7 +11,7 @@
     "distribution_sha256": "SHA256(scientific_pack_sha256_utf8 + NUL + companion_merkle + NUL); companion_merkle uses the same per-file update as scientific pack."
   },
   "distribution_sha256": "7db7d2cc7fa24d5d482f3294dc3c53f8134bde7bf02b22bfd7352d3c1b13f94a",
-  "source_revision": "094e9be32e3a950831aa7b72a69031ea47557acc",
+  "source_revision": "8d53d5d0e1ca1d6cadaac0893e1b6727a93fb1cb",
   "companion_files": [
     {
       "path": "sql/fdd/tuning_catalog.json",

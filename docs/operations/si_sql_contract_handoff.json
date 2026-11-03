@@ -18,9 +18,9 @@
   "distribution_id": "openfdd-si-sql-distribution-v1",
   "distribution_version": "4.0.8-softopen.1-dist-20261103",
   "distribution_sha256": "7db7d2cc7fa24d5d482f3294dc3c53f8134bde7bf02b22bfd7352d3c1b13f94a",
-  "source_revision": "094e9be32e3a950831aa7b72a69031ea47557acc",
+  "source_revision": "8d53d5d0e1ca1d6cadaac0893e1b6727a93fb1cb",
   "export_command": "python3 scripts/sql_contract/export_distribution.py --out /tmp/openfdd-si-dist --write-committed-manifest",
-  "verify_command": "OPENFDD_VERIFY_REPO=$PWD OPENFDD_SI_ARTIFACT_ROOT=/tmp/openfdd-si-dist OPENFDD_SI_EXPECTED_SOURCE_REV=$(git rev-parse HEAD) OPENFDD_DATABASE_URL=postgresql://… python3 scripts/sql_contract/verify_installed.py",
+  "verify_command": "OPENFDD_VERIFY_REPO=$PWD OPENFDD_SI_ARTIFACT_ROOT=/tmp/openfdd-si-dist OPENFDD_SI_EXPECTED_SOURCE_REV=$(git rev-parse HEAD) OPENFDD_DATABASE_URL=postgresql://\u2026 python3 scripts/sql_contract/verify_installed.py",
   "ci_workflow": ".github/workflows/si-parity.yml",
   "ci_job": "si-installed-artifact-consumer",
   "install_order": {
@@ -65,7 +65,9 @@
     "topology_equipment"
   ],
   "supported_rule_count": 77,
-  "unsupported_rule_ids": ["SV-RATE"],
+  "unsupported_rule_ids": [
+    "SV-RATE"
+  ],
   "receipts": {
     "installed_consumer": "installed_consumer_receipt.json from verify_installed.py",
     "si_parity_matrix": "si-parity job artifacts (not duplicated here)"
