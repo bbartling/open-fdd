@@ -80,7 +80,7 @@ retest. Do not confuse those with this engineering OS.
 16. When blocked (secrets, permissions), finish non-blocked work and record the exact error.
 17. Bound each PR to its declared scope.
 18. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest.
-19. For `frontend/web` work: follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) and [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md). Review diffs with [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md).
+19. For `archive/product-ui/react-spa-v4` (legacy GHCR `openfdd-web`): follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md). For **static product UI** on central `/app/` (Wave C+): follow [`openfdd-static-ui`](skills/openfdd-static-ui/SKILL.md) and [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md) for shared review hygiene. Review diffs with [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md).
 20. Central product image is **debian + Rust binaries only** — no Python. **Engineering & ML bundle** export is Rust-first (`POST /api/jobs/{id}/exports`, schema `openfdd_engineering_bundle_v1`). Offline Python parity stays in `tools/wattlab_export/` (`OPENFDD_WATTLAB_PYTHON_EXPORT=1` bench only). `/wattlab/dumps` is a deprecated alias.
 21. **Site lock:** Overview + sidebar Active site are the only editors of `?site=`. `SectionTabs` (and sidebar App pages) must `navigate` with `hrefWithSession` so `site` + `eq` survive. FDD / RCx / Results / **Dump** show a locked `zip:BUILDING_*` caption — no Building `<Select>`.
 22. **FDD Plots = vibe19 `rule_result_chart`:** auto-load series; last y-axis title is `fault`; `confirmed_fault` is the last trace on the bottom domain (`domain[0] < 0.4`). A successful rule run with an empty overlay is a bug (fail the test), not a soft banner.
@@ -190,7 +190,8 @@ Author only the files in this table. Sibling links inside each skill point at th
 | Skill | Use when |
 | --- | --- |
 | [`openfdd-architecture`](skills/openfdd-architecture/SKILL.md) | Ownership / engine boundaries |
-| [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) | Product SPA (`frontend/web`) |
+| [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) | Archived React SPA (`archive/product-ui/react-spa-v4`) |
+| [`openfdd-static-ui`](skills/openfdd-static-ui/SKILL.md) | Static product UI on central `/app/` |
 | [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md) | Rust + React best-practice review (`RUST_BEST_PRACTICES.md`, `REACT_BEST_PRACTICES.md`) |
 | [`openfdd-package-mapping`](skills/openfdd-package-mapping/SKILL.md) | Zip / `equipType` / Haystack→SQL / empty charts |
 | [`openfdd-rcx-fdd-plot-poll`](skills/openfdd-rcx-fdd-plot-poll/SKILL.md) | Blank RCx/FDD → missing portal or package roles |

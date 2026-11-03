@@ -271,6 +271,11 @@ fn ambiguous_bindings(keys: &BTreeMap<String, Vec<String>>) -> BTreeMap<String, 
         .collect()
 }
 
+/// Pivot SELECT aliases must not equal SQL role names (e.g. `fan_cmd` vs `a.role`).
+fn inspect_pivot_value_alias(role: &str) -> String {
+    format!("v_{}", role.replace('-', "_"))
+}
+
 async fn roles_for_equipment(
     tsdb: &Tsdb,
     building_id: &str,
@@ -357,17 +362,20 @@ pub async fn inspect_equipment(
     let limit = max_points.clamp(50, 8000) as i64;
     let bound = binding_keys(&tsdb, building_id, eq).await?;
     let ambiguous = ambiguous_bindings(&bound);
-    let unique: Vec<String> = selected
+    let mut unique: Vec<String> = selected
         .iter()
         .filter(|role| bound.get(*role).is_some_and(|keys| keys.len() == 1))
         .cloned()
         .collect();
+    unique.sort();
+    unique.dedup();
     // One key per role. A second key stays out of the pivot instead of being maxed.
     let mut max_cols = String::new();
     for role in &unique {
-        let alias = crate::series_binding::quote_ident(role);
+        let alias = inspect_pivot_value_alias(role);
+        let alias_q = crate::series_binding::quote_ident(&alias);
         max_cols.push_str(&format!(
-            ", MAX(s.val) FILTER (WHERE a.role = '{role_lit}') AS {alias}",
+            ", MAX(s.val) FILTER (WHERE a.role = '{role_lit}') AS {alias_q}",
             role_lit = role.replace('\'', "''"),
         ));
     }
@@ -397,7 +405,10 @@ LIMIT $4
 "#,
         max_cols_outer = unique
             .iter()
-            .map(|r| format!(", {}", crate::series_binding::quote_ident(r)))
+            .map(|r| format!(
+                ", {}",
+                crate::series_binding::quote_ident(&inspect_pivot_value_alias(r))
+            ))
             .collect::<String>(),
         max_cols = max_cols,
     );
@@ -428,7 +439,8 @@ LIMIT $4
         });
         if let Some(obj) = row.as_object_mut() {
             for c in &unique {
-                let v = r.try_get::<Option<f64>, _>(c.as_str()).ok().flatten();
+                let alias = inspect_pivot_value_alias(c);
+                let v = r.try_get::<Option<f64>, _>(alias.as_str()).ok().flatten();
                 obj.insert(c.clone(), json!(v));
             }
         }

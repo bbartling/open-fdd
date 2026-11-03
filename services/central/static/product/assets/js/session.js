@@ -1,4 +1,4 @@
-const TOKEN_KEY = "openfdd.jwt";
+const TOKEN_KEY = "openfdd.auth.token";
 
 export function readToken() {
   return sessionStorage.getItem(TOKEN_KEY);

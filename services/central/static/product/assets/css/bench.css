@@ -206,11 +206,97 @@ main {
   background: var(--panel2);
   border-radius: 10px;
   border: 1px dashed var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  min-height: 200px;
+}
+.chart.chart-ready {
+  border-style: solid;
+}
+.login-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.sparql-input {
+  width: 100%;
+  background: #0a0f1e;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: 12px ui-monospace, Consolas, monospace;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.model-side {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+.tree-host {
+  width: 100%;
+  min-height: 520px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.tree-host-tall {
+  min-height: 760px;
+}
+.tree-page main.tree-main {
+  max-width: 1200px;
+  display: grid;
+}
+.heat-pick {
+  margin-left: auto;
+  max-width: 220px;
+}
+table.bac tr.pick {
+  cursor: pointer;
+}
+table.bac tr.pick:hover td {
+  background: #16203b;
+}
+table.bac tr.pick.sel {
+  background: #1a2848;
+}
+.card.flash {
+  animation: flash 0.9s ease-out;
+}
+@keyframes flash {
+  from {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  to {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.chip .state {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.chip.on .state {
+  color: var(--good);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+.checklist {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
 }
 .chart.tall {
   height: 420px;
@@ -446,4 +532,50 @@ footer {
 .login-err {
   color: var(--hot);
   font-size: 0.9rem;
+}
+nav.subnav {
+  padding: 0 24px 8px;
+  border-bottom: 1px solid var(--line);
+  gap: 8px;
+}
+a.tab-link {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+a.tab-link.on,
+a.tab-link:hover {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--panel2);
+}
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 420px;
+  overflow: auto;
+}
+.rule-pick {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--text);
+  cursor: pointer;
+}
+.rule-pick.sel {
+  border-color: var(--accent);
+}
+.rule-pick .rule-id {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
 }
