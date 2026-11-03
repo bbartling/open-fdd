@@ -1,0 +1,54 @@
+.sched-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  padding: 0 24px 24px;
+}
+.sched-card h2 {
+  margin-top: 0;
+}
+.sched-status {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.sched-status th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px 8px 4px 0;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.sched-status td {
+  padding: 4px 0;
+  word-break: break-word;
+}
+.sched-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.sched-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.sched-form select,
+.sched-form input[type="text"] {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+.sched-msg {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+.sched-msg.sched-err {
+  color: var(--hot);
+}

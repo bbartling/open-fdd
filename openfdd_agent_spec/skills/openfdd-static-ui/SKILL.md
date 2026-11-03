@@ -33,6 +33,18 @@ description: >-
 
 **`index.html?tab=fdd`** + **`fdd-tab.js`** — rules list, status filter, `/api/fdd/run` with session `confirm_min`, `/api/fdd/plot` + inspect overlay via `chart-kit.js` / `fdd-api.js`.
 
+## Schedule cards (Wave D)
+
+**`index.html?tab=schedules`** + **`schedules-tab.js`** + **`assets/css/schedules.css`** — three cards on existing durable jobs:
+
+| Card | Status sources | Operator save |
+| --- | --- | --- |
+| Model sync | `GET /api/schedules/status` (poll + provider health) | `POST /api/schedules/model-sync` (`poll_secs` 15–3600) |
+| History ingest | above + `GET /api/ingest/gaps?view=status&site_id=` | `POST /api/schedules/history` (`periodic` / `daily` + IANA tz) |
+| AFDD | `GET /api/afdd/scheduler/status` | `POST /api/afdd/scheduler/config`, run-now via `POST /api/afdd/scheduler/run-now` |
+
+Overrides persist in `state/providers/operator-site-schedules.json`. Escape dynamic text with `textContent` only.
+
 ## Related
 
 - ADR: [`docs/architecture/adr-013-static-product-ui-central.md`](../../../docs/architecture/adr-013-static-product-ui-central.md)

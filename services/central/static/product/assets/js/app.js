@@ -26,6 +26,7 @@ import { renderModelChecks, renderModelTree, resizeTree } from "./tree-view.js";
 import { fetchInspectSeries } from "./analytics.js";
 import { bindRcxTab, onRcxSiteChange, refreshRcxTab, resizeRcxCharts } from "./rcx-tab.js";
 import { bindFddTab, onFddSiteChange, resizeFddCharts } from "./fdd-tab.js";
+import { bindSchedulesTab, refreshSchedulesTab } from "./schedules-tab.js";
 
 const $ = (id) => document.getElementById(id);
 let activeTab = "overview";
@@ -95,6 +96,11 @@ function renderTab(name) {
   }
   if (name === "fdd") {
     resizeFddCharts();
+  }
+  if (name === "schedules" && scope.site) {
+    const tab = $("tab-schedules");
+    if (tab) tab.dataset.buildingId = scope.site;
+    refreshSchedulesTab(scope.site).catch((err) => showErr(err.message));
   }
   if (name === "points" && selectedPointId) {
     renderPointHistory(
@@ -509,6 +515,8 @@ async function bootApp() {
   bindSparql();
   bindRcxTab();
   bindFddTab();
+  const schedTab = $("tab-schedules");
+  if (schedTab) bindSchedulesTab(schedTab);
   await loadSites();
 }
 

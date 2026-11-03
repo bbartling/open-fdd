@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open-FDD</title>
 <link rel="stylesheet" href="/app/assets/css/bench.css">
+<link rel="stylesheet" href="/app/assets/css/schedules.css">
 </head>
 <body>
 <div id="loginGate">
@@ -38,6 +39,7 @@
   <button type="button" data-tab="points">Points <span class="count" id="nPoints">0</span></button>
   <button type="button" data-tab="rcx">RCx</button>
   <button type="button" data-tab="fdd">FDD</button>
+  <button type="button" data-tab="schedules">Schedules</button>
   <button type="button" data-tab="model">Model</button>
 </nav>
 
@@ -146,6 +148,71 @@
       </h2>
       <div id="fddPreviewTable"></div>
     </section>
+  </section>
+
+  <section class="tab" id="tab-schedules" data-building-id="">
+    <section class="sched-grid">
+      <article class="panel sched-card">
+        <h2>Model sync <span class="hint">portal inventory · poll cadence</span></h2>
+        <table class="sched-status" id="modelSyncStatus"></table>
+        <form id="modelSyncForm" class="sched-form">
+          <label>Poll interval
+            <select id="modelPollPick" class="sched-editable" aria-label="Model sync poll interval"></select>
+          </label>
+          <button type="submit" class="btn sched-editable">Save model sync</button>
+        </form>
+        <p class="sched-msg" id="modelSyncMsg" hidden></p>
+      </article>
+      <article class="panel sched-card">
+        <h2>History ingest <span class="hint">durable hourly jobs · coverage</span></h2>
+        <table class="sched-status" id="historyScheduleStatus"></table>
+        <form id="historyScheduleForm" class="sched-form">
+          <label>Schedule mode
+            <select id="historyModePick" class="sched-editable" aria-label="History schedule mode">
+              <option value="periodic">Periodic</option>
+              <option value="daily">Daily (local midnight)</option>
+            </select>
+          </label>
+          <label>Timezone (daily only)
+            <input id="historyTzInput" class="sched-editable" type="text" placeholder="America/Chicago">
+          </label>
+          <button type="submit" class="btn sched-editable">Save history schedule</button>
+        </form>
+        <p class="sched-msg" id="historyScheduleMsg" hidden></p>
+      </article>
+      <article class="panel sched-card">
+        <h2>AFDD <span class="hint">continuous registry · checkpoint</span></h2>
+        <table class="sched-status" id="afddScheduleStatus"></table>
+        <form id="afddScheduleForm" class="sched-form">
+          <label>Schedule kind
+            <select id="afddKindPick" class="sched-editable" aria-label="AFDD schedule kind">
+              <option value="interval">Interval</option>
+              <option value="wall_clock">Wall clock</option>
+            </select>
+          </label>
+          <label>Interval
+            <select id="afddIntervalPick" class="sched-editable" aria-label="AFDD interval"></select>
+          </label>
+          <label>Lookback (days)
+            <select id="afddLookbackPick" class="sched-editable" aria-label="AFDD lookback days">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+          <label>Wall clock (HH:MM)
+            <input id="afddWallClock" class="sched-editable" type="text" value="05:00">
+          </label>
+          <label>Wall clock timezone
+            <input id="afddWallTz" class="sched-editable" type="text" placeholder="America/Chicago">
+          </label>
+          <button type="submit" class="btn sched-editable">Save AFDD schedule</button>
+        </form>
+        <button type="button" class="btn sched-editable" id="afddRunNowBtn">Run AFDD now</button>
+        <p class="sched-msg" id="afddScheduleMsg" hidden></p>
+      </article>
+    </section>
+    <p class="hint" id="schedLoadMsg" hidden></p>
   </section>
 
   <section class="tab" id="tab-model">

@@ -1324,10 +1324,7 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
 fn site_schedule(state: &AppState, tenant_id: &str, canonical_site: &str) -> IngestSchedule {
     state
         .providers
-        .sites
-        .iter()
-        .find(|site| site.tenant_id == tenant_id && site.building_id == canonical_site)
-        .map_or(IngestSchedule::Periodic, |site| site.schedule)
+        .effective_ingest_schedule(tenant_id, canonical_site)
 }
 
 type PlannedDevices = Vec<(IngestSchedule, ScheduleDevice)>;
