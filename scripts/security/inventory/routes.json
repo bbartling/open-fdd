@@ -1312,6 +1312,47 @@
       "notes": "Wave-NF JWT provider site list. Same tenant filter and redaction as provider health. PLANNED until the security suite emits these check ids."
     },
     {
+      "method": "GET",
+      "path": "/api/sites/buildings",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "IMPLEMENTED",
+      "deny_statuses": [
+        401,
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_sites_buildings",
+        "y.authz.get_api_sites_buildings"
+      ],
+      "implemented_check_ids": [
+        "x.preauth.anon401.get_api_sites_buildings"
+      ],
+      "check_ids": [
+        "x.preauth.anon401.get_api_sites_buildings",
+        "y.authz.get_api_sites_buildings"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity"
+      ],
+      "notes": "Static UI site picker: merged provider + CSV/historian building ids, tenant-scoped."
+    },
+    {
       "method": "POST",
       "path": "/api/connectors/{edge_id}/read",
       "section": "protected",
