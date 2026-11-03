@@ -379,6 +379,11 @@ run_stack() {
   compose up -d --pull never --no-build --wait --wait-timeout 300
   wait_healthy
 
+  chmod +x scripts/ci/static_ui_smoke.sh
+  OPENFDD_STATIC_UI_BASE="http://127.0.0.1:8080" \
+    OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
+    ./scripts/ci/static_ui_smoke.sh
+
   local report
   report="$(mktemp)"
   if ! run_playwright "$report"; then

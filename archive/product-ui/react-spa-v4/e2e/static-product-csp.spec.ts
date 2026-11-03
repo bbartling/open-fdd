@@ -22,6 +22,7 @@ const TAB_PATHS = [
   "/app/?tab=fdd",
   "/app/?tab=model",
   "/app/?tab=schedules",
+  "/app/?tab=ops",
 ];
 
 function pathWithSite(path: string): string {
@@ -195,6 +196,7 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
     fdd: "#ruleList",
     model: "#tree",
     schedules: "#modelSyncStatus",
+    ops: "#csvBuildingsBody",
     overview: "#summary",
   };
   await expect(panel.locator(markerByTab[tab] ?? "#summary")).toBeAttached({ timeout: 15_000 });

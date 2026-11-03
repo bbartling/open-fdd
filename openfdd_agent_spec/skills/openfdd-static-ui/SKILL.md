@@ -13,6 +13,7 @@ description: >-
 - Editing `services/central/static/product/` (HTML, CSS, JS) or `static_product.rs`
 - RCx / FDD plot parity vs archived React SPA (`archive/product-ui/react-spa-v4`)
 - Model tree + SPARQL (TTL-only on Model tab)
+- CSV upload/export, hub admin read surfaces, synthetic M&V demo (Ops tab)
 - Vendoring chart libraries under `assets/vendor/`
 
 ## Rules
@@ -24,6 +25,28 @@ description: >-
 5. **ECharts** — vendored under `assets/vendor/` with `.version` sidecar + `LICENSE.echarts.txt`. Pin latest stable; update sidecar when replacing files.
 6. **Lean pages** — `index.html`, `tree.html`, `rcx.html`, `fdd.html` link CSS + module scripts only; logic lives in `assets/js/`.
 7. **Parity** — match archived SPA behavior for Overview RCx presets, economizer gate (`ECONOMIZER_DT_MIN_C`), `analyticsWindowFromSampling`, FDD status filters, `confirm_min` on run, inspect title/stacking, series preview 10/20/50/100/500. SI storage; metric display default (imperial toggle deferred).
+8. **Dynamic text** — use `textContent` / DOM APIs; never inject HTML strings from API responses.
+
+## Tabs (index.html)
+
+| Tab | Module | APIs |
+| --- | --- | --- |
+| Overview / Charts / Points | `app.js`, `charts.js` | health, mapping, historian |
+| RCx | `rcx-tab.js`, `rcx-presets.js` | `/api/analytics/*` |
+| FDD | `fdd-tab.js`, `fdd-api.js` | `/api/fdd/*`, session config |
+| Schedules | `schedules-tab.js` | `/api/schedules/status`, ingest gaps, AFDD |
+| **Ops** | `operations-tab.js` | CSV import/export, admin read, synthetic M&V |
+| Model | `tree-view.js`, `ttl-model.js` | TTL + SPARQL |
+
+## Ops tab (Wave E)
+
+**`index.html?tab=ops`** + **`operations-tab.js`**
+
+- **CSV card** — multipart `POST /api/csv/import/package`; list `GET /api/csv/import/package/buildings`; session-scoped site from header `?site=`; export via ephemeral `POST /api/jobs` + `POST /api/jobs/{id}/exports` (`kind: csv`) and authenticated download of `download_url`.
+- **Admin card** — hub admin only (`GET /api/auth/me` → `hub_admin`); read-only tables from `/api/admin/users`, `/api/admin/tenants`, `/api/admin/historian-limits`.
+- **Synthetic demo card** — deterministic seed in `mv-demo-seed.js`; `POST /api/analytics/mv` with ECharts scatter (no Plotly).
+
+Styles: `assets/css/operations.css`.
 
 ## RCx preset IDs
 
@@ -33,20 +56,25 @@ description: >-
 
 **`index.html?tab=fdd`** + **`fdd-tab.js`** — rules list, status filter, `/api/fdd/run` with session `confirm_min`, `/api/fdd/plot` + inspect overlay via `chart-kit.js` / `fdd-api.js`.
 
-## Schedule cards (Wave D)
+## CI smoke (no central image build)
 
-**`index.html?tab=schedules`** + **`schedules-tab.js`** + **`assets/css/schedules.css`** — three cards on existing durable jobs:
+Against a running central with static UI enabled:
 
-| Card | Status sources | Operator save |
-| --- | --- | --- |
-| Model sync | `GET /api/schedules/status` (poll + provider health) | `POST /api/schedules/model-sync` (`poll_secs` 15–3600) |
-| History ingest | above + `GET /api/ingest/gaps?view=status&site_id=` | `POST /api/schedules/history` (`periodic` / `daily` + IANA tz) |
-| AFDD | `GET /api/afdd/scheduler/status` | `POST /api/afdd/scheduler/config`, run-now via `POST /api/afdd/scheduler/run-now` |
+```bash
+OPENFDD_ADMIN_PASSWORD='…' ./scripts/ci/static_ui_smoke.sh
+```
 
-Overrides persist in `state/providers/operator-site-schedules.json`. Escape dynamic text with `textContent` only.
+Optional: `OPENFDD_STATIC_UI_BASE=http://127.0.0.1:8080`.
+
+Asset/policy gate: `./scripts/ci/static_product_guard.sh` (replaces React-only workflow guards until Wave F).
+
+Real-stack browser CI runs `static_ui_smoke.sh` before Playwright (`scripts/ci/real_stack_browser.sh`).
+
+**Deferred (not Wave E):** ZAP AF and legacy React-only frontend soak — unchanged; do not mark passed.
 
 ## Related
 
 - ADR: [`docs/architecture/adr-013-static-product-ui-central.md`](../../../docs/architecture/adr-013-static-product-ui-central.md)
+- Handoff: [`docs/operations/GROK_CLOUD_STATIC_UI_HANDOFF.md`](../../../docs/operations/GROK_CLOUD_STATIC_UI_HANDOFF.md)
 - Archived React reference: [`archive/product-ui/react-spa-v4/`](../../../archive/product-ui/react-spa-v4/)
 - [`openfdd-react-spa`](../openfdd-react-spa/SKILL.md) — historical SPA; new plot work lands here

@@ -27,6 +27,7 @@ import { fetchInspectSeries } from "./analytics.js";
 import { bindRcxTab, onRcxSiteChange, refreshRcxTab, resizeRcxCharts } from "./rcx-tab.js";
 import { bindFddTab, onFddSiteChange, resizeFddCharts } from "./fdd-tab.js";
 import { bindSchedulesTab, refreshSchedulesTab } from "./schedules-tab.js";
+import { bindOperationsTab, refreshOperationsTab } from "./operations-tab.js";
 
 const $ = (id) => document.getElementById(id);
 let activeTab = "overview";
@@ -101,6 +102,9 @@ function renderTab(name) {
     const tab = $("tab-schedules");
     if (tab) tab.dataset.buildingId = scope.site;
     refreshSchedulesTab(scope.site).catch((err) => showErr(err.message));
+  }
+  if (name === "ops") {
+    refreshOperationsTab(scope.site).catch((err) => showErr(err.message));
   }
   if (name === "points" && selectedPointId) {
     renderPointHistory(
@@ -341,6 +345,12 @@ async function applySite() {
         heatRole: chartState.heatRole,
       });
     }
+    if (activeTab === "ops") {
+      await refreshOperationsTab(scope.site);
+    }
+    if (activeTab === "schedules") {
+      await refreshSchedulesTab(scope.site);
+    }
   } catch (err) {
     showErr(err.message || String(err));
     setLive(false, "error");
@@ -517,6 +527,8 @@ async function bootApp() {
   bindFddTab();
   const schedTab = $("tab-schedules");
   if (schedTab) bindSchedulesTab(schedTab);
+  const opsTab = $("tab-ops");
+  if (opsTab) bindOperationsTab(opsTab);
   await loadSites();
 }
 

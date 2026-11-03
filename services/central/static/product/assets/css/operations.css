@@ -1,0 +1,59 @@
+.ops-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  padding: 0 24px 24px;
+}
+.ops-card h2 {
+  margin-top: 0;
+}
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.ops-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 4px 8px 4px 0;
+  vertical-align: top;
+}
+.ops-table td {
+  padding: 4px 0;
+  word-break: break-word;
+}
+.ops-form {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+.ops-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ops-msg {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+.ops-msg.ops-err {
+  color: var(--hot);
+}
+.ops-pre {
+  max-height: 160px;
+  overflow: auto;
+  font-size: 11px;
+  margin: 8px 0 0;
+}
+.ops-denied {
+  color: var(--muted);
+  font-size: 13px;
+}
+.ops-chart {
+  height: 220px;
+  margin-top: 8px;
+}

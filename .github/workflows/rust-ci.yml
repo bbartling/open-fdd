@@ -141,7 +141,7 @@ jobs:
           grep -q 'auth.env.local' .gitignore || grep -q '/workspace' .gitignore
 
   frontend:
-    name: Product UI guards (React)
+    name: Product UI guards (static + archived React)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -149,15 +149,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: React sole product UI
+      - name: Static product UI + rollback guards
         run: |
-          test -f archive/product-ui/react-spa-v4/package.json
-          test -f archive/product-ui/react-spa-v4/Dockerfile
-          test -f docker/compose.react.yml
-          ! test -d services/ui
-          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
-          ! test -d workspace/dashboard/src
-          ! test -f workspace/dashboard/package.json
+          chmod +x scripts/ci/static_product_guard.sh
+          ./scripts/ci/static_product_guard.sh
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Static product Rust unit tests
+        run: cargo test -p openfdd-central static_product:: -- --nocapture
 
       - name: Product tree guards
         run: |
