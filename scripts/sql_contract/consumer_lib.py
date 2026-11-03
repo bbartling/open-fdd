@@ -279,6 +279,8 @@ def verify_analytics_execute_smoke(conn, artifact_root: Path, receipt: VerifyRec
     sql = (artifact_root / rel).read_text(encoding="utf-8")
     site = "INSTALLED_CONSUMER_SITE"
     with conn.cursor() as cur:
+        cur.execute("DELETE FROM equipment WHERE building_id = %s", (site,))
+        cur.execute("DELETE FROM building WHERE building_id = %s", (site,))
         cur.execute("DELETE FROM sample WHERE site_id = %s", (site,))
         cur.execute("DELETE FROM site WHERE site_id = %s", (site,))
         cur.execute(
