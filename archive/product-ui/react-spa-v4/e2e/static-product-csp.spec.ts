@@ -257,6 +257,23 @@ test.describe("Static product UI CSP (central /app/)", () => {
     await ensureProductSession(page, request);
   });
 
+  test("site picker lists seeded building from API", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto(`${centralBase}/app/`, {
+      waitUntil: "networkidle",
+      timeout: 60_000,
+    });
+    await expect(page.locator("#loginGate")).toBeHidden({ timeout: 30_000 });
+    await waitForAppBoot(page);
+    const pick = page.locator("#sitePick");
+    await expect(pick.locator('option[value]:not([value=""])')).not.toHaveCount(0, {
+      timeout: 30_000,
+    });
+    if (seededBuildingId) {
+      await expect(pick).toHaveValue(seededBuildingId, { timeout: 15_000 });
+    }
+  });
+
   for (const path of TAB_PATHS) {
     test(`no CSP violations on ${path}`, async ({ page }) => {
       test.setTimeout(180_000);

@@ -127,18 +127,17 @@ code="$(curl -s --max-time 20 -o /dev/null -w '%{http_code}' "$WEB/" || true)"
 if [[ "$SKIP_CONTAINERS" -eq 0 && -n "$EXPECT_SHA" ]] && command -v docker >/dev/null 2>&1; then
   project=""
   [[ -f "$ENV_FILE" ]] && project="$(grep -E '^COMPOSE_PROJECT_NAME=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)"
-  for svc in central; do
-    filter=(--filter "label=com.docker.compose.service=$svc")
-    [[ -n "$project" ]] && filter+=(--filter "label=com.docker.compose.project=$project")
-    img="$(docker ps "${filter[@]}" --format '{{.Image}}' | head -1)"
-    if [[ -z "$img" ]]; then
-      fail "no running $svc container${project:+ in project $project}"
-    elif [[ "$img" == *":$EXPECT_SHA" ]]; then
-      pass "$svc image $img"
-    else
-      fail "$svc image $img is not :$EXPECT_SHA"
-    fi
-  done
+  svc=central
+  filter=(--filter "label=com.docker.compose.service=$svc")
+  [[ -n "$project" ]] && filter+=(--filter "label=com.docker.compose.project=$project")
+  img="$(docker ps "${filter[@]}" --format '{{.Image}}' | head -1)"
+  if [[ -z "$img" ]]; then
+    fail "no running $svc container${project:+ in project $project}"
+  elif [[ "$img" == *":$EXPECT_SHA" ]]; then
+    pass "$svc image $img"
+  else
+    fail "$svc image $img is not :$EXPECT_SHA"
+  fi
 fi
 
 if [[ "$FAIL" -ne 0 ]]; then

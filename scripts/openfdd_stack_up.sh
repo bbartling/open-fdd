@@ -27,7 +27,7 @@ Usage: openfdd_stack_up.sh [portal|standalone|central|edge|csv|react|react-ot] [
 Recipes:
   portal      4.0 default: central static UI at /app/ + Timescale (no MQTT, no fieldbus)
   central     archived OT mqtt + central (no fieldbus)
-  csv         central + React web (openfdd-web)
+  csv         central static UI at /app/ + Timescale (no openfdd-web)
   react       archived OT: mqtt + central + React web (no fieldbus)
 
 Fieldbus recipes (standalone, edge, react-ot) are refused. Render the pinned
@@ -35,12 +35,12 @@ archive lane instead:
   OPENFDD_OT_ARCHIVE_RESTORE=1 ./archive/ot-edge/unqualified-cdaa4f15/recipes/restore-isolated.sh --replay
 
 Options:
-  --caddy     Start Caddy on :80 → web (/api* → central). Default ON for react/react-ot;
-              use OPENFDD_CADDY=0 to disable. Requires a recipe that includes the web service.
+  --caddy     Caddy edge: portal/csv → central:8080 (HTTPS tls internal by default; OPENFDD_CADDY_TLS=0 for plain HTTP).
+              react/react-ot → archived React nginx. Default ON for react/react-ot unless OPENFDD_CADDY=0.
   --wattlab   Mount WattLab workspace onto central (compose.wattlab.react.yml)
 
 Env: OPENFDD_IMAGE_TAG, OPENFDD_*_IMAGE, OPENFDD_JWT_SECRET, OPENFDD_ADMIN_PASSWORD
-     OPENFDD_CADDY=1|0, OPENFDD_CENTRAL_BIND=127.0.0.1 (LAN via Caddy)
+     OPENFDD_CADDY=1|0, OPENFDD_CADDY_TLS=1|0, OPENFDD_CENTRAL_BIND=127.0.0.1 (LAN via Caddy)
      OPENFDD_WATTLAB=1 (same as --wattlab), OPENFDD_WATTLAB_HOST_WORKSPACE, OPENFDD_WATTLAB_HOST_SRC
 EOF
       exit 0
@@ -90,11 +90,23 @@ if [[ "$DO_PULL" -eq 1 ]]; then
 fi
 
 if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
-  if [[ "$RECIPE" == "portal" || "$RECIPE" == "react" || "$RECIPE" == "react-ot" || "$RECIPE" == "csv" ]]; then
-    ARGS+=(-f "$ROOT/docker/compose.caddy.react.yml")
-  else
-    echo "WARN: --caddy requires portal, react, react-ot, or csv (web service); ignored for recipe=$RECIPE" >&2
-  fi
+  case "$RECIPE" in
+    portal|csv)
+      if [[ "${OPENFDD_CADDY_TLS:-1}" == "0" || "${OPENFDD_CADDY_TLS:-}" == "false" ]]; then
+        export OPENFDD_CADDYFILE="${OPENFDD_CADDYFILE:-./caddy/Caddyfile.central.http}"
+        ARGS+=(-f "$ROOT/docker/compose.caddy.central.http.yml")
+      else
+        export OPENFDD_CADDYFILE="${OPENFDD_CADDYFILE:-./caddy/Caddyfile.central.https}"
+        ARGS+=(-f "$ROOT/docker/compose.caddy.central.yml")
+      fi
+      ;;
+    react|react-ot)
+      ARGS+=(-f "$ROOT/docker/compose.caddy.react.yml")
+      ;;
+    *)
+      echo "WARN: --caddy requires portal, csv, react, or react-ot; ignored for recipe=$RECIPE" >&2
+      ;;
+  esac
 fi
 if [[ "${OPENFDD_WATTLAB:-0}" == "1" || "${OPENFDD_WATTLAB:-}" == "true" ]]; then
   if [[ "$RECIPE" == "edge" ]]; then
@@ -123,7 +135,7 @@ fi
 
 if [[ "$RECIPE" != "edge" ]]; then
   openfdd_stack_wait_health
-  if [[ "$RECIPE" == "portal" ]]; then
+  if [[ "$RECIPE" == "portal" || "$RECIPE" == "csv" ]]; then
     echo "UI: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}/app/  API: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
   else
     echo "UI: http://127.0.0.1:3000  API: ${OPENFDD_API_BASE:-http://127.0.0.1:8080}"
@@ -132,7 +144,15 @@ if [[ "$RECIPE" != "edge" ]]; then
     echo "Fieldbus: http://127.0.0.1:8081"
   fi
   if [[ "${OPENFDD_CADDY:-0}" == "1" || "${OPENFDD_CADDY:-}" == "true" ]]; then
-    echo "Caddy: http://<host>/  (UI)  http://<host>/auth  (login)  http://<host>/api/health"
+    if [[ "$RECIPE" == "portal" || "$RECIPE" == "csv" ]]; then
+      if [[ "${OPENFDD_CADDY_TLS:-1}" == "0" || "${OPENFDD_CADDY_TLS:-}" == "false" ]]; then
+        echo "Caddy: http://<host>/app/  http://<host>/auth  http://<host>/api/health"
+      else
+        echo "Caddy: https://<host>/app/  https://<host>/auth  (tls internal; HTTP redirects to HTTPS)"
+      fi
+    else
+      echo "Caddy: http://<host>/  (React UI)  http://<host>/auth  http://<host>/api/health"
+    fi
   fi
   if [[ "${OPENFDD_WATTLAB:-0}" == "1" || "${OPENFDD_WATTLAB:-}" == "true" ]]; then
     echo "WattLab: WATTLAB_STUDIO_WORKSPACE=/data (host ${OPENFDD_WATTLAB_HOST_WORKSPACE:-~/wattlab_workspace})"

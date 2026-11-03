@@ -129,6 +129,7 @@ fn dashboard_shell_routes_are_not_404() {
         "/api/fdd-rules",
         "/api/reports",
         "/api/reports/templates",
+        "/api/sites/buildings",
     ];
     for path in paths {
         let (status, body) = http("GET", server.port, path, None);
