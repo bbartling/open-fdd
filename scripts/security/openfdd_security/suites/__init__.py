@@ -257,6 +257,7 @@ def run_suite_x(ctx: SuiteContext) -> None:
         # Prefer a live analytics GET (overview path is not routed → 404 bypasses auth layer).
         ("/api/analytics/sql-anomaly/status", "x.preauth.anon401.get_api_analytics_overview"),
         ("/api/csv/import/package/buildings", "x.preauth.anon401.get_api_csv_import_package_buildings"),
+        ("/api/sites/buildings", "x.preauth.anon401.get_api_sites_buildings"),
         ("/api/fdd/series", "x.preauth.anon401.get_api_fdd_series"),
         ("/api/admin/users", "x.preauth.anon401.get_api_admin_users"),
         ("/api/jobs", "x.preauth.anon401.get_api_jobs"),

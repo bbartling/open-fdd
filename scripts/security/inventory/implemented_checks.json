@@ -18,6 +18,7 @@
     "x.preauth.anon401.get_api_agent_tools",
     "x.preauth.anon401.get_api_analytics_overview",
     "x.preauth.anon401.get_api_csv_import_package_buildings",
+    "x.preauth.anon401.get_api_sites_buildings",
     "x.preauth.anon401.get_api_csv_import_package_mapping",
     "x.preauth.anon401.get_api_csv_import_package_mapping_ttl",
     "x.preauth.anon401.get_api_datasets",
