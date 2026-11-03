@@ -109,14 +109,9 @@ jobs:
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_stack_pull.sh
 
-      - name: CSV recipe boot smoke (central + React web)
-        env:
-          # Reuse the verified openfdd-web:ci from the prior step; only rebuild central.
-          OPENFDD_WEB_IMAGE: openfdd-web:ci
+      - name: CSV recipe boot smoke (central static /app/)
         run: |
           chmod +x scripts/release/smoke_csv_central_boot.sh
-          docker image inspect openfdd-web:ci >/dev/null
-          # Build central only (web already verified with index.html).
           docker build -f services/central/Dockerfile -t openfdd-central:ci .
           export OPENFDD_CENTRAL_IMAGE=openfdd-central:ci
           export OPENFDD_SMOKE_SKIP_BUILD=1

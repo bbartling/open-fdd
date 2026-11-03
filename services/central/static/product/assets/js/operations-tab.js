@@ -2,6 +2,7 @@ import { apiFetch } from "./api.js";
 import { readToken } from "./session.js";
 import { mountChart, disposeChart } from "./chart-kit.js";
 import { MV_DEMO_SEED } from "./mv-demo-seed.js";
+import { mvChartOption } from "./mv-charts.js";
 
 function setMsg(el, text, isErr) {
   if (!el) return;
@@ -82,53 +83,6 @@ async function exportSiteCsvZip(buildingId) {
   const exp = exportBody?.export;
   if (!exp?.download_url) throw new Error("Export missing download_url");
   await downloadBlob(exp.download_url, exp.filename || "site_history.zip");
-}
-
-function mvChartOption(envelope) {
-  const points = envelope?.points ?? [];
-  if (!points.length) return null;
-  const base = points.filter((p) => p.period_kind === "baseline");
-  const rep = points.filter((p) => p.period_kind === "reporting");
-  const pred = points.filter((p) => p.y_predicted != null);
-  const series = [
-    {
-      type: "scatter",
-      name: "Baseline",
-      data: base.map((p) => [Number(p.x), Number(p.y)]),
-    },
-    {
-      type: "scatter",
-      name: "Reporting",
-      data: rep.map((p) => [Number(p.x), Number(p.y)]),
-    },
-  ];
-  if (pred.length) {
-    series.push({
-      type: "scatter",
-      name: "Predicted",
-      symbol: "diamond",
-      data: pred.map((p) => [Number(p.x), Number(p.y_predicted)]),
-    });
-  }
-  return {
-    backgroundColor: "transparent",
-    textStyle: { color: "#cbd5e1" },
-    grid: { left: 48, right: 16, top: 36, bottom: 40 },
-    legend: { top: 0, textStyle: { color: "#94a3b8" } },
-    xAxis: {
-      type: "value",
-      name: envelope?.coverage?.dd_kind ?? "degree-days",
-      nameTextStyle: { color: "#94a3b8" },
-      axisLine: { lineStyle: { color: "#334155" } },
-    },
-    yAxis: {
-      type: "value",
-      name: "energy",
-      nameTextStyle: { color: "#94a3b8" },
-      axisLine: { lineStyle: { color: "#334155" } },
-    },
-    series,
-  };
 }
 
 async function runMvDemo(root) {

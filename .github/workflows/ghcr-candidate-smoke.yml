@@ -77,12 +77,11 @@ jobs:
           docker pull "ghcr.io/bbartling/openfdd-central:${TAG}"
           docker pull "ghcr.io/bbartling/openfdd-web:${TAG}"
 
-      - name: Smoke published central + web
+      - name: Smoke published central (csv recipe, static /app/)
         env:
           TAG: ${{ steps.candidate.outputs.tag }}
           OPENFDD_SMOKE_SKIP_BUILD: "1"
           OPENFDD_CENTRAL_IMAGE: ghcr.io/bbartling/openfdd-central:${{ steps.candidate.outputs.tag }}
-          OPENFDD_WEB_IMAGE: ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}
           OPENFDD_SMOKE_TIMEOUT_SECS: "180"
         run: |
           chmod +x scripts/release/smoke_csv_central_boot.sh
@@ -97,6 +96,6 @@ jobs:
             echo "- Tag: \`${{ steps.candidate.outputs.tag }}\`"
             echo "- Source commit: \`${{ steps.candidate.outputs.ref }}\`"
             echo "- Central: \`ghcr.io/bbartling/openfdd-central:${{ steps.candidate.outputs.tag }}\`"
-            echo "- Web: \`ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}\`"
-            echo "- Mode: pull prebuilt images, compose up with \`--no-build\`"
+            echo "- Web (rollback image, not csv compose): \`ghcr.io/bbartling/openfdd-web:${{ steps.candidate.outputs.tag }}\`"
+            echo "- Mode: pull prebuilt central, csv compose up central only (\`--no-build\`), probe \`/app/\`"
           } >> "$GITHUB_STEP_SUMMARY"

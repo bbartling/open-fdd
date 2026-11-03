@@ -19,7 +19,7 @@ allow_path() {
     docs/operations/GROK_CLOUD_STATIC_UI_HANDOFF.md|docs/maintenance/*|docs/archive/*|docs/agent/*|docs/operations/BUG_REPORT_*|docs/operations/LOCAL_BACNET_*)
       return 0
       ;;
-    scripts/release/smoke_csv_central_boot.sh|scripts/ci/static_product_guard.sh)
+    scripts/ci/static_product_guard.sh)
       return 0
       ;;
     openfdd_agent_spec/CONTAINER_AGENT.md|openfdd_agent_spec/AGENTS.md|AGENTS.md)

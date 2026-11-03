@@ -29,6 +29,13 @@ import { bindRcxTab, onRcxSiteChange, refreshRcxTab, resizeRcxCharts } from "./r
 import { bindFddTab, onFddSiteChange, resizeFddCharts } from "./fdd-tab.js";
 import { bindSchedulesTab, refreshSchedulesTab } from "./schedules-tab.js";
 import { bindOperationsTab, refreshOperationsTab } from "./operations-tab.js";
+import {
+  applyDocumentTheme,
+  readThemePreference,
+  writeThemePreference,
+} from "./chart-theme.js";
+import { sensorHealthHeatmapOption } from "./chart-registry.js";
+import { remountAllCharts } from "./chart-kit.js";
 
 const $ = (id) => document.getElementById(id);
 let activeTab = "overview";
@@ -492,7 +499,28 @@ function bindAuth() {
   $("equipPick").addEventListener("change", () => applyEquip());
 }
 
+function bindThemeToggle() {
+  applyDocumentTheme(readThemePreference());
+  const btn = $("themeToggle");
+  if (!btn) return;
+  const syncLabel = () => {
+    btn.textContent = readThemePreference() === "dark" ? "Dark" : "Light";
+  };
+  syncLabel();
+  btn.addEventListener("click", () => {
+    const next = readThemePreference() === "dark" ? "light" : "dark";
+    writeThemePreference(next);
+    syncLabel();
+    remountAllCharts();
+    resizeCharts();
+    resizeRcxCharts();
+    resizeFddCharts();
+  });
+}
+
 async function bootApp() {
+  void sensorHealthHeatmapOption;
+  bindThemeToggle();
   tickClock();
   setInterval(tickClock, 30_000);
   bindTabs();

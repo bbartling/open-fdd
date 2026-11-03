@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+## 4.0.10 — 2026-11-03
+
+Workspace patch for **Open-FDD Central UI parity**: ECharts themes (light blueprint default, dark Bench Viz toggle), chart-parity matrix + shape tests, FDD stacked unit-family plots with bottom confirmed_fault lane, Overview RCx and generic RCx/fuel/sensor/M&V renderers, Bench Viz Charts catalog on `/app/`. `/api/health` reports `4.0.10+<sha>`.
+
 ## 4.0.9 — 2026-11-03
 
 Workspace patch for **static product UI Wave F**: the default portal compose serves the Bench Viz shell from central at `/app/` (`OPENFDD_STATIC_PRODUCT_UI=1`); the `openfdd-web` container is removed from `docker/compose.portal.yml`. Rollback remains `docker/compose.react.yml` plus the archived SPA and GHCR `openfdd-web` (rollback-only publish). `/api/health` and `/api/version` report `4.0.9+<sha>`. PyPI `open-fdd` stays **5.0.0**. No SQL equation or contract identity changes (SI distribution remains `4.0.8-softopen.1`, docs/packaging only).
