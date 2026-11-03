@@ -850,7 +850,9 @@ impl AfddSchedulerRuntime {
                     .await
                     {
                         Ok(crate::fdd_registry_persist::IntervalEvidenceReadiness::Ready) => {
-                            safe_analyzed_through = tchunk.end_utc;
+                            if tchunk.start_utc == safe_analyzed_through {
+                                safe_analyzed_through = tchunk.end_utc;
+                            }
                         }
                         Ok(crate::fdd_registry_persist::IntervalEvidenceReadiness::Pending) => {
                             last_error =

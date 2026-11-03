@@ -5,8 +5,6 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::sync::Mutex;
-
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
