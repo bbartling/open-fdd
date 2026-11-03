@@ -492,7 +492,7 @@ mod tests {
         let doc = ApiDoc::openapi();
         assert_eq!(
             doc.info.version,
-            openapi_inventory::product_version(),
+            crate::openapi_inventory::product_version(),
             "OpenAPI info.version must track repo VERSION"
         );
     }
@@ -500,15 +500,15 @@ mod tests {
     #[test]
     fn openapi_route_inventory_matches_axum_router_both_ways() {
         let doc = ApiDoc::openapi();
-        let router = openapi_inventory::collect_router_routes();
-        let spec = openapi_inventory::collect_openapi_routes(&doc);
-        let allowlist = openapi_inventory::load_allowlist();
-        openapi_inventory::assert_allowlist_shrink_only(&spec, &allowlist.entries)
+        let router = crate::openapi_inventory::collect_router_routes();
+        let spec = crate::openapi_inventory::collect_openapi_routes(&doc);
+        let allowlist = crate::openapi_inventory::load_allowlist();
+        crate::openapi_inventory::assert_allowlist_shrink_only(&spec, &allowlist.entries)
             .expect("allowlist entries documented in OpenAPI — shrink allowlist");
-        openapi_inventory::compare_router_and_openapi(
+        crate::openapi_inventory::compare_router_and_openapi(
             &router,
             &spec,
-            &openapi_inventory::allowlist_route_keys(&allowlist.entries),
+            &crate::openapi_inventory::allowlist_route_keys(&allowlist.entries),
         )
         .expect("router ↔ OpenAPI inventory mismatch");
     }
@@ -551,9 +551,6 @@ mod tests {
             .expect("/api/agent/tools");
         let op = item.get.as_ref().expect("GET /api/agent/tools");
         let sec = op.security.as_ref().expect("security on protected route");
-        assert!(
-            !sec.is_empty(),
-            "protected routes must declare bearerAuth"
-        );
+        assert!(!sec.is_empty(), "protected routes must declare bearerAuth");
     }
 }
