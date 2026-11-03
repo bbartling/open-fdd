@@ -1,5 +1,7 @@
-# Open-FDD standalone HTTPS overlay (Wave U U3 / UA-02) — Caddy + web/central only.
-# Combine with compose.standalone.yml + compose.react.yml:
+# Open-FDD standalone HTTPS overlay (Wave U U3 / UA-02) — Caddy + central (static /app/).
+# React rollback: combine with compose.react.yml so a `web` service exists; Caddy still
+# proxies to central:8080 (same-origin /app/ + /api).
+# Historical OT standalone:
 #   OPENFDD_CENTRAL_BIND=127.0.0.1 \
 #   docker compose -f docker/compose.standalone.yml \
 #     -f docker/compose.react.yml \
@@ -35,16 +37,10 @@ services:
     security_opt:
       - no-new-privileges:true
     depends_on:
-      - web
       - central
 
-  # Remove plaintext SPA / API publication from merged base files.
+  # Remove plaintext API/UI publication from merged base files.
   # Compose v2 `!reset` clears inherited ports so only Caddy is the LAN HTTP(S) entry.
-  web:
-    ports: !reset []
-    expose:
-      - "8080"
-
   central:
     ports: !reset []
     expose:
