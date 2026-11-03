@@ -7,7 +7,7 @@
   "distribution_id": "openfdd-si-sql-distribution-v1",
   "distribution_version": "4.0.8-softopen-dist-20261103",
   "distribution_sha256": "b1b8979e09421fb1b9351b726bee14a14b36d5ac185697dbd47978a0e2243dae",
-  "source_revision": "da127349864ffedfbdb1c6dbd1ab121f550d265a",
+  "source_revision": "faa5f3a7a776731c957b1691f864f66a28f15a6d",
   "export_command": "python3 scripts/sql_contract/export_distribution.py --out /tmp/openfdd-si-dist --write-committed-manifest",
   "verify_command": "OPENFDD_VERIFY_REPO=$PWD OPENFDD_SI_ARTIFACT_ROOT=/tmp/openfdd-si-dist OPENFDD_SI_EXPECTED_SOURCE_REV=$(git rev-parse HEAD) OPENFDD_DATABASE_URL=postgresql://\u2026 python3 scripts/sql_contract/verify_installed.py",
   "ci_workflow": ".github/workflows/si-parity.yml",
