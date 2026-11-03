@@ -4,8 +4,8 @@
   "processing_abi_current": "metric-c-v2",
   "notes": [
     "Canonical processing and storage ABI is metric-c-v2 (°C, Δ°C, Pa, kPa, L/s, kW, kWh).",
-    "Rule SQL and historian values remain imperial-f-v1 on running stacks until W4 ingest/cutover land.",
-    "Declared source units convert once at ingest (W2b) or cutover (W2c); no query-time admit after W2b.",
+    "Shipped Postgres FDD and analytics SQL bodies evaluate in metric-c-v2 storage units on the product path.",
+    "Declared source units convert once at ingest or cutover; display preference must not rewrite stored SI values.",
     "Display preference is independent of processing and must not use ±32 on deltas/rates.",
     "Percent 0–100 vs fraction 0–1 is declared metadata — never inferred from magnitude.",
     "Parameter SI renames are published in parameter_si_rename_map.json; registry keys stay until W4/W2c migration.",

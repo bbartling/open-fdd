@@ -1,0 +1,58 @@
+{
+  "distribution_id": "openfdd-si-sql-distribution-v1",
+  "distribution_version": "4.0.8-softopen-dist-20261103",
+  "processing_abi": "metric-c-v2",
+  "scientific_contract_id": "openfdd-sql-schema-fdd-v1",
+  "scientific_contract_version": "4.0.8-softopen",
+  "scientific_pack_sha256": "b33b4209ee2962e78c64cdc1b07851d1baf0e265b7543e28699e2bbff762b6a0",
+  "scientific_file_count": 110,
+  "aggregate_digest_definition": {
+    "scientific_pack_sha256": "For each path in sql/contract/manifest.json files[] in order: SHA256.update(path_utf8 + NUL + file_sha256_hex + NUL); final hex digest.",
+    "distribution_sha256": "SHA256(scientific_pack_sha256_utf8 + NUL + companion_merkle + NUL); companion_merkle uses the same per-file update as scientific pack."
+  },
+  "distribution_sha256": "89d4f8a9ae4b43a8eaf505582325186c49a6ed643233a927f1728090be2c6000",
+  "source_revision": "9ea0688340f333f86be11ffc825f380a4ccb983f",
+  "companion_files": [
+    {
+      "path": "sql/fdd/tuning_catalog.json",
+      "sha256": "24df8e70f8c00ba815b46a685eee8aeee443479b5a41566d9a0f3cddc155a3f4",
+      "bytes": 297701
+    },
+    {
+      "path": "sql/fdd/runtime_defaults.json",
+      "sha256": "e5de1bf416b67ba589b9cb8bf2c23cfe56ee92eb6d90e70a381388ecf53bb856",
+      "bytes": 1549
+    },
+    {
+      "path": "sql/fdd/render_rule.py",
+      "sha256": "758502b001abd2e873b0bbf2e75a99ffdadb6cca3d514b6b108efd894d0a2e9e",
+      "bytes": 4264
+    }
+  ],
+  "install_order": {
+    "schema_ddl": [
+      "sql/schema/00_extensions.sql",
+      "sql/schema/01_bps_core.sql",
+      "sql/schema/02_openfdd_dims.sql",
+      "sql/schema/03_wide_history_helper.sql",
+      "sql/schema/05_portal_inventory.sql",
+      "sql/schema/11_point_map_binding_metadata.sql",
+      "sql/schema/07_opaque_series_binding.sql"
+    ],
+    "fdd_helpers": "sql/fdd/postgres/postgres_helpers.sql",
+    "fdd_rules": "on-demand via sql/fdd/render_rule.py + sql/fdd/postgres/rules/*.sql",
+    "analytics": "on-demand via sql/analytics/postgres/queries/*.sql"
+  },
+  "client_bindings": {
+    "fdd_render": "python3 sql/fdd/render_rule.py <RULE_ID> --dialect postgres --poll-seconds <n>",
+    "fdd_execute": "Bind building_id, equipment_id, window; use rendered SQL as parameterized query",
+    "analytics_execute": "Load body from registry sql_path; bind per query contract",
+    "unit_admission": "sql/contract/metric_units.json source_unit_conversions before SQL"
+  },
+  "unsupported_rule_ids": [
+    "SV-RATE"
+  ],
+  "supported_rule_count": 77,
+  "analytics_body_count": 19,
+  "verify_entrypoint": "verify_installed.py"
+}

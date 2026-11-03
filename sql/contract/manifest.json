@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 110,
-  "pack_sha256": "742b9bcf4e3873665ed4f64378888826b54998ee6ef845a8eed6f720f16c6260",
+  "pack_sha256": "b33b4209ee2962e78c64cdc1b07851d1baf0e265b7543e28699e2bbff762b6a0",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -542,8 +542,8 @@
     },
     {
       "path": "sql/contract/metric_units.json",
-      "sha256": "6002486b0d7eb0e2442c4e3b7886179f3fae821e263086668d3410fd38f9c89f",
-      "bytes": 8508
+      "sha256": "01eff52186ce5c631f2aff500400ccdd38f218a1aece00ff665a3de3a3b930f0",
+      "bytes": 8525
     },
     {
       "path": "sql/contract/goldens/unit_vectors.json",
@@ -552,8 +552,8 @@
     },
     {
       "path": "sql/contract/README.md",
-      "sha256": "41ec92aa3717fbc78d871459702f664689bac5caf3ec041fc32ea8f9f93370ae",
-      "bytes": 2015
+      "sha256": "5e7b0374ad2867e71827c2c48d997df52edc5283f62d54b5de46a054cc4dff30",
+      "bytes": 2885
     },
     {
       "path": "sql/contract/parameter_si_rename_map.json",
