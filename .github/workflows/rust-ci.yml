@@ -61,7 +61,7 @@ jobs:
           msrv="$(awk -F'"' '/^rust-version/{print $2; exit}' Cargo.toml)"
           test -n "$msrv"
           rustup toolchain install "$msrv" --profile minimal
-          cargo "+$msrv" check -p openfdd-central -p openfdd-mcp
+          cargo "+$msrv" check -p openfdd-central -p openfdd-mcp --locked
 
       - name: Format
         run: cargo fmt --all --check
