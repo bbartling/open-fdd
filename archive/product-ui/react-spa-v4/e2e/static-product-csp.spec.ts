@@ -194,6 +194,7 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
     rcx: "#mainChart",
     fdd: "#ruleList",
     model: "#tree",
+    schedules: "#modelSyncStatus",
     overview: "#summary",
   };
   await expect(panel.locator(markerByTab[tab] ?? "#summary")).toBeAttached({ timeout: 15_000 });

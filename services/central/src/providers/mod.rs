@@ -899,6 +899,10 @@ mod tests {
                 registry: Vec::new(),
             }),
             hourly: Mutex::new(None),
+            operator_schedules: StdMutex::new(
+                operator_schedule::OperatorSiteScheduleStore::default(),
+            ),
+            state_store: StdMutex::new(None),
         }
     }
 

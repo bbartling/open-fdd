@@ -87,8 +87,6 @@ pub fn effective_ingest_schedule(
     IngestSchedule::parse(mode, entry.schedule_timezone.as_deref())
 }
 
-pub type SharedOperatorSchedules = Mutex<OperatorSiteScheduleStore>;
-
 #[cfg(test)]
 mod tests {
     use super::*;

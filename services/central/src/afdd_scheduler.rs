@@ -969,11 +969,12 @@ impl AfddSchedulerRuntime {
         };
 
         self.persist_run_record(&record)?;
-        let checkpoint_ready = matches!(
-            interval_readiness,
-            crate::fdd_registry_persist::IntervalEvidenceReadiness::Ready
+        let checkpoint_ready = afdd_may_persist_scheduler_checkpoint(
+            advance_checkpoint,
+            rules_clean,
+            &interval_readiness,
         ) && safe_analyzed_through > window.start_utc;
-        if advance_checkpoint && rules_clean && checkpoint_ready {
+        if checkpoint_ready {
             self.persist_checkpoint_for_building(
                 scope,
                 &AfddSchedulerCheckpoint {
