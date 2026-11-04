@@ -7,7 +7,7 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::thread;
 use std::time::Duration;
@@ -39,7 +39,7 @@ impl Server {
         let repo_root = manifest_dir.join("../..");
         let sql_rules = repo_root.join("sql_rules");
         let bin = env!("CARGO_BIN_EXE_openfdd-central");
-        let mut child = Command::new(bin)
+        let child = Command::new(bin)
             .env("OPENFDD_CENTRAL_HOST", "127.0.0.1")
             .env("OPENFDD_CENTRAL_PORT", port.to_string())
             .env("OPENFDD_MQTT_ENABLED", "0")
@@ -116,7 +116,7 @@ impl Drop for Server {
     }
 }
 
-fn persist_meta(workspace: &PathBuf, building_id: &str) {
+fn persist_meta(workspace: &Path, building_id: &str) {
     let root = workspace
         .join("data")
         .join("csv_buildings")

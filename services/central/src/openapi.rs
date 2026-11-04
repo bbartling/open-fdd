@@ -529,7 +529,7 @@ mod tests {
             .responses
             .responses
             .keys()
-            .filter_map(|k| k.as_u16())
+            .filter_map(|k| k.parse::<u16>().ok())
             .collect();
         assert!(codes.contains(&404), "projection missing 404: {codes:?}");
         assert!(codes.contains(&400), "projection missing 400: {codes:?}");
@@ -540,7 +540,7 @@ mod tests {
             .responses
             .responses
             .keys()
-            .filter_map(|k| k.as_u16())
+            .filter_map(|k| k.parse::<u16>().ok())
             .collect();
         assert!(codes.contains(&404), "sparql missing 404: {codes:?}");
         assert!(codes.contains(&400), "sparql missing 400: {codes:?}");
