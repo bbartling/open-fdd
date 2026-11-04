@@ -89,4 +89,24 @@ describe("chart-parity.json", () => {
       }
     }
   });
+
+  it("ported rows map to workflows without void-only renderers", async () => {
+    const { workflowForParityRow } = await import("./chart-workflows.js");
+    for (const row of parity.charts) {
+      if (!String(row.status).startsWith("ported")) continue;
+      const workflow = workflowForParityRow(row);
+      assert.ok(workflow, `workflow missing for ${row.old_builder}`);
+      if (workflow.internal) continue;
+      if (String(row.status).includes("deferred:")) continue;
+      assert.ok(
+        workflow.renderer || workflow.adapt,
+        `${row.old_builder} has no renderer or adapt`,
+      );
+      assert.notEqual(
+        workflow.renderer,
+        null,
+        `${row.old_builder} void-only renderer`,
+      );
+    }
+  });
 });

@@ -2,7 +2,7 @@ import * as echarts from "../vendor/echarts.esm.min.js";
 import { fetchBasVsWeb, fetchInspectSeries } from "./analytics.js";
 import { displayName, has, isTemp, roleOf, unitLabel } from "./tags.js";
 import { rainbowColor, toolboxSaveAsImage } from "./chart-theme.js";
-import { basOverlayOption } from "./overview-rcx-charts.js";
+import { basOverlayOption, basHistOption } from "./overview-rcx-charts.js";
 import { filterSeriesByRangeHours, dataEndMsFromHistory } from "./history-window.js";
 import { parseTimestampMillis } from "./timestamp-adapter.js";
 
@@ -155,9 +155,19 @@ export function renderOverviewSpark(i, point, history, dataEndMs) {
   });
 }
 
-export function renderBasVsWeb(rows) {
+export function renderBasVsWeb(rows, mode = "bas_overlay") {
   const chart = chartEl("wxChart");
   if (!chart) return;
+  if (mode === "bas_hist") {
+    const hist = rows.filter((r) => r.kind === "delta_hist" || r.count != null);
+    const built = basHistOption(hist, "metric", "bas_web_oat_deviation_hist");
+    if (!built?.option) {
+      chart.clear();
+      return;
+    }
+    chart.setOption(built.option, true);
+    return;
+  }
   const points = rows.map((row) => ({
     timestamp_utc: row.ts ?? row.timestamp_utc,
     bas_oat_c: row.bas_oa_t ?? row.bas_oat_c,
@@ -456,7 +466,8 @@ export async function refreshChartsTab(state) {
   if (!ids.length) return;
   const endMs = dataEndMs ?? dataEndMsFromHistory(history);
   const basRows = await fetchBasVsWeb(buildingId, ids.slice(0, 1), windowOrHours || Math.max(rangeHours, 48));
-  renderBasVsWeb(basRows);
+  const basMode = document.getElementById("chartsBasPick")?.value || "bas_overlay";
+  renderBasVsWeb(basRows, basMode);
   renderTempTrend(cardPoints, history, rangeHours, endMs);
   renderHeatmap(cardPoints, history, heatRole, endMs);
   renderPsychrometric(cardPoints, history, document.getElementById("psyHint"), endMs);

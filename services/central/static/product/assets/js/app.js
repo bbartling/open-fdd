@@ -40,7 +40,14 @@ import {
 import { renderModelChecks, renderModelTree, resizeTree } from "./tree-view.js";
 import { fetchInspectSeries } from "./analytics.js";
 import { bindRcxTab, onRcxSiteChange, refreshRcxTab, resizeRcxCharts } from "./rcx-tab.js";
+import {
+  bindAnalyticsTab,
+  onAnalyticsSiteChange,
+  refreshAnalyticsTab,
+  resizeAnalyticsCharts,
+} from "./analytics-tab.js";
 import { bindFddTab, ensureFddTabLoaded, onFddSiteChange, resizeFddCharts } from "./fdd-tab.js";
+import { bindRuleTuningPanel } from "./rule-tuning.js";
 import { bindSchedulesTab, refreshSchedulesTab } from "./schedules-tab.js";
 import { bindOperationsTab, refreshOperationsTab } from "./operations-tab.js";
 import {
@@ -48,8 +55,8 @@ import {
   readThemePreference,
   writeThemePreference,
 } from "./chart-theme.js";
-import { sensorHealthHeatmapOption } from "./chart-registry.js";
 import { remountAllCharts } from "./chart-kit.js";
+import "./chart-workflows.js";
 
 const $ = (id) => document.getElementById(id);
 const siteLoadHolder = createScopeHolder();
@@ -159,6 +166,10 @@ function renderTab(name) {
   if (name === "rcx") {
     refreshRcxTab().catch((err) => showErr(err.message));
     resizeRcxCharts();
+  }
+  if (name === "analytics") {
+    refreshAnalyticsTab().catch((err) => showErr(err.message));
+    resizeAnalyticsCharts();
   }
   if (name === "fdd") {
     ensureFddTabLoaded().catch((err) => showErr(err.message));
@@ -445,10 +456,14 @@ async function applySite() {
     renderModelTree(modelTree, scope.site, scope.equip, $("detail"), $("tree"));
     renderModelChecks(modelTree, scope.site, $("checks"));
     onRcxSiteChange(scope.site, ctx.mapping);
+    onAnalyticsSiteChange(scope.site, ctx.mapping);
     await onFddSiteChange(scope.site, ctx);
     if (!ticket.isCurrent()) return;
     if (activeTab === "rcx") {
       await refreshRcxTab().catch(() => {});
+    }
+    if (activeTab === "analytics") {
+      await refreshAnalyticsTab().catch(() => {});
     }
     if (activeTab === "fdd") {
       await ensureFddTabLoaded().catch(() => {});
@@ -551,6 +566,9 @@ function bindTabs() {
     chartState.heatRole = $("heatPick").value;
     refreshChartsTab(chartsTabState()).catch((err) => showErr(err.message));
   });
+  $("chartsBasPick")?.addEventListener("change", () => {
+    refreshChartsTab(chartsTabState()).catch((err) => showErr(err.message));
+  });
   $("pointFilter")?.addEventListener("input", () => renderPointsTable());
   $("pointRows")?.addEventListener("click", async (ev) => {
     const row = ev.target.closest("tr[data-id]");
@@ -572,6 +590,7 @@ function bindTabs() {
     resizeCharts();
     resizeTree();
     resizeRcxCharts();
+    resizeAnalyticsCharts();
     resizeFddCharts();
   });
 }
@@ -618,18 +637,20 @@ function bindThemeToggle() {
     remountAllCharts();
     resizeCharts();
     resizeRcxCharts();
+    resizeAnalyticsCharts();
     resizeFddCharts();
   });
 }
 
 async function bootApp() {
-  void sensorHealthHeatmapOption;
   bindThemeToggle();
   tickClock();
   setInterval(tickClock, 30_000);
   bindTabs();
   bindSparql();
   bindRcxTab();
+  bindAnalyticsTab();
+  bindRuleTuningPanel();
   bindFddTab();
   const schedTab = $("tab-schedules");
   if (schedTab) bindSchedulesTab(schedTab);

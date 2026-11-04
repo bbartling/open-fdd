@@ -20,8 +20,24 @@ export async function fetchSessionConfig(buildingId) {
   );
 }
 
+export async function getFddRuleParams(ruleId) {
+  const body = await apiFetch(`/api/fdd/rules/${encodeURIComponent(ruleId)}/params`);
+  if (body?.ok === false) throw new Error(body.error || "Failed to load rule params");
+  return body.params ?? {};
+}
+
+export async function putSessionConfig(buildingId, config) {
+  const payload = { building_id: buildingId, config };
+  const body = await apiFetch("/api/fdd/session-config", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  if (body?.ok === false) throw new Error(body.error || "Failed to save session config");
+  return body;
+}
+
 export async function runFdd(buildingId, equipmentId, ruleIds, sessionConfig, rulesMeta) {
-  const sessionParams = effectiveRunParams(sessionConfig);
+  const sessionParams = effectiveRunParams(sessionConfig, buildingId);
   const params = {};
   for (const ruleId of ruleIds) {
     const meta = rulesMeta.find((r) => r.rule_id === ruleId);
@@ -29,7 +45,7 @@ export async function runFdd(buildingId, equipmentId, ruleIds, sessionConfig, ru
     const confirmMin =
       fromBag != null && Number.isFinite(fromBag)
         ? fromBag
-        : confirmMinForRule(sessionConfig, ruleId, meta);
+        : confirmMinForRule(sessionConfig, ruleId, meta, buildingId);
     if (confirmMin != null) {
       params[ruleId] = { ...sessionParams[ruleId], confirm_min: confirmMin };
     } else if (sessionParams[ruleId]) {

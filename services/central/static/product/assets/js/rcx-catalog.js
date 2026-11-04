@@ -1,0 +1,21 @@
+/** Generic RCx preset ids (archived react-spa-v4/src/nav/rcxCatalog.ts). */
+export const REQUIRED_RCX_PRESET_IDS = [
+  "zone_comfort_rank",
+  "zone_temps",
+  "ahu_dats",
+  "ahu_mats",
+  "ahu_rats",
+  "ahu_dampers",
+  "duct_static_box",
+  "ahu_sat_reset_scatter",
+  "hw_reset_scatter",
+  "chw_reset_scatter",
+  "cw_reset_scatter",
+  "vav_flows",
+  "fan_speeds",
+  "meter_elec_cdd",
+  "meter_gas_hdd",
+  "duct_static_ts",
+  "chw_temps_ts",
+  "cw_temps_ts",
+];

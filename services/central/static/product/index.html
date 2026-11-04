@@ -38,6 +38,7 @@
 <nav class="tabs" id="tabs">
   <button type="button" data-tab="overview" class="on">Overview</button>
   <button type="button" data-tab="charts">Charts</button>
+  <button type="button" data-tab="analytics">Analytics</button>
   <button type="button" data-tab="points">Points <span class="count" id="nPoints">0</span></button>
   <button type="button" data-tab="rcx">RCx</button>
   <button type="button" data-tab="fdd">FDD</button>
@@ -61,7 +62,12 @@
   <section class="tab" id="tab-charts">
     <p class="hint" id="chartsLoadHint" hidden></p>
     <section class="panel">
-      <h2>Weather vs sensors <span class="hint">BAS vs web OAT · Timescale</span></h2>
+      <h2>Weather vs sensors <span class="hint">BAS vs web OAT · Timescale</span>
+        <select id="chartsBasPick" class="heat-pick" aria-label="BAS chart view">
+          <option value="bas_overlay">BAS overlay</option>
+          <option value="bas_hist">Deviation histogram</option>
+        </select>
+      </h2>
       <div class="chart" id="wxChart"></div>
     </section>
     <section class="panel">
@@ -94,6 +100,24 @@
         <h2>Outdoor air <span class="hint" id="psyHint">temp × humidity</span></h2>
         <div class="chart" id="psyChart"></div>
       </div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-analytics">
+    <section class="panel">
+      <h2>Analytics charts
+        <select id="analyticsGroupPick" aria-label="Analytics group"></select>
+        <select id="analyticsChartPick" aria-label="Analytics chart"></select>
+        <button type="button" class="btn" id="refreshAnalyticsBtn">Refresh analytics</button>
+        <span class="hint" id="analyticsLoadMsg"></span>
+      </h2>
+      <div class="chart tall" id="analyticsChart"></div>
+    </section>
+    <section class="panel">
+      <h2>Series preview
+        <select id="analyticsPreviewPick" aria-label="Preview rows"></select>
+      </h2>
+      <div id="analyticsPreviewTable"></div>
     </section>
   </section>
 
@@ -146,6 +170,19 @@
           <span class="hint" id="runMsg"></span>
         </h2>
         <div id="ruleList" class="rule-list"></div>
+      </div>
+      <div class="panel">
+        <h2>Rule tuning <span class="hint">session params · admin/operator</span></h2>
+        <p class="ops-denied" id="tuningDenied" hidden>Rule tuning requires admin or operator role.</p>
+        <div id="tuningPanel">
+          <div id="tuningFields" class="tuning-fields"></div>
+          <p>
+            <button type="button" class="btn primary" id="tuningSaveBtn">Save tuning</button>
+            <button type="button" class="btn" id="tuningResetBtn">Reset draft</button>
+            <button type="button" class="btn" id="tuningRerunBtn">Save and re-run rule</button>
+          </p>
+          <p class="ops-msg" id="tuningMsg" hidden></p>
+        </div>
       </div>
       <div class="panel">
         <h2>FDD chart <span class="hint" id="plotHint"></span></h2>

@@ -601,3 +601,32 @@ a.tab-link:hover {
   font-family: ui-monospace, monospace;
   font-size: 12px;
 }
+.tuning-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+.tuning-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.tuning-field input[type="range"] {
+  width: 100%;
+}
+.ops-denied {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.ops-msg {
+  font-size: 12px;
+  margin-top: 8px;
+}
+.ops-msg.ops-err {
+  color: #f87171;
+}

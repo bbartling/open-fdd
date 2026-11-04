@@ -17,6 +17,7 @@ type CspViolation = {
 const TAB_PATHS = [
   "/app/",
   "/app/?tab=charts",
+  "/app/?tab=analytics",
   "/app/?tab=points",
   "/app/?tab=rcx",
   "/app/?tab=fdd",
@@ -191,6 +192,7 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
   await expect(panel).toHaveClass(/\bon\b/, { timeout: 15_000 });
   const markerByTab: Record<string, string> = {
     charts: "#tempChart",
+    analytics: "#analyticsChart",
     points: "#pointRows",
     rcx: "#mainChart",
     fdd: "#ruleList",
@@ -208,6 +210,8 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
 
   if (tab === "charts") {
     await waitForChartsTab(page);
+  } else if (tab === "analytics") {
+    await requireCanvas(page, "#analyticsChart");
   } else if (tab === "rcx") {
     await waitForRcxTab(page);
   } else if (tab === "fdd") {

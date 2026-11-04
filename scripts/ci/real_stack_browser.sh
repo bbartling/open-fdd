@@ -9,7 +9,10 @@ cd "$ROOT"
 
 TIMESCALE_IMAGE="timescale/timescaledb:2.17.2-pg16"
 APP_BASE="http://127.0.0.1:8080/app"
-STATIC_CSP_SPEC=e2e/static-product-csp.spec.ts
+STATIC_BROWSER_SPECS=(
+  e2e/static-product-csp.spec.ts
+  e2e/static-product-csv-export.spec.ts
+)
 COMPOSE_FILES=(-f docker/compose.portal.yml -f docker/compose.timescale.yml -f docker/compose.ci-browser.yml)
 
 STARTED=0
@@ -208,10 +211,12 @@ require_playwright() {
     echo "FAIL: archive/product-ui/react-spa-v4 Playwright is not installed (npm ci && playwright install)" >&2
     missing=1
   fi
-  if [[ ! -f "archive/product-ui/react-spa-v4/$STATIC_CSP_SPEC" ]]; then
-    echo "FAIL: required browser spec missing: archive/product-ui/react-spa-v4/$STATIC_CSP_SPEC" >&2
-    missing=1
-  fi
+  for spec in "${STATIC_BROWSER_SPECS[@]}"; do
+    if [[ ! -f "archive/product-ui/react-spa-v4/$spec" ]]; then
+      echo "FAIL: required browser spec missing: archive/product-ui/react-spa-v4/$spec" >&2
+      missing=1
+    fi
+  done
   if [[ "$missing" -ne 0 ]]; then
     return 1
   fi
@@ -268,7 +273,7 @@ run_playwright() {
       OPENFDD_PLAYWRIGHT_BASE_URL="http://127.0.0.1:8080" \
       OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
       OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="${OPENFDD_STATIC_UI_BROWSER_BUILDING_ID:-}" \
-      npx playwright test "$STATIC_CSP_SPEC" \
+      npx playwright test "${STATIC_BROWSER_SPECS[@]}" \
         --retries=0 \
         --reporter=json
   )
@@ -309,16 +314,16 @@ for suite in report.get("suites") or []:
     if isinstance(suite, dict):
         walk(suite)
 
-print(f"static-product-csp: tests_run={len(tests_run)} tests_passed={len(tests_ok)}")
-if len(tests_run) < 1:
-    print("FAIL: zero static product CSP tests in JSON report", file=sys.stderr)
+print(f"static product browser: tests_run={len(tests_run)} tests_passed={len(tests_ok)}")
+if len(tests_run) < 2:
+    print("FAIL: expected at least CSP + CSV export browser tests", file=sys.stderr)
     sys.exit(1)
 if len(tests_ok) != len(tests_run):
     sys.exit(1)
 PY
   fi
   set -e
-  echo "static product CSP playwright exit ${status} (spec=$STATIC_CSP_SPEC)"
+  echo "static product browser playwright exit ${status} (specs=${STATIC_BROWSER_SPECS[*]})"
   if [[ "$status" -ne 0 || "$report_status" -ne 0 ]]; then
     return 1
   fi
