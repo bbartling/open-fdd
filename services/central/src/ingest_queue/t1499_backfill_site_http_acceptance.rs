@@ -298,7 +298,7 @@ async fn t1499_backfill_site_http_acceptance() {
         eprintln!("OPENFDD_TEST_DATABASE_URL unset; skipping t1499 site backfill HTTP acceptance");
         return;
     };
-    let _lock = crate::test_env_lock::lock_env_async().await;
+    let _lock = crate::test_env_lock::lock_env();
     let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
     let _db = EnvGuard::set("OPENFDD_DATABASE_URL", url.trim());
 

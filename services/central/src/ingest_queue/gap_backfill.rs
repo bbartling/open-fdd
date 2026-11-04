@@ -11,7 +11,9 @@ use super::binding_state::{
     last_stored_ts_for_device, stored_hour_starts_for_device, DeviceBindingKey,
     DevicePointCoverage, EnsureBindingInput,
 };
-use super::gap_planner::{default_max_span, gap_plan_input, plan_gap_windows, GapPlanResult};
+use super::gap_planner::{
+    default_max_span, gap_plan_input, plan_gap_windows, GapPlanBuild, GapPlanResult,
+};
 use super::model::{NewJob, QueueError};
 
 pub fn point_keys_for_group(group: &IngestDeviceGroup) -> Vec<String> {
@@ -19,23 +21,6 @@ pub fn point_keys_for_group(group: &IngestDeviceGroup) -> Vec<String> {
         .points
         .iter()
         .map(|point| conventional_openfdd_key(&group.equipment_id, &point.canonical_role))
-        .collect()
-}
-
-pub fn point_coverage_for_group(group: &IngestDeviceGroup) -> Vec<DevicePointCoverage> {
-    group
-        .points
-        .iter()
-        .map(|point| {
-            let openfdd_key = conventional_openfdd_key(&group.equipment_id, &point.canonical_role);
-            DevicePointCoverage {
-                openfdd_key,
-                coverage_point_id: point.source_point_id.clone(),
-                history_mode: point.history_mode.clone(),
-                cadence_secs: point.cadence_secs,
-                heartbeat_secs: point.heartbeat_secs,
-            }
-        })
         .collect()
 }
 
@@ -98,16 +83,16 @@ pub async fn plan_device_gap_backfill(
     )
     .await?;
     let last_stored = last_stored_ts_for_device(pool, &request.key.canonical_site, &keys).await?;
-    let plan = gap_plan_input(
-        request.range_start,
-        request.range_end,
-        binding.provider_data_start,
-        binding.binding_created_at,
-        &stored,
-        last_stored,
-        request.force,
-        default_max_span(),
-    )
+    let plan = gap_plan_input(GapPlanBuild {
+        requested_start: request.range_start,
+        requested_end: request.range_end,
+        provider_data_start: binding.provider_data_start,
+        binding_created_at: binding.binding_created_at,
+        stored_hour_starts: &stored,
+        last_stored_ts: last_stored,
+        force: request.force,
+        max_span: default_max_span(),
+    })
     .and_then(plan_gap_windows)
     .map_err(QueueError::Invalid)?;
     let mut jobs = Vec::new();
@@ -169,16 +154,16 @@ pub async fn plan_explicit_windows(
     .await?;
     let last_stored =
         last_stored_ts_for_device(pool, &request.key.canonical_site, &request.point_keys).await?;
-    let plan = gap_plan_input(
-        range_start,
-        range_end,
-        binding.provider_data_start,
-        binding.binding_created_at,
-        &stored,
-        last_stored,
-        request.force,
-        default_max_span(),
-    )
+    let plan = gap_plan_input(GapPlanBuild {
+        requested_start: range_start,
+        requested_end: range_end,
+        provider_data_start: binding.provider_data_start,
+        binding_created_at: binding.binding_created_at,
+        stored_hour_starts: &stored,
+        last_stored_ts: last_stored,
+        force: request.force,
+        max_span: default_max_span(),
+    })
     .and_then(plan_gap_windows)
     .map_err(QueueError::Invalid)?;
     let mut jobs = Vec::new();

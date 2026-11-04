@@ -1586,10 +1586,6 @@ fn gap_plan_outcome(plan: &super::gap_planner::GapPlanResult, jobs: usize) -> &'
     }
 }
 
-fn gap_plan_json(plan: &super::gap_planner::GapPlanResult) -> Value {
-    gap_plan_device_json(plan, None, 0)
-}
-
 fn gap_plan_device_json(
     plan: &super::gap_planner::GapPlanResult,
     device_id: Option<&str>,

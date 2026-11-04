@@ -3,7 +3,7 @@
 use chrono::{DateTime, Duration, Utc};
 
 use super::asap_mode::{decide_mode, plan_backlog, CatchupMode};
-use super::gap_planner::gap_plan_input;
+use super::gap_planner::{gap_plan_input, GapPlanBuild};
 use crate::providers::http_policy::MAX_HISTORY_WINDOW;
 
 fn h(n: i64) -> DateTime<Utc> {
@@ -16,16 +16,16 @@ fn h(n: i64) -> DateTime<Utc> {
 #[test]
 fn t1423_5_asap_mode_enters_on_backlog_and_exits_near_now() {
     let stored = [h(1)];
-    let plan = gap_plan_input(
-        h(1),
-        h(12),
-        Some(h(1)),
-        h(1),
-        &stored,
-        Some(h(1)),
-        false,
-        MAX_HISTORY_WINDOW,
-    )
+    let plan = gap_plan_input(GapPlanBuild {
+        requested_start: h(1),
+        requested_end: h(12),
+        provider_data_start: Some(h(1)),
+        binding_created_at: h(1),
+        stored_hour_starts: &stored,
+        last_stored_ts: Some(h(1)),
+        force: false,
+        max_span: MAX_HISTORY_WINDOW,
+    })
     .and_then(plan_backlog)
     .expect("plan");
     let enter =
@@ -34,16 +34,16 @@ fn t1423_5_asap_mode_enters_on_backlog_and_exits_near_now() {
 
     let now = h(10) + Duration::minutes(10);
     let last = h(9) + Duration::minutes(30);
-    let caught_up = gap_plan_input(
-        h(1),
-        h(10),
-        Some(h(1)),
-        h(1),
-        &stored,
-        Some(last),
-        false,
-        MAX_HISTORY_WINDOW,
-    )
+    let caught_up = gap_plan_input(GapPlanBuild {
+        requested_start: h(1),
+        requested_end: h(10),
+        provider_data_start: Some(h(1)),
+        binding_created_at: h(1),
+        stored_hour_starts: &stored,
+        last_stored_ts: Some(last),
+        force: false,
+        max_span: MAX_HISTORY_WINDOW,
+    })
     .and_then(plan_backlog)
     .expect("plan");
     let exit =

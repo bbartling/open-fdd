@@ -1242,16 +1242,16 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
         super::binding_state::last_stored_ts_for_device(pool, &device.canonical_site, &point_keys)
             .await
             .map_err(|err| err.to_string())?;
-    let gap_plan = super::gap_planner::gap_plan_input(
-        range_start,
-        target_end,
-        binding.provider_data_start,
-        binding.binding_created_at,
-        &stored,
-        last_stored,
-        false,
-        super::gap_planner::default_max_span(),
-    )
+    let gap_plan = super::gap_planner::gap_plan_input(super::gap_planner::GapPlanBuild {
+        requested_start: range_start,
+        requested_end: target_end,
+        provider_data_start: binding.provider_data_start,
+        binding_created_at: binding.binding_created_at,
+        stored_hour_starts: &stored,
+        last_stored_ts: last_stored,
+        force: false,
+        max_span: super::gap_planner::default_max_span(),
+    })
     .and_then(super::asap_mode::plan_backlog)?;
     let decision = super::asap_mode::decide_mode(
         &gap_plan,

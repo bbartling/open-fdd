@@ -18,7 +18,7 @@ use super::binding_state::{
     stored_hour_starts_for_device, DeviceBindingKey, EnsureBindingInput,
 };
 
-use super::gap_planner::{default_max_span, gap_plan_input, plan_gap_windows};
+use super::gap_planner::{default_max_span, gap_plan_input, plan_gap_windows, GapPlanBuild};
 use super::model::MAX_CATCHUP_HOURS;
 use super::worker::publication_delay_secs;
 
@@ -176,16 +176,16 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
     let last_stored = last_stored_ts_for_device(pool, &site_cfg.building_id, &point_keys)
         .await
         .map_err(|err| err.to_string())?;
-    let gap_plan = gap_plan_input(
-        range_start,
-        target_end,
-        binding.provider_data_start,
-        binding.binding_created_at,
-        &stored,
-        last_stored,
-        false,
-        default_max_span(),
-    )
+    let gap_plan = gap_plan_input(GapPlanBuild {
+        requested_start: range_start,
+        requested_end: target_end,
+        provider_data_start: binding.provider_data_start,
+        binding_created_at: binding.binding_created_at,
+        stored_hour_starts: &stored,
+        last_stored_ts: last_stored,
+        force: false,
+        max_span: default_max_span(),
+    })
     .and_then(plan_gap_windows)?;
     let decision = decide_mode(
         &gap_plan,

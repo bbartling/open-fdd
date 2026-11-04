@@ -12,6 +12,8 @@ use crate::providers::http_policy::MAX_HISTORY_WINDOW;
 
 use super::model::is_hour_start;
 
+pub type GapPlanBounds = (DateTime<Utc>, DateTime<Utc>, DateTime<Utc>);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct WindowSpan {
     pub start: DateTime<Utc>,
@@ -55,6 +57,18 @@ pub struct GapPlanInput<'a> {
     pub max_span: Duration,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct GapPlanBuild<'a> {
+    pub requested_start: DateTime<Utc>,
+    pub requested_end: DateTime<Utc>,
+    pub provider_data_start: Option<DateTime<Utc>>,
+    pub binding_created_at: DateTime<Utc>,
+    pub stored_hour_starts: &'a [DateTime<Utc>],
+    pub last_stored_ts: Option<DateTime<Utc>>,
+    pub force: bool,
+    pub max_span: Duration,
+}
+
 pub fn floor_to_hour(ts: DateTime<Utc>) -> DateTime<Utc> {
     floor_to_window(ts, 3600)
 }
@@ -65,7 +79,7 @@ pub fn gap_plan_bounds(
     requested_end: DateTime<Utc>,
     provider_data_start: Option<DateTime<Utc>>,
     binding_created_at: DateTime<Utc>,
-) -> Result<(DateTime<Utc>, DateTime<Utc>, DateTime<Utc>), String> {
+) -> Result<GapPlanBounds, String> {
     if requested_end <= requested_start {
         return Err("backfill end must be after start".into());
     }
@@ -77,33 +91,24 @@ pub fn gap_plan_bounds(
     Ok((first_expected, fetch_start, requested_end))
 }
 
-pub fn gap_plan_input<'a>(
-    requested_start: DateTime<Utc>,
-    requested_end: DateTime<Utc>,
-    provider_data_start: Option<DateTime<Utc>>,
-    binding_created_at: DateTime<Utc>,
-    stored_hour_starts: &'a [DateTime<Utc>],
-    last_stored_ts: Option<DateTime<Utc>>,
-    force: bool,
-    max_span: Duration,
-) -> Result<GapPlanInput<'a>, String> {
+pub fn gap_plan_input<'a>(input: GapPlanBuild<'a>) -> Result<GapPlanInput<'a>, String> {
     let (first_expected, fetch_start, fetch_end) = gap_plan_bounds(
-        requested_start,
-        requested_end,
-        provider_data_start,
-        binding_created_at,
+        input.requested_start,
+        input.requested_end,
+        input.provider_data_start,
+        input.binding_created_at,
     )?;
     Ok(GapPlanInput {
-        range_start: requested_start,
+        range_start: input.requested_start,
         fetch_start,
         fetch_end,
         first_expected,
-        provider_data_start,
-        binding_created_at,
-        stored_hour_starts,
-        last_stored_ts,
-        force,
-        max_span,
+        provider_data_start: input.provider_data_start,
+        binding_created_at: input.binding_created_at,
+        stored_hour_starts: input.stored_hour_starts,
+        last_stored_ts: input.last_stored_ts,
+        force: input.force,
+        max_span: input.max_span,
     })
 }
 
@@ -271,16 +276,16 @@ mod tests {
     #[test]
     fn t1423_3_plans_only_missing_merged_ranges() {
         let stored = [h(1), h(2), h(3), h(6)];
-        let plan = gap_plan_input(
-            h(0),
-            h(9),
-            Some(h(1)),
-            h(0),
-            &stored,
-            Some(h(6) + Duration::minutes(30)),
-            false,
-            Duration::hours(6),
-        )
+        let plan = gap_plan_input(GapPlanBuild {
+            requested_start: h(0),
+            requested_end: h(9),
+            provider_data_start: Some(h(1)),
+            binding_created_at: h(0),
+            stored_hour_starts: &stored,
+            last_stored_ts: Some(h(6) + Duration::minutes(30)),
+            force: false,
+            max_span: Duration::hours(6),
+        })
         .and_then(plan_gap_windows)
         .expect("plan");
         assert_eq!(plan.counts.not_expected, 1, "{plan:?}");
@@ -310,16 +315,16 @@ mod tests {
     #[test]
     fn force_replans_stored_hours() {
         let stored = [h(1)];
-        let plan = gap_plan_input(
-            h(1),
-            h(3),
-            Some(h(1)),
-            h(1),
-            &stored,
-            Some(h(1)),
-            true,
-            Duration::hours(6),
-        )
+        let plan = gap_plan_input(GapPlanBuild {
+            requested_start: h(1),
+            requested_end: h(3),
+            provider_data_start: Some(h(1)),
+            binding_created_at: h(1),
+            stored_hour_starts: &stored,
+            last_stored_ts: Some(h(1)),
+            force: true,
+            max_span: Duration::hours(6),
+        })
         .and_then(plan_gap_windows)
         .expect("plan");
         assert_eq!(plan.counts.skipped_stored, 0);
@@ -351,16 +356,16 @@ mod tests {
             gap_plan_bounds(h(0), h(4), Some(anchor), h(0)).expect("bounds");
         assert_eq!(first, anchor);
         assert_eq!(fetch_start, h(1));
-        let plan = gap_plan_input(
-            h(0),
-            h(4),
-            Some(anchor),
-            h(0),
-            &[],
-            None,
-            false,
-            Duration::hours(6),
-        )
+        let plan = gap_plan_input(GapPlanBuild {
+            requested_start: h(0),
+            requested_end: h(4),
+            provider_data_start: Some(anchor),
+            binding_created_at: h(0),
+            stored_hour_starts: &[],
+            last_stored_ts: None,
+            force: false,
+            max_span: Duration::hours(6),
+        })
         .and_then(plan_gap_windows)
         .expect("plan");
         assert_eq!(plan.counts.not_expected, 1, "{plan:?}");
