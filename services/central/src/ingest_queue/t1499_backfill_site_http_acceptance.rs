@@ -16,8 +16,6 @@ use crate::auth::{AuthConfig, Role};
 use crate::providers::committed_model::{
     CommittedEquipment, CommittedModel, CommittedPoint, SCHEMA,
 };
-use crate::providers::config::{SiteConfig, SiteTransport};
-use crate::providers::types::ProviderKind;
 use crate::state::AppState;
 use crate::tenant::{ControlPlane, TenantRecord};
 
@@ -195,38 +193,20 @@ impl SiteCase {
         }
     }
 
-    fn push_site_config(&self, state: &mut AppState) {
-        state.providers.sites.push(SiteConfig {
-            building_id: self.site.clone(),
-            tenant_id: self.tenant.clone(),
-            provider_instance_id: self.connection.clone(),
-            kind: ProviderKind::Nf,
-            endpoint: "https://portal.example".into(),
-            client_id: None,
-            client_secret: None,
-            anonymous: true,
-            transport: SiteTransport::Rest,
-            poll_secs: 300,
-            latitude: None,
-            longitude: None,
-            schedule: super::schedule::IngestSchedule::Periodic,
-            resolver: crate::providers::map::RoleResolver::default(),
-            model: crate::providers::committed_model::model_from_point_map(
-                &crate::providers::committed_model::ModelScope {
-                    tenant_id: self.tenant.clone(),
-                    site_id: self.site.clone(),
-                    provider_instance_id: self.connection.clone(),
-                },
-                &[],
-            )
-            .expect("resolver model"),
-        });
+    fn provider_sites_json(&self) -> String {
+        format!(
+            r#"[{{"building_id":"{site}","tenant_id":"{tenant}","provider_instance_id":"{conn}","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"}}]"#,
+            site = self.site,
+            tenant = self.tenant,
+            conn = self.connection,
+        )
     }
 }
 
 async fn harness(case: &SiteCase) -> (Arc<AppState>, Router, String) {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("database url");
     std::env::set_var("OPENFDD_DATABASE_URL", &url);
+    let _sites = EnvGuard::set("OPENFDD_PROVIDER_SITES", &case.provider_sites_json());
     let mut state = AppState::new();
     state.auth = AuthConfig {
         secret: Some("t1499-site-backfill-test-secret-not-a-credential".into()),
@@ -235,7 +215,6 @@ async fn harness(case: &SiteCase) -> (Arc<AppState>, Router, String) {
         viewer_password: None,
         viewer_tenant_ids: Vec::new(),
     };
-    case.push_site_config(&mut state);
     let state = Arc::new(state);
     {
         let mut plane = state.control_plane.write().await;

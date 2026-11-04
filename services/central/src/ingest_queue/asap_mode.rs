@@ -5,7 +5,7 @@ use tracing::info;
 
 use crate::providers::hourly::{floor_to_window, validate_ingest_window_secs};
 
-use super::gap_planner::{gap_plan_input, plan_gap_windows, GapPlanResult};
+use super::gap_planner::{gap_plan_input, plan_gap_windows, GapPlanInput, GapPlanResult};
 
 pub const MODE_NORMAL: &str = "normal";
 pub const MODE_ASAP: &str = "asap";
