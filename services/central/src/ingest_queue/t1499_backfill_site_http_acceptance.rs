@@ -397,7 +397,7 @@ async fn t1499_backfill_site_http_acceptance() {
 
     case.cleanup().await;
 
-    // Slug plan + connection id → device_not_in_plan (unmatched group lookup).
+    // Slug plan provider id + nf:slug connection id → explained gap plan (bosspi alias).
     {
         let (state, app, token) = harness(&case).await;
         let dev = "SLUG_DEV";
@@ -429,7 +429,8 @@ async fn t1499_backfill_site_http_acceptance() {
         let plans = body["gap_plans"].as_array().expect("gap_plans");
         assert_eq!(plans.len(), 1);
         assert_eq!(plans[0]["device_id"].as_str(), Some(dev));
-        assert_eq!(plans[0]["outcome"].as_str(), Some("device_not_in_plan"));
+        assert_ne!(plans[0]["outcome"].as_str(), Some("device_not_in_plan"));
+        assert!(plans[0].get("counts").is_some(), "{body}");
     }
 
     case.cleanup().await;

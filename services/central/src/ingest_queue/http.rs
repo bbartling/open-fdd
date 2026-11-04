@@ -928,6 +928,19 @@ pub async fn backfill(
     }
 }
 
+fn site_backfill_plan_group<'a>(
+    plan: &'a crate::providers::committed_model::IngestPlan,
+    device: &crate::providers::committed_model::PlanDevice,
+) -> Option<&'a crate::providers::committed_model::IngestDeviceGroup> {
+    plan.groups.iter().find(|group| {
+        group.equipment_id == device.equipment_id
+            && super::providers::http_policy::provider_ids_equivalent(
+                &group.provider_instance_id,
+                &device.provider_instance_id,
+            )
+    })
+}
+
 pub async fn backfill_site(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<AuthUser>,
@@ -1107,10 +1120,7 @@ pub async fn backfill_site(
     match state.ingest_queue.postgres_pool().await {
         Ok(Some(pool)) => {
             for device in &devices {
-                let Some(group) = plan.groups.iter().find(|group| {
-                    group.equipment_id == device.equipment_id
-                        && group.provider_instance_id == device.provider_instance_id
-                }) else {
+                let Some(group) = site_backfill_plan_group(&plan, device) else {
                     gap_plans.push(json!({
                         "device_id": device.equipment_id,
                         "outcome": "device_not_in_plan",
@@ -1933,6 +1943,33 @@ mod tests {
         };
         assert_eq!(gap_plan_outcome(&plan, 0), "already_covered");
         assert_eq!(gap_plan_outcome(&plan, 2), "enqueued");
+    }
+
+    #[test]
+    fn t1499_site_backfill_unmatched_device_yields_device_not_in_plan_outcome() {
+        use crate::providers::committed_model::{
+            IngestDeviceGroup, IngestPlan, PlanDevice, PLAN_SCHEMA,
+        };
+        let plan = IngestPlan {
+            schema: PLAN_SCHEMA.into(),
+            revision_id: "rev".into(),
+            tenant_id: "tenant-a".into(),
+            site_id: "site-a".into(),
+            groups: vec![IngestDeviceGroup {
+                provider_instance_id: "nf-conn-a".into(),
+                equipment_id: "AHU_1".into(),
+                equip_type: "ahu".into(),
+                points: vec![],
+            }],
+            withheld: vec![],
+        };
+        let device = PlanDevice {
+            equipment_id: "OTHER".into(),
+            provider_instance_id: "nf:conn-a".into(),
+            revision_id: "rev".into(),
+            estimated_cost: 1,
+        };
+        assert!(site_backfill_plan_group(&plan, &device).is_none());
     }
 
     #[test]
