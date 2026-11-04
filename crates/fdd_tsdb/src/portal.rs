@@ -453,7 +453,7 @@ impl Tsdb {
               SELECT s.unit, s.quality
               FROM sample s
               WHERE s.site_id = pm.site_id AND s.openfdd_key = pm.openfdd_key
-              ORDER BY s.timestamp_utc DESC
+              ORDER BY s.ts DESC
               LIMIT 1
             ) ls ON true
             WHERE pm.site_id = $1
@@ -486,7 +486,7 @@ impl Tsdb {
               SELECT s.unit, s.quality
               FROM sample s
               WHERE s.site_id = pm.site_id AND s.openfdd_key = pm.openfdd_key
-              ORDER BY s.timestamp_utc DESC
+              ORDER BY s.ts DESC
               LIMIT 1
             ) ls ON true
             WHERE pm.site_id = $1

@@ -108,7 +108,7 @@ pub fn trace_unit_binding(
         };
     }
 
-    let Some(canonical_unit) = canonical.clone() else {
+    let Some(canonical_unit) = canonical else {
         return UnitBindingTrace {
             declared_unit: declared,
             source_unit: source_unit.map(str::to_string),
