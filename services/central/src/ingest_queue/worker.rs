@@ -316,13 +316,20 @@ async fn execute_job(state: &Arc<AppState>, job: &JobView) -> WindowDecision {
             code: "not_implemented".into(),
         });
     }
-    let fetched = match poller::fetch_device_window(
-        state,
-        site,
-        &job.device_id,
-        job.logical_window_start,
-        job.logical_window_end,
-    )
+    let fetched = match {
+        let policy = crate::providers::hourly::HourlyPolicy::from_env();
+        let fetch_from = crate::providers::hourly::portal_history_fetch_from(
+            job.logical_window_start,
+            policy.overlap,
+        );
+        poller::fetch_device_window(
+            state,
+            site,
+            &job.device_id,
+            fetch_from,
+            job.logical_window_end,
+        )
+    }
     .await
     {
         Ok(page) => page,
@@ -1183,12 +1190,6 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
             .cloned()
             .ok_or_else(|| "plan_not_committed".to_string())?
     };
-    let point_keys = super::gap_backfill::point_keys_for_plan_device(
-        &plan,
-        &device.provider_instance_id,
-        &device.device_id,
-    )
-    .ok_or_else(|| "device not in committed plan".to_string())?;
     let group = plan
         .groups
         .iter()
@@ -1200,7 +1201,14 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
                 )
         })
         .ok_or_else(|| "device not in committed plan".to_string())?;
-    let point_coverage = super::gap_backfill::point_coverage_for_group(group);
+    let point_coverage =
+        super::binding_state::device_point_coverage_for_group(pool, &device.canonical_site, group)
+            .await
+            .map_err(|err| err.to_string())?;
+    let point_keys: Vec<String> = point_coverage
+        .iter()
+        .map(|row| row.openfdd_key.clone())
+        .collect();
     let key = super::binding_state::DeviceBindingKey {
         tenant_id: device.tenant_id.clone(),
         canonical_site: device.canonical_site.clone(),
@@ -1234,13 +1242,8 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
         super::binding_state::last_stored_ts_for_device(pool, &device.canonical_site, &point_keys)
             .await
             .map_err(|err| err.to_string())?;
-    let plan_range_start = super::gap_planner::expected_start(
-        range_start,
-        binding.provider_data_start,
-        binding.binding_created_at,
-    );
-    let gap_plan = super::asap_mode::plan_backlog(super::gap_planner::GapPlanInput {
-        requested_start: plan_range_start,
+    let gap_plan = super::gap_planner::gap_plan_input(super::gap_planner::GapPlanBuild {
+        requested_start: range_start,
         requested_end: target_end,
         provider_data_start: binding.provider_data_start,
         binding_created_at: binding.binding_created_at,
@@ -1248,7 +1251,8 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
         last_stored_ts: last_stored,
         force: false,
         max_span: super::gap_planner::default_max_span(),
-    })?;
+    })
+    .and_then(super::asap_mode::plan_backlog)?;
     let decision = super::asap_mode::decide_mode(
         &gap_plan,
         last_stored,

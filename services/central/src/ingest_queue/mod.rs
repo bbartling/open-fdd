@@ -41,6 +41,10 @@ mod t1423_gap_planner_acceptance;
 #[cfg(test)]
 mod t1423_per_point_coverage_acceptance;
 #[cfg(test)]
+mod t1499_backfill_site_http_acceptance;
+#[cfg(test)]
+mod t1501_catchup_openfdd_key_acceptance;
+#[cfg(test)]
 mod upgrade_acceptance;
 #[cfg(test)]
 mod writer_fence;
