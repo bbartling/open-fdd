@@ -523,17 +523,25 @@ mod tests {
     fn openapi_documents_model_sparql_and_projection_status_codes() {
         let doc = ApiDoc::openapi();
         let paths = doc.paths.paths;
-        let projection = paths
-            .get("/api/model/projection")
-            .expect("projection path");
+        let projection = paths.get("/api/model/projection").expect("projection path");
         let get = projection.get.as_ref().expect("GET projection");
-        let codes: Vec<u16> = get.responses.responses.keys().filter_map(|k| k.as_u16()).collect();
+        let codes: Vec<u16> = get
+            .responses
+            .responses
+            .keys()
+            .filter_map(|k| k.as_u16())
+            .collect();
         assert!(codes.contains(&404), "projection missing 404: {codes:?}");
         assert!(codes.contains(&400), "projection missing 400: {codes:?}");
 
         let sparql = paths.get("/api/model/sparql").expect("sparql path");
         let post = sparql.post.as_ref().expect("POST sparql");
-        let codes: Vec<u16> = post.responses.responses.keys().filter_map(|k| k.as_u16()).collect();
+        let codes: Vec<u16> = post
+            .responses
+            .responses
+            .keys()
+            .filter_map(|k| k.as_u16())
+            .collect();
         assert!(codes.contains(&404), "sparql missing 404: {codes:?}");
         assert!(codes.contains(&400), "sparql missing 400: {codes:?}");
     }

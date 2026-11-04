@@ -7,7 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Value};
 
 use super::haystack_central_dataset::CentralDatasetSnapshot;
-use super::haystack_sparql_bindings::{inventory_equip_types, inventory_role_map, select_lexical_rows_on_turtle};
+use super::haystack_sparql_bindings::{
+    inventory_equip_types, inventory_role_map, select_lexical_rows_on_turtle,
+};
 
 pub const UI_MODEL_SCHEMA: &str = "ofdd_static_ui_model_projection_v1";
 
@@ -101,7 +103,9 @@ fn equip_type_from_tags(tags: &[String], inventory_type: Option<&str>) -> String
     if let Some(t) = inventory_type {
         return t.to_string();
     }
-    const KINDS: &[&str] = &["ahu", "vav", "rtu", "chiller", "boiler", "pump", "fan", "meter"];
+    const KINDS: &[&str] = &[
+        "ahu", "vav", "rtu", "chiller", "boiler", "pump", "fan", "meter",
+    ];
     for k in KINDS {
         if tags.iter().any(|t| t.eq_ignore_ascii_case(k)) {
             return (*k).to_string();
@@ -188,10 +192,7 @@ pub fn project_ui_model_from_snapshot(
         let Some(eid) = row.get("equipmentId").filter(|s| !s.is_empty()) else {
             continue;
         };
-        let (tag_iris, native) = equip_tags
-            .get(eid)
-            .cloned()
-            .unwrap_or_default();
+        let (tag_iris, native) = equip_tags.get(eid).cloned().unwrap_or_default();
         let tags = merge_tags(&tag_iris, &native);
         let label = row
             .get("dis")
@@ -199,10 +200,8 @@ pub fn project_ui_model_from_snapshot(
             .cloned()
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| eid.clone());
-        let site_ref = site_id_from_scope(
-            &snap.building_id,
-            row.get("siteRefIri").map(String::as_str),
-        );
+        let site_ref =
+            site_id_from_scope(&snap.building_id, row.get("siteRefIri").map(String::as_str));
         let equip_type = equip_type_from_tags(&tags, inv_types.get(eid).map(String::as_str));
         equips.push(json!({
             "id": eid,
@@ -245,20 +244,15 @@ pub fn project_ui_model_from_snapshot(
         } else {
             point_id.clone()
         };
-        let (tag_iris, native) = point_tags
-            .get(&point_iri)
-            .cloned()
-            .unwrap_or_default();
+        let (tag_iris, native) = point_tags.get(&point_iri).cloned().unwrap_or_default();
         let tags = merge_tags(&tag_iris, &native);
         let role = roles
             .get(&(eid.clone(), column.clone()))
             .cloned()
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| column.clone());
-        let site_ref = site_id_from_scope(
-            &snap.building_id,
-            row.get("siteRefIri").map(String::as_str),
-        );
+        let site_ref =
+            site_id_from_scope(&snap.building_id, row.get("siteRefIri").map(String::as_str));
         let dis = row
             .get("dis")
             .cloned()
@@ -445,12 +439,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .filter_map(|p| {
-                Some((
-                    p.get("id")?.as_str()?.to_string(),
-                    p.clone(),
-                ))
-            })
+            .filter_map(|p| Some((p.get("id")?.as_str()?.to_string(), p.clone())))
             .collect();
         assert_eq!(by_id["fan-cmd-pct"]["kind"], "Number");
         assert_eq!(by_id["enable-bool"]["kind"], "Bool");

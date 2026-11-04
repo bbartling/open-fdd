@@ -93,7 +93,9 @@ impl Server {
             "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
         );
-        stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
+        stream
+            .write_all(req.as_bytes())
+            .map_err(|e| e.to_string())?;
         let mut buf = String::new();
         stream.read_to_string(&mut buf).map_err(|e| e.to_string())?;
         let status = buf

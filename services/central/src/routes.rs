@@ -213,10 +213,7 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/model/ttl",
             get(csv_import_package_mapping_haystack_ttl),
         )
-        .route(
-            "/api/model/projection",
-            get(model_ui_projection),
-        )
+        .route("/api/model/projection", get(model_ui_projection))
         // Soft-OPEN: revisioned semantic_meta CRUD (dry_run + expected_revision CAS).
         .route(
             "/api/model/semantic-meta",
