@@ -668,11 +668,11 @@ async function boot() {
   }
   $("loginGate").hidden = true;
   $("logoutBtn").hidden = false;
+  await bootApp();
   const tabFromQuery = new URLSearchParams(location.search).get("tab");
   if (tabFromQuery) {
     renderTab(tabFromQuery);
   }
-  await bootApp();
 }
 
 boot();
