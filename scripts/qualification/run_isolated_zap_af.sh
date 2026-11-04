@@ -2,7 +2,7 @@
 # Astra C-ZAP (A06–A07) — disposable authenticated ZAP AF wrapper.
 #
 # Mints a throwaway portal candidate (deployment profile `cloud_portal`:
-# openfdd-web + openfdd-central + Timescale from GHCR, OPENFDD_MULTI_TENANT=1,
+# openfdd-central + Timescale from GHCR, OPENFDD_MULTI_TENANT=1,
 # per-run JWT secret, no open-bind escape hatch) through
 # lib/portal_stack.sh, then delegates scan evaluation to
 # scripts/qualification/zap/run_af_disposable.py (single evaluator).
@@ -34,25 +34,26 @@ mkdir -p "$ART"
 ART="$(cd "$ART" && pwd)"
 WRK="$ART/zap_wrk"
 mkdir -p "$WRK"
+# Never reuse OpenAPI staged by a previous artifact-directory run. The
+# evaluator fetches the live candidate document after portal_stack_up.
+rm -f "$WRK/openapi.json" "$WRK/openapi.yaml"
 # Restrict artifact tree (no JWT on disk). ZAP image often runs as uid 1000 —
 # make wrk world-accessible for the mount only (plan/report; never secrets).
 chmod 700 "$ART"
 chmod 777 "$WRK"
-cp "$ROOT/docs/openapi.yaml" "$WRK/openapi.yaml"
 
 portal_stack_init zap
 trap portal_stack_cleanup EXIT
-# A07: scan through nginx+SPA (openfdd-web, compose service `web`), not bare
-# central. The scanner joins this project's default network, where the
-# compose service name `web` resolves; central and Timescale stay on the
-# internal network and are not reachable from the scanner.
-TARGET_ORIGIN="http://web:8080"
-ZAP_NET="${PORTAL_PROJECT}_default"
+# A07: scan the shipped Central product surface directly. The candidate is
+# started before the evaluator fetches its actual /openapi.json. The scanner
+# and its preflight/fetch helpers join only this project's internal network.
+TARGET_ORIGIN="http://central:8080"
+ZAP_NET="${PORTAL_PROJECT}_qual-private"
 
 echo "== Pull images and start the disposable portal candidate =="
 docker pull "$ZAP_IMAGE" >/dev/null
 portal_stack_up 240
-echo "OK disposable portal candidate (web+central+timescale, project $PORTAL_PROJECT)"
+echo "OK disposable portal candidate (central+timescale, project $PORTAL_PROJECT)"
 
 portal_login admin admin || { echo "FAIL: could not mint admin JWT for ZAP context" >&2; exit 1; }
 # UA-04: token stays in the private dir, never in the artifact tree or argv.
@@ -74,13 +75,13 @@ export ZAP_TARGET_ORIGIN="$TARGET_ORIGIN"
 export ZAP_AUTH_HEADER_FILE="$AUTH_FILE"
 export OPENFDD_ZAP_EXPECTED_USERNAME="admin"
 export ZAP_DOCKER_NETWORK="$ZAP_NET"
+unset OPENFDD_ZAP_OPENAPI_URL
 unset OPENFDD_ADMIN_PASSWORD OPENFDD_JWT_SECRET
 VERDICT_OUT="$ART/verdict.json"
 
 NEG_WRK="$ART/zap_wrk_negative"
 mkdir -p "$NEG_WRK"
 chmod 777 "$NEG_WRK"
-cp "$WRK/openapi.yaml" "$NEG_WRK/openapi.yaml"
 set +e
 ZAP_AF_WORK_DIR="$NEG_WRK" OPENFDD_ZAP_AF_ACTIVE=0 \
   python3 -B "$ROOT/scripts/qualification/zap/run_af_disposable.py" \
@@ -149,4 +150,4 @@ if [[ "$EVAL_RC" -ne 0 ]]; then
   echo "FAIL: isolated ZAP AF suite (evaluator rc=$EVAL_RC)" >&2
   exit "$EVAL_RC"
 fi
-echo "PASS: isolated ZAP AF (portal web via run_af_disposable.py) → $ART"
+echo "PASS: isolated ZAP AF (central via run_af_disposable.py) → $ART"

@@ -62,7 +62,8 @@ PROFILE_LIFECYCLES = frozenset({"active", "archived"})
 ARCHIVED_WIRE_SERVICES = frozenset(
     {"openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"}
 )
-PORTAL_REQUIRED_SERVICES = frozenset({"openfdd-web", "openfdd-central", "openfdd-timescale"})
+PORTAL_REQUIRED_SERVICES = frozenset({"openfdd-central", "openfdd-timescale"})
+PORTAL_OPTIONAL_SERVICES = frozenset({"openfdd-mcp", "caddy"})
 PORTAL_AUTH_KEYS = frozenset(
     {"jwt_required", "multi_tenant", "min_jwt_secret_chars", "open_bind_escape_hatch", "tenant_fixture"}
 )
@@ -334,6 +335,27 @@ def validate_deployment_profile(profile_id: str, profile: Any) -> list[str]:
 
     if profile_id == "cloud_portal":
         errors.extend(_validate_cloud_portal(profile, required_services, forbidden_services, suites))
+    elif profile_id == "local_development":
+        if profile.get("lifecycle") != "active":
+            errors.append("local_development: must be active")
+        if profile.get("profile_version") != 2:
+            errors.append("local_development: current topology requires profile_version 2")
+        if required_services != {"openfdd-central", "openfdd-timescale"}:
+            errors.append("local_development: must require central + timescale exactly")
+        if set(profile.get("selected_capabilities") or []) != {
+            "static_product_ui", "central", "timescale"
+        }:
+            errors.append("local_development: must select static_product_ui + central + timescale")
+        if "openfdd-web" not in forbidden_services:
+            errors.append("local_development: retired openfdd-web must be forbidden")
+        errors.extend(
+            _validate_current_listener_ports(
+                profile_id,
+                profile,
+                {"openfdd-central": 8080, "openfdd-timescale": 5432},
+                private_host="127.0.0.1",
+            )
+        )
     elif profile_id == "cloud_mqtt_hub":
         if required_services != {"openfdd-web", "openfdd-central", "openfdd-mqtt"}:
             errors.append("cloud_mqtt_hub: must require web + central + mqtt exactly")
@@ -420,12 +442,34 @@ def _validate_cloud_portal(
     errors: list[str] = []
     if profile.get("lifecycle") != "active":
         errors.append("cloud_portal: must be the active portal profile")
+    if profile.get("profile_version") != 2:
+        errors.append("cloud_portal: current topology requires profile_version 2")
     if required_services != PORTAL_REQUIRED_SERVICES:
-        errors.append("cloud_portal: must require web + central + timescale exactly")
-    if set(profile.get("optional_services") or []) - {"openfdd-mcp"}:
-        errors.append("cloud_portal: only openfdd-mcp may be optional")
-    if not ARCHIVED_WIRE_SERVICES <= forbidden_services:
-        errors.append("cloud_portal: MQTT, fieldbus, BACnet/Modbus, and Haystack must be forbidden")
+        errors.append("cloud_portal: must require central + timescale exactly")
+    if set(profile.get("optional_services") or []) != PORTAL_OPTIONAL_SERVICES:
+        errors.append("cloud_portal: MCP and Caddy are the only optional services")
+    if not (ARCHIVED_WIRE_SERVICES | {"openfdd-web"}) <= forbidden_services:
+        errors.append("cloud_portal: retired web and all archived OT services must be forbidden")
+    if "static_product_ui" not in set(profile.get("selected_capabilities") or []):
+        errors.append("cloud_portal: static_product_ui capability is required")
+    if "web" in set(profile.get("selected_capabilities") or []):
+        errors.append("cloud_portal: retired web capability is forbidden")
+    expected_capabilities = {
+        "static_product_ui", "central", "timescale", "nf_portal_ingest", "csv_ingest"
+    }
+    if set(profile.get("selected_capabilities") or []) != expected_capabilities:
+        errors.append("cloud_portal: selected capabilities must match current static UI topology")
+    origin = profile.get("origin")
+    if not isinstance(origin, dict) or origin.get("required_scheme") != "https" or origin.get("resolved_exposure") != "portal_https_frontdoor":
+        errors.append("cloud_portal: HTTPS frontdoor origin contract is required")
+    errors.extend(
+        _validate_current_listener_ports(
+            "cloud_portal",
+            profile,
+            {"https_frontdoor": 443, "openfdd-central": 8080, "openfdd-timescale": 5432},
+            private_host="private_only",
+        )
+    )
     if not {"X", "Y", "Z"} <= suites:
         errors.append("cloud_portal: X, Y, and Z suites are required")
     if profile.get("selected_connector") != "nf_portal":
@@ -473,6 +517,44 @@ def _validate_cloud_portal(
         errors.append("cloud_portal: NF allowed_methods must be a nonempty list")
     elif set(allowed_methods) & set(forbidden_methods or []):
         errors.append("cloud_portal: an NF method is both allowed and forbidden")
+    return errors
+
+
+def _validate_current_listener_ports(
+    profile_id: str,
+    profile: dict[str, Any],
+    expected_ports: dict[str, int],
+    *,
+    private_host: str,
+) -> list[str]:
+    """Pin current active service scopes so legacy/public web ports cannot pass."""
+    errors: list[str] = []
+    rows = profile.get("listeners")
+    if not isinstance(rows, list):
+        return errors
+    by_service = {row.get("service"): row for row in rows if isinstance(row, dict)}
+    expected_pairs = set(expected_ports.items())
+    actual_pairs = {
+        (row.get("service"), row.get("port")) for row in rows if isinstance(row, dict)
+    }
+    if actual_pairs != expected_pairs:
+        errors.append(
+            f"{profile_id}: listener services and ports must match the current topology exactly"
+        )
+    for service, port in expected_ports.items():
+        row = by_service.get(service)
+        if row is None:
+            errors.append(f"{profile_id}: missing {service} listener contract")
+            continue
+        if row.get("port") != port:
+            errors.append(f"{profile_id}: {service} listener must use port {port}")
+        if service == "https_frontdoor":
+            if row.get("protocol") != "tcp" or row.get("authenticated_transport") != "tls+jwt":
+                errors.append("cloud_portal: https_frontdoor must be observed as TCP TLS+JWT ingress")
+        elif row.get("port") in {80, 3000, 443}:
+            errors.append(f"{profile_id}: {service} cannot expose a web/management listener on port {row.get('port')}")
+        elif row.get("host_ipv4") != private_host or row.get("host_ipv6") != ("::1" if private_host == "127.0.0.1" else private_host):
+            errors.append(f"{profile_id}: {service} must remain private at its declared address scope")
     return errors
 
 

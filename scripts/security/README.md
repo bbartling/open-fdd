@@ -32,10 +32,15 @@ digests, origin, listeners, required services, and explicitly absent services.
 
 The active topology IDs are `cloud_portal` and `local_development`.
 
-`cloud_portal` is the current Open-FDD 4.0 product stack. It requires
-`openfdd-web` + `openfdd-central` + `openfdd-timescale` (MCP optional) and
-forbids `openfdd-mqtt`, `openfdd-fieldbus`, `openfdd-bacnet-modbus`, and
-`openfdd-haystack` as runtime services. Its `auth` block requires JWT, multi-tenant
+`cloud_portal` is the current static-UI product topology (profile version 2). It
+requires `openfdd-central` + private `openfdd-timescale`; `static_product_ui` is
+served by central. MCP is optional, and Caddy is an optional TLS frontdoor
+implementation. The profile records `https_frontdoor:443` as a logical TLS
+ingress observation, separately from central's private `8080` listener. This is
+a requirement for evidence, not evidence that a deployed ingress or certificate
+was observed. Raw HTTP management exposure is forbidden. `openfdd-web` and the
+archived `openfdd-mqtt`, `openfdd-fieldbus`, `openfdd-bacnet-modbus`, and
+`openfdd-haystack` services are forbidden. Its `auth` block requires JWT, multi-tenant
 ON, a JWT secret of at least 32 characters, and no open-bind escape hatch. Its
 `egress.nf_portal` block keeps the production origin for reference but allows
 qualification only against the loopback NF emulator
@@ -43,6 +48,9 @@ qualification only against the loopback NF emulator
 forbidden. The disposable recipe is
 [`scripts/qualification/run_portal_qualification.sh`](../qualification/run_portal_qualification.sh)
 (see [`scripts/qualification/README.md`](../qualification/README.md)).
+
+`local_development` also uses central + Timescale with the static product UI and
+loopback-only exposure; it does not use the retired React web service.
 
 `cloud_mqtt_hub`, `ot_local_bacnet_modbus`, and `ot_local_haystack` stay in the
 registry with `lifecycle: "archived"` and an `archive_reason`. They describe the

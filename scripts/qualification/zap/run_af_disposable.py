@@ -90,8 +90,10 @@ DISPOSITION_SCHEMA = "openfdd.zap_alert_disposition.v2"
 
 DEFAULT_MAX_WALL_SECONDS = 5400
 DEFAULT_MAX_REQUESTS = 60000
-DISPOSABLE_DOCKER_ALIASES = frozenset({"web", "central"})
-_DOCKER_NETWORK_RE = re.compile(r"^openfdd-zap-af-[A-Za-z0-9_.-]{1,64}$")
+DISPOSABLE_DOCKER_ALIASES = frozenset({"central"})
+_DOCKER_NETWORK_RE = re.compile(
+    r"^(?:openfdd-zap-af-[A-Za-z0-9_.-]{1,64}|openfdd-qual-[a-z0-9-]{4,48}_qual-private)$"
+)
 _USERNAME_RE = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
 _PROXY_ENV = frozenset(
     k
@@ -277,9 +279,9 @@ def parse_disposable_origin(raw: str, *, docker_network: str = "") -> TargetOrig
     """Accept only the exact canonical origin of a loopback or disposable host.
 
     Loopback (127.0.0.0/8, ::1, localhost) is always disposable. The docker
-    aliases ``web`` / ``central`` are accepted only on a runner-owned
-    ``openfdd-zap-af-*`` network. Anything else is refused before any
-    credential is read.
+    alias ``central`` is accepted only on a runner-owned ``openfdd-zap-af-*``
+    network or this qualification's ``openfdd-qual-*_qual-private`` network.
+    Anything else is refused before any credential is read.
     """
     raw = (raw or "").strip()
     if not raw or any(ch.isspace() for ch in raw) or "\\" in raw:
