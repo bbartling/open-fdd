@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Disposable portal qualification (deployment profile `cloud_portal`).
 #
-# Brings up central + web + Timescale from GHCR (OPENFDD_IMAGE_TAG=sha-<7>)
+# Brings up central + Timescale from GHCR (OPENFDD_IMAGE_TAG=sha-<7>)
 # plus the loopback NF emulator, with OPENFDD_MULTI_TENANT=1 and a per-run
 # random JWT secret. Creates tenants A and B with viewer and operator users
 # through the admin API (qa<date> prefix), seeds one canary package per
@@ -38,7 +38,7 @@ echo "== Portal qualification $PREFIX (project $PORTAL_PROJECT, tag $PORTAL_TAG)
 
 echo "== Pull GHCR images and start the disposable stack =="
 portal_stack_up 240
-portal_step stack.healthy PASS "web /api/health via 127.0.0.1:$PORTAL_WEB_PORT"
+portal_step stack.healthy PASS "central /api/health via loopback port $PORTAL_CENTRAL_PORT"
 
 echo "== Observe services and images =="
 running="$(portal_compose ps --services --status running | sort | tr '\n' ' ')"
@@ -64,7 +64,7 @@ images_json="$ART/images.json"
 {
   echo "{"
   first=1
-  for ref in "ghcr.io/bbartling/openfdd-central:$PORTAL_TAG" "ghcr.io/bbartling/openfdd-web:$PORTAL_TAG" \
+  for ref in "ghcr.io/bbartling/openfdd-central:$PORTAL_TAG" \
     "$(docker inspect --format '{{.Config.Image}}' "$(portal_compose ps -q timescale)" 2>/dev/null || true)"; do
     [[ -n "$ref" ]] || continue
     (( first )) || echo ","
@@ -74,17 +74,17 @@ images_json="$ART/images.json"
   echo
   echo "}"
 } >"$images_json"
-if jq -e 'to_entries | length >= 3 and all(.value | test("@sha256:[0-9a-f]{64}$"))' "$images_json" >/dev/null; then
+if jq -e 'to_entries | length == 2 and all(.value | test("@sha256:[0-9a-f]{64}$"))' "$images_json" >/dev/null; then
   portal_step deployment.images.immutable PASS "repo digests recorded in images.json"
 else
   portal_step deployment.images.immutable FAIL "missing repo digest (see images.json)"
 fi
 central_ports="$(docker port "$(portal_compose ps -q central)" 2>/dev/null || true)"
 ts_ports="$(docker port "$(portal_compose ps -q timescale)" 2>/dev/null || true)"
-if [[ -z "$central_ports" && -z "$ts_ports" ]]; then
-  portal_step deployment.exposure.private_central_timescale PASS "central and timescale publish no host port"
+if [[ "$central_ports" =~ ^8080/tcp\ \-\>\ 127\.0\.0\.1:[0-9]+$ && -z "$ts_ports" ]]; then
+  portal_step deployment.exposure.private_central_timescale PASS "central loopback-only; Timescale has no host port"
 else
-  portal_step deployment.exposure.private_central_timescale FAIL "central=$central_ports timescale=$ts_ports"
+  portal_step deployment.exposure.private_central_timescale FAIL "central must publish only 8080/tcp → 127.0.0.1:<port>; timescale must be unpublished (central=$central_ports timescale=$ts_ports)"
 fi
 unauth_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PORTAL_BASE/api/tenants" || echo 000)"
 if [[ "$unauth_status" == "401" ]]; then

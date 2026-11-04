@@ -32,6 +32,12 @@ impl EnvGuard {
         std::env::set_var(key, value);
         Self { key, prev }
     }
+
+    fn unset(key: &'static str) -> Self {
+        let prev = std::env::var(key).ok();
+        std::env::remove_var(key);
+        Self { key, prev }
+    }
 }
 
 impl Drop for EnvGuard {
@@ -68,6 +74,7 @@ impl GapCase {
             .filter(|value| !value.trim().is_empty())?;
         let pool = PgPoolOptions::new()
             .max_connections(3)
+            .acquire_timeout(std::time::Duration::from_secs(30))
             .connect(url.trim())
             .await
             .expect("test database");
@@ -297,65 +304,70 @@ async fn call(app: &Router, token: Option<&str>, body: Value) -> (StatusCode, Va
     (status, parsed)
 }
 
-#[tokio::test]
-async fn t1423_4_cancel_route_is_operator_scoped_and_idempotent() {
-    let _env = crate::test_env_lock::lock_env_async().await;
-    let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
-    let Some(case) = GapCase::open("cancel").await else {
-        eprintln!("OPENFDD_TEST_DATABASE_URL unset; skipping T1423-4");
-        return;
-    };
-    case.cleanup().await;
-    let queued = case.enqueue(JobState::Queued.as_str(), h(4)).await;
-    let retry = case.enqueue(JobState::RetryWait.as_str(), h(5)).await;
-    let leased = case.enqueue(JobState::Leased.as_str(), h(6)).await;
+#[test]
+fn t1423_4_cancel_route_is_operator_scoped_and_idempotent() {
+    crate::test_env_lock::run_env_locked(async {
+        let _mt = EnvGuard::set("OPENFDD_MULTI_TENANT", "1");
+        // Jobs are inserted via postgres::enqueue; cancel must use the Postgres queue. With a
+        // configured OPENFDD_DATABASE_URL, OPENFDD_INGEST_QUEUE=memory does not override Postgres.
+        let _queue = EnvGuard::unset("OPENFDD_INGEST_QUEUE");
+        let Some(case) = GapCase::open("cancel").await else {
+            eprintln!("OPENFDD_TEST_DATABASE_URL unset; skipping T1423-4");
+            return;
+        };
+        case.cleanup().await;
+        let queued = case.enqueue(JobState::Queued.as_str(), h(4)).await;
+        let retry = case.enqueue(JobState::RetryWait.as_str(), h(5)).await;
+        let leased = case.enqueue(JobState::Leased.as_str(), h(6)).await;
 
-    let (state, app) = cancel_harness(&case).await;
-    let tenants = vec![case.tenant.clone()];
-    let viewer = state
-        .auth
-        .issue_token_with_tenants("t1423-viewer", Role::Viewer, 600, &tenants)
-        .expect("viewer token");
-    let operator = state
-        .auth
-        .issue_token_with_tenants("t1423-operator", Role::Operator, 600, &tenants)
-        .expect("operator token");
+        let (state, app) = cancel_harness(&case).await;
+        let tenants = vec![case.tenant.clone()];
+        let viewer = state
+            .auth
+            .issue_token_with_tenants("t1423-viewer", Role::Viewer, 600, &tenants)
+            .expect("viewer token");
+        let operator = state
+            .auth
+            .issue_token_with_tenants("t1423-operator", Role::Operator, 600, &tenants)
+            .expect("operator token");
 
-    let idempotency_key = format!("t1423-cancel-{}", case.tenant);
-    let body = json!({
-        "idempotency_key": idempotency_key,
-        "tenant_id": case.tenant,
-        "canonical_site": case.site,
+        let idempotency_key = format!("t1423-cancel-{}", case.tenant);
+        let body = json!({
+            "idempotency_key": idempotency_key,
+            "tenant_id": case.tenant,
+            "canonical_site": case.site,
+        });
+
+        let (status, _) = call(&app, None, body.clone()).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        let (status, _) = call(&app, Some(&viewer), body.clone()).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+
+        let (status, first) = call(&app, Some(&operator), body.clone()).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(first["cancelled"], 2);
+        let (status, second) = call(&app, Some(&operator), body).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(second["cancelled"], 2);
+        assert_eq!(first["job_ids"], second["job_ids"]);
+
+        let leased_row: String =
+            sqlx::query_scalar("SELECT state FROM ingest_job WHERE job_id = $1")
+                .bind(leased.to_string())
+                .fetch_one(&case.pool)
+                .await
+                .expect("leased state");
+        assert_eq!(leased_row, JobState::Leased.as_str());
+
+        for id in [queued, retry] {
+            let row: String = sqlx::query_scalar("SELECT state FROM ingest_job WHERE job_id = $1")
+                .bind(id.to_string())
+                .fetch_one(&case.pool)
+                .await
+                .expect("state");
+            assert_eq!(row, JobState::Cancelled.as_str());
+        }
+        case.cleanup().await;
     });
-
-    let (status, _) = call(&app, None, body.clone()).await;
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-
-    let (status, _) = call(&app, Some(&viewer), body.clone()).await;
-    assert_eq!(status, StatusCode::FORBIDDEN);
-
-    let (status, first) = call(&app, Some(&operator), body.clone()).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(first["cancelled"], 2);
-    let (status, second) = call(&app, Some(&operator), body).await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(second["cancelled"], 2);
-    assert_eq!(first["job_ids"], second["job_ids"]);
-
-    let leased_row: String = sqlx::query_scalar("SELECT state FROM ingest_job WHERE job_id = $1")
-        .bind(leased.to_string())
-        .fetch_one(&case.pool)
-        .await
-        .expect("leased state");
-    assert_eq!(leased_row, JobState::Leased.as_str());
-
-    for id in [queued, retry] {
-        let row: String = sqlx::query_scalar("SELECT state FROM ingest_job WHERE job_id = $1")
-            .bind(id.to_string())
-            .fetch_one(&case.pool)
-            .await
-            .expect("state");
-        assert_eq!(row, JobState::Cancelled.as_str());
-    }
-    case.cleanup().await;
 }

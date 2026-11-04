@@ -24,7 +24,8 @@ class ProfileImageScanTest(unittest.TestCase):
 
     def test_portal_requires_timescale_not_ot(self) -> None:
         names = profile_required_scan_images("cloud_portal")
-        self.assertEqual(names, ["openfdd-web", "openfdd-central", "openfdd-timescale"])
+        self.assertEqual(names, ["openfdd-central", "openfdd-timescale"])
+        self.assertNotIn("openfdd-web", names)
         for ot in ("openfdd-mqtt", "openfdd-bacnet-modbus", "openfdd-haystack", "openfdd-fieldbus"):
             self.assertNotIn(ot, names)
 

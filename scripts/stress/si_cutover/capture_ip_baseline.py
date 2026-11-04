@@ -83,6 +83,9 @@ from si_cutover.baseline_io import (  # noqa: E402
 
 POLL_SECONDS = 300.0
 DEFAULT_REQUEST_TIMEOUT_S = 120.0
+DEFAULT_HTTP_TIMEOUT_S = 960.0
+DEFAULT_FDD_POLL_INTERVAL_S = 5.0
+DEFAULT_FDD_POLL_DEADLINE_S = 960.0
 FDD_RUN_409_MAX_ATTEMPTS = 8
 FDD_RUN_409_BACKOFF_S = 1.0
 FDD_RUN_409_BACKOFF_CAP_S = 32.0
@@ -259,6 +262,10 @@ def post_fdd_run_with_busy_retry(
     run_body: dict[str, Any],
     *,
     request_timeout_s: float,
+    conn=None,
+    building_id: str | None = None,
+    poll_interval_s: float = DEFAULT_FDD_POLL_INTERVAL_S,
+    poll_deadline_s: float = DEFAULT_FDD_POLL_DEADLINE_S,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """POST /api/fdd/run; retry HTTP 409 with bounded exponential backoff."""
     attempts: list[dict[str, Any]] = []
@@ -289,12 +296,80 @@ def post_fdd_run_with_busy_retry(
             "request_timeout_s": request_timeout_s,
             "final_http_status": status,
         }
+        run_status = str(body.get("run_status") or "")
+        run_id = str(body.get("run_id") or "")
+        bid = building_id or str(run_body.get("building_id") or "").strip()
+        rule_ids = list(run_body.get("rule_ids") or [])
+        if conn is not None and run_id and run_status and run_status != "complete":
+            poll_meta = poll_registry_run_complete(
+                conn,
+                building_id=bid,
+                run_id=run_id,
+                rule_ids=rule_ids,
+                poll_interval_s=poll_interval_s,
+                poll_deadline_s=poll_deadline_s,
+            )
+            meta["fdd_run_poll"] = poll_meta
+            if not poll_meta.get("complete"):
+                raise RuntimeError(
+                    f"/api/fdd/run run_id={run_id} not complete after "
+                    f"{poll_deadline_s}s DB poll (run_status={run_status})"
+                )
         return body, meta
     snippet = last_raw[:240].decode("utf-8", errors="replace")
     raise RuntimeError(
         f"POST /api/fdd/run busy after {FDD_RUN_409_MAX_ATTEMPTS} attempts "
         f"(last HTTP {last_status}): {snippet}"
     )
+
+
+def poll_registry_run_complete(
+    conn,
+    *,
+    building_id: str,
+    run_id: str,
+    rule_ids: list[str],
+    poll_interval_s: float,
+    poll_deadline_s: float,
+) -> dict[str, Any]:
+    """Poll Timescale ``fdd_run`` rows until the logical run finishes or deadline.
+
+    Central has no separate async FDD endpoint; long runs either return ``run_status``
+    on the POST body or keep writing rows while the HTTP connection stays open. Capture
+    uses an extended ``--http-timeout`` and this DB poll when the POST body is not
+    ``complete`` yet.
+    """
+    if poll_interval_s <= 0 or poll_deadline_s <= 0:
+        raise ValueError("poll interval and deadline must be positive")
+    expected = {str(rid).strip() for rid in rule_ids if str(rid).strip()}
+    deadline = time.monotonic() + poll_deadline_s
+    polls: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        status_map = fetch_run_status_rows(conn, building_id=building_id, run_id=run_id)
+        seen = {rid for (rid, _eq) in status_map}
+        polls.append({"seen_rules": len(seen), "expected_rules": len(expected)})
+        if expected and seen >= expected:
+            return {
+                "polls": polls,
+                "poll_interval_s": poll_interval_s,
+                "poll_deadline_s": poll_deadline_s,
+                "complete": True,
+            }
+        if not expected and status_map:
+            return {
+                "polls": polls,
+                "poll_interval_s": poll_interval_s,
+                "poll_deadline_s": poll_deadline_s,
+                "complete": True,
+            }
+        time.sleep(poll_interval_s)
+    return {
+        "polls": polls,
+        "poll_interval_s": poll_interval_s,
+        "poll_deadline_s": poll_deadline_s,
+        "complete": False,
+    }
+
 
 ANALYTICS_POST_ROUTES: tuple[tuple[str, dict[str, Any]], ...] = (
     ("/api/analytics/runtime", {}),
@@ -504,7 +579,9 @@ def db_connect():
             "(listed in scripts/qualification/requirements.txt for stress tooling)"
         ) from exc
 
-    return psycopg.connect(require_database_url())
+    conn = psycopg.connect(require_database_url())
+    conn.autocommit = True
+    return conn
 
 
 def require_pandas_oracle() -> None:
@@ -1074,6 +1151,100 @@ def effective_run_window(
     if requested_end and end_instant > parse_utc_instant(requested_end):
         raise ValueError("FDD effective window ends after the requested window")
     return start, end
+
+
+def iter_half_open_window_chunks(
+    window_start: str | None,
+    window_end: str | None,
+    chunk_days: int,
+) -> list[tuple[str, str]]:
+    """Split a half-open capture window into bounded day chunks (stress tooling only)."""
+    if chunk_days <= 0:
+        return []
+    ws = str(window_start or "").strip()
+    we = str(window_end or "").strip()
+    if not ws or not we:
+        return []
+    start = parse_utc_instant(ws)
+    end = parse_utc_instant(we)
+    if end <= start:
+        return []
+    from datetime import timedelta
+
+    chunks: list[tuple[str, str]] = []
+    cursor = start
+    step = timedelta(days=chunk_days)
+    while cursor < end:
+        nxt = min(cursor + step, end)
+        chunks.append(
+            (
+                cursor.isoformat().replace("+00:00", "Z"),
+                nxt.isoformat().replace("+00:00", "Z"),
+            )
+        )
+        cursor = nxt
+    return chunks
+
+
+def expand_sites_for_chunk_days(
+    sites: list[dict[str, Any]], chunk_days: int
+) -> list[dict[str, Any]]:
+    if chunk_days <= 0:
+        return sites
+    expanded: list[dict[str, Any]] = []
+    for site in sites:
+        chunks = iter_half_open_window_chunks(
+            site.get("window_start") or site.get("start"),
+            site.get("window_end") or site.get("end"),
+            chunk_days,
+        )
+        if len(chunks) <= 1:
+            expanded.append(site)
+            continue
+        for index, (chunk_start, chunk_end) in enumerate(chunks):
+            copy = dict(site)
+            copy["window_start"] = chunk_start
+            copy["window_end"] = chunk_end
+            copy["chunk_index"] = index
+            copy["chunk_count"] = len(chunks)
+            copy["chunk_subdir"] = f"chunk-{index:04d}"
+            expanded.append(copy)
+    return expanded
+
+
+def merge_chunk_site_outputs(out_dir: Path, building_id: str, chunk_count: int) -> None:
+    """Merge per-chunk JSONL.gz outputs into the parent site directory."""
+    import gzip
+    import shutil
+
+    site_dir = out_dir / building_id
+    if chunk_count <= 1:
+        return
+    names = (
+        "sql_fdd_daily.jsonl.gz",
+        "analytics_rows.jsonl.gz",
+        "pandas_fdd_daily.jsonl.gz",
+        "unit_inventory.jsonl.gz",
+        "sample_counts.jsonl.gz",
+        "persisted_runs.jsonl.gz",
+    )
+    for name in names:
+        dest = site_dir / name
+        if dest.is_file():
+            dest.unlink()
+        with gzip.open(dest, "wt", encoding="utf-8") as out_fh:
+            for index in range(chunk_count):
+                src = site_dir / f"chunk-{index:04d}" / name
+                if not src.is_file():
+                    continue
+                with gzip.open(src, "rt", encoding="utf-8") as in_fh:
+                    for line in in_fh:
+                        if line.strip():
+                            out_fh.write(line if line.endswith("\n") else line + "\n")
+    for index in range(chunk_count):
+        chunk_dir = site_dir / f"chunk-{index:04d}"
+        if chunk_dir.is_dir():
+            shutil.rmtree(chunk_dir)
 
 
 def require_same_batch_window(
@@ -1705,6 +1876,8 @@ def capture_site(
     pandas_max_rules: int | None,
     rule_batch_size: int = 0,
     request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S,
+    poll_interval_s: float = DEFAULT_FDD_POLL_INTERVAL_S,
+    poll_deadline_s: float = DEFAULT_FDD_POLL_DEADLINE_S,
 ) -> dict[str, Any]:
     building_id = str(site["building_id"]).strip()
     window_start = str(site.get("window_start") or site.get("start") or "").strip() or None
@@ -1747,7 +1920,14 @@ def capture_site(
         if we or window_end:
             run_body["window_end"] = we or window_end
         run_resp, http_meta = post_fdd_run_with_busy_retry(
-            http, headers, run_body, request_timeout_s=request_timeout_s
+            http,
+            headers,
+            run_body,
+            request_timeout_s=request_timeout_s,
+            conn=conn,
+            building_id=building_id,
+            poll_interval_s=poll_interval_s,
+            poll_deadline_s=poll_deadline_s,
         )
         fdd_run_http.append({"batch_index": batch_index, **http_meta})
         if not run_resp.get("ok", True) and run_resp.get("error"):
@@ -1938,6 +2118,9 @@ def capture_site(
         )
 
     site_dir = out_dir / building_id
+    chunk_subdir = str(site.get("chunk_subdir") or "").strip()
+    if chunk_subdir:
+        site_dir = site_dir / chunk_subdir
     site_dir.mkdir(parents=True, exist_ok=True)
     with JsonlGzWriter(site_dir / "sql_fdd_daily.jsonl.gz") as writer:
         for row in sql_daily:
@@ -2129,9 +2312,32 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument(
         "--request-timeout-s",
+        "--http-timeout",
         type=float,
-        default=DEFAULT_REQUEST_TIMEOUT_S,
-        help=f"HTTP request timeout for capture calls (default {DEFAULT_REQUEST_TIMEOUT_S:g})",
+        default=DEFAULT_HTTP_TIMEOUT_S,
+        dest="request_timeout_s",
+        help=(
+            "HTTP request timeout for capture calls "
+            f"(default {DEFAULT_HTTP_TIMEOUT_S:g}; alias --http-timeout)"
+        ),
+    )
+    ap.add_argument(
+        "--chunk-days",
+        type=int,
+        default=0,
+        help="If >0, split each site window into day chunks with merged outputs",
+    )
+    ap.add_argument(
+        "--fdd-poll-interval-s",
+        type=float,
+        default=DEFAULT_FDD_POLL_INTERVAL_S,
+        help="DB poll interval when POST /api/fdd/run returns non-complete run_status",
+    )
+    ap.add_argument(
+        "--fdd-poll-deadline-s",
+        type=float,
+        default=DEFAULT_FDD_POLL_DEADLINE_S,
+        help="DB poll deadline for incomplete registry runs",
     )
     ap.add_argument("--self-test", action="store_true", help="Offline JSON shape validation")
     ap.add_argument(
@@ -2148,8 +2354,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    if args.request_timeout_s <= 0 or args.rule_batch_size < 0:
-        ap.error("--request-timeout-s must be positive and --rule-batch-size non-negative")
+    if args.request_timeout_s <= 0 or args.rule_batch_size < 0 or args.chunk_days < 0:
+        ap.error(
+            "--request-timeout-s/--http-timeout must be positive, "
+            "--rule-batch-size and --chunk-days non-negative"
+        )
 
     if args.self_test:
         return run_self_test()
@@ -2181,6 +2390,7 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["OPENFDD_DATABASE_URL"] = str(args.database_url).strip()
     require_database_url()
     sites = load_sites_config(args.sites_config.expanduser())
+    sites = expand_sites_for_chunk_days(sites, args.chunk_days)
     rules = oracle["rules"]
     base = apply_base_url(
         resolve_base_url(base_url=args.base_url, host=args.host, port=args.port)
@@ -2211,6 +2421,8 @@ def main(argv: list[str] | None = None) -> int:
                         pandas_max_rules=pandas_cap,
                         rule_batch_size=args.rule_batch_size,
                         request_timeout_s=args.request_timeout_s,
+                        poll_interval_s=args.fdd_poll_interval_s,
+                        poll_deadline_s=args.fdd_poll_deadline_s,
                     )
                 except CaptureQualificationError as exc:
                     summary = {
@@ -2223,6 +2435,14 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 all_errors.extend(summary.get("pandas_errors") or [])
                 all_errors.extend(summary.get("analytics_errors") or [])
+            merged: dict[str, int] = {}
+            for site in sites:
+                chunk_count = int(site.get("chunk_count") or 0)
+                if chunk_count > 1:
+                    bid = str(site.get("building_id") or "").strip()
+                    merged[bid] = max(merged.get(bid, 0), chunk_count)
+            for building_id, chunk_count in merged.items():
+                merge_chunk_site_outputs(out_dir, building_id, chunk_count)
         meta = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "health_shortsha": shortsha,
@@ -2231,6 +2451,9 @@ def main(argv: list[str] | None = None) -> int:
             "ip_oracle": {k: v for k, v in oracle.items() if k != "rules"},
             "pandas_max_rules": pandas_cap,
             "rule_batch_size": args.rule_batch_size,
+            "chunk_days": args.chunk_days,
+            "fdd_poll_interval_s": args.fdd_poll_interval_s,
+            "fdd_poll_deadline_s": args.fdd_poll_deadline_s,
             "allow_errors": args.allow_errors,
             "request_timeout_s": args.request_timeout_s,
             "sites": summaries,

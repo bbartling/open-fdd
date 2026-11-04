@@ -342,11 +342,12 @@ class RecipeStaticTest(unittest.TestCase):
             l for l in OVERLAY.read_text().splitlines() if not l.lstrip().startswith("#")
         )
         builds = re.findall(r"(?m)^\s*build:.*$", text)
-        self.assertEqual([b.strip() for b in builds], ["build: !reset null"] * 2,
+        self.assertEqual([b.strip() for b in builds], ["build: !reset null"],
                          "overlay must drop the base build sections, never add one")
         self.assertIn("ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:?", text)
-        self.assertIn("ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:?", text)
+        self.assertNotIn("openfdd-web", text)
         self.assertIn('OPENFDD_MULTI_TENANT: "1"', text)
+        self.assertIn('OPENFDD_STATIC_PRODUCT_UI: "1"', text)
         self.assertIn('OPENFDD_ALLOW_OPEN_BIND: ""', text)
         self.assertRegex(text, r"qual-private:\s*\n\s*internal: true")
         self.assertIn('network_mode: "service:central"', text)
@@ -354,9 +355,10 @@ class RecipeStaticTest(unittest.TestCase):
         self.assertNotIn("../workspace", text)
         self.assertRegex(text, r"python:3\.12-alpine@sha256:[0-9a-f]{64}")
         self.assertNotRegex(text.lower(), r"mqtt|fieldbus|bacnet")
-        # Central and Timescale publish nothing; web only on loopback.
-        self.assertEqual(text.count("ports: !reset []"), 2)
-        self.assertIn('"127.0.0.1:${PORTAL_QUAL_WEB_PORT', text)
+        # Only central publishes a host port, and only on loopback.
+        self.assertEqual(text.count("ports: !reset []"), 1)
+        self.assertIn('"127.0.0.1:${PORTAL_QUAL_CENTRAL_PORT', text)
+        self.assertNotIn("  web:\n", text)
 
     def test_overlay_parses_as_yaml_when_available(self):
         try:
@@ -374,7 +376,8 @@ class RecipeStaticTest(unittest.TestCase):
                 else loader.construct_scalar(node)
             ))
         doc = yaml.load(OVERLAY.read_text(), Loader=Loader)
-        self.assertEqual(set(doc["services"]), {"central", "timescale", "web", "nf-emulator"})
+        self.assertEqual(set(doc["services"]), {"central", "timescale", "nf-emulator"})
+        self.assertEqual(doc["services"]["central"]["ports"][0].split(":")[0], "127.0.0.1")
         self.assertEqual(doc["services"]["nf-emulator"]["profiles"], ["nf"])
 
     def test_wave_c_points_at_portal_profile(self):

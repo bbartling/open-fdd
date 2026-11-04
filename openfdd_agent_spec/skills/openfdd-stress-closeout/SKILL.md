@@ -22,7 +22,7 @@ Guidance-only or product PRs must not edit these paths. Use a Grok-owned row
 (4.0.7 W0a / W0b / W3 / W8). Each agent watches its PR until required checks
 are green. Protocol: [`PR_PROTOCOL.md`](../../PR_PROTOCOL.md).
 
-Current product is Rust central, React web, Timescale and NF portal pull/CSV.
+Current product is Rust central serving the static `/app/` UI, Timescale and NF portal pull/CSV. React web is archived rollback tooling only.
 MQTT/BACnet/Modbus/Haystack transport containers are archived and unqualified;
 Haystack semantic modeling remains active. Historical3.x OT closeout rows do not
 qualify the portal product and do not authorize deployment or live scans.
@@ -40,6 +40,19 @@ Read [qualification entry](../../../scripts/qualification/README.md),
 [stress contract](../../../scripts/stress/README.md),
 [semantic verifier](../../../scripts/qualification/semantic/README.md) and
 [ZAP limits](../../../scripts/qualification/zap/README.md).
+
+## Finite static-UI passive baseline
+
+`/scripts/qualification/zap/run_static_passive.py` is a separate requestor-only
+baseline for an exactly owned, image-pinned, internal-network central+Timescale
+fixture with no provider configuration or host ports. It sends twelve planned
+GET requests, verifies three nonce-bound authenticated identities and an invalid
+bearer denial from the scanner HAR, and checks the observed candidate version.
+Private credential/plan/HAR files are removed after use. The result separates
+execution/auth proof from the alert verdict; High/Medium fail, Low/Informational
+require review, and full qualification always remains unclaimed. It does not
+replace multi-tenant, active scan, TLS or PEN qualification. The finite request
+plan plus a post-HAR count is not a preventive firewall request budget.
 
 ## Order and evidence
 

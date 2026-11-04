@@ -22,7 +22,7 @@ Grok-owned row. Protocol: [`PR_PROTOCOL.md`](../../PR_PROTOCOL.md).
 
 ## Current portal qualification (4.0)
 
-NF/CSV, Rust/React and Timescale are the active product. The MQTT/fieldbus sections
+NF/CSV, Rust central with its static `/app/` UI, and Timescale are the active product. React is archived rollback source. The MQTT/fieldbus sections
 below are dated archive context, not current deployment or qualification steps.
 Use [current qualification](../../../scripts/qualification/README.md), the
 [portal stress skill](../openfdd-stress-closeout/SKILL.md), and
@@ -45,13 +45,23 @@ Kali owns **live** ZAP/PEN. Mint implements **product fixes + automated tests**.
 
 Plans: [`.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`](../../../.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md) § O2c · [`.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md`](../../../.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md) § P2c.
 
+## Current static passive baseline
+
+The owned-target finite baseline is
+[`run_static_passive.py`](../../../scripts/qualification/zap/run_static_passive.py).
+It proves only twelve specific GET responses, scanner identity/invalid-bearer
+controls and passive alert evaluation on the exact candidate. A zero exit from
+this baseline is not multi-tenant, active scan, TLS, PEN or full-release approval.
+Do not broaden bearer origin/port scope to make the older AF runner pass. Refer
+to the [stress skill](../openfdd-stress-closeout/SKILL.md) for evidence boundaries.
+
 ## Verified Kali findings (2026-09-15) — must stay fixed
 
 | # | Bug | Contract |
 |---|-----|----------|
 | **V1** | Unauth `GET /api/tenants` used `dev_anonymous()` → **Admin** → full roster | When `OPENFDD_JWT_SECRET` set: **401** without Bearer. Membership filters tenants/buildings. Hub admin (`role=admin` + empty `tenant_ids`) sees all. Never Admin-via-anonymous for listing. |
 | **V2** | Unauth `capabilities` / `health/stack` / `building/snapshot` / `dashboard/summary` leaked MCP, protocols, paths, flags | These routes sit on the **JWT-protected** router. Unauth → **401**. Public readiness = `GET /api/health` only (lean). |
-| **V3** | CSP / HSTS / `security.txt` | Web nginx: CSP allows Google Fonts (`fonts.googleapis.com` / `fonts.gstatic.com`) + Plotly same-origin/`blob:`; HSTS when `X-Forwarded-Proto=https`; `/.well-known/security.txt` **text/plain** (not SPA HTML). Gate 34. |
+| **V3** | CSP / HSTS / `security.txt` / nosniff | Bare **central** serves `/.well-known/security.txt` as **text/plain** (GitHub private advisory contact) and sets `X-Content-Type-Options: nosniff` on every response (JSON, errors, static `/app/*`). Archived web nginx: CSP Fonts + Plotly; HSTS when `X-Forwarded-Proto=https`. Gate 34. |
 
 ## Endpoint → authz (quick matrix)
 
@@ -68,6 +78,7 @@ Plans: [`.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`](../../../.curs
 
 ```bash
 cargo test -p openfdd-central --test preauth_disclosure
+cargo test -p openfdd-central --test response_security_headers
 # covers: anonymous_tenants_denied · tenants_scoped_by_membership ·
 #         anonymous_topology · health_stays_public_and_lean ·
 #         mt_isolation_matrix_select_and_datapath

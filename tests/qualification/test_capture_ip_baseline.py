@@ -49,7 +49,7 @@ IP_ORACLE_COMMIT = "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0"
 
 
 def ensure_ip_oracle_worktree() -> Path:
-    """Detached worktree at the frozen 4.0.6 / open-fdd 4.4.9 IP oracle (CI-safe)."""
+    """Use only the locally available frozen oracle commit; never fetch in tests."""
     root = IP_ORACLE_ROOT
     if (root / "pyproject.toml").is_file() and (root / "sql" / "fdd" / "registry.yaml").is_file():
         return root
@@ -64,25 +64,9 @@ def ensure_ip_oracle_worktree() -> Path:
             text=True,
         )
         if proc.returncode != 0:
-            fetch = subprocess.run(
-                ["git", "fetch", "--depth", "1", "origin", IP_ORACLE_COMMIT],
-                cwd=REPO,
-                capture_output=True,
-                text=True,
-            )
-            if fetch.returncode != 0:
-                raise RuntimeError(
-                    f"git fetch origin {IP_ORACLE_COMMIT} failed: {fetch.stderr or fetch.stdout}"
-                )
-            proc = subprocess.run(
-                ["git", "worktree", "add", "--detach", str(root), IP_ORACLE_COMMIT],
-                cwd=REPO,
-                capture_output=True,
-                text=True,
-            )
-        if proc.returncode != 0:
             raise RuntimeError(
-                f"git worktree add {root} @ {IP_ORACLE_COMMIT} failed: {proc.stderr or proc.stdout}"
+                f"local git worktree add {root} @ {IP_ORACLE_COMMIT} failed: "
+                f"{proc.stderr or proc.stdout}"
             )
     return root
 
@@ -241,7 +225,23 @@ class CaptureRequirements(unittest.TestCase):
         self.assertIn("4.4.9", str(ctx.exception))
 
     def test_pinned_oracle_provenance_matches_frozen_registry(self) -> None:
-        oracle_root = ensure_ip_oracle_worktree()
+        available = subprocess.run(
+            ["git", "cat-file", "-e", f"{IP_ORACLE_COMMIT}^{{commit}}"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+        )
+        if available.returncode != 0:
+            self.skipTest(
+                f"pinned oracle {IP_ORACLE_COMMIT} is not in the local Git object database; "
+                "offline test will not fetch it"
+            )
+        try:
+            oracle_root = ensure_ip_oracle_worktree()
+        except RuntimeError as exc:
+            self.skipTest(
+                f"local pinned oracle worktree unavailable ({exc}); offline test will not fetch it"
+            )
         try:
             oracle = capture.load_ip_oracle(oracle_root)
             self.assertEqual(oracle["version"], "4.4.9")
@@ -1463,6 +1463,51 @@ class BaselineIoIntervalUnknownTest(unittest.TestCase):
         }
         errors = baseline_io.validate_fdd_daily_row(row)
         self.assertTrue(errors)
+
+
+class CaptureChunkWindowTest(unittest.TestCase):
+    def test_iter_half_open_window_chunks(self) -> None:
+        chunks = capture.iter_half_open_window_chunks(
+            "2026-06-01T00:00:00Z",
+            "2026-06-04T00:00:00Z",
+            2,
+        )
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(chunks[0][0], "2026-06-01T00:00:00Z")
+        self.assertEqual(chunks[1][1], "2026-06-04T00:00:00Z")
+
+    def test_expand_sites_for_chunk_days(self) -> None:
+        sites = capture.expand_sites_for_chunk_days(
+            [
+                {
+                    "building_id": "SITE_A",
+                    "window_start": "2026-06-01T00:00:00Z",
+                    "window_end": "2026-06-04T00:00:00Z",
+                }
+            ],
+            2,
+        )
+        self.assertEqual(len(sites), 2)
+        self.assertEqual(sites[0]["chunk_subdir"], "chunk-0000")
+
+
+class FddRunPollTest(unittest.TestCase):
+    def test_poll_registry_run_complete(self) -> None:
+        conn = mock.MagicMock()
+        with mock.patch.object(
+            capture,
+            "fetch_run_status_rows",
+            side_effect=[{}, {("FC1", "AHU_1"): "OK"}],
+        ):
+            meta = capture.poll_registry_run_complete(
+                conn,
+                building_id="SITE_A",
+                run_id="run-1",
+                rule_ids=["FC1"],
+                poll_interval_s=0.01,
+                poll_deadline_s=1.0,
+            )
+        self.assertTrue(meta["complete"])
 
 
 class FddRunBusyRetryTest(unittest.TestCase):

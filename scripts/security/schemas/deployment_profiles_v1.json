@@ -8,18 +8,18 @@
   ],
   "profiles": {
     "cloud_portal": {
-      "profile_version": 1,
+      "profile_version": 2,
       "lifecycle": "active",
       "deployment": "cloud_portal",
-      "selected_capabilities": ["web", "central", "timescale", "nf_portal_ingest", "csv_ingest"],
+      "selected_capabilities": ["static_product_ui", "central", "timescale", "nf_portal_ingest", "csv_ingest"],
       "selected_connector": "nf_portal",
-      "required_services": ["openfdd-web", "openfdd-central", "openfdd-timescale"],
-      "optional_services": ["openfdd-mcp"],
-      "forbidden_services": ["openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"],
-      "required_images": ["openfdd-web", "openfdd-central", "openfdd-timescale"],
+      "required_services": ["openfdd-central", "openfdd-timescale"],
+      "optional_services": ["openfdd-mcp", "caddy"],
+      "forbidden_services": ["openfdd-web", "openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"],
+      "required_images": ["openfdd-central", "openfdd-timescale"],
       "required_execution_suites": ["X", "Y", "Z"],
       "required_checks": [
-        "deployment.services.web",
+        "deployment.services.static_ui",
         "deployment.services.central",
         "deployment.services.timescale",
         "deployment.cloud.zero_ot",
@@ -47,7 +47,7 @@
       },
       "origin": {
         "required_scheme": "https",
-        "resolved_exposure": "portal_public_web"
+        "resolved_exposure": "portal_https_frontdoor"
       },
       "certificate": {
         "modes": ["provider_managed", "operator_ca"],
@@ -72,10 +72,10 @@
       ],
       "listeners": [
         {
-          "service": "openfdd-web",
-          "network_namespace": "portal_public_ingress",
-          "host_ipv4": "provider_public_or_loopback",
-          "host_ipv6": "provider_public_or_loopback",
+          "service": "https_frontdoor",
+          "network_namespace": "platform_tls_ingress",
+          "host_ipv4": "provider_frontdoor",
+          "host_ipv6": "provider_frontdoor",
           "port": 443,
           "protocol": "tcp",
           "authenticated_transport": "tls+jwt",
@@ -91,7 +91,7 @@
           "port": 8080,
           "protocol": "tcp",
           "authenticated_transport": "jwt_private",
-          "source_network_aliases": ["openfdd-web", "openfdd-mcp"],
+          "source_network_aliases": ["https_frontdoor", "openfdd-mcp"],
           "egress_aliases": ["openfdd-timescale", "nf_portal_https", "workspace"],
           "expected_denied_paths": ["public_bind", "open_bind_escape_hatch", "unauthenticated_rest"]
         },
@@ -115,7 +115,7 @@
         "docker/compose.portal-qual.yml",
         "scripts/qualification/run_portal_qualification.sh"
       ],
-      "notes": "Open-FDD 4.0 portal stack: web + private central + private Timescale. NF portal polling and CSV are the only ingest. Qualification talks only to the loopback NF emulator; MQTT, fieldbus, BACnet, Modbus, and Haystack processes are forbidden."
+      "notes": "Current portal contract: static_product_ui served by central + private Timescale; MCP and a Caddy TLS frontdoor implementation are optional. https_frontdoor is a logical external TLS ingress observation, separate from central's private port 8080; no raw HTTP management exposure is permitted. NF portal polling and CSV are the only ingest. Qualification talks only to the loopback NF emulator; retired web, MQTT, fieldbus, BACnet, Modbus, and Haystack processes are forbidden."
     },
     "cloud_mqtt_hub": {
       "profile_version": 1,
@@ -406,17 +406,17 @@
       "notes": "Haystack is the selected manual outbound connector. The profile proves no BACnet/Modbus process or local broker is present."
     },
     "local_development": {
-      "profile_version": 1,
+      "profile_version": 2,
       "lifecycle": "active",
       "deployment": "loopback_development",
-      "selected_capabilities": ["web", "central"],
+      "selected_capabilities": ["static_product_ui", "central", "timescale"],
       "selected_connector": "none",
-      "required_services": ["openfdd-web", "openfdd-central"],
-      "optional_services": [],
-      "forbidden_services": ["openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"],
-      "required_images": ["openfdd-web", "openfdd-central"],
+      "required_services": ["openfdd-central", "openfdd-timescale"],
+      "optional_services": ["openfdd-mcp"],
+      "forbidden_services": ["openfdd-web", "openfdd-mqtt", "openfdd-fieldbus", "openfdd-bacnet-modbus", "openfdd-haystack"],
+      "required_images": ["openfdd-central", "openfdd-timescale"],
       "required_execution_suites": ["Z"],
-      "required_checks": ["deployment.services.web", "deployment.services.central", "deployment.loopback_only"],
+      "required_checks": ["deployment.services.static_ui", "deployment.services.central", "deployment.services.timescale", "deployment.loopback_only"],
       "origin": {
         "required_scheme": "http",
         "resolved_exposure": "loopback_only"
@@ -437,33 +437,33 @@
       "prohibited_side_effects": ["production_qualification", "bas_writes", "credential_rotation"],
       "listeners": [
         {
-          "service": "openfdd-web",
-          "network_namespace": "loopback",
-          "host_ipv4": "127.0.0.1",
-          "host_ipv6": "::1",
-          "port": 3000,
-          "protocol": "tcp",
-          "authenticated_transport": "development_http",
-          "source_network_aliases": ["loopback"],
-          "egress_aliases": ["openfdd-central"],
-          "expected_denied_paths": ["lan_peer", "public_bind"]
-        },
-        {
           "service": "openfdd-central",
           "network_namespace": "loopback",
           "host_ipv4": "127.0.0.1",
           "host_ipv6": "::1",
           "port": 8080,
           "protocol": "tcp",
-          "authenticated_transport": "development_http",
-          "source_network_aliases": ["openfdd-web", "loopback"],
-          "egress_aliases": ["workspace"],
+          "authenticated_transport": "jwt_loopback",
+          "source_network_aliases": ["loopback"],
+          "egress_aliases": ["openfdd-timescale", "workspace"],
           "expected_denied_paths": ["lan_peer", "public_bind"]
+        },
+        {
+          "service": "openfdd-timescale",
+          "network_namespace": "loopback_private_db",
+          "host_ipv4": "127.0.0.1",
+          "host_ipv6": "::1",
+          "port": 5432,
+          "protocol": "tcp",
+          "authenticated_transport": "postgres_password_loopback",
+          "source_network_aliases": ["openfdd-central"],
+          "egress_aliases": [],
+          "expected_denied_paths": ["lan_peer", "public_bind", "default_password"]
         }
       ],
       "evidence_max_age_seconds": 3600,
-      "source_recipes": ["docker/compose.csv.yml"],
-      "notes": "Development is loopback-only and cannot close production or Nessus readiness."
+      "source_recipes": ["docker/compose.csv.yml", "docker/compose.timescale.yml"],
+      "notes": "Development uses the static product UI served by central with private Timescale storage. Loopback-only exposure cannot close production or Nessus readiness."
     }
   }
 }

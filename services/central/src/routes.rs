@@ -42,6 +42,10 @@ use crate::wattlab_dump;
 
 pub fn router(state: Arc<AppState>) -> Router {
     let public = Router::new()
+        .route(
+            "/.well-known/security.txt",
+            get(crate::security_well_known::security_txt),
+        )
         .route("/api/health", get(health))
         .route("/api/version", get(version_public))
         .route("/health", get(health))

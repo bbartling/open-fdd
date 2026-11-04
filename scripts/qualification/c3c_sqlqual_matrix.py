@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
+import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -113,6 +115,25 @@ class MatrixDocument:
     def write_json(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(self.to_dict(), indent=2) + "\n", encoding="utf-8")
+
+    def write_json_atomic(self, path: Path) -> None:
+        """Publish matrix JSON without exposing a torn file on interrupt."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(self.to_dict(), indent=2) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(temp_name, path)
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
 
 
 def new_matrix(*, identities: dict[str, Any] | None = None) -> MatrixDocument:
