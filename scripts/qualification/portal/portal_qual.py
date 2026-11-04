@@ -29,7 +29,7 @@ MIN_SECRET_CHARS = 32
 JWT_SECRET_BYTES = 48
 PACKAGE_START = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
 STEP_STATUSES = frozenset({"PASS", "FAIL", "ERROR", "BLOCKED", "SKIPPED", "NOT_APPLICABLE"})
-REQUIRED_PORTAL_SERVICES = frozenset({"central", "web", "timescale", "nf-emulator"})
+REQUIRED_PORTAL_SERVICES = frozenset({"central", "timescale", "nf-emulator"})
 VIEWER_WRITE_CHECK_IDS = frozenset(
     f"y.authz.viewer_{action}_{scope}_denied"
     for action in ("import", "append", "purge", "delete")

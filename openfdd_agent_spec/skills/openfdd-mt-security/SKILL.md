@@ -22,7 +22,7 @@ Grok-owned row. Protocol: [`PR_PROTOCOL.md`](../../PR_PROTOCOL.md).
 
 ## Current portal qualification (4.0)
 
-NF/CSV, Rust/React and Timescale are the active product. The MQTT/fieldbus sections
+NF/CSV, Rust central with its static `/app/` UI, and Timescale are the active product. React is archived rollback source. The MQTT/fieldbus sections
 below are dated archive context, not current deployment or qualification steps.
 Use [current qualification](../../../scripts/qualification/README.md), the
 [portal stress skill](../openfdd-stress-closeout/SKILL.md), and
@@ -44,6 +44,16 @@ never widen bearer exposure to turn qualification green.
 Kali owns **live** ZAP/PEN. Mint implements **product fixes + automated tests**. Never ActiveScan production OT from Mint.
 
 Plans: [`.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`](../../../.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md) § O2c · [`.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md`](../../../.cursor/plans/wave_p_residual_stress_gh_tidy_ce235993.plan.md) § P2c.
+
+## Current static passive baseline
+
+The owned-target finite baseline is
+[`run_static_passive.py`](../../../scripts/qualification/zap/run_static_passive.py).
+It proves only twelve specific GET responses, scanner identity/invalid-bearer
+controls and passive alert evaluation on the exact candidate. A zero exit from
+this baseline is not multi-tenant, active scan, TLS, PEN or full-release approval.
+Do not broaden bearer origin/port scope to make the older AF runner pass. Refer
+to the [stress skill](../openfdd-stress-closeout/SKILL.md) for evidence boundaries.
 
 ## Verified Kali findings (2026-09-15) — must stay fixed
 

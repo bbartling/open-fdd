@@ -359,7 +359,7 @@ class ZapAfScopeTest(unittest.TestCase):
             "http://evil.example",
             "https://openfdd.up.railway.app",
             "http://127.0.0.1.evil.example:18080",
-            "http://web:8080",
+            "http://central:8080",
             "http://user@127.0.0.1:18080",
             "http://127.0.0.1:18080/api",
             "http://127.0.0.1:18080?x=1",
@@ -377,14 +377,16 @@ class ZapAfScopeTest(unittest.TestCase):
                 with self.assertRaises(af.ScopeError):
                     af.parse_disposable_origin(origin)
         with self.assertRaises(af.ScopeError):
-            af.parse_disposable_origin("http://web:8080", docker_network="bridge")
+            af.parse_disposable_origin("http://central:8080", docker_network="bridge")
 
     def test_disposable_origins_accepted(self):
         self.assertEqual(af.parse_disposable_origin("http://127.0.0.1:18080/").kind, "loopback")
         self.assertEqual(af.parse_disposable_origin("http://localhost:3000").kind, "loopback")
         self.assertEqual(af.parse_disposable_origin("http://[::1]:8080").origin, "http://[::1]:8080")
-        t = af.parse_disposable_origin("http://web:8080", docker_network="openfdd-zap-af-1a2b3c")
+        t = af.parse_disposable_origin("http://central:8080", docker_network="openfdd-zap-af-1a2b3c")
         self.assertEqual(t.kind, "docker_network")
+        with self.assertRaises(af.ScopeError):
+            af.parse_disposable_origin("http://web:8080", docker_network="openfdd-zap-af-1a2b3c")
 
     def test_scope_regex_is_anchored_and_escaped(self):
         t = af.parse_disposable_origin(ORIGIN)
@@ -399,6 +401,34 @@ class ZapAfScopeTest(unittest.TestCase):
         ):
             with self.subTest(url=url):
                 self.assertFalse(t.in_scope(url))
+
+
+class OpenApiStagingTest(unittest.TestCase):
+    def test_fetches_candidate_openapi_from_central_internal_network(self):
+        network = "openfdd-qual-zap-qa20261103ab12_qual-private"
+        target = af.parse_disposable_origin("http://central:8080", docker_network=network)
+        candidate = json.dumps({
+            "openapi": "3.1.0",
+            "info": {"title": "candidate", "version": "4.0.10"},
+            "paths": {"/api/candidate-only": {"get": {}}},
+        })
+        captured = {}
+
+        def fake(cmd, *, env, timeout_s, cwd=None, container_name=None, stdin_bytes=None):
+            captured.update(cmd=cmd, env=env, timeout_s=timeout_s, name=container_name)
+            return af.ProcResult(returncode=0, stdout=candidate, stderr="")
+
+        with tempfile.TemporaryDirectory() as td, mock.patch.object(af, "run_owned_process", side_effect=fake):
+            work = Path(td)
+            ok, detail = af.stage_openapi_spec(
+                work_dir=work, target=target, budget=af.Budget(600, 10), docker_network=network
+            )
+            self.assertTrue(ok, detail)
+            self.assertIn("http://central:8080/openapi.json", captured["cmd"])
+            self.assertEqual(captured["cmd"][captured["cmd"].index("--network") + 1], network)
+            staged = json.loads((work / "openapi.json").read_text())
+            self.assertIn("/api/candidate-only", staged["paths"])
+            self.assertEqual(staged["servers"], [{"url": "http://central:8080"}])
 
     def test_child_env_strips_proxies_and_credentials(self):
         with mock.patch.dict(
@@ -1167,7 +1197,7 @@ class ZapAfSecretCanaryTest(ExecuteHarness):
 
     def test_docker_preflight_passes_credential_on_stdin_not_argv(self):
         canary = self.canary()
-        target = af.parse_disposable_origin("http://web:8080", docker_network="openfdd-zap-af-t1")
+        target = af.parse_disposable_origin("http://central:8080", docker_network="openfdd-zap-af-t1")
         captured = {}
 
         def fake(cmd, *, env, timeout_s, cwd=None, container_name=None, stdin_bytes=None):

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Backup → empty disposable volumes → restore, on the portal stack
-# (deployment profile `cloud_portal`: central + web + Timescale from GHCR).
+# (central + Timescale from GHCR; central `/app/` is the product UI).
 #
 # Proves that the Timescale historian came back (per-site row count + md5 of a
 # known fixture site's samples, plus the total sample count) and that the
@@ -95,7 +95,7 @@ echo "== Record pre-backup state =="
 FP_BEFORE="$(portal_site_fingerprint "$SITE")"
 TOTAL_BEFORE="$(portal_psql "SELECT count(*) FROM sample")"
 ID_BEFORE="$(identity_state "$ART/identity_before")"
-portal_compose stop central web >/dev/null
+portal_compose stop central >/dev/null
 MANIFEST_BEFORE="$(workspace_manifest)"
 CP_BEFORE="$(control_plane_hashes)"
 [[ -n "$CP_BEFORE" ]] || portal_die "control plane files missing before backup"
@@ -140,7 +140,7 @@ portal_psql "SELECT timescaledb_post_restore()" >/dev/null
 echo "pg_restore rc=$RESTORE_RC (see pg_restore.log)"
 
 echo "== Restore workspace onto a fresh volume =="
-portal_compose up --no-start --no-build central web >/dev/null
+portal_compose up --no-start --no-build central >/dev/null
 ws_files="$(portal_volume_run "$WS_VOL" ro sh -c 'find /w -type f | wc -l' | tr -d ' ')"
 [[ "$ws_files" == "0" ]] || portal_die "fresh workspace volume is not empty ($ws_files files)"
 portal_volume_run "$WS_VOL" rw tar -C /w --numeric-owner -xzpf - <"$BK/workspace.tgz"
@@ -152,7 +152,7 @@ else
   portal_step restore.workspace_manifest FAIL "workspace file manifest differs"
 fi
 
-echo "== Boot central + web on the restored state =="
+echo "== Boot central on the restored state =="
 portal_compose up -d --no-build >/dev/null
 portal_wait_health 240
 
