@@ -61,6 +61,7 @@ mod rule_catalog_fixtures;
 mod runtime_weekly_fixtures;
 #[cfg(test)]
 mod sat_pairing_fixtures;
+mod security_well_known;
 mod series_binding;
 mod si_api_response;
 mod si_cutover_admin;
