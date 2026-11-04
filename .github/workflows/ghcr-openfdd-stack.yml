@@ -68,10 +68,31 @@ jobs:
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: |
+          set -euo pipefail
           cargo test -p openfdd-central r1484_execute_cycle_holds_checkpoint_until_interval_check_recovers -- --test-threads=1
           cargo test -p openfdd-central r_wave_d_multi_hour_earlier_chunk_holds_checkpoint -- --test-threads=1
-          cargo test -p openfdd-central -- --skip fixture_acceptance
+          cargo test -p openfdd-central -- --skip fixture_acceptance --test-threads=2
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
+
+      - name: Ingest scope receipts (Postgres pass required)
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+          OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED: "1"
+        run: |
+          set -euo pipefail
+          cargo test -p openfdd-central ingest_idempotency_backfill_and_metrics_are_tenant_scoped -- --nocapture --test-threads=1 \
+            2>&1 | tee scope_receipt.log
+          grep -q 'SCOPE_TEST_RECEIPT phase=memory' scope_receipt.log
+          grep -q 'SCOPE_TEST_RECEIPT phase=postgres' scope_receipt.log
+
+      - name: In-process parallel ingest interaction (bounded)
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+          OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED: "1"
+        run: |
+          set -euo pipefail
+          chmod +x scripts/ci/run_ingest_parallel_interaction_rounds.sh
+          ./scripts/ci/run_ingest_parallel_interaction_rounds.sh
 
       - name: Static default portal + React rollback image
         run: |
