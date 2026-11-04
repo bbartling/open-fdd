@@ -48,7 +48,7 @@ export function displayName(point) {
 }
 
 export function unitLabel(point) {
-  return point.unit || "";
+  return point?.unit ?? "";
 }
 
 export function normalizeTags(rawTags, role) {

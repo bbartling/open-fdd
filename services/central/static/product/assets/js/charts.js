@@ -152,6 +152,10 @@ export function renderTempTrend(points, history, rangeHours) {
   const temps = tempRoles(points);
   const chart = chartEl("tempChart");
   if (!chart) return;
+  if (!temps.length) {
+    chart.clear();
+    return;
+  }
   const bucket = rangeHours > 24 ? 5 * 60_000 : 60_000;
   chart.setOption(
     {
