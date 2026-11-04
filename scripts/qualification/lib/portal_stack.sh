@@ -12,7 +12,9 @@
 
 PORTAL_QUAL_COMPOSE_MIN="2.24.4"
 PORTAL_ALPINE_IMAGE="${OPENFDD_QUAL_ALPINE_IMAGE:-alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc}"
+PORTAL_CURL_IMAGE="${OPENFDD_QUAL_CURL_IMAGE:-curlimages/curl:8.5.0}"
 PORTAL_COMPOSE_PROFILES=()
+PORTAL_COMPOSE_EXTRA=()
 PORTAL_QUAL_SECRET_VARS=(
   OPENFDD_JWT_SECRET OPENFDD_ADMIN_PASSWORD OPENFDD_AGENT_PASSWORD
   OPENFDD_TIMESCALE_PASSWORD OPENFDD_DATABASE_URL OPENFDD_PROVIDER_SITES
@@ -79,8 +81,15 @@ portal_stack_init() {
   PORTAL_STEPS="$ART/steps.jsonl"
   : >"$PORTAL_STEPS"
   portal_py plan --prefix "$PORTAL_PREFIX" >"$PORTAL_PLAN"
-  PORTAL_CENTRAL_PORT="$(portal_free_port)"
-  PORTAL_BASE="http://127.0.0.1:${PORTAL_CENTRAL_PORT}"
+  if [[ "${PORTAL_QUAL_INTERNAL:-}" == "1" ]]; then
+    PORTAL_COMPOSE_EXTRA=(-f "$ROOT/docker/compose.portal-qual-internal.yml")
+    PORTAL_CENTRAL_PORT="0"
+    PORTAL_BASE="http://central:8080"
+  else
+    PORTAL_COMPOSE_EXTRA=()
+    PORTAL_CENTRAL_PORT="$(portal_free_port)"
+    PORTAL_BASE="http://127.0.0.1:${PORTAL_CENTRAL_PORT}"
+  fi
 
   jwt="$(portal_py secret --bytes 48)"
   admin_pw="$(portal_py secret --bytes 32)"
@@ -121,7 +130,20 @@ portal_compose() {
     -f "$ROOT/docker/compose.portal.yml" \
     -f "$ROOT/docker/compose.timescale.yml" \
     -f "$ROOT/docker/compose.portal-qual.yml" \
+    "${PORTAL_COMPOSE_EXTRA[@]}" \
     "$@"
+}
+
+# HTTP from the host: loopback publish (default) or central's network namespace.
+portal_http() {
+  if [[ "${PORTAL_QUAL_INTERNAL:-}" == "1" ]]; then
+    local cid
+    cid="$(portal_compose ps -q central | head -n1)"
+    [[ -n "$cid" ]] || portal_die "central container missing for internal-only HTTP"
+    docker run --rm --network "container:${cid}" "$PORTAL_CURL_IMAGE" "$@"
+  else
+    curl "$@"
+  fi
 }
 
 portal_stack_pull() {
@@ -132,7 +154,7 @@ portal_stack_pull() {
 
 portal_wait_health() {
   local deadline=$((SECONDS + ${1:-180}))
-  until curl -fsS --max-time 5 "$PORTAL_BASE/api/health" >/dev/null 2>&1; do
+  until portal_http -fsS --max-time 5 "$PORTAL_BASE/api/health" >/dev/null 2>&1; do
     if (( SECONDS >= deadline )); then
       portal_compose ps >&2 || true
       portal_compose logs --no-color --tail 80 central >&2 || true
@@ -253,7 +275,7 @@ portal_api() {
   if [[ -n "$body" ]]; then
     args+=(-H "Content-Type: $ctype" --data-binary "@$body")
   fi
-  curl "${args[@]}" "$PORTAL_BASE$path" >"$PORTAL_PRIV/last_status" 2>/dev/null \
+  portal_http "${args[@]}" "$PORTAL_BASE$path" >"$PORTAL_PRIV/last_status" 2>/dev/null \
     || echo 000 >"$PORTAL_PRIV/last_status"
   cat "$out" 2>/dev/null || true
   rm -f "$out"

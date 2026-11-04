@@ -81,12 +81,18 @@ else
 fi
 central_ports="$(docker port "$(portal_compose ps -q central)" 2>/dev/null || true)"
 ts_ports="$(docker port "$(portal_compose ps -q timescale)" 2>/dev/null || true)"
-if [[ "$central_ports" =~ ^8080/tcp\ \-\>\ 127\.0\.0\.1:[0-9]+$ && -z "$ts_ports" ]]; then
+if [[ "${PORTAL_QUAL_INTERNAL:-}" == "1" ]]; then
+  if [[ -z "$central_ports" && -z "$ts_ports" ]]; then
+    portal_step deployment.exposure.private_central_timescale PASS "internal qual-private only; no host ports published"
+  else
+    portal_step deployment.exposure.private_central_timescale FAIL "internal mode must not publish host ports (central=$central_ports timescale=$ts_ports)"
+  fi
+elif [[ "$central_ports" =~ ^8080/tcp\ \-\>\ 127\.0\.0\.1:[0-9]+$ && -z "$ts_ports" ]]; then
   portal_step deployment.exposure.private_central_timescale PASS "central loopback-only; Timescale has no host port"
 else
   portal_step deployment.exposure.private_central_timescale FAIL "central must publish only 8080/tcp → 127.0.0.1:<port>; timescale must be unpublished (central=$central_ports timescale=$ts_ports)"
 fi
-unauth_status="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PORTAL_BASE/api/tenants" || echo 000)"
+unauth_status="$(portal_http -s -o /dev/null -w '%{http_code}' --max-time 10 "$PORTAL_BASE/api/tenants" || echo 000)"
 if [[ "$unauth_status" == "401" ]]; then
   portal_step deployment.auth.jwt_required PASS "anonymous /api/tenants → 401"
 else

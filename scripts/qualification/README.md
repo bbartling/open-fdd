@@ -176,9 +176,11 @@ What one run does:
    are scrubbed from artifacts.
 2. Starts `docker/compose.portal.yml` + `compose.timescale.yml` +
    `compose.portal-qual.yml`. Central and Timescale sit on an internal network
-   with no internet route. Central's HTTP port is published only to
-   `127.0.0.1:<free port>` for the qualification client. The NF emulator shares
-   central's network namespace at
+   with no internet route. By default Central's HTTP port is published only to
+   `127.0.0.1:<free port>` for the qualification client. Set
+   `PORTAL_QUAL_INTERNAL=1` to keep Central on `qual-private` only (no host
+   publish); HTTP clients use `portal_http` via the central network namespace.
+   The NF emulator shares central's network namespace at
    `http://127.0.0.1:18089`, the only provider origin configured. No real
    portal credentials or connections exist.
 3. Creates tenants A and B plus a viewer and an operator per tenant through
