@@ -51,6 +51,26 @@ static TEST_AFDD_REGISTRY_CHUNK: Mutex<Option<Value>> = Mutex::new(None);
 #[cfg(test)]
 static TEST_INTERVAL_CONNECT_FAIL: Mutex<Option<String>> = Mutex::new(None);
 
+/// Records `run_scheduled_cycle` building ids when continuous timer tests run.
+#[cfg(test)]
+static TEST_CONTINUOUS_TICK_CYCLES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+#[cfg(test)]
+pub(crate) fn test_clear_continuous_tick_cycles() {
+    TEST_CONTINUOUS_TICK_CYCLES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
+}
+
+#[cfg(test)]
+pub(crate) fn test_continuous_tick_cycles() -> Vec<String> {
+    TEST_CONTINUOUS_TICK_CYCLES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+}
+
 /// Polls `from` into `into` until either is set or the guard drops (M70-01).
 struct CancelBridge {
     stop: Arc<AtomicBool>,
@@ -397,6 +417,11 @@ impl AfddSchedulerRuntime {
     }
 
     async fn run_scheduled_cycle(&self, building_id: &str) -> Result<Option<AfddCycleRecord>> {
+        #[cfg(test)]
+        TEST_CONTINUOUS_TICK_CYCLES
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(building_id.to_string());
         let config = self.config_snapshot();
         if config.mode != AfddMode::Continuous {
             return Ok(None);
@@ -1347,6 +1372,28 @@ async fn scheduler_backfill(
     }
 }
 
+pub(crate) async fn continuous_timer_tick(runtime: &AfddSchedulerRuntime) {
+    for building_id in runtime.scheduled_building_ids() {
+        match runtime.run_scheduled_cycle(&building_id).await {
+            Ok(Some(record)) => info!(
+                scope = %record.scope,
+                analyzed_through = %record.end_utc,
+                catch_up = record.catch_up,
+                "continuous AFDD cycle completed"
+            ),
+            Ok(None) => {}
+            Err(error) => {
+                warn!(building_id = %building_id, %error, "continuous AFDD cycle failed");
+                runtime
+                    .status
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .last_error = Some(error.to_string());
+            }
+        }
+    }
+}
+
 pub fn spawn(runtime: Arc<AfddSchedulerRuntime>) -> Option<tokio::task::JoinHandle<()>> {
     if runtime.config_snapshot().mode != AfddMode::Continuous {
         info!("AFDD scheduler is in bulk mode; continuous timer is disabled");
@@ -1357,25 +1404,7 @@ pub fn spawn(runtime: Arc<AfddSchedulerRuntime>) -> Option<tokio::task::JoinHand
         interval.tick().await;
         loop {
             interval.tick().await;
-            for building_id in runtime.scheduled_building_ids() {
-                match runtime.run_scheduled_cycle(&building_id).await {
-                    Ok(Some(record)) => info!(
-                        scope = %record.scope,
-                        analyzed_through = %record.end_utc,
-                        catch_up = record.catch_up,
-                        "continuous AFDD cycle completed"
-                    ),
-                    Ok(None) => {}
-                    Err(error) => {
-                        warn!(building_id = %building_id, %error, "continuous AFDD cycle failed");
-                        runtime
-                            .status
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .last_error = Some(error.to_string());
-                    }
-                }
-            }
+            continuous_timer_tick(runtime.as_ref()).await;
         }
     }))
 }
@@ -1728,6 +1757,71 @@ CREATE INDEX IF NOT EXISTS fdd_run_site_rule_idx
         .resolve_scheduled_buildings(&known)
         .expect_err("csv in OPENFDD_AFDD_BUILDING_IDS");
         assert!(startup_err.to_string().contains("NF provider site"));
+        let _ = tsdb.purge_building(&csv_only).await;
+        std::env::remove_var("OPENFDD_PROVIDER_SITES");
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize OPENFDD_* env while the continuous timer tick fixture runs"
+    )]
+    #[tokio::test]
+    async fn t1403_continuous_timer_tick_csv_site_not_scheduled() {
+        let Some(url) = fixture_database_url() else {
+            eprintln!("skip t1403 tick: OPENFDD_LIFECYCLE_DATABASE_URL unset");
+            return;
+        };
+        let _lock = crate::test_env_lock::lock_env();
+        let prov = format!("p403t{}", uuid::Uuid::new_v4().simple());
+        let csv_only = format!("csv403t{}", uuid::Uuid::new_v4().simple());
+        for id in [&prov, &csv_only] {
+            assert_disposable(id);
+        }
+        let sites_json = format!(
+            r#"[{{"building_id":"{prov}","tenant_id":"tenant-a","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"}}]"#
+        );
+        std::env::set_var("OPENFDD_PROVIDER_SITES", &sites_json);
+        std::env::set_var("OPENFDD_DATABASE_URL", &url);
+        std::env::set_var("OPENFDD_HISTORIAN", "timescale");
+        let storage = tempfile::tempdir().expect("afdd state dir");
+        std::env::set_var(
+            "OPENFDD_STORAGE_URL",
+            format!("file://{}", storage.path().display()),
+        );
+        let state = AppState::new();
+        let tsdb = Tsdb::connect(&url).await.expect("connect");
+        ensure_schema(&tsdb).await;
+        tsdb.ensure_site_building(&csv_only)
+            .await
+            .expect("csv-only site row");
+        let store = CanonicalStateStore::from_env().expect("state store");
+        let runtime = AfddSchedulerRuntime {
+            config: Mutex::new(AfddConfig {
+                mode: AfddMode::Continuous,
+                ..AfddConfig::default()
+            }),
+            store,
+            scope_locks: DashMap::new(),
+            status: Mutex::new(RuntimeStatus::default()),
+            scheduled_buildings: Mutex::new(Vec::new()),
+            chunk_env: AfddChunkEnv::from_env(),
+        };
+        runtime
+            .validate_scheduled_buildings(&state)
+            .expect("schedule provider sites");
+        test_clear_continuous_tick_cycles();
+        continuous_timer_tick(&runtime).await;
+        continuous_timer_tick(&runtime).await;
+        let calls = test_continuous_tick_cycles();
+        assert!(
+            !calls.iter().any(|id| id == &csv_only),
+            "csv-only site must not receive scheduled cycles: {calls:?}"
+        );
+        assert_eq!(
+            calls.iter().filter(|id| *id == &prov).count(),
+            2,
+            "provider site should run each tick: {calls:?}"
+        );
         let _ = tsdb.purge_building(&csv_only).await;
         std::env::remove_var("OPENFDD_PROVIDER_SITES");
     }
