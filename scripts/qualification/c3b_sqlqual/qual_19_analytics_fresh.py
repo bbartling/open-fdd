@@ -15,11 +15,36 @@ from scripts.stress.si_cutover import analytics_parity as ap  # noqa: E402
 from scripts.stress.si_cutover import ci_analytics_p2 as cap2  # noqa: E402
 from scripts.stress.si_cutover import ci_fixtures_lib as cfl  # noqa: E402
 
+# Bodies that may legitimately return empty rows on some fixtures (inventory snapshot).
+EMPTY_ALLOWED_STEMS = frozenset({"plant_health_inventory"})
+
 
 def _metric() -> dict[str, Any]:
     import json
 
     return json.loads((REPO / "sql" / "contract" / "metric_units.json").read_text(encoding="utf-8"))
+
+
+def compare_stem_rows(
+    stem: str,
+    sql_norm: list[list[Any]],
+    oracle_norm: list[list[Any]],
+    *,
+    dataset_id: str,
+) -> tuple[int, list[str]]:
+    """Full declared-column compare for one analytics body (all columns including fault_flag)."""
+    n, errors = ap.compare_rows(
+        "C3-analytics-fresh",
+        dataset_id,
+        stem,
+        "sql_pg",
+        sql_norm,
+        "independent_oracle",
+        oracle_norm,
+    )
+    if n == 0 and (sql_norm or oracle_norm) and stem not in EMPTY_ALLOWED_STEMS:
+        errors.append(f"{dataset_id}/{stem}: zero comparisons with nonempty rows")
+    return n, errors
 
 
 def run_offline() -> list[QualCell]:
@@ -114,6 +139,7 @@ def run_postgres(conn) -> list[QualCell]:
     comparisons = 0
     errors: list[str] = []
     datasets = list(ap.iter_analytics_datasets())
+    per_body_comparisons: dict[str, int] = {stem: 0 for stem in stems}
     for ds in datasets:
         conn.rollback()
         si_frame = cfl.frame_to_si(ds.ip_frame, metric)
@@ -152,51 +178,18 @@ def run_postgres(conn) -> list[QualCell]:
                 metric=metric,
             )
             oracle_norm = ap.norm_rows(stem, oracle_rows)
-            if stem == "sensor_faults_staleness":
-                flag_i = [c for c, _k in ap.STEM_COLUMNS[stem]].index("fault_flag")
-                sql_trim = [r[:flag_i] for r in sql_norm]
-                oracle_trim = [r[:flag_i] for r in oracle_norm]
-                if len(sql_trim) != len(oracle_trim):
-                    errors.append(
-                        f"{ds.dataset_id}/{stem}: row count sql={len(sql_trim)} oracle={len(oracle_trim)}"
-                    )
-                    continue
-                row_cmp = 0
-                for g, l in zip(sorted(sql_trim, key=repr), sorted(oracle_trim, key=repr)):
-                    row_cmp += 1
-                    if len(g) != len(l):
-                        errors.append(f"{ds.dataset_id}/{stem}: width mismatch")
-                        break
-                    for a, b in zip(g, l):
-                        if isinstance(a, float) and isinstance(b, float):
-                            if abs(a - b) > 1e-6 and not (abs(a) < 1e-9 and abs(b) < 1e-9):
-                                errors.append(
-                                    f"{ds.dataset_id}/{stem}: {a!r} != {b!r}"
-                                )
-                                break
-                        elif a != b:
-                            errors.append(f"{ds.dataset_id}/{stem}: {a!r} != {b!r}")
-                            break
-                comparisons += row_cmp
-                continue
-            n, e = ap.compare_rows(
-                "C3-analytics-fresh",
-                ds.dataset_id,
-                stem,
-                "sql_pg",
-                sql_norm,
-                "independent_oracle",
-                oracle_norm,
+            n, stem_errors = compare_stem_rows(
+                stem, sql_norm, oracle_norm, dataset_id=ds.dataset_id
             )
             comparisons += n
-            if e:
-                errors.extend(e[:2])
-            elif n == 0:
-                if not sql_norm and not oracle_norm:
-                    continue
-                if stem in ("plant_health_inventory",):
-                    continue
-                errors.append(f"{ds.dataset_id}/{stem}: zero comparisons")
+            per_body_comparisons[stem] += n
+            if stem_errors:
+                errors.extend(stem_errors[:2])
+    missing_bodies = [
+        stem for stem, count in per_body_comparisons.items() if count == 0 and stem not in EMPTY_ALLOWED_STEMS
+    ]
+    if missing_bodies:
+        errors.insert(0, f"required analytics bodies without comparisons: {sorted(missing_bodies)}")
     if errors:
         return [
             QualCell(
@@ -211,6 +204,6 @@ def run_postgres(conn) -> list[QualCell]:
             "19_pg_fresh_sql_vs_oracle_all_bodies",
             "PASS",
             comparisons=comparisons,
-            detail=f"stems={len(stems)} datasets={len(datasets)}",
+            detail=f"stems={len(stems)} datasets={len(datasets)} per_body={per_body_comparisons}",
         )
     ]

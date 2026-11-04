@@ -18,6 +18,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from scripts.qualification.c3a import runner_identities as rid  # noqa: E402
+from scripts.qualification.c3a import rule_tuner_matrix as rtm  # noqa: E402
 from scripts.stress.si_cutover import baseline_io as bio  # noqa: E402
 from scripts.stress.si_cutover import ci_fixtures_lib as cfl  # noqa: E402
 from scripts.stress.si_cutover import ci_timescale_sql as cts  # noqa: E402
@@ -399,106 +400,53 @@ def qual_05_mask_independence() -> QualCell:
     return cell
 
 
-def _rule_tuner_matrix_rows() -> list[dict[str, Any]]:
-    catalog = json.loads((REPO / "sql" / "fdd" / "tuning_catalog.json").read_text(encoding="utf-8"))
-    registry = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
-    rows: list[dict[str, Any]] = []
-    for entry in catalog.get("rules") or []:
-        rid_key = str(entry.get("rule_id") or "")
-        reg = registry.get(rid_key)
-        if reg is None:
-            continue
-        outputs = list(entry.get("output_columns") or [])
-        params = entry.get("parameters") or {}
-        for pname, pspec in params.items():
-            rows.append(
-                {
-                    "rule_id": rid_key,
-                    "typed_output": outputs,
-                    "tuner": str(pname),
-                    "tuner_effect": str(pspec.get("effect") or ""),
-                    "pandas_function": entry.get("pandas_function"),
-                    "status": "PENDING",
-                    "compared": 0,
-                }
-            )
-        if not params:
-            rows.append(
-                {
-                    "rule_id": rid_key,
-                    "typed_output": outputs,
-                    "tuner": None,
-                    "tuner_effect": "",
-                    "pandas_function": entry.get("pandas_function"),
-                    "status": "PENDING",
-                    "compared": 0,
-                }
-            )
-    return rows
-
-
 def qual_06_rule_matrix(conn) -> QualCell:
-    cell = QualCell(check_id="SQL-QUAL-06", status="PASS")
-    matrix_rows = _rule_tuner_matrix_rows()
+    cell = QualCell(check_id="SQL-QUAL-06", status="INCOMPLETE")
+    matrix_rows = rtm.build_matrix_rows()
     cell.evidence["matrix_rows"] = len(matrix_rows)
     cell.checks += 1
 
-    # Structural: every registry rule with pandas twin appears in matrix.
     registry = cfl.load_rule_registry()
     pandas_rules = {str(r["rule_id"]) for r in cfl.pandas_rules(registry)}
-    matrix_rules = {str(r["rule_id"]) for r in matrix_rows}
+    matrix_rules = {r.rule_id for r in matrix_rows}
     dropped = sorted(pandas_rules - matrix_rules)
     if dropped:
         cell.errors.append(f"matrix missing pandas rules: {dropped[:5]}")
     cell.checks += len(pandas_rules)
 
-    sv_rate_rows = [r for r in matrix_rows if r["rule_id"] == "SV-RATE"]
-    for row in sv_rate_rows:
-        row["status"] = "BLOCKED"
-        if row.get("status") == "PASS":
-            cell.errors.append("SV-RATE must not earn PASS")
+    mutation_cmp, mutation_errs = rtm.mutation_self_credit_guard()
+    cell.comparisons += mutation_cmp
+    cell.errors.extend(mutation_errs)
 
-    compared = 0
-    if conn is not None:
-        from scripts.ci import unit_contract_lib as uc
+    result = rtm.run_matrix(conn)
+    cell.evidence.update(result["evidence"])
+    cell.evidence["cd_subset_smoke"] = result.get("cd_subset_smoke", "INCOMPLETE")
+    cell.comparisons += int(result.get("compared_cells") or 0)
+    cell.checks += int(result.get("required") or 0)
+    cell.errors.extend(result["errors"])
 
-        metric = uc.load_json(uc.METRIC_UNITS)
-        for spec in cfl.iter_dataset_specs():
-            if spec.building_id not in DB_DATASET_BUILDINGS:
-                continue
-            golden = cfl.build_golden_for_dataset(spec, cfl.pandas_rules(registry), metric, conn)
-            for row in matrix_rows:
-                if row["rule_id"] not in {str(r.get("rule_id")) for r in golden.get("pandas_fdd_daily") or []}:
-                    continue
-                if row.get("tuner_effect") == "unsupported":
-                    row["status"] = "BLOCKED"
-                    continue
-                row["status"] = "PASS"
-                row["compared"] = int(row.get("compared", 0)) + 1
-                compared += 1
-    else:
-        cell.evidence["db_hydration"] = False
-        for row in matrix_rows:
-            if row["rule_id"] in ("FC1", "FC2", "VAV-1") and row.get("tuner"):
-                row["status"] = "PENDING"
-
-    db_compared = compared
-    cell.comparisons = db_compared
-    cell.evidence["rule_tuner_matrix_sample"] = matrix_rows[:12]
-    cell.evidence["expected_change_ledger"] = _load_ledger()
-
-    # Ledger-driven expected change: FC1 mode delay default (#1469).
+    # Ledger-driven expected change: FC1 mode delay default (#1469) — historical A/B vs C/D only.
     rules = {str(r["rule_id"]): r for r in registry}
     fc1_params = cfl.rule_params_from_registry(rules["FC1"])
     if psp.p0_value_mismatch_reason("FC1", fc1_params) != psp.MODE_DELAY_DEFAULT_VS_STARTUP:
         cell.errors.append("FC1 expected-change ledger probe missing mode_delay default reason")
     else:
         cell.comparisons += 1
+    cell.evidence["expected_change_ledger"] = _load_ledger()
 
     if cell.errors:
         cell.status = "FAIL"
-    elif db_compared == 0 and conn is None:
-        cell.evidence["db_matrix"] = "PENDING until disposable Postgres is available"
+    elif conn is None or int(result.get("compared_cells") or 0) == 0:
+        cell.status = "INCOMPLETE"
+        cell.evidence["db_matrix"] = (
+            "PENDING until disposable Postgres is available"
+            if conn is None
+            else "zero runner C/D compared cells"
+        )
+    elif result["status"] == "PASS":
+        cell.status = "PASS"
+    else:
+        cell.status = result["status"]
     return cell
 
 

@@ -13,7 +13,7 @@
   "stay_rust_oss": true,
   "soft_open_neq_fq": true,
   "file_count": 110,
-  "pack_sha256": "82efa9027adbe0e3e75e64365474b238e74cc0fed307caf6187b80063c7d3422",
+  "pack_sha256": "b83dd5f7af724fb5e370d26b54961a105ea644bdf9b39802e3f112a2b85c68c8",
   "files": [
     {
       "path": "sql/schema/00_extensions.sql",
@@ -317,8 +317,8 @@
     },
     {
       "path": "sql/fdd/postgres/rules/sv_range.sql",
-      "sha256": "9ed617940f19583fef271d01fb17265c2bfa60d5d5e311a4137754b438bb447e",
-      "bytes": 8917
+      "sha256": "1265833c03abd542a3327015d1abf8484312ec2b48c53d78690dd6eb342baf92",
+      "bytes": 9257
     },
     {
       "path": "sql/fdd/postgres/rules/sv_rate.sql",

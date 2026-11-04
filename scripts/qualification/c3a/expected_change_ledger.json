@@ -9,19 +9,56 @@
       "runner_c_d_expected": "max(mode_delay_min, startup_delay_min) with product default 10 min from runtime_defaults.json",
       "independent_oracle": "tests/qualification/fc1_mode_delay_timeline_reference.py",
       "harness_probe": "product_sql_params.MODE_DELAY_DEFAULT_VS_STARTUP",
+      "product_change": "mode delay consolidation (see #1437 / runtime_defaults.json); not PR #1470",
       "waive_four_way_agreement": false,
       "compare_against": "independent_timeline_and_explicit_default"
     },
     {
       "issue": 1470,
-      "title": "Startup delay extends mode holdoff; defaults consolidated in SQL render",
-      "affected_rules": ["FC1", "FC2", "FC3", "FC4", "FC5", "FC6", "FC7", "FC8", "FC9", "FC10", "FC11", "FC12", "FC13", "FC14", "FC15", "FC13-SAT-HIGH"],
-      "runner_b_expected": "35c17ac aggregate SQL could disagree with overlay when only aggregate mutated",
-      "runner_d_expected": "shipped aggregate and fault-series overlay both execute; coverage preserved",
-      "independent_oracle": "scripts/stress/si_cutover/ci_timescale_sql.execute_sql_rule_daily",
-      "harness_probe": "SQL-QUAL-04 aggregate_vs_overlay",
+      "title": "FC6 min_cfm_design SI defaults follow LPS_PER_CFM contract (0.471947 L/s per cfm)",
+      "affected_rules": ["FC6"],
+      "parameters": ["min_cfm_design"],
+      "product_change": "PR #1470 (merge 7d800da2): align FC6 min_cfm_design default, max, and step with sql/contract/metric_units.json LPS_PER_CFM",
+      "runner_b_expected": "frozen 35c17ac or pre-1470 defaults could disagree with contract L/s per cfm",
+      "runner_c_d_expected": "current pandas FC6 and sql/fdd/postgres/rules/fc6.sql use the same contract-aligned min_cfm_design tuner bounds",
+      "independent_oracle": "tests/qualification/fc6_flow_boundary_reference.py + tests/units/test_lps_per_cfm_contract.py",
+      "harness_probe": "tests/qualification/test_fc6_flow_default_coherence.py",
+      "waive_four_way_agreement": false,
+      "compare_against": "contract_lps_per_cfm_and_boundary_reference"
+    },
+    {
+      "issue": 1477,
+      "title": "Runner D daily SQL executes aggregate render plus fault-series overlay",
+      "affected_rules": ["FC1"],
+      "product_change": "PR #1477 (merge 86a68904) documents product path scripts/stress/si_cutover/ci_timescale_sql.execute_sql_rule_daily (aggregate + rewrite_fault_series overlay)",
+      "runner_b_expected": "frozen 35c17ac product SQL could disagree with overlay when only aggregate SQL was mutated",
+      "runner_d_expected": "shipped SQL runs both original aggregate and fault-series overlay; daily fault/covered seconds reflect overlay confirmation",
+      "independent_oracle": "scripts/qualification/c3a/sql_qual_harness.qual_04_aggregate_overlay",
+      "harness_probe": "SQL-QUAL-04",
       "waive_four_way_agreement": false,
       "compare_against": "paired_aggregate_and_overlay_seconds"
+    },
+    {
+      "issue": 1408,
+      "title": "SV-RANGE range_scale_* must use midpoint half-width geometry (pandas _sweep_range)",
+      "affected_rules": ["SV-RANGE"],
+      "parameters": ["range_scale_temperature", "range_scale_humidity", "range_scale_pressure"],
+      "product_change": "PR #1481: sql/fdd/postgres/rules/sv_range.sql midpoint ± half-width × scale (scale=1 numerically unchanged)",
+      "runner_c_d_expected": "current pandas C and current SQL D agree on default and non-default scale tuners",
+      "independent_oracle": "open_fdd.rules.cookbook_catalog._sweep_range vs sql/fdd/postgres/rules/sv_range.sql",
+      "harness_probe": "rule_tuner_matrix daily C/D compare (no waiver)",
+      "waive_four_way_agreement": false,
+      "compare_against": "current_implementation_cd_agreement"
+    },
+    {
+      "issue": 1284,
+      "title": "confirm_min catalog minutes map to confirm_seconds on both engines without double conversion",
+      "parameters": ["confirm_min"],
+      "runner_c_d_expected": "default and non-default confirm_min tuner cases agree on elapsed confirmation seconds",
+      "independent_oracle": "registry confirm_seconds + catalog confirm_min with explicit ×60 hook",
+      "harness_probe": "rule_tuner_matrix boundary/effective confirm checks (no waiver)",
+      "waive_four_way_agreement": false,
+      "compare_against": "current_implementation_cd_agreement"
     }
   ]
 }

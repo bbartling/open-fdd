@@ -4,14 +4,14 @@
   "processing_abi": "metric-c-v2",
   "scientific_contract_id": "openfdd-sql-schema-fdd-v1",
   "scientific_contract_version": "4.0.8-softopen.1",
-  "scientific_pack_sha256": "82efa9027adbe0e3e75e64365474b238e74cc0fed307caf6187b80063c7d3422",
+  "scientific_pack_sha256": "b83dd5f7af724fb5e370d26b54961a105ea644bdf9b39802e3f112a2b85c68c8",
   "scientific_file_count": 110,
   "aggregate_digest_definition": {
     "scientific_pack_sha256": "For each path in sql/contract/manifest.json files[] in order: SHA256.update(path_utf8 + NUL + file_sha256_hex + NUL); final hex digest.",
     "distribution_sha256": "SHA256(scientific_pack_sha256_utf8 + NUL + companion_merkle + NUL); companion_merkle uses the same per-file update as scientific pack."
   },
-  "distribution_sha256": "7db7d2cc7fa24d5d482f3294dc3c53f8134bde7bf02b22bfd7352d3c1b13f94a",
-  "source_revision": "8d53d5d0e1ca1d6cadaac0893e1b6727a93fb1cb",
+  "distribution_sha256": "142f83680edbd97b9c415aa5aabc138c27cc3792dfad8ca3a5ad34870175059c",
+  "source_revision": "950d2daa02019e5b1769ca4f76534368fe9a1781",
   "companion_files": [
     {
       "path": "sql/fdd/tuning_catalog.json",
