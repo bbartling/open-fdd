@@ -343,7 +343,7 @@ mod tests {
         );
         let renamed_snap = CentralDatasetSnapshot {
             turtle: renamed,
-            ..snap.clone()
+            ..snap
         };
         let alt = project_ui_model_from_snapshot(&renamed_snap, "", Some(&inv)).expect("renamed");
         assert_eq!(baseline["equipment_count"], alt["equipment_count"]);
