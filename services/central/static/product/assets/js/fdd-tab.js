@@ -35,6 +35,7 @@ let statusFilter = "All";
 let selectedRuleId = "";
 let previewRows = DEFAULT_SERIES_PREVIEW_ROWS;
 let plotLineSeries = [];
+let roleUnitIndex = null;
 let rulesBound = false;
 let fddTabBound = false;
 
@@ -141,6 +142,7 @@ async function loadPlot() {
       built = fddPlotOption(rows, roles, body.has_confirmed_fault, {
         ruleId: selectedRuleId,
         equipmentId: equipId,
+        roleUnitIndex,
       });
     }
     mountChart($("fddChart"), built.option);
@@ -166,7 +168,7 @@ async function loadInspect() {
   );
   const samplingWindow = analyticsWindowFromSampling(mapping?.equipment ?? []);
   const rows = await fetchInspectSeries(buildingId, equipId, samplingWindow, roles);
-  const built = inspectChartOption(equipId, rows, roles);
+  const built = inspectChartOption(equipId, rows, roles, "metric", roleUnitIndex);
   $("inspectHost").style.height = `${built.heightPx}px`;
   mountChart($("inspectChart"), built.option);
 }
@@ -249,6 +251,7 @@ export async function onFddSiteChange(site, ctx) {
   buildingId = site;
   mapping = ctx.mapping;
   sessionConfig = ctx.sessionConfig;
+  roleUnitIndex = ctx.roleUnitIndex ?? null;
   rules = await getFddRules();
   results = await getFddResults(buildingId);
   const equips = ctx.model?.equips || [];

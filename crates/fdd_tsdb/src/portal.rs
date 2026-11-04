@@ -246,7 +246,15 @@ pub struct HistorianPoint {
     pub equip_type: Option<String>,
     pub openfdd_key: String,
     pub role: Option<String>,
+    /// Engineer overlay unit on `point_map` (sanctioned declaration).
     pub unit: Option<String>,
+    pub source_unit: Option<String>,
+    pub quantity: Option<String>,
+    pub declared_unit: Option<String>,
+    pub canonical_unit: Option<String>,
+    pub storage_unit: Option<String>,
+    pub unit_assessment: String,
+    pub unit_assessment_reason: Option<String>,
     pub portal_point_id: Option<String>,
     pub referenced: bool,
 }
@@ -435,10 +443,19 @@ impl Tsdb {
         let rows = sqlx::query(
             r#"
             SELECT pm.equipment_id, e.equip_type, pm.openfdd_key, pm.role, pm.unit,
-                   pm.portal_point_id, pm.referenced
+                   pm.source_unit, pm.quantity,
+                   pm.portal_point_id, pm.referenced,
+                   ls.unit AS storage_unit, ls.quality AS sample_quality
             FROM point_map pm
             LEFT JOIN equipment e
               ON e.building_id = pm.site_id AND e.equipment_id = pm.equipment_id
+            LEFT JOIN LATERAL (
+              SELECT s.unit, s.quality
+              FROM sample s
+              WHERE s.site_id = pm.site_id AND s.openfdd_key = pm.openfdd_key
+              ORDER BY s.ts DESC
+              LIMIT 1
+            ) ls ON true
             WHERE pm.site_id = $1
               AND pm.referenced = false
               AND EXISTS (
@@ -459,10 +476,19 @@ impl Tsdb {
         let rows = sqlx::query(
             r#"
             SELECT pm.equipment_id, e.equip_type, pm.openfdd_key, pm.role, pm.unit,
-                   pm.portal_point_id, pm.referenced
+                   pm.source_unit, pm.quantity,
+                   pm.portal_point_id, pm.referenced,
+                   ls.unit AS storage_unit, ls.quality AS sample_quality
             FROM point_map pm
             LEFT JOIN equipment e
               ON e.building_id = pm.site_id AND e.equipment_id = pm.equipment_id
+            LEFT JOIN LATERAL (
+              SELECT s.unit, s.quality
+              FROM sample s
+              WHERE s.site_id = pm.site_id AND s.openfdd_key = pm.openfdd_key
+              ORDER BY s.ts DESC
+              LIMIT 1
+            ) ls ON true
             WHERE pm.site_id = $1
             ORDER BY pm.equipment_id NULLS LAST, pm.openfdd_key
             "#,
@@ -531,12 +557,35 @@ impl Tsdb {
 }
 
 fn historian_point(row: &sqlx::postgres::PgRow) -> Result<HistorianPoint, TsdbError> {
+    let role: Option<String> = row.try_get("role")?;
+    let overlay_unit: Option<String> = row.try_get("unit")?;
+    let source_unit: Option<String> = row.try_get("source_unit")?;
+    let quantity: Option<String> = row.try_get("quantity")?;
+    let storage_unit: Option<String> = row.try_get("storage_unit")?;
+    let sample_quality: Option<String> = row.try_get("sample_quality")?;
+    let contract = fdd_core::units_contract::MetricUnitsContract::load_embedded()?;
+    let trace = crate::unit_trace::trace_unit_binding(
+        &contract,
+        role.as_deref(),
+        overlay_unit.as_deref(),
+        source_unit.as_deref(),
+        quantity.as_deref(),
+        storage_unit.as_deref(),
+        sample_quality.as_deref(),
+    );
     Ok(HistorianPoint {
         equipment_id: row.try_get("equipment_id")?,
         equip_type: row.try_get("equip_type")?,
         openfdd_key: row.try_get("openfdd_key")?,
-        role: row.try_get("role")?,
-        unit: row.try_get("unit")?,
+        role,
+        unit: overlay_unit,
+        source_unit: trace.source_unit,
+        quantity: trace.quantity,
+        declared_unit: trace.declared_unit,
+        canonical_unit: trace.canonical_unit,
+        storage_unit: trace.storage_unit,
+        unit_assessment: trace.unit_assessment,
+        unit_assessment_reason: trace.unit_assessment_reason,
         portal_point_id: row.try_get("portal_point_id")?,
         referenced: row.try_get("referenced")?,
     })

@@ -1,4 +1,5 @@
 import { apiFetch } from "./api.js";
+import { bindingFromPoint, buildRoleUnitIndex } from "./role-units.js";
 import { isBoolRole, normalizeTags, roleOf } from "./tags.js";
 import { confirmMinForRule as confirmMinForRuleImpl } from "./rule-params.js";
 import { loadModelProjection } from "./ttl-model.js";
@@ -19,7 +20,8 @@ export async function loadSiteData(buildingId) {
     loadModelProjection(buildingId, apiFetch).catch(() => null),
   ]);
   const model = buildOperationalModel(buildingId, mapping, historian, graphModel);
-  return { mapping, historian, sessionConfig, model, graphModel };
+  const roleUnitIndex = buildRoleUnitIndex(model.points);
+  return { mapping, historian, sessionConfig, model, graphModel, roleUnitIndex };
 }
 
 function historianIndex(historian) {
@@ -60,6 +62,22 @@ function mergeHistorianRow(point, histByKey) {
   return null;
 }
 
+function mergePointUnits(point, hist) {
+  if (!hist) return point;
+  const trace = bindingFromPoint(hist);
+  return {
+    ...point,
+    unit: hist.unit || point.unit || "",
+    source_unit: hist.source_unit || point.source_unit || "",
+    quantity: hist.quantity || point.quantity || "",
+    declared_unit: trace?.declared_unit || point.declared_unit || "",
+    canonical_unit: hist.canonical_unit || point.canonical_unit || "",
+    storage_unit: hist.storage_unit || point.storage_unit || "",
+    unit_assessment: hist.unit_assessment || point.unit_assessment || "",
+    unit_assessment_reason: hist.unit_assessment_reason || point.unit_assessment_reason || "",
+  };
+}
+
 function buildOperationalModel(buildingId, mapping, historian, graphModel) {
   const histByKey = historianIndex(historian);
   if (graphModel?.points?.length) {
@@ -76,15 +94,17 @@ function buildOperationalModel(buildingId, mapping, historian, graphModel) {
           : hist && isBoolRole({ role: p.role, kind: "Bool", tags: [] })
             ? "Bool"
             : p.kind || null;
-      return {
-        ...p,
-        siteRef: p.siteRef || buildingId,
-        tags,
-        unit: p.unit || hist?.unit || "",
-        kind,
-        openfddKey: hist?.openfdd_key,
-        latest: null,
-      };
+      return mergePointUnits(
+        {
+          ...p,
+          siteRef: p.siteRef || buildingId,
+          tags,
+          kind,
+          openfddKey: hist?.openfdd_key,
+          latest: null,
+        },
+        hist,
+      );
     });
     return {
       site: graphModel.site || { id: buildingId, name: buildingId },
@@ -136,7 +156,7 @@ function buildOperationalModel(buildingId, mapping, historian, graphModel) {
       if (!role) continue;
       const opaque = row.openfdd_key || `${equipId}::${role}`;
       const existing = pointByKey.get(`${equipId}::${role}`);
-      pointByKey.set(opaque, {
+      pointByKey.set(opaque, mergePointUnits({
         id: opaque,
         siteRef: buildingId,
         equipRef: equipId,
@@ -144,7 +164,6 @@ function buildOperationalModel(buildingId, mapping, historian, graphModel) {
         column: existing?.column || role,
         dis: existing?.dis || role,
         tags: existing?.tags?.length ? existing.tags : normalizeTags([], role),
-        unit: row.unit || existing?.unit || "",
         kind:
           row.kind === "Bool" || row.kind === "Number"
             ? row.kind
@@ -153,7 +172,7 @@ function buildOperationalModel(buildingId, mapping, historian, graphModel) {
               : "Number",
         latest: null,
         openfddKey: row.openfdd_key,
-      });
+      }, row));
     }
   }
   return {

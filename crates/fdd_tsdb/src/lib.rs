@@ -14,6 +14,7 @@ mod revision;
 mod runner;
 mod sample;
 pub mod si_cutover;
+pub mod unit_trace;
 pub mod writer;
 
 pub use client::{clear_shared_pool, database_url_from_env, SampleUpsertStats, Tsdb, TsdbError};
@@ -48,4 +49,8 @@ pub use si_cutover::{
     apply_sample_cutover_tx, contract as si_cutover_contract, dry_run_site,
     ensure_si_cutover_schema, invalidate_derived_results_tx, DerivedInvalidation, SiCutoverError,
     SiteCutoverResult, SiteDryRunReport,
+};
+pub use unit_trace::{
+    declared_unit_for_display, trace_unit_binding, UnitBindingTrace, UNIT_ASSESSED,
+    UNIT_NOT_ASSESSED,
 };

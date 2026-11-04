@@ -47,7 +47,14 @@ export function displayName(point) {
   return point.dis || point.column || point.role || "point";
 }
 
+import { NOT_ASSESSED_LABEL } from "./role-units.js";
+
 export function unitLabel(point) {
+  if (point?.unit_assessment && point.unit_assessment !== "assessed") {
+    return NOT_ASSESSED_LABEL;
+  }
+  const declared = point?.declared_unit || point?.unit;
+  if (declared) return declared;
   return point?.unit ?? "";
 }
 

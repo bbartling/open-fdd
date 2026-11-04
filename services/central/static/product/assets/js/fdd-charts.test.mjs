@@ -7,6 +7,7 @@ import {
   ruleResultChartOption,
   oatMeteoFddOption,
 } from "./fdd-charts.js";
+import { buildRoleUnitIndex } from "./role-units.js";
 import { basOverlayOption } from "./overview-rcx-charts.js";
 import { rcxOptionHasFaultLane, multiEquipmentTimeseriesOption } from "./rcx-vibe-charts.js";
 
@@ -18,6 +19,31 @@ describe("fdd-charts", () => {
   });
 
   it("ruleResultChartOption stacks unit families and fault lane", () => {
+    const roleUnitIndex = buildRoleUnitIndex([
+      {
+        equipRef: "AHU_1",
+        role: "zone_t",
+        quantity: "absolute_temperature",
+        declared_unit: "degC",
+        unit_assessment: "assessed",
+        canonical_unit: "degC",
+      },
+      {
+        equipRef: "AHU_1",
+        role: "fan_cmd",
+        quantity: "percent",
+        declared_unit: "%",
+        unit_assessment: "assessed",
+      },
+      {
+        equipRef: "AHU_1",
+        role: "duct_static",
+        quantity: "air_pressure",
+        declared_unit: "inH2O",
+        unit_assessment: "assessed",
+        canonical_unit: "Pa",
+      },
+    ]);
     const built = ruleResultChartOption(
       [
         {
@@ -38,6 +64,7 @@ describe("fdd-charts", () => {
         ruleId: "FC1",
         roles: ["zone_t", "fan_cmd", "duct_static"],
         confirmedFault: [0, 1],
+        roleUnitIndex,
       },
     );
     assert.ok(built.option);
