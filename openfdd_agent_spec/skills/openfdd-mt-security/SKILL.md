@@ -51,7 +51,7 @@ Plans: [`.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`](../../../.curs
 |---|-----|----------|
 | **V1** | Unauth `GET /api/tenants` used `dev_anonymous()` → **Admin** → full roster | When `OPENFDD_JWT_SECRET` set: **401** without Bearer. Membership filters tenants/buildings. Hub admin (`role=admin` + empty `tenant_ids`) sees all. Never Admin-via-anonymous for listing. |
 | **V2** | Unauth `capabilities` / `health/stack` / `building/snapshot` / `dashboard/summary` leaked MCP, protocols, paths, flags | These routes sit on the **JWT-protected** router. Unauth → **401**. Public readiness = `GET /api/health` only (lean). |
-| **V3** | CSP / HSTS / `security.txt` | Web nginx: CSP allows Google Fonts (`fonts.googleapis.com` / `fonts.gstatic.com`) + Plotly same-origin/`blob:`; HSTS when `X-Forwarded-Proto=https`; `/.well-known/security.txt` **text/plain** (not SPA HTML). Gate 34. |
+| **V3** | CSP / HSTS / `security.txt` / nosniff | Bare **central** serves `/.well-known/security.txt` as **text/plain** (GitHub private advisory contact) and sets `X-Content-Type-Options: nosniff` on every response (JSON, errors, static `/app/*`). Archived web nginx: CSP Fonts + Plotly; HSTS when `X-Forwarded-Proto=https`. Gate 34. |
 
 ## Endpoint → authz (quick matrix)
 
@@ -68,6 +68,7 @@ Plans: [`.cursor/plans/wave_o_known_bugs_patch_ce235993.plan.md`](../../../.curs
 
 ```bash
 cargo test -p openfdd-central --test preauth_disclosure
+cargo test -p openfdd-central --test response_security_headers
 # covers: anonymous_tenants_denied · tenants_scoped_by_membership ·
 #         anonymous_topology · health_stays_public_and_lean ·
 #         mt_isolation_matrix_select_and_datapath
