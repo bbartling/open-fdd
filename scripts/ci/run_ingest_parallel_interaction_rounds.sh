@@ -36,13 +36,7 @@ for round in $(seq 1 "$ROUNDS"); do
   echo "=== ingest parallel interaction round ${round}/${ROUNDS} ==="
   log="$(mktemp)"
   cargo test -p "$PACKAGE" -- --exact "${TEST_NAMES[@]}" --test-threads=8 2>&1 | tee "$log"
-  running_line="$(grep -E '^running [0-9]+ tests' "$log" | tail -1 || true)"
-  if [[ -z "$running_line" ]]; then
-    echo "INGEST_PARALLEL_RECEIPT round=${round} running_count=0 selected_names=${names_csv} expected_count=${EXPECTED_COUNT} verdict=FAIL reason=no_running_line"
-    rm -f "$log"
-    exit 1
-  fi
-  running_count="$(sed -E 's/^running ([0-9]+) tests.*/\1/' <<<"$running_line")"
+  running_count="$(grep -E '^running [0-9]+ tests' "$log" | sed -E 's/^running ([0-9]+) tests.*/\1/' | awk '{s+=$1} END {print s+0}')"
   echo "INGEST_PARALLEL_RECEIPT round=${round} running_count=${running_count} selected_names=${names_csv} expected_count=${EXPECTED_COUNT}"
   if [[ "$running_count" -eq 0 ]] || [[ "$running_count" -ne "$EXPECTED_COUNT" ]]; then
     echo "INGEST_PARALLEL_RECEIPT round=${round} verdict=FAIL reason=running_count_mismatch"
