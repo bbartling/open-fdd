@@ -18,8 +18,8 @@ export function roleOf(point) {
 export function isTemp(point) {
   if (has(point, "temp")) return true;
   const role = roleOf(point);
+  if (/-temp$/.test(role) || role.endsWith("_t")) return true;
   return (
-    role.endsWith("_t") ||
     role === "oa_t" ||
     role === "sat" ||
     role === "mat" ||
