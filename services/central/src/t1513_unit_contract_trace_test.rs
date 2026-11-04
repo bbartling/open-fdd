@@ -179,17 +179,19 @@ async fn t1513_historian_points_trace_inwc_to_pa_and_legacy_not_assessed() {
         quantity: Some("air_pressure".into()),
         ..SampleRow::default_row(ts, &site, "AHU_1.duct_static_sp")
     });
-    batch.push(SampleRow {
-        ts,
-        site_id: site.clone(),
-        openfdd_key: "AHU_1.duct_static_legacy".into(),
-        val: Some(1.214),
-        unit: None,
-        equipment_id: Some("AHU_1".into()),
-        role: Some("duct_static_legacy".into()),
-        ..SampleRow::default_row(ts, &site, "AHU_1.duct_static_legacy")
-    });
     tsdb.upsert_samples_stats(&batch).await.expect("upsert");
+
+    // Pre-cutover row: declared inH₂O in point_map but sample never got canonical unit at write time.
+    sqlx::query(
+        "INSERT INTO sample (ts, site_id, openfdd_key, val, unit) VALUES ($1, $2, $3, $4, NULL)",
+    )
+    .bind(ts)
+    .bind(&site)
+    .bind("AHU_1.duct_static_legacy")
+    .bind(1.214_f64)
+    .execute(&pool)
+    .await
+    .expect("legacy sample insert");
 
     let points = tsdb.historian_points(&site).await.expect("historian");
     let assessed = points
