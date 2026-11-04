@@ -35,6 +35,9 @@ class OatMeteoAsOfScalingBenchTests(unittest.TestCase):
         exp = self.bench._growth_exponent([700, 4700, 35000], [0.01, 0.28, 10.6])
         self.assertGreater(exp, 1.1)
 
+    def test_fdd_timeout_default_matches_central_contract(self):
+        self.assertGreaterEqual(self.bench.fdd_run_timeout_seconds(), 900.0)
+
 
 @unittest.skipUnless(
     os.environ.get("OPENFDD_TEST_DATABASE_URL", "").strip()
@@ -61,6 +64,8 @@ class OatMeteoAsOfScalingPostgresTests(unittest.TestCase):
         )
         self.assertEqual(len(report["cases"]), 2)
         self.assertGreater(report["timeout_margin_seconds_largest_case"], 0.0)
+        self.assertGreater(report.get("warm_log_log_exponent") or 0, 1.1)
+        self.assertTrue(report.get("superlinear_growth"))
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ def run_sql_qual_11(
     sizes = bench.QUICK_SIZES + (35000,) if ci_quick else bench.DEFAULT_SIZES
     web_modes = ("dense", "sparse", "duplicate")
     bound = 1500.0
-    timeout = float(__import__("os").environ.get("OPENFDD_FDD_RUN_TIMEOUT_SECS", "900"))
+    timeout = bench.fdd_run_timeout_seconds()
 
     cells: list[dict[str, Any]] = []
     evidence: dict[str, Any] = {"web_asof_bound_seconds": bound, "runs": []}
@@ -117,6 +117,46 @@ def run_sql_qual_11(
             "status": "PASS" if 0 < assessable < total else "FAIL",
             "summary": f"assessable={assessable} total={total} raw_fault={masks.get('raw_fault_rows')}",
             "evidence": masks,
+        }
+    )
+
+    injected = bench.run_injected_fault_mask_digest(
+        database_url=database_url,
+        web_asof_bound_seconds=bound,
+    )
+    evidence["injected_fault_mask"] = injected
+    raw_fault = int(injected.get("raw_fault_rows") or 0)
+    cells.append(
+        {
+            "id": "SQL-QUAL-11-injected-fault-mask",
+            "phase": "C3",
+            "status": "PASS" if raw_fault > 0 else "FAIL",
+            "summary": f"raw_fault_rows={raw_fault} assessable={injected.get('assessable_rows')}",
+            "evidence": injected,
+        }
+    )
+
+    api_timeout = bench.fdd_run_timeout_seconds()
+    largest_margin = max(
+        (
+            float(r.get("report", {}).get("timeout_margin_seconds_largest_case") or 0.0)
+            for r in evidence.get("runs") or []
+        ),
+        default=0.0,
+    )
+    cells.append(
+        {
+            "id": "SQL-QUAL-11-api-timeout-margin",
+            "phase": "C3",
+            "status": "PASS" if largest_margin > 0 and api_timeout >= 900.0 else "FAIL",
+            "summary": (
+                f"OPENFDD_FDD_RUN_TIMEOUT_SECS={api_timeout} "
+                f"min_margin_s={largest_margin}"
+            ),
+            "evidence": {
+                "fdd_run_timeout_seconds": api_timeout,
+                "min_timeout_margin_seconds": largest_margin,
+            },
         }
     )
 
