@@ -239,6 +239,27 @@ class SqlQualC3aHarnessTests(unittest.TestCase):
         self.assertGreater(n_bad, 0)
         self.assertTrue(err_bad)
 
+    def test_sv_rate_matrix_blocked_not_executed(self) -> None:
+        rtm = _load("rtm_sv_rate", REPO / "scripts/qualification/c3a/rule_tuner_matrix.py")
+        rows = rtm.build_matrix_rows()
+        rate_rows = [r for r in rows if r.rule_id == "SV-RATE"]
+        self.assertTrue(rate_rows)
+        offline = rtm.run_matrix(None)
+        blocked = [r for r in offline["evidence"]["per_rule_tuner"] if r["rule_id"] == "SV-RATE"]
+        self.assertTrue(blocked)
+        self.assertTrue(all(r["status"] == "BLOCKED" for r in blocked))
+        self.assertTrue(all(r.get("executed", r.get("attempted", 0)) == 0 for r in blocked))
+
+    def test_tuner_value_cases_include_default_boundary_nondefault(self) -> None:
+        rtm = _load("rtm_cases", REPO / "scripts/qualification/c3a/rule_tuner_matrix.py")
+        catalog = json.loads((REPO / "sql/fdd/tuning_catalog.json").read_text(encoding="utf-8"))
+        entry = next(e for e in catalog["rules"] if e["rule_id"] == "SV-RANGE")
+        pspec = entry["parameters"]["range_scale_temperature"]
+        labels = {label for label, _ in rtm.tuner_value_cases(pspec)}
+        self.assertIn("default", labels)
+        self.assertIn("boundary", labels)
+        self.assertIn("nondefault", labels)
+
 
 @unittest.skipUnless(
     os.environ.get("OPENFDD_DATABASE_URL", "").strip(),

@@ -125,6 +125,7 @@ class MatrixRow:
             "tuner_effect": self.tuner_effect,
             "required": self.required,
             "attempted": self.attempted,
+            "executed": self.attempted,
             "cases_compared": self.cases_compared,
             "compared_cells": self.compared_cells,
             "numeric_mismatch": self.numeric_mismatch,
@@ -180,15 +181,17 @@ def tuner_value_cases(pspec: dict[str, Any] | None) -> list[tuple[str, float | N
     boundary = mn if abs(default - mn) > 1e-9 else mx
     if all(label != "boundary" for label, _ in cases):
         cases.append(("boundary", boundary))
-    # De-dupe values while preserving first label.
-    seen: set[float | None] = set()
-    out: list[tuple[str, float | None]] = []
+    # De-dupe values while preserving the most audit-meaningful label per value.
+    label_priority = {"boundary": 0, "min": 1, "max": 2, "nondefault": 3, "default": 4}
+    by_key: dict[float | None, str] = {}
+    values: dict[float | None, float | None] = {}
     for label, val in cases:
         key = None if val is None else round(float(val), 12)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append((label, val))
+        prev = by_key.get(key)
+        if prev is None or label_priority.get(label, 99) < label_priority.get(prev, 99):
+            by_key[key] = label
+            values[key] = val
+    out = [(by_key[k], values[k]) for k in by_key]
     return out
 
 
@@ -651,6 +654,7 @@ def run_matrix(conn) -> dict[str, Any]:
             "cd_subset_scope": CD_SUBSET_SCOPE_NOTE,
             "runner_a_b": a_status,
             "runner_a_b_prerequisite": b_detail,
+            "per_rule_tuner": [r.to_dict() for r in rows],
             "per_rule_tuner_sample": [r.to_dict() for r in rows],
             "per_rule_tuner_totals": _totals(rows),
         },
