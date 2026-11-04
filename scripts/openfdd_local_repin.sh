@@ -50,9 +50,8 @@ fi
 if [[ -z "$TAG" ]]; then
   TAG="$("$ROOT/scripts/ghcr_newest_by_created.py" openfdd-central | awk -F'\t' 'NR==1{print $2}')"
   web_tag="$("$ROOT/scripts/ghcr_newest_by_created.py" openfdd-web | awk -F'\t' 'NR==1{print $2}')"
-  if [[ "$TAG" != "$web_tag" ]]; then
-    echo "FAIL: newest central ($TAG) and web ($web_tag) differ; pass an explicit sha-<7>" >&2
-    exit 2
+  if [[ -n "$web_tag" && "$TAG" != "$web_tag" ]]; then
+    echo "WARN: newest central ($TAG) and rollback openfdd-web ($web_tag) differ (portal default uses central only)" >&2
   fi
 fi
 if [[ ! "$TAG" =~ ^sha-[0-9a-f]{7}$ ]]; then
@@ -69,7 +68,7 @@ COMPOSE=(docker compose --env-file "$ENV_FILE"
 echo "== local re-pin: ${old:-<unset>} -> ${TAG} (env=$ENV_FILE base=$BASE)"
 if [[ "$DRY" -eq 1 ]]; then
   echo "DRY-RUN: would run tip gate=${TIP_GATE}, set OPENFDD_IMAGE_TAG=${TAG},"
-  echo "  ${COMPOSE[*]} pull central web"
+  echo "  ${COMPOSE[*]} pull central"
   echo "  ${COMPOSE[*]} up -d --no-build"
   echo "  scripts/ops/assert_local_stack_after_repin.sh ${TAG} --base ${BASE}"
   exit 0
@@ -90,7 +89,7 @@ chmod --reference="$ENV_FILE" "$tmp" 2>/dev/null || chmod 600 "$tmp"
 mv "$tmp" "$ENV_FILE"
 echo "OK: OPENFDD_IMAGE_TAG=${TAG} written (previous: ${old:-<unset>})"
 
-(cd "$ROOT" && "${COMPOSE[@]}" pull central web)
+(cd "$ROOT" && "${COMPOSE[@]}" pull central)
 (cd "$ROOT" && "${COMPOSE[@]}" up -d --no-build)
 
 "$ROOT/scripts/ops/assert_local_stack_after_repin.sh" "$TAG" --base "$BASE" --env-file "$ENV_FILE"

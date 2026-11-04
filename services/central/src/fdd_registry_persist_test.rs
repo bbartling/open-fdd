@@ -200,11 +200,14 @@ mod up03_postgres_exact_buckets {
         let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
             .ok()
             .filter(|v| !v.trim().is_empty())?;
-        sqlx::postgres::PgPoolOptions::new()
-            .max_connections(3)
+        match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(10)
             .connect(&url)
             .await
-            .ok()
+        {
+            Ok(pool) => Some(pool),
+            Err(err) => panic!("OPENFDD_TEST_DATABASE_URL connect failed: {err}"),
+        }
     }
 
     async fn apply_schema(pool: &PgPool) {
@@ -311,6 +314,10 @@ mod up03_postgres_exact_buckets {
         batch.push(st_row);
     }
 
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize disposable Postgres CMD-1 bucket fixture against shared DDL"
+    )]
     #[tokio::test]
     async fn up03_postgres_exact_daily_buckets_from_confirmed_series() {
         let Some(pool) = pool().await else {
@@ -318,7 +325,10 @@ mod up03_postgres_exact_buckets {
             return;
         };
         let site = format!("up03{}", uuid::Uuid::new_v4().simple());
-        apply_schema(&pool).await;
+        {
+            let _lock = crate::test_env_lock::lock_env();
+            apply_schema(&pool).await;
+        }
         let tsdb = Tsdb::from_pool(pool.clone());
         tsdb.ensure_site_building(&site)
             .await
@@ -362,17 +372,23 @@ mod up03_postgres_exact_buckets {
             .iter()
             .find(|r| r.rule_id == "CMD-1")
             .expect("CMD-1");
-        let confirmed = crate::timescale_product::load_live_confirmed_fault(
-            &tsdb,
-            &reg,
+        let ctx = crate::effective_run_context::EffectiveRunContext {
+            poll_seconds: 300.0,
+            confirm_seconds: 600,
+            session_override: None,
+        };
+        let query = crate::effective_run_context::LiveConfirmedFaultQuery {
+            reg: &reg,
             rule,
-            &site,
-            eq_day2,
-            Some(window_start),
-            Some(window_end),
-        )
-        .await
-        .expect("confirmed series");
+            building_id: &site,
+            equipment_id: eq_day2,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            ctx: &ctx,
+        };
+        let confirmed = crate::timescale_product::load_live_confirmed_fault(&tsdb, &query)
+            .await
+            .expect("confirmed series");
         assert!(
             !confirmed.is_empty(),
             "load_live_confirmed_fault must return data"
@@ -503,5 +519,1395 @@ mod up03_postgres_exact_buckets {
             .bind(site)
             .execute(pool)
             .await;
+    }
+}
+
+#[cfg(test)]
+mod up03_postgres_integration {
+    use chrono::{Duration, TimeZone, Utc};
+    use fdd_tsdb::{AnalysisWindow, SampleRow, Tsdb, UpsertBatch};
+    use serde_json::json;
+    use sqlx::PgPool;
+
+    use crate::effective_run_context::{EffectiveRunContext, LiveConfirmedFaultQuery};
+    use crate::fdd_registry_persist::{
+        active_generation_manifest, commit_and_persist_registry_run,
+        exact_interval_plan_from_confirmed_map, interval_evidence_pending_for_active_run,
+        interval_evidence_readiness_for_active_run, repair_unknown_interval_evidence_for_run,
+        IntervalEvidenceReadiness, IntervalPersistReasonCode, RepairBudget,
+        INTERVAL_EVIDENCE_EXACT,
+    };
+    use open_fdd_edge_prototype::fdd::registry_api::{
+        RunGenerationCommit, RunModelEquipment, RunRuleFile,
+    };
+
+    const HELPERS: &str = include_str!("../../../sql/fdd/postgres/postgres_helpers.sql");
+    const PACK_RUNTIME: &str = include_str!("../../../sql/schema/06_fdd_pack_runtime.sql");
+    const CI_MARKER: &str = "UP03_POSTGRES_CI";
+
+    async fn pool() -> Option<PgPool> {
+        let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty())?;
+        match sqlx::postgres::PgPoolOptions::new()
+            .max_connections(10)
+            .connect(&url)
+            .await
+        {
+            Ok(pool) => Some(pool),
+            Err(err) => panic!("OPENFDD_TEST_DATABASE_URL connect failed: {err}"),
+        }
+    }
+
+    async fn apply_schema(pool: &PgPool) {
+        static ONCE: tokio::sync::OnceCell<()> = tokio::sync::OnceCell::const_new();
+        let pool = pool.clone();
+        ONCE.get_or_init(|| async move {
+            apply_schema_once(&pool).await;
+        })
+        .await;
+    }
+
+    async fn apply_schema_once(pool: &PgPool) {
+        crate::portal_inventory_fixtures::apply_schema(pool).await;
+        crate::series_binding::ensure_authorized_series(pool).await;
+        let mut conn = pool.acquire().await.expect("conn");
+        for statement in crate::db_lifecycle::statements(HELPERS) {
+            sqlx::raw_sql(&statement)
+                .execute(&mut *conn)
+                .await
+                .expect("helpers");
+        }
+        for statement in crate::db_lifecycle::statements(PACK_RUNTIME) {
+            sqlx::raw_sql(&statement)
+                .execute(&mut *conn)
+                .await
+                .expect("pack runtime");
+        }
+        for statement in
+            fdd_tsdb::schema_statements(include_str!("../../../sql/schema/01_bps_core.sql"))
+        {
+            if statement.contains("fdd_run") {
+                crate::test_ddl::execute_idempotent_ddl(pool, statement).await;
+            }
+        }
+        fdd_tsdb::ensure_revision_schema(pool)
+            .await
+            .expect("revision schema");
+        fdd_tsdb::ensure_incremental_schema(pool)
+            .await
+            .expect("incremental schema");
+    }
+
+    async fn seed_site(pool: &PgPool, site: &str, equipment_id: &str) {
+        sqlx::query("INSERT INTO site (site_id, dis) VALUES ($1, $1) ON CONFLICT DO NOTHING")
+            .bind(site)
+            .execute(pool)
+            .await
+            .expect("site");
+        sqlx::query(
+            "INSERT INTO building (building_id, site_id, dis) VALUES ($1, $1, $1) ON CONFLICT DO NOTHING",
+        )
+        .bind(site)
+        .execute(pool)
+        .await
+        .expect("building");
+        sqlx::query(
+            "INSERT INTO equipment (building_id, equipment_id, equip_type) VALUES ($1, $2, 'ahu') ON CONFLICT DO NOTHING",
+        )
+        .bind(site)
+        .bind(equipment_id)
+        .execute(pool)
+        .await
+        .expect("equip");
+    }
+
+    async fn bind_fan_roles(pool: &PgPool, site: &str, equipment_id: &str) {
+        for (role, suffix) in [("fan_cmd", "fan_cmd"), ("fan_status", "fan_status")] {
+            let key = format!("{equipment_id}.{suffix}");
+            sqlx::query(
+                "INSERT INTO point_map (site_id, openfdd_key, haystack_id, role, equipment_id, referenced)
+                 VALUES ($1, $2, $2, $3, $4, true)
+                 ON CONFLICT (site_id, openfdd_key) DO UPDATE SET role = EXCLUDED.role",
+            )
+            .bind(site)
+            .bind(&key)
+            .bind(role)
+            .bind(equipment_id)
+            .execute(pool)
+            .await
+            .expect("point_map");
+            sqlx::query(
+                "INSERT INTO role_map (building_id, equipment_id, openfdd_key, role)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (building_id, equipment_id, openfdd_key) DO UPDATE SET role = EXCLUDED.role",
+            )
+            .bind(site)
+            .bind(equipment_id)
+            .bind(&key)
+            .bind(role)
+            .execute(pool)
+            .await
+            .expect("role_map");
+        }
+    }
+
+    fn push_cmd_status(
+        batch: &mut UpsertBatch,
+        site: &str,
+        equipment_id: &str,
+        ts: chrono::DateTime<Utc>,
+        cmd: f64,
+        status: f64,
+    ) {
+        let mut cmd_row = SampleRow::new(ts, site, format!("{equipment_id}.fan_cmd"), Some(cmd));
+        cmd_row.equipment_id = Some(equipment_id.to_string());
+        cmd_row.role = Some("fan_cmd".into());
+        cmd_row.source_unit = Some("fraction".into());
+        cmd_row.quantity = Some("fraction".into());
+        batch.push(cmd_row);
+        let mut st_row =
+            SampleRow::new(ts, site, format!("{equipment_id}.fan_status"), Some(status));
+        st_row.equipment_id = Some(equipment_id.to_string());
+        st_row.role = Some("fan_status".into());
+        st_row.source_unit = Some("fraction".into());
+        st_row.quantity = Some("fraction".into());
+        batch.push(st_row);
+    }
+
+    async fn seed_two_day_cmd1_series(tsdb: &Tsdb, site: &str, equipment_id: &str) {
+        let mut batch = UpsertBatch::default();
+        let base = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
+        for minute in (0..2 * 24 * 60).step_by(5) {
+            let ts = base + Duration::minutes(minute);
+            let day_index = minute / (24 * 60);
+            let minute_of_day = minute % (24 * 60);
+            let aligned = day_index == 0 || minute_of_day < 12 * 60;
+            let status = if aligned { 1.0 } else { 0.0 };
+            push_cmd_status(&mut batch, site, equipment_id, ts, 1.0, status);
+        }
+        tsdb.upsert_samples(&batch).await.expect("samples");
+    }
+
+    fn cmd1_commit(
+        site: &str,
+        equipment_id: &str,
+        window_start: &str,
+        window_end: &str,
+        full_cohort: bool,
+        confirm_seconds: f64,
+        poll_seconds: f64,
+    ) -> RunGenerationCommit {
+        RunGenerationCommit {
+            building_id: site.to_string(),
+            full_cohort,
+            equipment: vec![RunModelEquipment {
+                equipment_id: equipment_id.into(),
+                equip_type: Some("ahu".into()),
+            }],
+            rules: vec![RunRuleFile {
+                rule_id: "CMD-1".into(),
+                body: json!({
+                    "rule_id": "CMD-1",
+                    "rows": [{
+                        "equipment_id": equipment_id,
+                        "status": "FAULT",
+                        "output_kind": "diagnostic",
+                        "fault_hours": 2.0,
+                        "covered_hours": 48.0,
+                        "sample_rows": 100,
+                        "confirm_seconds": confirm_seconds,
+                        "poll_seconds": poll_seconds,
+                    }],
+                }),
+            }],
+            config_fingerprint: "up03-int".into(),
+            window_start: Some(window_start.into()),
+            window_end: Some(window_end.into()),
+            watermark: None,
+            poll_seconds,
+            pack: json!({ "pack_version": "test-pack" }),
+        }
+    }
+
+    async fn bucket_fault_sum(
+        pool: &PgPool,
+        site: &str,
+        equipment_id: &str,
+        window_start: &str,
+        window_end: &str,
+    ) -> f64 {
+        sqlx::query_scalar(
+            r#"
+            SELECT COALESCE(SUM(fault_seconds), 0)
+            FROM fdd_interval_result
+            WHERE site_id = $1 AND rule_id = 'CMD-1' AND equipment_id = $2
+              AND bucket_start >= $3::timestamptz AND bucket_start < $4::timestamptz
+            "#,
+        )
+        .bind(site)
+        .bind(equipment_id)
+        .bind(window_start)
+        .bind(window_end)
+        .fetch_one(pool)
+        .await
+        .expect("bucket sum")
+    }
+
+    async fn checkpoint_fence(pool: &PgPool, site: &str, equipment_id: &str) -> i64 {
+        sqlx::query_scalar(
+            r#"
+            SELECT COALESCE(MAX(fence), 0)
+            FROM fdd_incremental_checkpoint
+            WHERE site_id = $1 AND rule_id = 'CMD-1' AND equipment_id = $2
+            "#,
+        )
+        .bind(site)
+        .bind(equipment_id)
+        .fetch_one(pool)
+        .await
+        .expect("fence")
+    }
+
+    async fn purge_site(pool: &PgPool, site: &str) {
+        let _ = sqlx::query("DELETE FROM fdd_interval_result WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM fdd_incremental_checkpoint WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM fdd_run WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM sample WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM point_map WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM role_map WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM equipment WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM building WHERE building_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("DELETE FROM site WHERE site_id = $1")
+            .bind(site)
+            .execute(pool)
+            .await;
+    }
+
+    #[expect(
+        clippy::await_holding_lock,
+        reason = "serialize UP-03 disposable Postgres integration (CI runs --test-threads=1)"
+    )]
+    #[tokio::test]
+    async fn up03_postgres_integration_ci() {
+        let _lock = crate::test_env_lock::lock_env();
+        let Some(pool) = pool().await else {
+            eprintln!("skip: OPENFDD_TEST_DATABASE_URL unset");
+            return;
+        };
+        apply_schema(&pool).await;
+        scenario_exact_unknown_exact(pool.clone()).await;
+        scenario_scheduler_unknown_repair_checkpoint_gate(pool.clone()).await;
+        scenario_confirm_zero_uses_row_run_context(pool.clone()).await;
+        scenario_noon_window_unknown_clears_midnight_bucket(pool.clone()).await;
+        scenario_repair_rejects_stale_run_id(pool.clone()).await;
+        scenario_series_statement_failure_commits_unknown(pool.clone()).await;
+        scenario_repair_revision_drift_stays_unknown(pool.clone()).await;
+        scenario_repair_budget_stop_is_not_ready(pool.clone()).await;
+        scenario_repair_one_connection_pool(pool.clone()).await;
+        scenario_delayed_repair_loses_to_newer_generation(pool.clone()).await;
+        scenario_interval_readiness_check_failed_inject(pool).await;
+    }
+
+    async fn scenario_exact_unknown_exact(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_exact_unknown_exact_same_window executing");
+        let site = format!("up3e{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+        seed_two_day_cmd1_series(&tsdb, &site, &equipment_id).await;
+
+        let window_start = "2026-10-10T00:00:00Z";
+        let window_end = "2026-10-12T00:00:00Z";
+
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("exact persist");
+        let fence_exact = checkpoint_fence(&pool, &site, &equipment_id).await;
+        assert!(
+            fence_exact >= 1,
+            "exact run advances incremental checkpoint fence"
+        );
+        let fault_before_unknown =
+            bucket_fault_sum(&pool, &site, &equipment_id, window_start, window_end).await;
+        assert!(fault_before_unknown > 0.0, "exact buckets populated");
+
+        let _ = sqlx::query("DELETE FROM sample WHERE site_id = $1")
+            .bind(&site)
+            .execute(&pool)
+            .await;
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                false,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("unknown persist");
+        let status: String = sqlx::query_scalar(
+            "SELECT status FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("status");
+        assert_eq!(
+            status, "FAULT",
+            "aggregate status preserved on unknown interval"
+        );
+        let reason: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'reason_code' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("reason");
+        assert_eq!(
+            reason,
+            IntervalPersistReasonCode::SeriesEmptyNoSamples.as_str()
+        );
+        let buckets_unknown =
+            bucket_fault_sum(&pool, &site, &equipment_id, window_start, window_end).await;
+        assert_eq!(
+            buckets_unknown, 0.0,
+            "unknown run clears stale interval buckets in window"
+        );
+        let fence_after_unknown = checkpoint_fence(&pool, &site, &equipment_id).await;
+        assert_eq!(
+            fence_after_unknown, fence_exact,
+            "unknown persist must not advance checkpoint fence"
+        );
+
+        seed_two_day_cmd1_series(&tsdb, &site, &equipment_id).await;
+        let summary = commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                false,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("exact again");
+        let run_id = summary
+            .get("run_id")
+            .and_then(|v| v.as_str())
+            .expect("run_id");
+        let manifest = active_generation_manifest(&tsdb, &site)
+            .await
+            .expect("manifest")
+            .expect("active generation");
+        assert_eq!(
+            manifest.get("run_id").and_then(|v| v.as_str()),
+            Some(run_id),
+            "active generation is latest run"
+        );
+        let evidence: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'status' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 AND detail->>'run_id' = $3",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .bind(run_id)
+        .fetch_one(&pool)
+        .await
+        .expect("evidence");
+        assert_eq!(evidence, INTERVAL_EVIDENCE_EXACT);
+        let fence_final = checkpoint_fence(&pool, &site, &equipment_id).await;
+        assert!(
+            fence_final > fence_after_unknown,
+            "exact repair generation advances checkpoint once"
+        );
+
+        let reg = crate::timescale_product::load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "CMD-1")
+            .expect("CMD-1");
+        let ctx = EffectiveRunContext::from_run_row(
+            &json!({"confirm_seconds": 600.0, "poll_seconds": 300.0}),
+            300.0,
+        );
+        let query = LiveConfirmedFaultQuery {
+            reg: &reg,
+            rule,
+            building_id: &site,
+            equipment_id: &equipment_id,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            ctx: &ctx,
+        };
+        let confirmed = crate::timescale_product::load_live_confirmed_fault(&tsdb, &query)
+            .await
+            .expect("confirmed");
+        let window = AnalysisWindow::half_open(
+            Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2026, 10, 12, 0, 0, 0).unwrap(),
+        )
+        .expect("window");
+        let plan =
+            exact_interval_plan_from_confirmed_map(window, confirmed, 100).expect("plan buckets");
+        let expected_fault: f64 = match plan {
+            crate::fdd_registry_persist::ExactIntervalPlan::Buckets(buckets) => {
+                buckets.iter().map(|b| b.fault_seconds()).sum()
+            }
+            _ => panic!("expected exact plan"),
+        };
+        let stored_fault =
+            bucket_fault_sum(&pool, &site, &equipment_id, window_start, window_end).await;
+        assert!(
+            (stored_fault - expected_fault).abs() < 1.0,
+            "stored buckets match confirmed series (stored={stored_fault} expected={expected_fault})"
+        );
+
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_scheduler_unknown_repair_checkpoint_gate(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_scheduler_unknown_repair_checkpoint_gate executing");
+        let site = format!("up3s{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+
+        let window_start = "2026-10-10T00:00:00Z";
+        let window_end = "2026-10-12T00:00:00Z";
+
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("unknown without samples");
+        let status_unknown: String = sqlx::query_scalar(
+            "SELECT status FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("status");
+        assert_eq!(status_unknown, "FAULT");
+        let reason_unknown: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'reason_code' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("reason");
+        assert_eq!(
+            reason_unknown,
+            IntervalPersistReasonCode::SeriesEmptyNoSamples.as_str()
+        );
+        let pending_before_repair = interval_evidence_pending_for_active_run(&tsdb, &site, false)
+            .await
+            .expect("pending");
+        assert!(
+            pending_before_repair,
+            "scheduler gate: unknown interval blocks checkpoint advance"
+        );
+        let fence_before = checkpoint_fence(&pool, &site, &equipment_id).await;
+        assert_eq!(
+            fence_before, 0,
+            "no checkpoint advance while interval unknown"
+        );
+
+        seed_two_day_cmd1_series(&tsdb, &site, &equipment_id).await;
+        let pending_after_repair = interval_evidence_pending_for_active_run(&tsdb, &site, true)
+            .await
+            .expect("pending after repair");
+        assert!(
+            pending_after_repair,
+            "new samples are a new input identity; repair must not attach exact series to the old aggregate"
+        );
+        let fence_after = checkpoint_fence(&pool, &site, &equipment_id).await;
+        assert_eq!(
+            fence_after, 0,
+            "drifted repair must not advance the evidence checkpoint"
+        );
+        let drift_reason: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'reason_code' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("drift reason");
+        assert_eq!(
+            drift_reason,
+            IntervalPersistReasonCode::RevisionDrift.as_str()
+        );
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                false,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("full re-evaluation");
+        let pending_after_reeval = interval_evidence_pending_for_active_run(&tsdb, &site, false)
+            .await
+            .expect("pending after reeval");
+        assert!(
+            !pending_after_reeval,
+            "a new generation can persist exact evidence"
+        );
+        let fence_reeval = checkpoint_fence(&pool, &site, &equipment_id).await;
+        assert!(
+            fence_reeval >= 1,
+            "re-evaluation advances the checkpoint once"
+        );
+        let interval_status: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'status' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("interval status");
+        assert_eq!(interval_status, INTERVAL_EVIDENCE_EXACT);
+
+        let run_id: String = sqlx::query_scalar(
+            "SELECT detail->>'run_id' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("run_id");
+        let repaired = repair_unknown_interval_evidence_for_run(
+            &tsdb,
+            &site,
+            &run_id,
+            &crate::fdd_registry_persist::RepairBudget::default(),
+        )
+        .await
+        .expect("idempotent repair");
+        assert_eq!(repaired, 0, "repair is idempotent once exact");
+
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_confirm_zero_uses_row_run_context(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_confirm_zero_uses_row_run_context executing");
+        let site = format!("up3c{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+
+        let window_start = "2026-10-10T00:00:00Z";
+        let window_end = "2026-10-11T00:00:00Z";
+        let mut batch = UpsertBatch::default();
+        let base = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
+        for step in 0..36 {
+            let ts = base + Duration::minutes(step * 5);
+            let mismatched = (2..14).contains(&step);
+            let status = if mismatched { 0.0 } else { 1.0 };
+            push_cmd_status(&mut batch, &site, &equipment_id, ts, 1.0, status);
+        }
+        tsdb.upsert_samples(&batch).await.expect("samples");
+
+        let row_json = json!({"confirm_seconds": 0.0, "poll_seconds": 60.0});
+        let row_ctx = EffectiveRunContext::from_run_row(&row_json, 300.0);
+        let wrong_ctx = EffectiveRunContext {
+            poll_seconds: 300.0,
+            confirm_seconds: 600,
+            session_override: None,
+        };
+        assert_ne!(
+            row_ctx, wrong_ctx,
+            "fixture distinguishes row vs commit-default context"
+        );
+
+        let reg = crate::timescale_product::load_reg().expect("registry");
+        let rule = reg
+            .rules
+            .iter()
+            .find(|r| r.rule_id == "CMD-1")
+            .expect("CMD-1");
+        let confirmed_row = crate::timescale_product::load_live_confirmed_fault(
+            &tsdb,
+            &LiveConfirmedFaultQuery {
+                reg: &reg,
+                rule,
+                building_id: &site,
+                equipment_id: &equipment_id,
+                window_start: Some(window_start),
+                window_end: Some(window_end),
+                ctx: &row_ctx,
+            },
+        )
+        .await
+        .expect("row ctx series");
+        let confirmed_wrong = crate::timescale_product::load_live_confirmed_fault(
+            &tsdb,
+            &LiveConfirmedFaultQuery {
+                reg: &reg,
+                rule,
+                building_id: &site,
+                equipment_id: &equipment_id,
+                window_start: Some(window_start),
+                window_end: Some(window_end),
+                ctx: &wrong_ctx,
+            },
+        )
+        .await
+        .expect("wrong ctx series");
+        let fault_row: u64 = confirmed_row.values().filter(|v| **v).count() as u64;
+        let fault_wrong: u64 = confirmed_wrong.values().filter(|v| **v).count() as u64;
+        assert!(
+            fault_row > fault_wrong,
+            "confirm=0 row context flags more confirmed samples than poll300+confirm600"
+        );
+
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                0.0,
+                60.0,
+            ),
+        )
+        .await
+        .expect("persist with row context");
+        let stored = bucket_fault_sum(&pool, &site, &equipment_id, window_start, window_end).await;
+        let window = AnalysisWindow::half_open(
+            Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2026, 10, 11, 0, 0, 0).unwrap(),
+        )
+        .expect("window");
+        let plan = exact_interval_plan_from_confirmed_map(window, confirmed_row, 100)
+            .expect("expected buckets");
+        let expected: f64 = match plan {
+            crate::fdd_registry_persist::ExactIntervalPlan::Buckets(buckets) => {
+                buckets.iter().map(|b| b.fault_seconds()).sum()
+            }
+            _ => panic!("expected buckets"),
+        };
+        assert!(
+            (stored - expected).abs() < 1.0,
+            "persist used row run context via load_live_confirmed_fault_in_tx (stored={stored} expected={expected})"
+        );
+        let wrong_plan =
+            exact_interval_plan_from_confirmed_map(window, confirmed_wrong, 100).expect("plan");
+        let wrong_sum: f64 = match wrong_plan {
+            crate::fdd_registry_persist::ExactIntervalPlan::Buckets(buckets) => {
+                buckets.iter().map(|b| b.fault_seconds()).sum()
+            }
+            _ => 0.0,
+        };
+        assert!(
+            (stored - wrong_sum).abs() > 1.0,
+            "stored buckets must not match commit-default poll300+confirm600 context"
+        );
+
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_noon_window_unknown_clears_midnight_bucket(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_noon_window_clears_midnight_bucket executing");
+        let site = format!("up3n{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+        let window_start = "2026-10-10T12:00:00Z";
+        let window_end = "2026-10-10T13:00:00Z";
+        let base = Utc.with_ymd_and_hms(2026, 10, 10, 12, 0, 0).unwrap();
+        let mut batch = UpsertBatch::default();
+        for step in 0..12 {
+            let ts = base + Duration::minutes(step * 5);
+            push_cmd_status(&mut batch, &site, &equipment_id, ts, 1.0, 1.0);
+        }
+        tsdb.upsert_samples(&batch).await.expect("samples");
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("exact noon window");
+        let midnight_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1 AND equipment_id = $2 AND bucket_start = $3::timestamptz",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .bind("2026-10-10T00:00:00Z")
+        .fetch_one(&pool)
+        .await
+        .expect("count");
+        assert!(
+            midnight_count >= 1,
+            "LocalDay bucket starts at midnight for noon-window exact run"
+        );
+        let other = format!("eq{}", uuid::Uuid::new_v4().simple());
+        seed_site(&pool, &site, &other).await;
+        bind_fan_roles(&pool, &site, &other).await;
+        let mut other_batch = UpsertBatch::default();
+        for step in 0..12 {
+            let ts = base + Duration::minutes(step * 5);
+            push_cmd_status(&mut other_batch, &site, &other, ts, 1.0, 1.0);
+        }
+        tsdb.upsert_samples(&other_batch)
+            .await
+            .expect("other samples");
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(&site, &other, window_start, window_end, true, 600.0, 300.0),
+        )
+        .await
+        .expect("other equipment exact");
+        let other_before: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1 AND equipment_id = $2",
+        )
+        .bind(&site)
+        .bind(&other)
+        .fetch_one(&pool)
+        .await
+        .expect("other count");
+        assert!(other_before >= 1, "other equipment keeps its own bucket");
+        let _ = sqlx::query("DELETE FROM sample WHERE site_id = $1")
+            .bind(&site)
+            .execute(&pool)
+            .await;
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                false,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("unknown noon window");
+        let after: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1 AND equipment_id = $2",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("after count");
+        assert_eq!(
+            after, 0,
+            "unknown persist must delete overlapping midnight-anchored buckets"
+        );
+        let other_after: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1 AND equipment_id = $2",
+        )
+        .bind(&site)
+        .bind(&other)
+        .fetch_one(&pool)
+        .await
+        .expect("other still present");
+        assert_eq!(
+            other_after, other_before,
+            "another equipment in the same window stays"
+        );
+        let mut again = UpsertBatch::default();
+        for step in 0..12 {
+            let ts = base + Duration::minutes(step * 5);
+            push_cmd_status(&mut again, &site, &equipment_id, ts, 1.0, 1.0);
+        }
+        tsdb.upsert_samples(&again).await.expect("reseed");
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("exact again");
+        let restored: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1 AND equipment_id = $2",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("restored count");
+        assert_eq!(restored, 1, "re-run leaves one active bucket");
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_repair_rejects_stale_run_id(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_repair_rejects_stale_run_id executing");
+        let site = format!("up3r{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+        let window_start = "2026-10-10T00:00:00Z";
+        let window_end = "2026-10-11T00:00:00Z";
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("run A unknown");
+        let run_a: String = sqlx::query_scalar(
+            "SELECT detail->>'run_id' FROM fdd_run WHERE site_id = $1 ORDER BY created_at ASC LIMIT 1",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("run_a");
+        seed_two_day_cmd1_series(&tsdb, &site, &equipment_id).await;
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                false,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("run B active");
+        let active = active_generation_manifest(&tsdb, &site)
+            .await
+            .expect("manifest")
+            .and_then(|m| m.get("run_id").and_then(|v| v.as_str()).map(str::to_owned))
+            .expect("active run");
+        assert_ne!(active, run_a);
+        let repaired = repair_unknown_interval_evidence_for_run(
+            &tsdb,
+            &site,
+            &run_a,
+            &RepairBudget::default(),
+        )
+        .await
+        .expect("repair stale");
+        assert_eq!(
+            repaired, 0,
+            "repair must not publish for a non-active run_id"
+        );
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_interval_readiness_check_failed_inject(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_interval_readiness_check_failed_inject executing");
+        let site = format!("up3i{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        {
+            let mut inject = crate::fdd_registry_persist::TEST_INTERVAL_EVIDENCE_INJECT
+                .lock()
+                .expect("inject lock");
+            *inject = Some(IntervalEvidenceReadiness::CheckFailed {
+                reason: "injected interval check failure".into(),
+            });
+        }
+        let readiness = interval_evidence_readiness_for_active_run(
+            &tsdb,
+            &site,
+            false,
+            &RepairBudget::default(),
+        )
+        .await
+        .expect("readiness");
+        assert_eq!(
+            readiness,
+            IntervalEvidenceReadiness::CheckFailed {
+                reason: "injected interval check failure".into(),
+            }
+        );
+        {
+            let mut inject = crate::fdd_registry_persist::TEST_INTERVAL_EVIDENCE_INJECT
+                .lock()
+                .expect("inject lock");
+            *inject = None;
+        }
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_series_statement_failure_commits_unknown(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_series_statement_failure_commits_unknown executing");
+        let site = format!("up3q{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+        seed_two_day_cmd1_series(&tsdb, &site, &equipment_id).await;
+        let window_start = "2026-10-10T00:00:00Z";
+        let window_end = "2026-10-12T00:00:00Z";
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("exact before statement failure");
+        let fence_before = checkpoint_fence(&pool, &site, &equipment_id).await;
+        assert!(fence_before >= 1, "baseline fence");
+        crate::fdd_registry_persist::TEST_FORCE_SERIES_STATEMENT_ERROR
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let persist = commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                false,
+                600.0,
+                300.0,
+            ),
+        )
+        .await;
+        crate::fdd_registry_persist::TEST_FORCE_SERIES_STATEMENT_ERROR
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        persist.expect("unknown row commits after series statement failure");
+        let status: String = sqlx::query_scalar(
+            "SELECT status FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("status");
+        assert_eq!(status, "FAULT", "aggregate commits");
+        let reason: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'reason_code' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("reason");
+        assert_eq!(
+            reason,
+            IntervalPersistReasonCode::SeriesQueryFailed.as_str()
+        );
+        let evidence: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'status' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("evidence");
+        assert_eq!(evidence, "INTERVAL_UNKNOWN");
+        assert_eq!(
+            checkpoint_fence(&pool, &site, &equipment_id).await,
+            fence_before,
+            "evidence checkpoint does not advance"
+        );
+        sqlx::query("SELECT 1")
+            .execute(&pool)
+            .await
+            .expect("transaction was not left aborted");
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_repair_revision_drift_stays_unknown(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_repair_revision_drift executing");
+        let site = format!("up3d{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+        let window_start = "2026-10-10T00:00:00Z";
+        let window_end = "2026-10-11T00:00:00Z";
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("unknown generation");
+        seed_two_day_cmd1_series(&tsdb, &site, &equipment_id).await;
+        let run_id: String = sqlx::query_scalar(
+            "SELECT detail->>'run_id' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("run");
+        let repaired = repair_unknown_interval_evidence_for_run(
+            &tsdb,
+            &site,
+            &run_id,
+            &RepairBudget::default(),
+        )
+        .await
+        .expect("drift repair");
+        assert_eq!(repaired, 0, "drift must not publish a new exact series");
+        let reason: String = sqlx::query_scalar(
+            "SELECT detail->'interval_persist'->>'reason_code' FROM fdd_run WHERE site_id = $1 AND detail->>'run_id' = $2",
+        )
+        .bind(&site)
+        .bind(&run_id)
+        .fetch_one(&pool)
+        .await
+        .expect("reason");
+        assert_eq!(reason, IntervalPersistReasonCode::RevisionDrift.as_str());
+        let buckets: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("buckets");
+        assert_eq!(buckets, 0, "old aggregate keeps no new exact series");
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_repair_budget_stop_is_not_ready(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_repair_budget_stop executing");
+        let site = format!("up3b{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                "2026-10-10T00:00:00Z",
+                "2026-10-11T00:00:00Z",
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("unknown");
+        let readiness = interval_evidence_readiness_for_active_run(
+            &tsdb,
+            &site,
+            true,
+            &RepairBudget {
+                max_pairs: 0,
+                max_duration: std::time::Duration::from_secs(45),
+                cancel: None,
+            },
+        )
+        .await
+        .expect("readiness");
+        match readiness {
+            IntervalEvidenceReadiness::CheckFailed { reason } => {
+                assert!(
+                    reason.contains("retry required"),
+                    "stopped repair is retryable: {reason}"
+                );
+            }
+            other => panic!("stopped repair must not look clean: {other:?}"),
+        }
+        assert_eq!(checkpoint_fence(&pool, &site, &equipment_id).await, 0);
+        purge_site(&pool, &site).await;
+    }
+
+    async fn scenario_repair_one_connection_pool(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_repair_one_connection executing");
+        let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("test url");
+        let narrow = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(std::time::Duration::from_secs(5))
+            .connect(url.trim())
+            .await
+            .expect("one-connection pool");
+        let site = format!("up31{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(narrow);
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(tsdb.pool(), &site, &equipment_id).await;
+        bind_fan_roles(tsdb.pool(), &site, &equipment_id).await;
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                "2026-10-10T00:00:00Z",
+                "2026-10-11T00:00:00Z",
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("unknown");
+        let run_id: String = sqlx::query_scalar(
+            "SELECT detail->>'run_id' FROM fdd_run WHERE site_id = $1 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .fetch_one(tsdb.pool())
+        .await
+        .expect("run");
+        let repaired = repair_unknown_interval_evidence_for_run(
+            &tsdb,
+            &site,
+            &run_id,
+            &RepairBudget::default(),
+        )
+        .await
+        .expect("repair on one connection");
+        assert_eq!(
+            repaired, 0,
+            "one-connection repair finishes in-transaction instead of waiting on a second pool connection"
+        );
+        purge_site(&pool, &site).await;
+        purge_site(tsdb.pool(), &site).await;
+    }
+
+    async fn scenario_delayed_repair_loses_to_newer_generation(pool: PgPool) {
+        eprintln!("{CI_MARKER}: up03_postgres_delayed_repair_race executing");
+        let site = format!("up3x{}", uuid::Uuid::new_v4().simple());
+        let equipment_id = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let other = format!("eq{}", uuid::Uuid::new_v4().simple());
+        let tsdb = Tsdb::from_pool(pool.clone());
+        tsdb.ensure_site_building(&site).await.expect("site");
+        seed_site(&pool, &site, &equipment_id).await;
+        seed_site(&pool, &site, &other).await;
+        bind_fan_roles(&pool, &site, &equipment_id).await;
+        bind_fan_roles(&pool, &site, &other).await;
+        let window_start = "2026-10-10T00:00:00Z";
+        let window_end = "2026-10-11T00:00:00Z";
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                true,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("run A");
+        let run_a: String = sqlx::query_scalar(
+            "SELECT detail->>'run_id' FROM fdd_run WHERE site_id = $1 AND equipment_id = $2 ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(&site)
+        .bind(&equipment_id)
+        .fetch_one(&pool)
+        .await
+        .expect("run A id");
+        let gate = std::sync::Arc::new(crate::fdd_registry_persist::RepairPauseGate {
+            arrived: std::sync::Arc::new(tokio::sync::Notify::new()),
+            release: std::sync::atomic::AtomicBool::new(false),
+            release_notify: std::sync::Arc::new(tokio::sync::Notify::new()),
+        });
+        *crate::fdd_registry_persist::TEST_REPAIR_PAUSE
+            .lock()
+            .expect("pause") = Some(gate.clone());
+        let repair_tsdb = tsdb.clone();
+        let repair_site = site.clone();
+        let repair_run = run_a.clone();
+        let repair = tokio::spawn(async move {
+            repair_unknown_interval_evidence_for_run(
+                &repair_tsdb,
+                &repair_site,
+                &repair_run,
+                &RepairBudget::default(),
+            )
+            .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(15), gate.arrived.notified())
+            .await
+            .expect("repair reached its pair read");
+        seed_two_day_cmd1_series(&tsdb, &site, &equipment_id).await;
+        seed_two_day_cmd1_series(&tsdb, &site, &other).await;
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(
+                &site,
+                &equipment_id,
+                window_start,
+                window_end,
+                false,
+                600.0,
+                300.0,
+            ),
+        )
+        .await
+        .expect("run B same scope");
+        commit_and_persist_registry_run(
+            &tsdb,
+            cmd1_commit(&site, &other, window_start, window_end, false, 600.0, 300.0),
+        )
+        .await
+        .expect("run B other scope");
+        let buckets_before: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("buckets before resume");
+        let active = active_generation_manifest(&tsdb, &site)
+            .await
+            .expect("manifest")
+            .and_then(|m| m.get("run_id").and_then(|v| v.as_str()).map(str::to_owned))
+            .expect("active");
+        assert_ne!(active, run_a);
+        gate.release
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        gate.release_notify.notify_waiters();
+        let repaired = repair.await.expect("join").expect("repair A");
+        *crate::fdd_registry_persist::TEST_REPAIR_PAUSE
+            .lock()
+            .expect("pause") = None;
+        assert_eq!(repaired, 0, "stale repair publishes nothing");
+        let buckets_after: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_interval_result WHERE site_id = $1",
+        )
+        .bind(&site)
+        .fetch_one(&pool)
+        .await
+        .expect("buckets after");
+        assert_eq!(
+            buckets_after, buckets_before,
+            "run A leaves B's buckets alone"
+        );
+        let a_exact: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*)::bigint FROM fdd_run WHERE site_id = $1 AND detail->>'run_id' = $2 AND detail->'interval_persist'->>'status' = $3",
+        )
+        .bind(&site)
+        .bind(&run_a)
+        .bind(INTERVAL_EVIDENCE_EXACT)
+        .fetch_one(&pool)
+        .await
+        .expect("A exact rows");
+        assert_eq!(a_exact, 0, "run A does not become exact beside B");
+        purge_site(&pool, &site).await;
+    }
+}
+
+#[cfg(test)]
+mod up03_effective_run_context_unit {
+    use serde_json::json;
+
+    use crate::effective_run_context::EffectiveRunContext;
+
+    #[test]
+    fn row_poll_and_confirm_override_commit_defaults() {
+        let row = json!({"confirm_seconds": 0.0, "poll_seconds": 60.0});
+        let ctx = EffectiveRunContext::from_run_row(&row, 300.0);
+        assert_eq!(ctx.confirm_seconds, 0);
+        assert!((ctx.poll_seconds - 60.0).abs() < f64::EPSILON);
     }
 }

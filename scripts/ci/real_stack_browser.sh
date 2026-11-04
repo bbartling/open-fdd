@@ -8,8 +8,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 TIMESCALE_IMAGE="timescale/timescaledb:2.17.2-pg16"
-WEB_BASE="http://127.0.0.1:3000"
-REQUIRED_SPECS=(e2e/smoke.spec.ts e2e/product.spec.ts e2e/csp-plotly.spec.ts)
+APP_BASE="http://127.0.0.1:8080/app"
+STATIC_CSP_SPEC=e2e/static-product-csp.spec.ts
 COMPOSE_FILES=(-f docker/compose.portal.yml -f docker/compose.timescale.yml -f docker/compose.ci-browser.yml)
 
 STARTED=0
@@ -43,8 +43,12 @@ scan_compose_config() {
     echo "FAIL: central image is not the local disposable tag" >&2
     return 1
   fi
-  if ! grep -F -q "localhost/openfdd-ci-browser-web:${project}" <<<"$cfg"; then
-    echo "FAIL: web image is not the local disposable tag" >&2
+  if grep -F -q "localhost/openfdd-ci-browser-web:${project}" <<<"$cfg"; then
+    echo "FAIL: disposable compose must not include openfdd-web" >&2
+    return 1
+  fi
+  if ! grep -E -q 'OPENFDD_STATIC_PRODUCT_UI: "?1"?' <<<"$cfg"; then
+    echo "FAIL: static product UI is not enabled on central" >&2
     return 1
   fi
   if ! grep -F -q "${TIMESCALE_IMAGE}" <<<"$cfg"; then
@@ -105,8 +109,7 @@ services:
     environment:
       OPENFDD_DATABASE_URL: postgresql://openfdd:openfdd_dev_only@timescale:5432/openfdd
       OPENFDD_STARTER_SEED: "0"
-  web:
-    image: localhost/openfdd-ci-browser-web:${project}
+      OPENFDD_STATIC_PRODUCT_UI: "1"
   timescale:
     image: ${TIMESCALE_IMAGE}
 EOF
@@ -153,7 +156,6 @@ prepare_runtime_env() {
   export OPENFDD_CI_BROWSER_ADMIN_PASSWORD
   export OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD"
   export OPENFDD_JWT_SECRET="$OPENFDD_CI_BROWSER_JWT_SECRET"
-  export OPENFDD_PLAYWRIGHT_BASE_URL="$WEB_BASE"
   export OPENFDD_PLAYWRIGHT_REQUIRE_STACK=1
   export OPENFDD_GIT_SHA="${GITHUB_SHA:-$(git rev-parse HEAD)}"
 }
@@ -171,12 +173,11 @@ remove_disposable_project() {
   assert_disposable_project "$PROJECT"
   compose down -v --remove-orphans
   docker image rm -f \
-    "localhost/openfdd-ci-browser-central:${PROJECT}" \
-    "localhost/openfdd-ci-browser-web:${PROJECT}" >/dev/null 2>&1 || true
+    "localhost/openfdd-ci-browser-central:${PROJECT}" >/dev/null 2>&1 || true
 }
 
 dump_logs() {
-  compose logs --no-color --tail 80 central web timescale 2>&1 | redact_stream || true
+  compose logs --no-color --tail 80 central timescale 2>&1 | redact_stream || true
 }
 
 require_compose() {
@@ -203,17 +204,14 @@ require_playwright() {
     echo "FAIL: required tool missing: npx" >&2
     missing=1
   fi
-  if [[ ! -x frontend/web/node_modules/.bin/playwright ]]; then
-    echo "FAIL: frontend/web Playwright is not installed (npm ci && playwright install)" >&2
+  if [[ ! -x archive/product-ui/react-spa-v4/node_modules/.bin/playwright ]]; then
+    echo "FAIL: archive/product-ui/react-spa-v4 Playwright is not installed (npm ci && playwright install)" >&2
     missing=1
   fi
-  local spec
-  for spec in "${REQUIRED_SPECS[@]}"; do
-    if [[ ! -f "frontend/web/$spec" ]]; then
-      echo "FAIL: required browser spec missing: frontend/web/$spec" >&2
-      missing=1
-    fi
-  done
+  if [[ ! -f "archive/product-ui/react-spa-v4/$STATIC_CSP_SPEC" ]]; then
+    echo "FAIL: required browser spec missing: archive/product-ui/react-spa-v4/$STATIC_CSP_SPEC" >&2
+    missing=1
+  fi
   if [[ "$missing" -ne 0 ]]; then
     return 1
   fi
@@ -224,9 +222,9 @@ ports_free() {
     return 0
   fi
   local busy
-  busy="$(ss -ltn 2>/dev/null | grep -E ':3000 |:8080 ' || true)"
+  busy="$(ss -ltn 2>/dev/null | grep -E ':8080 ' || true)"
   if [[ -n "$busy" ]]; then
-    echo "FAIL: host port 3000 or 8080 is in use; refusing to attach to an existing stack" >&2
+    echo "FAIL: host port 8080 is in use; refusing to attach to an existing stack" >&2
     printf '%s\n' "$busy" >&2
     return 1
   fi
@@ -243,7 +241,7 @@ wait_healthy() {
   local deadline=$((SECONDS + 300))
   local code=1
   while (( SECONDS < deadline )); do
-    if python3 "$ROOT/scripts/ci/browser_stack_health.py" --base "$WEB_BASE"; then
+    if python3 "$ROOT/scripts/ci/browser_stack_health.py" --base "$APP_BASE"; then
       return 0
     fi
     sleep 3
@@ -254,28 +252,73 @@ wait_healthy() {
 }
 
 run_playwright() {
-  local report="$1"
-  local expects="${report}.expects.json"
+  local static_report="$1"
+  OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="$(
+    OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
+      bash "$ROOT/scripts/ci/seed_static_ui_browser_site.sh"
+  )"
+  export OPENFDD_STATIC_UI_BROWSER_BUILDING_ID
+  echo "OPENFDD_STATIC_UI_BROWSER_BUILDING_ID=$OPENFDD_STATIC_UI_BROWSER_BUILDING_ID"
   local status=0
   local report_status=0
-  rm -f "$expects" "$report"
   set +e
   (
-    cd frontend/web
-    # One --reporter value. A second flag replaces the first, and the JSON
-    # report never reaches the gate.
-    PLAYWRIGHT_JSON_OUTPUT_FILE="$report" \
-      OPENFDD_EXPECT_COUNT_FILE="$expects" \
-      npx playwright test "${REQUIRED_SPECS[@]}" \
+    cd archive/product-ui/react-spa-v4
+    PLAYWRIGHT_JSON_OUTPUT_FILE="$static_report" \
+      OPENFDD_PLAYWRIGHT_BASE_URL="http://127.0.0.1:8080" \
+      OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
+      OPENFDD_STATIC_UI_BROWSER_BUILDING_ID="${OPENFDD_STATIC_UI_BROWSER_BUILDING_ID:-}" \
+      npx playwright test "$STATIC_CSP_SPEC" \
         --retries=0 \
-        --reporter="json,${ROOT}/scripts/ci/playwright_expect_reporter.cjs"
+        --reporter=json
   )
   status=$?
-  python3 "$ROOT/scripts/ci/playwright_required_report.py" "$report" --expects "$expects"
-  report_status=$?
-  rm -f "$expects"
+  report_status=0
+  if [[ "$status" -eq 0 ]]; then
+    python3 - "$static_report" <<'PY' || report_status=$?
+import json
+import sys
+from pathlib import Path
+
+raw = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = raw.find("{")
+if start < 0:
+    print("FAIL: static product CSP JSON report has no object", file=sys.stderr)
+    sys.exit(1)
+report = json.loads(raw[start:])
+
+
+def walk(suite: dict) -> None:
+    for spec in suite.get("specs") or []:
+        for test in spec.get("tests") or []:
+            if not isinstance(test, dict):
+                continue
+            results = test.get("results") or []
+            status = results[-1].get("status") if results else ""
+            tests_run.append(str(spec.get("title") or "spec"))
+            if status in {"passed", "expected"}:
+                tests_ok.append(1)
+    for child in suite.get("suites") or []:
+        if isinstance(child, dict):
+            walk(child)
+
+
+tests_run: list[str] = []
+tests_ok: list[int] = []
+for suite in report.get("suites") or []:
+    if isinstance(suite, dict):
+        walk(suite)
+
+print(f"static-product-csp: tests_run={len(tests_run)} tests_passed={len(tests_ok)}")
+if len(tests_run) < 1:
+    print("FAIL: zero static product CSP tests in JSON report", file=sys.stderr)
+    sys.exit(1)
+if len(tests_ok) != len(tests_run):
+    sys.exit(1)
+PY
+  fi
   set -e
-  echo "playwright exit ${status}; required specs: ${REQUIRED_SPECS[*]}"
+  echo "static product CSP playwright exit ${status} (spec=$STATIC_CSP_SPEC)"
   if [[ "$status" -ne 0 || "$report_status" -ne 0 ]]; then
     return 1
   fi
@@ -305,9 +348,13 @@ run_stack() {
   docker pull "$TIMESCALE_IMAGE"
   DOCKER_BUILDKIT=1 compose build --pull=false
   docker image inspect "localhost/openfdd-ci-browser-central:${PROJECT}" >/dev/null
-  docker image inspect "localhost/openfdd-ci-browser-web:${PROJECT}" >/dev/null
   compose up -d --pull never --no-build --wait --wait-timeout 300
   wait_healthy
+
+  chmod +x scripts/ci/static_ui_smoke.sh
+  OPENFDD_STATIC_UI_BASE="http://127.0.0.1:8080" \
+    OPENFDD_ADMIN_PASSWORD="$OPENFDD_CI_BROWSER_ADMIN_PASSWORD" \
+    ./scripts/ci/static_ui_smoke.sh
 
   local report
   report="$(mktemp)"

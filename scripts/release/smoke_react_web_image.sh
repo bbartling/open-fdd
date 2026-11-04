@@ -46,7 +46,7 @@ if docker pull "$CENTRAL_IMAGE" >/dev/null 2>&1; then
 fi
 
 # Local compose-build path when GHCR web tag missing (dev):
-# docker build -t openfdd-web:local frontend/web && OPENFDD_WEB_IMAGE=openfdd-web:local …
+# docker build -t openfdd-web:local archive/product-ui/react-spa-v4 && OPENFDD_WEB_IMAGE=openfdd-web:local …
 
 cat >"$OUT_DIR/SUMMARY.md" <<EOF
 # P1-M1-C web image smoke

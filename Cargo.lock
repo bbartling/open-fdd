@@ -779,7 +779,7 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
 name = "fdd_core"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -793,7 +793,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_csv"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -806,7 +806,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_resources"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "anyhow",
  "serde",
@@ -818,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_rules"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -831,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_store"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -847,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "fdd_tsdb"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1192,6 +1192,12 @@ dependencies = [
  "http-body",
  "pin-project-lite",
 ]
+
+[[package]]
+name = "http-range-header"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
 
 [[package]]
 name = "httparse"
@@ -1906,7 +1912,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "open_fdd_edge_prototype"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "base64 0.22.1",
  "bcrypt",
@@ -1945,7 +1951,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-central"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -1988,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd-mcp"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "base64 0.22.1",
  "reqwest 0.12.28",
@@ -1999,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_contracts"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "chrono",
  "serde",
@@ -2011,7 +2017,7 @@ dependencies = [
 
 [[package]]
 name = "openfdd_nf_grpc"
-version = "4.0.8"
+version = "4.0.10"
 dependencies = [
  "chrono",
  "http",
@@ -3667,9 +3673,9 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
 dependencies = [
  "bytes",
  "libc",
@@ -3860,10 +3866,19 @@ checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
 dependencies = [
  "bitflags",
  "bytes",
+ "futures-core",
  "futures-util",
  "http",
  "http-body",
+ "http-body-util",
+ "http-range-header",
+ "httpdate",
+ "mime",
+ "mime_guess",
+ "percent-encoding",
  "pin-project-lite",
+ "tokio",
+ "tokio-util",
  "tower 0.5.3",
  "tower-layer",
  "tower-service",

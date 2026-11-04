@@ -56,6 +56,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Workspace MSRV (Cargo.toml rust-version)
+        run: |
+          msrv="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          test -n "$msrv"
+          rustup toolchain install "$msrv" --profile minimal
+          cargo "+$msrv" check -p openfdd-central
+
       - name: Format
         run: cargo fmt --all --check
 
@@ -92,15 +99,23 @@ jobs:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: cargo test -p openfdd-central every_analytics_endpoint_uses_result_store -- --test-threads=1
 
+      - name: UP-03 Postgres interval integration (serialized)
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: |
+          cargo test -p openfdd-central up03_postgres_exact_daily_buckets_from_confirmed_series -- --nocapture --test-threads=1
+          cargo test -p openfdd-central up03_postgres_integration_ci -- --nocapture --test-threads=1
+
       - name: Central / fieldbus / MQTT contract tests
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: |
           cargo test -p openfdd-central t1439_oat_meteo_asof_masks_match_legacy_reference -- --test-threads=1
-          cargo test -p openfdd_contracts -p fdd_resources -p fdd_tsdb -p openfdd-central -p openfdd_nf_grpc -- --skip fixture_acceptance --skip t1423_6
+          cargo test -p openfdd_contracts -p fdd_resources -p fdd_tsdb -p openfdd-central -p openfdd_nf_grpc -- --skip fixture_acceptance --skip t1423_6 --skip up03_postgres_exact_daily_buckets_from_confirmed_series --skip up03_postgres_integration_ci
           cargo test -p openfdd-central --test csv_fdd_integration
           cargo test -p openfdd-central --test jobs_api_integration -- --test-threads=1
           cargo test -p openfdd-central t1405_3_trim_rules_without_reset_request_binding_not_sql_error -- --test-threads=1
+          cargo test -p openfdd-central 'static_product::' -- --nocapture
 
       - name: Architecture / MQTT cutover gates
         run: bash scripts/gates/run_all_gates.sh --quick
@@ -134,7 +149,7 @@ jobs:
           grep -q 'auth.env.local' .gitignore || grep -q '/workspace' .gitignore
 
   frontend:
-    name: Product UI guards (React)
+    name: Product UI guards (static + archived React)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -142,15 +157,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: React sole product UI
+      - name: Static product UI + rollback guards
         run: |
-          test -f frontend/web/package.json
-          test -f frontend/web/Dockerfile
-          test -f docker/compose.react.yml
-          ! test -d services/ui
-          ! grep -qE 'openfdd-ui|services/ui|:8501' docker/compose.portal.yml docker/compose.central.yml docker/compose.csv.yml
-          ! test -d workspace/dashboard/src
-          ! test -f workspace/dashboard/package.json
+          chmod +x scripts/ci/static_product_guard.sh
+          ./scripts/ci/static_product_guard.sh
+          bash -n scripts/ci/forbid_product_ui_port_3000_docs.sh
+          chmod +x scripts/ci/forbid_product_ui_port_3000_docs.sh
+          ./scripts/ci/forbid_product_ui_port_3000_docs.sh
 
       - name: Product tree guards
         run: |
@@ -164,8 +177,11 @@ jobs:
           test ! -d crates/openfdd_mqtt
           test -f archive/ot-edge/unmaintained/crates/openfdd_mqtt/Cargo.toml
 
+      - name: Static product JS unit tests
+        run: node --test services/central/static/product/assets/js/*.test.mjs
+
   react-web:
-    name: React web (frontend/web)
+    name: React web (archive/product-ui/react-spa-v4)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -176,9 +192,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/web/package-lock.json
+          cache-dependency-path: archive/product-ui/react-spa-v4/package-lock.json
       - name: typecheck, lint, test, build
-        working-directory: frontend/web
+        working-directory: archive/product-ui/react-spa-v4
         run: |
           npm ci
           npm run typecheck
@@ -210,9 +226,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/web/package-lock.json
+          cache-dependency-path: archive/product-ui/react-spa-v4/package-lock.json
       - name: Install Playwright
-        working-directory: frontend/web
+        working-directory: archive/product-ui/react-spa-v4
         run: |
           npm ci
           npx playwright install --with-deps chromium
@@ -260,7 +276,11 @@ jobs:
           bash scripts/test_openfdd_stack_image_tag.sh
           test -f docker/compose.wattlab.react.yml
           test -f docker/compose.caddy.react.yml
+          test -f docker/compose.caddy.central.yml
+          test -f docker/compose.caddy.central.http.yml
           test -f docker/caddy/Caddyfile.react.http
+          test -f docker/caddy/Caddyfile.central.https
+          test -f docker/caddy/Caddyfile.central.http
           test -f docs/mcp-agents/companion-wattlab-energyplus.md
           test -f docs/mcp-agents/dual-site-mcp-it.md
 

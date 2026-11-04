@@ -4,7 +4,7 @@
 Rejects:
   - QUALIFIED without evidence paths
   - WAIVED without reason/approver/expiry
-  - react_route not present in frontend/web/src/App.tsx
+  - react_route not present in archive/product-ui/react-spa-v4/src/App.tsx
   - QUALIFIED capabilities that are demo_only or mention stub/demo/sample
     without an explicit demo_only classification at lower status
 """
@@ -22,7 +22,7 @@ except ImportError:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parents[1]
 LEDGER = ROOT / "docs" / "migration" / "react-rust" / "capabilities.yaml"
-APP_TSX = ROOT / "frontend" / "web" / "src" / "App.tsx"
+APP_TSX = ROOT / "archive" / "product-ui" / "react-spa-v4" / "src" / "App.tsx"
 
 ALLOWED_STATUS = {
     "NOT_STARTED",

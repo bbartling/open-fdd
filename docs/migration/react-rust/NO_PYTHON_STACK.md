@@ -12,7 +12,7 @@ Compose file: [`docker/compose.react.yml`](../../docker/compose.react.yml)
 ```bash
 docker compose -f docker/compose.react.yml config
 # health: GET http://localhost:8080/api/capabilities  (react_ui true when OPENFDD_REACT_UI=1)
-# SPA:    http://localhost:3000/
+# Default portal/csv UI: http://localhost:8080/app/  — React rollback: compose.react.yml (see LOCAL_HOSTING.md)
 ```
 
 Rollback to React: use `docker/compose.central.yml` (includes `ui` service) — routing flip is Phase 2.

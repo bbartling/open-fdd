@@ -209,6 +209,7 @@ async fn diagnostic_matrix_handlers_keep_site_equipment_role_flags() {
         return;
     };
     let _lock = lock_env();
+    let _pressure = fdd_resources::TestPressureGuard::normal();
     let workspace = tempfile::tempdir().expect("workspace");
     let _workspace = WorkspaceEnv::set(workspace.path());
     let suffix = uuid::Uuid::new_v4().simple().to_string();

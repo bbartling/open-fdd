@@ -560,7 +560,11 @@ async fn nf_hourly_loop(
     let owner = std::env::var("OPENFDD_HOURLY_WORKER_ID").unwrap_or_else(|_| "central".into());
     let mut first = true;
     loop {
-        let wait = if first { 0 } else { tick_secs() };
+        let wait = if first {
+            0
+        } else {
+            runtime.effective_poll_secs(&building_id).max(tick_secs())
+        };
         first = false;
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(wait)) => {}
@@ -964,9 +968,8 @@ async fn ace_poll_loop(
     shutdown: &mut watch::Receiver<bool>,
 ) {
     let building_id = site.building_id.clone();
-    let poll_secs = site.poll_secs;
-    let mut backoff_secs = 0u64;
     let mut ace = AceIotStubDriver::new(&site.provider_instance_id);
+    let mut backoff_secs = 0u64;
     debug!(identity = %super::driver_identity(&ace), %building_id, "ace driver");
     loop {
         tokio::select! {
@@ -982,6 +985,7 @@ async fn ace_poll_loop(
             Ok(p) => p,
             Err(_) => return,
         };
+        let poll_secs = runtime.effective_poll_secs(&building_id);
         match poll_ace_site(&building_id, &mut ace).await {
             Ok(ingested) => {
                 backoff_secs = poll_secs;

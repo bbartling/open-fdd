@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Fail if any Content-Security-Policy in frontend/web/nginx.conf allows
+# Fail if any Content-Security-Policy in archive/product-ui/react-spa-v4/nginx.conf allows
 # 'unsafe-inline' outside style-src-attr (#1130).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-NGINX_CONF="${ROOT}/frontend/web/nginx.conf"
+NGINX_CONF="${ROOT}/archive/product-ui/react-spa-v4/nginx.conf"
 
 self_test() {
   local fail=0

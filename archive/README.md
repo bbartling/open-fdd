@@ -6,7 +6,7 @@ Code under this tree is **archived and unmaintained**.
 - GitHub Actions does not build or test it.
 - It is not published to GHCR.
 
-The product path is the Normal Framework portal: `openfdd-central`, `openfdd-web`, and Timescale.
+The product path is the Normal Framework portal: `openfdd-central`, static UI on central (`/app/`), optional `openfdd-web` rollback image, and Timescale. The React SPA source is archived under [`product-ui/`](product-ui/README.md).
 
 ## OT edge
 

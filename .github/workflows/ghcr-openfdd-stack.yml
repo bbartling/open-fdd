@@ -1,5 +1,5 @@
-# Publish Open-FDD 4.0 images to GHCR (central + web).
-# Product UI is openfdd-web (React SPA).
+# Publish Open-FDD 4.0 images to GHCR (central + rollback openfdd-web).
+# Default product UI is static on central (/app/). openfdd-web stays published for rollback.
 # This workflow does not publish openfdd-fieldbus or openfdd-mqtt.
 # The Railway MQTT broker keeps its already-published image.
 # Tag contract:
@@ -68,14 +68,18 @@ jobs:
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
         run: |
+          cargo test -p openfdd-central r1484_execute_cycle_holds_checkpoint_until_interval_check_recovers -- --test-threads=1
+          cargo test -p openfdd-central r_wave_d_multi_hour_earlier_chunk_holds_checkpoint -- --test-threads=1
           cargo test -p openfdd-central -- --skip fixture_acceptance
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
 
-      - name: React sole product UI
+      - name: Static default portal + React rollback image
         run: |
-          test -f frontend/web/package.json
-          test -f frontend/web/package-lock.json
-          test -f frontend/web/Dockerfile
+          chmod +x scripts/ci/static_product_guard.sh
+          ./scripts/ci/static_product_guard.sh
+          test -f archive/product-ui/react-spa-v4/package.json
+          test -f archive/product-ui/react-spa-v4/package-lock.json
+          test -f archive/product-ui/react-spa-v4/Dockerfile
           test -f docker/compose.react.yml
           grep -q '3000:8080' docker/compose.react.yml
           ! test -d services/ui
@@ -87,8 +91,8 @@ jobs:
             --build-arg OPENFDD_GIT_SHA=ci-test \
             --build-arg OPENFDD_WEB_VERSION=0.0.0-ci \
             -t openfdd-web:ci \
-            -f frontend/web/Dockerfile \
-            frontend/web
+            -f archive/product-ui/react-spa-v4/Dockerfile \
+            archive/product-ui/react-spa-v4
           docker run --rm --entrypoint cat openfdd-web:ci /usr/share/nginx/html/version.json | grep openfdd-web
           docker run --rm --entrypoint sh openfdd-web:ci -c 'test -f /usr/share/nginx/html/index.html'
           ! docker run --rm --entrypoint sh openfdd-web:ci -c 'command -v python3 || command -v python' 2>/dev/null
@@ -105,14 +109,9 @@ jobs:
           bash -n scripts/openfdd_stack_up.sh
           bash -n scripts/openfdd_stack_pull.sh
 
-      - name: CSV recipe boot smoke (central + React web)
-        env:
-          # Reuse the verified openfdd-web:ci from the prior step; only rebuild central.
-          OPENFDD_WEB_IMAGE: openfdd-web:ci
+      - name: CSV recipe boot smoke (central static /app/)
         run: |
           chmod +x scripts/release/smoke_csv_central_boot.sh
-          docker image inspect openfdd-web:ci >/dev/null
-          # Build central only (web already verified with index.html).
           docker build -f services/central/Dockerfile -t openfdd-central:ci .
           export OPENFDD_CENTRAL_IMAGE=openfdd-central:ci
           export OPENFDD_SMOKE_SKIP_BUILD=1
@@ -217,12 +216,12 @@ jobs:
         if: steps.vars.outputs.nightly == 'true'
         run: docker buildx imagetools create -t "${{ env.CENTRAL_IMAGE }}:nightly" "${{ env.CENTRAL_IMAGE }}:sha-${{ steps.vars.outputs.short_sha }}"
 
-      - name: Build and push openfdd-web (React product UI)
+      - name: Build and push openfdd-web (React rollback image)
         uses: docker/build-push-action@v6
         timeout-minutes: 30
         with:
-          context: frontend/web
-          file: frontend/web/Dockerfile
+          context: archive/product-ui/react-spa-v4
+          file: archive/product-ui/react-spa-v4/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.vars.outputs.web_tags }}
@@ -235,7 +234,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/bbartling/open-fdd
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.vars.outputs.version }}
-            org.opencontainers.image.description=Supported product UI — nginx SPA proxying /api to central
+            org.opencontainers.image.description=Rollback-only React SPA — use docker/compose.react.yml; default portal UI is static on central /app/
           cache-from: type=gha,scope=openfdd-web
           cache-to: type=gha,mode=max,scope=openfdd-web
 

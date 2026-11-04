@@ -25,21 +25,12 @@ services:
       OPENFDD_AGENT_PASSWORD: ""
       OPENFDD_ALLOW_OPEN_BIND: ""
       OPENFDD_PROVIDER_SITES: ""
+      OPENFDD_STATIC_PRODUCT_UI: "1"
       OPENFDD_STORAGE_URL: file:///workspace/openfdd
       OPENFDD_WORKSPACE: /workspace
     volumes: !override
       - ci-browser-workspace:/workspace
       - ../sql:/sql:ro
-
-  web:
-    image: localhost/openfdd-ci-browser-web:${OPENFDD_CI_BROWSER_PROJECT:?set OPENFDD_CI_BROWSER_PROJECT}
-    pull_policy: never
-    restart: "no"
-    environment:
-      OPENFDD_CENTRAL_UPSTREAM: central:8080
-    depends_on:
-      central:
-        condition: service_healthy
 
   timescale:
     image: timescale/timescaledb:2.17.2-pg16

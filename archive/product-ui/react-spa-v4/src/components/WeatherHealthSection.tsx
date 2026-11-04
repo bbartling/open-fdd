@@ -1,0 +1,225 @@
+import { useEffect, useMemo, useState } from "react";
+import { DataTable, InlineAlert } from "./widgets";
+import { getFddResults, type FddResultRow } from "../api/fddApi";
+import { postBasVsWebOat } from "../api/analyticsApi";
+import { plantEquipmentFamilies } from "../lib/plantEquipment";
+import { isWeatherEquipment, pickWeatherFaultRow } from "../lib/overviewMetrics";
+import type { FddEquipmentItem } from "../api/analyticsApi";
+import {
+  overviewQueryRequestsRefresh,
+  useOverviewQueryEpoch,
+} from "../session/overviewQueryPolicy";
+
+function fmtHours(v: unknown): string {
+  if (v == null || v === "") return "—";
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(1);
+}
+
+function triFault(status: unknown, hours: unknown): string {
+  const st = String(status ?? "").toUpperCase();
+  if (st === "INTERVAL_UNKNOWN" || st === "NOT_ASSESSED") return "unknown";
+  const h = typeof hours === "number" ? hours : Number(hours);
+  if (st === "FAULT" || (Number.isFinite(h) && h > 0)) return "true";
+  if (st === "PASS") return "false";
+  if (!Number.isFinite(h)) return "unknown";
+  return "false";
+}
+
+/** Aggregate child WX fault tri-state: any true → true; else any unknown → unknown; else false. */
+export function aggregateWxFaultTriState(rows: FddResultRow[]): string {
+  if (rows.length === 0) {
+    return "unknown";
+  }
+  let sawUnknown = false;
+  for (const r of rows) {
+    const child = triFault(r.status, r.fault_hours);
+    if (child === "true") {
+      return "true";
+    }
+    if (child === "unknown") {
+      sawUnknown = true;
+    }
+  }
+  return sawUnknown ? "unknown" : "false";
+}
+
+function sumKnownFaultHours(rows: FddResultRow[]): number | null {
+  let any = false;
+  let sum = 0;
+  for (const r of rows) {
+    if (String(r.interval_status ?? "") === "INTERVAL_UNKNOWN") {
+      return null;
+    }
+    const st = String(r.status ?? "").toUpperCase();
+    if (st === "INTERVAL_UNKNOWN" || st === "NOT_ASSESSED") {
+      return null;
+    }
+    const h = typeof r.fault_hours === "number" ? r.fault_hours : Number(r.fault_hours);
+    if (!Number.isFinite(h)) {
+      return null;
+    }
+    any = true;
+    sum += h;
+  }
+  return any ? sum : null;
+}
+
+/** Web vs local outside-air sensors — drybulb + humidity with fault hours. */
+export function WeatherHealthSection({
+  buildingId,
+  refreshToken,
+  equipment,
+}: {
+  buildingId: string;
+  refreshToken: number;
+  equipment: FddEquipmentItem[];
+}) {
+  const families = useMemo(() => plantEquipmentFamilies(equipment), [equipment]);
+  const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [scopeId, setScopeId] = useState(buildingId);
+  const queryEpoch = useOverviewQueryEpoch(buildingId, "weather-health");
+  if (scopeId !== buildingId) {
+    setScopeId(buildingId);
+    setRows([]);
+    setErr(null);
+    setNote(null);
+    setLoading(true);
+  }
+
+  useEffect(() => {
+    if (!buildingId) {
+      setRows([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setErr(null);
+    void (async () => {
+      try {
+        if (!families.hasWeather) {
+          if (!cancelled) {
+            setRows([]);
+            setNote(
+              "No weather equipment in this data model. CSV packages and the NF portal include weather when it is mapped.",
+            );
+            setLoading(false);
+          }
+          return;
+        }
+        const refresh = overviewQueryRequestsRefresh(buildingId, "weather-health");
+        const [fddRows, bas] = await Promise.all([
+          getFddResults(buildingId).catch((): FddResultRow[] => []),
+          postBasVsWebOat({
+            building_id: buildingId,
+            max_points: 4000,
+            dt_min_c: 10 * (5 / 9),
+            ...(refresh ? { refresh: true } : {}),
+          }),
+        ]);
+        if (cancelled) return;
+
+        const oatMeteo = fddRows.filter((r) => String(r.rule_id ?? "") === "OAT-METEO");
+        const wxRules = fddRows.filter((r) =>
+          ["WX-1", "SENSOR-HI", "SENSOR-LO", "FLATLINE"].includes(String(r.rule_id ?? "")),
+        );
+
+        const histRows = bas.rows ?? [];
+        const hasOatHist = histRows.some(
+          (r) => r.kind === "delta_hist" || r.count != null,
+        );
+        const hasWebOat = (bas.points ?? []).length > 0;
+
+        const out: Array<Record<string, unknown>> = [];
+
+        const weatherIds = new Set(
+          equipment
+            .filter((e) => isWeatherEquipment(e))
+            .map((e) => String(e.equipment_id ?? "")),
+        );
+        const oatFault = pickWeatherFaultRow(oatMeteo, weatherIds);
+
+        out.push({
+          point: "outsideAir drybulb",
+          local_tag: "oa_t",
+          web_tag: "web_oa_t",
+          rule_id: "OAT-METEO",
+          fault: triFault(oatFault?.status, oatFault?.fault_hours),
+          fault_h: fmtHours(oatFault?.fault_hours),
+          total_fault_h: fmtHours(oatFault?.fault_hours),
+        });
+
+        out.push({
+          point: "outsideAir humidity",
+          local_tag: "oa_h",
+          web_tag: "web_oa_h",
+          rule_id: "SENSOR-HI/LO",
+          fault: aggregateWxFaultTriState(wxRules),
+          fault_h: fmtHours(sumKnownFaultHours(wxRules)),
+          total_fault_h: fmtHours(sumKnownFaultHours(wxRules)),
+        });
+
+        setRows(out);
+        if (!hasWebOat && !hasOatHist) {
+          setNote(
+            "Need mapped oa_t (BAS) and web_oa_t on the weather equip ref — run Update analytics after mapping.",
+          );
+        } else if (!fddRows.length) {
+          setNote("Run all rules to populate OAT-METEO fault hours.");
+        } else {
+          setNote(null);
+        }
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setErr(e instanceof Error ? e.message : String(e));
+          setRows([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [buildingId, refreshToken, families.hasWeather, equipment, queryEpoch]);
+
+  return (
+    <section className="overview-section" data-testid="overview-weather-health">
+      <h3>Weather sensors — web vs local</h3>
+      {loading ? (
+        <InlineAlert id="weather-health-loading" variant="info" testId="weather-health-loading">
+          Loading…
+        </InlineAlert>
+      ) : null}
+      {err ? (
+        <InlineAlert id="weather-health-err" variant="danger" testId="weather-health-err">
+          {err}
+        </InlineAlert>
+      ) : null}
+      {note ? (
+        <InlineAlert id="weather-health-note" variant="info" testId="weather-health-note">
+          {note}
+        </InlineAlert>
+      ) : null}
+      <DataTable
+        id="weather-health-table"
+        label="Weather sensor health"
+        columns={[
+          { key: "point", header: "point" },
+          { key: "local_tag", header: "local tag" },
+          { key: "web_tag", header: "web tag" },
+          { key: "rule_id", header: "cookbook rule" },
+          { key: "fault", header: "fault" },
+          { key: "fault_h", header: "fault_h" },
+          { key: "total_fault_h", header: "total fault_h" },
+        ]}
+        rows={rows as Array<Record<string, string | number>>}
+        testId="weather-health-table"
+      />
+    </section>
+  );
+}

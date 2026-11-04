@@ -20,7 +20,7 @@ PRODUCT_ROOTS = (
     "open_fdd/reporting",
     "open_fdd/units",
     "tools/wattlab_export/app",
-    "frontend/web/src",
+    "archive/product-ui/react-spa-v4/src",
     "sql/fdd/postgres/rules",
     "sql/fdd/warehouse/rules",
     "sql_rules",

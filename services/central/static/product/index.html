@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-FDD Central</title>
+<link rel="stylesheet" href="/app/assets/css/bench.css">
+<link rel="stylesheet" href="/app/assets/css/schedules.css">
+<link rel="stylesheet" href="/app/assets/css/operations.css">
+</head>
+<body>
+<div id="loginGate">
+  <section class="panel">
+    <h1 class="login-title">Sign in</h1>
+    <p class="hint">JWT session · same-origin <code>/api</code></p>
+    <form id="loginForm">
+      <label>Username<input name="username" autocomplete="username" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit" class="btn primary">Continue</button>
+      <p class="login-err" id="loginErr" hidden></p>
+    </form>
+  </section>
+</div>
+
+<header>
+  <div>
+    <h1>⚡ Open-FDD Central</h1>
+    <div class="sub" id="sub">Loading…</div>
+  </div>
+  <div class="spacer"></div>
+  <label class="scope">site <select id="sitePick"></select></label>
+  <label class="scope">equip <select id="equipPick" disabled><option value="">—</option></select></label>
+  <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">offline</span></span>
+  <span class="pill" id="clock"></span>
+  <button type="button" class="btn" id="themeToggle" title="Toggle light / dark chart theme">Theme</button>
+  <button type="button" class="btn" id="logoutBtn" hidden>Sign out</button>
+</header>
+<nav class="tabs" id="tabs">
+  <button type="button" data-tab="overview" class="on">Overview</button>
+  <button type="button" data-tab="charts">Charts</button>
+  <button type="button" data-tab="points">Points <span class="count" id="nPoints">0</span></button>
+  <button type="button" data-tab="rcx">RCx</button>
+  <button type="button" data-tab="fdd">FDD</button>
+  <button type="button" data-tab="schedules">Schedules</button>
+  <button type="button" data-tab="ops">Ops</button>
+  <button type="button" data-tab="model">Model</button>
+</nav>
+
+<main>
+  <div id="err"></div>
+
+  <section class="tab on" id="tab-overview">
+    <div class="stats" id="summary"></div>
+    <section class="cards" id="cards"></section>
+    <section class="panel">
+      <h2>Equipment status <span class="hint">Bool / status roles from historian</span></h2>
+      <div class="chips" id="chips"></div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-charts">
+    <section class="panel">
+      <h2>Weather vs sensors <span class="hint">BAS vs web OAT · Timescale</span></h2>
+      <div class="chart" id="wxChart"></div>
+    </section>
+    <section class="panel">
+      <h2>Temperatures
+        <span class="seg" id="range">
+          <button type="button" data-h="6">6h</button><button type="button" data-h="24" class="on">24h</button>
+          <button type="button" data-h="72">3d</button><button type="button" data-h="168">7d</button>
+        </span>
+      </h2>
+      <div class="chart tall" id="tempChart"></div>
+    </section>
+    <section class="grid2">
+      <div class="panel">
+        <h2>Daily min / mean / max</h2>
+        <div class="chart" id="dailyChart"></div>
+      </div>
+      <div class="panel">
+        <h2>Runtime (bool / status)</h2>
+        <div class="chart" id="runtimeChart"></div>
+      </div>
+    </section>
+    <section class="grid2">
+      <div class="panel">
+        <h2>Hour-of-day heatmap
+          <select id="heatPick" class="heat-pick" aria-label="Heatmap role"></select>
+        </h2>
+        <div class="chart" id="heatChart"></div>
+      </div>
+      <div class="panel">
+        <h2>Outdoor air <span class="hint" id="psyHint">temp × humidity</span></h2>
+        <div class="chart" id="psyChart"></div>
+      </div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-points">
+    <section class="panel">
+      <h2>Point data
+        <input type="search" id="pointFilter" placeholder="filter tags or roles">
+        <span class="hint" id="pointHint"></span>
+      </h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Equip</th><th>Updated</th></tr></thead>
+        <tbody id="pointRows"><tr><td colspan="5" class="sub">Sign in and select a site.</td></tr></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>History <span class="hint" id="histHint">select a point</span></h2>
+      <div class="chart short" id="histChart"></div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-rcx">
+    <section class="panel">
+      <h2>RCx preset
+        <select id="presetPick" aria-label="RCx preset"></select>
+        <button type="button" class="btn" id="refreshRcxBtn">Refresh analytics</button>
+        <span class="hint" id="rcxLoadMsg"></span>
+      </h2>
+      <div class="chart tall" id="mainChart"></div>
+    </section>
+    <section class="panel" id="companionPanel" hidden>
+      <h2>Companion</h2>
+      <div class="chart" id="companionChart"></div>
+    </section>
+    <section class="panel">
+      <h2>Series preview
+        <select id="rcxPreviewPick" aria-label="Preview rows"></select>
+      </h2>
+      <div id="rcxPreviewTable"></div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-fdd">
+    <section class="grid2">
+      <div class="panel">
+        <h2>Rules
+          <select id="statusFilter" aria-label="Status filter"></select>
+          <label class="scope">equip <select id="fddEquipPick"></select></label>
+          <button type="button" class="btn primary" id="runBtn">Run selected</button>
+          <button type="button" class="btn" id="rerunRuleBtn">Re-run after rule update</button>
+          <span class="hint" id="runMsg"></span>
+        </h2>
+        <div id="ruleList" class="rule-list"></div>
+      </div>
+      <div class="panel">
+        <h2>FDD chart <span class="hint" id="plotHint"></span></h2>
+        <div class="chart tall" id="fddChart"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Inspect overlay</h2>
+      <div id="inspectHost"><div class="chart" id="inspectChart"></div></div>
+    </section>
+    <section class="panel">
+      <h2>Series preview
+        <select id="fddPreviewPick" aria-label="Preview rows"></select>
+      </h2>
+      <div id="fddPreviewTable"></div>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-schedules" data-building-id="">
+    <section class="sched-grid">
+      <article class="panel sched-card">
+        <h2>Model sync <span class="hint">portal inventory · poll cadence</span></h2>
+        <table class="sched-status" id="modelSyncStatus"></table>
+        <form id="modelSyncForm" class="sched-form">
+          <label>Poll interval
+            <select id="modelPollPick" class="sched-editable" aria-label="Model sync poll interval"></select>
+          </label>
+          <button type="submit" class="btn sched-editable">Save model sync</button>
+        </form>
+        <p class="sched-msg" id="modelSyncMsg" hidden></p>
+      </article>
+      <article class="panel sched-card">
+        <h2>History ingest <span class="hint">durable hourly jobs · coverage</span></h2>
+        <table class="sched-status" id="historyScheduleStatus"></table>
+        <form id="historyScheduleForm" class="sched-form">
+          <label>Schedule mode
+            <select id="historyModePick" class="sched-editable" aria-label="History schedule mode">
+              <option value="periodic">Periodic</option>
+              <option value="daily">Daily (local midnight)</option>
+            </select>
+          </label>
+          <label>Timezone (daily only)
+            <input id="historyTzInput" class="sched-editable" type="text" placeholder="America/Chicago">
+          </label>
+          <button type="submit" class="btn sched-editable">Save history schedule</button>
+        </form>
+        <p class="sched-msg" id="historyScheduleMsg" hidden></p>
+      </article>
+      <article class="panel sched-card">
+        <h2>AFDD <span class="hint">continuous registry · checkpoint</span></h2>
+        <table class="sched-status" id="afddScheduleStatus"></table>
+        <form id="afddScheduleForm" class="sched-form">
+          <label>Schedule kind
+            <select id="afddKindPick" class="sched-editable" aria-label="AFDD schedule kind">
+              <option value="interval">Interval</option>
+              <option value="wall_clock">Wall clock</option>
+            </select>
+          </label>
+          <label>Interval
+            <select id="afddIntervalPick" class="sched-editable" aria-label="AFDD interval"></select>
+          </label>
+          <label>Lookback (days)
+            <select id="afddLookbackPick" class="sched-editable" aria-label="AFDD lookback days">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+            </select>
+          </label>
+          <label>Wall clock (HH:MM)
+            <input id="afddWallClock" class="sched-editable" type="text" value="05:00">
+          </label>
+          <label>Wall clock timezone
+            <input id="afddWallTz" class="sched-editable" type="text" placeholder="America/Chicago">
+          </label>
+          <button type="submit" class="btn sched-editable">Save AFDD schedule</button>
+        </form>
+        <button type="button" class="btn sched-editable" id="afddRunNowBtn">Run AFDD now</button>
+        <p class="sched-msg" id="afddScheduleMsg" hidden></p>
+      </article>
+    </section>
+    <p class="hint" id="schedLoadMsg" hidden></p>
+  </section>
+
+  <section class="tab" id="tab-ops">
+    <section class="ops-grid">
+      <article class="panel ops-card">
+        <h2>CSV package <span class="hint">upload · registry · export</span></h2>
+        <p class="hint">Session site: <span id="csvSessionSite">—</span></p>
+        <form id="csvUploadForm" class="ops-form">
+          <label>openfdd_package_v1 zip
+            <input id="csvPackageFile" type="file" accept=".zip,application/zip" required>
+          </label>
+          <button type="submit" class="btn primary">Import package</button>
+        </form>
+        <p class="ops-msg" id="csvUploadMsg" hidden></p>
+        <pre class="ttl ops-pre" id="csvImportResult"></pre>
+        <h3 class="hint">Registered package sites</h3>
+        <div class="tablewrap">
+          <table class="ops-table">
+            <thead><tr><th>building_id</th><th></th></tr></thead>
+            <tbody id="csvBuildingsBody"></tbody>
+          </table>
+        </div>
+        <button type="button" class="btn" id="csvExportBtn" disabled>Export site CSV zip</button>
+        <p class="ops-msg" id="csvExportMsg" hidden></p>
+      </article>
+      <article class="panel ops-card">
+        <h2>Hub admin <span class="hint">users · tenants · limits</span></h2>
+        <p class="ops-denied" id="adminDenied" hidden>Hub admin only.</p>
+        <div id="adminPanel" hidden>
+          <h3 class="hint">Users</h3>
+          <div class="tablewrap">
+            <table class="ops-table">
+              <thead><tr><th>username</th><th>role</th><th>tenants</th></tr></thead>
+              <tbody id="adminUsersBody"></tbody>
+            </table>
+          </div>
+          <h3 class="hint">Tenants</h3>
+          <div class="tablewrap">
+            <table class="ops-table">
+              <thead><tr><th>id</th><th>name</th></tr></thead>
+              <tbody id="adminTenantsBody"></tbody>
+            </table>
+          </div>
+          <h3 class="hint">Historian limits</h3>
+          <table class="ops-table" id="adminLimitsBody"></table>
+        </div>
+      </article>
+      <article class="panel ops-card">
+        <h2>Synthetic demo <span class="hint">POST /api/analytics/mv</span></h2>
+        <p class="hint">Deterministic IPMVP-style twin seed (no live campus bills).</p>
+        <button type="button" class="btn primary" id="demoMvRun">Run demo seed</button>
+        <p class="ops-msg" id="demoMvMsg" hidden></p>
+        <div class="chart ops-chart" id="demoMvChart"></div>
+        <table class="ops-table" id="demoMvSummary"></table>
+      </article>
+    </section>
+  </section>
+
+  <section class="tab" id="tab-model">
+    <div class="stats" id="modelStats"></div>
+    <section class="grid57">
+      <div class="panel">
+        <h2>Model tree <span class="hint"><a href="/app/tree.html">standalone tree</a></span></h2>
+        <div id="tree" class="tree-host"></div>
+      </div>
+      <div class="model-side">
+        <div class="detail" id="detail"><span class="hint">Select a node.</span></div>
+        <div class="panel">
+          <h2>Model checks</h2>
+          <div id="checks" class="hint">Pending model sync data.</div>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>SPARQL <span class="hint">POST /api/model/sparql · read-only SELECT/ASK</span></h2>
+      <textarea id="sparqlQuery" class="sparql-input" rows="4">SELECT * WHERE { ?s ?p ?o } LIMIT 20</textarea>
+      <p><button type="button" class="btn" id="sparqlRun">Run</button></p>
+      <pre class="ttl" id="sparqlOut">Sign in and pick a site.</pre>
+    </section>
+    <section class="panel">
+      <h2>RDF (Turtle) <span class="hint">GET /api/model/ttl</span></h2>
+      <pre class="ttl" id="ttl"># Load site to fetch TTL…</pre>
+    </section>
+  </section>
+</main>
+<footer>Open-FDD static product UI · central <code>/app/</code> · API <code>/api/*</code> ·
+  <a href="/app/tree.html">model tree</a></footer>
+
+<script type="module" src="/app/assets/js/app.js"></script>
+</body>
+</html>

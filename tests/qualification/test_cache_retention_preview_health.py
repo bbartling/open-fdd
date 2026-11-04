@@ -18,12 +18,15 @@ SPEC.loader.exec_module(mod)
 
 class ContractTests(unittest.TestCase):
     def test_nginx_liveness_is_bounded(self) -> None:
-        text = (ROOT / "frontend/web/nginx.conf").read_text(encoding="utf-8")
+        text = (
+            ROOT / "archive/product-ui/react-spa-v4/nginx.conf"
+        ).read_text(encoding="utf-8")
         self.assertEqual(mod.check_nginx(text), [])
 
     def test_series_preview_is_newest_n(self) -> None:
-        ts = (ROOT / "frontend/web/src/components/seriesPreview.ts").read_text(encoding="utf-8")
-        tsx = (ROOT / "frontend/web/src/components/SeriesPreview.tsx").read_text(encoding="utf-8")
+        web = ROOT / "archive/product-ui/react-spa-v4"
+        ts = (web / "src/components/seriesPreview.ts").read_text(encoding="utf-8")
+        tsx = (web / "src/components/SeriesPreview.tsx").read_text(encoding="utf-8")
         self.assertEqual(mod.check_series_preview(ts, tsx), [])
 
     def test_cache_hit_requires_elapsed_and_does_not_hide_stale(self) -> None:

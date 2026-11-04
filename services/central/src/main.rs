@@ -22,6 +22,7 @@ mod db_lifecycle;
 #[cfg(test)]
 mod diagnostic_matrix_api;
 mod durable_storage;
+mod effective_run_context;
 mod engineering_bundle;
 mod eplus_runner;
 mod fdd_registry_persist;
@@ -43,10 +44,13 @@ mod occupancy_calendar;
 #[cfg(test)]
 mod one_writer_fixtures;
 mod openapi;
+mod openapi_inventory;
+mod operator_schedule;
 #[cfg(test)]
 mod package_preflight_fixtures;
 #[cfg(test)]
 mod portal_inventory_fixtures;
+mod product_schedules;
 mod providers;
 #[cfg(test)]
 mod rcx_row_fixtures;
@@ -66,6 +70,7 @@ mod sql_anomaly_fixtures;
 mod sql_pack;
 mod starter_seed;
 mod state;
+mod static_product;
 #[cfg(test)]
 mod t1284_2_ingest_si_test;
 #[cfg(test)]
@@ -143,10 +148,12 @@ async fn main() -> anyhow::Result<()> {
             Arc::clone(&state),
             Arc::clone(&afdd_runtime),
         ))
+        .merge(product_schedules::router(Arc::clone(&state)))
         .merge(sql_anomaly::router(Arc::clone(&state)))
         .merge(cutover::router())
         .merge(vibe21::router(Arc::clone(&state)))
         .merge(openapi::router())
+        .merge(static_product::router())
         .layer(middleware::from_fn(contract::request_id_middleware))
         .layer(TraceLayer::new_for_http());
 

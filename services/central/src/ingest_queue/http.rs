@@ -315,7 +315,8 @@ async fn coverage_status(
             Ok(rows) => rows,
             Err(err) => return queue_err(&err, request_id),
         };
-        let horizon = super::schedule::planned_horizon(config.schedule, now, delay, window_secs);
+        let schedule = state.providers.effective_ingest_schedule(tenant_id, site);
+        let horizon = super::schedule::planned_horizon(schedule, now, delay, window_secs);
         let (planned_through, next_run, schedule_error) = match horizon {
             Ok((planned, next)) => (Some(planned), Some(next), None),
             Err(err) => (None, None, Some(err.to_string())),
@@ -330,7 +331,7 @@ async fn coverage_status(
         overall = super::status::worse(overall, status.state);
         provider_statuses.push(status.clone());
         let gap_scan_truncated = status.oldest_gap.is_none() && gaps.len() >= MAX_LIST as usize;
-        let (mode, timezone) = match config.schedule {
+        let (mode, timezone) = match schedule {
             super::schedule::IngestSchedule::Periodic => ("periodic", None),
             super::schedule::IngestSchedule::Daily { tz } => ("daily", Some(tz.name())),
         };
