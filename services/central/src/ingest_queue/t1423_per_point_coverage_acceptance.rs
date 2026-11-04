@@ -204,19 +204,14 @@ async fn t1423_6_one_point_present_one_missing_does_not_mark_hour_stored() {
         return;
     };
     case.cleanup().await;
-    case
-        .seed_point_map("src-p1", "opaque-p1", "sat")
-        .await;
+    case.seed_point_map("src-p1", "opaque-p1", "sat").await;
     case.insert_sample("opaque-p1", h(2) + Duration::minutes(5))
         .await;
     let group = case.two_point_group();
-    let coverage = super::binding_state::device_point_coverage_for_group(
-        &case.pool,
-        &case.site,
-        &group,
-    )
-    .await
-    .expect("coverage");
+    let coverage =
+        super::binding_state::device_point_coverage_for_group(&case.pool, &case.site, &group)
+            .await
+            .expect("coverage");
     let stored = stored_hour_starts_for_device(
         &case.pool,
         &case.binding_key(),

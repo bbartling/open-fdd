@@ -57,9 +57,9 @@ pub async fn site_catchup_json(
         for group in plan.groups.iter().filter(|group| {
             provider_ids_equivalent(&group.provider_instance_id, &site_cfg.provider_instance_id)
         }) {
-            if device_filter.is_some_and(|allowed| {
-                !allowed.iter().any(|id| id == &group.equipment_id)
-            }) {
+            if device_filter
+                .is_some_and(|allowed| !allowed.iter().any(|id| id == &group.equipment_id))
+            {
                 continue;
             }
             let key = DeviceBindingKey {

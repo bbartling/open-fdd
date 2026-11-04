@@ -8,8 +8,8 @@ use uuid::Uuid;
 use super::binding_state::{device_point_coverage_for_group, last_stored_ts_for_device};
 use super::gap_backfill::{plan_device_gap_backfill, DeviceGapBackfillRequest};
 use crate::providers::committed_model::{IngestDeviceGroup, PlannedPoint};
-use crate::providers::writer::project_historian_rows;
 use crate::providers::types::NormalizedSample;
+use crate::providers::writer::project_historian_rows;
 
 fn h(n: i64) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339("2026-06-01T00:00:00Z")
@@ -175,10 +175,9 @@ async fn t1501_catchup_reads_opaque_point_map_keys_not_semantic_ids() {
         .expect("coverage");
     assert_eq!(coverage[0].openfdd_key, opaque_sat);
     let keys: Vec<String> = coverage.iter().map(|row| row.openfdd_key.clone()).collect();
-    let last =
-        last_stored_ts_for_device(&case.pool, &case.site, &keys)
-            .await
-            .expect("last");
+    let last = last_stored_ts_for_device(&case.pool, &case.site, &keys)
+        .await
+        .expect("last");
     assert!(last.is_some(), "semantic ids must not hide stored samples");
     let (plan, jobs) = plan_device_gap_backfill(
         &case.pool,

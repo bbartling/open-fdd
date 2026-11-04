@@ -228,7 +228,12 @@ async fn harness(case: &SiteCase) -> (Arc<AppState>, Router, String) {
     }
     let token = state
         .auth
-        .issue_token_with_tenants("t1499-operator", Role::Operator, 600, &[case.tenant.clone()])
+        .issue_token_with_tenants(
+            "t1499-operator",
+            Role::Operator,
+            600,
+            &[case.tenant.clone()],
+        )
         .expect("token");
     let app = crate::routes::router(Arc::clone(&state));
     (state, app, token)
@@ -303,17 +308,23 @@ async fn t1499_backfill_site_http_acceptance() {
     // Unknown provider → 404 unknown_provider.
     {
         let (state, app, token) = harness(&case).await;
-        state.providers.models.lock().unwrap().try_activate(
-            None,
-            &CommittedModel {
-                schema: SCHEMA.into(),
-                tenant_id: case.tenant.clone(),
-                site_id: case.site.clone(),
-                provider_instance_id: case.connection.clone(),
-                truncated: false,
-                equipment: vec![case.equipment("DEV_A", "src-a")],
-            },
-        ).expect("plan");
+        state
+            .providers
+            .models
+            .lock()
+            .unwrap()
+            .try_activate(
+                None,
+                &CommittedModel {
+                    schema: SCHEMA.into(),
+                    tenant_id: case.tenant.clone(),
+                    site_id: case.site.clone(),
+                    provider_instance_id: case.plan_slug.clone(),
+                    truncated: false,
+                    equipment: vec![case.equipment("DEV_A", "src-a")],
+                },
+            )
+            .expect("plan");
         let (status, body) = post_site(
             &app,
             &token,
@@ -334,20 +345,26 @@ async fn t1499_backfill_site_http_acceptance() {
         let (state, app, token) = harness(&case).await;
         let dev_a = "AHU_A";
         let dev_b = "AHU_B";
-        state.providers.models.lock().unwrap().try_activate(
-            None,
-            &CommittedModel {
-                schema: SCHEMA.into(),
-                tenant_id: case.tenant.clone(),
-                site_id: case.site.clone(),
-                provider_instance_id: case.connection.clone(),
-                truncated: false,
-                equipment: vec![
-                    case.equipment(dev_a, "src-a"),
-                    case.equipment(dev_b, "src-b"),
-                ],
-            },
-        ).expect("two-device plan");
+        state
+            .providers
+            .models
+            .lock()
+            .unwrap()
+            .try_activate(
+                None,
+                &CommittedModel {
+                    schema: SCHEMA.into(),
+                    tenant_id: case.tenant.clone(),
+                    site_id: case.site.clone(),
+                    provider_instance_id: case.plan_slug.clone(),
+                    truncated: false,
+                    equipment: vec![
+                        case.equipment(dev_a, "src-a"),
+                        case.equipment(dev_b, "src-b"),
+                    ],
+                },
+            )
+            .expect("two-device plan");
         for (device, portal) in [(dev_a, "src-a"), (dev_b, "src-b")] {
             let key = case.point_key(device, "sat");
             case.seed_point_map(device, portal, &key, "sat").await;
@@ -384,17 +401,23 @@ async fn t1499_backfill_site_http_acceptance() {
     {
         let (state, app, token) = harness(&case).await;
         let dev = "SLUG_DEV";
-        state.providers.models.lock().unwrap().try_activate(
-            None,
-            &CommittedModel {
-                schema: SCHEMA.into(),
-                tenant_id: case.tenant.clone(),
-                site_id: case.site.clone(),
-                provider_instance_id: case.plan_slug.clone(),
-                truncated: false,
-                equipment: vec![case.equipment(dev, "src-slug")],
-            },
-        ).expect("slug plan");
+        state
+            .providers
+            .models
+            .lock()
+            .unwrap()
+            .try_activate(
+                None,
+                &CommittedModel {
+                    schema: SCHEMA.into(),
+                    tenant_id: case.tenant.clone(),
+                    site_id: case.site.clone(),
+                    provider_instance_id: case.plan_slug.clone(),
+                    truncated: false,
+                    equipment: vec![case.equipment(dev, "src-slug")],
+                },
+            )
+            .expect("slug plan");
         case.seed_binding(dev, h(0)).await;
         let (status, body) = post_site(
             &app,
@@ -416,24 +439,30 @@ async fn t1499_backfill_site_http_acceptance() {
         let (state, app, token) = harness(&case).await;
         let covered = "COV_DEV";
         let gap = "GAP_DEV";
-        state.providers.models.lock().unwrap().try_activate(
-            None,
-            &CommittedModel {
-                schema: SCHEMA.into(),
-                tenant_id: case.tenant.clone(),
-                site_id: case.site.clone(),
-                provider_instance_id: case.connection.clone(),
-                truncated: false,
-                equipment: vec![
-                    case.equipment(covered, "src-cov"),
-                    case.equipment(gap, "src-gap"),
-                ],
-            },
-        )
-        .expect("mixed plan");
+        state
+            .providers
+            .models
+            .lock()
+            .unwrap()
+            .try_activate(
+                None,
+                &CommittedModel {
+                    schema: SCHEMA.into(),
+                    tenant_id: case.tenant.clone(),
+                    site_id: case.site.clone(),
+                    provider_instance_id: case.plan_slug.clone(),
+                    truncated: false,
+                    equipment: vec![
+                        case.equipment(covered, "src-cov"),
+                        case.equipment(gap, "src-gap"),
+                    ],
+                },
+            )
+            .expect("mixed plan");
         let cov_key = case.point_key(covered, "sat");
         let gap_key = case.point_key(gap, "sat");
-        case.seed_point_map(covered, "src-cov", &cov_key, "sat").await;
+        case.seed_point_map(covered, "src-cov", &cov_key, "sat")
+            .await;
         case.seed_point_map(gap, "src-gap", &gap_key, "sat").await;
         case.seed_binding(covered, h(0)).await;
         case.seed_binding(gap, h(0)).await;
@@ -441,7 +470,8 @@ async fn t1499_backfill_site_http_acceptance() {
             case.insert_sample(&cov_key, h(hour) + Duration::minutes(5))
                 .await;
         }
-        case.insert_sample(&gap_key, h(1) + Duration::minutes(5)).await;
+        case.insert_sample(&gap_key, h(1) + Duration::minutes(5))
+            .await;
         let (status, body) = post_site(
             &app,
             &token,

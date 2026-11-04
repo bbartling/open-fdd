@@ -39,6 +39,8 @@ pub struct GapPlanResult {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GapPlanInput<'a> {
+    /// Operator-requested range start (hour-aligned); may precede `fetch_start`.
+    pub range_start: DateTime<Utc>,
     /// Hour-aligned walk bound (outer fetch/planner range start).
     pub fetch_start: DateTime<Utc>,
     /// Hour-aligned walk bound (publication-aligned end).
@@ -92,6 +94,7 @@ pub fn gap_plan_input<'a>(
         binding_created_at,
     )?;
     Ok(GapPlanInput {
+        range_start: requested_start,
         fetch_start,
         fetch_end,
         first_expected,
@@ -144,7 +147,7 @@ pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String
     let mut not_expected = Vec::new();
     let mut missing_hours = Vec::new();
 
-    let mut cursor = input.fetch_start;
+    let mut cursor = input.range_start;
     while cursor < input.fetch_end {
         let next = cursor + Duration::hours(1);
         if next <= input.first_expected {
@@ -152,6 +155,8 @@ pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String
                 start: cursor,
                 end: next,
             });
+        } else if cursor < input.fetch_start {
+            // Hour before the fetch-aligned walk; visibility only.
         } else if !input.force && stored.contains(&cursor) {
             skipped_stored.push(WindowSpan {
                 start: cursor,

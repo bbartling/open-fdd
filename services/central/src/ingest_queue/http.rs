@@ -461,7 +461,8 @@ pub async fn list_catchup(
         now,
         device_filter.as_deref(),
     )
-    .await {
+    .await
+    {
         Ok(providers) => Json(json!({
             "ok": true,
             "request_id": request_id,
@@ -1961,14 +1962,16 @@ mod tests {
                 &crate::providers::committed_model::ModelScope {
                     tenant_id: "tenant-a".into(),
                     site_id: "site-a".into(),
-                    provider_instance_id: "nf:conn-a".into(),
+                    provider_instance_id: "nf-conn-a".into(),
                 },
                 &[],
             )
             .expect("model"),
         }];
-        assert!(resolve_bound_provider_id(&sites, "tenant-a", "site-a", "nf:missing", "nf:conn-a")
-            .is_err());
+        assert!(
+            resolve_bound_provider_id(&sites, "tenant-a", "site-a", "nf:missing", "nf:conn-a")
+                .is_err()
+        );
         assert!(provider_connection_configured(
             &sites,
             "tenant-a",

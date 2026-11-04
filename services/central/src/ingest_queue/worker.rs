@@ -1201,13 +1201,10 @@ async fn process_asap_device(input: AsapDeviceCycleInput<'_>) -> Result<u32, Str
                 )
         })
         .ok_or_else(|| "device not in committed plan".to_string())?;
-    let point_coverage = super::binding_state::device_point_coverage_for_group(
-        pool,
-        &device.canonical_site,
-        group,
-    )
-    .await
-    .map_err(|err| err.to_string())?;
+    let point_coverage =
+        super::binding_state::device_point_coverage_for_group(pool, &device.canonical_site, group)
+            .await
+            .map_err(|err| err.to_string())?;
     let point_keys: Vec<String> = point_coverage
         .iter()
         .map(|row| row.openfdd_key.clone())

@@ -27,8 +27,7 @@ pub fn point_coverage_for_group(group: &IngestDeviceGroup) -> Vec<DevicePointCov
         .points
         .iter()
         .map(|point| {
-            let openfdd_key =
-                conventional_openfdd_key(&group.equipment_id, &point.canonical_role);
+            let openfdd_key = conventional_openfdd_key(&group.equipment_id, &point.canonical_role);
             DevicePointCoverage {
                 openfdd_key,
                 coverage_point_id: point.source_point_id.clone(),
