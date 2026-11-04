@@ -934,7 +934,7 @@ fn site_backfill_plan_group<'a>(
 ) -> Option<&'a crate::providers::committed_model::IngestDeviceGroup> {
     plan.groups.iter().find(|group| {
         group.equipment_id == device.equipment_id
-            && super::providers::http_policy::provider_ids_equivalent(
+            && crate::providers::http_policy::provider_ids_equivalent(
                 &group.provider_instance_id,
                 &device.provider_instance_id,
             )
