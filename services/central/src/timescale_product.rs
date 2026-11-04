@@ -4865,6 +4865,35 @@ mod plot_role_tests {
     }
 
     #[test]
+    fn fc1_zero_mode_positive_startup_maps_session_to_holdoff_rows() {
+        let _lock = crate::test_env_lock::lock_env();
+        let reg = load_reg().expect("load sql/fdd registry");
+        let rule = reg.rules.iter().find(|r| r.rule_id == "FC1").expect("FC1");
+        let payload = json!({
+            "params": { "FC1": { "mode_delay_min": 0, "startup_delay_min": 15 } }
+        });
+        let session = session_override_for_rule(&payload, "FC1");
+        let sql = render_rule_sql(
+            &reg,
+            rule,
+            300.0,
+            confirm_seconds_from_payload(&payload, rule),
+            "SYNTH",
+            Some("AHU_1"),
+            session.as_ref(),
+        )
+        .expect("render FC1");
+        assert!(
+            !sql.contains("{{"),
+            "unfilled placeholder left in FC1 SQL: {sql}"
+        );
+        assert!(
+            sql.contains("ROWS BETWEEN 2 PRECEDING AND CURRENT ROW"),
+            "15 min startup @ 300 s poll must use 3-row holdoff: {sql}"
+        );
+    }
+
+    #[test]
     fn clamp_max_points_bounds() {
         assert_eq!(clamp_max_points(None), 1500);
         assert_eq!(clamp_max_points(Some(10)), 50);

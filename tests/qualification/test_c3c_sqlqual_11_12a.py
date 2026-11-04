@@ -82,7 +82,7 @@ class C3cSqlQualDbTests(unittest.TestCase):
         payload = json.loads(out.read_text(encoding="utf-8"))
         self.assertEqual(payload["schema"], "c3-sqlqual-matrix-v1")
         qual = payload["summary_by_qual_id"]
-        self.assertGreaterEqual(qual.get("SQL-QUAL-11", {}).get("PASS", 0), 4)
+        self.assertGreaterEqual(qual.get("SQL-QUAL-11", {}).get("PASS", 0), 6)
         self.assertEqual(qual.get("SQL-QUAL-12B", {}).get("PENDING", 0), 1)
         self.assertEqual(qual.get("SQL-QUAL-12C", {}).get("PENDING", 0), 1)
 

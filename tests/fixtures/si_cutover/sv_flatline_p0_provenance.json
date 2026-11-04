@@ -1,0 +1,46 @@
+{
+  "schema": "openfdd-sv-flatline-p0-provenance-v1",
+  "issue": 1408,
+  "rule_id": "SV-FLATLINE",
+  "building_id": "SYNTH_VAV_CASE_VAV_1",
+  "equipment_id": "VAV_CASE_VAV_1",
+  "summary": "P0 compares frozen W0c IP golden pandas_fdd_daily against frozen IP sql_fdd_daily. The seven mismatches are a stale dual-capture artifact (3.2× inflated sql_fdd_daily seconds), not current pandas-vs-shipped-SQL disagreement.",
+  "disposition": "report_only_p0; do not refresh ip_goldens; SI P2 pairs on the same golden agree at 4500 s",
+  "p0_mismatch_cells": [
+    {
+      "utc_day": "2026-01-05",
+      "frozen_pandas_ip_fault_seconds": 4500.0,
+      "frozen_sql_ip_fault_seconds": 14400.0
+    },
+    {
+      "utc_day": "2026-01-06",
+      "frozen_pandas_ip_fault_seconds": 4500.0,
+      "frozen_sql_ip_fault_seconds": 14400.0
+    },
+    {
+      "utc_day": "2026-01-07",
+      "frozen_pandas_ip_fault_seconds": 3900.0,
+      "frozen_sql_ip_fault_seconds": 13800.0
+    },
+    {
+      "utc_day": "2026-01-08",
+      "frozen_pandas_ip_fault_seconds": 4500.0,
+      "frozen_sql_ip_fault_seconds": 14400.0
+    },
+    {
+      "utc_day": "2026-01-09",
+      "frozen_pandas_ip_fault_seconds": 4500.0,
+      "frozen_sql_ip_fault_seconds": 14400.0
+    },
+    {
+      "utc_day": "2026-01-10",
+      "frozen_pandas_ip_fault_seconds": 0.0,
+      "frozen_sql_ip_fault_seconds": 14400.0
+    },
+    {
+      "utc_day": "2026-01-11",
+      "frozen_pandas_ip_fault_seconds": 0.0,
+      "frozen_sql_ip_fault_seconds": 14400.0
+    }
+  ]
+}

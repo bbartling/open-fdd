@@ -45,6 +45,13 @@ def test_sv_range_flags_out_of_range_humidity():
     assert mask.iloc[0]
 
 
+def test_flatline_nonzero_on_humidity_after_declared_unit():
+    frame = pd.DataFrame({"return-air-humidity": [44.0] * 30})
+    stamp_display_units(frame)
+    flat_mask = _sweep_flatline(frame, {"flatline_hours": 1.0, "flatline_tol": 0.1}, 300.0)
+    assert flat_mask.sum() >= 5
+
+
 def test_t1408_3_airflow_proxy_gate_uses_si_litres_per_second() -> None:
     """W4e: the VAV airflow proof is 50 cfm, i.e. 23.597 L/s on SI storage."""
     from open_fdd.analytics.report_storage import STORAGE_ABI_METRIC

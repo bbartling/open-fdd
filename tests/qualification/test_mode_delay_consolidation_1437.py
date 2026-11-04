@@ -207,8 +207,6 @@ class Fc1ModeDelayTimelineGridPostgresTest(unittest.TestCase):
         for case in build_mode_delay_grid_cases():
             if float(case.get("poll_seconds") or 0) != poll:
                 continue
-            if case.get("mode_delay_min") == 0.0 and float(case.get("startup_delay_min") or 0) > 0:
-                continue
             params = self._params_for_case(case)
             res = run_rule(
                 "FC1",

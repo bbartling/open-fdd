@@ -59,7 +59,14 @@ def _executemany(cur, sql: str, rows: list[tuple]) -> None:
     cur.executemany(sql, rows)
 
 
-def _setup_fixture(cur, *, rows_per_equipment: int, equipment_count: int, web_mode: str) -> None:
+def _setup_fixture(
+    cur,
+    *,
+    rows_per_equipment: int,
+    equipment_count: int,
+    web_mode: str,
+    inject_fault: bool = False,
+) -> None:
     cur.execute(
         """
         DROP TABLE IF EXISTS history, weather CASCADE;
@@ -82,8 +89,9 @@ def _setup_fixture(cur, *, rows_per_equipment: int, equipment_count: int, web_mo
     hist: list[tuple[str, str, float, None]] = []
     for i in range(rows_per_equipment):
         ts = (t0 + timedelta(minutes=5 * i)).isoformat()
+        oa_val = 20.0 + (i % 7) * 0.1 if inject_fault else 10.0 + (i % 7) * 0.1
         for eq in eqs:
-            hist.append((eq, ts, 10.0 + (i % 7) * 0.1, None))
+            hist.append((eq, ts, oa_val, None))
     _executemany(cur, "INSERT INTO history VALUES (%s, %s, %s, %s)", hist)
     n_web = max(50, rows_per_equipment // 20)
     web_rows: list[tuple[str, float]] = []
@@ -315,6 +323,43 @@ def run_mask_boundary_digest(
         "raw_fault_rows": int(row[1]),
         "total_rows": int(row[2]),
     }
+
+
+def run_injected_fault_mask_digest(
+    *,
+    database_url: str,
+    web_asof_bound_seconds: float,
+) -> dict:
+    """Dense fixture with BAS/web delta above OAT_ERR — must produce raw_fault rows (#1439)."""
+    probe = _render_base_probe_sql(web_asof_bound_seconds=web_asof_bound_seconds)
+    conn = _connect(database_url)
+    conn.autocommit = True
+    cur = conn.cursor()
+    _setup_fixture(
+        cur,
+        rows_per_equipment=700,
+        equipment_count=1,
+        web_mode="dense",
+        inject_fault=True,
+    )
+    cur.execute(
+        "SELECT count(*) FILTER (WHERE assessable) AS assessable_rows, "
+        "count(*) FILTER (WHERE raw_fault = 1) AS raw_fault_rows, "
+        "count(*) AS total_rows "
+        f"FROM ({probe}) s"
+    )
+    row = cur.fetchone()
+    conn.close()
+    return {
+        "assessable_rows": int(row[0]),
+        "raw_fault_rows": int(row[1]),
+        "total_rows": int(row[2]),
+        "injected_fault": True,
+    }
+
+
+def fdd_run_timeout_seconds() -> float:
+    return float(os.environ.get("OPENFDD_FDD_RUN_TIMEOUT_SECS", "900"))
 
 
 def build_parser() -> argparse.ArgumentParser:
