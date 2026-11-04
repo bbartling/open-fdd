@@ -8,9 +8,9 @@ Soft-OPEN dependency artifact for generic downstream consumers. **Not** full liv
 | --- | --- |
 | Processing ABI | `metric-c-v2` |
 | Scientific contract | `openfdd-sql-schema-fdd-v1` @ `4.0.8-softopen.1` |
-| Scientific `pack_sha256` | `82efa9027adbe0e3e75e64365474b238e74cc0fed307caf6187b80063c7d3422` |
+| Scientific `pack_sha256` | `b83dd5f7af724fb5e370d26b54961a105ea644bdf9b39802e3f112a2b85c68c8` |
 | Distribution | `openfdd-si-sql-distribution-v1` @ `4.0.8-softopen.1-dist-20261103` |
-| Distribution `distribution_sha256` | `7db7d2cc7fa24d5d482f3294dc3c53f8134bde7bf02b22bfd7352d3c1b13f94a` |
+| Distribution `distribution_sha256` | `142f83680edbd97b9c415aa5aabc138c27cc3792dfad8ca3a5ad34870175059c` |
 
 ### Superseded scientific identity (do not re-pin)
 

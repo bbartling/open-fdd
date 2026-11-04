@@ -359,6 +359,10 @@
     },
     {
       "method": "GET",
+      "path": "/api/model/projection"
+    },
+    {
+      "method": "GET",
       "path": "/api/model/ttl"
     },
     {

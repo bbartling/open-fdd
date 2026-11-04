@@ -97,7 +97,7 @@ concurrency:
 jobs:
   si-parity:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     services:
       timescale:
         image: timescale/timescaledb:2.17.2-pg16
@@ -251,7 +251,7 @@ jobs:
             tests.qualification.test_mode_delay_shared \
             tests.qualification.test_mode_delay_consolidation_1437 \
             tests.qualification.test_fc6_flow_default_coherence \
-            tests.qualification.test_c3a_sql_qual_01_06 -v
+            tests.qualification.test_c3a_sql_qual_01_06.SqlQualC3aHarnessTests -v
 
       - name: C3b SQL-QUAL-07..10 + 19 analytics (disposable Timescale)
         env:

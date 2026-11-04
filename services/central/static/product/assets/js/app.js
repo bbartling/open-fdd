@@ -141,7 +141,14 @@ function recomputeScopedSets() {
   const tagged = ctx.model.points.filter((p) => p.siteRef === scope.site);
   const equipPts = tagged.filter(inScopeEquip);
   chartState.cardPoints = equipPts
-    .filter((p) => !isBoolRole(p) && (has(p, "sensor") || has(p, "sp")))
+    .filter(
+      (p) =>
+        !isBoolRole(p) &&
+        (has(p, "sensor") ||
+          has(p, "sp") ||
+          isTemp(p) ||
+          (p.kind === "Number" && roleOf(p))),
+    )
     .sort((a, b) => rankPoint(a) - rankPoint(b) || displayName(a).localeCompare(displayName(b)));
   chartState.statusPoints = equipPts
     .filter(isBoolRole)

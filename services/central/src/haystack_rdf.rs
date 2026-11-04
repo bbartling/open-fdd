@@ -252,6 +252,14 @@ impl HaystackRdfCache {
     }
 }
 
+/// Overlay Turtle for SPARQL union (empty string when no overlay file).
+pub fn overlay_ttl_for_sparql(
+    building_id: &str,
+    equipment_id: Option<&str>,
+) -> Result<String, Value> {
+    HaystackRdfCache::load_overlay_ttl(building_id, equipment_id)
+}
+
 /// HTTP status for package SPARQL errors (`404` = no native model, `400` = scoped failure).
 pub fn sparql_route_status(err: &Value) -> axum::http::StatusCode {
     if err.get("present") == Some(&json!(false)) {

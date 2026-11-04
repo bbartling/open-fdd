@@ -17,6 +17,7 @@ pub mod portal_ingest_sparql;
 pub mod semantic_meta;
 pub mod semantic_selector;
 pub mod session;
+pub mod static_ui_model_projection;
 pub mod timescale_stage;
 pub mod timestamp;
 mod upload;

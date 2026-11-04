@@ -479,6 +479,21 @@ fn load_store(pack_turtle: &str, overlay_turtle: &str) -> Result<Store, String> 
     model_overlay::union_pack_overlay_for_sparql(pack_turtle, overlay_turtle)
 }
 
+/// Run a read-only SELECT and return lexical string bindings per variable (for UI projections).
+pub fn select_lexical_rows_on_turtle(
+    pack_turtle: &str,
+    overlay_turtle: &str,
+    query_text: &str,
+) -> Result<(Vec<BTreeMap<String, String>>, bool), String> {
+    let store = load_store(pack_turtle, overlay_turtle)?;
+    let full = if query_text.trim().to_ascii_uppercase().contains("PREFIX ") {
+        query_text.to_string()
+    } else {
+        format!("{PREFIXES}\n{query_text}")
+    };
+    execute_select(&store, &full)
+}
+
 fn execute_select(
     store: &Store,
     query_text: &str,
@@ -525,7 +540,7 @@ fn template_by_id(id: &str) -> Option<Template> {
     templates().into_iter().find(|t| t.id == id)
 }
 
-fn inventory_role_map(inventory: Option<&Value>) -> BTreeMap<(String, String), String> {
+pub fn inventory_role_map(inventory: Option<&Value>) -> BTreeMap<(String, String), String> {
     let mut out = BTreeMap::new();
     let Some(equip) = inventory
         .and_then(|v| v.get("equipment"))
@@ -554,7 +569,7 @@ fn inventory_role_map(inventory: Option<&Value>) -> BTreeMap<(String, String), S
     out
 }
 
-fn inventory_equip_types(inventory: Option<&Value>) -> BTreeMap<String, String> {
+pub fn inventory_equip_types(inventory: Option<&Value>) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
     let Some(equip) = inventory
         .and_then(|v| v.get("equipment"))

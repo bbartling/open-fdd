@@ -13,6 +13,15 @@ from typing import Any
 
 from scripts.ci import unit_contract_lib as uc
 from scripts.qualification.c3c_db_schema import apply_si_cutover_fixture_schema
+from scripts.qualification.c3c_libpq import (
+    admin_dbname,
+    blocked_migration_client_receipt,
+    missing_pg_clients,
+    run_pg_dump,
+    run_psql,
+    scratch_dbname,
+    with_dbname,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 IP_GOLDENS = ROOT / "tests" / "fixtures" / "si_cutover" / "ip_goldens"
@@ -117,18 +126,17 @@ def _dry_run_rows_to_convert(cur, site: str) -> int:
 
 
 def _admin_url(database_url: str) -> str:
-    return database_url.rsplit("/", 1)[0] + "/postgres"
+    return admin_dbname(database_url)
 
 
 def _scratch_url(database_url: str) -> str:
-    return database_url.rsplit("/", 1)[0] + "/openfdd_c3c_scratch"
+    return scratch_dbname(database_url)
 
 
 def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
-    scratch = _scratch_url(database_url)
-    admin = _admin_url(database_url)
-    env = os.environ.copy()
-    env["PGPASSWORD"] = env.get("PGPASSWORD", "openfdd")
+    scratch = scratch_dbname(database_url)
+    scratch_url = with_dbname(database_url, scratch)
+    admin = admin_dbname(database_url)
 
     with _connect(database_url) as conn:
         conn.autocommit = True
@@ -151,18 +159,18 @@ def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
         )
         sample_rows = cur.fetchall()
 
-    subprocess.run(
-        ["psql", admin, "-v", "ON_ERROR_STOP=1", "-c", "DROP DATABASE IF EXISTS openfdd_c3c_scratch"],
-        check=True,
-        env=env,
+    run_psql(
+        database_url=database_url,
+        dbname=admin,
+        args=["-c", "DROP DATABASE IF EXISTS openfdd_c3c_scratch"],
     )
-    subprocess.run(
-        ["psql", admin, "-v", "ON_ERROR_STOP=1", "-c", "CREATE DATABASE openfdd_c3c_scratch"],
-        check=True,
-        env=env,
+    run_psql(
+        database_url=database_url,
+        dbname=admin,
+        args=["-c", "CREATE DATABASE openfdd_c3c_scratch"],
     )
 
-    with _connect(scratch) as conn:
+    with _connect(scratch_url) as conn:
         conn.autocommit = True
         cur = conn.cursor()
         apply_si_cutover_fixture_schema(cur)
@@ -182,36 +190,36 @@ def _pg_dump_restore_proof(*, database_url: str, site: str) -> dict[str, Any]:
 
     with tempfile.TemporaryDirectory(prefix="c3c-12a-") as tmp:
         dump_path = Path(tmp) / "scratch.sql"
-        raw_sql = subprocess.check_output(
-            ["pg_dump", "--format=p", "--no-owner", "--data-only", "--column-inserts", scratch],
-            env=env,
-            text=True,
-        )
+        raw_sql = run_pg_dump(
+            database_url=database_url,
+            dbname=scratch,
+            extra_args=["--format=p", "--no-owner", "--data-only", "--column-inserts"],
+        ).decode("utf-8", errors="replace")
         filtered = "\n".join(
             line for line in raw_sql.splitlines() if "transaction_timeout" not in line
         )
         dump_path.write_text(filtered + "\n", encoding="utf-8")
         dump_bytes = dump_path.stat().st_size
-        with _connect(scratch) as conn:
+        with _connect(scratch_url) as conn:
             conn.autocommit = True
             cur = conn.cursor()
             cur.execute("DELETE FROM sample WHERE site_id = %s", (site,))
             cur.execute("DELETE FROM point_map WHERE site_id = %s", (site,))
             cur.execute("DELETE FROM site WHERE site_id = %s", (site,))
-        subprocess.run(
-            ["psql", scratch, "-v", "ON_ERROR_STOP=1", "-f", str(dump_path)],
-            check=True,
-            env=env,
+        run_psql(
+            database_url=database_url,
+            dbname=scratch,
+            args=["-f", str(dump_path)],
         )
-        with _connect(scratch) as conn:
+        with _connect(scratch_url) as conn:
             cur = conn.cursor()
             cur.execute("SELECT val, unit FROM sample WHERE site_id = %s LIMIT 1", (site,))
             row = cur.fetchone()
 
-    subprocess.run(
-        ["psql", admin, "-v", "ON_ERROR_STOP=1", "-c", "DROP DATABASE IF EXISTS openfdd_c3c_scratch"],
-        check=True,
-        env=env,
+    run_psql(
+        database_url=database_url,
+        dbname=admin,
+        args=["-c", "DROP DATABASE IF EXISTS openfdd_c3c_scratch"],
     )
     return {
         "scratch_database": "openfdd_c3c_scratch",
@@ -394,19 +402,34 @@ def run_sql_qual_12a(
             }
         )
 
-    restore = _pg_dump_restore_proof(database_url=database_url, site=site)
-    evidence["pg_dump_restore"] = restore
-    cells.append(
-        {
-            "id": "SQL-QUAL-12A-pg-dump-scratch-restore-rollback",
-            "phase": "C3",
-            "status": "PASS"
-            if restore.get("restored_unit") == "degC" and abs(float(restore.get("restored_val") or 0) - 10.0) < 1e-5
-            else "FAIL",
-            "summary": str(restore),
-            "evidence": restore,
-        }
-    )
+    restore_blocked = missing_pg_clients()
+    if restore_blocked:
+        receipt = blocked_migration_client_receipt(missing=restore_blocked)
+        evidence["pg_dump_restore"] = receipt
+        cells.append(
+            {
+                "id": "SQL-QUAL-12A-pg-dump-scratch-restore-rollback",
+                "phase": "C3",
+                "status": "BLOCKED",
+                "summary": f"missing migration clients: {', '.join(restore_blocked)}",
+                "evidence": receipt,
+            }
+        )
+    else:
+        restore = _pg_dump_restore_proof(database_url=database_url, site=site)
+        evidence["pg_dump_restore"] = restore
+        cells.append(
+            {
+                "id": "SQL-QUAL-12A-pg-dump-scratch-restore-rollback",
+                "phase": "C3",
+                "status": "PASS"
+                if restore.get("restored_unit") == "degC"
+                and abs(float(restore.get("restored_val") or 0) - 10.0) < 1e-5
+                else "FAIL",
+                "summary": str(restore),
+                "evidence": restore,
+            }
+        )
 
     if run_rust_cutover:
         rust = run_rust_t1284_3(database_url=database_url)

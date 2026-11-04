@@ -5,20 +5,24 @@ on:
     branches: [master, main]
     paths:
       - "scripts/qualification/c3c*.py"
+      - "scripts/qualification/c3c_libpq.py"
       - "scripts/qualification/run_c3c_sqlqual_11_12a.py"
       - "scripts/qualification/c3c_db_schema.py"
       - "scripts/stress/oat_meteo_asof_scaling_bench.py"
       - "tests/qualification/test_c3c_sqlqual_11_12a.py"
+      - "tests/qualification/test_c3c_libpq.py"
       - "services/central/src/t1284_3_si_cutover_test.rs"
       - "crates/fdd_tsdb/src/si_cutover.rs"
       - ".github/workflows/c3c-sqlqual-11-12a.yml"
   pull_request:
     paths:
       - "scripts/qualification/c3c*.py"
+      - "scripts/qualification/c3c_libpq.py"
       - "scripts/qualification/run_c3c_sqlqual_11_12a.py"
       - "scripts/qualification/c3c_db_schema.py"
       - "scripts/stress/oat_meteo_asof_scaling_bench.py"
       - "tests/qualification/test_c3c_sqlqual_11_12a.py"
+      - "tests/qualification/test_c3c_libpq.py"
       - "services/central/src/t1284_3_si_cutover_test.rs"
       - "crates/fdd_tsdb/src/si_cutover.rs"
       - ".github/workflows/c3c-sqlqual-11-12a.yml"
@@ -62,7 +66,9 @@ jobs:
         run: python3 -m pip install --quiet -r scripts/qualification/requirements.txt
 
       - name: Offline C3c harness unit tests
-        run: python3 -B -m unittest tests.qualification.test_c3c_sqlqual_11_12a.C3cMatrixTests -v
+        run: |
+          python3 -B -m unittest tests.qualification.test_c3c_sqlqual_11_12a.C3cMatrixTests -v
+          python3 -B -m unittest tests.qualification.test_c3c_libpq -v
 
       - name: Run SQL-QUAL-11 + 12A matrix (disposable DB)
         env:
