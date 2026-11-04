@@ -125,6 +125,25 @@ impl PpcCase {
         .expect("sample");
     }
 
+    async fn seed_point_map(&self, portal_point_id: &str, openfdd_key: &str, role: &str) {
+        sqlx::query(
+            "INSERT INTO point_map (site_id, openfdd_key, haystack_id, role, equipment_id, portal_point_id, referenced)
+         VALUES ($1, $2, $3, $4, $5, $3, true)
+         ON CONFLICT (site_id, openfdd_key) DO UPDATE
+           SET portal_point_id = EXCLUDED.portal_point_id,
+               role = EXCLUDED.role,
+               equipment_id = EXCLUDED.equipment_id",
+        )
+        .bind(&self.site)
+        .bind(openfdd_key)
+        .bind(portal_point_id)
+        .bind(role)
+        .bind(&self.device)
+        .execute(&self.pool)
+        .await
+        .expect("point_map");
+    }
+
     fn point_key(&self, stem: &str) -> String {
         format!("urn:openfdd:point:{}:{stem}", self.site)
     }
@@ -169,7 +188,7 @@ fn coverage_points(group: &IngestDeviceGroup) -> Vec<DevicePointCoverage> {
         .points
         .iter()
         .map(|point| DevicePointCoverage {
-            openfdd_key: point.semantic_point_id.clone(),
+            openfdd_key: format!("opaque-{}", point.source_point_id),
             coverage_point_id: point.source_point_id.clone(),
             history_mode: point.history_mode.clone(),
             cadence_secs: point.cadence_secs,
@@ -185,10 +204,19 @@ async fn t1423_6_one_point_present_one_missing_does_not_mark_hour_stored() {
         return;
     };
     case.cleanup().await;
-    case.insert_sample(&case.point_key("p1"), h(2) + Duration::minutes(5))
+    case
+        .seed_point_map("src-p1", "opaque-p1", "sat")
+        .await;
+    case.insert_sample("opaque-p1", h(2) + Duration::minutes(5))
         .await;
     let group = case.two_point_group();
-    let coverage = coverage_points(&group);
+    let coverage = super::binding_state::device_point_coverage_for_group(
+        &case.pool,
+        &case.site,
+        &group,
+    )
+    .await
+    .expect("coverage");
     let stored = stored_hour_starts_for_device(
         &case.pool,
         &case.binding_key(),

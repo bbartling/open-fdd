@@ -14,12 +14,11 @@ use crate::state::AppState;
 
 use super::asap_mode::{decide_mode, eta_seconds, AsapConfig};
 use super::binding_state::{
-    ensure_binding_row, last_stored_ts_for_device, stored_hour_starts_for_device, DeviceBindingKey,
-    EnsureBindingInput,
+    device_point_coverage_for_group, ensure_binding_row, last_stored_ts_for_device,
+    stored_hour_starts_for_device, DeviceBindingKey, EnsureBindingInput,
 };
 
-use super::gap_backfill::{point_coverage_for_group, point_keys_for_plan_device};
-use super::gap_planner::{default_max_span, expected_start, plan_gap_windows, GapPlanInput};
+use super::gap_planner::{default_max_span, gap_plan_input, plan_gap_windows};
 use super::model::MAX_CATCHUP_HOURS;
 use super::worker::publication_delay_secs;
 
@@ -29,6 +28,7 @@ pub async fn site_catchup_json(
     site: &str,
     configs: &[&SiteConfig],
     now: DateTime<Utc>,
+    device_filter: Option<&[String]>,
 ) -> Result<Vec<Value>, String> {
     let config = AsapConfig::from_env()?;
     let delay = Duration::seconds(publication_delay_secs() as i64);
@@ -57,6 +57,11 @@ pub async fn site_catchup_json(
         for group in plan.groups.iter().filter(|group| {
             provider_ids_equivalent(&group.provider_instance_id, &site_cfg.provider_instance_id)
         }) {
+            if device_filter.is_some_and(|allowed| {
+                !allowed.iter().any(|id| id == &group.equipment_id)
+            }) {
+                continue;
+            }
             let key = DeviceBindingKey {
                 tenant_id: site_cfg.tenant_id.clone(),
                 canonical_site: site_cfg.building_id.clone(),
@@ -125,8 +130,6 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
         config,
         rows_per_minute,
     } = input;
-    let point_keys = point_keys_for_plan_device(plan, provider_instance_id, device_id)
-        .ok_or_else(|| "device not in plan".to_string())?;
     let group = plan
         .groups
         .iter()
@@ -135,7 +138,13 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
                 && provider_ids_equivalent(&group.provider_instance_id, provider_instance_id)
         })
         .ok_or_else(|| "device not in plan".to_string())?;
-    let point_coverage = point_coverage_for_group(group);
+    let point_coverage = device_point_coverage_for_group(pool, &site_cfg.building_id, group)
+        .await
+        .map_err(|err| err.to_string())?;
+    let point_keys: Vec<String> = point_coverage
+        .iter()
+        .map(|row| row.openfdd_key.clone())
+        .collect();
     let key = DeviceBindingKey {
         tenant_id: site_cfg.tenant_id.clone(),
         canonical_site: site_cfg.building_id.clone(),
@@ -167,21 +176,17 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
     let last_stored = last_stored_ts_for_device(pool, &site_cfg.building_id, &point_keys)
         .await
         .map_err(|err| err.to_string())?;
-    let plan_start = expected_start(
+    let gap_plan = gap_plan_input(
         range_start,
+        target_end,
         binding.provider_data_start,
         binding.binding_created_at,
-    );
-    let gap_plan = plan_gap_windows(GapPlanInput {
-        requested_start: plan_start,
-        requested_end: target_end,
-        provider_data_start: binding.provider_data_start,
-        binding_created_at: binding.binding_created_at,
-        stored_hour_starts: &stored,
-        last_stored_ts: last_stored,
-        force: false,
-        max_span: default_max_span(),
-    })?;
+        &stored,
+        last_stored,
+        false,
+        default_max_span(),
+    )
+    .and_then(plan_gap_windows)?;
     let decision = decide_mode(
         &gap_plan,
         last_stored,
@@ -206,6 +211,7 @@ async fn device_row(input: DeviceCatchupRowInput<'_>) -> Result<Value, String> {
     Ok(json!({
         "device_id": device_id,
         "mode": decision.mode.as_str(),
+        "first_expected": gap_plan.expected_start,
         "last_stored_ts": last_stored,
         "missing_windows": decision.missing_windows,
         "rows_per_minute": rows_per_minute,

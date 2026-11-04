@@ -1,9 +1,11 @@
 //! Per-device ingest binding metadata (#1423): provider data start and creation time.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
+
+use crate::providers::committed_model::IngestDeviceGroup;
 
 use super::coverage::{
     expectation_from_fields, reconcile, PointExpectation, PointObservation, ReconcileInput,
@@ -65,6 +67,72 @@ impl DevicePointCoverage {
             ),
         }
     }
+}
+
+pub fn conventional_openfdd_key(equipment_id: &str, role: &str) -> String {
+    format!("{equipment_id}.{role}")
+}
+
+async fn load_openfdd_keys_for_portal_points(
+    pool: &PgPool,
+    site_id: &str,
+    portal_point_ids: &[String],
+) -> Result<HashMap<String, String>, QueueError> {
+    if portal_point_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let rows = match sqlx::query_as::<_, (String, String)>(
+        "SELECT portal_point_id, openfdd_key
+         FROM point_map
+         WHERE site_id = $1 AND portal_point_id = ANY($2)",
+    )
+    .bind(site_id)
+    .bind(portal_point_ids)
+    .fetch_all(pool)
+    .await
+    {
+        Ok(rows) => rows,
+        Err(err) if sample_table_missing(&err) => Vec::new(),
+        Err(err) => {
+            return Err(QueueError::Db(super::model::redact_db_text(
+                &err.to_string(),
+            )));
+        }
+    };
+    Ok(rows.into_iter().collect())
+}
+
+/// Resolve historian keys from committed `point_map` rows, not semantic ids (#1501).
+pub async fn device_point_coverage_for_group(
+    pool: &PgPool,
+    site_id: &str,
+    group: &IngestDeviceGroup,
+) -> Result<Vec<DevicePointCoverage>, QueueError> {
+    let portal_ids: Vec<String> = group
+        .points
+        .iter()
+        .map(|point| point.source_point_id.clone())
+        .collect();
+    let keys = load_openfdd_keys_for_portal_points(pool, site_id, &portal_ids).await?;
+    Ok(group
+        .points
+        .iter()
+        .map(|point| {
+            let openfdd_key = keys
+                .get(&point.source_point_id)
+                .cloned()
+                .unwrap_or_else(|| {
+                    conventional_openfdd_key(&group.equipment_id, &point.canonical_role)
+                });
+            DevicePointCoverage {
+                openfdd_key,
+                coverage_point_id: point.source_point_id.clone(),
+                history_mode: point.history_mode.clone(),
+                cadence_secs: point.cadence_secs,
+                heartbeat_secs: point.heartbeat_secs,
+            }
+        })
+        .collect())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

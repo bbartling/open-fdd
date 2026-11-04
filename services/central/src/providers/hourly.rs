@@ -134,6 +134,11 @@ pub fn completed_window_end(
     floor_to_window(now - publication_delay, window_secs)
 }
 
+/// History fetch lower bound for a logical hour window (#1500).
+pub fn portal_history_fetch_from(logical_start: DateTime<Utc>, overlap: Duration) -> DateTime<Utc> {
+    logical_start - overlap
+}
+
 pub fn catch_up_windows(
     contiguous_end: Option<DateTime<Utc>>,
     now: DateTime<Utc>,
@@ -612,5 +617,14 @@ mod tests {
         assert_eq!(retry_delay_secs(1), 30);
         assert_eq!(retry_delay_secs(2), 60);
         assert_eq!(retry_delay_secs(20), 900);
+    }
+
+    #[test]
+    fn t1500_portal_fetch_from_applies_overlap_before_logical_start() {
+        let start = DateTime::parse_from_rfc3339("2026-06-01T08:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let from = portal_history_fetch_from(start, Duration::minutes(5));
+        assert_eq!(from, start - Duration::minutes(5));
     }
 }

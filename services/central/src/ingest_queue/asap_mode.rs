@@ -5,7 +5,7 @@ use tracing::info;
 
 use crate::providers::hourly::{floor_to_window, validate_ingest_window_secs};
 
-use super::gap_planner::{plan_gap_windows, GapPlanInput, GapPlanResult};
+use super::gap_planner::{gap_plan_input, plan_gap_windows, GapPlanResult};
 
 pub const MODE_NORMAL: &str = "normal";
 pub const MODE_ASAP: &str = "asap";
@@ -221,16 +221,17 @@ mod tests {
     #[test]
     fn enters_asap_when_missing_exceeds_threshold() {
         let stored = [h(1)];
-        let plan = plan_backlog(GapPlanInput {
-            requested_start: h(1),
-            requested_end: h(12),
-            provider_data_start: Some(h(1)),
-            binding_created_at: h(1),
-            stored_hour_starts: &stored,
-            last_stored_ts: Some(h(1)),
-            force: false,
-            max_span: MAX_HISTORY_WINDOW,
-        })
+        let plan = gap_plan_input(
+            h(1),
+            h(12),
+            Some(h(1)),
+            h(1),
+            &stored,
+            Some(h(1)),
+            false,
+            MAX_HISTORY_WINDOW,
+        )
+        .and_then(plan_backlog)
         .expect("plan");
         let decision =
             decide_mode(&plan, Some(h(1)), h(12), Duration::seconds(300), 3600, 3).expect("decide");
@@ -248,16 +249,17 @@ mod tests {
             Duration::seconds(300),
             3600
         ));
-        let plan = plan_backlog(GapPlanInput {
-            requested_start: h(1),
-            requested_end: h(10),
-            provider_data_start: Some(h(1)),
-            binding_created_at: h(1),
-            stored_hour_starts: &[h(1)],
-            last_stored_ts: Some(last),
-            force: false,
-            max_span: MAX_HISTORY_WINDOW,
-        })
+        let plan = gap_plan_input(
+            h(1),
+            h(10),
+            Some(h(1)),
+            h(1),
+            &[h(1)],
+            Some(last),
+            false,
+            MAX_HISTORY_WINDOW,
+        )
+        .and_then(plan_backlog)
         .expect("plan");
         let decision =
             decide_mode(&plan, Some(last), now, Duration::seconds(300), 3600, 1).expect("decide");
