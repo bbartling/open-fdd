@@ -81,7 +81,7 @@ pub fn gap_plan_input<'a>(
     provider_data_start: Option<DateTime<Utc>>,
     binding_created_at: DateTime<Utc>,
     stored_hour_starts: &'a [DateTime<Utc>],
-    last_stored_ts: Option<DateTime<Utc>],
+    last_stored_ts: Option<DateTime<Utc>>,
     force: bool,
     max_span: Duration,
 ) -> Result<GapPlanInput<'a>, String> {
