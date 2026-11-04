@@ -5,7 +5,7 @@ use fdd_core::units_contract::MetricUnitsContract;
 use fdd_tsdb::{SampleRow, Tsdb, UpsertBatch, UNIT_ASSESSED, UNIT_NOT_ASSESSED};
 use sqlx::postgres::PgPoolOptions;
 
-const T1513_LOCK: i64 = 15_130_1513;
+const T1513_LOCK: i64 = 151_301_513;
 
 async fn connect_test_pool() -> Option<sqlx::PgPool> {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
