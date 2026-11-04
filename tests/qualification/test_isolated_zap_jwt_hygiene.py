@@ -37,19 +37,23 @@ class IsolatedZapJwtHygieneTest(unittest.TestCase):
         self.assertNotIn("FALLBACK", text)
         self.assertNotIn("af_fallback", text)
 
-    def test_disposable_web_plus_central(self):
+    def test_disposable_central_product_surface(self):
         text = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("openfdd-web", text)
-        self.assertIn("http://web:8080", text)
+        self.assertNotIn("openfdd-web", text)
+        self.assertIn('TARGET_ORIGIN="http://central:8080"', text)
+        self.assertIn('rm -f "$WRK/openapi.json" "$WRK/openapi.yaml"', text)
+        self.assertIn("unset OPENFDD_ZAP_OPENAPI_URL", text)
         self.assertIn("@sha256:", text)
+        self.assertNotIn('cp "$ROOT/docs/openapi.yaml"', text)
+        self.assertNotIn('cp "$WRK/openapi.yaml"', text)
 
     def test_candidate_is_cloud_portal_profile(self):
         text = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("lib/portal_stack.sh", text)
         self.assertIn("portal_stack_init zap", text)
         self.assertIn("trap portal_stack_cleanup EXIT", text)
-        # Scanner joins the compose project's default network, where `web` resolves.
-        self.assertIn('ZAP_NET="${PORTAL_PROJECT}_default"', text)
+        # Scanner joins only the isolated internal network, where central resolves.
+        self.assertIn('ZAP_NET="${PORTAL_PROJECT}_qual-private"', text)
         # No short $RANDOM secrets, no open-bind escape hatch, no MQTT wiring.
         self.assertNotIn("RANDOM", text)
         self.assertNotIn("OPENFDD_ALLOW_OPEN_BIND=1", text)

@@ -49,7 +49,7 @@ IP_ORACLE_COMMIT = "35c17ac2d4ccc9ff677f5dd8d928e786aea0e2f0"
 
 
 def ensure_ip_oracle_worktree() -> Path:
-    """Detached worktree at the frozen 4.0.6 / open-fdd 4.4.9 IP oracle (CI-safe)."""
+    """Use only the locally available frozen oracle commit; never fetch in tests."""
     root = IP_ORACLE_ROOT
     if (root / "pyproject.toml").is_file() and (root / "sql" / "fdd" / "registry.yaml").is_file():
         return root
@@ -64,25 +64,9 @@ def ensure_ip_oracle_worktree() -> Path:
             text=True,
         )
         if proc.returncode != 0:
-            fetch = subprocess.run(
-                ["git", "fetch", "--depth", "1", "origin", IP_ORACLE_COMMIT],
-                cwd=REPO,
-                capture_output=True,
-                text=True,
-            )
-            if fetch.returncode != 0:
-                raise RuntimeError(
-                    f"git fetch origin {IP_ORACLE_COMMIT} failed: {fetch.stderr or fetch.stdout}"
-                )
-            proc = subprocess.run(
-                ["git", "worktree", "add", "--detach", str(root), IP_ORACLE_COMMIT],
-                cwd=REPO,
-                capture_output=True,
-                text=True,
-            )
-        if proc.returncode != 0:
             raise RuntimeError(
-                f"git worktree add {root} @ {IP_ORACLE_COMMIT} failed: {proc.stderr or proc.stdout}"
+                f"local git worktree add {root} @ {IP_ORACLE_COMMIT} failed: "
+                f"{proc.stderr or proc.stdout}"
             )
     return root
 
@@ -241,7 +225,23 @@ class CaptureRequirements(unittest.TestCase):
         self.assertIn("4.4.9", str(ctx.exception))
 
     def test_pinned_oracle_provenance_matches_frozen_registry(self) -> None:
-        oracle_root = ensure_ip_oracle_worktree()
+        available = subprocess.run(
+            ["git", "cat-file", "-e", f"{IP_ORACLE_COMMIT}^{{commit}}"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+        )
+        if available.returncode != 0:
+            self.skipTest(
+                f"pinned oracle {IP_ORACLE_COMMIT} is not in the local Git object database; "
+                "offline test will not fetch it"
+            )
+        try:
+            oracle_root = ensure_ip_oracle_worktree()
+        except RuntimeError as exc:
+            self.skipTest(
+                f"local pinned oracle worktree unavailable ({exc}); offline test will not fetch it"
+            )
         try:
             oracle = capture.load_ip_oracle(oracle_root)
             self.assertEqual(oracle["version"], "4.4.9")

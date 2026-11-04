@@ -2,7 +2,7 @@
 
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderName, HeaderValue, Request, StatusCode},
+    http::{header, HeaderMap, HeaderName, HeaderValue, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -105,6 +105,10 @@ pub async fn request_id_middleware(mut req: Request<Body>, next: Next) -> Respon
         res.headers_mut()
             .insert(HeaderName::from_static(SERVER_REQUEST_ID_HEADER), hv);
     }
+    res.headers_mut().insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
     res
 }
 
@@ -178,6 +182,39 @@ mod tests {
             false,
         );
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn request_id_middleware_sets_nosniff_on_success_and_error() {
+        use axum::routing::get;
+        use axum::Router;
+        use tower::ServiceExt;
+
+        let app = Router::new()
+            .route("/ok", get(|| async { "ok" }))
+            .route(
+                "/missing",
+                get(|| async { (StatusCode::NOT_FOUND, "gone") }),
+            )
+            .layer(axum::middleware::from_fn(request_id_middleware));
+
+        for path in ["/ok", "/missing"] {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            let nosniff = response
+                .headers()
+                .get(header::X_CONTENT_TYPE_OPTIONS)
+                .and_then(|v| v.to_str().ok());
+            assert_eq!(nosniff, Some("nosniff"), "{path} missing nosniff");
+        }
     }
 
     #[tokio::test]
