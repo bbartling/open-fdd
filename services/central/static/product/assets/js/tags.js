@@ -34,8 +34,11 @@ export function isRH(point) {
 
 export function isBoolRole(point) {
   if (point.kind === "Bool") return true;
+  if (point.kind === "Number") return false;
   const role = roleOf(point);
-  return role.endsWith("_status") || role.endsWith("_cmd") || role === "occ_mode";
+  if (role.endsWith("_status") && point.kind !== "Number") return true;
+  if (role === "occ_mode" && point.kind !== "Number") return true;
+  return false;
 }
 
 export function displayName(point) {
@@ -53,14 +56,6 @@ export function normalizeTags(rawTags, role) {
   if (!tags.includes("point")) tags.push("point");
   if (role.includes("web") || role === "web_oa_t") {
     if (!tags.includes("weather")) tags.push("weather");
-  }
-  if (role.endsWith("_status") || role.endsWith("_cmd")) {
-    if (!tags.includes("sensor")) tags.push("sensor");
-  }
-  if (isTemp({ role, tags })) {
-    for (const t of ["sensor", "temp"]) {
-      if (!tags.includes(t)) tags.push(t);
-    }
   }
   return tags;
 }

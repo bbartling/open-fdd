@@ -213,6 +213,10 @@ pub fn router(state: Arc<AppState>) -> Router {
             "/api/model/ttl",
             get(csv_import_package_mapping_haystack_ttl),
         )
+        .route(
+            "/api/model/projection",
+            get(model_ui_projection),
+        )
         // Soft-OPEN: revisioned semantic_meta CRUD (dry_run + expected_revision CAS).
         .route(
             "/api/model/semantic-meta",
@@ -5093,6 +5097,65 @@ pub async fn csv_import_package_mapping_haystack_dataset(
             };
             Err((status, Json(err)))
         }
+    }
+}
+
+/// SPARQL-backed typed model tree for static product UI (Model + Points tabs).
+pub async fn model_ui_projection(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<HaystackDatasetQuery>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let Some(building_id) = q
+        .building_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "building_id query parameter required",
+            })),
+        ));
+    };
+    if let Some(deny) = deny_if_building_out_of_scope(&state, &headers, Some(&building_id)) {
+        return Err(deny);
+    }
+    let equipment_id = q
+        .equipment_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let ctx = resolve_tenant_context(&state, &headers);
+    let preferred = preferred_tenant_for_building_read(&ctx, Some(&building_id));
+    let cache = state.haystack_rdf.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let (snap, inventory) = cache.get_or_materialize_with_inventory(
+            &building_id,
+            equipment_id.as_deref(),
+            preferred.as_deref(),
+        )?;
+        let overlay = crate::haystack_rdf::overlay_ttl_for_sparql(
+            &building_id,
+            equipment_id.as_deref(),
+        )?;
+        open_fdd_edge_prototype::csv_ingest::static_ui_model_projection::project_ui_model_from_snapshot(
+            &snap,
+            &overlay,
+            Some(&inventory),
+        )
+        .map_err(|e| json!({"ok": false, "error": e}))
+    })
+    .await
+    .unwrap_or_else(|e| Err(json!({"ok": false, "error": format!("model projection task: {e}")})));
+
+    match result {
+        Ok(body) => Ok(Json(body)),
+        Err(err) => Err((crate::haystack_rdf::sparql_route_status(&err), Json(err))),
     }
 }
 

@@ -289,6 +289,35 @@ mod live_routes {
     pub fn reports_get() {}
 
     #[utoipa::path(
+        get,
+        path = "/api/model/projection",
+        tag = "model",
+        params(
+            ("building_id" = String, Query, description = "Open-FDD building scope"),
+            ("equipment_id" = Option<String>, Query, description = "Optional equipment scope")
+        ),
+        responses(
+            (status = 200, description = "SPARQL-backed typed model tree for static UI", body = serde_json::Value),
+            (status = 404, description = "semantic_meta.json not present for building", body = serde_json::Value),
+            (status = 400, description = "Scoped model/inventory failure (e.g. unknown equipment_id)", body = serde_json::Value)
+        )
+    )]
+    pub fn model_ui_projection() {}
+
+    #[utoipa::path(
+        post,
+        path = "/api/model/sparql",
+        tag = "model",
+        request_body = serde_json::Value,
+        responses(
+            (status = 200, description = "Read-only SPARQL SELECT/ASK result", body = serde_json::Value),
+            (status = 404, description = "semantic_meta.json not present for building", body = serde_json::Value),
+            (status = 400, description = "Invalid query, unknown equipment scope, or template failure", body = serde_json::Value)
+        )
+    )]
+    pub fn model_sparql_post() {}
+
+    #[utoipa::path(
         get, path = "/api/ingest/jobs", tag = "ingest",
         params(
             ("site_id" = Option<String>, Query, description = "Canonical site id"),
@@ -411,6 +440,8 @@ mod live_routes {
         live_routes::reports_templates,
         live_routes::reports_draft,
         live_routes::reports_get,
+        live_routes::model_ui_projection,
+        live_routes::model_sparql_post,
     ),
     components(schemas(
         OkHealthResponse,
@@ -458,6 +489,7 @@ mod live_routes {
         (name = "datasets", description = "Ingested site datasets (Delete site)"),
         (name = "fuel", description = "Campus fuel ZIP analytics + Open-Meteo weather"),
         (name = "fdd", description = "Site-scoped FDD rule results / equipment"),
+        (name = "model", description = "Haystack RDF model, SPARQL, and static UI projection"),
         (name = "reports", description = "Report artifacts, templates, and drafts")
     )
 )]
@@ -485,5 +517,24 @@ mod tests {
     fn openapi_router_builds_without_overlapping_routes() {
         // Axum panics on duplicate path+method; this was the nightly central crash (#502).
         let _ = router();
+    }
+
+    #[test]
+    fn openapi_documents_model_sparql_and_projection_status_codes() {
+        let doc = ApiDoc::openapi();
+        let paths = doc.paths.paths;
+        let projection = paths
+            .get("/api/model/projection")
+            .expect("projection path");
+        let get = projection.get.as_ref().expect("GET projection");
+        let codes: Vec<u16> = get.responses.responses.keys().filter_map(|k| k.as_u16()).collect();
+        assert!(codes.contains(&404), "projection missing 404: {codes:?}");
+        assert!(codes.contains(&400), "projection missing 400: {codes:?}");
+
+        let sparql = paths.get("/api/model/sparql").expect("sparql path");
+        let post = sparql.post.as_ref().expect("POST sparql");
+        let codes: Vec<u16> = post.responses.responses.keys().filter_map(|k| k.as_u16()).collect();
+        assert!(codes.contains(&404), "sparql missing 404: {codes:?}");
+        assert!(codes.contains(&400), "sparql missing 400: {codes:?}");
     }
 }
