@@ -63,7 +63,7 @@ PY
 }
 
 # portal_stack_init <kind> — sets PORTAL_PREFIX PORTAL_PROJECT PORTAL_PRIV
-# PORTAL_PLAN PORTAL_WEB_PORT PORTAL_BASE PORTAL_STEPS. Requires ART.
+# PORTAL_PLAN PORTAL_CENTRAL_PORT PORTAL_BASE PORTAL_STEPS. Requires ART.
 portal_stack_init() {
   local kind="$1" jwt admin_pw ts_pw
   [[ -n "${ART:-}" ]] || portal_die "ART must be set before portal_stack_init"
@@ -79,8 +79,8 @@ portal_stack_init() {
   PORTAL_STEPS="$ART/steps.jsonl"
   : >"$PORTAL_STEPS"
   portal_py plan --prefix "$PORTAL_PREFIX" >"$PORTAL_PLAN"
-  PORTAL_WEB_PORT="$(portal_free_port)"
-  PORTAL_BASE="http://127.0.0.1:${PORTAL_WEB_PORT}"
+  PORTAL_CENTRAL_PORT="$(portal_free_port)"
+  PORTAL_BASE="http://127.0.0.1:${PORTAL_CENTRAL_PORT}"
 
   jwt="$(portal_py secret --bytes 48)"
   admin_pw="$(portal_py secret --bytes 32)"
@@ -89,7 +89,7 @@ portal_stack_init() {
   umask 077
   {
     printf "OPENFDD_IMAGE_TAG='%s'\n" "$PORTAL_TAG"
-    printf "PORTAL_QUAL_WEB_PORT='%s'\n" "$PORTAL_WEB_PORT"
+    printf "PORTAL_QUAL_CENTRAL_PORT='%s'\n" "$PORTAL_CENTRAL_PORT"
     printf "OPENFDD_JWT_SECRET='%s'\n" "$jwt"
     printf "OPENFDD_ADMIN_PASSWORD='%s'\n" "$admin_pw"
     printf "OPENFDD_TIMESCALE_PASSWORD='%s'\n" "$ts_pw"
@@ -125,7 +125,7 @@ portal_compose() {
 }
 
 portal_stack_pull() {
-  local svc=(central web timescale)
+  local svc=(central timescale)
   [[ ${#PORTAL_COMPOSE_PROFILES[@]} -gt 0 ]] && svc+=(nf-emulator)
   portal_compose pull --quiet "${svc[@]}" >/dev/null
 }
@@ -135,7 +135,7 @@ portal_wait_health() {
   until curl -fsS --max-time 5 "$PORTAL_BASE/api/health" >/dev/null 2>&1; do
     if (( SECONDS >= deadline )); then
       portal_compose ps >&2 || true
-      portal_compose logs --no-color --tail 80 central web >&2 || true
+      portal_compose logs --no-color --tail 80 central >&2 || true
       portal_die "portal stack never became healthy at $PORTAL_BASE"
     fi
     sleep 2

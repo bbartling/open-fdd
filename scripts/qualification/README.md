@@ -2,7 +2,7 @@
 
 ## Current portal and semantic tooling
 
-Product qualification targets Rust central + React web + Timescale, NF portal
+Product qualification targets Rust central + Timescale, NF portal
 pull and CSV import. OT transport recipes below describe historical/archive
 qualification; they are not requirements for the current portal stack. Haystack
 semantic modeling remains active independently of retired Haystack wire drivers.
@@ -146,11 +146,11 @@ python3 -B scripts/qualification/write_manifest.py selftest
 | `protocol_connector_qualification.py` | Phase 5D split image/recipe and read-only bench evidence evaluator; fail-closed selftest |
 | `write_manifest.py` | Create / record / finalize / selftest |
 | `zap_baseline_verdict.py` | Parse ZAP JSON; High always fails; Medium explicit |
-| `run_portal_qualification.sh` | Disposable `cloud_portal` qualification: central + web + Timescale + loopback NF emulator, two tenants, security harness, historian side-effect proof (see below) |
+| `run_portal_qualification.sh` | Disposable portal qualification: central + Timescale + loopback NF emulator, two tenants, security harness, historian side-effect proof (see below) |
 | `lib/portal_stack.sh` | Shared disposable-stack helpers: per-run secrets, unique compose project, project-scoped teardown |
 | `portal/portal_qual.py` · `portal/nf_emulator.py` | Docker-free plan / package / verdict helpers and the stdlib NF emulator (fixture `fixtures/nf_emulator/points.json`) |
 | `run_wave_c_isolated.sh` | Wave C entry on the portal profile: portal qualification + restore-to-empty + ZAP AF |
-| `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint a disposable `cloud_portal` candidate (multi-tenant ON, per-run JWT secret) via `lib/portal_stack.sh`, run the broken-credential negative control, then call `zap/run_af_disposable.py` against `http://web:8080`. Scanner credential is a private file, never argv. Digest-pinned ZAP. **Never** activeScan Railway or a site; no fallback crawl. |
+| `run_isolated_zap_af.sh` | Astra C-ZAP wrapper: mint a disposable central + Timescale candidate (multi-tenant ON, per-run JWT secret) via `lib/portal_stack.sh`, run the broken-credential negative control, then call `zap/run_af_disposable.py` against `http://central:8080` on the project's internal `qual-private` network. The evaluator fetches that candidate's `/openapi.json` after startup; no checked-in OpenAPI document is staged. Scanner credential is a private file, never argv. Digest-pinned ZAP. Request-count budget is checked after the HAR is collected, so it detects excess requests but is not a preventive cap. **Never** activeScan a live site; no fallback crawl. |
 | `zap/run_af_disposable.py` | Exact-origin evidence evaluator, scanner-origin nonce probes, strict alerts/dispositions and hashed artifacts; enforced wall time, post-HAR request count. `--selftest` is BLOCKED; probe-only negative control requires actual401/403denials. [Limits](zap/README.md). Execute opt-in only against an owned isolated target. |
 | `zap/run_af_disposable.sh` | Thin shell alias to `run_af_disposable.py`. |
 | `restore_to_empty.sh` | Portal stack: `pg_dump` + workspace tarball → fresh volumes → restore; proves the fixture site's Timescale count + md5, total samples, workspace manifest, control-plane files, admin API identity state, and operator login; then bounded API budgets |
@@ -161,8 +161,8 @@ GHCR images only (never a local build). Requires Docker with Compose >= 2.24.4,
 `curl`, `jq`, and `python3`. Pick the newest published tag by OCI `created`:
 
 ```bash
-./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
-export OPENFDD_IMAGE_TAG=sha-<7>        # same tag for central and web
+./scripts/ghcr_newest_by_created.py openfdd-central
+export OPENFDD_IMAGE_TAG=sha-<7>        # immutable central candidate image
 ./scripts/qualification/run_portal_qualification.sh
 # optional: ARTIFACT_DIR=/path/to/out  OPENFDD_TIMESCALE_IMAGE=timescale/timescaledb@sha256:...
 ```
@@ -176,8 +176,9 @@ What one run does:
    are scrubbed from artifacts.
 2. Starts `docker/compose.portal.yml` + `compose.timescale.yml` +
    `compose.portal-qual.yml`. Central and Timescale sit on an internal network
-   with no host port and no internet route. Web listens on `127.0.0.1:<free port>`.
-   The NF emulator shares central's network namespace at
+   with no internet route. Central's HTTP port is published only to
+   `127.0.0.1:<free port>` for the qualification client. The NF emulator shares
+   central's network namespace at
    `http://127.0.0.1:18089`, the only provider origin configured. No real
    portal credentials or connections exist.
 3. Creates tenants A and B plus a viewer and an operator per tenant through
@@ -223,3 +224,23 @@ Field Railway closeout stays public `zap-baseline`. Gate 18 same-volume recreate
 | Tightening bounded-perf baselines after CI green week | isolated |
 
 Public claim only after verified evidence: discoverable REST/MCP with automated consistency and permission checks — **not** blanket security certification.
+
+### Finite static-product passive baseline
+
+`zap/run_static_passive.py` is a bounded requestor-only check, separate from the
+full AF/active qualification wrapper. It requires cached immutable image IDs and
+an already-owned internal network with exactly central and Timescale, no host
+ports and no provider configuration. Both containers and the network must carry
+`openfdd.qualification.owner=static-passive` and the exact per-run nonce. It
+refuses a normal owner stack. See `--help` for the explicit ownership, identity,
+private auth-header-file and output arguments.
+
+The plan sends twelve GETs, including three nonce-bound identity probes and an
+invalid-bearer control; it does not import OpenAPI, spider or actively scan.
+The pinned ZAP HAR exporter also emits nine empty type-0 SiteMap ancestor
+records. Only that exact ancestor set is accepted, separately from twelve
+type-15 requestor messages; unexpected status-0, body, duplicate or extra wire
+records fail. Counts are retrospective evidence, not a preventive firewall
+budget. Raw plans/HAR/reports are private and removed after sanitized receipts.
+A scan verdict of REVIEW/FAIL is separate from execution/authentication PASS;
+this baseline never earns full qualification or TLS/tenant/PEN signoff.

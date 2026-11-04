@@ -140,11 +140,20 @@ class DeploymentProfileContractTest(unittest.TestCase):
         )
         self.assertEqual(active_profile_ids(registry), ["cloud_portal", "local_development"])
         portal = registry["profiles"]["cloud_portal"]
+        self.assertEqual(portal["profile_version"], 2)
         self.assertEqual(
             portal["required_services"],
-            ["openfdd-web", "openfdd-central", "openfdd-timescale"],
+            ["openfdd-central", "openfdd-timescale"],
         )
-        self.assertEqual(portal["optional_services"], ["openfdd-mcp"])
+        self.assertEqual(portal["optional_services"], ["openfdd-mcp", "caddy"])
+        self.assertIn("static_product_ui", portal["selected_capabilities"])
+        self.assertNotIn("web", portal["selected_capabilities"])
+        self.assertIn("openfdd-web", portal["forbidden_services"])
+        self.assertEqual(portal["listeners"][0]["service"], "https_frontdoor")
+        self.assertEqual(portal["listeners"][0]["port"], 443)
+        self.assertEqual(portal["listeners"][1]["service"], "openfdd-central")
+        self.assertEqual(portal["listeners"][1]["port"], 8080)
+        self.assertEqual(portal["listeners"][1]["host_ipv4"], "private_only")
         self.assertTrue(ARCHIVED_WIRE_SERVICES <= set(portal["forbidden_services"]))
         self.assertNotIn("mqtt_acl", portal["required_execution_suites"])
         self.assertIs(portal["auth"]["multi_tenant"], True)
@@ -154,6 +163,35 @@ class DeploymentProfileContractTest(unittest.TestCase):
         self.assertEqual(nf["qualification_mode"], "emulator_only")
         self.assertEqual(nf["real_portal_connections"], "forbidden")
         self.assertIn("POST /api/v1/point/data", nf["forbidden_methods"])
+        local = registry["profiles"]["local_development"]
+        self.assertEqual(local["profile_version"], 2)
+        self.assertEqual(set(local["required_services"]), {"openfdd-central", "openfdd-timescale"})
+        self.assertIn("openfdd-web", local["forbidden_services"])
+
+    def test_active_profiles_reject_retired_web_and_archived_ot_contracts(self) -> None:
+        registry = load_profile_registry()
+        for profile_id in active_profile_ids(registry):
+            profile = registry["profiles"][profile_id]
+            self.assertNotIn("openfdd-web", profile["required_services"], profile_id)
+            self.assertNotIn("openfdd-web", profile["optional_services"], profile_id)
+            self.assertIn("openfdd-web", profile["forbidden_services"], profile_id)
+        portal = copy.deepcopy(registry["profiles"]["cloud_portal"])
+        portal["required_services"] = ["openfdd-web", "openfdd-central", "openfdd-timescale"]
+        portal["required_images"] = list(portal["required_services"])
+        errors = validate_deployment_profile("cloud_portal", portal)
+        self.assertTrue(any("central + timescale exactly" in error for error in errors), errors)
+
+    def test_active_portal_listener_contract_separates_tls_from_internal_http(self) -> None:
+        portal = copy.deepcopy(load_profile_registry()["profiles"]["cloud_portal"])
+        portal["listeners"][1]["port"] = 80
+        portal["listeners"][1]["host_ipv4"] = "0.0.0.0"
+        errors = validate_deployment_profile("cloud_portal", portal)
+        self.assertTrue(any("must use port 8080" in error for error in errors), errors)
+        self.assertTrue(any("web/management listener" in error for error in errors), errors)
+        self.assertTrue(any("match the current topology exactly" in error for error in errors), errors)
+        portal["listeners"][1]["port"] = 8080
+        errors = validate_deployment_profile("cloud_portal", portal)
+        self.assertTrue(any("must remain private" in error for error in errors), errors)
 
     def test_every_profile_declares_lifecycle_and_ot_profiles_are_archived(self) -> None:
         registry = load_profile_registry()
@@ -176,14 +214,14 @@ class DeploymentProfileContractTest(unittest.TestCase):
         portal["required_services"].append("openfdd-mqtt")
         portal["required_images"].append("openfdd-mqtt")
         errors = validate_deployment_profile("cloud_portal", portal)
-        self.assertTrue(any("web + central + timescale" in e for e in errors), errors)
+        self.assertTrue(any("central + timescale exactly" in e for e in errors), errors)
         self.assertTrue(any("archived wire service" in e for e in errors), errors)
 
         portal = copy.deepcopy(load_profile_registry()["profiles"]["cloud_portal"])
         portal["optional_services"].append("openfdd-fieldbus")
         portal["forbidden_services"].remove("openfdd-fieldbus")
         errors = validate_deployment_profile("cloud_portal", portal)
-        self.assertTrue(any("only openfdd-mcp may be optional" in e for e in errors), errors)
+        self.assertTrue(any("MCP and Caddy are the only optional" in e for e in errors), errors)
         self.assertTrue(any("must be forbidden" in e for e in errors), errors)
 
     def test_portal_rejects_mqtt_acl_suite(self) -> None:
@@ -258,6 +296,29 @@ class DeploymentProfileContractTest(unittest.TestCase):
             evidence, expected_profile="cloud_portal", now=NOW
         )
         self.assertTrue(ok, reason)
+
+    def test_retired_web_positive_evidence_is_rejected_by_current_profile(self) -> None:
+        evidence = _healthy_evidence("cloud_portal")
+        web_digest = "sha256:" + ("d" * 64)
+        evidence["candidate"]["images"].append(
+            {"name": "openfdd-web", "digest": web_digest, "platform": "linux/amd64"}
+        )
+        for row in evidence["services"]:
+            if row["name"] == "openfdd-web":
+                row.update(status="PRESENT", image="openfdd-web", digest=web_digest)
+        ok, reason = evaluate_deployment_evidence(
+            evidence, expected_profile="cloud_portal", now=NOW
+        )
+        self.assertFalse(ok)
+        self.assertIn("openfdd-web is not proven ABSENT", reason)
+
+        evidence = _healthy_evidence("cloud_portal")
+        evidence["profile_version"] = 1
+        ok, reason = evaluate_deployment_evidence(
+            evidence, expected_profile="cloud_portal", now=NOW
+        )
+        self.assertFalse(ok)
+        self.assertIn("profile_version mismatch", reason)
 
     def test_archived_profile_evidence_cannot_qualify(self) -> None:
         for pid in ("cloud_mqtt_hub", "ot_local_bacnet_modbus", "ot_local_haystack"):
