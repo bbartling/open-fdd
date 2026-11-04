@@ -1,5 +1,5 @@
 import * as echarts from "../vendor/echarts.esm.min.js";
-import { activeEchartsThemeName, ensureThemes } from "./chart-theme.js";
+import { activeEchartsThemeName, ensureThemes, toolboxSaveAsImage } from "./chart-theme.js";
 import { resolveRoleUnit, lookupRoleBinding } from "./role-units.js";
 import { ruleResultChartOption } from "./fdd-charts.js";
 import { parseTimestampMillis } from "./timestamp-adapter.js";
@@ -108,6 +108,7 @@ export function inspectChartOption(equipmentId, rows, roles, unitSystem = "metri
       xAxis: xAxes,
       yAxis: yAxes,
       series,
+      toolbox: toolboxSaveAsImage(pngStem),
     },
     lineSeries,
     heightPx: totalHeight,

@@ -17,6 +17,7 @@ type CspViolation = {
 const TAB_PATHS = [
   "/app/",
   "/app/?tab=charts",
+  "/app/?tab=analytics",
   "/app/?tab=points",
   "/app/?tab=rcx",
   "/app/?tab=fdd",
@@ -149,6 +150,22 @@ async function waitForChartsTab(page: Page): Promise<void> {
   await requireCanvas(page, "#tempChart");
 }
 
+async function waitForAnalyticsTab(page: Page): Promise<void> {
+  await expect(async () => {
+    await assertErrHidden(page);
+    if ((await page.locator("#analyticsChart canvas").count()) > 0) return;
+    const msg = (await page.locator("#analyticsLoadMsg").textContent())?.trim() ?? "";
+    if (
+      msg.length > 0 &&
+      msg !== "Loading…" &&
+      msg !== "Pick a site to load analytics charts."
+    ) {
+      return;
+    }
+    throw new Error("waiting for #analyticsChart canvas or analytics load message");
+  }).toPass({ timeout: 90_000 });
+}
+
 async function waitForRcxTab(page: Page): Promise<void> {
   await requireCanvas(page, "#mainChart");
 }
@@ -191,6 +208,7 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
   await expect(panel).toHaveClass(/\bon\b/, { timeout: 15_000 });
   const markerByTab: Record<string, string> = {
     charts: "#tempChart",
+    analytics: "#analyticsChart",
     points: "#pointRows",
     rcx: "#mainChart",
     fdd: "#ruleList",
@@ -208,6 +226,8 @@ async function waitForTabRenderMarker(page: Page, path: string): Promise<void> {
 
   if (tab === "charts") {
     await waitForChartsTab(page);
+  } else if (tab === "analytics") {
+    await waitForAnalyticsTab(page);
   } else if (tab === "rcx") {
     await waitForRcxTab(page);
   } else if (tab === "fdd") {

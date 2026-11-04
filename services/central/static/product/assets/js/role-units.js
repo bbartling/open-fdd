@@ -207,3 +207,186 @@ export function percentToFraction(pct) {
 export function fractionToPercent(frac) {
   return frac * 100;
 }
+
+const EXPLICIT_QUANTITY = {
+  temperature: "temperature",
+  temperature_delta: "temperature_delta",
+  temperature_rate: "temperature_rate",
+  pressure: "pressure",
+  fraction: "fraction",
+  percent: "percent",
+  minutes: "minutes",
+  hours: "hours",
+  seconds: "seconds",
+  boolean: "boolean",
+  volumetric_flow: "volumetric_flow",
+};
+
+function unitToken(unit) {
+  return String(unit ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s/g, "");
+}
+
+function keySuggestsTemperatureDelta(key) {
+  const k = String(key ?? "").toLowerCase();
+  return k.includes("delta") || k.startsWith("eps_") || k.includes("_tol");
+}
+
+function temperatureScale(unit) {
+  const t = unitToken(unit);
+  if (t === "degf" || t === "f" || t === "°f") return "f";
+  if (t === "degc" || t === "c" || t === "°c") return "c";
+  return null;
+}
+
+function isSiAbsoluteTempToken(t) {
+  return t === "degc" || t === "c" || t === "celsius";
+}
+
+function isSiDeltaToken(t) {
+  return t.includes("deltac") || t === "k_diff" || t === "k";
+}
+
+function pressureToPaFactor(unit) {
+  const t = unitToken(unit);
+  if (t === "pa" || t === "pascal") return 1;
+  if (t === "inwc" || t === "inh2o" || t === "in.w.c.") return PA_PER_IN_WC;
+  return null;
+}
+
+/** Infer quantity from catalog unit and parameter key. */
+export function resolveQuantityKind(unit, key, explicit) {
+  if (typeof explicit === "string") {
+    const mapped = EXPLICIT_QUANTITY[explicit.trim().toLowerCase()];
+    if (mapped) return mapped;
+  }
+  const token = unitToken(unit);
+  if (!token) {
+    if (keySuggestsTemperatureDelta(key)) return "temperature_delta";
+    const k = String(key ?? "").toLowerCase();
+    if (k.endsWith("_min") || k.endsWith("_minutes")) return "minutes";
+    return "other";
+  }
+  if (pressureToPaFactor(unit) != null) return "pressure";
+  if (token === "frac") return "fraction";
+  if (token === "min" || token === "mins") return "minutes";
+  if (token === "pct" || token === "%" || token === "percent") return "percent";
+  if (token.includes("delta") || isSiDeltaToken(token)) return "temperature_delta";
+  if (isSiAbsoluteTempToken(token) || token === "degf" || token === "f") {
+    return keySuggestsTemperatureDelta(key) ? "temperature_delta" : "temperature";
+  }
+  return "other";
+}
+
+export function displayScalar(value, unit, unitSystem, kind, key) {
+  const q = resolveQuantityKind(unit, key, kind);
+  const token = unitToken(unit);
+  if (q === "temperature" && isSiAbsoluteTempToken(token)) {
+    return unitSystem === "imperial" ? celsiusToFahrenheit(value) : value;
+  }
+  if ((q === "temperature_delta" || q === "temperature_rate") && isSiDeltaToken(token)) {
+    return unitSystem === "imperial" ? deltaCToDeltaF(value) : value;
+  }
+  if (q === "pressure" && (token === "pa" || token === "pascal")) {
+    const factor = pressureToPaFactor("Pa");
+    if (unitSystem === "imperial" && factor) return value / factor;
+    return value;
+  }
+  const scale = temperatureScale(unit);
+  if (q === "temperature" || q === "temperature_delta" || q === "temperature_rate") {
+    const delta = q !== "temperature";
+    if (unitSystem === "metric" && scale === "f") {
+      return delta ? deltaFToDeltaC(value) : fahrenheitToCelsius(value);
+    }
+    if (unitSystem === "imperial" && scale === "c") {
+      return delta ? deltaCToDeltaF(value) : celsiusToFahrenheit(value);
+    }
+    return value;
+  }
+  if (q === "pressure" && unitSystem === "metric") {
+    const factor = pressureToPaFactor(unit);
+    if (factor != null) return value * factor;
+  }
+  return value;
+}
+
+function deltaCToDeltaF(dc) {
+  return (dc * 9) / 5;
+}
+
+export function storeScalar(display, unit, unitSystem, kind, key) {
+  const q = resolveQuantityKind(unit, key, kind);
+  const scale = temperatureScale(unit);
+  if (q === "temperature" || q === "temperature_delta" || q === "temperature_rate") {
+    const delta = q !== "temperature";
+    if (unitSystem === "metric" && scale === "f") {
+      return delta ? deltaCToDeltaF(display) : celsiusToFahrenheit(display);
+    }
+    if (unitSystem === "imperial" && scale === "c") {
+      return delta ? deltaFToDeltaC(display) : fahrenheitToCelsius(display);
+    }
+    return display;
+  }
+  if (q === "pressure" && unitSystem === "metric") {
+    const factor = pressureToPaFactor(unit);
+    if (factor != null && factor !== 0) return display / factor;
+  }
+  return display;
+}
+
+export function displayStep(step, unit, unitSystem, kind, key) {
+  const base = step != null && step > 0 ? step : 0.1;
+  if (unitSystem === "metric") {
+    const q = resolveQuantityKind(unit, key, kind);
+    if ((q === "temperature" || q === "temperature_delta") && temperatureScale(unit) === "f") {
+      return base * (5 / 9);
+    }
+    if (q === "pressure") {
+      const factor = pressureToPaFactor(unit);
+      if (factor != null && factor !== 1) return base * factor;
+    }
+  }
+  if (unitSystem === "imperial") {
+    const q = resolveQuantityKind(unit, key, kind);
+    if ((q === "temperature" || q === "temperature_delta") && temperatureScale(unit) === "c") {
+      return base * (9 / 5);
+    }
+  }
+  return base;
+}
+
+export function formatTunerCaption(value, quantity) {
+  if (!Number.isFinite(value)) return "";
+  const q = typeof quantity === "string" ? EXPLICIT_QUANTITY[quantity] ?? quantity : quantity;
+  if (q === "fraction" || q === "minutes" || q === "percent" || q === "boolean") {
+    return String(value);
+  }
+  return String(Math.round(value * 1000) / 1000);
+}
+
+export function displayUnitLabel(unit, unitSystem, kind, key) {
+  const q = resolveQuantityKind(unit, key, kind);
+  const scale = temperatureScale(unit);
+  if (q === "temperature_delta") {
+    return unitSystem === "imperial" ? "Δ°F" : "Δ°C";
+  }
+  if (q === "temperature_rate") {
+    return unitSystem === "imperial" ? "°F/h" : "°C/h";
+  }
+  if (q === "temperature") {
+    if (scale === "c" || isSiAbsoluteTempToken(unitToken(unit))) {
+      return unitSystem === "imperial" ? "°F" : "°C";
+    }
+    return unitSystem === "metric" ? "°C" : "°F";
+  }
+  if (q === "pressure") {
+    return unitSystem === "imperial" ? "in. w.c." : "Pa";
+  }
+  if (q === "minutes") return "min";
+  if (q === "percent") return "%";
+  if (q === "fraction") return "frac";
+  if (unit) return String(unit);
+  return "";
+}

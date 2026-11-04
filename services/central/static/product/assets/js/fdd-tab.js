@@ -18,6 +18,7 @@ import { expandFddPlotRoles, isOatMeteoRule, oatMeteoFddOption } from "./fdd-cha
 import { postAnalytics, analyticsBody } from "./analytics.js";
 import { fetchInspectSeries } from "./analytics.js";
 import { RULES_UPDATED } from "./rule-params.js";
+import { onRuleTuningRuleChange, onRuleTuningSiteChange } from "./rule-tuning.js";
 import {
   DEFAULT_SERIES_PREVIEW_ROWS,
   SERIES_PREVIEW_ROW_OPTIONS,
@@ -208,6 +209,7 @@ export function bindFddTab() {
     renderRuleList();
     await loadPlot();
     await loadInspect();
+    await onRuleTuningRuleChange(selectedRuleId, equipId, rules, sessionConfig);
   });
   $("runBtn").addEventListener("click", async () => {
     const list = filteredRules();
@@ -245,10 +247,12 @@ export function bindFddTab() {
     await refreshFddData();
   });
   renderRuleList();
+  void onRuleTuningRuleChange(selectedRuleId, equipId, rules, sessionConfig);
 }
 
 export async function onFddSiteChange(site, ctx) {
   buildingId = site;
+  onRuleTuningSiteChange(site);
   mapping = ctx.mapping;
   sessionConfig = ctx.sessionConfig;
   roleUnitIndex = ctx.roleUnitIndex ?? null;
@@ -266,6 +270,7 @@ export async function onFddSiteChange(site, ctx) {
       renderRuleList();
       await loadPlot();
       await loadInspect();
+      await onRuleTuningRuleChange(selectedRuleId, equipId, rules, sessionConfig);
     });
   }
   if (pick) {
@@ -283,6 +288,7 @@ export async function onFddSiteChange(site, ctx) {
     pick.value = equipId;
   }
   renderRuleList();
+  await onRuleTuningRuleChange(selectedRuleId, equipId, rules, sessionConfig);
 }
 
 export async function ensureFddTabLoaded() {
