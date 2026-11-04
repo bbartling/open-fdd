@@ -68,14 +68,45 @@ def run_offline() -> list[QualCell]:
     else:
         cells.append(QualCell("09_issue_1458_independent_timeline", "FAIL", 0))
 
-    cells.append(
-        QualCell(
-            "09_catalog_render_api_mapping",
-            "PENDING",
-            0,
-            "C5: REST/session tuner mapping on owner stack",
-        )
+    from scripts.stress.si_cutover import ci_fixtures_lib as cfl
+    from scripts.stress.si_cutover.product_sql_params import (
+        catalog_overrides_from_registry,
+        render_rule_sql_product,
     )
+
+    rules = {str(r["rule_id"]): r for r in cfl.load_rule_registry()}
+    fc1 = rules["FC1"]
+    base = dict(cfl.rule_params_from_registry(fc1))
+    mapping_cases: list[tuple[dict[str, float], str]] = [
+        ({"mode_delay_min": 0.0, "startup_delay_min": 15.0}, "ROWS BETWEEN 2 PRECEDING"),
+        ({"mode_delay_min": 10.0, "startup_delay_min": 0.0}, "ROWS BETWEEN 1 PRECEDING"),
+    ]
+    comparisons = 0
+    map_errors: list[str] = []
+    poll = 300.0
+    for overrides, needle in mapping_cases:
+        merged = dict(base)
+        merged.update(overrides)
+        sql = render_rule_sql_product("FC1", poll, registry_params=merged)
+        catalog = catalog_overrides_from_registry({"rule_id": "FC1"}, merged)
+        comparisons += 1
+        if "{{" in sql:
+            map_errors.append(f"unfilled placeholder overrides={overrides}")
+        if needle not in sql:
+            map_errors.append(f"missing {needle!r} overrides={overrides} catalog={catalog}")
+    if map_errors:
+        cells.append(
+            QualCell(
+                "09_catalog_render_api_mapping",
+                "FAIL",
+                comparisons,
+                "; ".join(map_errors[:4]),
+            )
+        )
+    else:
+        cells.append(
+            QualCell("09_catalog_render_api_mapping", "PASS", comparisons=comparisons)
+        )
     return cells
 
 
@@ -88,11 +119,8 @@ def run_postgres(conn) -> list[QualCell]:
     comparisons = 0
     errors: list[str] = []
     subset = [
-        c
-        for c in build_mode_delay_grid_cases()
-        if float(c.get("poll_seconds") or 0) == poll
-        and not (c.get("mode_delay_min") == 0.0 and float(c.get("startup_delay_min") or 0) > 0)
-    ][:6]
+        c for c in build_mode_delay_grid_cases() if float(c.get("poll_seconds") or 0) == poll
+    ]
     for case in subset:
         params = params_for_grid_case(params_ip, case)
         res = run_rule(

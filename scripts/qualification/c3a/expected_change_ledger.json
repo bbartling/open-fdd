@@ -40,6 +40,17 @@
     },
     {
       "issue": 1408,
+      "title": "SV-FLATLINE P0 IP golden sql_fdd_daily capture inflated vs pandas_fdd_daily",
+      "affected_rules": ["SV-FLATLINE"],
+      "product_change": "PR8 provenance only: seven P0 cells on SYNTH_VAV_CASE_VAV_1 are stale frozen IP captures (see tests/fixtures/si_cutover/sv_flatline_p0_provenance.json); shipped SI SQL matches SI pandas on p2_si_pairs",
+      "runner_c_d_expected": "current pandas oracle and shipped postgres SV-FLATLINE agree on fresh synth runs",
+      "independent_oracle": "tests/qualification/test_sv_flatline_p0_provenance_1408.py + tests/rules/test_sensor_sweep_t1408.py",
+      "harness_probe": "P0 report-only; do not refresh ip_goldens",
+      "waive_four_way_agreement": false,
+      "compare_against": "provenance_table_not_current_sql_defect"
+    },
+    {
+      "issue": 1408,
       "title": "SV-RANGE range_scale_* must use midpoint half-width geometry (pandas _sweep_range)",
       "affected_rules": ["SV-RANGE"],
       "parameters": ["range_scale_temperature", "range_scale_humidity", "range_scale_pressure"],

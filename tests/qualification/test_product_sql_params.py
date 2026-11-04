@@ -50,6 +50,23 @@ class ProductSqlParamsTests(unittest.TestCase):
         # MODE_DELAY_ROWS=2 → ROWS BETWEEN 1 PRECEDING (see render_rule.py)
         self.assertIn("ROWS BETWEEN 1 PRECEDING AND CURRENT ROW", sql)
 
+    def test_explicit_zero_mode_startup_maps_to_holdoff_rows(self) -> None:
+        rules = {str(r["rule_id"]): r for r in self.cfl.load_rule_registry()}
+        fc1 = rules["FC1"]
+        params = self.cfl.rule_params_from_registry(fc1)
+        params["mode_delay_min"] = 0.0
+        params["startup_delay_min"] = 15.0
+        sql = self.psp.render_rule_sql_product("FC1", 300.0, registry_params=params)
+        self.assertNotIn("{{", sql)
+        self.assertIn("ROWS BETWEEN 2 PRECEDING AND CURRENT ROW", sql)
+
+    def test_confirm_min_boundary_maps_to_confirm_seconds(self) -> None:
+        rules = {str(r["rule_id"]): r for r in self.cfl.load_rule_registry()}
+        fc1 = rules["FC1"]
+        params = self.cfl.rule_params_from_registry(fc1)
+        overrides = self.psp.catalog_overrides_from_registry(fc1, {**params, "confirm_seconds": 0.0})
+        self.assertEqual(overrides.get("confirm_min"), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()
