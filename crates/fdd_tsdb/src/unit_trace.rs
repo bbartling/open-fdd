@@ -49,14 +49,15 @@ pub fn trace_unit_binding(
     });
 
     if non_empty(sample_quality) == Some(QUALITY_UNIT_UNDECLARED) {
+        let canonical_unit = qty
+            .as_deref()
+            .and_then(|q| contract.canonical_unit(q).ok())
+            .map(str::to_string);
         return UnitBindingTrace {
             declared_unit: declared,
             source_unit: source_unit.map(str::to_string),
             quantity: qty,
-            canonical_unit: qty
-                .as_deref()
-                .and_then(|q| contract.canonical_unit(q).ok())
-                .map(str::to_string),
+            canonical_unit,
             storage_unit: storage_unit.map(str::to_string),
             unit_assessment: UNIT_NOT_ASSESSED.into(),
             unit_assessment_reason: Some("unit_undeclared".into()),
