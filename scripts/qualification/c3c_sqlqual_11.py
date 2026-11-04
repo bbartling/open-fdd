@@ -32,7 +32,7 @@ def run_sql_qual_11(
     sizes = bench.QUICK_SIZES + (35000,) if ci_quick else bench.DEFAULT_SIZES
     web_modes = ("dense", "sparse", "duplicate")
     bound = 1500.0
-    timeout = fdd_run_timeout_seconds()
+    timeout = bench.fdd_run_timeout_seconds()
 
     cells: list[dict[str, Any]] = []
     evidence: dict[str, Any] = {"web_asof_bound_seconds": bound, "runs": []}
