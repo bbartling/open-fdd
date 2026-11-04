@@ -70,7 +70,11 @@ class CaseResult:
 def _parse_turtle(text: Any) -> Graph:
     if not isinstance(text, str) or not text.strip():
         raise ValueError("case ttl must be non-empty text")
-    return Graph().parse(data=text, format="turtle")
+    graph = Graph()
+    stripped = text.lstrip()
+    if stripped.startswith("<") and " .\n" in stripped:
+        return graph.parse(data=text, format="nt")
+    return graph.parse(data=text, format="turtle")
 
 
 def _oracle_counts(graph: Graph) -> tuple[int, int]:
@@ -139,6 +143,20 @@ def evaluate_cases(
     }
 
 
+def probe_identity() -> dict[str, str]:
+    return {
+        "candidate_git_sha": subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, timeout=30
+        ).strip(),
+        "parser_sha256": hashlib.sha256(PARSER.read_bytes()).hexdigest(),
+        "probe_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "rdflib_version": rdflib.__version__,
+        "node_version": subprocess.check_output(
+            ["node", "--version"], text=True, timeout=30
+        ).strip(),
+    }
+
+
 def parse_with_node(ttl: str) -> dict[str, Any]:
     if not PARSER.is_file():
         raise FileNotFoundError(f"static UI parser missing: {PARSER}")
@@ -166,17 +184,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"BLOCKED: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
     try:
-        result["identity"] = {
-            "candidate_git_sha": subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, timeout=5
-            ).strip(),
-            "parser_sha256": hashlib.sha256(PARSER.read_bytes()).hexdigest(),
-            "probe_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-            "rdflib_version": rdflib.__version__,
-            "node_version": subprocess.check_output(
-                ["node", "--version"], text=True, timeout=5
-            ).strip(),
-        }
+        result["identity"] = probe_identity()
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"BLOCKED: identity unavailable ({type(exc).__name__})", file=sys.stderr)
         return 2

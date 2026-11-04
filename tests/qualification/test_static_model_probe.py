@@ -19,6 +19,14 @@ assert SPEC and SPEC.loader
 sys.modules[SPEC.name] = probe
 SPEC.loader.exec_module(probe)
 
+_STUB_IDENTITY = {
+    "candidate_git_sha": "qualification-stub-sha",
+    "parser_sha256": "parser-stub",
+    "probe_sha256": "probe-stub",
+    "rdflib_version": "stub",
+    "node_version": "stub",
+}
+
 
 class StaticModelProbeTests(unittest.TestCase):
     def test_working_candidate_passes_equivalent_cases(self) -> None:
@@ -57,6 +65,8 @@ class StaticModelProbeTests(unittest.TestCase):
             out = Path(tmp) / "result.json"
             with mock.patch.object(
                 probe, "parse_with_node", return_value={"equipment": 1, "points": 0}
+            ), mock.patch.object(
+                probe, "probe_identity", return_value=_STUB_IDENTITY
             ), redirect_stdout(StringIO()):
                 code = probe.main(["--json-out", str(out)])
             self.assertEqual(code, 1)
@@ -65,6 +75,8 @@ class StaticModelProbeTests(unittest.TestCase):
     def test_cli_success_code_with_working_candidate(self) -> None:
         with mock.patch.object(
             probe, "parse_with_node", return_value={"equipment": 1, "points": 1}
+        ), mock.patch.object(
+            probe, "probe_identity", return_value=_STUB_IDENTITY
         ), redirect_stdout(StringIO()):
             self.assertEqual(probe.main([]), 0)
 
