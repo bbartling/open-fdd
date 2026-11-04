@@ -247,7 +247,7 @@ export function bindFddTab() {
     await refreshFddData();
   });
   renderRuleList();
-  await onRuleTuningRuleChange(selectedRuleId, equipId, rules, sessionConfig);
+  void onRuleTuningRuleChange(selectedRuleId, equipId, rules, sessionConfig);
 }
 
 export async function onFddSiteChange(site, ctx) {
