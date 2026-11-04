@@ -24,18 +24,18 @@ After each merge: Grok runs `gh pr checks`, squash-merges with `--delete-branch`
 
 ## PR checklist
 
-- [ ] **PR0** — Branch `tools/4.0.10-audit-import`: apply reviewed 4.0.10 tooling patch (29 files), `4.0.11_audit_ledger.md`, this handoff. Closing: central-only qual tests in CI. **Fixes part of #1509.** No version bump.
-- [ ] **PR1** — Finish [#1483](https://github.com/bbartling/open-fdd/pull/1483): exact-name test selection (fail on zero tests). **Fixes part of #1423 / #1406** (tooling slice).
-- [ ] **PR2** — Finish [#1481](https://github.com/bbartling/open-fdd/pull/1481): full SQL-QUAL tuner matrix + all-column analytics incl. `fault_flag`; SV-RANGE A–D. **Fixes part of #1284.**
-- [ ] **PR3** — Ingest bundle: #1501, #1500, #1499, #1423, #1403 (+ #1401 children). Single owner.
-- [ ] **PR4** — Graph model + point identity: #1508, #1516, #1441 (SPARQL-backed projection, opaque ids).
-- [ ] **PR5** — SI units end-to-end: #1513, #1406, #1407, #1405 (after PR4).
-- [ ] **PR6** — UI behavior: #1517, #1510, #1511, #1512, #1497 (after PR5).
-- [ ] **PR7** — UI workflows: #1514, #1515, CSV export proof (after PR6).
-- [ ] **PR8** — FDD SQL science: #1437, #1439, #1404, #1408 (after PR2).
-- [ ] **PR9** — Capture + C3c: #1440, #1444.
-- [ ] **PR10** — Security hardening: nosniff on all central responses; deliberate bare-central `security.txt` (generic public text only).
-- [ ] **PR-R** — After all above: bump to **4.0.11** once; #1502 residual; `openfdd_agent_spec` + `./scripts/openfdd_install_agent_skills.sh --sync`; disposition #1284 / #1401 only if every child ledger row closes.
+- [x] **PR0** — [#1518](https://github.com/bbartling/open-fdd/pull/1518) @ `27af6578`: tooling import, `4.0.11_audit_ledger.md`, this handoff. **Fixes part of #1509.**
+- [x] **PR1** — [#1483](https://github.com/bbartling/open-fdd/pull/1483) @ `693b2686`: exact-name test selection. **Fixes part of #1423 / #1406 (tooling slice).**
+- [x] **PR2** — [#1481](https://github.com/bbartling/open-fdd/pull/1481) @ `576c1eee`: full SQL-QUAL tuner matrix + all-column analytics incl. `fault_flag`; SV-RANGE A–D. **Fixes part of #1284.**
+- [x] **PR3** — [#1522](https://github.com/bbartling/open-fdd/pull/1522) @ `d2ad0d04`: ingest bundle #1501, #1500, #1499, #1423, #1403. **Fixes part of #1401.**
+- [x] **PR4** — [#1520](https://github.com/bbartling/open-fdd/pull/1520) @ `070cbe19`: graph model + point identity #1508, #1516, #1441. 
+- [x] **PR5** — [#1524](https://github.com/bbartling/open-fdd/pull/1524) @ `4d2aa2fe`: SI units #1513, #1406, #1407, #1405.
+- [x] **PR6** — [#1525](https://github.com/bbartling/open-fdd/pull/1525) @ `0c38f0e8`: UI behavior #1517, #1510, #1511, #1512, #1497 (**residual:** Charts calendar pickers).
+- [x] **PR7** — [#1526](https://github.com/bbartling/open-fdd/pull/1526) @ `7df8e1d8`: UI workflows #1514, #1515, CSV export proof.
+- [x] **PR8** — [#1523](https://github.com/bbartling/open-fdd/pull/1523) @ `5bb357c5`: FDD SQL science #1437, #1439, #1404, #1408.
+- [x] **PR9** — [#1521](https://github.com/bbartling/open-fdd/pull/1521) @ `98f7eb42`: capture + C3c #1440, #1444.
+- [x] **PR10** — [#1519](https://github.com/bbartling/open-fdd/pull/1519) @ `7e80d064`: nosniff + deliberate bare-central `security.txt`.
+- [ ] **PR-R** — 4.0.10 → **4.0.11** bump; #1502 residual guards; `openfdd_agent_spec` + skills sync; ledger disposition for #1284 / #1401 (umbrellas stay open until current-image proof).
 
 ## Post-train (owner host, not cloud)
 

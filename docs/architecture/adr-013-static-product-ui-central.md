@@ -22,6 +22,7 @@ Open-FDD 4.0 shipped the React SPA in `openfdd-web`; source moves to `archive/pr
 3. **Design tokens:** background `#0b1020`, panels `#121a30` / `#18223d`, line `#24304f`, text `#e6ebf5`, muted `#8a96b3`, accent `#4cc9f0`, warm `#f8961e`, fault `#f94144`, cool `#4361ee`, healthy `#43aa8b`.
 4. **Parity waves:** Model tree + SPARQL (C), charts/FDD tuners with vendored ECharts (C), schedule cards on durable jobs (D), CSV/admin/demo + guard replacement (E), then retire `openfdd-web` on a patch release with rollback image (F).
 5. **Wave F (4.0.9+):** Default portal compose drops `openfdd-web`; central `/app/` is the product UI. React rollback uses `docker/compose.react.yml` and GHCR `openfdd-web` (rollback-only).
+6. **4.0.11 audit:** Model tab uses a typed TTL graph projection (opaque stored point ids, Number vs Bool from tags/units — not Turtle regex). Charts and API honor declared source units through SI storage (`metric-c-v2`) and presentation conversion at the UI boundary. Static JS uses immutable site scope, generation tokens, and `AbortController` so delayed requests cannot overwrite a newer site selection. RCx/FDD chart-parity rows require a reachable control → bounded request → adapter → non-empty chart path (see `chart-parity.json` and Playwright/static smoke).
 
 ## Consequences
 

@@ -167,6 +167,9 @@ jobs:
           bash -n scripts/ci/forbid_product_ui_port_3000_docs.sh
           chmod +x scripts/ci/forbid_product_ui_port_3000_docs.sh
           ./scripts/ci/forbid_product_ui_port_3000_docs.sh
+          bash -n scripts/ci/forbid_machine_paths_public_docs.sh
+          chmod +x scripts/ci/forbid_machine_paths_public_docs.sh
+          ./scripts/ci/forbid_machine_paths_public_docs.sh
 
       - name: Product tree guards
         run: |

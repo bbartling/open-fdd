@@ -4,6 +4,10 @@
 
 ## Unreleased
 
+## 4.0.11 — 2026-11-04
+
+Workspace patch closing the **4.0.10 audit patch train**: graph model projection and opaque point identity, SI unit contract through writer/API/charts, ingest catch-up and AFDD scheduler acceptance tests, FDD SQL science gates, static UI scope guards and workflows (RCx/FDD chart reachability, rule tuning, CSV export proof), qualification tooling on central-only portal compose, and security response hardening (`nosniff`, deliberate bare-central `security.txt`). `/api/health` reports `4.0.11+<sha>`. Residual: explicit calendar date pickers on the Charts tab (#1510 / PR6); owner-stack post-publish qualification and SQL-QUAL W9 live cutover remain outside this bump.
+
 ## 4.0.10 — 2026-11-03
 
 Workspace patch for **Open-FDD Central UI parity**: ECharts themes (light blueprint default, dark Bench Viz toggle), chart-parity matrix + shape tests, FDD stacked unit-family plots with bottom confirmed_fault lane, Overview RCx and generic RCx/fuel/sensor/M&V renderers, Bench Viz Charts catalog on `/app/`. `/api/health` reports `4.0.10+<sha>`.

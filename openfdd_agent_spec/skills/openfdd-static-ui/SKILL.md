@@ -31,6 +31,10 @@ description: >-
 10. **Lean pages** — `index.html`, `tree.html`, `rcx.html`, `fdd.html` link CSS + module scripts only; logic lives in `assets/js/`.
 11. **Parity** — match archived SPA behavior for Overview RCx presets, economizer gate (`ECONOMIZER_DT_MIN_C`), `analyticsWindowFromSampling`, FDD status filters, `confirm_min` on run, inspect title/stacking, series preview 10/20/50/100/500. SI storage; metric display default.
 12. **Dynamic text** — use `textContent` / DOM APIs; never inject HTML strings from API responses.
+13. **Graph projection (Model + Points)** — equipment and points come from the server TTL/SPARQL graph projection (`GET /api/model/ttl`, tree builders in `ttl-model.js` / `tree-view.js`). Point ids are opaque stored series keys; duplicate same-role sensors keep distinct ids. Command roles stay Number when the model declares a numeric unit/kind — do not coerce VFD/command `%` to Bool. Read-only metadata from the graph; no `/api/model/agent-context` on Model pages.
+14. **SI units end-to-end** — declared source unit + quantity on ingest/resync; Timescale stores `metric-c-v2`; API returns SI with unit metadata; charts label axes from declared/display conversion (`charts.js`, RCx modules). Missing declarations remain explicit not-assessed / empty states — never silently assume Pa when the model says inH₂O.
+15. **Scope guards** — `site-data.js` binds an immutable active site + generation counter; fetches attach `AbortController` and ignore stale responses. Unauthorized `?site=` is rejected (UI + backend tests). Lazy tabs must not fire hidden FDD/RCx work for off-tab sites.
+16. **Chart reachability** — every `chart-parity.json` row used in product must expose a visible control, issue a bounded historian/analytics request, adapt timestamps (epoch ms + ISO in FDD preview tables), and render a non-empty chart when data exists. RCx presets exclude the FDD fault swim lane. Rule tuning: authorized save/reset/readback + scoped cache invalidation on `RULES_UPDATED` (`fdd-tab.js`). Residual: explicit calendar date pickers on the Charts tab are not shipped yet (#1510); coverage-aware windows and presets are.
 
 ## Chart modules
 
