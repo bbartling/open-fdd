@@ -48,11 +48,24 @@ jobs:
       - name: Stack crate tests
         env:
           OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
-          OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED: "1"
         run: |
           set -euo pipefail
-          cargo test -p openfdd-central -- --skip fixture_acceptance --test-threads=2
+          cargo test -p openfdd-central up03_postgres_exact_daily_buckets_from_confirmed_series -- --nocapture --test-threads=1
+          cargo test -p openfdd-central up03_postgres_integration_ci -- --nocapture --test-threads=1
+          cargo test -p openfdd-central -- --skip fixture_acceptance --skip up03_postgres_exact_daily_buckets_from_confirmed_series --skip up03_postgres_integration_ci --skip t1423_6 --test-threads=2
+          cargo test -p openfdd-central t1423_6 -- --test-threads=1
           cargo test -p openfdd-central fixture_acceptance -- --test-threads=1
+
+      - name: T1423 ingest Postgres stress (30x, parallel)
+        env:
+          OPENFDD_TEST_DATABASE_URL: postgresql://openfdd:openfdd@localhost:5432/openfdd
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            echo "=== T1423 ingest_queue repeat ${i}/30 ==="
+            cargo test -p openfdd-central ingest_queue::t1423 --
+          done
+          echo "T1423 ingest_queue 30x parallel loop complete"
 
       - name: Ingest scope receipts (Postgres pass required)
         env:
@@ -71,10 +84,5 @@ jobs:
           OPENFDD_INGEST_SCOPE_DATABASE_REQUIRED: "1"
         run: |
           set -euo pipefail
-          for round in $(seq 1 5); do
-            echo "=== ingest parallel interaction round ${round}/5 ==="
-            cargo test -p openfdd-central \
-              'ingest_idempotency_backfill_and_metrics_are_tenant_scoped|t1406_model_point_engineer_overlay_controls|t1423_4_cancel_route_is_operator_scoped_and_idempotent' \
-              -- --test-threads=8
-          done
-          echo "ingest parallel interaction complete"
+          chmod +x scripts/ci/run_ingest_parallel_interaction_rounds.sh
+          ./scripts/ci/run_ingest_parallel_interaction_rounds.sh

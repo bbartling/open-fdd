@@ -2,7 +2,7 @@
 //!
 //! PostgreSQL runs when `OPENFDD_TEST_DATABASE_URL` is set. The route output
 //! is the shared fixture the React table renders
-//! (`frontend/web/src/fixtures/sqlAnomalyEventV1.json`).
+//! (`archive/product-ui/react-spa-v4/src/fixtures/sqlAnomalyEventV1.json`).
 //! Set `OPENFDD_WRITE_SQL_ANOMALY_FIXTURE=1` to rewrite that file from the route.
 
 use std::collections::BTreeSet;
@@ -104,7 +104,7 @@ fn test_database_url() -> Option<String> {
 
 fn fixture_path() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../frontend/web/src/fixtures/sqlAnomalyEventV1.json")
+        .join("../../archive/product-ui/react-spa-v4/src/fixtures/sqlAnomalyEventV1.json")
 }
 
 fn base() -> DateTime<Utc> {

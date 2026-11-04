@@ -1,16 +1,19 @@
 ---
 name: openfdd-react-spa
 description: >-
-  Maintain the Open-FDD React product SPA (frontend/web → openfdd-web). Use when
-  editing Overview, Inspect, FDD Plots, RCx, Mapping, Operations, Sites, auth UI,
-  health matrices, or client Plotly charts against central /api (Timescale SQL).
+  Historical Open-FDD React product SPA (source at archive/product-ui/react-spa-v4,
+  GHCR openfdd-web until Wave F). For new plot/UI work on central `/app/`, use
+  openfdd-static-ui instead. Still use this skill when editing the archived SPA or
+  parity tests under archive/product-ui/react-spa-v4.
 ---
 
-# Open-FDD React SPA
+# Open-FDD React SPA (archived source)
+
+**Product default is moving to static UI on central** ([`openfdd-static-ui`](../openfdd-static-ui/SKILL.md), ADR-013). This skill remains the contract for `archive/product-ui/react-spa-v4` until Wave F retires `openfdd-web`.
 
 ## When to use
 
-- Changing `frontend/web` pages, API clients, or Plotly builders
+- Changing `archive/product-ui/react-spa-v4` pages, API clients, or Plotly builders
 
 How the code is written (hooks, keys, abort, TypeScript, accessibility) is [`docs/REACT_BEST_PRACTICES.md`](../../docs/REACT_BEST_PRACTICES.md). Review with [`openfdd-code-review-rust-react`](../openfdd-code-review-rust-react/SKILL.md). This skill is the product screen contract.
 - Overview / FDD / RCx chart parity vs vibe19 **presentation** (colors, axes)

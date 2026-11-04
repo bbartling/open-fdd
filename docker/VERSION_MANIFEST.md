@@ -9,7 +9,7 @@ All container images in the MQTT / CSV stack share a **coordinated release** tie
 | Image | Dockerfile | Role |
 |-------|------------|------|
 | `ghcr.io/bbartling/openfdd-central` | `services/central/Dockerfile` | MQTTS ingest, Feather, FDD, REST + OpenAPI |
-| `ghcr.io/bbartling/openfdd-web` | `frontend/web/Dockerfile` | React SPA product UI (nginx → central `/api`) |
+| `ghcr.io/bbartling/openfdd-web` | `archive/product-ui/react-spa-v4/Dockerfile` | Archived React SPA (rollback; nginx → central `/api`) |
 | `ghcr.io/bbartling/openfdd-fieldbus` | not in the 4.0 publish set | Archived. Compile `archive/ot-edge/unqualified-cdaa4f15/source` (`Dockerfile.closure`). Digest pin: `evidence/oci-pin.json`. |
 | `ghcr.io/bbartling/openfdd-mqtt` | `services/mqtt/Dockerfile` | Mosquitto MQTTS broker |
 | `ghcr.io/bbartling/openfdd-mcp` | `Dockerfile.mcp` | Optional MCP stdio sidecar → central |
@@ -65,7 +65,7 @@ Do not hand-maintain a stale SHA in this file. After a `master` merge:
 3. verify `:nightly` matches the intended `sha-<7>` image before deploying;
 4. pin the local stack and qualification to the immutable `sha-*` tag when reproducibility matters (`scripts/openfdd_local_repin.sh`).
 
-Product UI is **React** (`frontend/web` / `openfdd-web`).  
+Product UI default is **static on central** (`/app/`); React source is archived (`archive/product-ui/react-spa-v4` / `openfdd-web` rollback).  
 Production FDD = DataFusion SQL (`sql_rules/`). Pandas cookbook stays as oracle (PyPI / vibe19).
 WattLab dumps use `tools/wattlab_export/` from central.
 

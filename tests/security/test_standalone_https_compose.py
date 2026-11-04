@@ -35,10 +35,12 @@ class StandaloneHttpsComposeTest(unittest.TestCase):
         import yaml
 
         cfg = yaml.safe_load(out)
-        web_ports = cfg["services"]["web"].get("ports") or []
-        self.assertEqual(web_ports, [], f"web must not publish LAN ports, got {web_ports}")
-        self.assertNotIn("mqtt", cfg["services"])
-        caddy_ports = cfg["services"]["caddy"].get("ports") or []
+        services = cfg.get("services") or {}
+        self.assertNotIn("web", services, "default portal recipe must not include openfdd-web")
+        self.assertNotIn("mqtt", services)
+        central_ports = services["central"].get("ports") or []
+        self.assertEqual(central_ports, [], f"central must not publish LAN ports, got {central_ports}")
+        caddy_ports = services["caddy"].get("ports") or []
         published = {str(p.get("published")) for p in caddy_ports}
         self.assertTrue({"80", "443"}.issubset(published), caddy_ports)
 

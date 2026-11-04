@@ -63,7 +63,7 @@ retest. Do not confuse those with this engineering OS.
 1. Product FDD + Overview analytics = **Timescale + `sql/fdd/*.sql`** on GHCR (ADR-010). Never silent pandas fallback in central. Never dual-write: one Timescale telemetry writer for NF portal REST, NF LAN gRPC (per-site `transport`) and CSV. Never re-enable `legacy-datafusion` / `legacy-parquet` on the product tip. Never add a Parquet / Arrow / Arrow IPC / Feather / DataFusion store, cache, execution path, or dependency ([storage mandate](DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)).
 2. Pandas oracle stays forever on **PyPI** + cookbooks — **test-only** vs Timescale SQL; DuckDB harnesses only outside product containers.
 3. Never delete the SQL cookbook / `sql/fdd` pack because pandas remains the oracle.
-4. **Product UI:** React SPA (`frontend/web` → `openfdd-web`, `docker/compose.portal.yml`) only. Overview = central `/api/analytics/*` (Timescale SQL) **tables + health matrices**. Plotly motor/mech/econ/BAS figures live on RCx (additive presets). Inspect radio hosts the CSV overlay. Browser → central Rust `/api` only — **no Python in the product request path**.
+4. **Product UI:** **Open-FDD Central** static UI on central `/app/` (`services/central/static/product`, `OPENFDD_STATIC_PRODUCT_UI=1`). GHCR `openfdd-web` / React SPA is rollback-only (`docker/compose.react.yml`). Overview = central `/api/analytics/*` tables + health matrices; motor/mech/econ/BAS figures are RCx presets (ECharts). FDD/Inspect use stacked plots + bottom fault lane per [`openfdd-static-ui`](skills/openfdd-static-ui/SKILL.md). Browser → central Rust `/api` only — **no Python in the product request path**.
 5. **Internet-facing auth/UI hygiene:** Never put bench/dev secrets, credential file paths, default passwords, or JWT dumps on login or other product surfaces. Generic login errors only.
 6. Resolve images with `./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web` and pin `OPENFDD_IMAGE_TAG` to that `sha-*`. `:nightly` is a channel pointer, not proof of tip. See [`CONTAINER_AGENT.md`](CONTAINER_AGENT.md).
 6b. **Rust lint hygiene:** eliminate `#[allow]` / `#![allow]` — see [`docs/RUST_LINT_HYGIENE.md`](docs/RUST_LINT_HYGIENE.md). Prefer fix / `_` / `?` / smallest-scope `#[expect]` + comment; never crate-wide `#![allow]`.
@@ -80,7 +80,7 @@ retest. Do not confuse those with this engineering OS.
 16. When blocked (secrets, permissions), finish non-blocked work and record the exact error.
 17. Bound each PR to its declared scope.
 18. **Active program:** [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/README.md) Master Loop. Keep [`capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml) honest.
-19. For `frontend/web` work: follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) and [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md). Review diffs with [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md).
+19. For `archive/product-ui/react-spa-v4` (legacy GHCR `openfdd-web`): follow [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md). For **static product UI** on central `/app/` (Wave C+): follow [`openfdd-static-ui`](skills/openfdd-static-ui/SKILL.md) and [`docs/REACT_BEST_PRACTICES.md`](docs/REACT_BEST_PRACTICES.md) for shared review hygiene. Review diffs with [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md).
 20. Central product image is **debian + Rust binaries only** — no Python. **Engineering & ML bundle** export is Rust-first (`POST /api/jobs/{id}/exports`, schema `openfdd_engineering_bundle_v1`). Offline Python parity stays in `tools/wattlab_export/` (`OPENFDD_WATTLAB_PYTHON_EXPORT=1` bench only). `/wattlab/dumps` is a deprecated alias.
 21. **Site lock:** Overview + sidebar Active site are the only editors of `?site=`. `SectionTabs` (and sidebar App pages) must `navigate` with `hrefWithSession` so `site` + `eq` survive. FDD / RCx / Results / **Dump** show a locked `zip:BUILDING_*` caption — no Building `<Select>`.
 22. **FDD Plots = vibe19 `rule_result_chart`:** auto-load series; last y-axis title is `fault`; `confirmed_fault` is the last trace on the bottom domain (`domain[0] < 0.4`). A successful rule run with an empty overlay is a bug (fail the test), not a soft banner.
@@ -190,7 +190,8 @@ Author only the files in this table. Sibling links inside each skill point at th
 | Skill | Use when |
 | --- | --- |
 | [`openfdd-architecture`](skills/openfdd-architecture/SKILL.md) | Ownership / engine boundaries |
-| [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) | Product SPA (`frontend/web`) |
+| [`openfdd-react-spa`](skills/openfdd-react-spa/SKILL.md) | Archived React SPA (`archive/product-ui/react-spa-v4`) |
+| [`openfdd-static-ui`](skills/openfdd-static-ui/SKILL.md) | Static product UI on central `/app/` |
 | [`openfdd-code-review-rust-react`](skills/openfdd-code-review-rust-react/SKILL.md) | Rust + React best-practice review (`RUST_BEST_PRACTICES.md`, `REACT_BEST_PRACTICES.md`) |
 | [`openfdd-package-mapping`](skills/openfdd-package-mapping/SKILL.md) | Zip / `equipType` / Haystack→SQL / empty charts |
 | [`openfdd-rcx-fdd-plot-poll`](skills/openfdd-rcx-fdd-plot-poll/SKILL.md) | Blank RCx/FDD → missing portal or package roles |

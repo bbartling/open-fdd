@@ -37,11 +37,7 @@ cargo test -p openfdd-central ingest_idempotency_backfill_and_metrics_are_tenant
 grep -q 'SCOPE_TEST_RECEIPT phase=postgres' /tmp/repro_1483_scope.log
 
 echo "=== parallel interaction (same process, libtest threads=8) ==="
-for round in $(seq 1 5); do
-  echo "--- round ${round}/5 ---"
-  cargo test -p openfdd-central \
-    'ingest_idempotency_backfill_and_metrics_are_tenant_scoped|t1406_model_point_engineer_overlay_controls|t1423_4_cancel_route_is_operator_scoped_and_idempotent' \
-    -- --test-threads=8
-done
+chmod +x scripts/ci/run_ingest_parallel_interaction_rounds.sh
+./scripts/ci/run_ingest_parallel_interaction_rounds.sh
 
 echo "repro_1483 phase=${PHASE} ref=${REF} ok"

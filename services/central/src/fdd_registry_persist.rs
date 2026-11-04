@@ -15,6 +15,147 @@ use open_fdd_edge_prototype::fdd::registry_api::{
 };
 use serde_json::{json, Value};
 use sqlx::{Postgres, Row, Transaction};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration as StdDuration, Instant};
+
+const FDD_REGISTRY_SITE_LOCK_CLASS: i32 = 1484;
+
+/// AFDD scheduler: interval evidence gate after a clean rule cycle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum IntervalEvidenceReadiness {
+    Ready,
+    Pending,
+    CheckFailed { reason: String },
+}
+
+/// Bounded repair work during an AFDD cycle (pairs and wall time).
+#[derive(Debug, Clone)]
+pub(crate) struct RepairBudget {
+    pub max_pairs: u32,
+    pub max_duration: StdDuration,
+    pub cancel: Option<Arc<AtomicBool>>,
+}
+
+impl Default for RepairBudget {
+    fn default() -> Self {
+        Self {
+            max_pairs: 32,
+            max_duration: StdDuration::from_secs(45),
+            cancel: None,
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) static TEST_INTERVAL_EVIDENCE_INJECT: std::sync::Mutex<
+    Option<IntervalEvidenceReadiness>,
+> = std::sync::Mutex::new(None);
+
+/// When set, interval readiness through any `through_utc` strictly before this instant
+/// returns `Pending` (multi-hour AFDD checkpoint tests).
+#[cfg(test)]
+pub(crate) static TEST_INTERVAL_PENDING_BEFORE_UTC: std::sync::Mutex<
+    Option<chrono::DateTime<chrono::Utc>>,
+> = std::sync::Mutex::new(None);
+
+/// When set, the series load runs `SELECT 1/0` inside the interval savepoint.
+#[cfg(test)]
+pub(crate) static TEST_FORCE_SERIES_STATEMENT_ERROR: AtomicBool = AtomicBool::new(false);
+
+/// Pauses repair after the out-of-transaction pair read so another generation can commit.
+#[cfg(test)]
+pub(crate) struct RepairPauseGate {
+    pub arrived: Arc<tokio::sync::Notify>,
+    pub release: AtomicBool,
+    pub release_notify: Arc<tokio::sync::Notify>,
+}
+
+#[cfg(test)]
+pub(crate) static TEST_REPAIR_PAUSE: std::sync::Mutex<Option<Arc<RepairPauseGate>>> =
+    std::sync::Mutex::new(None);
+
+async fn lock_site_registry_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext($1), $2)")
+        .bind(site_id)
+        .bind(FDD_REGISTRY_SITE_LOCK_CLASS)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn active_run_id_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT run_id
+        FROM (
+            SELECT detail->>'run_id' AS run_id, MAX(created_at) AS latest
+            FROM fdd_run
+            WHERE site_id = $1 AND detail->'generation' IS NOT NULL
+            GROUP BY detail->>'run_id'
+        ) runs
+        ORDER BY latest DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(site_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row.and_then(|r| r.try_get("run_id").ok()))
+}
+
+async fn delete_interval_buckets_overlapping_window_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+    rule_id: &str,
+    equipment_id: &str,
+    window: AnalysisWindow,
+    scope_digest: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    match scope_digest {
+        Some(digest) => {
+            sqlx::query(
+                r#"
+                DELETE FROM fdd_interval_result
+                WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                  AND scope_digest = md5($4)
+                  AND bucket_start < $6 AND bucket_end > $5
+                "#,
+            )
+            .bind(site_id)
+            .bind(rule_id)
+            .bind(equipment_id)
+            .bind(digest)
+            .bind(window.start())
+            .bind(window.end())
+            .execute(&mut **tx)
+            .await?;
+        }
+        None => {
+            sqlx::query(
+                r#"
+                DELETE FROM fdd_interval_result
+                WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                  AND bucket_start < $5 AND bucket_end > $4
+                "#,
+            )
+            .bind(site_id)
+            .bind(rule_id)
+            .bind(equipment_id)
+            .bind(window.start())
+            .bind(window.end())
+            .execute(&mut **tx)
+            .await?;
+        }
+    }
+    Ok(())
+}
 
 fn parse_window(start: Option<&str>, end: Option<&str>) -> Result<AnalysisWindow> {
     let start = start
@@ -50,15 +191,141 @@ fn row_f64(row: &Value, key: &str) -> Option<f64> {
 
 const ELAPSED_MAX_GAP_SECONDS: i64 = 3600;
 
+/// Daily bucket evidence could not be computed from the confirmed-fault series.
+pub(crate) const INTERVAL_EVIDENCE_UNKNOWN: &str = "INTERVAL_UNKNOWN";
+/// Daily bucket evidence was persisted from the confirmed-fault series.
+pub(crate) const INTERVAL_EVIDENCE_EXACT: &str = "INTERVAL_EXACT";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IntervalPersistReasonCode {
+    RegistryLoadFailed,
+    RuleNotInRegistry,
+    SeriesQueryFailed,
+    SeriesEmptyNoSamples,
+    SeriesExact,
+    /// Stored input or model identity no longer matches the historian. The row stays unknown.
+    RevisionDrift,
+}
+
+impl IntervalPersistReasonCode {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::RegistryLoadFailed => "registry_load_failed",
+            Self::RuleNotInRegistry => "rule_not_in_registry",
+            Self::SeriesQueryFailed => "series_query_failed",
+            Self::SeriesEmptyNoSamples => "series_empty_no_samples",
+            Self::SeriesExact => "series_exact",
+            Self::RevisionDrift => "full_re_evaluation_required",
+        }
+    }
+}
+
+pub(crate) fn interval_persist_evidence_json(
+    status: &str,
+    reason_code: IntervalPersistReasonCode,
+    reason_detail: Option<&str>,
+) -> Value {
+    json!({
+        "status": status,
+        "reason_code": reason_code.as_str(),
+        "reason": reason_detail.unwrap_or(""),
+    })
+}
+
+fn enrich_stored_row_with_interval_evidence(body_row: &mut Value, detail: &Value) {
+    let Some(ip) = detail.get("interval_persist") else {
+        return;
+    };
+    let Some(obj) = body_row.as_object_mut() else {
+        return;
+    };
+    if let Some(status) = ip.get("status").and_then(Value::as_str) {
+        obj.insert("interval_status".into(), json!(status));
+    }
+    if let Some(code) = ip.get("reason_code").and_then(Value::as_str) {
+        obj.insert("interval_reason_code".into(), json!(code));
+    }
+}
+
+fn append_hold_to_daily_utc(
+    out: &mut BTreeMap<NaiveDate, (f64, f64)>,
+    hold_start: DateTime<Utc>,
+    hold_seconds: f64,
+    confirmed: bool,
+    clip: Option<AnalysisWindow>,
+) {
+    if hold_seconds <= 0.0 || !hold_seconds.is_finite() {
+        return;
+    }
+    let mut remaining = hold_seconds;
+    let mut cursor = hold_start;
+    while remaining > 0.0 {
+        if let Some(window) = clip {
+            if cursor >= window.end() {
+                break;
+            }
+            if cursor < window.start() {
+                let skip = (window.start() - cursor).num_seconds() as f64;
+                if skip >= remaining {
+                    break;
+                }
+                remaining -= skip;
+                cursor = window.start();
+                continue;
+            }
+        }
+        let day = cursor.date_naive();
+        let mut segment_end = day
+            .succ_opt()
+            .and_then(|next| next.and_hms_opt(0, 0, 0))
+            .map(|naive| DateTime::from_naive_utc_and_offset(naive, Utc))
+            .filter(|midnight| *midnight > cursor)
+            .map(|midnight| {
+                let cap = (midnight - cursor).num_seconds() as f64;
+                if cap >= remaining {
+                    cursor + chrono::Duration::milliseconds((remaining * 1000.0) as i64)
+                } else {
+                    midnight
+                }
+            })
+            .unwrap_or_else(|| {
+                cursor + chrono::Duration::milliseconds((remaining * 1000.0) as i64)
+            });
+        if let Some(window) = clip {
+            if segment_end > window.end() {
+                segment_end = window.end();
+            }
+        }
+        let segment_secs = (segment_end - cursor).num_seconds();
+        if segment_secs <= 0 {
+            break;
+        }
+        let segment = segment_secs as f64;
+        let slot = out.entry(day).or_insert((0.0, 0.0));
+        slot.1 += segment;
+        if confirmed {
+            slot.0 += segment;
+        }
+        remaining -= segment;
+        cursor = segment_end;
+    }
+}
+
 /// Per-UTC-day fault/covered seconds from a confirmed_fault series (pandas hold semantics).
 fn daily_utc_fault_covered_from_confirmed_points(
     points: &[(DateTime<Utc>, bool)],
+    clip: Option<AnalysisWindow>,
 ) -> BTreeMap<NaiveDate, (f64, f64)> {
     let mut sorted = points.to_vec();
     sorted.sort_by_key(|(ts, _)| *ts);
     let mut out: BTreeMap<NaiveDate, (f64, f64)> = BTreeMap::new();
     for i in 0..sorted.len() {
         let (ts, confirmed) = sorted[i];
+        if let Some(window) = clip {
+            if ts >= window.end() {
+                continue;
+            }
+        }
         let hold = if i + 1 < sorted.len() {
             let delta = (sorted[i + 1].0 - ts).num_seconds();
             if delta > 0 && delta <= ELAPSED_MAX_GAP_SECONDS {
@@ -69,15 +336,7 @@ fn daily_utc_fault_covered_from_confirmed_points(
         } else {
             0.0
         };
-        if hold <= 0.0 {
-            continue;
-        }
-        let day = ts.date_naive();
-        let slot = out.entry(day).or_insert((0.0, 0.0));
-        slot.1 += hold;
-        if confirmed {
-            slot.0 += hold;
-        }
+        append_hold_to_daily_utc(&mut out, ts, hold, confirmed, clip);
     }
     out
 }
@@ -123,10 +382,12 @@ fn interval_buckets_from_confirmed_fault_map(
     if points.is_empty() {
         return Ok(Vec::new());
     }
-    let daily = daily_utc_fault_covered_from_confirmed_points(&points);
+    let daily = daily_utc_fault_covered_from_confirmed_points(&points, Some(window));
     interval_buckets_from_daily_utc(window, daily, sample_rows)
 }
 
+/// Legacy proportional spreading (4.0.6). Not used for persisted qualification buckets.
+#[cfg(test)]
 fn distribute_interval_buckets(
     grid: BucketGrid,
     window: AnalysisWindow,
@@ -168,6 +429,495 @@ fn distribute_interval_buckets(
     Ok(out)
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ExactIntervalPlan {
+    Buckets(Vec<BucketResult>),
+    SeriesUnavailable {
+        reason_code: IntervalPersistReasonCode,
+        reason_detail: String,
+    },
+}
+
+pub(crate) fn exact_interval_plan_from_confirmed_map(
+    window: AnalysisWindow,
+    map: HashMap<String, bool>,
+    sample_rows: i32,
+) -> Result<ExactIntervalPlan, IncrementalError> {
+    if map.is_empty() {
+        return Ok(ExactIntervalPlan::SeriesUnavailable {
+            reason_code: IntervalPersistReasonCode::SeriesEmptyNoSamples,
+            reason_detail: String::new(),
+        });
+    }
+    let buckets = interval_buckets_from_confirmed_fault_map(window, &map, sample_rows)?;
+    Ok(ExactIntervalPlan::Buckets(buckets))
+}
+
+async fn exact_interval_plan_for_rule_row(
+    tx: &mut Transaction<'_, Postgres>,
+    rule_id: &str,
+    site_id: &str,
+    equipment_id: &str,
+    window: AnalysisWindow,
+    sample_rows: i32,
+    run_ctx: &crate::effective_run_context::EffectiveRunContext,
+) -> Result<ExactIntervalPlan, IncrementalError> {
+    let reg = match crate::timescale_product::load_reg() {
+        Ok(reg) => reg,
+        Err(err) => {
+            return Ok(ExactIntervalPlan::SeriesUnavailable {
+                reason_code: IntervalPersistReasonCode::RegistryLoadFailed,
+                reason_detail: err.to_string(),
+            });
+        }
+    };
+    let Some(rule) = reg.rules.iter().find(|spec| spec.rule_id == rule_id) else {
+        return Ok(ExactIntervalPlan::SeriesUnavailable {
+            reason_code: IntervalPersistReasonCode::RuleNotInRegistry,
+            reason_detail: rule_id.to_string(),
+        });
+    };
+    let ws = window
+        .start()
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let we = window
+        .end()
+        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let fault_query = crate::effective_run_context::LiveConfirmedFaultQuery {
+        reg: &reg,
+        rule,
+        building_id: site_id,
+        equipment_id,
+        window_start: Some(ws.as_str()),
+        window_end: Some(we.as_str()),
+        ctx: run_ctx,
+    };
+    const SAVEPOINT: &str = "interval_series_load";
+    sqlx::query(&format!("SAVEPOINT {SAVEPOINT}"))
+        .execute(&mut **tx)
+        .await?;
+    #[cfg(test)]
+    if TEST_FORCE_SERIES_STATEMENT_ERROR.load(Ordering::SeqCst) {
+        let forced = sqlx::query("SELECT 1/0").execute(&mut **tx).await;
+        if let Err(err) = forced {
+            let _ = sqlx::query(&format!("ROLLBACK TO SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await;
+            return Ok(ExactIntervalPlan::SeriesUnavailable {
+                reason_code: IntervalPersistReasonCode::SeriesQueryFailed,
+                reason_detail: err.to_string(),
+            });
+        }
+    }
+    let load_result =
+        crate::timescale_product::load_live_confirmed_fault_in_tx(tx, &fault_query).await;
+    match load_result {
+        Ok(map) => {
+            sqlx::query(&format!("RELEASE SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await?;
+            exact_interval_plan_from_confirmed_map(window, map, sample_rows)
+        }
+        Err(err) => {
+            let _ = sqlx::query(&format!("ROLLBACK TO SAVEPOINT {SAVEPOINT}"))
+                .execute(&mut **tx)
+                .await;
+            Ok(ExactIntervalPlan::SeriesUnavailable {
+                reason_code: IntervalPersistReasonCode::SeriesQueryFailed,
+                reason_detail: err.to_string(),
+            })
+        }
+    }
+}
+
+async fn clear_interval_buckets_in_tx(
+    tx: &mut Transaction<'_, Postgres>,
+    site_id: &str,
+    rule_id: &str,
+    equipment_id: &str,
+    window: AnalysisWindow,
+) -> Result<(), sqlx::Error> {
+    delete_interval_buckets_overlapping_window_in_tx(
+        tx,
+        site_id,
+        rule_id,
+        equipment_id,
+        window,
+        None,
+    )
+    .await
+}
+
+/// Active generation rows whose interval evidence is still unknown for a run id.
+pub async fn interval_unknown_pairs_for_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+) -> Result<Vec<(String, String)>> {
+    interval_unknown_pairs_for_run_through(tsdb, site_id, run_id, None).await
+}
+
+pub async fn interval_unknown_pairs_for_run_through(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+    through_utc: Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<Vec<(String, String)>> {
+    let rows = if let Some(through) = through_utc {
+        sqlx::query(
+            r#"
+            SELECT rule_id, equipment_id
+            FROM fdd_run
+            WHERE site_id = $1
+              AND detail->>'run_id' = $2
+              AND equipment_id <> ''
+              AND detail->'interval_persist'->>'status' = $3
+              AND window_end <= $4
+            "#,
+        )
+        .bind(site_id)
+        .bind(run_id)
+        .bind(INTERVAL_EVIDENCE_UNKNOWN)
+        .bind(through)
+        .fetch_all(tsdb.pool())
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT rule_id, equipment_id
+            FROM fdd_run
+            WHERE site_id = $1
+              AND detail->>'run_id' = $2
+              AND equipment_id <> ''
+              AND detail->'interval_persist'->>'status' = $3
+            "#,
+        )
+        .bind(site_id)
+        .bind(run_id)
+        .bind(INTERVAL_EVIDENCE_UNKNOWN)
+        .fetch_all(tsdb.pool())
+        .await?
+    };
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let rule_id = row.try_get::<String, _>("rule_id").ok()?;
+            let equipment_id = row.try_get::<String, _>("equipment_id").ok()?;
+            Some((rule_id, equipment_id))
+        })
+        .collect())
+}
+
+/// Re-attempt interval persist for unknown pairs on an existing run (bounded repair).
+pub async fn repair_unknown_interval_evidence_for_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+    budget: &RepairBudget,
+) -> Result<u32> {
+    let pairs = interval_unknown_pairs_for_run(tsdb, site_id, run_id).await?;
+    if pairs.is_empty() {
+        return Ok(0);
+    }
+    #[cfg(test)]
+    {
+        let pause_gate = TEST_REPAIR_PAUSE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        if let Some(gate) = pause_gate {
+            gate.arrived.notify_one();
+            while !gate.release.load(Ordering::SeqCst) {
+                gate.release_notify.notified().await;
+            }
+        }
+    }
+    let started = Instant::now();
+    let mut repaired = 0u32;
+    let mut stopped_early = false;
+    for (pair_idx, (rule_id, equipment_id)) in pairs.into_iter().enumerate() {
+        if pair_idx as u32 >= budget.max_pairs
+            || started.elapsed() >= budget.max_duration
+            || budget
+                .cancel
+                .as_ref()
+                .is_some_and(|c| c.load(Ordering::SeqCst))
+        {
+            stopped_early = true;
+            break;
+        }
+        let mut tx = tsdb.pool().begin().await?;
+        lock_site_registry_tx(&mut tx, site_id).await?;
+        let active = active_run_id_in_tx(&mut tx, site_id).await?;
+        if active.as_deref() != Some(run_id) {
+            let _ = tx.rollback().await;
+            continue;
+        }
+        let row = sqlx::query(
+            r#"
+            SELECT window_start, window_end, poll_seconds, confirm_min, sample_count, detail
+            FROM fdd_run
+            WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+              AND detail->>'run_id' = $4
+              AND detail->'interval_persist'->>'status' = $5
+            LIMIT 1
+            FOR UPDATE
+            "#,
+        )
+        .bind(site_id)
+        .bind(&rule_id)
+        .bind(&equipment_id)
+        .bind(run_id)
+        .bind(INTERVAL_EVIDENCE_UNKNOWN)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(row) = row else {
+            let _ = tx.rollback().await;
+            continue;
+        };
+        let detail: Value = row.try_get("detail")?;
+        let stored_data_revision = detail
+            .get("persisted_data_revision")
+            .and_then(Value::as_u64);
+        let stored_model_revision = detail
+            .get("persisted_model_revision")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let through_revision = fdd_tsdb::current_data_revision(&mut *tx, site_id).await?;
+        let current_model_revision =
+            crate::timescale_product::read_model_revision_string_in_tx(&mut tx, site_id)
+                .await
+                .map_err(|e| anyhow!(e))?;
+        if stored_data_revision != Some(through_revision)
+            || stored_model_revision.as_deref() != Some(current_model_revision.as_str())
+        {
+            let mut detail_mut = detail.clone();
+            if let Some(obj) = detail_mut.as_object_mut() {
+                obj.insert(
+                    "interval_persist".into(),
+                    interval_persist_evidence_json(
+                        INTERVAL_EVIDENCE_UNKNOWN,
+                        IntervalPersistReasonCode::RevisionDrift,
+                        Some("full re-evaluation required"),
+                    ),
+                );
+            }
+            let updated = sqlx::query(
+                r#"
+                UPDATE fdd_run SET detail = $5
+                WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                  AND detail->>'run_id' = $4
+                  AND detail->'interval_persist'->>'status' = $6
+                "#,
+            )
+            .bind(site_id)
+            .bind(&rule_id)
+            .bind(&equipment_id)
+            .bind(run_id)
+            .bind(&detail_mut)
+            .bind(INTERVAL_EVIDENCE_UNKNOWN)
+            .execute(&mut *tx)
+            .await?;
+            if updated.rows_affected() != 1 {
+                let _ = tx.rollback().await;
+                continue;
+            }
+            tx.commit().await?;
+            continue;
+        }
+        let model_revision = stored_model_revision.unwrap_or(current_model_revision);
+        let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+        let poll: i32 = row.try_get("poll_seconds")?;
+        let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(
+            &body_row,
+            f64::from(poll),
+        );
+        let window =
+            AnalysisWindow::half_open(row.try_get("window_start")?, row.try_get("window_end")?)
+                .map_err(|e| anyhow!("repair window: {e}"))?;
+        let sample_rows = row.try_get::<Option<i32>, _>("sample_count")?.unwrap_or(0);
+        let plan = exact_interval_plan_for_rule_row(
+            &mut tx,
+            &rule_id,
+            site_id,
+            &equipment_id,
+            window,
+            sample_rows,
+            &run_ctx,
+        )
+        .await?;
+        match plan {
+            ExactIntervalPlan::Buckets(buckets) if !buckets.is_empty() => {
+                let confirm = run_ctx.confirm_seconds as f64;
+                let rule_params = RuleParameters::try_from_pairs([
+                    ("confirm_min", confirm.to_string()),
+                    ("poll_seconds", run_ctx.poll_seconds.to_string()),
+                ])
+                .map_err(|e| anyhow!("repair params: {e}"))?;
+                let pack_ver = detail
+                    .get("generation")
+                    .and_then(|g| g.get("pack_version"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                let identity = FddResultIdentity::new(
+                    through_revision,
+                    &model_revision,
+                    rule_params,
+                    pack_ver,
+                    window,
+                    QualityPolicy::DropBad,
+                    SchedulePolicy::Sched1,
+                );
+                use chrono_tz::UTC;
+                let horizon = RuleHorizon::new(
+                    chrono::Duration::zero(),
+                    chrono::Duration::seconds(confirm.round().max(0.0) as i64),
+                )?;
+                let grid = BucketGrid::LocalDay(UTC);
+                let scope =
+                    ResultScope::new(site_id, &rule_id, &equipment_id, &identity, grid, horizon)?;
+                replace_scope_results_in_tx(&mut tx, &scope, window, through_revision, &buckets)
+                    .await?;
+                let mut detail_mut = detail.clone();
+                if let Some(obj) = detail_mut.as_object_mut() {
+                    obj.insert(
+                        "interval_persist".into(),
+                        interval_persist_evidence_json(
+                            INTERVAL_EVIDENCE_EXACT,
+                            IntervalPersistReasonCode::SeriesExact,
+                            None,
+                        ),
+                    );
+                }
+                let updated = sqlx::query(
+                    r#"
+                    UPDATE fdd_run SET detail = $5
+                    WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+                      AND detail->>'run_id' = $4
+                      AND detail->'interval_persist'->>'status' = $6
+                    "#,
+                )
+                .bind(site_id)
+                .bind(&rule_id)
+                .bind(&equipment_id)
+                .bind(run_id)
+                .bind(&detail_mut)
+                .bind(INTERVAL_EVIDENCE_UNKNOWN)
+                .execute(&mut *tx)
+                .await?;
+                if updated.rows_affected() != 1 {
+                    let _ = tx.rollback().await;
+                    continue;
+                }
+                tx.commit().await?;
+                repaired += 1;
+            }
+            _ => {
+                let _ = tx.rollback().await;
+            }
+        }
+    }
+    if stopped_early {
+        return Err(anyhow!(
+            "interval repair stopped before completion; retry required"
+        ));
+    }
+    Ok(repaired)
+}
+
+/// Whether interval evidence is ready for AFDD checkpoint advance (optional bounded repair).
+pub(crate) async fn interval_evidence_readiness_for_run_through(
+    tsdb: &Tsdb,
+    site_id: &str,
+    run_id: &str,
+    through_utc: chrono::DateTime<chrono::Utc>,
+    attempt_repair: bool,
+    budget: &RepairBudget,
+) -> Result<IntervalEvidenceReadiness> {
+    #[cfg(test)]
+    if let Ok(guard) = TEST_INTERVAL_PENDING_BEFORE_UTC.lock() {
+        if guard.as_ref().is_some_and(|cutoff| through_utc <= *cutoff) {
+            return Ok(IntervalEvidenceReadiness::Pending);
+        }
+    }
+    let mut pending =
+        !interval_unknown_pairs_for_run_through(tsdb, site_id, run_id, Some(through_utc))
+            .await?
+            .is_empty();
+    if pending && attempt_repair {
+        if let Err(err) =
+            repair_unknown_interval_evidence_for_run(tsdb, site_id, run_id, budget).await
+        {
+            return Ok(IntervalEvidenceReadiness::CheckFailed {
+                reason: err.to_string(),
+            });
+        }
+        pending = !interval_unknown_pairs_for_run_through(tsdb, site_id, run_id, Some(through_utc))
+            .await?
+            .is_empty();
+    }
+    if pending {
+        Ok(IntervalEvidenceReadiness::Pending)
+    } else {
+        Ok(IntervalEvidenceReadiness::Ready)
+    }
+}
+
+pub(crate) async fn interval_evidence_readiness_for_active_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    attempt_repair: bool,
+    budget: &RepairBudget,
+) -> Result<IntervalEvidenceReadiness> {
+    #[cfg(test)]
+    if let Ok(guard) = TEST_INTERVAL_EVIDENCE_INJECT.lock() {
+        if let Some(inject) = guard.as_ref() {
+            return Ok(inject.clone());
+        }
+    }
+    let Some(manifest) = active_generation_manifest(tsdb, site_id).await? else {
+        return Ok(IntervalEvidenceReadiness::Ready);
+    };
+    let Some(run_id) = manifest
+        .get("run_id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+    else {
+        return Ok(IntervalEvidenceReadiness::Ready);
+    };
+    interval_evidence_readiness_for_run_through(
+        tsdb,
+        site_id,
+        run_id,
+        chrono::DateTime::<chrono::Utc>::MAX_UTC,
+        attempt_repair,
+        budget,
+    )
+    .await
+}
+
+/// Whether the active registry generation still has interval-unknown rows (optional bounded repair).
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) async fn interval_evidence_pending_for_active_run(
+    tsdb: &Tsdb,
+    site_id: &str,
+    attempt_repair: bool,
+) -> Result<bool> {
+    match interval_evidence_readiness_for_active_run(
+        tsdb,
+        site_id,
+        attempt_repair,
+        &RepairBudget::default(),
+    )
+    .await
+    {
+        Ok(IntervalEvidenceReadiness::Ready) => Ok(false),
+        Ok(IntervalEvidenceReadiness::Pending) => Ok(true),
+        Ok(IntervalEvidenceReadiness::CheckFailed { reason }) => Err(anyhow!(reason)),
+        Err(err) => Err(err),
+    }
+}
+
 async fn model_revision_for_site(tsdb: &Tsdb, site_id: &str) -> Result<String> {
     crate::timescale_product::read_model_revision_string(tsdb, site_id)
         .await
@@ -199,6 +949,9 @@ pub async fn persist_registry_run_timescale(
     let poll = commit.poll_seconds.round().max(1.0) as i32;
 
     let mut tx = tsdb.pool().begin().await?;
+    lock_site_registry_tx(&mut tx, site_id)
+        .await
+        .map_err(|e| anyhow!("registry lock: {e}"))?;
     if commit.full_cohort {
         sqlx::query("DELETE FROM fdd_run WHERE site_id = $1")
             .bind(site_id)
@@ -267,13 +1020,68 @@ pub async fn persist_registry_run_timescale(
                 let fault_hours = row_f64(row, "fault_hours");
                 let sample_rows =
                     row.get("sample_rows").and_then(Value::as_i64).unwrap_or(0) as i32;
-                let detail = json!({
-                    "generation": prep.manifest,
-                    "run_id": prep.run_id,
-                    "dirty_reason": prep.dirty_reason,
-                    "row": row,
-                });
                 if let Some(eq) = equipment_id {
+                    let run_ctx = crate::effective_run_context::EffectiveRunContext::from_run_row(
+                        row,
+                        f64::from(poll),
+                    );
+                    let mut interval_persist: Option<Value> = None;
+                    let mut interval_buckets: Option<Vec<BucketResult>> = None;
+                    if item.outcome == RuleOutcome::Succeeded
+                        && row.get("output_kind").and_then(Value::as_str) != Some("metric")
+                        && fault_hours.is_some()
+                    {
+                        match exact_interval_plan_for_rule_row(
+                            &mut tx,
+                            &item.rule_id,
+                            site_id,
+                            eq,
+                            window,
+                            sample_rows,
+                            &run_ctx,
+                        )
+                        .await
+                        {
+                            Ok(ExactIntervalPlan::Buckets(buckets)) => {
+                                interval_persist = Some(interval_persist_evidence_json(
+                                    INTERVAL_EVIDENCE_EXACT,
+                                    IntervalPersistReasonCode::SeriesExact,
+                                    None,
+                                ));
+                                interval_buckets = Some(buckets);
+                            }
+                            Ok(ExactIntervalPlan::SeriesUnavailable {
+                                reason_code,
+                                reason_detail,
+                            }) => {
+                                interval_persist = Some(interval_persist_evidence_json(
+                                    INTERVAL_EVIDENCE_UNKNOWN,
+                                    reason_code,
+                                    Some(reason_detail.as_str()),
+                                ));
+                                clear_interval_buckets_in_tx(
+                                    &mut tx,
+                                    site_id,
+                                    &item.rule_id,
+                                    eq,
+                                    window,
+                                )
+                                .await?;
+                            }
+                            Err(err) => {
+                                return Err(anyhow!("interval buckets: {err}"));
+                            }
+                        }
+                    }
+                    let detail = json!({
+                        "generation": prep.manifest,
+                        "run_id": prep.run_id,
+                        "dirty_reason": prep.dirty_reason,
+                        "row": row,
+                        "interval_persist": interval_persist,
+                        "persisted_data_revision": through_revision,
+                        "persisted_model_revision": model_revision,
+                    });
                     let fault_seconds = fault_hours.map(|h| (h * 3600.0).round() as i32);
                     sqlx::query(
                         r#"
@@ -300,60 +1108,13 @@ pub async fn persist_registry_run_timescale(
                     .execute(&mut *tx)
                     .await?;
 
-                    if item.outcome == RuleOutcome::Succeeded
-                        && row.get("output_kind").and_then(Value::as_str) != Some("metric")
-                        && fault_hours.is_some()
-                    {
+                    if let Some(buckets) = interval_buckets {
                         use chrono_tz::UTC;
                         let horizon = RuleHorizon::new(
                             chrono::Duration::zero(),
                             chrono::Duration::seconds(confirm.round().max(0.0) as i64),
                         )?;
-                        let covered = row_f64(row, "covered_hours");
-                        let ws = window
-                            .start()
-                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                        let we = window
-                            .end()
-                            .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-                        let mut grid = BucketGrid::UtcHour;
-                        let mut buckets: Vec<BucketResult> = Vec::new();
-                        if let Ok(reg) = crate::timescale_product::load_reg() {
-                            if let Some(rule) =
-                                reg.rules.iter().find(|spec| spec.rule_id == item.rule_id)
-                            {
-                                if let Ok(map) =
-                                    crate::timescale_product::load_live_confirmed_fault(
-                                        tsdb,
-                                        &reg,
-                                        rule,
-                                        site_id,
-                                        eq,
-                                        Some(&ws),
-                                        Some(&we),
-                                    )
-                                    .await
-                                {
-                                    if !map.is_empty() {
-                                        grid = BucketGrid::LocalDay(UTC);
-                                        buckets = interval_buckets_from_confirmed_fault_map(
-                                            window,
-                                            &map,
-                                            sample_rows,
-                                        )?;
-                                    }
-                                }
-                            }
-                        }
-                        if buckets.is_empty() {
-                            buckets = distribute_interval_buckets(
-                                grid,
-                                window,
-                                fault_hours.unwrap_or(0.0),
-                                covered,
-                                sample_rows,
-                            )?;
-                        }
+                        let grid = BucketGrid::LocalDay(UTC);
                         let scope =
                             ResultScope::new(site_id, &item.rule_id, eq, &identity, grid, horizon)?;
                         if !buckets.is_empty() {
@@ -368,6 +1129,12 @@ pub async fn persist_registry_run_timescale(
                         }
                     }
                 } else {
+                    let detail = json!({
+                        "generation": prep.manifest,
+                        "run_id": prep.run_id,
+                        "dirty_reason": prep.dirty_reason,
+                        "row": row,
+                    });
                     sqlx::query(
                         r#"
                         INSERT INTO fdd_run(
@@ -471,10 +1238,14 @@ async fn copy_parent_runs(
 pub async fn active_generation_manifest(tsdb: &Tsdb, building_id: &str) -> Result<Option<Value>> {
     let row = sqlx::query(
         r#"
-        SELECT detail
-        FROM fdd_run
-        WHERE site_id = $1
-        ORDER BY created_at DESC
+        SELECT generation
+        FROM (
+            SELECT detail->'generation' AS generation, MAX(created_at) AS latest
+            FROM fdd_run
+            WHERE site_id = $1 AND detail->'generation' IS NOT NULL
+            GROUP BY detail->>'run_id', detail->'generation'
+        ) runs
+        ORDER BY latest DESC
         LIMIT 1
         "#,
     )
@@ -484,8 +1255,7 @@ pub async fn active_generation_manifest(tsdb: &Tsdb, building_id: &str) -> Resul
     let Some(row) = row else {
         return Ok(None);
     };
-    let detail: Value = row.try_get("detail")?;
-    Ok(detail.get("generation").cloned())
+    Ok(row.try_get("generation")?)
 }
 
 /// Build flat rule rows for the active Timescale generation (rule_id, row body).
@@ -517,10 +1287,52 @@ pub async fn active_generation_rows(
     for row in rows {
         let rule_id = row.try_get::<String, _>("rule_id")?;
         let detail: Value = row.try_get("detail")?;
-        let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+        let mut body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+        enrich_stored_row_with_interval_evidence(&mut body_row, &detail);
         out.push((rule_id, body_row));
     }
     Ok(out)
+}
+
+/// Latest run context for plot/series for one rule × equipment on the active generation.
+pub async fn effective_run_context_for_active_row(
+    tsdb: &Tsdb,
+    site_id: &str,
+    rule_id: &str,
+    equipment_id: &str,
+) -> Result<Option<crate::effective_run_context::EffectiveRunContext>> {
+    let manifest = active_generation_manifest(tsdb, site_id).await?;
+    let Some(manifest) = manifest else {
+        return Ok(None);
+    };
+    let run_id = manifest.get("run_id").and_then(Value::as_str).unwrap_or("");
+    if run_id.is_empty() {
+        return Ok(None);
+    }
+    let row = sqlx::query(
+        r#"
+        SELECT poll_seconds, detail
+        FROM fdd_run
+        WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3
+          AND detail->>'run_id' = $4
+        LIMIT 1
+        "#,
+    )
+    .bind(site_id)
+    .bind(rule_id)
+    .bind(equipment_id)
+    .bind(run_id)
+    .fetch_optional(tsdb.pool())
+    .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let detail: Value = row.try_get("detail")?;
+    let body_row = detail.get("row").cloned().unwrap_or(Value::Null);
+    let poll: i32 = row.try_get("poll_seconds")?;
+    Ok(Some(
+        crate::effective_run_context::EffectiveRunContext::from_run_row(&body_row, f64::from(poll)),
+    ))
 }
 
 pub async fn commit_and_persist_registry_run(
@@ -637,6 +1449,12 @@ mod interval_daily_unit_tests {
     use super::*;
     use chrono::{TimeZone, Utc};
 
+    fn ts(s: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(s)
+            .expect("ts")
+            .with_timezone(&Utc)
+    }
+
     #[test]
     fn daily_series_fault_only_on_one_day_not_equal_across_five() {
         let start = Utc.with_ymd_and_hms(2026, 10, 10, 0, 0, 0).unwrap();
@@ -649,7 +1467,7 @@ mod interval_daily_unit_tests {
                 points.push((ts, confirmed));
             }
         }
-        let daily = daily_utc_fault_covered_from_confirmed_points(&points);
+        let daily = daily_utc_fault_covered_from_confirmed_points(&points, None);
         let fault_day0 = daily
             .get(&NaiveDate::from_ymd_opt(2026, 10, 10).unwrap())
             .map(|(f, _)| *f)
@@ -660,6 +1478,102 @@ mod interval_daily_unit_tests {
             .unwrap_or(0.0);
         assert!(fault_day0 > 0.0, "day 0 should have fault seconds");
         assert_eq!(fault_day1, 0.0, "day 1 should have no fault seconds");
+    }
+
+    #[test]
+    fn up03_two_day_window_fault_only_on_day_two() {
+        let start = ts("2026-10-10T00:00:00Z");
+        let end = ts("2026-10-12T00:00:00Z");
+        let window = AnalysisWindow::half_open(start, end).expect("window");
+        let mut points = Vec::new();
+        let day2 = ts("2026-10-11T00:00:00Z");
+        points.push((day2, false));
+        points.push((day2 + chrono::Duration::minutes(5), true));
+        points.push((day2 + chrono::Duration::minutes(10), true));
+        points.push((day2 + chrono::Duration::minutes(15), false));
+        let buckets =
+            interval_buckets_from_confirmed_fault_map(window, &map_from_points(&points), 4)
+                .expect("buckets");
+        let day1 = NaiveDate::from_ymd_opt(2026, 10, 10).unwrap();
+        let day2d = NaiveDate::from_ymd_opt(2026, 10, 11).unwrap();
+        let fault_day1 = bucket_fault_for_day(&buckets, day1);
+        let fault_day2 = bucket_fault_for_day(&buckets, day2d);
+        assert_eq!(fault_day1, 0.0);
+        assert!((fault_day2 - 600.0).abs() < 0.01, "fault_day2={fault_day2}");
+    }
+
+    #[test]
+    fn up03_midnight_hold_splits_five_min_each_day() {
+        let t0 = ts("2026-10-10T23:55:00Z");
+        let t1 = ts("2026-10-11T00:05:00Z");
+        let points = vec![(t0, true), (t1, true)];
+        let daily = daily_utc_fault_covered_from_confirmed_points(&points, None);
+        let d0 = NaiveDate::from_ymd_opt(2026, 10, 10).unwrap();
+        let d1 = NaiveDate::from_ymd_opt(2026, 10, 11).unwrap();
+        let (_, cov0) = daily.get(&d0).copied().unwrap_or((0.0, 0.0));
+        let (_, cov1) = daily.get(&d1).copied().unwrap_or((0.0, 0.0));
+        assert!((cov0 - 300.0).abs() < 0.01, "cov0={cov0}");
+        assert!((cov1 - 300.0).abs() < 0.01, "cov1={cov1}");
+    }
+
+    #[test]
+    fn up03_max_gap_boundary() {
+        let t0 = ts("2026-10-10T12:00:00Z");
+        let below = t0 + chrono::Duration::seconds(ELAPSED_MAX_GAP_SECONDS);
+        let above = t0 + chrono::Duration::seconds(ELAPSED_MAX_GAP_SECONDS + 1);
+        let daily_below =
+            daily_utc_fault_covered_from_confirmed_points(&[(t0, true), (below, false)], None);
+        let daily_above =
+            daily_utc_fault_covered_from_confirmed_points(&[(t0, true), (above, false)], None);
+        let day = t0.date_naive();
+        let (_, cov_below) = daily_below.get(&day).copied().unwrap_or((0.0, 0.0));
+        let (_, cov_above) = daily_above.get(&day).copied().unwrap_or((0.0, 0.0));
+        assert!((cov_below - ELAPSED_MAX_GAP_SECONDS as f64).abs() < 0.01);
+        assert_eq!(cov_above, 0.0);
+    }
+
+    #[test]
+    fn up03_clipped_window_trims_hold() {
+        let t0 = ts("2026-10-10T10:00:00Z");
+        let t1 = ts("2026-10-10T11:00:00Z");
+        let window =
+            AnalysisWindow::half_open(ts("2026-10-10T10:30:00Z"), ts("2026-10-10T11:00:00Z"))
+                .expect("window");
+        let daily =
+            daily_utc_fault_covered_from_confirmed_points(&[(t0, true), (t1, false)], Some(window));
+        let day = t0.date_naive();
+        let (_, covered) = daily.get(&day).copied().unwrap_or((0.0, 0.0));
+        assert!((covered - 1800.0).abs() < 0.01, "covered={covered}");
+    }
+
+    #[test]
+    fn up03_empty_map_is_series_unavailable() {
+        let window =
+            AnalysisWindow::half_open(ts("2026-10-10T00:00:00Z"), ts("2026-10-11T00:00:00Z"))
+                .expect("window");
+        let plan = exact_interval_plan_from_confirmed_map(window, HashMap::new(), 0).expect("plan");
+        assert_eq!(
+            plan,
+            ExactIntervalPlan::SeriesUnavailable {
+                reason_code: IntervalPersistReasonCode::SeriesEmptyNoSamples,
+                reason_detail: String::new(),
+            }
+        );
+    }
+
+    fn map_from_points(points: &[(DateTime<Utc>, bool)]) -> HashMap<String, bool> {
+        points
+            .iter()
+            .map(|(ts, flag)| (ts.to_rfc3339_opts(chrono::SecondsFormat::Secs, true), *flag))
+            .collect()
+    }
+
+    fn bucket_fault_for_day(buckets: &[BucketResult], day: NaiveDate) -> f64 {
+        buckets
+            .iter()
+            .filter(|b| b.bucket().start().date_naive() == day)
+            .map(BucketResult::fault_seconds)
+            .sum()
     }
 
     #[test]

@@ -42,6 +42,11 @@ Edge install, licensing, BACnet scan, and trend periods: [`openfdd-nf-edge-bench
 5. Smoke one UUID with [`scripts/nf/read_sensors.py`](../../../scripts/nf/read_sensors.py)
    (`NF_POINT_UUIDS`), then check provider health in central.
 
+**Tag-driven portal CLI (operator host, not product):** [`scripts/nf_tools/`](../../../scripts/nf_tools/README.md)
+— `nf_model_read.py`, `nf_query.py`, and dry-run-default `nf_tag_apply.py` for Haystack
+model dumps, history/latest by tags, and guarded model-layer tag plans. Credentials stay
+in env / `--env-file` only; nothing is wired into central or the SPA.
+
 **NF MCP (read-only):** prefer the Normal Framework MCP connector for inventory
 and trend checks (`search_points`, `read_values`, `diagnose`) — not BACnet
 `control` or HVAC writes. Open-FDD central never needs NF write RPCs for ingest.

@@ -268,7 +268,7 @@ pub async fn replace_scope_results_in_tx(
     sqlx::query(
         "DELETE FROM fdd_interval_result
          WHERE site_id = $1 AND rule_id = $2 AND equipment_id = $3 AND scope_digest = md5($4)
-           AND bucket_start >= $5 AND bucket_start < $6",
+           AND bucket_start < $6 AND bucket_end > $5",
     )
     .bind(scope.site_id())
     .bind(scope.rule_id())

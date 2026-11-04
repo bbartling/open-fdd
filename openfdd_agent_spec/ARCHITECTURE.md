@@ -11,7 +11,8 @@ Trust **tested current code**. Update this file when code truth changes.
 | Surface | Role | Must not |
 | --- | --- | --- |
 | **Open-FDD product** (GHCR stack) | Rust central (Timescale historian + `sql/fdd` FDD + `/api/analytics/*`), React SPA (`openfdd-web`). `architecture_epoch: portal-timescale-v1`. Ingest is the Normal Framework portal API and CSV. Deploy central + web + Timescale (`./scripts/openfdd_stack_up.sh portal`). Hosting is the local single-host stack only (Railway / cloud web-app hosting retired). Soft-OPEN ≠ FQ ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)) | Python/pandas in the product request path; FDD math in TypeScript; Parquet/DataFusion co-canonical; restoring MQTT or fieldbus as product ingest |
-| **React SPA** | Sole product UI → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
+| **React SPA** | Archived product UI (`archive/product-ui/react-spa-v4` → GHCR `openfdd-web` until Wave F) → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
+| **Static product UI** | Default portal UI on central at `/app/` when `OPENFDD_STATIC_PRODUCT_UI=1` — lean HTML, modular JS, vendored ECharts, RCx/FDD parity waves ([ADR-013](../docs/architecture/adr-013-static-product-ui-central.md)); skill [`openfdd-static-ui`](skills/openfdd-static-ui/SKILL.md) | CDN scripts; Model tab calling `/api/model/agent-context`; CSP `unsafe-eval` |
 | **Historian** | **TimescaleDB durable history** + versioned SQL FDD (`sql/fdd`, `sql/schema`); ADR-010 Timescale hard cutover ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Dual-write; Parquet/Arrow/DataFusion co-canonical; Feather durability; Python on FDD equation path |
 | **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |
 | **Camber** (external) | [yroussev/camber](https://github.com/yroussev/camber) Apache-2.0 — algorithm reference for PyPI M&V / change-point ports only | GHCR request path; OT adapters; `camber serve` as product UI |
@@ -84,7 +85,7 @@ Never delete one cookbook because the other engine “won.”
 | Kind | Owner |
 | --- | --- |
 | Portable report builders / schemas | `open_fdd.reporting` (PyPI) |
-| Product download UX | React SPA (`frontend/web`) |
+| Product download UX | Static UI on central `/app/`; React SPA archived at `archive/product-ui/react-spa-v4` |
 
 ---
 

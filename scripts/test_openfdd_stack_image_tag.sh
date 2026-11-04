@@ -44,12 +44,12 @@ echo "PASS openfdd_stack_export_image_env tip pin + custom override"
 export OPENFDD_WEB_IMAGE=ghcr.io/bbartling/openfdd-web:sha-deadbeef
 if openfdd_stack_frontend_unmerged "$ROOT"; then
   if openfdd_stack_guard_ghcr_web; then
-    echo "FAIL: guard allowed GHCR web while frontend/web drifted" >&2
+    echo "FAIL: guard allowed GHCR web while archive/product-ui/react-spa-v4 drifted" >&2
     exit 1
   fi
   OPENFDD_ALLOW_STALE_GHCR_WEB=1 openfdd_stack_guard_ghcr_web
 else
-  echo "NOTE: frontend/web matches master — skip drift-guard fail path"
+  echo "NOTE: archive/product-ui/react-spa-v4 matches master — skip drift-guard fail path"
 fi
 export OPENFDD_WEB_IMAGE=openfdd-web:overview-vibe19-oracle
 unset OPENFDD_ALLOW_STALE_GHCR_WEB

@@ -53,12 +53,5 @@ services:
     volumes: !override
       - openfdd-timescale:/var/lib/postgresql/data
 
-  web:
-    image: ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:?set OPENFDD_IMAGE_TAG=sha-<7>}
-    build: !reset null
-    pull_policy: missing
-    environment:
-      OPENFDD_CENTRAL_UPSTREAM: central:8080
-
 volumes:
   openfdd-workspace:

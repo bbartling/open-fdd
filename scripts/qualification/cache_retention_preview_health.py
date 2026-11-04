@@ -24,9 +24,10 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-NGINX = ROOT / "frontend/web/nginx.conf"
-PREVIEW_TS = ROOT / "frontend/web/src/components/seriesPreview.ts"
-PREVIEW_TSX = ROOT / "frontend/web/src/components/SeriesPreview.tsx"
+WEB = ROOT / "archive/product-ui/react-spa-v4"
+NGINX = WEB / "nginx.conf"
+PREVIEW_TS = WEB / "src/components/seriesPreview.ts"
+PREVIEW_TSX = WEB / "src/components/SeriesPreview.tsx"
 PREFLIGHT = ROOT / "scripts/openfdd_disk_preflight.py"
 
 LIVENESS_READ_TIMEOUT = {

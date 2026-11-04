@@ -2010,6 +2010,8 @@ pub fn results_response_with_timescale_rows(
             "values": row.get("values").cloned().unwrap_or(Value::Null),
             "missing_roles": missing_roles,
             "notes": row.get("notes").cloned().unwrap_or(Value::Null),
+            "interval_status": row.get("interval_status").cloned().unwrap_or(Value::Null),
+            "interval_reason_code": row.get("interval_reason_code").cloned().unwrap_or(Value::Null),
             "run_id": manifest.get("run_id").cloned().unwrap_or(Value::Null),
         }));
     }

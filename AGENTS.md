@@ -1,7 +1,6 @@
 # Agent Guide (container stack + external agents)
 
-Open-FDD 4.0 ships as a **portal container stack**: `openfdd-central`, `openfdd-web`
-(React), Timescale, plus optional `openfdd-mcp`. BACnet/Modbus/Haystack wire and the
+Open-FDD 4.0 ships as a **portal container stack**: `openfdd-central` (static **Open-FDD Central** UI at `/app/`), Timescale, plus optional `openfdd-mcp`. GHCR `openfdd-web` (archived React SPA) is rollback-only. BACnet/Modbus/Haystack wire and the
 MQTTS broker are an **unqualified archive**
 ([`archive/ot-edge/unqualified-cdaa4f15/`](archive/ot-edge/unqualified-cdaa4f15/README.md)),
 not the default compose or publish path. It does **not** ship an embedded AI chatbot.
@@ -11,7 +10,8 @@ connect via **JWT REST** and optional **`openfdd-mcp` stdio**.
 | Layer | Responsibility |
 | --- | --- |
 | **central** | NF ingest (portal HTTPS REST or LAN gRPC, per site), **Timescale** historian, `.sql` FDD + `/api/analytics/*`, REST + JWT (Rust image — no Python). Ingest is the Normal Framework API (portal HTTPS REST or LAN gRPC, chosen per site with `transport: rest|grpc`, no automatic fallback) and CSV only, through one Timescale telemetry writer. Timescale/PostgreSQL only: Parquet, Arrow, Arrow IPC, Feather and DataFusion are prohibited in product storage, caching, execution and dependencies ([storage mandate](openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory), [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)) |
-| **web** | React product UI (`frontend/web`) — sole product UI ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
+| **web (rollback)** | Archived React SPA (`archive/product-ui/react-spa-v4`, GHCR `openfdd-web`) — not the default portal path ([ADR-001](docs/architecture/adr-001-react-rust-modernization.md)) |
+| **central `/app/`** | **Open-FDD Central** — static Bench Viz layout, vendored ECharts, light/dark themes ([ADR-013](docs/architecture/adr-013-static-product-ui-central.md)) |
 | **fieldbus** | Archived OT drivers (BACnet / Modbus / Haystack wire). Not in the `portal` recipe. |
 | **mqtt** | Archived Mosquitto MQTTS broker. Not in the `portal` recipe. |
 | **timescale** | Sole product historian + SQL FDD store (`openfdd-timescale`) |
@@ -123,8 +123,9 @@ Aliases: [`docs/migration/vibe19/ROLE_MAPPING_PARITY.md`](docs/migration/vibe19/
 
 ## Product UI / FDD agent notes
 
-- **Overview:** tabulated analytics + plant/VAV **health matrices** (AHU → chiller → boiler → HP → VAV). No Plotly on Overview. Motor / mech / econ / BAS figures live on **RCx Plots** (additive presets). CSV overlay is the **Inspect** radio (`/inspect`).
-- **Sidebar revision:** `data-testid="app-revision"` shows `GET /api/health` `semver+shortsha` (fallback `version.json`).
+- **Open-FDD Central** (`/app/`): static Bench Viz layout on central; light blueprint default + dark toggle; vendored ECharts; chart parity matrix in `services/central/static/product/chart-parity.json`. GHCR `openfdd-web` is rollback-only.
+- **Overview:** tabulated analytics + plant/VAV **health matrices** (AHU → chiller → boiler → HP → VAV). No Plotly on Overview. Motor / mech / econ / BAS figures live on **RCx** (additive presets). FDD **Inspect** is stacked domains on the FDD tab.
+- **Build revision:** Overview stats + health show `GET /api/health` `semver+shortsha`.
 - **Lab → FDD Plots:** `session_config` `confirm_min` (and rule params) apply to the series overlay (`sql_detail_session`). After **Update this rule**, Reports/FDD Plots must refetch on `RULES_UPDATED`.
 - **Series preview:** FDD Plots and each RCx timeseries card show the most recent N rows of the plot window already loaded (newest first). Per-plot dropdown default 10 (10/20/50/100/500). Do not load the historian again for the table.
 - **SCHED-1 occupancy:** treat numeric `0` / `0.0` / `false` **and** string `unoccupied` (and related tokens) as unoccupied — SQL + pandas cookbook stay aligned.

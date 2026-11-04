@@ -1,7 +1,14 @@
-# Open-FDD CSV-only recipe: central + React web (no MQTT, no fieldbus).
-# Use when starting jobs from bulk CSV upload without live OT drivers.
+# Open-FDD CSV-only recipe: central static UI at /app/ + Timescale (no MQTT, no fieldbus).
+# Timescale overlay is added by scripts/openfdd_stack_lib.sh (compose.timescale.yml).
+# React rollback: docker/compose.react.yml (+ optional compose.local.yml overlays).
 
 name: openfdd-csv
+
+x-openfdd-logging: &openfdd-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   central:
@@ -16,25 +23,16 @@ services:
       OPENFDD_ADMIN_PASSWORD: ${OPENFDD_ADMIN_PASSWORD:-}
       OPENFDD_AGENT_PASSWORD: ${OPENFDD_AGENT_PASSWORD:-}
       OPENFDD_ALLOW_OPEN_BIND: ${OPENFDD_ALLOW_OPEN_BIND:-}
-      OPENFDD_REACT_UI: "1"
-      OPENFDD_UI_GENERATION_DEFAULT: react
+      OPENFDD_STATIC_PRODUCT_UI: ${OPENFDD_STATIC_PRODUCT_UI:-1}
+      OPENFDD_PROVIDER_SITES: ${OPENFDD_PROVIDER_SITES:-}
+      OPENFDD_PROVIDER_POLL: ${OPENFDD_PROVIDER_POLL:-}
+      OPENFDD_AFDD_MODE: ${OPENFDD_AFDD_MODE:-}
+      OPENFDD_AFDD_BUILDING_ID: ${OPENFDD_AFDD_BUILDING_ID:-}
+      OPENFDD_AFDD_BUILDING_IDS: ${OPENFDD_AFDD_BUILDING_IDS:-}
+      OPENFDD_LOG_FORMAT: ${OPENFDD_LOG_FORMAT:-json}
     ports:
-      - "${OPENFDD_CENTRAL_BIND:-0.0.0.0}:8080:8080"
+      - "${OPENFDD_CENTRAL_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - ../workspace:/workspace
-    restart: unless-stopped
-
-  web:
-    image: ${OPENFDD_WEB_IMAGE:-ghcr.io/bbartling/openfdd-web:nightly}
-    build:
-      context: ../frontend/web
-      dockerfile: Dockerfile
-      args:
-        OPENFDD_GIT_SHA: ${OPENFDD_GIT_SHA:-unknown}
-        OPENFDD_WEB_VERSION: ${OPENFDD_WEB_VERSION:-0.1.0}
-    ports:
-      # nginx-unprivileged listens on 8080 inside the image.
-      - "${OPENFDD_WEB_BIND:-0.0.0.0}:3000:8080"
-    depends_on:
-      - central
+    logging: *openfdd-logging
     restart: unless-stopped
