@@ -283,6 +283,10 @@ export async function onFddSiteChange(site, ctx) {
     pick.value = equipId;
   }
   renderRuleList();
+}
+
+export async function ensureFddTabLoaded() {
+  if (!buildingId) return;
   await loadPlot();
   await loadInspect();
 }

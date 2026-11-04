@@ -59,6 +59,7 @@
   </section>
 
   <section class="tab" id="tab-charts">
+    <p class="hint" id="chartsLoadHint" hidden></p>
     <section class="panel">
       <h2>Weather vs sensors <span class="hint">BAS vs web OAT · Timescale</span></h2>
       <div class="chart" id="wxChart"></div>
@@ -165,7 +166,7 @@
 
   <section class="tab" id="tab-schedules" data-building-id="">
     <section class="sched-grid">
-      <article class="panel sched-card">
+      <article class="panel sched-card sched-provider-only">
         <h2>Model sync <span class="hint">portal inventory · poll cadence</span></h2>
         <table class="sched-status" id="modelSyncStatus"></table>
         <form id="modelSyncForm" class="sched-form">
@@ -176,7 +177,7 @@
         </form>
         <p class="sched-msg" id="modelSyncMsg" hidden></p>
       </article>
-      <article class="panel sched-card">
+      <article class="panel sched-card sched-provider-only">
         <h2>History ingest <span class="hint">durable hourly jobs · coverage</span></h2>
         <table class="sched-status" id="historyScheduleStatus"></table>
         <form id="historyScheduleForm" class="sched-form">

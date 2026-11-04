@@ -413,6 +413,12 @@ table.bac td.num {
 .chip.on {
   border-color: #2f6b5c;
 }
+.chip.unknown .led {
+  background: #6b7280;
+}
+.chip.unknown {
+  border-color: #4b5563;
+}
 .chip .state {
   color: var(--muted);
   font-size: 11px;

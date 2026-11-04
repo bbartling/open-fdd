@@ -3,6 +3,8 @@ import { fetchBasVsWeb, fetchInspectSeries } from "./analytics.js";
 import { displayName, has, isTemp, roleOf, unitLabel } from "./tags.js";
 import { rainbowColor, toolboxSaveAsImage } from "./chart-theme.js";
 import { basOverlayOption } from "./overview-rcx-charts.js";
+import { filterSeriesByRangeHours, dataEndMsFromHistory } from "./history-window.js";
+import { parseTimestampMillis } from "./timestamp-adapter.js";
 
 export const PALETTE = [
   "#2563eb",
@@ -42,9 +44,8 @@ export function resizeCharts() {
   }
 }
 
-function parseTs(iso) {
-  const ms = Date.parse(iso);
-  return Number.isFinite(ms) ? ms : null;
+function parseTs(raw) {
+  return parseTimestampMillis(raw);
 }
 
 function seriesFromInspect(rows, role) {
@@ -79,9 +80,8 @@ function downsample(arr, bucketMs) {
   return out;
 }
 
-function since(arr, hours) {
-  const cut = Date.now() - hours * 3600 * 1000;
-  return arr.filter(([t]) => t >= cut);
+function since(arr, hours, dataEndMs) {
+  return filterSeriesByRangeHours(arr, hours, dataEndMs);
 }
 
 function tempRoles(points) {
@@ -92,12 +92,35 @@ function findRole(points, role) {
   return points.find((p) => roleOf(p) === role);
 }
 
-export async function loadScopeHistory(buildingId, equipId, cardPoints, weatherPoints, hours) {
+export async function loadScopeHistory(
+  buildingId,
+  equipIds,
+  cardPoints,
+  weatherPoints,
+  statusPoints,
+  windowOrHours,
+  { signal } = {},
+) {
   const roles = new Set();
-  for (const p of [...cardPoints, ...weatherPoints]) {
+  for (const p of [...cardPoints, ...weatherPoints, ...(statusPoints || [])]) {
     if (roleOf(p)) roles.add(roleOf(p));
   }
-  const rows = await fetchInspectSeries(buildingId, equipId, hours, [...roles]);
+  const ids = (equipIds || []).filter(Boolean);
+  if (!ids.length || !roles.size) {
+    return { rows: [], history: new Map() };
+  }
+  const roleList = [...roles];
+  let rows = [];
+  for (const equipId of ids) {
+    const chunk = await fetchInspectSeries(
+      buildingId,
+      equipId,
+      windowOrHours,
+      roleList,
+      { signal },
+    );
+    rows = rows.concat(chunk);
+  }
   const history = new Map();
   for (const role of roles) {
     history.set(role, seriesFromInspect(rows, role));
@@ -105,10 +128,10 @@ export async function loadScopeHistory(buildingId, equipId, cardPoints, weatherP
   return { rows, history };
 }
 
-export function renderOverviewSpark(i, point, history) {
+export function renderOverviewSpark(i, point, history, dataEndMs) {
   const role = roleOf(point);
   const color = PALETTE[i % PALETTE.length];
-  const data = since(history.get(role) || [], 6);
+  const data = since(history.get(role) || [], 6, dataEndMs);
   chartEl(`spark-${i}`)?.setOption({
     animation: false,
     grid: { left: 0, right: 0, top: 4, bottom: 0 },
@@ -148,7 +171,7 @@ export function renderBasVsWeb(rows) {
   chart.setOption(built.option, true);
 }
 
-export function renderTempTrend(points, history, rangeHours) {
+export function renderTempTrend(points, history, rangeHours, dataEndMs) {
   const temps = tempRoles(points);
   const chart = chartEl("tempChart");
   if (!chart) return;
@@ -187,16 +210,16 @@ export function renderTempTrend(points, history, rangeHours) {
         smooth: 0.2,
         sampling: "lttb",
         lineStyle: { width: 1.6, color: rainbowColor(i) },
-        data: downsample(since(history.get(roleOf(p)) || [], rangeHours), bucket),
+        data: downsample(since(history.get(roleOf(p)) || [], rangeHours, dataEndMs), bucket),
       })),
     },
     { replaceMerge: ["series"] },
   );
 }
 
-function dailyStats(history, role, rangeHours) {
+function dailyStats(history, role, rangeHours, dataEndMs) {
   const byDay = new Map();
-  for (const [t, v] of since(history.get(role) || [], rangeHours)) {
+  for (const [t, v] of since(history.get(role) || [], rangeHours, dataEndMs)) {
     const day = new Date(t).toISOString().slice(0, 10);
     if (!byDay.has(day)) byDay.set(day, []);
     byDay.get(day).push(v);
@@ -214,7 +237,7 @@ function dailyStats(history, role, rangeHours) {
   return { days, min, mean, max };
 }
 
-export function renderDailyMinMax(points, history, rangeHours) {
+export function renderDailyMinMax(points, history, rangeHours, dataEndMs) {
   const chart = chartEl("dailyChart");
   if (!chart) return;
   const p = points.find(isTemp) || points[0];
@@ -222,7 +245,7 @@ export function renderDailyMinMax(points, history, rangeHours) {
     chart.clear();
     return;
   }
-  const { days, min, mean, max } = dailyStats(history, roleOf(p), rangeHours);
+  const { days, min, mean, max } = dailyStats(history, roleOf(p), rangeHours, dataEndMs);
   chart.setOption({
     backgroundColor: "transparent",
     tooltip: { trigger: "axis" },
@@ -239,7 +262,7 @@ export function renderDailyMinMax(points, history, rangeHours) {
   });
 }
 
-export function renderRuntimeBool(points, history, rangeHours) {
+export function renderRuntimeBool(points, history, rangeHours, dataEndMs) {
   const chart = chartEl("runtimeChart");
   if (!chart) return;
   const status = points.find((p) => roleOf(p).includes("status") || roleOf(p).includes("cmd"));
@@ -249,7 +272,7 @@ export function renderRuntimeBool(points, history, rangeHours) {
   }
   const role = roleOf(status);
   const byDay = new Map();
-  for (const [t, v] of since(history.get(role) || [], rangeHours)) {
+  for (const [t, v] of since(history.get(role) || [], rangeHours, dataEndMs)) {
     const day = new Date(t).toISOString().slice(0, 10);
     const on = Number(v) > 0.5 ? 1 : 0;
     const e = byDay.get(day) ?? { on: 0, n: 0 };
@@ -274,7 +297,7 @@ export function renderRuntimeBool(points, history, rangeHours) {
   });
 }
 
-export function renderHeatmap(points, history, heatRole) {
+export function renderHeatmap(points, history, heatRole, dataEndMs) {
   const chart = chartEl("heatChart");
   if (!chart) return;
   const p = points.find((x) => roleOf(x) === heatRole) || points.find(isTemp);
@@ -284,7 +307,7 @@ export function renderHeatmap(points, history, heatRole) {
   }
   const cells = new Map();
   const days = [];
-  for (const [t, v] of since(history.get(roleOf(p)) || [], 168)) {
+  for (const [t, v] of since(history.get(roleOf(p)) || [], 168, dataEndMs)) {
     const d = new Date(t);
     const day = d.toLocaleDateString(undefined, { weekday: "short", month: "numeric", day: "numeric" });
     if (!days.includes(day)) days.push(day);
@@ -335,7 +358,7 @@ export function renderHeatmap(points, history, heatRole) {
   );
 }
 
-export function renderPsychrometric(points, history, hintEl) {
+export function renderPsychrometric(points, history, hintEl, dataEndMs) {
   const chart = chartEl("psyChart");
   if (!chart || !hintEl) return;
   const oat = findRole(points, "oa_t") || points.find((p) => has(p, "outside", "air", "temp"));
@@ -348,9 +371,9 @@ export function renderPsychrometric(points, history, hintEl) {
     return;
   }
   hintEl.textContent = `${displayName(oat)} × ${displayName(rhPoint)}`;
-  const rhSeries = downsample(since(history.get(roleOf(rhPoint)) || [], 168), 15 * 60_000);
+  const rhSeries = downsample(since(history.get(roleOf(rhPoint)) || [], 168, dataEndMs), 15 * 60_000);
   const rhAt = new Map(rhSeries.map(([k, v]) => [k, v]));
-  const pts = downsample(since(history.get(roleOf(oat)) || [], 168), 15 * 60_000)
+  const pts = downsample(since(history.get(roleOf(oat)) || [], 168, dataEndMs), 15 * 60_000)
     .filter(([k]) => rhAt.has(k))
     .map(([k, tv]) => [tv, rhAt.get(k), new Date(k).getHours() + new Date(k).getMinutes() / 60, k]);
   chart.setOption(
@@ -427,13 +450,16 @@ export function renderPointHistory(point, rows, hours) {
 }
 
 export async function refreshChartsTab(state) {
-  const { buildingId, equipId, cardPoints, history, rangeHours, heatRole } = state;
-  if (!equipId) return;
-  const basRows = await fetchBasVsWeb(buildingId, [equipId], Math.max(rangeHours, 48));
+  const { buildingId, equipIds, cardPoints, history, rangeHours, heatRole, dataEndMs, windowOrHours } =
+    state;
+  const ids = equipIds?.length ? equipIds : [];
+  if (!ids.length) return;
+  const endMs = dataEndMs ?? dataEndMsFromHistory(history);
+  const basRows = await fetchBasVsWeb(buildingId, ids.slice(0, 1), windowOrHours || Math.max(rangeHours, 48));
   renderBasVsWeb(basRows);
-  renderTempTrend(cardPoints, history, rangeHours);
-  renderHeatmap(cardPoints, history, heatRole);
-  renderPsychrometric(cardPoints, history, document.getElementById("psyHint"));
-  renderDailyMinMax(cardPoints, history, rangeHours);
-  renderRuntimeBool(cardPoints, history, rangeHours);
+  renderTempTrend(cardPoints, history, rangeHours, endMs);
+  renderHeatmap(cardPoints, history, heatRole, endMs);
+  renderPsychrometric(cardPoints, history, document.getElementById("psyHint"), endMs);
+  renderDailyMinMax(cardPoints, history, rangeHours, endMs);
+  renderRuntimeBool(cardPoints, history, rangeHours, endMs);
 }

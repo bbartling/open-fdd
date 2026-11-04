@@ -2,6 +2,7 @@ import * as echarts from "../vendor/echarts.esm.min.js";
 import { activeEchartsThemeName, ensureThemes } from "./chart-theme.js";
 import { resolveRoleUnit, lookupRoleBinding } from "./role-units.js";
 import { ruleResultChartOption } from "./fdd-charts.js";
+import { parseTimestampMillis } from "./timestamp-adapter.js";
 
 const charts = new Map();
 
@@ -78,11 +79,10 @@ export function inspectChartOption(equipmentId, rows, roles, unitSystem = "metri
     const data = [];
     for (const r of rows) {
       const raw = r.timestamp_utc ?? r.ts;
-      const ms = Date.parse(String(raw ?? ""));
-      const t = Number.isFinite(ms) ? ms : null;
+      const ms = parseTimestampMillis(raw);
       const v = r[usedRoles[i]];
       const y = v == null || v === "" ? null : Number(v);
-      data.push([t, Number.isFinite(y) ? y : null]);
+      data.push([ms, Number.isFinite(y) ? y : null]);
     }
     lineSeries.push({ name: usedRoles[i], data: data.filter((d) => d[0] != null) });
     series.push({
