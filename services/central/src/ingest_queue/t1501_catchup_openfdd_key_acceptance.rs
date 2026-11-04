@@ -124,8 +124,8 @@ async fn t1501_catchup_reads_opaque_point_map_keys_not_semantic_ids() {
         return;
     };
     case.cleanup().await;
-    let opaque_sat = format!("series-sat-{}", &case.site);
-    let opaque_rat = format!("series-rat-{}", &case.site);
+    let opaque_sat = format!("series-sat-{}", case.site);
+    let opaque_rat = format!("series-rat-{}", case.site);
     for (portal, key, role) in [
         ("portal-sat", opaque_sat.as_str(), "sat"),
         ("portal-rat", opaque_rat.as_str(), "rat"),

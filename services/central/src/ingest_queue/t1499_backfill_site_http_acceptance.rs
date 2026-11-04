@@ -231,7 +231,7 @@ async fn harness(case: &SiteCase) -> (Arc<AppState>, Router, String) {
             "t1499-operator",
             Role::Operator,
             600,
-            &[case.tenant.clone()],
+            std::slice::from_ref(&case.tenant),
         )
         .expect("token");
     let app = crate::routes::router(Arc::clone(&state));
@@ -369,7 +369,7 @@ async fn t1499_backfill_site_http_acceptance() {
             let key = case.point_key(device, "sat");
             case.seed_point_map(device, portal, &key, "sat").await;
             case.seed_binding(device, h(0)).await;
-            for hour in [1, 2] {
+            for hour in [0, 1, 2] {
                 case.insert_sample(&key, h(hour) + Duration::minutes(5))
                     .await;
             }
@@ -467,7 +467,7 @@ async fn t1499_backfill_site_http_acceptance() {
         case.seed_point_map(gap, "src-gap", &gap_key, "sat").await;
         case.seed_binding(covered, h(0)).await;
         case.seed_binding(gap, h(0)).await;
-        for hour in [1, 2] {
+        for hour in [0, 1, 2] {
             case.insert_sample(&cov_key, h(hour) + Duration::minutes(5))
                 .await;
         }

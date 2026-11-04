@@ -258,15 +258,17 @@ async fn t1423_6_internal_gap_with_current_last_sample_plans_middle_hours() {
         return;
     };
     case.cleanup().await;
-    let key = case.point_key("interval");
-    case.insert_sample(&key, h(3) + Duration::minutes(5)).await;
-    case.insert_sample(&key, h(6) + Duration::minutes(5)).await;
+    case.seed_point_map("src-interval", "opaque-interval", "sat").await;
+    case.insert_sample("opaque-interval", h(3) + Duration::minutes(5))
+        .await;
+    case.insert_sample("opaque-interval", h(6) + Duration::minutes(5))
+        .await;
     let group = IngestDeviceGroup {
         provider_instance_id: case.provider.clone(),
         equipment_id: case.device.clone(),
         equip_type: "ahu".into(),
         points: vec![PlannedPoint {
-            semantic_point_id: key.clone(),
+            semantic_point_id: case.point_key("interval"),
             source_point_id: "src-interval".into(),
             canonical_role: "sat".into(),
             kind: None,
@@ -278,7 +280,10 @@ async fn t1423_6_internal_gap_with_current_last_sample_plans_middle_hours() {
             heartbeat_secs: None,
         }],
     };
-    let coverage = coverage_points(&group);
+    let coverage =
+        super::binding_state::device_point_coverage_for_group(&case.pool, &case.site, &group)
+            .await
+            .expect("coverage");
     let stored = stored_hour_starts_for_device(
         &case.pool,
         &case.binding_key(),
@@ -357,11 +362,13 @@ async fn t1423_6_fully_covered_device_queues_nothing() {
         return;
     };
     case.cleanup().await;
+    case.seed_point_map("src-p1", "opaque-p1", "sat").await;
+    case.seed_point_map("src-p2", "opaque-p2", "rat").await;
     let group = case.two_point_group();
     for hour in 0..4 {
-        case.insert_sample(&case.point_key("p1"), h(hour) + Duration::minutes(10))
+        case.insert_sample("opaque-p1", h(hour) + Duration::minutes(10))
             .await;
-        case.insert_sample(&case.point_key("p2"), h(hour) + Duration::minutes(20))
+        case.insert_sample("opaque-p2", h(hour) + Duration::minutes(20))
             .await;
     }
     let (plan, jobs) = plan_device_gap_backfill(
