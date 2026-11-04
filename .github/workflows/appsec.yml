@@ -114,7 +114,7 @@ jobs:
           OPENFDD_IMAGE_TAG: sha-0000000
           OPENFDD_DATABASE_URL: postgresql://openfdd@timescale:5432/openfdd
           OPENFDD_TIMESCALE_PASSWORD: ci-render-only
-          PORTAL_QUAL_WEB_PORT: "18080"
+          PORTAL_QUAL_CENTRAL_PORT: "18080"
         run: |
           for f in scripts/qualification/*.sh scripts/qualification/lib/*.sh; do bash -n "$f"; done
           (cd scripts/qualification && shellcheck -x run_portal_qualification.sh restore_to_empty.sh \
