@@ -35,7 +35,7 @@ After each merge: Grok runs `gh pr checks`, squash-merges with `--delete-branch`
 - [x] **PR8** — [#1523](https://github.com/bbartling/open-fdd/pull/1523) @ `5bb357c5`: FDD SQL science #1437, #1439, #1404, #1408.
 - [x] **PR9** — [#1521](https://github.com/bbartling/open-fdd/pull/1521) @ `98f7eb42`: capture + C3c #1440, #1444.
 - [x] **PR10** — [#1519](https://github.com/bbartling/open-fdd/pull/1519) @ `7e80d064`: nosniff + deliberate bare-central `security.txt`.
-- [ ] **PR-R** — 4.0.10 → **4.0.11** bump; #1502 residual guards; `openfdd_agent_spec` + skills sync; ledger disposition for #1284 / #1401 (umbrellas stay open until current-image proof).
+- [ ] **PR-R** — [#1527](https://github.com/bbartling/open-fdd/pull/1527) @ `c6a8de0e` (CI green): 4.0.10 → **4.0.11** bump; #1502 residual guards; `openfdd_agent_spec` + skills sync; ledger disposition for #1284 / #1401 (umbrellas stay open until current-image proof). Tick after squash merge only.
 
 ## Post-train (owner host, not cloud)
 
