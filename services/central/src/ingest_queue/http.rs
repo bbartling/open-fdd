@@ -28,6 +28,8 @@ use super::scale::{self, ScalePolicy, ScaleSample};
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
     pub site_id: Option<String>,
+    /// Comma-separated device ids; limits catch-up status work per request (#1501).
+    pub device_ids: Option<String>,
     pub state: Option<String>,
     pub limit: Option<u32>,
     /// `status` on `/api/ingest/gaps` returns the site's schedule and
@@ -444,7 +446,23 @@ pub async fn list_catchup(
         }
         Err(err) => return queue_err(&err, &request_id),
     };
-    match super::catchup_view::site_catchup_json(&state, &pool, site, &configs, now).await {
+    let device_filter: Option<Vec<String>> = query.device_ids.as_deref().map(|raw| {
+        raw.split(',')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .map(str::to_string)
+            .collect()
+    });
+    match super::catchup_view::site_catchup_json(
+        &state,
+        &pool,
+        site,
+        &configs,
+        now,
+        device_filter.as_deref(),
+    )
+    .await
+    {
         Ok(providers) => Json(json!({
             "ok": true,
             "request_id": request_id,
@@ -800,7 +818,14 @@ pub async fn backfill(
             )
             .await
             {
-                Ok((plan, jobs)) => (Some(gap_plan_json(&plan)), jobs),
+                Ok((plan, jobs)) => (
+                    Some(gap_plan_device_json(
+                        &plan,
+                        Some(&body.device_id),
+                        jobs.len(),
+                    )),
+                    jobs,
+                ),
                 Err(err) => return queue_err(&err, &request_id),
             }
         }
@@ -844,6 +869,10 @@ pub async fn backfill(
         );
     }
     if jobs.is_empty() {
+        let outcome = gap_plan
+            .as_ref()
+            .and_then(|plan| plan.get("outcome").and_then(Value::as_str))
+            .unwrap_or("already_covered");
         return (
             StatusCode::ACCEPTED,
             Json(json!({
@@ -852,6 +881,7 @@ pub async fn backfill(
                 "scope": scope_json(&ctx),
                 "idempotency_key": body.idempotency_key,
                 "jobs": [],
+                "outcome": outcome,
                 "gap_plan": gap_plan,
             })),
         )
@@ -896,6 +926,19 @@ pub async fn backfill(
         ),
         Err(err) => queue_err(&err, &request_id),
     }
+}
+
+fn site_backfill_plan_group<'a>(
+    plan: &'a crate::providers::committed_model::IngestPlan,
+    device: &crate::providers::committed_model::PlanDevice,
+) -> Option<&'a crate::providers::committed_model::IngestDeviceGroup> {
+    plan.groups.iter().find(|group| {
+        group.equipment_id == device.equipment_id
+            && crate::providers::http_policy::provider_ids_equivalent(
+                &group.provider_instance_id,
+                &device.provider_instance_id,
+            )
+    })
 }
 
 pub async fn backfill_site(
@@ -1005,13 +1048,33 @@ pub async fn backfill_site(
             false,
         );
     }
-    let connection_id = bound_provider_id(
+    let connection_id = match resolve_bound_provider_id(
         &state.providers.sites,
         &tenant_id,
         &body.canonical_site,
         &body.provider_instance_id,
         &body.provider_instance_id,
-    );
+    ) {
+        Ok(id) => id,
+        Err("unknown_provider") => {
+            return json_error(
+                StatusCode::NOT_FOUND,
+                "unknown_provider",
+                "provider connection is not configured for this site",
+                &request_id,
+                false,
+            )
+        }
+        Err(_) => {
+            return json_error(
+                StatusCode::CONFLICT,
+                "plan_identity_mismatch",
+                "provider identity does not match site configuration",
+                &request_id,
+                false,
+            )
+        }
+    };
     let devices = match crate::providers::committed_model::schedule_plan_devices(
         &tenant_id,
         &body.canonical_site,
@@ -1057,10 +1120,11 @@ pub async fn backfill_site(
     match state.ingest_queue.postgres_pool().await {
         Ok(Some(pool)) => {
             for device in &devices {
-                let Some(group) = plan.groups.iter().find(|group| {
-                    group.equipment_id == device.equipment_id
-                        && group.provider_instance_id == device.provider_instance_id
-                }) else {
+                let Some(group) = site_backfill_plan_group(&plan, device) else {
+                    gap_plans.push(json!({
+                        "device_id": device.equipment_id,
+                        "outcome": "device_not_in_plan",
+                    }));
                     continue;
                 };
                 let key = DeviceBindingKey {
@@ -1084,7 +1148,11 @@ pub async fn backfill_site(
                 .await
                 {
                     Ok((plan, device_jobs)) => {
-                        gap_plans.push(gap_plan_json(&plan));
+                        gap_plans.push(gap_plan_device_json(
+                            &plan,
+                            Some(&device.equipment_id),
+                            device_jobs.len(),
+                        ));
                         jobs.extend(device_jobs);
                     }
                     Err(err) => return queue_err(&err, &request_id),
@@ -1123,6 +1191,10 @@ pub async fn backfill_site(
         Err(err) => return queue_err(&err, &request_id),
     }
     if jobs.is_empty() {
+        let outcome = gap_plans
+            .iter()
+            .find_map(|row| row.get("outcome").and_then(Value::as_str))
+            .unwrap_or("already_covered");
         return (
             StatusCode::ACCEPTED,
             Json(json!({
@@ -1133,6 +1205,7 @@ pub async fn backfill_site(
                 "groups": devices.len(),
                 "windows": windows.len(),
                 "jobs": [],
+                "outcome": outcome,
                 "gap_plans": gap_plans,
             })),
         )
@@ -1506,15 +1579,78 @@ fn gap_plan_unavailable_json() -> Value {
     json!({ "status": "unavailable_no_postgres" })
 }
 
-fn gap_plan_json(plan: &super::gap_planner::GapPlanResult) -> Value {
-    json!({
+fn gap_plan_outcome(plan: &super::gap_planner::GapPlanResult, jobs: usize) -> &'static str {
+    if jobs > 0 {
+        return "enqueued";
+    }
+    if plan.counts.missing_hours == 0 && plan.counts.planned == 0 {
+        if plan.counts.skipped_stored > 0 {
+            "already_covered"
+        } else if plan.counts.not_expected > 0 {
+            "not_expected_only"
+        } else {
+            "already_covered"
+        }
+    } else {
+        "planned_no_enqueue"
+    }
+}
+
+fn gap_plan_device_json(
+    plan: &super::gap_planner::GapPlanResult,
+    device_id: Option<&str>,
+    jobs: usize,
+) -> Value {
+    let mut body = json!({
         "expected_start": plan.expected_start,
         "last_stored_ts": plan.last_stored_ts,
         "planned": plan.planned,
         "skipped_stored": plan.skipped_stored,
         "not_expected": plan.not_expected,
         "counts": plan.counts,
+        "outcome": gap_plan_outcome(plan, jobs),
+    });
+    if let Some(device_id) = device_id {
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("device_id".into(), json!(device_id));
+        }
+    }
+    body
+}
+
+fn provider_connection_configured(
+    sites: &[SiteConfig],
+    tenant_id: &str,
+    site_id: &str,
+    requested: &str,
+) -> bool {
+    sites.iter().any(|site| {
+        site.tenant_id == tenant_id
+            && site.building_id == site_id
+            && provider_ids_equivalent(&site.provider_instance_id, requested)
     })
+}
+
+fn resolve_bound_provider_id(
+    sites: &[SiteConfig],
+    tenant_id: &str,
+    site_id: &str,
+    requested: &str,
+    plan_provider: &str,
+) -> Result<String, &'static str> {
+    if !provider_connection_configured(sites, tenant_id, site_id, requested) {
+        return Err("unknown_provider");
+    }
+    sites
+        .iter()
+        .find(|site| {
+            site.tenant_id == tenant_id
+                && site.building_id == site_id
+                && provider_ids_equivalent(&site.provider_instance_id, plan_provider)
+                && provider_ids_equivalent(&site.provider_instance_id, requested)
+        })
+        .map(|site| site.provider_instance_id.clone())
+        .ok_or("unknown_provider")
 }
 
 pub fn viewer_cannot_mutate(role: Role) -> bool {
@@ -1636,16 +1772,8 @@ fn bound_provider_id(
     requested: &str,
     plan_provider: &str,
 ) -> String {
-    sites
-        .iter()
-        .find(|site| {
-            site.tenant_id == tenant_id
-                && site.building_id == site_id
-                && provider_ids_equivalent(&site.provider_instance_id, plan_provider)
-                && provider_ids_equivalent(&site.provider_instance_id, requested)
-        })
-        .map(|site| site.provider_instance_id.clone())
-        .unwrap_or_else(|| plan_provider.to_string())
+    resolve_bound_provider_id(sites, tenant_id, site_id, requested, plan_provider)
+        .unwrap_or_else(|_| plan_provider.to_string())
 }
 
 fn backfill_claim(
@@ -1722,6 +1850,7 @@ mod tests {
         let ctx = scoped_user_ctx(&["site-a"]);
         let query = ListQuery {
             site_id: Some("site-b".into()),
+            device_ids: None,
             state: None,
             limit: None,
             view: None,
@@ -1729,6 +1858,7 @@ mod tests {
         assert!(scoped_filter(&ctx, &query, "req").is_none());
         let own = ListQuery {
             site_id: Some("site-a".into()),
+            device_ids: None,
             state: Some("queued".into()),
             limit: Some(10),
             view: None,
@@ -1742,6 +1872,7 @@ mod tests {
             &empty,
             &ListQuery {
                 site_id: None,
+                device_ids: None,
                 state: None,
                 limit: None,
                 view: None,
@@ -1789,6 +1920,97 @@ mod tests {
         assert!(gap_backfill::point_keys_for_plan_device(&plan, "portal-1", "AHU_1").is_some());
         assert!(gap_backfill::point_keys_for_plan_device(&plan, "nf:portal-1", "AHU_1").is_some());
         assert!(gap_backfill::point_keys_for_plan_device(&plan, "nf:other", "AHU_1").is_none());
+    }
+
+    #[test]
+    fn t1499_gap_plan_outcome_distinguishes_already_covered() {
+        use chrono::{Duration, Utc};
+        let plan = super::super::gap_planner::GapPlanResult {
+            planned: Vec::new(),
+            skipped_stored: vec![super::super::gap_planner::WindowSpan {
+                start: Utc::now(),
+                end: Utc::now() + Duration::hours(1),
+            }],
+            not_expected: Vec::new(),
+            counts: super::super::gap_planner::GapPlanCounts {
+                planned: 0,
+                skipped_stored: 1,
+                not_expected: 0,
+                missing_hours: 0,
+            },
+            expected_start: Utc::now(),
+            last_stored_ts: Some(Utc::now()),
+        };
+        assert_eq!(gap_plan_outcome(&plan, 0), "already_covered");
+        assert_eq!(gap_plan_outcome(&plan, 2), "enqueued");
+    }
+
+    #[test]
+    fn t1499_site_backfill_unmatched_device_yields_device_not_in_plan_outcome() {
+        use crate::providers::committed_model::{
+            IngestDeviceGroup, IngestPlan, PlanDevice, PLAN_SCHEMA,
+        };
+        let plan = IngestPlan {
+            schema: PLAN_SCHEMA.into(),
+            revision_id: "rev".into(),
+            tenant_id: "tenant-a".into(),
+            site_id: "site-a".into(),
+            groups: vec![IngestDeviceGroup {
+                provider_instance_id: "nf-conn-a".into(),
+                equipment_id: "AHU_1".into(),
+                equip_type: "ahu".into(),
+                points: vec![],
+            }],
+            withheld: vec![],
+        };
+        let device = PlanDevice {
+            equipment_id: "OTHER".into(),
+            provider_instance_id: "nf:conn-a".into(),
+            revision_id: "rev".into(),
+            estimated_cost: 1,
+        };
+        assert!(site_backfill_plan_group(&plan, &device).is_none());
+    }
+
+    #[test]
+    fn t1499_unknown_provider_is_not_configured_on_site() {
+        use crate::providers::config::SiteConfig;
+        use crate::providers::types::ProviderKind;
+        let sites = vec![SiteConfig {
+            building_id: "site-a".into(),
+            tenant_id: "tenant-a".into(),
+            provider_instance_id: "nf:conn-a".into(),
+            kind: ProviderKind::Nf,
+            endpoint: "http://127.0.0.1".into(),
+            client_id: None,
+            client_secret: None,
+            anonymous: true,
+            transport: crate::providers::config::SiteTransport::Rest,
+            poll_secs: 300,
+            latitude: None,
+            longitude: None,
+            schedule: super::super::schedule::IngestSchedule::Periodic,
+            resolver: crate::providers::map::RoleResolver::default(),
+            model: crate::providers::committed_model::model_from_point_map(
+                &crate::providers::committed_model::ModelScope {
+                    tenant_id: "tenant-a".into(),
+                    site_id: "site-a".into(),
+                    provider_instance_id: "nf-conn-a".into(),
+                },
+                &[],
+            )
+            .expect("model"),
+        }];
+        assert!(
+            resolve_bound_provider_id(&sites, "tenant-a", "site-a", "nf:missing", "nf:conn-a")
+                .is_err()
+        );
+        assert!(provider_connection_configured(
+            &sites,
+            "tenant-a",
+            "site-a",
+            "nf:conn-a"
+        ));
     }
 
     #[test]

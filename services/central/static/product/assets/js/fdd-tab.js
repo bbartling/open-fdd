@@ -36,6 +36,7 @@ let selectedRuleId = "";
 let previewRows = DEFAULT_SERIES_PREVIEW_ROWS;
 let plotLineSeries = [];
 let roleUnitIndex = null;
+let rulesBound = false;
 let fddTabBound = false;
 
 const $ = (id) => document.getElementById(id);

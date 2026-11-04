@@ -7,9 +7,12 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::Serialize;
 
+use crate::providers::hourly::floor_to_window;
 use crate::providers::http_policy::MAX_HISTORY_WINDOW;
 
 use super::model::is_hour_start;
+
+pub type GapPlanBounds = (DateTime<Utc>, DateTime<Utc>, DateTime<Utc>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct WindowSpan {
@@ -38,6 +41,24 @@ pub struct GapPlanResult {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GapPlanInput<'a> {
+    /// Operator-requested range start (hour-aligned); may precede `fetch_start`.
+    pub range_start: DateTime<Utc>,
+    /// Hour-aligned walk bound (outer fetch/planner range start).
+    pub fetch_start: DateTime<Utc>,
+    /// Hour-aligned walk bound (publication-aligned end).
+    pub fetch_end: DateTime<Utc>,
+    /// Semantic first instant provider data is expected (may include minutes/seconds).
+    pub first_expected: DateTime<Utc>,
+    pub provider_data_start: Option<DateTime<Utc>>,
+    pub binding_created_at: DateTime<Utc>,
+    pub stored_hour_starts: &'a [DateTime<Utc>],
+    pub last_stored_ts: Option<DateTime<Utc>>,
+    pub force: bool,
+    pub max_span: Duration,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GapPlanBuild<'a> {
     pub requested_start: DateTime<Utc>,
     pub requested_end: DateTime<Utc>,
     pub provider_data_start: Option<DateTime<Utc>>,
@@ -46,6 +67,49 @@ pub struct GapPlanInput<'a> {
     pub last_stored_ts: Option<DateTime<Utc>>,
     pub force: bool,
     pub max_span: Duration,
+}
+
+pub fn floor_to_hour(ts: DateTime<Utc>) -> DateTime<Utc> {
+    floor_to_window(ts, 3600)
+}
+
+/// Split operator hour bounds from the semantic first-expected instant (#1500).
+pub fn gap_plan_bounds(
+    requested_start: DateTime<Utc>,
+    requested_end: DateTime<Utc>,
+    provider_data_start: Option<DateTime<Utc>>,
+    binding_created_at: DateTime<Utc>,
+) -> Result<GapPlanBounds, String> {
+    if requested_end <= requested_start {
+        return Err("backfill end must be after start".into());
+    }
+    if !is_hour_start(requested_start) || !is_hour_start(requested_end) {
+        return Err("backfill range must use exact UTC hour boundaries".into());
+    }
+    let first_expected = expected_start(requested_start, provider_data_start, binding_created_at);
+    let fetch_start = requested_start.max(floor_to_hour(first_expected));
+    Ok((first_expected, fetch_start, requested_end))
+}
+
+pub fn gap_plan_input<'a>(input: GapPlanBuild<'a>) -> Result<GapPlanInput<'a>, String> {
+    let (first_expected, fetch_start, fetch_end) = gap_plan_bounds(
+        input.requested_start,
+        input.requested_end,
+        input.provider_data_start,
+        input.binding_created_at,
+    )?;
+    Ok(GapPlanInput {
+        range_start: input.requested_start,
+        fetch_start,
+        fetch_end,
+        first_expected,
+        provider_data_start: input.provider_data_start,
+        binding_created_at: input.binding_created_at,
+        stored_hour_starts: input.stored_hour_starts,
+        last_stored_ts: input.last_stored_ts,
+        force: input.force,
+        max_span: input.max_span,
+    })
 }
 
 pub fn expected_start(
@@ -65,23 +129,18 @@ pub fn expected_start(
     start
 }
 
-/// Plan hourly windows in `[requested_start, requested_end)` against stored hours.
+/// Plan hourly windows in `[fetch_start, fetch_end)` against stored hours.
 pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String> {
-    if input.requested_end <= input.requested_start {
+    if input.fetch_end <= input.fetch_start {
         return Err("backfill end must be after start".into());
     }
-    if !is_hour_start(input.requested_start) || !is_hour_start(input.requested_end) {
+    if !is_hour_start(input.fetch_start) || !is_hour_start(input.fetch_end) {
         return Err("backfill range must use exact UTC hour boundaries".into());
     }
     let span_cap = input.max_span.num_seconds();
     if span_cap < 60 {
         return Err("max_history_span must be at least 60 seconds".into());
     }
-    let expected = expected_start(
-        input.requested_start,
-        input.provider_data_start,
-        input.binding_created_at,
-    );
     let stored: std::collections::BTreeSet<DateTime<Utc>> = input
         .stored_hour_starts
         .iter()
@@ -93,14 +152,16 @@ pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String
     let mut not_expected = Vec::new();
     let mut missing_hours = Vec::new();
 
-    let mut cursor = input.requested_start;
-    while cursor < input.requested_end {
+    let mut cursor = input.range_start;
+    while cursor < input.fetch_end {
         let next = cursor + Duration::hours(1);
-        if next <= expected {
+        if next <= input.first_expected {
             not_expected.push(WindowSpan {
                 start: cursor,
                 end: next,
             });
+        } else if cursor < input.fetch_start {
+            // Hour before the fetch-aligned walk; visibility only.
         } else if !input.force && stored.contains(&cursor) {
             skipped_stored.push(WindowSpan {
                 start: cursor,
@@ -128,7 +189,7 @@ pub fn plan_gap_windows(input: GapPlanInput<'_>) -> Result<GapPlanResult, String
         skipped_stored,
         not_expected,
         counts,
-        expected_start: expected,
+        expected_start: input.first_expected,
         last_stored_ts: input.last_stored_ts,
     })
 }
@@ -215,7 +276,7 @@ mod tests {
     #[test]
     fn t1423_3_plans_only_missing_merged_ranges() {
         let stored = [h(1), h(2), h(3), h(6)];
-        let plan = plan_gap_windows(GapPlanInput {
+        let plan = gap_plan_input(GapPlanBuild {
             requested_start: h(0),
             requested_end: h(9),
             provider_data_start: Some(h(1)),
@@ -225,6 +286,7 @@ mod tests {
             force: false,
             max_span: Duration::hours(6),
         })
+        .and_then(plan_gap_windows)
         .expect("plan");
         assert_eq!(plan.counts.not_expected, 1, "{plan:?}");
         assert_eq!(plan.counts.skipped_stored, 4, "{plan:?}");
@@ -253,7 +315,7 @@ mod tests {
     #[test]
     fn force_replans_stored_hours() {
         let stored = [h(1)];
-        let plan = plan_gap_windows(GapPlanInput {
+        let plan = gap_plan_input(GapPlanBuild {
             requested_start: h(1),
             requested_end: h(3),
             provider_data_start: Some(h(1)),
@@ -263,6 +325,7 @@ mod tests {
             force: true,
             max_span: Duration::hours(6),
         })
+        .and_then(plan_gap_windows)
         .expect("plan");
         assert_eq!(plan.counts.skipped_stored, 0);
         assert_eq!(plan.counts.planned, 2);
@@ -284,5 +347,32 @@ mod tests {
             h(5),
             "requested start wins"
         );
+    }
+
+    #[test]
+    fn t1500_partial_first_hour_stays_plannable_with_subhour_anchor() {
+        let anchor = h(1) + Duration::minutes(35) + Duration::seconds(12);
+        let (first, fetch_start, fetch_end) =
+            gap_plan_bounds(h(0), h(4), Some(anchor), h(0)).expect("bounds");
+        assert_eq!(first, anchor);
+        assert_eq!(fetch_start, h(1));
+        let plan = gap_plan_input(GapPlanBuild {
+            requested_start: h(0),
+            requested_end: h(4),
+            provider_data_start: Some(anchor),
+            binding_created_at: h(0),
+            stored_hour_starts: &[],
+            last_stored_ts: None,
+            force: false,
+            max_span: Duration::hours(6),
+        })
+        .and_then(plan_gap_windows)
+        .expect("plan");
+        assert_eq!(plan.counts.not_expected, 1, "{plan:?}");
+        assert!(
+            plan.planned.iter().any(|w| w.start == h(1)),
+            "partial first hour must plan: {plan:?}"
+        );
+        assert_eq!(fetch_end, h(4));
     }
 }
