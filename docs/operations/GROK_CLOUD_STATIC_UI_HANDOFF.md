@@ -5,7 +5,7 @@ Paste this file into a Cursor cloud agent. You are the implementing agent. Do no
 ## Roles
 
 - Composer cloud agents write the diffs. One wave per pull request. Open the PR, then watch `gh pr checks` until every required job is green. Fix a red job on the same branch and watch again. Do not merge.
-- Grok re-reads `gh pr checks`. Only then `gh pr merge --squash --delete-branch`. In that same turn, check the box for that wave in the checklist below (`- [ ]` becomes `- [x]`) and set the matching todo `status` to `completed` in `/home/ben/.cursor/plans/grok_cloud_ui_handoff_46657107.plan.md` when that file is on the machine. Do not check a box while Actions is still red. Do not start the next wave until the previous PR is merged, the branch is deleted, and the box is checked.
+- Grok re-reads `gh pr checks`. Only then `gh pr merge --squash --delete-branch`. In that same turn, check the box for that wave in the checklist below (`- [ ]` becomes `- [x]`) and mark the matching todo completed in the operator's local Cursor plan file when present. Do not check a box while Actions is still red. Do not start the next wave until the previous PR is merged, the branch is deleted, and the box is checked.
 - Do not delete Actions run https://github.com/bbartling/open-fdd/actions/runs/41337446192. Do not delete a failed run that is the only evidence of a still-open bug. Superseded failed or cancelled runs on a branch that now has a green replacement may be deleted.
 - Do not retag `698ea2d`. Do not re-pin the owner stack. Do not `docker compose down -v`. Do not start another 4.0.8 publisher.
 

@@ -28,7 +28,7 @@ Rev loop: [`PATCH_CYCLE.md`](PATCH_CYCLE.md).
 | MQTT edge kit | **Not in git** | Re-issue via `POST /api/mqtt/edge-kits` **only if** Railway mqtt volume has CA **key**; today often **reuse `pi-1` kit** (CA key absent) — see BUG_REPORT |
 | Railway CLI token | Operator secret | `railway login` / `RAILWAY_TOKEN` |
 | GH token | Operator secret | `gh auth login` |
-| Creekside fixture zip | Operator file | Path historically `/home/ben/OpenFdd_Creekside.zip` — **copy off-box**; not in git |
+| Creekside fixture zip | Operator file | Full zip kept off-box; not in git |
 | Cursor plans | **Also in-repo** under `docs/operations/patch_trains/` | Do not rely on `~/.cursor/plans` alone |
 | Tuner baseline JSON | `docs/operations/recovery/*_tuners_snapshot*.json` | Vibe19 vs Lab counts |
 
