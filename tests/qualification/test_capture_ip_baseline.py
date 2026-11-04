@@ -1465,6 +1465,51 @@ class BaselineIoIntervalUnknownTest(unittest.TestCase):
         self.assertTrue(errors)
 
 
+class CaptureChunkWindowTest(unittest.TestCase):
+    def test_iter_half_open_window_chunks(self) -> None:
+        chunks = capture.iter_half_open_window_chunks(
+            "2026-06-01T00:00:00Z",
+            "2026-06-04T00:00:00Z",
+            2,
+        )
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(chunks[0][0], "2026-06-01T00:00:00Z")
+        self.assertEqual(chunks[1][1], "2026-06-04T00:00:00Z")
+
+    def test_expand_sites_for_chunk_days(self) -> None:
+        sites = capture.expand_sites_for_chunk_days(
+            [
+                {
+                    "building_id": "SITE_A",
+                    "window_start": "2026-06-01T00:00:00Z",
+                    "window_end": "2026-06-04T00:00:00Z",
+                }
+            ],
+            2,
+        )
+        self.assertEqual(len(sites), 2)
+        self.assertEqual(sites[0]["chunk_subdir"], "chunk-0000")
+
+
+class FddRunPollTest(unittest.TestCase):
+    def test_poll_registry_run_complete(self) -> None:
+        conn = mock.MagicMock()
+        with mock.patch.object(
+            capture,
+            "fetch_run_status_rows",
+            side_effect=[{}, {("FC1", "AHU_1"): "OK"}],
+        ):
+            meta = capture.poll_registry_run_complete(
+                conn,
+                building_id="SITE_A",
+                run_id="run-1",
+                rule_ids=["FC1"],
+                poll_interval_s=0.01,
+                poll_deadline_s=1.0,
+            )
+        self.assertTrue(meta["complete"])
+
+
 class FddRunBusyRetryTest(unittest.TestCase):
     def test_post_fdd_run_retries_409_then_succeeds(self) -> None:
         http = mock.MagicMock()
