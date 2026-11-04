@@ -2,11 +2,13 @@ import { apiFetch } from "./api.js";
 
 /**
  * Populate a site <select> from the tenant-scoped building list.
- * Ensures `?site=` has a matching <option> before selection.
+ * Rejects `?site=` values outside the authorized list (does not add a foreign option).
+ *
+ * @returns {Promise<{ authorized: string[], queryRejected: string|null, selected: string }>}
  */
 export async function populateSitePicker(selectEl, { querySite = null } = {}) {
-  if (!selectEl) return [];
-  selectEl.innerHTML = "";
+  if (!selectEl) return { authorized: [], queryRejected: null, selected: "" };
+  selectEl.replaceChildren();
   const ids = new Set();
 
   const addOption = (id, label = id) => {
@@ -33,14 +35,17 @@ export async function populateSitePicker(selectEl, { querySite = null } = {}) {
       }
     }
   } catch {
-    /* fall through — querySite may still apply */
+    /* fall through — authorized list may stay empty */
   }
 
-  const fromQuery =
-    (querySite ?? new URLSearchParams(location.search).get("site") ?? "").trim();
+  const fromQuery = (querySite ?? new URLSearchParams(location.search).get("site") ?? "").trim();
+  let queryRejected = null;
   if (fromQuery) {
-    addOption(fromQuery);
-    selectEl.value = fromQuery;
+    if (ids.has(fromQuery)) {
+      selectEl.value = fromQuery;
+    } else {
+      queryRejected = fromQuery;
+    }
   }
 
   if (ids.size === 0 && !fromQuery) {
@@ -50,5 +55,15 @@ export async function populateSitePicker(selectEl, { querySite = null } = {}) {
     selectEl.appendChild(opt);
   }
 
-  return [...ids];
+  return {
+    authorized: [...ids],
+    queryRejected,
+    selected: selectEl.value || "",
+  };
+}
+
+export function isAuthorizedSite(siteId, authorized) {
+  const id = (siteId ?? "").trim();
+  if (!id) return false;
+  return authorized.includes(id);
 }

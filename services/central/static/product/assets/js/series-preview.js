@@ -1,5 +1,7 @@
 /** Recent-N preview from loaded chart series (no historian refetch). */
 
+import { parseTimestampMillis } from "./timestamp-adapter.js";
+
 export const SERIES_PREVIEW_ROW_OPTIONS = [10, 20, 50, 100, 500];
 export const DEFAULT_SERIES_PREVIEW_ROWS = 10;
 
@@ -11,9 +13,7 @@ export function coerceSeriesPreviewLimit(value) {
 }
 
 function timestampMillis(raw) {
-  if (raw == null) return null;
-  const ms = Date.parse(String(raw));
-  return Number.isFinite(ms) ? ms : null;
+  return parseTimestampMillis(raw);
 }
 
 function uniqueColumnName(base, used) {
@@ -55,7 +55,7 @@ export function recentSeriesPreviewFromLines(lineSeries, limit) {
     for (const [x, y] of s.data || []) {
       const ms = timestampMillis(x);
       if (ms == null || !wanted.has(ms)) continue;
-      m.set(ms, y == null ? "" : String(y));
+      m.set(ms, y == null || y === "" ? "" : String(y));
     }
     maps.push(m);
   }

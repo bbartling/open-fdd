@@ -1,4 +1,5 @@
 import { apiFetch } from "./api.js";
+import { dedupeAsync, dedupeKey } from "./request-dedup.js";
 
 export function unwrapAnalytics(payload) {
   if (payload && typeof payload === "object" && payload.analytics) {
@@ -7,8 +8,10 @@ export function unwrapAnalytics(payload) {
   return payload;
 }
 
-export async function postAnalytics(path, body) {
-  const raw = await apiFetch(path, { method: "POST", body: JSON.stringify(body) });
+export async function postAnalytics(path, body, signal) {
+  const init = { method: "POST", body: JSON.stringify(body) };
+  if (signal) init.signal = signal;
+  const raw = await apiFetch(path, init);
   return unwrapAnalytics(raw);
 }
 
@@ -46,13 +49,22 @@ export function analyticsBody(buildingId, equipmentIds, windowOrHours, maxPoints
 }
 
 /** Wide inspect time series for one equipment (`analytics.points` rows). */
-export async function fetchInspectSeries(buildingId, equipmentId, windowOrHours, columns) {
-  const body = analyticsBody(buildingId, [equipmentId], windowOrHours);
-  if (columns?.length) {
-    body.series = { columns };
-  }
-  const env = await postAnalytics("/api/analytics/inspect", body);
-  return env?.points || [];
+export async function fetchInspectSeries(
+  buildingId,
+  equipmentId,
+  windowOrHours,
+  columns,
+  { signal } = {},
+) {
+  const key = dedupeKey(["inspect", buildingId, equipmentId, windowOrHours, columns]);
+  return dedupeAsync(key, async () => {
+    const body = analyticsBody(buildingId, [equipmentId], windowOrHours);
+    if (columns?.length) {
+      body.series = { columns };
+    }
+    const env = await postAnalytics("/api/analytics/inspect", body, signal);
+    return env?.points || [];
+  });
 }
 
 export async function fetchBasVsWeb(buildingId, equipmentIds, windowOrHours) {

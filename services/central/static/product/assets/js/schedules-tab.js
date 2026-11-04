@@ -87,7 +87,11 @@ export async function refreshSchedulesTab(buildingId) {
 }
 
 function renderSchedules(root, buildingId, summary, coverage, afdd) {
-  const editable = summary?.editable === true;
+  const providerConfigured = summary?.provider_configured === true;
+  root.querySelectorAll(".sched-provider-only").forEach((el) => {
+    el.hidden = !providerConfigured;
+  });
+  const editable = summary?.editable === true && providerConfigured;
   root.querySelectorAll(".sched-editable").forEach((el) => {
     el.disabled = !editable;
   });

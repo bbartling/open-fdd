@@ -365,6 +365,33 @@ fn mt_isolation_matrix_select_and_datapath() {
         "A must not see BLDG_B_ONLY: {visible:?}"
     );
 
+    // Static UI site picker source (#1497): scoped buildings list excludes foreign ids.
+    let (st, body) = http(
+        "GET",
+        server.port,
+        "/api/sites/buildings",
+        None,
+        Some(&tok_a),
+    );
+    assert_eq!(st, 200, "sites/buildings: {body}");
+    let site_rows = parse(&body)["buildings"].as_array().cloned().unwrap_or_default();
+    let site_ids: Vec<String> = site_rows
+        .iter()
+        .filter_map(|row| {
+            row.as_str()
+                .map(String::from)
+                .or_else(|| row.get("building_id").and_then(|v| v.as_str()).map(String::from))
+        })
+        .collect();
+    assert!(
+        site_ids.iter().any(|id| id == "BLDG_A_ONLY" || id == "BLDG_SHARED"),
+        "A sites/buildings must include own/shared: {site_ids:?}"
+    );
+    assert!(
+        !site_ids.iter().any(|id| id == "BLDG_B_ONLY"),
+        "A sites/buildings must not list foreign BLDG_B_ONLY: {site_ids:?}"
+    );
+
     // Foreign building data-path → 403 + ok:false (never empty-200 leak)
     let foreign_gets = [
         "/api/csv/import/package/mapping?building_id=BLDG_B_ONLY",

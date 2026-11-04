@@ -2,6 +2,20 @@ import { clearSession, readToken, writeToken } from "./session.js";
 import { apiFetch, login } from "./api.js";
 import { populateSitePicker } from "./sites.js";
 import {
+  beginScopedRequest,
+  cancelScopedRequest,
+  createScopeHolder,
+  freezeScope,
+  isAbortError,
+} from "./scope-request.js";
+import {
+  ALL_EQUIP_HISTORY_CAP,
+  analyticsWindowFromSampling,
+  chartDataState,
+  dataEndMsFromHistory,
+} from "./history-window.js";
+import { formatSampleAge } from "./timestamp-adapter.js";
+import {
   applyLatestFromSeries,
   displayName,
   esc,
@@ -26,7 +40,7 @@ import {
 import { renderModelChecks, renderModelTree, resizeTree } from "./tree-view.js";
 import { fetchInspectSeries } from "./analytics.js";
 import { bindRcxTab, onRcxSiteChange, refreshRcxTab, resizeRcxCharts } from "./rcx-tab.js";
-import { bindFddTab, onFddSiteChange, resizeFddCharts } from "./fdd-tab.js";
+import { bindFddTab, ensureFddTabLoaded, onFddSiteChange, resizeFddCharts } from "./fdd-tab.js";
 import { bindSchedulesTab, refreshSchedulesTab } from "./schedules-tab.js";
 import { bindOperationsTab, refreshOperationsTab } from "./operations-tab.js";
 import {
@@ -38,8 +52,10 @@ import { sensorHealthHeatmapOption } from "./chart-registry.js";
 import { remountAllCharts } from "./chart-kit.js";
 
 const $ = (id) => document.getElementById(id);
+const siteLoadHolder = createScopeHolder();
 let activeTab = "overview";
-let scope = { site: "", equip: "" };
+let scope = freezeScope({ site: "", equip: "", generation: 0 });
+let authorizedSites = [];
 let ctx = null;
 /** TTL-only tree for Model tab; operational points from historian/mapping elsewhere. */
 let modelTree = null;
@@ -52,6 +68,10 @@ let chartState = {
   cardPoints: [],
   weatherPoints: [],
   statusPoints: [],
+  historianWindow: {},
+  dataEndMs: null,
+  historyLoading: false,
+  historyError: null,
 };
 let selectedPointId = null;
 
@@ -71,6 +91,49 @@ function setLive(ok, text) {
   $("liveTxt").textContent = text;
 }
 
+function bumpScope(patch) {
+  scope = freezeScope({ ...scope, ...patch, generation: scope.generation + 1 });
+  return scope;
+}
+
+function scopedEquipIds() {
+  if (scope.equip) return [scope.equip];
+  const all = ctx?.model?.equips?.map((e) => e.id) ?? [];
+  return all.slice(0, ALL_EQUIP_HISTORY_CAP);
+}
+
+function chartsTabState() {
+  return {
+    buildingId: scope.site,
+    equipIds: scopedEquipIds(),
+    cardPoints: chartState.cardPoints,
+    history: chartState.history,
+    rangeHours: chartState.rangeHours,
+    heatRole: chartState.heatRole,
+    dataEndMs: chartState.dataEndMs,
+    windowOrHours: chartState.historianWindow,
+  };
+}
+
+function renderChartsHint() {
+  const el = $("chartsLoadHint");
+  if (!el) return;
+  const st = chartDataState({
+    loading: chartState.historyLoading,
+    error: chartState.historyError,
+    history: chartState.history,
+    cardPoints: chartState.cardPoints,
+    assessable: chartState.cardPoints.length > 0 || chartState.statusPoints.length > 0,
+  });
+  if (st.kind === "ready") {
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+  el.hidden = false;
+  el.textContent = st.message;
+}
+
 function tickClock() {
   $("clock").textContent = new Date().toLocaleString();
 }
@@ -84,14 +147,8 @@ function renderTab(name) {
     sec.classList.toggle("on", sec.id === `tab-${name}`);
   });
   if (name === "charts") {
-    refreshChartsTab({
-      buildingId: scope.site,
-      equipId: scope.equip || ctx?.model?.equips[0]?.id,
-      cardPoints: chartState.cardPoints,
-      history: chartState.history,
-      rangeHours: chartState.rangeHours,
-      heatRole: chartState.heatRole,
-    }).catch((err) => showErr(err.message));
+    renderChartsHint();
+    refreshChartsTab(chartsTabState()).catch((err) => showErr(err.message));
     resizeCharts();
   }
   if (name === "model") {
@@ -104,6 +161,7 @@ function renderTab(name) {
     resizeRcxCharts();
   }
   if (name === "fdd") {
+    ensureFddTabLoaded().catch((err) => showErr(err.message));
     resizeFddCharts();
   }
   if (name === "schedules" && scope.site) {
@@ -162,8 +220,12 @@ function fillEquipPicker() {
   const pick = $("equipPick");
   const equips = ctx.model.equips;
   pick.disabled = !equips.length;
+  const capNote =
+    !scope.equip && equips.length > ALL_EQUIP_HISTORY_CAP
+      ? ` · history capped at ${ALL_EQUIP_HISTORY_CAP} equips`
+      : "";
   pick.innerHTML =
-    `<option value="">all equips (${equips.length})</option>` +
+    `<option value="">all equips (${equips.length})${capNote}</option>` +
     equips
       .map((e) => `<option value="${esc(e.id)}">${esc(e.name || e.id)}</option>`)
       .join("");
@@ -177,7 +239,7 @@ function renderSummary() {
     return;
   }
   const tagged = ctx.model.points.filter((p) => p.siteRef === scope.site);
-  const v = ctx.health?.version ?? "—";
+  const v = ctx.buildLabel ?? ctx.health?.version ?? "—";
   summary.innerHTML = `
     <div class="stat"><b>${esc(v)}</b><span>build</span></div>
     <div class="stat"><b>${ctx.model.equips.length}</b><span>equip</span></div>
@@ -202,7 +264,7 @@ function renderCards() {
     .join("");
   cards.forEach((p, i) => {
     $(`val-${i}`).textContent = fmtPoint(p);
-    renderOverviewSpark(i, p, chartState.history);
+    renderOverviewSpark(i, p, chartState.history, chartState.dataEndMs);
   });
   $("nPoints").textContent = String(ctx.model.points.filter((p) => p.siteRef === scope.site).length);
 }
@@ -212,9 +274,14 @@ function renderChips() {
   $("chips").innerHTML = chips.length
     ? chips
         .map((p) => {
-          const on = (p.latest?.value ?? 0) > 0.5;
-          return `<span class="chip ${on ? "on" : ""}" title="${esc(displayName(p))}">
-      <span class="led"></span>${esc(displayName(p))}<span class="state">${on ? "on" : "off"}</span></span>`;
+          const latest = p.latest;
+          const hasSample = latest?.value != null && latest?.ts;
+          const on = hasSample && Number(latest.value) > 0.5;
+          const state = !hasSample ? "unknown" : on ? "on" : "off";
+          const cls = !hasSample ? "unknown" : on ? "on" : "";
+          const age = latest?.ts ? formatSampleAge(latest.ts) : "no sample";
+          return `<span class="chip ${cls}" title="${esc(displayName(p))} · ${esc(age)}">
+      <span class="led"></span>${esc(displayName(p))}<span class="state">${state}</span></span>`;
         })
         .join("")
     : `<span class="sub">No status/cmd roles on scoped equipment.</span>`;
@@ -291,54 +358,84 @@ function renderPointsTable() {
     .join("") || `<tr><td colspan="5" class="sub">No points match.</td></tr>`;
 }
 
-async function loadHistoryBundle() {
-  const equipId = scope.equip || ctx.model.equips[0]?.id;
-  if (!equipId) {
+async function loadHistoryBundle(ticket) {
+  const equipIds = scopedEquipIds();
+  if (!equipIds.length) {
     chartState.history = new Map();
     chartState.inspectRows = [];
+    chartState.dataEndMs = null;
+    chartState.historyError = null;
     return;
   }
-  scope.equip = scope.equip || equipId;
   recomputeScopedSets();
-  const { rows, history } = await loadScopeHistory(
-    scope.site,
-    equipId,
-    chartState.cardPoints,
-    chartState.weatherPoints,
-    168,
-  );
-  chartState.inspectRows = rows;
-  chartState.history = history;
-  const roles = [...history.keys()];
-  applyLatestFromSeries(ctx.model.points, rows, roles);
+  chartState.historianWindow = analyticsWindowFromSampling(ctx?.mapping?.equipment ?? []);
+  chartState.historyLoading = true;
+  chartState.historyError = null;
+  renderChartsHint();
+  try {
+    const { rows, history } = await loadScopeHistory(
+      scope.site,
+      equipIds,
+      chartState.cardPoints,
+      chartState.weatherPoints,
+      chartState.statusPoints,
+      chartState.historianWindow,
+      { signal: ticket?.signal },
+    );
+    if (ticket && !ticket.isCurrent()) return;
+    chartState.inspectRows = rows;
+    chartState.history = history;
+    chartState.dataEndMs = dataEndMsFromHistory(history);
+    const roles = [...history.keys()];
+    applyLatestFromSeries(ctx.model.points, rows, roles);
+  } catch (err) {
+    if (ticket && (isAbortError(err) || !ticket.isCurrent())) return;
+    chartState.historyError = err.message || String(err);
+    throw err;
+  } finally {
+    if (!ticket || ticket.isCurrent()) {
+      chartState.historyLoading = false;
+      renderChartsHint();
+    }
+  }
 }
 
 async function applySite() {
-  scope.site = $("sitePick").value;
-  if (!scope.site) {
+  const site = $("sitePick").value;
+  if (!site) {
     return;
   }
-  setLive(true, "loading…");
+  const ticket = beginScopedRequest(siteLoadHolder);
+  bumpScope({ site, equip: "" });
+  setLive(true, "UI connected");
   showErr("");
   try {
-    const { ttl, model: ttlModel } = await loadModelFromTtl(scope.site, apiFetch);
-    const siteData = await loadSiteData(scope.site);
+    const [versionInfo, health, ttlBundle, siteData] = await Promise.all([
+      apiFetch("/api/version").catch(() => null),
+      apiFetch("/api/health"),
+      loadModelFromTtl(scope.site, apiFetch),
+      loadSiteData(scope.site),
+    ]);
+    if (!ticket.isCurrent()) return;
+    const { ttl, model: ttlModel } = ttlBundle;
     modelTree = ttlModel;
+    const buildLabel = versionInfo?.version ?? health?.version ?? "Open-FDD";
     ctx = {
       buildingId: scope.site,
-      health: await apiFetch("/api/health"),
+      health,
+      buildLabel,
       ttl,
       model: siteData.model,
       mapping: siteData.mapping,
       sessionConfig: siteData.sessionConfig,
       roleUnitIndex: siteData.roleUnitIndex,
     };
-    scope.equip = "";
-    $("sub").textContent = `${scope.site} · ${ctx.health?.version ?? "Open-FDD"} · static UI`;
+    $("sub").textContent = `${scope.site} · ${buildLabel} · static UI`;
     $("ttl").textContent = ctx.ttl;
     fillEquipPicker();
     recomputeScopedSets();
-    await loadHistoryBundle();
+    await loadHistoryBundle(ticket);
+    if (!ticket.isCurrent()) return;
     fillHeatPicker();
     renderSummary();
     renderModelStats();
@@ -349,17 +446,18 @@ async function applySite() {
     renderModelChecks(modelTree, scope.site, $("checks"));
     onRcxSiteChange(scope.site, ctx.mapping);
     await onFddSiteChange(scope.site, ctx);
-    await refreshRcxTab().catch(() => {});
-    setLive(true, `live · ${new Date().toLocaleTimeString()}`);
+    if (!ticket.isCurrent()) return;
+    if (activeTab === "rcx") {
+      await refreshRcxTab().catch(() => {});
+    }
+    if (activeTab === "fdd") {
+      await ensureFddTabLoaded().catch(() => {});
+    }
+    const ageSample = chartState.dataEndMs ? formatSampleAge(chartState.dataEndMs) : "no historian samples";
+    setLive(true, `UI connected · ${ageSample}`);
     if (activeTab === "charts") {
-      await refreshChartsTab({
-        buildingId: scope.site,
-        equipId: scope.equip || ctx.model.equips[0]?.id,
-        cardPoints: chartState.cardPoints,
-        history: chartState.history,
-        rangeHours: chartState.rangeHours,
-        heatRole: chartState.heatRole,
-      });
+      renderChartsHint();
+      await refreshChartsTab(chartsTabState());
     }
     if (activeTab === "ops") {
       await refreshOperationsTab(scope.site);
@@ -368,37 +466,48 @@ async function applySite() {
       await refreshSchedulesTab(scope.site);
     }
   } catch (err) {
+    if (isAbortError(err) || !ticket.isCurrent()) return;
     showErr(err.message || String(err));
-    setLive(false, "error");
+    setLive(false, "load error");
   }
 }
 
 async function applyEquip() {
-  scope.equip = $("equipPick").value;
+  bumpScope({ equip: $("equipPick").value });
+  const ticket = beginScopedRequest(siteLoadHolder);
   recomputeScopedSets();
   fillHeatPicker();
-  await loadHistoryBundle();
-  renderSummary();
-  renderCards();
-  renderChips();
-  renderPointsTable();
-  renderModelTree(modelTree, scope.site, scope.equip || "", $("detail"), $("tree"));
-  if (activeTab === "charts") {
-    await refreshChartsTab({
-      buildingId: scope.site,
-      equipId: scope.equip || ctx.model.equips[0]?.id,
-      cardPoints: chartState.cardPoints,
-      history: chartState.history,
-      rangeHours: chartState.rangeHours,
-      heatRole: chartState.heatRole,
-    });
+  try {
+    await loadHistoryBundle(ticket);
+    if (!ticket.isCurrent()) return;
+    renderSummary();
+    renderCards();
+    renderChips();
+    renderPointsTable();
+    renderModelTree(modelTree, scope.site, scope.equip || "", $("detail"), $("tree"));
+    if (activeTab === "charts") {
+      renderChartsHint();
+      await refreshChartsTab(chartsTabState());
+    }
+  } catch (err) {
+    if (isAbortError(err) || !ticket.isCurrent()) return;
+    showErr(err.message || String(err));
   }
 }
 
 async function loadSites() {
   const pick = $("sitePick");
-  await populateSitePicker(pick);
-  scope.site = pick.value;
+  const { authorized, queryRejected, selected } = await populateSitePicker(pick);
+  authorizedSites = authorized;
+  if (queryRejected) {
+    showErr(`Site “${queryRejected}” is not in your authorized building list.`);
+    $("sub").textContent = "Select an authorized site";
+    setLive(false, "unauthorized site");
+    cancelScopedRequest(siteLoadHolder);
+    scope = freezeScope({ site: "", equip: "", generation: scope.generation + 1 });
+    return;
+  }
+  scope = bumpScope({ site: selected, equip: "" });
   if (scope.site) {
     await applySite();
   } else {
@@ -435,25 +544,12 @@ function bindTabs() {
     if (!btn) return;
     $("range").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === btn));
     chartState.rangeHours = Number(btn.dataset.h);
-    refreshChartsTab({
-      buildingId: scope.site,
-      equipId: scope.equip || ctx?.model?.equips[0]?.id,
-      cardPoints: chartState.cardPoints,
-      history: chartState.history,
-      rangeHours: chartState.rangeHours,
-      heatRole: chartState.heatRole,
-    }).catch((err) => showErr(err.message));
+    renderChartsHint();
+    refreshChartsTab(chartsTabState()).catch((err) => showErr(err.message));
   });
   $("heatPick")?.addEventListener("change", () => {
     chartState.heatRole = $("heatPick").value;
-    refreshChartsTab({
-      buildingId: scope.site,
-      equipId: scope.equip || ctx?.model?.equips[0]?.id,
-      cardPoints: chartState.cardPoints,
-      history: chartState.history,
-      rangeHours: chartState.rangeHours,
-      heatRole: chartState.heatRole,
-    }).catch((err) => showErr(err.message));
+    refreshChartsTab(chartsTabState()).catch((err) => showErr(err.message));
   });
   $("pointFilter")?.addEventListener("input", () => renderPointsTable());
   $("pointRows")?.addEventListener("click", async (ev) => {

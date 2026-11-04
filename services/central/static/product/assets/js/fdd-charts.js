@@ -5,6 +5,7 @@ import { rainbowColor, toolboxSaveAsImage, linkedTimeZoom, faultLaneStyle } from
 import { ruleLabelPlotTitle } from "./rule-labels.js";
 import { familyOrderKeys, lookupRoleBinding, resolveRoleUnit, unitFamily } from "./role-units.js";
 import { basOverlayOption } from "./overview-rcx-charts.js";
+import { parseTimestampMillis } from "./timestamp-adapter.js";
 
 const FAULT_ROLE_KEYS = new Set(["confirmed_fault", "fault"]);
 
@@ -16,10 +17,7 @@ export function confirmedFaultPlotY(v) {
 }
 
 function parseTimestamp(raw) {
-  const s = String(raw ?? "");
-  if (!s || s.includes("PrimitiveArray")) return null;
-  const ms = Date.parse(s);
-  return Number.isFinite(ms) ? ms : null;
+  return parseTimestampMillis(raw);
 }
 
 function rowValue(row, role) {
