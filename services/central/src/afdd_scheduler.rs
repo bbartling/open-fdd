@@ -1767,13 +1767,8 @@ CREATE INDEX IF NOT EXISTS fdd_run_site_rule_idx
     )]
     #[tokio::test]
     async fn t1403_continuous_timer_tick_csv_site_not_scheduled() {
-        let url = std::env::var("OPENFDD_TEST_DATABASE_URL")
-            .ok()
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-            .or_else(fixture_database_url);
-        let Some(url) = url else {
-            eprintln!("skip t1403 tick: no disposable Postgres fixture URL");
+        let Some(url) = fixture_database_url() else {
+            eprintln!("skip t1403 tick: OPENFDD_LIFECYCLE_DATABASE_URL unset");
             return;
         };
         let _lock = crate::test_env_lock::lock_env();

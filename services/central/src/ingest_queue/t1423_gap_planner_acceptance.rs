@@ -138,7 +138,23 @@ impl GapCase {
             .await;
     }
 
+    async fn ensure_point_map(&self) {
+        sqlx::query(
+            "INSERT INTO point_map (site_id, openfdd_key, haystack_id, role, equipment_id, portal_point_id, referenced)
+         VALUES ($1, $2, $3, 'sat', $4, $3, true)
+         ON CONFLICT (site_id, openfdd_key) DO NOTHING",
+        )
+        .bind(&self.site)
+        .bind(&self.point)
+        .bind("src-sat")
+        .bind(&self.device)
+        .execute(&self.pool)
+        .await
+        .expect("point_map");
+    }
+
     async fn seed_hour(&self, hour: i64) {
+        self.ensure_point_map().await;
         sqlx::query(
             "INSERT INTO sample (ts, site_id, openfdd_key, val, unit, quality)
          VALUES ($1, $2, $3, 70.0, 'degF', 'good')

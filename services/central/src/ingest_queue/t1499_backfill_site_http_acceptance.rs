@@ -195,10 +195,10 @@ impl SiteCase {
 
     fn provider_sites_json(&self) -> String {
         format!(
-            r#"[{{"building_id":"{site}","tenant_id":"{tenant}","provider_instance_id":"{conn}","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"}}]"#,
+            r#"[{{"building_id":"{site}","tenant_id":"{tenant}","provider_instance_id":"{slug}","provider":"nf","endpoint":"https://portal.example","auth_mode":"anonymous"}}]"#,
             site = self.site,
             tenant = self.tenant,
-            conn = self.connection,
+            slug = self.plan_slug,
         )
     }
 }
@@ -206,7 +206,6 @@ impl SiteCase {
 async fn harness(case: &SiteCase) -> (Arc<AppState>, Router, String) {
     let url = std::env::var("OPENFDD_TEST_DATABASE_URL").expect("database url");
     std::env::set_var("OPENFDD_DATABASE_URL", &url);
-    let _sites = EnvGuard::set("OPENFDD_PROVIDER_SITES", &case.provider_sites_json());
     let mut state = AppState::new();
     state.auth = AuthConfig {
         secret: Some("t1499-site-backfill-test-secret-not-a-credential".into()),
@@ -303,6 +302,7 @@ async fn t1499_backfill_site_http_acceptance() {
     let _db = EnvGuard::set("OPENFDD_DATABASE_URL", url.trim());
 
     let case = SiteCase::open("http").await.expect("case");
+    let _sites = EnvGuard::set("OPENFDD_PROVIDER_SITES", &case.provider_sites_json());
     case.cleanup().await;
 
     // Unknown provider → 404 unknown_provider.
