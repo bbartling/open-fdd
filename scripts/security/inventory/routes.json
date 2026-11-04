@@ -6786,6 +6786,45 @@
     },
     {
       "method": "GET",
+      "path": "/api/model/projection",
+      "section": "protected",
+      "auth": "jwt_required",
+      "policy": "tenant_building_acl",
+      "disposition": "PLANNED",
+      "deny_statuses": [
+        403
+      ],
+      "anon_expected": [
+        401
+      ],
+      "source": "services/central/src/routes.rs",
+      "planned_check_ids": [
+        "x.preauth.anon401.get_api_model_projection",
+        "y.authz.get_api_model_projection"
+      ],
+      "implemented_check_ids": [],
+      "check_ids": [
+        "x.preauth.anon401.get_api_model_projection",
+        "y.authz.get_api_model_projection"
+      ],
+      "request_schema": {
+        "type": "unknown",
+        "status": "TODO"
+      },
+      "response_schema": {
+        "type": "application/json",
+        "status": "TODO"
+      },
+      "selectors": [],
+      "side_effects": "none",
+      "fixture_needs": [
+        "identity",
+        "semantic_meta"
+      ],
+      "notes": "PR4 #1441: SPARQL-backed static UI model projection (ofdd_static_ui_model_projection_v1); 404 without semantic_meta; 400 unknown equipment_id"
+    },
+    {
+      "method": "GET",
       "path": "/api/model/semantic-meta",
       "section": "protected",
       "auth": "jwt_required",

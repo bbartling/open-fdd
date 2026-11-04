@@ -1,76 +1,23 @@
-/** Build site/equip/point tree from Turtle (GET /api/model/ttl) only. */
+/** Model tree from SPARQL-backed server projection (GET /api/model/projection). */
 
-const TAG_RE = /ph:hasTag\s+([^;\.]+)/g;
-const LABEL_RE = /rdfs:label\s+"([^"]*)"/;
-const EQUIP_REF_RE = /phIoT:equipRef\s+local:([^\s;]+)/;
-const UNIT_RE = /ph:unit\s+"([^"]*)"/;
-
-function localId(line) {
-  const m = line.match(/^local:([^\s]+)/);
-  return m ? m[1] : "";
-}
-
-function tagsFromBlock(block) {
-  const tags = [];
-  let m;
-  TAG_RE.lastIndex = 0;
-  while ((m = TAG_RE.exec(block))) {
-    const t = m[1].trim().replace(/^ph(?:IoT|Science|Ict)?:/, "").replace(":", "");
-    if (t) tags.push(t);
+function uiModelFromProjection(buildingId, payload) {
+  if (!payload || payload.ok === false) {
+    return {
+      site: { id: buildingId, name: buildingId },
+      equips: [],
+      devices: [],
+      points: [],
+    };
   }
-  return tags;
-}
-
-export function parseTtlModel(buildingId, ttlText) {
-  const site = { id: buildingId, name: buildingId };
-  const equipById = new Map();
-  const points = [];
-  const blocks = String(ttlText || "").split(/\n\s*\n/);
-  for (const block of blocks) {
-    const id = localId(block.split("\n")[0] || "");
-    if (!id) continue;
-    const tags = tagsFromBlock(block);
-    const label = block.match(LABEL_RE)?.[1] || id;
-    const unit = block.match(UNIT_RE)?.[1] || "";
-    if (/\ba\s+phIoT:equip\b/.test(block) || tags.includes("equip")) {
-      equipById.set(id, {
-        id,
-        name: label,
-        tags,
-        siteRef: buildingId,
-        equipType: tags.find((t) => ["ahu", "vav", "rtu", "equip"].includes(t)) || "",
-      });
-      continue;
-    }
-    if (/\ba\s+phIoT:point\b/.test(block) || tags.includes("point")) {
-      const equipRef = block.match(EQUIP_REF_RE)?.[1] || "";
-      const role =
-        tags.find((t) => t.includes("_") || t.endsWith("_t")) ||
-        tags.filter((t) => !["point", "his", "cur", "sensor"].includes(t))[0] ||
-        id;
-      points.push({
-        id: `${equipRef}::${role}`,
-        siteRef: buildingId,
-        equipRef,
-        role,
-        column: role,
-        dis: label,
-        tags,
-        unit,
-        kind: "Number",
-        latest: null,
-      });
-    }
-  }
-  return {
-    site,
-    equips: [...equipById.values()].sort((a, b) => a.id.localeCompare(b.id)),
-    devices: [],
-    points: points.sort(
-      (a, b) =>
-        (a.equipRef || "").localeCompare(b.equipRef || "") || a.dis.localeCompare(b.dis),
-    ),
-  };
+  const site = payload.site || { id: buildingId, name: buildingId };
+  const equips = Array.isArray(payload.equips) ? payload.equips : [];
+  const points = (Array.isArray(payload.points) ? payload.points : []).map((p) => ({
+    ...p,
+    latest: p.latest ?? null,
+    unit: p.unit ?? "",
+    kind: p.kind ?? null,
+  }));
+  return { site, equips, devices: payload.devices || [], points };
 }
 
 export async function loadModelFromTtl(buildingId, apiFetch) {
@@ -81,6 +28,21 @@ export async function loadModelFromTtl(buildingId, apiFetch) {
   } catch {
     ttl = "# TTL unavailable for this site.\n";
   }
-  const model = parseTtlModel(buildingId, ttl);
+  let model = uiModelFromProjection(buildingId, null);
+  try {
+    const projection = await apiFetch(
+      `/api/model/projection?building_id=${encodeURIComponent(buildingId)}`,
+    );
+    model = uiModelFromProjection(buildingId, projection);
+  } catch {
+    model = uiModelFromProjection(buildingId, null);
+  }
   return { ttl, model };
+}
+
+export async function loadModelProjection(buildingId, apiFetch) {
+  const projection = await apiFetch(
+    `/api/model/projection?building_id=${encodeURIComponent(buildingId)}`,
+  );
+  return uiModelFromProjection(buildingId, projection);
 }
