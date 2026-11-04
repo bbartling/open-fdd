@@ -48,7 +48,7 @@ pub struct GapPlanInput<'a> {
     pub provider_data_start: Option<DateTime<Utc>>,
     pub binding_created_at: DateTime<Utc>,
     pub stored_hour_starts: &'a [DateTime<Utc>],
-    pub last_stored_ts: Option<DateTime<Utc>],
+    pub last_stored_ts: Option<DateTime<Utc>>,
     pub force: bool,
     pub max_span: Duration,
 }
