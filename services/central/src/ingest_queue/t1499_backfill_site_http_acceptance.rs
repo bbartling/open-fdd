@@ -392,7 +392,10 @@ async fn t1499_backfill_site_http_acceptance() {
             assert!(row.get("counts").is_some());
         }
         assert_eq!(body["outcome"].as_str(), Some("already_covered"));
-        assert_eq!(body["jobs"].as_u64(), Some(0));
+        assert!(
+            body["jobs"].as_array().is_some_and(|jobs| jobs.is_empty()),
+            "expected empty jobs array: {body}"
+        );
     }
 
     case.cleanup().await;

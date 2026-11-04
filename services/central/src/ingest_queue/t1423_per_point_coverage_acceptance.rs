@@ -258,7 +258,8 @@ async fn t1423_6_internal_gap_with_current_last_sample_plans_middle_hours() {
         return;
     };
     case.cleanup().await;
-    case.seed_point_map("src-interval", "opaque-interval", "sat").await;
+    case.seed_point_map("src-interval", "opaque-interval", "sat")
+        .await;
     case.insert_sample("opaque-interval", h(3) + Duration::minutes(5))
         .await;
     case.insert_sample("opaque-interval", h(6) + Duration::minutes(5))
