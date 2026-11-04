@@ -3,7 +3,7 @@
  */
 import { rainbowColor, toolboxSaveAsImage, linkedTimeZoom, faultLaneStyle } from "./chart-theme.js";
 import { ruleLabelPlotTitle } from "./rule-labels.js";
-import { familyOrderKeys, resolveRoleUnit, unitFamily } from "./role-units.js";
+import { familyOrderKeys, lookupRoleBinding, resolveRoleUnit, unitFamily } from "./role-units.js";
 import { basOverlayOption } from "./overview-rcx-charts.js";
 
 const FAULT_ROLE_KEYS = new Set(["confirmed_fault", "fault"]);
@@ -48,9 +48,14 @@ export function ruleResultChartOption(rows, opts) {
     return { option: null, lineSeries: [], gridCount: 0, hasFaultLane: false };
   }
 
+  const unitSystem = opts.unitSystem ?? "metric";
+  const roleUnitIndex = opts.roleUnitIndex ?? null;
+  const equipmentId = opts.equipmentId ?? "";
+
   const groups = new Map();
   for (const role of roles) {
-    const unit = resolveRoleUnit(role, "metric");
+    const binding = lookupRoleBinding(roleUnitIndex, equipmentId, role);
+    const unit = resolveRoleUnit(role, unitSystem, binding);
     let fam = unit ? unitFamily(unit) : `other:${role}`;
     if (unit === "bool" || unit === "0/1") fam = "bool";
     const data = seriesDataForRole(rows, role);

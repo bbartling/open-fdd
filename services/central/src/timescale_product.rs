@@ -6779,6 +6779,10 @@ mod t1405_trim_column_contract_test;
 mod vav1_t1407_test;
 
 #[cfg(test)]
+#[path = "t1513_unit_contract_trace_test.rs"]
+mod t1513_unit_contract_trace_test;
+
+#[cfg(test)]
 #[path = "duplicate_timestamp_parity.rs"]
 mod duplicate_timestamp_parity;
 

@@ -1,6 +1,6 @@
 import * as echarts from "../vendor/echarts.esm.min.js";
 import { activeEchartsThemeName, ensureThemes } from "./chart-theme.js";
-import { resolveRoleUnit } from "./role-units.js";
+import { resolveRoleUnit, lookupRoleBinding } from "./role-units.js";
 import { ruleResultChartOption } from "./fdd-charts.js";
 
 const charts = new Map();
@@ -42,12 +42,13 @@ export function resizeCharts() {
 }
 
 /** Raw unit label for inspect stacked domains. */
-export function inspectRawUnit(role, unitSystem = "metric") {
-  return resolveRoleUnit(role, unitSystem) || role;
+export function inspectRawUnit(role, unitSystem = "metric", roleUnitIndex = null, equipmentId = "") {
+  const binding = lookupRoleBinding(roleUnitIndex, equipmentId, role);
+  return resolveRoleUnit(role, unitSystem, binding) || role;
 }
 
 /** Inspect stacked domains — title matches charts.contract.json. */
-export function inspectChartOption(equipmentId, rows, roles, unitSystem = "metric") {
+export function inspectChartOption(equipmentId, rows, roles, unitSystem = "metric", roleUnitIndex = null) {
   const title = `Inspection — ${equipmentId}`;
   const series = [];
   const lineSeries = [];
@@ -70,7 +71,7 @@ export function inspectChartOption(equipmentId, rows, roles, unitSystem = "metri
     yAxes.push({
       type: "value",
       gridIndex: i,
-      name: `${usedRoles[i]} (${inspectRawUnit(usedRoles[i], unitSystem)})`,
+      name: `${usedRoles[i]} (${inspectRawUnit(usedRoles[i], unitSystem, roleUnitIndex, equipmentId)})`,
       nameTextStyle: { fontSize: 11 },
       scale: true,
     });
@@ -126,5 +127,7 @@ export function fddPlotOption(rows, roles, hasConfirmedFault, meta = {}) {
     confirmedFault,
     description: meta.description,
     pngStem: meta.pngStem,
+    roleUnitIndex: meta.roleUnitIndex ?? null,
+    unitSystem: meta.unitSystem ?? "metric",
   });
 }

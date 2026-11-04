@@ -331,6 +331,7 @@ async function applySite() {
       model: siteData.model,
       mapping: siteData.mapping,
       sessionConfig: siteData.sessionConfig,
+      roleUnitIndex: siteData.roleUnitIndex,
     };
     scope.equip = "";
     $("sub").textContent = `${scope.site} · ${ctx.health?.version ?? "Open-FDD"} · static UI`;
