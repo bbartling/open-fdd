@@ -1,0 +1,4 @@
+# Copy to auth.caddy and replace with your own line (one line: `<user> <bcrypt hash>`).
+# Make the hash with:  docker run --rm caddy:2-alpine caddy hash-password -p '<new password>'
+# The hash below is a FAKE placeholder and will not match any password.
+admin $2a$14$REPLACE.WITH.OUTPUT.OF.caddy.hash-password.xxxxxxxxxxxxxxxxxxxxxxxxxx

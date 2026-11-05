@@ -49,3 +49,5 @@ Or with the NF MCP connector: `manage_app write_file` per file and `deploy_hook`
 
 Front door (Caddy: dashboard open, console and writes behind a login, optional self-signed TLS)
 arrives with slice 7.
+
+Step-by-step install, MCP deploy recipe and troubleshooting: [docs/install/nf-plugin.md](../docs/install/nf-plugin.md).

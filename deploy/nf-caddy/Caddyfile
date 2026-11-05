@@ -1,0 +1,26 @@
+# Plain-HTTP front door for Normal Framework on the LAN (light enough for a Raspberry Pi).
+# Use Caddyfile.tls instead for HTTPS (same routes, see README.md).
+#
+# NF's Envoy listens on loopback only (ENVOY_BIND_ADDRESS=127.0.0.1 in NF's compose); the
+# portal tunnel, app hooks and the NF MCP keep using that. Caddy takes the LAN side:
+#
+#   http://<lan-ip>/                              redirect to the Open-FDD dashboard
+#   http://<lan-ip>:<port>/api/v1/apps/static/open-fdd/   dashboard + read-only API, open
+#   http://<lan-ip>:<port>/  (console, config, writes)    basic auth
+#
+# Env (see docker-compose.yml): LAN_IP, NF_UPSTREAM, NF_PORT.
+{
+	auto_https off
+	admin off
+}
+
+:{$NF_PORT:8090} {
+	bind {$LAN_IP}
+	import /etc/caddy/routes.caddy
+}
+
+# The box's bare URL is the dashboard.
+:80 {
+	bind {$LAN_IP}
+	redir http://{host}:{$NF_PORT:8090}/api/v1/apps/static/open-fdd/ 302
+}

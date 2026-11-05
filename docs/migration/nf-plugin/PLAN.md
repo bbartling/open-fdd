@@ -57,3 +57,17 @@ deploy/caddy/                front door (plain HTTP default, Caddyfile.tls optio
 - **Portal auth for app API calls** (slice 1): pages already use the console's Clerk token through
   Normal Online; confirm hooks need nothing beyond `auth.apiKey.scopes`.
 - **Licensing**: Open-FDD stays open source; the plugin runs on any licensed NF.
+
+Slice 7 notes: front door in `deploy/nf-caddy/` (Caddy: dashboard and read-only API open, console/apps/writes basic auth, optional TLS); one-run install and MCP recipe in `docs/install/nf-plugin.md`. Caddyfiles not yet validated (Docker daemon was not running).
+
+## Slice 6 notes: RDF with external time-series refs
+
+- `modelToTurtle()` (`nf-app/static/model.js`) gives every exported point a Brick `ref:` reference:
+  `ref:hasExternalReference [ a ref:TimeseriesReference ; ref:hasTimeseriesId "<NF point uuid>" ;
+  ref:storedAt local:store_nf ; rdfs:seeAlso <{origin}/api/v1/point/data?uuids=<uuid>> ]`.
+- `local:store_nf` (`a ref:Database`) is defined in the graph; the URL base is the page origin at export
+  time (or `opts.nfBase`), never a hard-coded host. Without either, only the uuid is emitted.
+- Full-profile hook: `modelToTurtle(model, base, { timescale: { label, uri } })` adds a second reference per
+  point stored at `local:store_timescaledb` (same uuid). Not wired to any UI yet.
+- CI: `tools/rdf-check` (`gen_ttl.js` on `fixtures/model.json`, then `check_ttl.py` with Oxigraph + rdflib)
+  checks parse, no dangling refs/orphans, and exactly one NF reference with a uuid per point.

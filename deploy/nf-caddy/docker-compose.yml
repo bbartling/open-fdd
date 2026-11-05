@@ -1,0 +1,26 @@
+# Caddy front door for NF. Lives next to NF's own compose (e.g. ~/caddy beside ~/nf).
+# Small on purpose: 64 MiB is plenty and fits a 1 GB Raspberry Pi.
+# Set the values in a .env file next to this one (see README.md); defaults below are examples.
+services:
+  caddy:
+    image: caddy:2-alpine
+    network_mode: host          # LAN side + NF upstream on loopback
+    restart: unless-stopped
+    environment:
+      - NF_UPSTREAM=${NF_UPSTREAM:-127.0.0.1:8090}   # where NF's Envoy listens (loopback)
+      - NF_PORT=${NF_PORT:-8090}                      # LAN port Caddy serves (plain HTTP)
+      - TLS_PORT=${TLS_PORT:-443}                     # only used by Caddyfile.tls
+      - LAN_IP=${LAN_IP:-192.0.2.10}                  # this box's LAN address (Caddy binds only it)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./routes.caddy:/etc/caddy/routes.caddy:ro
+      - ./auth.caddy:/etc/caddy/auth.caddy:ro         # `<user> <bcrypt hash>`, not in git
+      # HTTPS instead: mount ./Caddyfile.tls as /etc/caddy/Caddyfile (replace the first line) and add
+      # - ./certs/server.crt:/certs/server.crt:ro
+      # - ./certs/server.key:/certs/server.key:ro
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

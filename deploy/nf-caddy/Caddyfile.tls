@@ -1,0 +1,27 @@
+# TLS variant of the front door (HTTPS only). Same routes as Caddyfile (routes.caddy).
+# Mount this file as /etc/caddy/Caddyfile plus the certs (see docker-compose.yml).
+#
+# NF listens on loopback (plain HTTP); this is the only way in from the LAN. The portal
+# tunnel, app hooks and the NF MCP keep using loopback and are not affected.
+#
+#   open (no login)  Open-FDD dashboard static files + the read-only API calls it makes
+#   basic auth       everything else: NF console, app/hook config, every write
+#
+# Self-signed cert/key are mounted at /certs (README.md shows how to make them); the login
+# lives in /etc/caddy/auth.caddy and is never committed.
+{
+	auto_https off
+	admin off
+}
+
+:{$TLS_PORT:443} {
+	bind {$LAN_IP}
+	tls /certs/server.crt /certs/server.key
+	import /etc/caddy/routes.caddy
+}
+
+# Plain HTTP only redirects to HTTPS.
+:80 {
+	bind {$LAN_IP}
+	redir https://{host}{uri} permanent
+}
