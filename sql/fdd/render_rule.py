@@ -49,6 +49,9 @@ def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', parame
         rows = max(1,math.ceil(values.get(prefix+'_MIN',0)*60/poll_seconds))
         values[prefix+'_ROWS'] = rows
         values[prefix+'_ROWS_PRECEDING'] = rows-1
+    # OAT-METEO joins web weather as-of: bound = web cadence + margin (same as central's renderer).
+    if 'WEB_CADENCE_SECONDS' in values and 'WEB_ASOF_MARGIN_SECONDS' in values:
+        values['WEB_ASOF_BOUND_SECONDS'] = round(values['WEB_CADENCE_SECONDS'] + values['WEB_ASOF_MARGIN_SECONDS'])
     if dialect not in ('postgres','warehouse','datafusion'):
         raise ValueError('dialect must be postgres, warehouse or datafusion')
     folder = ROOT/'original_datafusion' if dialect=='datafusion' else ROOT/dialect/'rules'
