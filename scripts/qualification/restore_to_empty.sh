@@ -205,12 +205,12 @@ measure() {
   local path="$1" _ start end
   for _ in $(seq 1 20); do
     start="$(date +%s%N)"
-    curl -fsS --max-time 5 -H "@$PORTAL_PRIV/hdr.admin" "$PORTAL_BASE$path" >/dev/null
+    portal_http -fsS --max-time 5 -H "@$PORTAL_PRIV/hdr.admin" "$PORTAL_BASE$path" >/dev/null
     end="$(date +%s%N)"
     echo "{\"path\":\"${path}\",\"ms\":$(( (end - start) / 1000000 ))}" >>"$TIMINGS"
   done
 }
-curl -fsS "$PORTAL_BASE/api/health" >/dev/null
+portal_http -fsS "$PORTAL_BASE/api/health" >/dev/null
 measure /api/health
 measure /api/datasets
 
