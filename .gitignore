@@ -1,84 +1,45 @@
-/target
-/edge/target
-/.cache/
+# Open-FDD — NF app repo (ADR-014). Pre-plugin stack lives in archive/central-v4 (tag v4.0.11-central).
 
-# Local cargo home / docker-build caches (never commit)
-.cargo-ben/
-.cargo-docker/
-
-# Local cutover / MQTT provision artifacts (never commit CA or kits)
-/backups/
-/reports/
-/docs/benchmarks/parity_b100_latest/
-/deploy/mqtt/ca/
-/deploy/mqtt/certs/
-/deploy/mqtt/kits/
-/deploy/mqtt/acl/
+# ---- secrets: never commit ----------------------------------------------------------
+.env
+*.env
+!.env.example
+!deploy/nf-caddy/.env.example
+*.env.local
+*.env.local.*
+auth.env.local*
 *.key.pem
+*.key
+deploy/nf-caddy/auth.caddy
+deploy/nf-caddy/certs/
+.secrets/
+
+# ---- NF app (nf-app/) -------------------------------------------------------------------
+nf-app/node_modules/
+
+# ---- Node / Python / Rust build output ------------------------------------------------
+node_modules/
+/target
 __pycache__/
 .pytest_cache/
-/.env
-/config/nf/provider-credentials.env
-edge/workspace/
-services/central/workspace/
-auth.env.local
-auth.env.local.*
-workspace/auth.env.local
-workspace/auth.env.local.bak.*
-workspace/data.env.local
-workspace/data/fdd_wires/
-workspace/backups/
-workspace/data/
-workspace/logs/
-workspace/smoke-profiles/local/*.local.toml
-workspace/bootstrap_credentials*
-workspace/bench.env.local
-workspace/bench/
-docker/compose.standalone.local.yml
-docker/compose.react.fieldbus.local.yml
-docker/compose.cloudsim.local.yml
-
-workspace/ollama.env.local
-workspace/codex.env.local
-workspace/agent-chat/
-workspace/agent-toolshed/
-workspace/haystack/local.nhaystack.toml
-workspace/import-profiles/local/*.local.toml
-workspace/export-profiles/local/*.local.toml
-workspace/imports/
-workspace/exports/
-workspace/reports/generated/
-workspace/data-management/
-workspace/deploy/
-workspace/overrides/
-workspace/bacnet/
-workspace/fixtures/ahu_data/*.csv
-workspace/dashboard/node_modules/
-workspace/dashboard/dist/
-frontend/assets/
-frontend/index.html
-**/*.db
-.DS_Store
-workspace/frontend/
-# Operator-sidecar TADCO prep (agent toolshed pattern — not product code)
-scripts/tadco_hvac_prepare.py
-scripts/openfdd_tadco_hvac_integration.sh
-services/central/.cache/
-
 *.egg-info/
 dist/
 build/
 .venv/
-.venv-bacpypes3/
+.venv-*/
+.cargo-ben/
+.cargo-docker/
+/.cache/
 
-workspace/.cache/
-workspace/jobs/
-workspace/vibe21_artifacts/
-workspace/vibe21_venv/
-workspace/vibe21_jobs/
-
-# Local workspace backups (never commit)
+# ---- local outputs (qualification runs, benchmarks, backups) --------------------------
+# reports/ holds generated run output; the few committed reports were force-added.
+/backups/
 openfdd-backups/
-.secrets/
+/reports/
+/docs/benchmarks/parity_b100_latest/
+*.db
+
+# ---- editor / OS / agent scratch ------------------------------------------------------
+.DS_Store
 .worktrees/
-nf-app/node_modules/
+*.swp

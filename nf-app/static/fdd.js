@@ -44,10 +44,15 @@ function bindRoles(roles, pool, catalog) {
  * Pool = the equip's tagged points + the site's weather points (for web_* roles).
  * pointInputs = false when a rule has no required role and no optional input bound (it reads other data).
  */
-function equipRules(equipRec, model, catalog) {
+/** Points an equip's roles may bind to: its own tagged points + its site's weather points. */
+function equipPool(equipRec, model) {
   const eid = idOf(equipRec);
   const siteRef = (equipRec.attrs || {}).siteRef;
-  const pool = model.points.filter((p) => has(p, "point") && (p.equipRef === eid || (p.siteRef === siteRef && has(p, "weather"))));
+  return model.points.filter((p) => has(p, "point") && (p.equipRef === eid || (p.siteRef === siteRef && has(p, "weather"))));
+}
+
+function equipRules(equipRec, model, catalog) {
+  const pool = equipPool(equipRec, model);
   const kinds = new Set(equipKinds(equipRec, catalog));
   const out = [];
   for (const rule of catalog.rules) {

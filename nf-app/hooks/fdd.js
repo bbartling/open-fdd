@@ -16,6 +16,8 @@
 //   windowHours   trailing window per run (default 24)
 //   equips        list of equip ids to limit a run to (default: every equip)
 //   dryRun        true → compute and log, write nothing
+//   bacnet        { enabled: true, firstInstance: 1000 } → fault count per equip as an AV on
+//                 NF's BACnet server (off by default; see exportToBacnet)
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -258,9 +260,79 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
     if (typeof global.gc === 'function') global.gc();
   }
   const faults = summary.results.filter((r) => r.fault && r.value > 0);
+  if (config.bacnet && config.bacnet.enabled && !config.dryRun) {
+    try {
+      summary.bacnet = await exportToBacnet(http, summary.results, config.bacnet, log);
+    } catch (e) {
+      summary.errors++;
+      log(`BACnet export: ${errText(e)}`);
+    }
+  }
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h)`);
   return summary;
+}
+
+// ---- optional: fault counts on NF's own BACnet server ----------------------------------
+// config.bacnet = { enabled: true, firstInstance: 1000 }  (off unless enabled)
+// One analog value per equip, "OFDD <equip> faults" = how many rules had fault time in the
+// last window; PROP_DESCRIPTION lists them. Objects are found by name, so instances stay
+// put across runs; new equips take the next free instance ≥ firstInstance. Only creates /
+// updates NF's own local objects (CreateLocalObject never gets a point uuid).
+const BACNET_NAME = (equipId) => `OFDD ${equipId} faults`.slice(0, 64);
+
+function bacnetPlan(results, existing, firstInstance) {
+  const byEquip = new Map();
+  for (const r of results) {
+    if (!r.fault) continue;
+    if (!byEquip.has(r.equip)) byEquip.set(r.equip, []);
+    if (r.value > 0) byEquip.get(r.equip).push(r.rule);
+  }
+  const used = new Set(existing.map((o) => o.instance));
+  const byName = new Map(existing.map((o) => [o.name, o.instance]));
+  let next = firstInstance;
+  const plan = [];
+  for (const [equip, rules] of [...byEquip.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const name = BACNET_NAME(equip);
+    let instance = byName.get(name);
+    const create = instance == null;
+    if (create) {
+      while (used.has(next)) next++;
+      instance = next;
+      used.add(next);
+    }
+    const description = rules.length ? `Open-FDD faults: ${rules.sort().join(', ')}` : 'Open-FDD: no faults';
+    plan.push({ equip, name, instance, create, count: rules.length, description: description.slice(0, 250) });
+  }
+  return plan;
+}
+
+async function exportToBacnet(http, results, cfg, log) {
+  const first = Number.isInteger(cfg.firstInstance) && cfg.firstInstance > 0 ? cfg.firstInstance : 1000;
+  const { data } = await http.get('/api/v1/bacnet/local');
+  const prop = (o, p) => {
+    const v = ((o.props || []).find((x) => x.property === p) || {}).value || {};
+    return v.characterString;
+  };
+  const existing = ((data && data.objects) || [])
+    .filter((o) => o.objectId && o.objectId.objectType === 'OBJECT_ANALOG_VALUE')
+    .map((o) => ({ instance: o.objectId.instance, name: prop(o, 'PROP_OBJECT_NAME') || '' }));
+  const plan = bacnetPlan(results, existing, first);
+  for (const p of plan) {
+    const objectId = { objectType: 'OBJECT_ANALOG_VALUE', instance: p.instance };
+    const pv = { property: 'PROP_PRESENT_VALUE', value: { real: p.count } };
+    const desc = { property: 'PROP_DESCRIPTION', value: { characterString: p.description } };
+    if (p.create) {
+      await http.post('/api/v1/bacnet/local', { objectId, props: [
+        { property: 'PROP_OBJECT_NAME', value: { characterString: p.name } },
+        { property: 'PROP_UNITS', value: { enumerated: 95 } },            // no-units
+        desc, pv] });
+      log(`created BACnet av.${p.instance} ${p.name}`);
+    } else {
+      await http.patch('/api/v1/bacnet/local', { objectId, props: [pv, desc] });
+    }
+  }
+  return plan.map((p) => ({ object: `av.${p.instance}`, name: p.name, faults: p.count }));
 }
 
 module.exports = async ({ sdk, config }) => {
@@ -270,3 +342,4 @@ module.exports.runFdd = runFdd;
 module.exports.nameUuid = nameUuid;
 module.exports.buildInput = buildInput;
 module.exports.resultValue = resultValue;
+module.exports.bacnetPlan = bacnetPlan;

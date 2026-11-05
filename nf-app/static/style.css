@@ -207,3 +207,13 @@ pre.ttl { margin: 0; max-height: 420px; overflow: auto; background: #0a0f1e; bor
 .login-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
   background: rgba(4, 8, 18, 0.88); backdrop-filter: blur(6px); }
 footer { color: var(--muted); font-size: 12px; text-align: center; padding-bottom: 24px; }
+
+/* RCx tab */
+.rcx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(520px, 1fr)); gap: 14px; }
+@media (max-width: 640px) { .rcx-grid { grid-template-columns: 1fr; } }
+.rcx-card h3 { margin: 0 0 6px; font-size: 14px; }
+.rcx-card .chart { height: 320px; }
+.rcx-card .note { margin-top: 6px; }
+.rcx-split { width: 100%; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--panel2); }

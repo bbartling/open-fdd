@@ -1,0 +1,296 @@
+{
+  "_doc": "Every chart of the archived central UI (archive/central-v4/services/central/static/product: all exported *Option builders, chart-parity.json, the 18 RCx preset ids) -> where it lives in the NF app. nf-app/tests/parity.test.mjs fails if one is missing, a view id is not registered, or a not_ported entry has no reason. Faults are always a bottom 0/1 lane (rcx.js rcxWithFaultLane).",
+  "builders": {
+    "fdd-charts.js#ruleResultChartOption": {
+      "fn": "fddRulePlot",
+      "where": "FDD tab: click a rule (stacked unit-family grids + bottom fault lane)"
+    },
+    "fdd-charts.js#expandFddPlotRoles": {
+      "fn": "fddPlotExpandRoles"
+    },
+    "fdd-charts.js#oatMeteoFddOption": {
+      "views": [
+        "fdd-oat-meteo"
+      ]
+    },
+    "chart-kit.js#fddPlotOption": {
+      "fn": "fddRulePlot",
+      "where": "was a wrapper of ruleResultChartOption"
+    },
+    "chart-kit.js#inspectChartOption": {
+      "views": [
+        "fdd-sensor-fault"
+      ],
+      "fn": "fddRulePlot",
+      "where": "generic multi-signal inspector: covered by the rule plot's stacked grids, the Charts tab and Points history"
+    },
+    "sensor-charts.js#sensorHealthHeatmapOption": {
+      "views": [
+        "fdd-sensor-health"
+      ]
+    },
+    "sensor-charts.js#sensorFaultChartOption": {
+      "views": [
+        "fdd-sensor-fault"
+      ]
+    },
+    "sensor-charts.js#deriveSensorFaultMasks": {
+      "fn": "fddPlotSensorMasks"
+    },
+    "overview-rcx-charts.js#weeklyMotorOption": {
+      "views": [
+        "weekly-fan",
+        "weekly-fan-cmd",
+        "weekly-pump",
+        "weekly-chw-pump",
+        "weekly-chw-pump-cmd",
+        "weekly-cw-pump",
+        "weekly-compressor",
+        "weekly-chiller",
+        "weekly-chiller-cmd",
+        "weekly-tower-fan"
+      ]
+    },
+    "overview-rcx-charts.js#mechCoolingOption": {
+      "views": [
+        "mech-cooling-compressor-status",
+        "mech-cooling-chiller-status",
+        "mech-cooling-chiller-cmd"
+      ]
+    },
+    "overview-rcx-charts.js#economizerDeltaOption": {
+      "views": [
+        "economizer-delta"
+      ]
+    },
+    "overview-rcx-charts.js#economizerMatResidOption": {
+      "views": [
+        "economizer-mat-residual"
+      ]
+    },
+    "overview-rcx-charts.js#economizerTempsOverlayOption": {
+      "views": [
+        "economizer-temps"
+      ]
+    },
+    "overview-rcx-charts.js#basOverlayOption": {
+      "views": [
+        "bas-vs-web-oat"
+      ]
+    },
+    "overview-rcx-charts.js#basHistOption": {
+      "views": [
+        "bas-vs-web-oat-hist"
+      ]
+    },
+    "rcx-vibe-charts.js#multiEquipmentTimeseriesOption": {
+      "views": [
+        "zone_temps",
+        "vav_flows",
+        "ahu_dats",
+        "ahu_mats",
+        "ahu_rats",
+        "ahu_dampers",
+        "fan_speeds",
+        "duct_static_ts",
+        "chw_temps_ts",
+        "cw_temps_ts"
+      ]
+    },
+    "rcx-vibe-charts.js#oatScatterOption": {
+      "views": [
+        "ahu_sat_reset_scatter",
+        "hw_reset_scatter",
+        "chw_reset_scatter",
+        "cw_reset_scatter"
+      ]
+    },
+    "rcx-vibe-charts.js#multiEquipmentBoxOption": {
+      "views": [
+        "duct_static_box"
+      ]
+    },
+    "rcx-vibe-charts.js#rankingBarsOption": {
+      "views": [
+        "zone_comfort_rank"
+      ]
+    },
+    "rcx-vibe-charts.js#comfortDonutOption": {
+      "views": [
+        "zone_comfort_rank"
+      ]
+    },
+    "rcx-vibe-charts.js#meteringChartsOption": {
+      "views": [
+        "meter_elec_cdd",
+        "meter_gas_hdd"
+      ]
+    },
+    "rcx-vibe-charts.js#vavHealthWorstBarsOption": {
+      "views": [
+        "vav_health"
+      ]
+    },
+    "rcx-vibe-charts.js#vavHealthDonutOption": {
+      "views": [
+        "vav_health"
+      ]
+    },
+    "fuel-charts.js#summaryPeerBulletOption": {
+      "views": [
+        "energy-peer-bullet"
+      ]
+    },
+    "fuel-charts.js#summaryPeerBarsOption": {
+      "views": [
+        "energy-peer-bars"
+      ]
+    },
+    "fuel-charts.js#rankedSiteEuiOption": {
+      "views": [
+        "energy-ranked-eui"
+      ]
+    },
+    "fuel-charts.js#rolling12EuiOption": {
+      "views": [
+        "energy-rolling12"
+      ]
+    },
+    "fuel-charts.js#intensityHeatmapForFuelOption": {
+      "views": [
+        "energy-intensity-heatmap"
+      ]
+    },
+    "fuel-charts.js#intensityHeatmapOption": {
+      "views": [
+        "energy-intensity-heatmap"
+      ]
+    },
+    "fuel-charts.js#stackedFuelOption": {
+      "views": [
+        "energy-stacked-meters"
+      ],
+      "where": "stacked by meter; NF has no fuel/gas role yet, so not split by fuel"
+    },
+    "fuel-charts.js#monthlyLinesOption": {
+      "views": [
+        "energy-monthly"
+      ]
+    },
+    "fuel-charts.js#demandHeatmapOption": {
+      "views": [
+        "energy-demand-heatmap"
+      ]
+    },
+    "fuel-charts.js#weatherScatterOption": {
+      "views": [
+        "energy-weather-scatter"
+      ]
+    },
+    "fuel-charts.js#weatherResidualBarsOption": {
+      "views": [
+        "energy-weather-scatter"
+      ]
+    },
+    "fuel-charts.js#demandPeakDualAxisOption": {
+      "views": [
+        "energy-demand-peak"
+      ]
+    },
+    "fuel-charts.js#peakVsCoolSeasonOption": {
+      "views": [
+        "energy-peak-cooling"
+      ]
+    },
+    "mv-charts.js#mvChartOption": {
+      "views": [
+        "energy-mv"
+      ]
+    },
+    "fdd-charts.js#fddPlotOption": {
+      "fn": "fddRulePlot",
+      "where": "wrapper of ruleResultChartOption"
+    },
+    "rcx-vibe-charts.js#rcxPresetOption": {
+      "views": [
+        "zone_comfort_rank",
+        "ahu_dats",
+        "meter_elec_cdd"
+      ],
+      "where": "was the dispatcher to the preset builders; each preset is its own view now"
+    },
+    "rcx-vibe-charts.js#outlierEquipmentIds": {
+      "views": [
+        "zone_temps",
+        "ahu_dats",
+        "chw_temps_ts",
+        "cw_temps_ts"
+      ],
+      "where": "outlier equips (|z| >= 2.5, 3+ equips) drawn red/dashed in the multi-equip timeseries presets"
+    }
+  },
+  "presets": {
+    "zone_comfort_rank": "zone_comfort_rank",
+    "zone_temps": "zone_temps",
+    "ahu_dats": "ahu_dats",
+    "ahu_mats": "ahu_mats",
+    "ahu_rats": "ahu_rats",
+    "ahu_dampers": "ahu_dampers",
+    "duct_static_box": "duct_static_box",
+    "ahu_sat_reset_scatter": "ahu_sat_reset_scatter",
+    "hw_reset_scatter": "hw_reset_scatter",
+    "chw_reset_scatter": "chw_reset_scatter",
+    "cw_reset_scatter": "cw_reset_scatter",
+    "vav_flows": "vav_flows",
+    "fan_speeds": "fan_speeds",
+    "meter_elec_cdd": "meter_elec_cdd",
+    "meter_gas_hdd": "meter_gas_hdd",
+    "duct_static_ts": "duct_static_ts",
+    "chw_temps_ts": "chw_temps_ts",
+    "cw_temps_ts": "cw_temps_ts"
+  },
+  "fault_lanes": {
+    "fdd-oat-meteo": [
+      "OAT-METEO"
+    ],
+    "economizer-mat-residual": [
+      "ECON-1",
+      "ECON-2",
+      "DMP-1"
+    ],
+    "economizer-temps": [
+      "ECON-1",
+      "ECON-2",
+      "DMP-1"
+    ],
+    "weekly-fan": [
+      "SCHED-247"
+    ],
+    "bas-vs-web-oat": [
+      "OAT-METEO"
+    ],
+    "duct_static_ts": [
+      "FC1",
+      "AHU-DUCTHI"
+    ],
+    "ahu_dats": [
+      "AHU-SATDEV"
+    ],
+    "zone_temps": [
+      "ZONE-COMFORT-PCT"
+    ],
+    "chw_temps_ts": [
+      "CHW-1"
+    ],
+    "energy-interval-demand": [
+      "UTIL-INTERVAL"
+    ],
+    "energy-monthly": [
+      "UTIL-MONTHLY"
+    ],
+    "_rule_plot": "fddRulePlot draws the lane of whichever rule is plotted (all 77)"
+  },
+  "not_ported": {
+    "utility bills / fuel prices (central /api/analytics/fuel inputs)": "NF holds no utility bills or tariffs; energy views use NF meter points and site area instead"
+  }
+}

@@ -110,3 +110,20 @@ test("fdd hook: dryRun writes nothing; uuids are stable v5-style", async () => {
   assert.equal(hook.nameUuid("AHU-1:CMD-1"), hook.nameUuid("AHU-1:CMD-1"));
   assert.match(hook.nameUuid("x"), /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
+
+test("fdd hook: BACnet export plan keeps instances by name and skips used ones", () => {
+  const results = [
+    { equip: "AHU-2", rule: "ECON-1", fault: true, value: 12 },
+    { equip: "AHU-2", rule: "CMD-1", fault: true, value: 0 },
+    { equip: "AHU-1", rule: "FC1", fault: true, value: 5 },
+    { equip: "AHU-1", rule: "FAN-RUNTIME-HOURS", fault: false, value: 24 },
+    { equip: "VAV-9", rule: "CMD-1", fault: true, value: 0 },
+  ];
+  const existing = [{ instance: 1000, name: "something else" }, { instance: 1001, name: "OFDD AHU-2 faults" }];
+  const plan = hook.bacnetPlan(results, existing, 1000);
+  const by = Object.fromEntries(plan.map((p) => [p.equip, p]));
+  assert.deepEqual([by["AHU-1"].instance, by["AHU-1"].create, by["AHU-1"].count], [1002, true, 1]);
+  assert.deepEqual([by["AHU-2"].instance, by["AHU-2"].create, by["AHU-2"].count], [1001, false, 1]);
+  assert.equal(by["AHU-2"].description, "Open-FDD faults: ECON-1");
+  assert.deepEqual([by["VAV-9"].instance, by["VAV-9"].count, by["VAV-9"].description], [1003, 0, "Open-FDD: no faults"]);
+});

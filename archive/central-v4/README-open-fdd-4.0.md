@@ -1,0 +1,114 @@
+# Open-FDD
+
+## Open-FDD 5 = NF app
+
+Open-FDD is now a **Normal Framework (NF) application**: the UI, hooks and SQL rule pack live in [`nf-app/`](nf-app/README.md) and run inside NF, reading NF's Haystack model and history directly. See [`docs/install/nf-plugin.md`](docs/install/nf-plugin.md) to install it, [ADR-014](docs/architecture/adr-014-open-fdd-as-nf-plugin.md) for the decision and [`docs/migration/nf-plugin/PLAN.md`](docs/migration/nf-plugin/PLAN.md) for the slices.
+
+The Rust **central** stack (`services/central`, its Timescale ingest, the portal compose files and the GHCR stack images) is **archived** in [`archive/central-v4/`](archive/central-v4/README.md); the last release of it is git tag `v4.0.11-central`. The sections below that describe GHCR images, compose and central are **archived** (pre-plugin 4.0) and kept for reference. The SQL FDD pack (`sql/fdd`), the PyPI package (`open_fdd`) and the schema bootstrap crates remain active.
+
+
+<p align="center">
+  <a href="https://discord.gg/qjT3w9y3pu"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg?branch=master" alt="CI"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml/badge.svg?branch=master" alt="Docs"></a>
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
+  <img src="https://img.shields.io/badge/status-Alpha-orange" alt="Alpha">
+  <img src="https://img.shields.io/badge/Rust-1.93-orange?logo=rust&logoColor=white" alt="Rust 1.93">
+  <img src="https://img.shields.io/badge/TimescaleDB-PostgreSQL-blue" alt="TimescaleDB">
+  <img src="https://img.shields.io/badge/SQL-FDD-purple" alt="SQL FDD">
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/image_new_chiller.png" alt="Open-FDD logo" width="440">
+</p>
+
+<p align="center">
+  <a href="https://bbartling.github.io/open-fdd/">
+    <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/rules/">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-71%20%2F%2077%20SQL%20%2B%20Pandas-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 71 / 77 SQL + Pandas">
+  </a>
+  <a href="https://pypi.org/project/open-fdd/">
+    <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/quick-start/docker-ghcr.html">
+    <img src="https://img.shields.io/badge/Quick%20Start-GHCR%20stack-059669?style=for-the-badge" alt="Quick start">
+  </a>
+  <a href="https://www.timescale.com/">
+    <img src="https://img.shields.io/badge/TimescaleDB-historian-0B7285?style=for-the-badge" alt="TimescaleDB historian">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/architecture/adr-010-timescale-hard-cutover.html">
+    <img src="https://img.shields.io/badge/ADR--010-Timescale%20only-6D28D9?style=for-the-badge" alt="ADR-010 Timescale only">
+  </a>
+</p>
+
+
+Open-FDD is a free, open-source building-analytics and fault-detection stack. It is friendly to AI agents. The product runs on-premises or in the cloud: Timescale on PostgreSQL, a Rust central service, and a React operator UI. Ingest is the Normal Framework portal API and CSV. The product services are written in Rust, with Python tooling for tests. MQTT and fieldbus recipes are an unqualified archive, not this stack.
+
+Python tooling is for tests. A PyPI package ships pandas FDD for notebooks and checks, plus report tools that write a PDF from mapped HVAC history. AI agents install that package, read the project skills, and run the CLI beside the live stack.
+
+---
+
+
+## Install / run GHCR images (archived, pre-plugin 4.0 stack)
+
+| Image | Role |
+|-------|------|
+| [`ghcr.io/bbartling/openfdd-central`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-central) | Normal Framework API (portal HTTPS or LAN gRPC) and CSV ingest, **Timescale** historian, SQL FDD, REST `/api` |
+| [`ghcr.io/bbartling/openfdd-web`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-web) | React operator SPA (browser → central `/api` only) |
+| [`ghcr.io/bbartling/openfdd-mcp`](https://github.com/bbartling/open-fdd/pkgs/container/openfdd-mcp) | Optional slim MCP stdio sidecar → central API |
+
+`openfdd-fieldbus` and `openfdd-mqtt` are not this product. Their recipes are historical/non-executable under [`archive/ot-edge/`](archive/ot-edge/).
+
+### Run
+
+```bash
+git clone https://github.com/bbartling/open-fdd.git && cd open-fdd
+./scripts/ghcr_newest_by_created.py openfdd-central openfdd-web
+export OPENFDD_IMAGE_TAG=sha-<that>
+export OPENFDD_JWT_SECRET='change-me'
+export OPENFDD_ADMIN_PASSWORD='change-me'
+
+./scripts/openfdd_stack_up.sh portal      # central + web + Timescale
+./scripts/openfdd_stack_up.sh csv         # central + web, no portal provider env
+```
+
+Update a running portal stack (pull, backup, rollback if health fails):
+
+```bash
+./scripts/openfdd_maint_update_resume.sh portal "$OPENFDD_IMAGE_TAG"
+```
+
+AI Agent assistance : [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).
+
+
+## PyPI package
+
+```bash
+pip install open-fdd
+```
+
+Third-party / oracle library (`open_fdd.rules`) for notebooks and parity — not the product request path. Production FDD is Timescale / PostgreSQL SQL (`sql/fdd`, [ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)). Human catalogs: [Rule Cookbook](https://bbartling.github.io/open-fdd/rules/) · [pandas-cookbook](https://bbartling.github.io/open-fdd/rules/cookbook/pandas-cookbook.html).
+
+
+<details>
+<summary>💛 Support This Work</summary>
+
+Support for Open-FDD directly funds the monthly time and labor required to keep the project moving forward, along with professional application-security testing to keep it strong, robust, free, and secure. Your support is greatly appreciated.
+
+
+<p align="center">
+  <a href="https://paypal.me/benbartling20/25"><img src="https://img.shields.io/badge/Donate-$25-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $25 via PayPal"></a>
+  <a href="https://paypal.me/benbartling20/50"><img src="https://img.shields.io/badge/Donate-$50-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $50 via PayPal"></a>
+  <a href="https://paypal.me/benbartling20/250"><img src="https://img.shields.io/badge/Donate-$250-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate $250 via PayPal"></a>
+  <a href="https://paypal.me/benbartling20"><img src="https://img.shields.io/badge/Donate-Custom%20Amount-0070BA?style=for-the-badge&logo=paypal&logoColor=white" alt="Choose a custom PayPal donation amount"></a>
+</p>
+
+</details>
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+Version **4.0.2** on tip · PyPI **4.4.9**

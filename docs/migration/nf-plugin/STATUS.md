@@ -61,10 +61,18 @@ and has no `authorized_series` / `equipment` tables. `tuning_catalog.json` `outp
 **Pack fixes found on the way.** `sql/fdd/render_rule.py` didn't compute OAT-METEO's `WEB_ASOF_BOUND_SECONDS`
 (cadence + margin, as central did). Fixed; all 77 rules render at defaults.
 
-## Slice 4: FDD UI
+## Slice 4: FDD + RCx UI (done)
 
-FDD tab → **Faults** panel (shown once result points exist): latest value per rule/equip, plus an hourly heatmap
-lane per fault rule over 7 days (NF `window=3600s&method=MAX`). The RCx tab port is still to do.
+- **FDD tab:** Faults panel (latest per rule/equip + 7-day hourly heatmap), click any rule → per-rule plot
+  (inputs stacked by unit family + bottom fault lane), "Run FDD now" (NF StartHook).
+- **RCx tab:** 60 views from four modules (`fdd-plots.js`, `rcx-overview.js`, `rcx-presets.js`, `energy.js`)
+  on one registry (`rcx.js`). Every chart of the old central UI is mapped in `nf-app/rcx-parity.json`, and
+  `tests/parity.test.mjs` fails CI if one goes missing. Only utility-bill/tariff inputs are not ported (NF has none).
+- **Faults:** always a stand-alone 0/1 lane at the bottom of the plot (`rcxWithFaultLane`), from the FDD hook's
+  hourly result points; 11 views carry rule lanes, the per-rule plot carries any rule's lane.
+- **Tested on Windows** against `nf-app/dev/mock-nf.mjs` (two sites, AHUs, VAVs, chiller/tower, boiler, meters,
+  faults): all tabs render with no console errors; 63 RCx cards draw, views without usable inputs move to the
+  "Not available here" list with the reason.
 
 ## Slice 5: full profile on NF TimescaleDB, blocked on schema
 

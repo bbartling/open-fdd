@@ -211,7 +211,7 @@ async function renderFdd() {
     const label = pts.length ? `${role} → ${pts[0].name}${pts.length > 1 ? ` (+${pts.length - 1})` : ""}` : role;
     return `<span class="tag ${cls} ${optional ? "opt" : ""}" title="${esc(title)}">${esc(label)}</span>`;
   };
-  $("fddRows").innerHTML = rows.filter((r) => !only || r.runnable).map((r) => `<tr>
+  $("fddRows").innerHTML = rows.filter((r) => !only || r.runnable).map((r) => `<tr class="clickable" data-rule="${esc(r.rule.id)}" data-equip="${esc(idOf(r.equip))}" title="plot this rule">
       <td><span class="rule-id">${esc(r.rule.id)}</span><div class="sub">${esc(r.rule.description)}</div></td>
       <td class="sub">${esc((r.equip.attrs || {}).dis || r.equip.name)}</td>
       <td><div class="tags">${r.required.map((x) => chip(x, r.bound[x], false)).join("")}${r.optional.map((x) => chip(x, r.bound[x], true)).join("")}</div></td>
@@ -220,6 +220,47 @@ async function renderFdd() {
         : `<span class="warn">needs ${esc(r.missing.join(", "))}</span>`}</td>
     </tr>`).join("") || `<tr><td colspan="4" class="sub">No rules apply to the equips in scope.</td></tr>`;
   await renderFddResults(equips);
+}
+
+// "Run FDD now": start the hook through NF (StartHook = on-request run), wait for it, reload.
+// The app id is the static path segment (/api/v1/apps/static/<app>/), never hard-coded.
+const APP_ID = (location.pathname.match(/\/apps\/static\/([^/]+)\//) || [])[1] || "open-fdd";
+async function runFddNow() {
+  const state = $("fddRunState");
+  $("fddRunNow").disabled = true;
+  try {
+    state.textContent = "starting…";
+    const { pid } = await api(`/api/v1/apps/${APP_ID}/hooks/fdd`, {});
+    for (let i = 0; i < 60; i++) {
+      await new Promise((ok) => setTimeout(ok, 2000));
+      const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/fdd/runs?page_size=5&include_results=true`)).runs || [];
+      const run = runs.find((r) => r.pid === pid);
+      if (!run || ["STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED"].includes(run.state)) { state.textContent = `running… ${2 * (i + 1)} s`; continue; }
+      const events = Object.values(run.results || {}).flatMap((g) => g.events || []);
+      state.textContent = run.state === "STATE_SUCCESS" ? (events.at(-1)?.message || "done") : `run ended: ${run.state}`;
+      model.points = await loadPoints(model);
+      await renderFdd();
+      return;
+    }
+    state.textContent = "still running; reload later";
+  } finally {
+    $("fddRunNow").disabled = false;
+  }
+}
+
+async function showRulePlot(ruleId, equipId) {
+  const catalog = await loadCatalog();
+  const equipRec = model.equips.find((e) => idOf(e) === equipId);
+  const row = equipRec && equipRules(equipRec, model, catalog).find((r) => r.rule.id === ruleId);
+  if (!row) return;
+  $("fddPlotPanel").hidden = false;
+  $("fddPlotTitle").textContent = `${ruleId} · ${equipLabel(equipRec)}`;
+  $("fddPlotNote").textContent = row.rule.description || "";
+  $("fddPlotPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  const note = await fddRulePlot($("fddPlot"), { rule: row.rule, equipRec, bound: row.bound,
+    resultPoint: rcxResultPoint(model, equipId, ruleId), hours: 168 });
+  $("fddPlot").classList.add("rendered");
+  if (note) $("fddPlotNote").textContent = note;
 }
 
 // Result points the FDD hook writes: markers fdd + fault|metric, ruleRef, equipRef.
@@ -238,7 +279,7 @@ async function renderFddResults(equips) {
   $("fddResultRows").innerHTML = results.map((p) => {
     const v = latestOf(p);
     const hot = has(p, "fault") && v > 0;
-    return `<tr><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
+    return `<tr class="clickable" data-rule="${esc(ruleRefOf(p))}" data-equip="${esc(p.equipRef)}" title="plot this rule"><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
       <td class="${hot ? "warn" : "ok"}">${fmt(v)} ${esc(p.units)}</td><td class="sub">${esc(when(p))}</td></tr>`;
   }).join("");
   const faults = results.filter((p) => has(p, "fault"));
@@ -254,7 +295,7 @@ async function renderFddResults(equips) {
   const hourLabel = (t) => new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric" });
   ofddChart(el).setOption({
     tooltip: { formatter: (x) => `${esc(label(faults[x.value[1]]))}<br>${esc(hourLabel(hours[x.value[0]]))}: ${fmt(x.value[2])} %` },
-    grid: { left: 150, right: 20, top: 10, bottom: 70 },
+    grid: { left: 200, right: 20, top: 10, bottom: 70 },
     xAxis: { type: "category", data: hours.map(hourLabel), splitArea: { show: false } },
     yAxis: { type: "category", data: faults.map(label), inverse: true },
     visualMap: { min: 0, max: 100, dimension: 2, orient: "horizontal", left: "center", bottom: 0, itemHeight: 120,
@@ -532,6 +573,56 @@ function download(name, text, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// ---- RCx tab ----------------------------------------------------------------------------
+// Views come from rcx-*.js modules (rcxView registry in rcx.js). One card per bound equip
+// (scope "equip") or one per site (scope "site"); each card renders on its own so one
+// failing view never blanks the tab.
+let rcxRun = 0;
+async function renderRcx() {
+  const run = ++rcxRun;
+  const catalog = await loadCatalog();
+  const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
+  const hours = Number($("rcxRange").value) || 168;
+  const { ready, missing } = rcxPlan(equips, model, catalog);
+  const cards = ready.flatMap(({ view, equips: eqs }) => (view.scope === "site" ? [{ view, eqs }] : eqs.map((eq) => ({ view, eqs: [eq] }))));
+  $("nRcx").textContent = cards.length;
+  $("nRcxMissing").textContent = missing.length;
+  $("rcxMissing").innerHTML = missing.map(({ view, roles }) => `<tr><td>${esc(view.title)}<div class="sub">${esc(view.group)}</div></td>
+    <td class="sub">${roles.length ? esc(roles.join(", ")) : `equipment kind: ${esc(view.kinds.join(" / "))}`}</td></tr>`).join("");
+  const groups = [...new Set(cards.map((c) => c.view.group))];
+  $("rcxBody").innerHTML = groups.map((g, gi) => `<section class="panel"><h2>${esc(g)}</h2><div class="rcx-grid">${
+    cards.map((c, i) => [c, i]).filter(([c]) => c.view.group === g).map(([c, i]) => `<div class="rcx-card">
+      <h3>${esc(c.view.title)}${c.view.scope === "equip" ? ` <span class="sub">· ${esc(c.eqs[0].name)}</span>` : ""}</h3>
+      <div class="chart" id="rcx-${i}"></div><div class="sub note" id="rcx-note-${i}"></div></div>`).join("")}</div></section>`).join("")
+    || `<section class="panel"><p class="sub">No RCx view has its inputs on the equips in scope yet — see "Not available here".</p></section>`;
+  for (const [i, c] of cards.entries()) {
+    if (run !== rcxRun) return;                      // a newer render (range/scope change) took over
+    const el = $(`rcx-${i}`);
+    try {
+      const note = await c.view.render(el, rcxContext(c.view, c.eqs, hours, model, catalog));
+      el.classList.add("rendered");
+      if (note) $(`rcx-note-${i}`).textContent = note;
+      // Fault lanes (rcxWithFaultLane) add grids under the signals: give each lane its own room
+      // instead of squeezing the signal plot.
+      const inst = window.echarts && echarts.getInstanceByDom(el);
+      const lanes = inst ? (inst.getOption().series || []).filter((s) => s.lineStyle && s.lineStyle.color === FAULT_LANE.lineStyle.color && s.step).length : 0;
+      if (lanes) { el.style.height = `${el.clientHeight + 34 * lanes}px`; inst.resize(); }
+      // Drew nothing (inputs present but no usable data / not enough equips): list it with the
+      // other unavailable views instead of leaving an empty box on the page.
+      if (!el.querySelector("canvas, svg")) {
+        el.closest(".rcx-card").hidden = true;
+        const who = c.view.scope === "equip" ? ` · ${c.eqs[0].name}` : "";
+        $("rcxMissing").insertAdjacentHTML("beforeend", `<tr><td>${esc(c.view.title + who)}<div class="sub">${esc(c.view.group)}</div></td>
+          <td class="sub">${esc(note || "no data in this range")}</td></tr>`);
+        $("nRcxMissing").textContent = $("rcxMissing").rows.length;
+        $("nRcx").textContent = Number($("nRcx").textContent) - 1;
+      }
+    } catch (e) {
+      $(`rcx-note-${i}`).textContent = `could not draw: ${e.message}`;
+    }
+  }
+}
+
 // ---- tabs + live loop -----------------------------------------------------------------
 
 function renderTab(name) {
@@ -539,6 +630,7 @@ function renderTab(name) {
   if (name === "overview") points.forEach((p, i) => updateCard(i, false));
   if (name === "charts") renderCharts().catch(errs);
   if (name === "fdd") renderFdd().catch(errs);
+  if (name === "rcx") renderRcx().catch(errs);
   if (name === "points") { renderPoints(); if (selectedPoint) renderPointHistory().catch(errs); }
   if (name === "bacnet") renderBacnet().catch((e) => ($("bacHint").textContent = `BACnet server: ${e.message}`));
   if (name === "model") renderModel();
@@ -671,6 +763,14 @@ function wireControls() {
     renderPointHistory().catch((e) => setLive(false, e.message));
   };
   $("fddRunnableOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
+  $("rcxRange").onchange = () => renderRcx().catch((e) => setLive(false, e.message));
+  // Click a rule (Faults or Rule inputs) → stacked signal plot + bottom fault lane (fdd-plots.js).
+  const plotErr = (e) => ($("fddPlotNote").textContent = `could not draw: ${e.message}`);
+  for (const id of ["fddRows", "fddResultRows"]) {
+    $(id).onclick = (ev) => { const tr = ev.target.closest("tr[data-rule]"); if (tr) showRulePlot(tr.dataset.rule, tr.dataset.equip).catch(plotErr); };
+  }
+  $("fddPlotClose").onclick = () => { $("fddPlotPanel").hidden = true; };
+  $("fddRunNow").onclick = () => runFddNow().catch((e) => ($("fddRunState").textContent = `could not start: ${e.message}`));
   $("pointFilter").oninput = renderPoints;
   $("showUntagged").onchange = renderPoints;
   $("pointRows").onclick = (ev) => {
