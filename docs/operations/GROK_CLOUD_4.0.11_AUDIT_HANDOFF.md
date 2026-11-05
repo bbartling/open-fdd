@@ -41,7 +41,7 @@ After each merge: Grok runs `gh pr checks`, squash-merges with `--delete-branch`
 
 - [ ] Wait for GHCR central (+ MCP) publish on PR-R merge; resolve newest image by OCI `created` (`./scripts/ghcr_newest_by_created.py openfdd-central`).
 - [ ] Isolated owned qualification on that `sha-*` (central-only recipe, static model probe PASS, finite passive ZAP, Playwright `/app/`, offline qualification roster, security discovery) — one workload at a time; append receipts to private review dir and ledger **current-image proof** column.
-- [ ] If qualification passes: `./scripts/openfdd_local_repin.sh sha-X`, `./scripts/openfdd_demo_gate.sh`, health check. No `down -v`, no prune, no DB reset.
+- [ ] If qualification passes: `./scripts/openfdd_local_repin.sh sha-X`, `./scripts/openfdd_demo_gate.sh --ghcr-web`, health check. No `down -v`, no prune, no DB reset.
 - [ ] Cleanup stale train branches/worktrees; delete disposable creds and probe artifacts; final issue disposition pass on every ledger row.
 
 ## Agent spawn template

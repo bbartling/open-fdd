@@ -16,6 +16,8 @@ alwaysApply: true
 
 Then pin `OPENFDD_IMAGE_TAG=sha-<that>` and recreate. Do not `docker pull …:nightly` and call it tip.
 
+**`--ghcr-web`** checks newest **openfdd-central** and static `/app/` on central (ADR-013). It does not require a separate `openfdd-web` container.
+
 ## Gate before any login URL
 
 ```bash
@@ -26,7 +28,7 @@ Then pin `OPENFDD_IMAGE_TAG=sha-<that>` and recreate. Do not `docker pull …:ni
 
 If the gate fails: fix serve. Do **not** paste `http://192.168.204.55/auth` and blame the user.
 
-Say explicitly: **local Overview bundle, not GHCR** — or **GHCR sha-… newest-by-created**.
+Say explicitly: **local Overview bundle, not GHCR** — or **GHCR central sha-… newest-by-created + /app/**.
 
 ## Rust vs web
 

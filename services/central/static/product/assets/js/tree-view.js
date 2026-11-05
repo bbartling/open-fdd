@@ -48,6 +48,10 @@ function entityNode(label, kind, children, rec) {
 }
 
 export function buildTreeModel(model, siteId, equipFilter) {
+  if (!model) {
+    const id = siteId || "site";
+    return entityNode(id, "site", [], { id, name: id });
+  }
   const site = model.site;
   const onSite = model.points.filter((p) => p.siteRef === siteId);
   const equipNodes = model.equips
@@ -134,6 +138,11 @@ function showDetail(node, detailEl) {
 
 export function renderModelChecks(model, siteId, checksEl) {
   if (!checksEl) return;
+  if (!model) {
+    checksEl.innerHTML =
+      '<ul class="checklist"><li>○ No model loaded for this site yet</li></ul>';
+    return;
+  }
   const onSite = model.points.filter((p) => p.siteRef === siteId);
   const tagged = onSite.filter((p) => has(p, "point") || p.tags?.length);
   checksEl.innerHTML = `
