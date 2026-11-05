@@ -376,6 +376,52 @@ class RecipeStaticTest(unittest.TestCase):
         self.assertIn('-v "$ART:$ART"', internal)
         self.assertNotIn("curl_user", internal)
 
+    def test_internal_security_probe_uses_central_netns_and_loopback(self):
+        lib = LIB.read_text()
+        self.assertIn('PORTAL_PROBE_BASE="http://127.0.0.1:8080"', lib)
+        probe_fn = lib.split("portal_security_probe() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn('--network "container:${cid}"', probe_fn)
+        self.assertIn('--user "$(id -u):$(id -g)"', probe_fn)
+        self.assertIn("PORTAL_PYTHON_IMAGE", probe_fn)
+        self.assertIn("--env-file", probe_fn)
+        self.assertIn('-v "$ART:$ART"', probe_fn)
+        self.assertIn('openfdd_security_probe.py" "$@"', probe_fn)
+        self.assertIn('http://127.0.0.1:8080', lib)
+        recipe = (QUAL / "run_portal_qualification.sh").read_text()
+        self.assertIn("portal_security_probe", recipe)
+        self.assertIn('--base-url "$PORTAL_PROBE_BASE"', recipe)
+        self.assertIn(
+            'probe-config --plan "$PORTAL_PLAN" --base-url "$PORTAL_PROBE_BASE"',
+            recipe,
+        )
+        self.assertNotRegex(
+            recipe,
+            r'openfdd_security_probe\.py[\s\S]*--base-url "\$PORTAL_BASE"',
+        )
+
+    def test_security_probe_loopback_http_guard_not_weakened(self):
+        cfg = (ROOT / "scripts" / "security" / "openfdd_security" / "config.py").read_text()
+        self.assertIn("http only permitted for loopback isolated/local", cfg)
+        probe = (ROOT / "scripts" / "security" / "openfdd_security_probe.py").read_text()
+        self.assertNotIn("allow-non-loopback", probe.lower())
+        self.assertNotIn("PORTAL_QUAL", probe)
+
+    def test_security_probe_rejects_allowlisted_non_loopback_http(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "security"))
+        from openfdd_security.config import (  # noqa: E402
+            ConfigError,
+            assert_base_url_allowed,
+            load_config,
+        )
+
+        example = ROOT / "scripts" / "security" / "config" / "example_security_fixtures.json"
+        loaded = load_config(example)
+        loaded.origin_allowlist.append("http://central:8080")
+        with self.assertRaises(ConfigError) as ctx:
+            assert_base_url_allowed("http://central:8080", loaded, "isolated_full")
+        self.assertIn("loopback", str(ctx.exception).lower())
+        assert_base_url_allowed("http://127.0.0.1:18080", loaded, "isolated_full")
+
     def test_overlay_parses_as_yaml_when_available(self):
         try:
             import yaml

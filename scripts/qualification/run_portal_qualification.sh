@@ -231,7 +231,7 @@ echo "$SITE_A $fp_a_before" | tee "$ART/fingerprint_before.txt"
 echo "$SITE_B $fp_b_before" | tee -a "$ART/fingerprint_before.txt"
 
 echo "== Security harness (isolated_full X Y Z) =="
-portal_py probe-config --plan "$PORTAL_PLAN" --base-url "$PORTAL_BASE" --out "$ART/probe_config.json"
+portal_py probe-config --plan "$PORTAL_PLAN" --base-url "$PORTAL_PROBE_BASE" --out "$ART/probe_config.json"
 set +e
 (
   export QA_ADMIN_USER=admin
@@ -246,9 +246,9 @@ set +e
   done
   QA_ISOLATED_JWT_SECRET="$(cat "$PORTAL_PRIV/jwt.secret")"
   export QA_ISOLATED_JWT_SECRET
-  python3 -B "$ROOT/scripts/security/openfdd_security_probe.py" \
+  portal_security_probe \
     --config "$ART/probe_config.json" \
-    --base-url "$PORTAL_BASE" \
+    --base-url "$PORTAL_PROBE_BASE" \
     --profile isolated_full \
     --execute --allow-fixture-writes \
     --isolated-jwt-secret-env QA_ISOLATED_JWT_SECRET \
