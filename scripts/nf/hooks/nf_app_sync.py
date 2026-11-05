@@ -12,6 +12,7 @@ auth scopes), a map of NF file path -> repo file, and the hook definitions
     M=scripts/nf/hooks/open_meteo_weather.app.json
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV status $M
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M   # create/update app, files, hooks; restart
+    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --skip-hooks   # files only
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M   # run every hook once now (StartHook)
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV pull   $M   # copy NF files back over the repo files
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV diff   $M   # show NF vs repo differences
@@ -26,6 +27,7 @@ import argparse
 import base64
 import difflib
 import json
+import re
 import sys
 import time
 import urllib.error
@@ -106,9 +108,18 @@ def cmd_status(c: Console, m: dict) -> int:
     return 0
 
 
-def cmd_push(c: Console, m: dict) -> int:
+def app_slug(name: str) -> str:
+    """NF 3.10 derives an app's id from its name (lower case, non-alphanumerics -> "-");
+    the id sent in CreateApplication is ignored."""
+    return "-".join(re.findall(r"[a-z0-9]+", name.lower()))
+
+
+def cmd_push(c: Console, m: dict, skip_hooks: bool = False) -> int:
     spec = m["application"]
     app_id = spec["id"]
+    if spec.get("name") and app_slug(spec["name"]) != app_id:
+        raise SystemExit(f"manifest id {app_id!r} != NF's id for name {spec['name']!r} ({app_slug(spec['name'])!r}); "
+                         "NF ignores the id on create, so make them match")
     if not c.app(app_id):
         print(f"creating app {app_id}")
         c.call("POST", "/api/v1/apps", spec)
@@ -124,7 +135,7 @@ def cmd_push(c: Console, m: dict) -> int:
         # WriteFile maps the HTTP body to the bytes field: send a JSON string of base64.
         c.call("POST", f"/api/v1/apps/{app_id}/files{nf_path}", base64.b64encode(data).decode())
         print(f"wrote {nf_path} ({len(data)} bytes)")
-    for hook in m["hooks"]:
+    for hook in [] if skip_hooks else m["hooks"]:
         # UpdateHook maps the HTTP body to the hook message itself.
         c.call("POST", f"/api/v1/apps/{app_id}/hooks", hook)
         print(f"updated hook {hook['id']}")
@@ -193,6 +204,8 @@ def main() -> int:
     ap.add_argument("--console", help="console base URL (default NF_CONSOLE_URL from --env)")
     ap.add_argument("action", choices=["status", "push", "run", "pull", "diff"])
     ap.add_argument("manifest", type=Path)
+    ap.add_argument("--skip-hooks", action="store_true",
+                    help="push: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
     a = ap.parse_args()
     env = load_env(a.env)
     if not env.get("CONSOLE_USERNAME") or not env.get("CONSOLE_PASSWORD"):
@@ -205,7 +218,7 @@ def main() -> int:
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
-        return cmd_push(c, m)
+        return cmd_push(c, m, a.skip_hooks)
     if a.action == "run":
         return cmd_run(c, m)
     return cmd_pull(c, m, write=(a.action == "pull"))

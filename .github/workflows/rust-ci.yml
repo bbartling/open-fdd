@@ -186,6 +186,23 @@ jobs:
       - name: Static product JS unit tests
         run: node --test services/central/static/product/assets/js/*.test.mjs
 
+      - name: NF app (ADR-014) unit tests + manifest check
+        run: |
+          node --test nf-app/tests/*.test.mjs
+          python3 - <<'EOF'
+          import json, pathlib, re
+          m = json.loads(pathlib.Path("nf-app/app.json").read_text())
+          app = m["application"]
+          slug = "-".join(re.findall(r"[a-z0-9]+", app["name"].lower()))
+          assert app["id"] == slug, f"app id {app['id']!r} must equal NF's id for its name ({slug!r})"
+          missing = [rel for rel in m["files"].values() if not (pathlib.Path("nf-app") / rel).is_file()]
+          assert not missing, f"manifest lists missing files: {missing}"
+          listed = {pathlib.Path(rel).as_posix() for rel in m["files"].values()}
+          on_disk = {p.relative_to("nf-app").as_posix() for p in pathlib.Path("nf-app/static").rglob("*") if p.is_file()}
+          assert on_disk <= listed, f"static files not in manifest: {sorted(on_disk - listed)}"
+          print(f"manifest OK: {len(m['files'])} files, {len(m['hooks'])} hook(s)")
+          EOF
+
   react-web:
     name: React web (archive/product-ui/react-spa-v4)
     runs-on: ubuntu-latest

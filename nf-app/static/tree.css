@@ -1,0 +1,18 @@
+/* tree.html only: its two-column layout on top of style.css (tokens + components). */
+header { padding: 18px 24px; }
+main { display: grid; gap: 18px; max-width: 1600px; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+@media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+.panel h2 { margin-bottom: 10px; align-items: baseline; }
+.devcard { margin-bottom: 12px; }
+.obj { margin-bottom: 10px; }
+.obj .name { font-weight: 600; }
+.obj .tags { margin-top: 8px; }
+.tags-top { margin: 0 0 8px; }
+#tree { height: 760px; }
+#detail { margin-top: 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; min-height: 60px; font-size: 13px; }
+#detail table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#detail td { padding: 3px 6px; border-top: 1px solid var(--cell-line); vertical-align: top; }
+#detail td:first-child { color: var(--muted); width: 30%; font-family: ui-monospace, Consolas, monospace; }
+.legend { margin-bottom: 6px; }
+#err { grid-column: 1 / -1; }

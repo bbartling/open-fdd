@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-FDD chart</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<!--
+  One Open-FDD chart per window: chart.html?c=<id>&site=<siteRef>[&equip=<equipRef>][&h=<hours>][&point=<uuid>]
+  Loads the Haystack model, then fetches ONLY this chart's points, resampled by NF
+  (charts.js). Redraws every 5 min while the window is visible.
+-->
+<script src="theme-init.js"></script>
+<script type="module" src="echarts-global.js"></script>
+<script defer src="nf.js"></script>
+<script defer src="model.js"></script>
+<script defer src="theme.js"></script>
+<script defer src="charts.js"></script>
+<script defer src="chart-page.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="title">⚡ Chart</h1>
+    <div class="sub" id="sub">Loading the Haystack model…</div>
+  </div>
+  <div class="spacer"></div>
+  <select id="pick" class="hidden"></select>
+  <span class="seg flush" id="range"></span>
+  <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
+  <button class="btn" id="themeToggle" type="button">☾ dark</button>
+  <a class="btn" id="back" href="./#charts">all charts</a>
+</header>
+<main>
+  <div id="err"></div>
+  <section class="panel">
+    <h2><span class="hint" id="hint"></span></h2>
+    <div class="chart full" id="chart"></div>
+  </section>
+</main>
+</body>
+</html>
