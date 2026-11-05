@@ -219,6 +219,49 @@ async function renderFdd() {
         : !r.pointInputs ? `<span class="sub">uses utility/meter data, not points</span>`
         : `<span class="warn">needs ${esc(r.missing.join(", "))}</span>`}</td>
     </tr>`).join("") || `<tr><td colspan="4" class="sub">No rules apply to the equips in scope.</td></tr>`;
+  await renderFddResults(equips);
+}
+
+// Result points the FDD hook writes: markers fdd + fault|metric, ruleRef, equipRef.
+const ruleRefOf = (p) => (p.rec.attrs || {}).ruleRef || "";
+const fddResults = (equipIds) => model.points
+  .filter((p) => has(p, "fdd") && ruleRefOf(p) && equipIds.includes(p.equipRef))
+  .sort((a, b) => (latestOf(b) ?? 0) - (latestOf(a) ?? 0) || ruleRefOf(a).localeCompare(ruleRefOf(b)));
+
+/** Faults panel: latest value per rule/equip + a lane per fault rule (hourly max, 7 days). */
+async function renderFddResults(equips) {
+  const results = fddResults(equips.map(idOf));
+  $("fddResultsPanel").hidden = !results.length;
+  if (!results.length) return;
+  const equipName = (id) => { const e = model.equips.find((x) => idOf(x) === id); return (e && ((e.attrs || {}).dis || e.name)) || id; };
+  const when = (p) => (p.latest && p.latest.ts ? new Date(parseTs(p.latest.ts)).toLocaleString() : "–");
+  $("fddResultRows").innerHTML = results.map((p) => {
+    const v = latestOf(p);
+    const hot = has(p, "fault") && v > 0;
+    return `<tr><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
+      <td class="${hot ? "warn" : "ok"}">${fmt(v)} ${esc(p.units)}</td><td class="sub">${esc(when(p))}</td></tr>`;
+  }).join("");
+  const faults = results.filter((p) => has(p, "fault"));
+  const el = $("fddLanes");
+  el.hidden = !faults.length;
+  if (!faults.length) return;
+  const series = await fetchSeries(faults, 24 * 7, { method: "MAX", windowSec: 3600 });
+  const label = (p) => (equips.length > 1 ? `${ruleRefOf(p)} · ${equipName(p.equipRef)}` : ruleRefOf(p));
+  el.style.height = `${Math.max(160, 26 * faults.length + 70)}px`;
+  // Heatmaps need category axes: one column per hour.
+  const hours = [...new Set(faults.flatMap((p) => (series.get(p.uuid) || []).map(([t]) => Math.floor(t / 3600e3) * 3600e3)))].sort((a, b) => a - b);
+  const col = new Map(hours.map((t, i) => [t, i]));
+  const hourLabel = (t) => new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric" });
+  ofddChart(el).setOption({
+    tooltip: { formatter: (x) => `${esc(label(faults[x.value[1]]))}<br>${esc(hourLabel(hours[x.value[0]]))}: ${fmt(x.value[2])} %` },
+    grid: { left: 150, right: 20, top: 10, bottom: 70 },
+    xAxis: { type: "category", data: hours.map(hourLabel), splitArea: { show: false } },
+    yAxis: { type: "category", data: faults.map(label), inverse: true },
+    visualMap: { min: 0, max: 100, dimension: 2, orient: "horizontal", left: "center", bottom: 0, itemHeight: 120,
+      text: ["100 %", "0 %"], inRange: { color: ["rgba(239,68,68,0.05)", FAULT_LANE.lineStyle.color] } },
+    series: [{ type: "heatmap", data: faults.flatMap((p, i) => (series.get(p.uuid) || [])
+      .map(([t, v]) => [col.get(Math.floor(t / 3600e3) * 3600e3), i, v])) }],
+  }, true);
 }
 
 // ---- Points tab -----------------------------------------------------------------------

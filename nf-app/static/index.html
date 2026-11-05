@@ -81,6 +81,14 @@
   <!-- FDD: which Open-FDD rules each equip can run, with inputs bound by Haystack class/markers -->
   <section class="tab" id="tab-fdd">
     <div class="stats" id="fddStats"></div>
+    <section class="panel" id="fddResultsPanel" hidden>
+      <h2>Faults <span class="hint" id="fddResultsHint">written by the open-fdd hook · fault % of covered time over its window</span></h2>
+      <div class="chart" id="fddLanes"></div>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Rule</th><th>Equip</th><th>Latest</th><th>Run</th></tr></thead>
+        <tbody id="fddResultRows"></tbody>
+      </table></div>
+    </section>
     <section class="panel">
       <h2>Rule inputs <span class="hint" id="fddHint">rules from sql/fdd/registry.yaml · inputs found by NF class or Haystack markers</span>
         <label class="hint"><input type="checkbox" id="fddRunnableOnly"> runnable only</label>

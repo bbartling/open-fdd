@@ -13,6 +13,7 @@ auth scopes), a map of NF file path -> repo file, and the hook definitions
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV status $M
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M   # create/update app, files, hooks; restart
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --skip-hooks   # files only
+    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --hook fdd     # files + only the fdd hook
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M   # run every hook once now (StartHook)
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV pull   $M   # copy NF files back over the repo files
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV diff   $M   # show NF vs repo differences
@@ -144,7 +145,7 @@ def app_slug(name: str) -> str:
     return "-".join(re.findall(r"[a-z0-9]+", name.lower()))
 
 
-def cmd_push(c: Console, m: dict, skip_hooks: bool = False) -> int:
+def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str] | None = None) -> int:
     spec = m["application"]
     app_id = spec["id"]
     if spec.get("name") and app_slug(spec["name"]) != app_id:
@@ -165,7 +166,7 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False) -> int:
         # WriteFile maps the HTTP body to the bytes field: send a JSON string of base64.
         c.call("POST", f"/api/v1/apps/{app_id}/files{nf_path}", base64.b64encode(data).decode())
         print(f"wrote {nf_path} ({len(data)} bytes)")
-    for hook in [] if skip_hooks else m["hooks"]:
+    for hook in [] if skip_hooks else [h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks]:
         # UpdateHook maps the HTTP body to the hook message itself.
         c.call("POST", f"/api/v1/apps/{app_id}/hooks", hook)
         print(f"updated hook {hook['id']}")
@@ -175,10 +176,10 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False) -> int:
     return 0
 
 
-def cmd_run(c: Console, m: dict) -> int:
+def cmd_run(c: Console, m: dict, only_hooks: list[str] | None = None) -> int:
     app_id = m["application"]["id"]
     rc = 0
-    for hook in m["hooks"]:
+    for hook in [h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks]:
         r = c.call("POST", f"/api/v1/apps/{app_id}/hooks/{hook['id']}", {})
         pid = r.get("pid")
         print(f"started {hook['id']} pid={pid}")
@@ -236,6 +237,8 @@ def main() -> int:
     ap.add_argument("manifest", type=Path)
     ap.add_argument("--skip-hooks", action="store_true",
                     help="push: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
+    ap.add_argument("--hook", action="append", dest="hooks", metavar="ID",
+                    help="push/run: only these hook ids (repeatable), e.g. --hook fdd on a box whose weather comes from elsewhere")
     a = ap.parse_args()
     env = load_env(a.env)
     if not env.get("CONSOLE_USERNAME") or not env.get("CONSOLE_PASSWORD"):
@@ -248,9 +251,9 @@ def main() -> int:
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
-        return cmd_push(c, m, a.skip_hooks)
+        return cmd_push(c, m, a.skip_hooks, a.hooks)
     if a.action == "run":
-        return cmd_run(c, m)
+        return cmd_run(c, m, a.hooks)
     return cmd_pull(c, m, write=(a.action == "pull"))
 
 

@@ -81,3 +81,4 @@ workspace/vibe21_jobs/
 openfdd-backups/
 .secrets/
 .worktrees/
+nf-app/node_modules/

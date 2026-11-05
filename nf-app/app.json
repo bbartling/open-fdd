@@ -33,7 +33,15 @@
     "/static/tree.html": "static/tree.html",
     "/static/tree.js": "static/tree.js",
     "/static/vendor/echarts.esm.min.js": "static/vendor/echarts.esm.min.js",
-    "/hooks/weather.js": "hooks/weather.js"
+    "/hooks/weather.js": "hooks/weather.js",
+    "/hooks/fdd.js": "hooks/fdd.js",
+    "/hooks/lib/engines.js": "hooks/lib/engines.js",
+    "/rules/pack-sqlite.json": "rules/pack-sqlite.json",
+    "/rules/pack-postgres.json": "rules/pack-postgres.json",
+    "/package.json": "package.json",
+    "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
+    "/hooks/vendor/sql.js/sql-wasm.wasm": "hooks/vendor/sql.js/sql-wasm.wasm",
+    "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE"
   },
   "hooks": [
     {
@@ -74,6 +82,23 @@
       },
       "mode": "MODE_SCHEDULED",
       "invokeTimeout": "60s"
+    },
+    {
+      "id": "fdd",
+      "name": "fdd",
+      "entryPoint": "/hooks/fdd.js",
+      "points": {
+        "noPoints": true
+      },
+      "config": {
+        "engine": "auto",
+        "windowHours": 24
+      },
+      "schedule": {
+        "rrule": "DTSTART:20261101T000700Z\nRRULE:FREQ=HOURLY;INTERVAL=1"
+      },
+      "mode": "MODE_SCHEDULED",
+      "invokeTimeout": "300s"
     }
   ]
 }
