@@ -13,6 +13,7 @@
 PORTAL_QUAL_COMPOSE_MIN="2.24.4"
 PORTAL_ALPINE_IMAGE="${OPENFDD_QUAL_ALPINE_IMAGE:-alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc}"
 PORTAL_CURL_IMAGE="${OPENFDD_QUAL_CURL_IMAGE:-curlimages/curl:8.5.0}"
+PORTAL_PYTHON_IMAGE="${OPENFDD_QUAL_PYTHON_IMAGE:-python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d}"
 PORTAL_COMPOSE_PROFILES=()
 PORTAL_COMPOSE_EXTRA=()
 PORTAL_QUAL_SECRET_VARS=(
@@ -65,7 +66,8 @@ PY
 }
 
 # portal_stack_init <kind> — sets PORTAL_PREFIX PORTAL_PROJECT PORTAL_PRIV
-# PORTAL_PLAN PORTAL_CENTRAL_PORT PORTAL_BASE PORTAL_STEPS. Requires ART.
+# PORTAL_PLAN PORTAL_CENTRAL_PORT PORTAL_BASE PORTAL_PROBE_BASE PORTAL_STEPS.
+# Requires ART.
 portal_stack_init() {
   local kind="$1" jwt admin_pw ts_pw
   [[ -n "${ART:-}" ]] || portal_die "ART must be set before portal_stack_init"
@@ -85,10 +87,12 @@ portal_stack_init() {
     PORTAL_COMPOSE_EXTRA=(-f "$ROOT/docker/compose.portal-qual-internal.yml")
     PORTAL_CENTRAL_PORT="0"
     PORTAL_BASE="http://central:8080"
+    PORTAL_PROBE_BASE="http://127.0.0.1:8080"
   else
     PORTAL_COMPOSE_EXTRA=()
     PORTAL_CENTRAL_PORT="$(portal_free_port)"
     PORTAL_BASE="http://127.0.0.1:${PORTAL_CENTRAL_PORT}"
+    PORTAL_PROBE_BASE="$PORTAL_BASE"
   fi
 
   jwt="$(portal_py secret --bytes 48)"
@@ -153,6 +157,44 @@ portal_http() {
       "${vol[@]}" "$PORTAL_CURL_IMAGE" "$@"
   else
     curl "$@"
+  fi
+}
+
+# Writes harness credential env vars for the internal-mode probe sidecar (0600).
+# Caller must export QA_* and per-user env refs before portal_security_probe.
+portal_write_probe_env() {
+  local envf="$PORTAL_PRIV/probe.env" name val
+  umask 077
+  : >"$envf"
+  local names=(QA_ADMIN_USER QA_ADMIN_PASSWORD QA_ISOLATED_JWT_SECRET)
+  while IFS= read -r name; do
+    [[ -n "$name" ]] && names+=("$name")
+  done < <(jq -r '.users[] | .username_env, .password_env' "$PORTAL_PLAN")
+  for name in "${names[@]}"; do
+    val="${!name-}"
+    [[ -n "$val" ]] || portal_die "missing probe env $name"
+    printf '%s=%s\n' "$name" "$val" >>"$envf"
+  done
+  chmod 600 "$envf"
+}
+
+# portal_security_probe — host python or pinned sidecar in central's network
+# namespace (internal qual) at PORTAL_PROBE_BASE. Remaining args are probe CLI
+# flags (including --config and --base-url); credentials never appear in argv.
+portal_security_probe() {
+  if [[ "${PORTAL_QUAL_INTERNAL:-}" == "1" ]]; then
+    local cid vol=()
+    cid="$(portal_compose ps -q central | head -n1)"
+    [[ -n "$cid" ]] || portal_die "central container missing for internal security probe"
+    portal_write_probe_env
+    vol+=(-v "$ROOT:$ROOT:ro" -v "$ART:$ART" -v "$PORTAL_PRIV:$PORTAL_PRIV:ro")
+    docker run --rm --network "container:${cid}" \
+      --user "$(id -u):$(id -g)" \
+      --env-file "$PORTAL_PRIV/probe.env" \
+      "${vol[@]}" "$PORTAL_PYTHON_IMAGE" \
+      python3 -B "$ROOT/scripts/security/openfdd_security_probe.py" "$@"
+  else
+    python3 -B "$ROOT/scripts/security/openfdd_security_probe.py" "$@"
   fi
 }
 
