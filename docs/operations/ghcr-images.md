@@ -38,7 +38,9 @@ Resolve newest by OCI config `created` (not tag name):
 
 Unmerged `frontend/web` is never inside `openfdd-web:sha-*`. Serve a local
 bundle and run `./scripts/openfdd_demo_gate.sh --local-web` before any login
-link. `openfdd_stack_up.sh` refuses GHCR web when `frontend/web` drifted
+link. Published portal demos: `./scripts/openfdd_demo_gate.sh --ghcr-web` checks
+newest **openfdd-central** and central `/app/` (static product UI), not
+`openfdd-web`. `openfdd_stack_up.sh` refuses GHCR web when `frontend/web` drifted
 (`OPENFDD_ALLOW_STALE_GHCR_WEB=1` to override).
 | `beta` | Floating | Last promoted beta pre-release |
 | `latest` | Floating | Last promoted **stable** release |

@@ -368,6 +368,14 @@ class RecipeStaticTest(unittest.TestCase):
         self.assertIn("PORTAL_QUAL_INTERNAL", lib)
         self.assertIn("compose.portal-qual-internal.yml", lib)
 
+    def test_internal_portal_http_mounts_portal_priv(self):
+        text = LIB.read_text()
+        self.assertIn('vol=(-v "$PORTAL_PRIV:$PORTAL_PRIV")', text)
+        self.assertRegex(
+            text,
+            r'if \[\[ "\$\{PORTAL_QUAL_INTERNAL:-\}" == "1" \]\]; then[\s\S]*-v "\$PORTAL_PRIV:\$PORTAL_PRIV"',
+        )
+
     def test_overlay_parses_as_yaml_when_available(self):
         try:
             import yaml

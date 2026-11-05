@@ -137,10 +137,13 @@ portal_compose() {
 # HTTP from the host: loopback publish (default) or central's network namespace.
 portal_http() {
   if [[ "${PORTAL_QUAL_INTERNAL:-}" == "1" ]]; then
-    local cid
+    local cid vol=()
     cid="$(portal_compose ps -q central | head -n1)"
     [[ -n "$cid" ]] || portal_die "central container missing for internal-only HTTP"
-    docker run --rm --network "container:${cid}" "$PORTAL_CURL_IMAGE" "$@"
+    if [[ -n "${PORTAL_PRIV:-}" && -d "$PORTAL_PRIV" ]]; then
+      vol=(-v "$PORTAL_PRIV:$PORTAL_PRIV")
+    fi
+    docker run --rm --network "container:${cid}" "${vol[@]}" "$PORTAL_CURL_IMAGE" "$@"
   else
     curl "$@"
   fi

@@ -23,7 +23,8 @@ Say “local Overview bundle, not GHCR.”
 
 Do not `docker pull …:nightly` and tell the user they are on tip. Pin
 `OPENFDD_IMAGE_TAG` to that `sha-*`, recreate, then
-`./scripts/openfdd_demo_gate.sh --ghcr-web`. If the gate fails, fix serve —
+`./scripts/openfdd_demo_gate.sh --ghcr-web` (verifies newest **openfdd-central**
+and static `/app/` on central — not a separate web container). If the gate fails, fix serve —
 do not hand out `http://192.168.204.55/auth` and blame the user.
 
 ---
