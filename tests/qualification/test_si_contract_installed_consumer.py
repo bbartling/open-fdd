@@ -24,7 +24,6 @@ class InstalledSiContractConsumerTests(unittest.TestCase):
                 str(REPO / "scripts/sql_contract/export_distribution.py"),
                 "--out",
                 str(cls.artifact_root),
-                "--write-committed-manifest",
             ],
             cwd=str(REPO),
             capture_output=True,

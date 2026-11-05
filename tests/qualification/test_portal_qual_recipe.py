@@ -360,6 +360,14 @@ class RecipeStaticTest(unittest.TestCase):
         self.assertIn('"127.0.0.1:${PORTAL_QUAL_CENTRAL_PORT', text)
         self.assertNotIn("  web:\n", text)
 
+    def test_internal_overlay_drops_central_host_port(self):
+        internal = ROOT / "docker" / "compose.portal-qual-internal.yml"
+        text = internal.read_text()
+        self.assertIn("ports: !reset []", text)
+        lib = LIB.read_text()
+        self.assertIn("PORTAL_QUAL_INTERNAL", lib)
+        self.assertIn("compose.portal-qual-internal.yml", lib)
+
     def test_overlay_parses_as_yaml_when_available(self):
         try:
             import yaml
