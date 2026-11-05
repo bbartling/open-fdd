@@ -135,15 +135,22 @@ portal_compose() {
 }
 
 # HTTP from the host: loopback publish (default) or central's network namespace.
+# Internal mode runs curl in a disposable container on central's network. Mount
+# every host path referenced in curl args (@file, -T, -o, --data-binary) at the
+# same absolute path; run as the invoking uid/gid so curl can read the 0700
+# PORTAL_PRIV tree (default curl image uid 100 cannot).
 portal_http() {
   if [[ "${PORTAL_QUAL_INTERNAL:-}" == "1" ]]; then
     local cid vol=()
     cid="$(portal_compose ps -q central | head -n1)"
     [[ -n "$cid" ]] || portal_die "central container missing for internal-only HTTP"
-    if [[ -n "${PORTAL_PRIV:-}" && -d "$PORTAL_PRIV" ]]; then
-      vol=(-v "$PORTAL_PRIV:$PORTAL_PRIV")
-    fi
-    docker run --rm --network "container:${cid}" "${vol[@]}" "$PORTAL_CURL_IMAGE" "$@"
+    [[ -n "${PORTAL_PRIV:-}" && -d "$PORTAL_PRIV" ]] \
+      && vol+=(-v "$PORTAL_PRIV:$PORTAL_PRIV")
+    [[ -n "${ART:-}" && -d "$ART" ]] \
+      && vol+=(-v "$ART:$ART")
+    docker run --rm --network "container:${cid}" \
+      --user "$(id -u):$(id -g)" \
+      "${vol[@]}" "$PORTAL_CURL_IMAGE" "$@"
   else
     curl "$@"
   fi
