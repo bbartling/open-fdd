@@ -44,6 +44,17 @@ class PositiveControlTests(unittest.TestCase):
         self.assertFalse(_nonempty_own_control(body))
         self.assertFalse(_nonempty_own_control(body, "CANARY_A_SYNTH"))
 
+    def test_presets_catalog_is_own_success(self):
+        body = b'{"ok":true,"presets":[{"id":"zone_temps","title":"Zones"}]}'
+        self.assertTrue(_nonempty_own_control(body))
+
+    def test_mapping_ttl_turtle_is_own_success(self):
+        from openfdd_security.suites import _mapping_ttl_own_control
+
+        body = b"@prefix enc: <urn:openfdd:ns#> .\nenc:equip a enc:Equipment .\n"
+        self.assertTrue(_mapping_ttl_own_control(body))
+        self.assertFalse(_mapping_ttl_own_control(b"@prefix x: <> .\n"))
+
     def test_structured_deny_requires_envelope(self):
         self.assertFalse(_structured_deny(404, b"not found", foreign_canary="B"))
         self.assertFalse(_structured_deny(404, b"<html>nope</html>", foreign_canary="B"))
