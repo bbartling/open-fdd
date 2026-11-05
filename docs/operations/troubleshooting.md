@@ -59,4 +59,4 @@ tar -xzf ~/openfdd-backups/latest/workspace-full.tgz -C ~/open-fdd
 ## Get help
 
 - [GitHub Issues](https://github.com/bbartling/open-fdd/issues)
-- [Discord](https://discord.gg/Ta48yQF8fC)
+- [Discord](https://discord.gg/qjT3w9y3pu)
