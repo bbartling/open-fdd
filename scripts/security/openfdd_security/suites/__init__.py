@@ -80,7 +80,17 @@ def _nonempty_own_control(
             ):
                 return False
         populated = False
-        for key in ("equipment", "items", "buildings", "data", "rows", "result"):
+        for key in (
+            "equipment",
+            "items",
+            "buildings",
+            "data",
+            "rows",
+            "result",
+            "presets",
+            "points",
+            "results",
+        ):
             val = data.get(key)
             if isinstance(val, list) and len(val) > 0:
                 populated = True
@@ -100,6 +110,21 @@ def _nonempty_own_control(
             return False
         return True
     return False
+
+
+def _mapping_ttl_own_control(body: bytes) -> bool:
+    """Positive control for ``GET …/mapping/ttl`` (text/turtle inventory export)."""
+    if not body or _looks_html(body):
+        return False
+    text = body.decode("utf-8", errors="replace").strip()
+    if len(text) < 32:
+        return False
+    lower = text.lower()
+    if "@prefix" not in lower and "@base" not in lower:
+        return False
+    if "urn:openfdd:" not in lower and "enc_" not in lower:
+        return False
+    return True
 
 
 def _datasets_own_control(body: bytes, building_id: str) -> bool:
@@ -1235,6 +1260,8 @@ def run_suite_y(ctx: SuiteContext) -> None:
             elif r_own.status == 200 and (
                 _datasets_own_control(r_own.body, fx.building_a)
                 if path == "/api/datasets"
+                else _mapping_ttl_own_control(r_own.body)
+                if path == "/api/csv/import/package/mapping/ttl"
                 else _nonempty_own_control(
                     r_own.body, fx.canary_a, require_canary=False
                 )
@@ -1289,7 +1316,16 @@ def run_suite_y(ctx: SuiteContext) -> None:
         ),
     ):
         try:
-            q_own = urlencode({"building_id": fx.building_a})
+            if path == "/api/fdd/series":
+                q_own = urlencode(
+                    {
+                        "building_id": fx.building_a,
+                        "equipment_id": fx.equipment_a,
+                        "rule_id": fx.fdd_rule_id,
+                    }
+                )
+            else:
+                q_own = urlencode({"building_id": fx.building_a})
             r_own = ctx.client.request("GET", f"{path}?{q_own}", token=tok_a)
             own_cid = foreign_cid.replace("_foreign_", "_own_").replace("_denied", "")
             if r_own.status == 401:
@@ -1312,7 +1348,16 @@ def run_suite_y(ctx: SuiteContext) -> None:
                 path_template=path,
                 detail=None if own_st == "PASS" else "empty/soft 200 is not positive own-object control",
             )
-            q_b = urlencode({"building_id": fx.building_b})
+            if path == "/api/fdd/series":
+                q_b = urlencode(
+                    {
+                        "building_id": fx.building_b,
+                        "equipment_id": fx.equipment_b,
+                        "rule_id": fx.fdd_rule_id,
+                    }
+                )
+            else:
+                q_b = urlencode({"building_id": fx.building_b})
             r_f = ctx.client.request("GET", f"{path}?{q_b}", token=tok_a)
             leak = fx.canary_b.encode() in r_f.body
             if r_f.status == 401:

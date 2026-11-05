@@ -170,10 +170,15 @@ else
 fi
 
 echo "== Seed one canary package per tenant (operator imports) =="
+EQUIP_A="$(jq -r '.tenants.a.canary_equipment' "$PORTAL_PLAN")"
 for side in a b; do
   site="$(jq -r ".tenants.$side.site" "$PORTAL_PLAN")"
   equip="$(jq -r ".tenants.$side.canary_equipment" "$PORTAL_PLAN")"
-  portal_py package --building "$site" --equipment "$equip" --rows 48 --out "$ART/package_$side.zip"
+  if [[ "$side" == "a" ]]; then
+    portal_py security-seed-package --plan "$PORTAL_PLAN" --rows 96 --out "$ART/package_$side.zip"
+  else
+    portal_py package --building "$site" --equipment "$equip" --rows 48 --out "$ART/package_$side.zip"
+  fi
   portal_api "operator_$side" POST /api/csv/import/package "$ART/package_$side.zip" application/zip \
     >"$ART/import_$side.json"
   if [[ "$(portal_last_status)" == "200" ]] && jq -e '.ok == true' "$ART/import_$side.json" >/dev/null; then
@@ -189,6 +194,54 @@ for site in "$SITE_A" "$SITE_B"; do
     portal_step "seed.timescale_rows.$site" FAIL "no Timescale samples after import"
   fi
 done
+
+echo "== Seed tenant A security own-object fixtures (FDD + analytics cache) =="
+portal_py security-fdd-run-body --plan "$PORTAL_PLAN" >"$ART/seed_fdd_run.json"
+portal_api operator_a POST /api/fdd/run "$ART/seed_fdd_run.json" >"$ART/seed_fdd_run_resp.json"
+fdd_seed_ok=0
+if [[ "$(portal_last_status)" == "200" ]] && jq -e '.ok == true and (.run_id // .run_status)' "$ART/seed_fdd_run_resp.json" >/dev/null; then
+  for _ in $(seq 1 60); do
+    portal_api operator_a GET "/api/fdd/results?building_id=$(jq -rn --arg s "$SITE_A" '$s|@uri')" \
+      >"$ART/seed_fdd_results_poll.json"
+    if [[ "$(portal_last_status)" == "200" ]] \
+      && jq -e '(.results // []) | length > 0 or (.count // 0) > 0' "$ART/seed_fdd_results_poll.json" >/dev/null; then
+      fdd_seed_ok=1
+      break
+    fi
+    sleep 2
+  done
+fi
+if (( fdd_seed_ok )); then
+  portal_step seed.security_own_object_fdd PASS "FC1 on $EQUIP_A"
+else
+  portal_step seed.security_own_object_fdd FAIL "FDD run or results poll → $(portal_last_status)"
+fi
+portal_py security-analytics-warm-body --plan "$PORTAL_PLAN" >"$ART/seed_analytics_warm.json"
+analytics_warm_ok=1
+for path in \
+  /api/analytics/ahu-health \
+  /api/analytics/vav-health \
+  /api/analytics/sensor-faults \
+  /api/analytics/rcx/ahu \
+  /api/analytics/chiller-health \
+  /api/analytics/cooling-tower-health \
+  /api/analytics/boiler-health \
+  /api/analytics/hp-health \
+  /api/analytics/zone-other-health \
+  /api/analytics/sensor-health; do
+  slug="${path##*/}"
+  portal_api operator_a POST "$path" "$ART/seed_analytics_warm.json" >"$ART/seed_analytics_${slug}.json"
+  if [[ "$(portal_last_status)" != "200" ]] \
+    || ! jq -e '(.equipment // .rows // .points // []) | length > 0' "$ART/seed_analytics_${slug}.json" >/dev/null; then
+    analytics_warm_ok=0
+    echo "analytics warm failed for $path → $(portal_last_status)" >&2
+  fi
+done
+if (( analytics_warm_ok )); then
+  portal_step seed.security_own_object_analytics PASS "plant + RCx analytics warmed for $SITE_A"
+else
+  portal_step seed.security_own_object_analytics FAIL "one or more analytics POSTs empty or non-200"
+fi
 
 echo "== NF emulator ingest (loopback only) =="
 if n="$(portal_wait_rows "$NF_SITE" 180)"; then
@@ -297,7 +350,8 @@ portal_py verdict --steps "$PORTAL_STEPS" --suite portal_qualification_v1 \
   deployment.exposure.private_central_timescale deployment.auth.jwt_required deployment.auth.multi_tenant \
   deployment.egress.nf_emulator_only control_plane.tenants control_plane.users \
   control_plane.tenant_admin_rejected control_plane.identities seed.import_a seed.import_b \
-  "seed.timescale_rows.$SITE_A" "seed.timescale_rows.$SITE_B" nf.emulator_ingest nf.provider_tenant_scope \
+  "seed.timescale_rows.$SITE_A" "seed.timescale_rows.$SITE_B" \
+  seed.security_own_object_fdd seed.security_own_object_analytics nf.emulator_ingest nf.provider_tenant_scope \
   security.harness security.viewer_write_matrix security.no_historian_side_effect
 VERDICT_RC=$?
 set -e

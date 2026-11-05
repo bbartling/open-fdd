@@ -28,6 +28,37 @@ PROJECT_RE = re.compile(r"^openfdd-qual-[a-z0-9-]{4,48}$")
 MIN_SECRET_CHARS = 32
 JWT_SECRET_BYTES = 48
 PACKAGE_START = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
+SECURITY_FDD_RULE_ID = "FC1"
+SECURITY_OWN_OBJECT_CHECK_IDS = frozenset(
+    {
+        "y.authz.a_own_package_mapping_ttl",
+        "y.authz.a_own_fdd_results",
+        "y.authz.a_own_fdd_series",
+        "y.authz.a_own_analytics_rcx_presets",
+        "y.authz.a_own_analytics_ahu_health",
+        "y.authz.a_own_analytics_boiler_health",
+        "y.authz.a_own_analytics_chiller_health",
+        "y.authz.a_own_analytics_cooling_tower_health",
+        "y.authz.a_own_analytics_hp_health",
+        "y.authz.a_own_analytics_rcx_ahu",
+        "y.authz.a_own_analytics_sensor_faults",
+        "y.authz.a_own_analytics_sensor_health",
+        "y.authz.a_own_analytics_vav_health",
+        "y.authz.a_own_analytics_zone_other_health",
+    }
+)
+SECURITY_ANALYTICS_WARM_PATHS = (
+    "/api/analytics/ahu-health",
+    "/api/analytics/vav-health",
+    "/api/analytics/sensor-faults",
+    "/api/analytics/rcx/ahu",
+    "/api/analytics/chiller-health",
+    "/api/analytics/cooling-tower-health",
+    "/api/analytics/boiler-health",
+    "/api/analytics/hp-health",
+    "/api/analytics/zone-other-health",
+    "/api/analytics/sensor-health",
+)
 STEP_STATUSES = frozenset({"PASS", "FAIL", "ERROR", "BLOCKED", "SKIPPED", "NOT_APPLICABLE"})
 REQUIRED_PORTAL_SERVICES = frozenset({"central", "timescale", "nf-emulator"})
 VIEWER_WRITE_CHECK_IDS = frozenset(
@@ -167,6 +198,169 @@ def package_zip(building_id: str, equipment_id: str, rows: int = 48) -> bytes:
     return buf.getvalue()
 
 
+def _grid_timestamps(rows: int, start: dt.datetime = PACKAGE_START) -> list[str]:
+    if rows < 1 or rows > 10_000:
+        raise ValueError("rows out of bounds")
+    return [
+        (start + dt.timedelta(minutes=5 * i)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for i in range(rows)
+    ]
+
+
+def _history_csv(columns: list[str], rows: int, values_for_row: Any) -> str:
+    stamps = _grid_timestamps(rows)
+    lines = ["timestamp_utc," + ",".join(columns)]
+    for i, ts in enumerate(stamps):
+        vals = values_for_row(i)
+        if len(vals) != len(columns):
+            raise ValueError("column/value length mismatch")
+        lines.append(ts + "," + ",".join(str(v) for v in vals))
+    return "\n".join(lines) + "\n"
+
+
+def security_seed_equipment(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """Plant-shaped equipment for tenant-A security own-object positive controls."""
+    if not PREFIX_RE.fullmatch(plan["prefix"]):
+        raise ValueError(f"bad qa prefix {plan['prefix']!r}")
+    up = plan["prefix"].upper()
+    canary = plan["tenants"]["a"]["canary_equipment"]
+    return [
+        {
+            "equipment_id": canary,
+            "equipType": "ahu",
+            "points": {
+                "fan-cmd": "fan_cmd",
+                "fan-status": "fan_st",
+                "duct-static-pressure": "da_p",
+                "duct-static-pressure-sp": "da_p_sp",
+                "outside-air-temp": "oat",
+                "return-air-temp": "rat",
+                "mixed-air-temp": "mat",
+                "discharge-air-temp": "sat",
+                "outdoor-air-damper-position": "oa_damper",
+            },
+            "values": lambda i: (
+                round(55.0 + (i * 3) % 20, 1),
+                1 if i % 3 else 0,
+                round(0.80 + ((i * 13) % 40) / 100.0, 2),
+                round(1.0 + ((i * 7) % 20) / 100.0, 2),
+                round(18.0 + (i % 12) * 0.5, 1),
+                round(21.0 + (i % 8) * 0.4, 1),
+                round(20.0 + (i % 10) * 0.3, 1),
+                round(16.0 + (i % 6) * 0.2, 1),
+                round(30.0 + (i * 5) % 70, 1),
+            ),
+        },
+        {
+            "equipment_id": f"{up}_SEC_VAV",
+            "equipType": "vav",
+            "points": {"zone-air-temp": "zone_t", "zone-airflow": "zone_flow"},
+            "values": lambda i: (round(21.0 + (i % 9) * 0.25, 2), round(200 + (i * 11) % 400, 1)),
+        },
+        {
+            "equipment_id": f"{up}_SEC_CHW",
+            "equipType": "chwPlant",
+            "points": {
+                "chiller-status": "ch_st",
+                "compressor-status": "comp_st",
+                "chw-pump-status": "pump_st",
+            },
+            "values": lambda i: (1 if i % 4 else 0, 1 if i % 5 else 0, 1 if i % 2 else 0),
+        },
+        {
+            "equipment_id": f"{up}_SEC_BLR",
+            "equipType": "boiler",
+            "points": {"boiler-status": "blr_st", "boiler-cmd": "blr_cmd"},
+            "values": lambda i: (1 if i % 6 else 0, 1 if i % 7 else 0),
+        },
+        {
+            "equipment_id": f"{up}_SEC_HP",
+            "equipType": "heatPump",
+            "points": {"compressor-status": "hp_comp", "fan-status": "hp_fan"},
+            "values": lambda i: (1 if i % 5 else 0, 1 if i % 3 else 0),
+        },
+        {
+            "equipment_id": f"{up}_SEC_CT",
+            "equipType": "cooling_tower",
+            "points": {"fan-status": "ct_fan", "fan-cmd": "ct_cmd"},
+            "values": lambda i: (1 if i % 4 else 0, round(40.0 + (i * 9) % 60, 1)),
+        },
+        {
+            "equipment_id": f"{up}_SEC_ZN",
+            "equipType": "zone_other",
+            "points": {"zone-air-temp": "zone_t", "zone-airflow": "zone_flow"},
+            "values": lambda i: (round(20.5 + (i % 11) * 0.2, 2), round(150 + (i * 3) % 250, 1)),
+        },
+    ]
+
+
+def security_seed_package_zip(plan: dict[str, Any], rows: int = 96) -> bytes:
+    """Multi-equipment tenant-A package for security harness own-object controls."""
+    building_id = plan["tenants"]["a"]["site"]
+    if not re.fullmatch(r"[A-Za-z0-9_]{1,64}", building_id):
+        raise ValueError(f"bad building_id {building_id!r}")
+    manifest = {
+        "schema_version": "openfdd_package_v1",
+        "building_id": building_id,
+        "grid_minutes": 5,
+        "timezone": "UTC",
+    }
+    weather_map = {
+        "equipType": "weather",
+        "points": {
+            "web-outside-air-temp": "web_oat",
+            "web-outside-air-humidity": "web_rh",
+        },
+    }
+    weather_csv = _history_csv(
+        ["web_oat", "web_rh"],
+        rows,
+        lambda i: (round(18.0 + (i % 24) * 0.4, 1), round(40.0 + (i % 20), 1)),
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        entries: list[tuple[str, str]] = [
+            ("manifest.json", json.dumps(manifest, sort_keys=True)),
+            ("weather/history_wide.json", json.dumps(weather_map, sort_keys=True)),
+            ("weather/history_wide.csv", weather_csv),
+        ]
+        for equip in security_seed_equipment(plan):
+            eid = equip["equipment_id"]
+            cols = list(equip["points"].values())
+            point_map = {"equipType": equip["equipType"], "points": equip["points"]}
+            csv_body = _history_csv(cols, rows, equip["values"])
+            entries.append((f"{eid}/history_wide.json", json.dumps(point_map, sort_keys=True)))
+            entries.append((f"{eid}/history_wide.csv", csv_body))
+        for name, content in entries:
+            info = zipfile.ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, content)
+    return buf.getvalue()
+
+
+def security_fdd_run_body(plan: dict[str, Any]) -> dict[str, Any]:
+    site = plan["tenants"]["a"]["site"]
+    equip = plan["tenants"]["a"]["canary_equipment"]
+    return {
+        "mode": "registry",
+        "building_id": site,
+        "equipment_id": equip,
+        "rule_ids": [SECURITY_FDD_RULE_ID],
+        "force_new_data": True,
+    }
+
+
+def security_analytics_warm_body(plan: dict[str, Any]) -> dict[str, Any]:
+    start = PACKAGE_START
+    end = start + dt.timedelta(minutes=5 * 95)
+    return {
+        "building_id": plan["tenants"]["a"]["site"],
+        "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "end": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "refresh": True,
+    }
+
+
 def provider_sites(plan: dict[str, Any], fixture_path: Path = NF_FIXTURE) -> list[dict[str, Any]]:
     """NF site config that can only reach the loopback emulator."""
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
@@ -244,6 +438,7 @@ def probe_config(plan: dict[str, Any], base_url: str) -> dict[str, Any]:
             "equipment_b": b["canary_equipment"],
             "canary_a": a["canary_equipment"],
             "canary_b": b["canary_equipment"],
+            "fdd_rule_id": SECURITY_FDD_RULE_ID,
             "nonexistent_object": f"{plan['prefix'].upper()}_DOES_NOT_EXIST",
         },
     }
@@ -401,6 +596,24 @@ def _cmd_package(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_security_seed_package(args: argparse.Namespace) -> int:
+    plan = json.loads(args.plan.read_text(encoding="utf-8"))
+    args.out.write_bytes(security_seed_package_zip(plan, args.rows))
+    return 0
+
+
+def _cmd_security_fdd_run_body(args: argparse.Namespace) -> int:
+    plan = json.loads(args.plan.read_text(encoding="utf-8"))
+    print(json.dumps(security_fdd_run_body(plan), sort_keys=True))
+    return 0
+
+
+def _cmd_security_analytics_warm_body(args: argparse.Namespace) -> int:
+    plan = json.loads(args.plan.read_text(encoding="utf-8"))
+    print(json.dumps(security_analytics_warm_body(plan), sort_keys=True))
+    return 0
+
+
 def _cmd_provider_sites(args: argparse.Namespace) -> int:
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
     sites = provider_sites(plan)
@@ -475,6 +688,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--rows", type=int, default=48)
     p.add_argument("--out", type=Path, required=True)
     p.set_defaults(fn=_cmd_package)
+    p = sub.add_parser("security-seed-package")
+    p.add_argument("--plan", type=Path, required=True)
+    p.add_argument("--rows", type=int, default=96)
+    p.add_argument("--out", type=Path, required=True)
+    p.set_defaults(fn=_cmd_security_seed_package)
+    p = sub.add_parser("security-fdd-run-body")
+    p.add_argument("--plan", type=Path, required=True)
+    p.set_defaults(fn=_cmd_security_fdd_run_body)
+    p = sub.add_parser("security-analytics-warm-body")
+    p.add_argument("--plan", type=Path, required=True)
+    p.set_defaults(fn=_cmd_security_analytics_warm_body)
     p = sub.add_parser("provider-sites")
     p.add_argument("--plan", type=Path, required=True)
     p.set_defaults(fn=_cmd_provider_sites)

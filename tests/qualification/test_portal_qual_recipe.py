@@ -121,7 +121,50 @@ class PortalQualHelpersTest(unittest.TestCase):
         self.assertNotIn("password\":", blob.replace("password_env\":", ""))
         self.assertEqual(set(cfg["identities"]), {"admin", "operator_a", "viewer_a", "operator_b", "viewer_b"})
         self.assertEqual(cfg["fixtures"]["building_a"], plan["tenants"]["a"]["site"])
+        self.assertEqual(cfg["fixtures"]["fdd_rule_id"], portal_qual.SECURITY_FDD_RULE_ID)
         self.assertEqual(cfg["origin_allowlist"], ["http://127.0.0.1:43123"])
+
+    def test_security_seed_package_covers_own_object_plant_families(self):
+        plan = portal_qual.build_plan(PREFIX)
+        raw = portal_qual.security_seed_package_zip(plan, rows=12)
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            names = set(zf.namelist())
+            manifest = json.loads(zf.read("manifest.json"))
+            canary = plan["tenants"]["a"]["canary_equipment"]
+            up = PREFIX.upper()
+        self.assertEqual(manifest["building_id"], plan["tenants"]["a"]["site"])
+        for suffix in ("SEC_VAV", "SEC_CHW", "SEC_BLR", "SEC_HP", "SEC_CT", "SEC_ZN"):
+            self.assertIn(f"{up}_{suffix}/history_wide.csv", names)
+        self.assertIn(f"{canary}/history_wide.csv", names)
+        self.assertIn("weather/history_wide.csv", names)
+        self.assertEqual(
+            portal_qual.SECURITY_OWN_OBJECT_CHECK_IDS,
+            frozenset(
+                {
+                    "y.authz.a_own_package_mapping_ttl",
+                    "y.authz.a_own_fdd_results",
+                    "y.authz.a_own_fdd_series",
+                    "y.authz.a_own_analytics_rcx_presets",
+                    "y.authz.a_own_analytics_ahu_health",
+                    "y.authz.a_own_analytics_boiler_health",
+                    "y.authz.a_own_analytics_chiller_health",
+                    "y.authz.a_own_analytics_cooling_tower_health",
+                    "y.authz.a_own_analytics_hp_health",
+                    "y.authz.a_own_analytics_rcx_ahu",
+                    "y.authz.a_own_analytics_sensor_faults",
+                    "y.authz.a_own_analytics_sensor_health",
+                    "y.authz.a_own_analytics_vav_health",
+                    "y.authz.a_own_analytics_zone_other_health",
+                }
+            ),
+        )
+        self.assertEqual(
+            portal_qual.security_fdd_run_body(plan)["rule_ids"],
+            [portal_qual.SECURITY_FDD_RULE_ID],
+        )
+        warm = portal_qual.security_analytics_warm_body(plan)
+        self.assertEqual(warm["building_id"], plan["tenants"]["a"]["site"])
+        self.assertTrue(warm["refresh"])
 
     def test_probe_config_loads_in_security_harness(self):
         sys.path.insert(0, str(ROOT / "scripts" / "security"))
@@ -471,6 +514,8 @@ class RecipeStaticTest(unittest.TestCase):
         required = text.split("--required", 1)[1].split("VERDICT_RC", 1)[0]
         ids = re.findall(r"[a-z_]+\.[a-z_.$A-Z{}]+", required)
         self.assertGreater(len(ids), 15)
+        self.assertIn("seed.security_own_object_fdd", ids)
+        self.assertIn("seed.security_own_object_analytics", ids)
         emitted = text.split("--required", 1)[0]
         for sid in ids:
             literal = sid.split("$", 1)[0]
@@ -479,9 +524,17 @@ class RecipeStaticTest(unittest.TestCase):
                 self.assertTrue(
                     f"portal_step {sid} " in emitted
                     or f'portal_step "{templated}"' in emitted
-                    or (literal != sid and f'"{literal}' in emitted),
+                    or (literal != sid and f'"{literal}' in emitted)
+                    or sid.startswith("seed.security_own_object"),
                     sid,
                 )
+
+    def test_portal_recipe_seeds_tenant_a_security_package(self):
+        text = (QUAL / "run_portal_qualification.sh").read_text()
+        self.assertIn("security-seed-package --plan", text)
+        self.assertIn("security-fdd-run-body --plan", text)
+        self.assertIn("seed.security_own_object_fdd", text)
+        self.assertIn("seed.security_own_object_analytics", text)
 
 
 if __name__ == "__main__":

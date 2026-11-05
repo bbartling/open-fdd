@@ -83,6 +83,7 @@ class FixtureRefs:
     canary_a: str = "CANARY_A_SYNTH"
     canary_b: str = "CANARY_B_SYNTH"
     nonexistent_object: str = "DOES_NOT_EXIST_Z9"
+    fdd_rule_id: str = "FC1"
 
 
 @dataclass
@@ -148,6 +149,7 @@ def load_config(path: str | Path) -> ProbeConfig:
         canary_a=fx.get("canary_a", "CANARY_A_SYNTH"),
         canary_b=fx.get("canary_b", "CANARY_B_SYNTH"),
         nonexistent_object=fx.get("nonexistent_object", "DOES_NOT_EXIST_Z9"),
+        fdd_rule_id=str(fx.get("fdd_rule_id") or "FC1"),
     )
     return ProbeConfig(
         raw=raw,
