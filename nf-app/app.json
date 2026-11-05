@@ -21,6 +21,8 @@
     "/static/chart.html": "static/chart.html",
     "/static/charts.js": "static/charts.js",
     "/static/echarts-global.js": "static/echarts-global.js",
+    "/static/fdd-catalog.json": "static/fdd-catalog.json",
+    "/static/fdd.js": "static/fdd.js",
     "/static/index.html": "static/index.html",
     "/static/model.js": "static/model.js",
     "/static/nf.js": "static/nf.js",

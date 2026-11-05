@@ -172,6 +172,10 @@ table.bac tr.sel td { background: var(--row-sel); }
 .tag.ref { background: var(--tag-ref-bg); color: var(--tag-ref-text); }
 .tag.odd { background: var(--tag-odd-bg); color: var(--tag-odd-text); }
 .check { margin-bottom: 8px; }
+.tag.got { background: color-mix(in srgb, var(--good) 18%, var(--panel2)); color: var(--text); }
+.tag.miss { background: color-mix(in srgb, var(--hot) 16%, var(--panel2)); color: var(--text); }
+.tag.opt { opacity: .75; }
+.rule-id { font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
 .check-items { margin: 4px 0 0 18px; }
 .devcard { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; background: var(--panel2); border: 1px solid var(--line);
   border-radius: 12px; padding: 12px 14px; font-size: 13px; }

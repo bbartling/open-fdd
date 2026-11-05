@@ -190,6 +190,37 @@ async function renderCharts() {
   if (hint != null) $("chartHint").textContent = hint;
 }
 
+// ---- FDD tab --------------------------------------------------------------------------
+// Which rules from the catalog each equip in scope can run (fdd.js binds inputs by tags).
+async function renderFdd() {
+  const catalog = await loadCatalog();
+  const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
+  const rows = equips.flatMap((e) => equipRules(e, model, catalog).map((r) => ({ ...r, equip: e })));
+  const runnable = rows.filter((r) => r.runnable);
+  $("nRules").textContent = runnable.length;
+  const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
+  $("fddStats").innerHTML = [
+    stat(catalog.rules.length, "rules in catalog"), stat(rows.length, "rules for these equip kinds"),
+    stat(runnable.length, "can run now"), stat(rows.filter((r) => r.pointInputs && !r.runnable).length, "missing inputs"),
+    stat(rows.filter((r) => !r.pointInputs).length, "use other data"), stat(equips.length, "equips"),
+  ].join("");
+  const only = $("fddRunnableOnly").checked;
+  const chip = (role, pts, optional) => {
+    const cls = pts.length ? "got" : optional ? "opt" : "miss";
+    const title = pts.length ? pts.map((p) => p.dis).join(" · ") : optional ? "optional, not found" : "required, not found";
+    const label = pts.length ? `${role} → ${pts[0].name}${pts.length > 1 ? ` (+${pts.length - 1})` : ""}` : role;
+    return `<span class="tag ${cls} ${optional ? "opt" : ""}" title="${esc(title)}">${esc(label)}</span>`;
+  };
+  $("fddRows").innerHTML = rows.filter((r) => !only || r.runnable).map((r) => `<tr>
+      <td><span class="rule-id">${esc(r.rule.id)}</span><div class="sub">${esc(r.rule.description)}</div></td>
+      <td class="sub">${esc((r.equip.attrs || {}).dis || r.equip.name)}</td>
+      <td><div class="tags">${r.required.map((x) => chip(x, r.bound[x], false)).join("")}${r.optional.map((x) => chip(x, r.bound[x], true)).join("")}</div></td>
+      <td>${r.runnable ? `<span class="ok">✓ can run</span>`
+        : !r.pointInputs ? `<span class="sub">uses utility/meter data, not points</span>`
+        : `<span class="warn">needs ${esc(r.missing.join(", "))}</span>`}</td>
+    </tr>`).join("") || `<tr><td colspan="4" class="sub">No rules apply to the equips in scope.</td></tr>`;
+}
+
 // ---- Points tab -----------------------------------------------------------------------
 function pointRows() {
   const showUntagged = $("showUntagged").checked;
@@ -464,6 +495,7 @@ function renderTab(name) {
   const errs = (e) => setLive(false, e.message);
   if (name === "overview") points.forEach((p, i) => updateCard(i, false));
   if (name === "charts") renderCharts().catch(errs);
+  if (name === "fdd") renderFdd().catch(errs);
   if (name === "points") { renderPoints(); if (selectedPoint) renderPointHistory().catch(errs); }
   if (name === "bacnet") renderBacnet().catch((e) => ($("bacHint").textContent = `BACnet server: ${e.message}`));
   if (name === "model") renderModel();
@@ -595,6 +627,7 @@ function wireControls() {
     document.querySelectorAll("#histRange button").forEach((b) => b.classList.toggle("on", b === ev.target));
     renderPointHistory().catch((e) => setLive(false, e.message));
   };
+  $("fddRunnableOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
   $("pointFilter").oninput = renderPoints;
   $("showUntagged").onchange = renderPoints;
   $("pointRows").onclick = (ev) => {

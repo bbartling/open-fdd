@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import base64
 import difflib
+import hashlib
 import json
 import re
 import sys
@@ -84,6 +85,35 @@ class Console:
         return None if r is None else base64.b64decode(r.get("data", ""))
 
 
+# Local script/stylesheet references in HTML ("app.js", "style.css"), not URLs or absolute paths.
+ASSET_REF = re.compile(r'(?<![\w-])(src|href)="(?![a-z][a-z0-9+.-]*:|/|#)([^"?#]+\.(?:js|mjs|css))"')
+STAMP = re.compile(r'(\.(?:js|mjs|css))\?v=[0-9a-f]{10}"')
+
+
+def deploy_bytes(m: dict, rel: str) -> bytes:
+    """File bytes as deployed. HTML gets each local asset reference stamped with the asset's
+    content hash (app.js -> app.js?v=<sha256[:10]>): NF serves app files with a 5-minute cache,
+    so a changed file needs a new URL or browsers mix old and new files after a deploy."""
+    path = m["_dir"] / rel
+    data = path.read_bytes()
+    if not rel.endswith(".html"):
+        return data
+
+    def stamp(mo: re.Match) -> str:
+        asset = path.parent / mo.group(2)
+        if not asset.is_file():
+            return mo.group(0)
+        digest = hashlib.sha256(asset.read_bytes()).hexdigest()[:10]
+        return f'{mo.group(1)}="{mo.group(2)}?v={digest}"'
+
+    return ASSET_REF.sub(stamp, data.decode("utf-8")).encode("utf-8")
+
+
+def strip_stamps(data: bytes) -> bytes:
+    """Undo deploy_bytes() stamping so pulled HTML matches the repo form."""
+    return STAMP.sub(r'\1"', data.decode("utf-8", errors="replace")).encode("utf-8")
+
+
 def manifest(path: Path) -> dict:
     m = json.loads(path.read_text(encoding="utf-8"))
     m["_dir"] = path.parent
@@ -131,7 +161,7 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False) -> int:
     elif spec.get("auth"):
         c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "auth": spec["auth"], "updateMask": ["auth"]})
     for nf_path, rel in m["files"].items():
-        data = (m["_dir"] / rel).read_bytes()
+        data = deploy_bytes(m, rel)
         # WriteFile maps the HTTP body to the bytes field: send a JSON string of base64.
         c.call("POST", f"/api/v1/apps/{app_id}/files{nf_path}", base64.b64encode(data).decode())
         print(f"wrote {nf_path} ({len(data)} bytes)")
@@ -179,7 +209,7 @@ def cmd_pull(c: Console, m: dict, write: bool) -> int:
     for nf_path, rel in m["files"].items():
         remote = c.read_file(app_id, nf_path)
         local_path = m["_dir"] / rel
-        local = local_path.read_bytes() if local_path.exists() else b""
+        local = deploy_bytes(m, rel) if local_path.exists() else b""
         if remote is None:
             print(f"{nf_path}: missing on NF")
             changed += 1
@@ -189,7 +219,7 @@ def cmd_pull(c: Console, m: dict, write: bool) -> int:
             continue
         changed += 1
         if write:
-            local_path.write_bytes(remote)
+            local_path.write_bytes(strip_stamps(remote) if rel.endswith(".html") else remote)
             print(f"{nf_path}: pulled into {local_path}")
         else:
             sys.stdout.writelines(difflib.unified_diff(

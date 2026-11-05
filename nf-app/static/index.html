@@ -22,6 +22,7 @@
 <script defer src="model.js"></script>
 <script defer src="theme.js"></script>
 <script defer src="charts.js"></script>
+<script defer src="fdd.js"></script>
 <script defer src="app.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -41,6 +42,7 @@
 <nav class="tabs" id="tabs">
   <button data-tab="overview" class="on">Overview</button>
   <button data-tab="charts">Charts</button>
+  <button data-tab="fdd">FDD <span class="count" id="nRules"></span></button>
   <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
   <button data-tab="model">Model &amp; RDF</button>
@@ -73,6 +75,20 @@
         <a class="btn" id="chartOpen" target="_blank" rel="noopener" title="open this chart in its own window">open in new window ↗</a>
       </h2>
       <div class="chart tall" id="chartHost"></div>
+    </section>
+  </section>
+
+  <!-- FDD: which Open-FDD rules each equip can run, with inputs bound by Haystack class/markers -->
+  <section class="tab" id="tab-fdd">
+    <div class="stats" id="fddStats"></div>
+    <section class="panel">
+      <h2>Rule inputs <span class="hint" id="fddHint">rules from sql/fdd/registry.yaml · inputs found by NF class or Haystack markers</span>
+        <label class="hint"><input type="checkbox" id="fddRunnableOnly"> runnable only</label>
+      </h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Rule</th><th>Equip</th><th>Inputs</th><th>Status</th></tr></thead>
+        <tbody id="fddRows"></tbody>
+      </table></div>
     </section>
   </section>
 

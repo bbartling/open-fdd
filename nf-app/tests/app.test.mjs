@@ -96,3 +96,46 @@ test("weather hook: site comes from NF, never hard-coded", () => {
   const dew = hook.magnusDewpointF(70, 50);
   assert.ok(dew > 49 && dew < 52, `dewpoint ${dew}`);
 });
+
+test("FDD binding: kinds from equip markers, inputs by NF class or markers", () => {
+  const ctx = load("nf.js", "model.js", "fdd.js");
+  const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
+  const model = modelFor(ctx);
+  assert.ok(Array.from(ctx.equipKinds(FIXTURE.equips[0], catalog)).includes("ahu"));
+  const rows = ctx.equipRules(FIXTURE.equips[0], model, catalog);
+  const byId = Object.fromEntries(Array.from(rows, (r) => [r.rule.id, r]));
+  // FAN-RUNTIME-HOURS needs only fan_cmd: FAN-C carries fan,run,cmd (no class) -> runnable by markers
+  assert.equal(byId["FAN-RUNTIME-HOURS"].runnable, true);
+  assert.equal(byId["FAN-RUNTIME-HOURS"].bound.fan_cmd[0].uuid, "u-FAN-C");
+  // sat is filled by class (discharge-air-temp-sensor), oa_t by class outside-air-temp-sensor
+  const satRule = rows.find((r) => r.rule.required_roles.includes("sat"));
+  assert.equal(satRule.bound.sat[0].uuid, "u-SAT");
+  // a rule needing a role nobody has is listed with what is missing
+  const econ = byId["ECON-1"];
+  assert.ok(econ && !econ.runnable && Array.from(econ.missing).includes("oa_damper_pct"));
+  // weather-service points fill web_* roles only; equipment sensors win oa_t
+  const web = rows.find((r) => r.rule.required_roles.includes("web_oa_t"));
+  if (web) assert.equal(web.bound.web_oa_t[0].uuid, "u-WX");
+  const oat = rows.find((r) => r.rule.required_roles.includes("oa_t"));
+  assert.deepEqual(Array.from(oat.bound.oa_t, (p) => p.uuid), ["u-OAT"]);
+  // rules with no point roles read other data and are not "runnable"
+  for (const r of rows) if (!r.pointInputs) assert.equal(r.runnable, false);
+  // duplicate required/optional roles are listed once
+  for (const r of rows) assert.equal(new Set([...r.required, ...r.optional]).size, r.required.length + r.optional.length);
+  // runnable rules sort first
+  assert.ok(rows[0].runnable);
+});
+
+test("FDD catalog covers every registry rule and only names NF classes", () => {
+  const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
+  const nf = new Set(JSON.parse(readFileSync(new URL("../rules/nf_classes.json", dir), "utf8")).classes);
+  assert.ok(catalog.rules.length >= 70);
+  for (const r of catalog.rules) {
+    assert.deepEqual(r.unmapped_roles, [], `${r.id} has unmapped roles`);
+    for (const role of [...r.required_roles, ...r.optional_roles]) assert.ok(catalog.roles[role], `${r.id}: role ${role}`);
+  }
+  for (const [role, def] of Object.entries(catalog.roles)) {
+    for (const c of def.classes) assert.ok(nf.has(c), `${role}: ${c} is not an NF class`);
+    assert.ok(def.classes.length || def.markers.length, `${role} cannot match anything`);
+  }
+});

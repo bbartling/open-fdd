@@ -202,6 +202,8 @@ jobs:
           assert on_disk <= listed, f"static files not in manifest: {sorted(on_disk - listed)}"
           print(f"manifest OK: {len(m['files'])} files, {len(m['hooks'])} hook(s)")
           EOF
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/nf/build_rule_catalog.py --check
 
   react-web:
     name: React web (archive/product-ui/react-spa-v4)

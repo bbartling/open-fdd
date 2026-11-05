@@ -1,0 +1,664 @@
+{
+ "_doc": "How each Open-FDD rule role (sql/fdd/role_map.json) is found on an NF site. A point fills a role if its NF class is in `classes`, or else it carries every Haystack marker in `markers`. Roles not listed here use the classes found automatically (role_map name + -sensor/-cmd/-status) and markers derived from the role_map name. Classes come from NF's ontology (nf_classes.json). Roles that the rules use but role_map.json lacks are defined here with a `name`.",
+ "oa_damper_pct": {
+  "classes": [
+   "outside-damper-cmd",
+   "outside-damper-sensor"
+  ],
+  "markers": [
+   "outside",
+   "damper"
+  ]
+ },
+ "clg_valve_pct": {
+  "classes": [
+   "chilled-water-cool-valve-cmd",
+   "discharge-chilled-water-cool-valve-cmd"
+  ],
+  "markers": [
+   "cool",
+   "valve",
+   "cmd"
+  ]
+ },
+ "htg_valve_pct": {
+  "classes": [
+   "hot-water-heat-valve-cmd",
+   "discharge-hot-water-heat-valve-cmd",
+   "discharge-steam-heat-valve-cmd"
+  ],
+  "markers": [
+   "heat",
+   "valve",
+   "cmd"
+  ]
+ },
+ "fan_cmd": {
+  "classes": [
+   "discharge-run-cmd",
+   "run-cmd"
+  ],
+  "markers": [
+   "fan",
+   "run",
+   "cmd"
+  ]
+ },
+ "return_fan": {
+  "classes": [
+   "return-run-cmd"
+  ],
+  "markers": [
+   "return",
+   "fan",
+   "run",
+   "cmd"
+  ]
+ },
+ "fan_status": {
+  "classes": [
+   "discharge-run-sensor",
+   "run-sensor"
+  ],
+  "markers": [
+   "fan",
+   "run",
+   "sensor"
+  ]
+ },
+ "duct_static": {
+  "classes": [
+   "discharge-air-pressure-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "pressure",
+   "sensor"
+  ]
+ },
+ "duct_static_sp": {
+  "classes": [
+   "discharge-air-pressure-sp"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "pressure",
+   "sp"
+  ]
+ },
+ "static_reset_request": {
+  "classes": [],
+  "markers": [
+   "pressure",
+   "request"
+  ]
+ },
+ "cooling_coil_entering_temp": {
+  "classes": [],
+  "markers": [
+   "cool",
+   "entering",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "cooling_coil_leaving_temp": {
+  "classes": [],
+  "markers": [
+   "cool",
+   "leaving",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "heating_coil_entering_temp": {
+  "classes": [],
+  "markers": [
+   "heat",
+   "entering",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "heating_coil_leaving_temp": {
+  "classes": [],
+  "markers": [
+   "heat",
+   "leaving",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "chiller_status": {
+  "classes": [],
+  "markers": [
+   "chiller",
+   "run",
+   "sensor"
+  ]
+ },
+ "loop_enabled": {
+  "classes": [
+   "enable-sensor",
+   "enable-cmd"
+  ],
+  "markers": [
+   "enable"
+  ]
+ },
+ "zone_air_temp_sp": {
+  "classes": [
+   "zone-air-temp-effective-sp"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "temp",
+   "sp"
+  ]
+ },
+ "cooling_sp": {
+  "classes": [
+   "zone-air-temp-occ-cooling-sp"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "temp",
+   "cooling",
+   "sp"
+  ]
+ },
+ "heating_sp": {
+  "classes": [
+   "zone-air-temp-occ-heating-sp"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "temp",
+   "heating",
+   "sp"
+  ]
+ },
+ "zone_co2": {
+  "classes": [
+   "air-co2-concentration-sensor"
+  ],
+  "markers": [
+   "zone",
+   "air",
+   "co2",
+   "sensor"
+  ]
+ },
+ "zone_flow": {
+  "classes": [
+   "discharge-air-flow-sensor",
+   "air-flow-sensor"
+  ],
+  "markers": [
+   "air",
+   "flow",
+   "sensor"
+  ]
+ },
+ "zone_airflow_sp": {
+  "classes": [
+   "discharge-air-flow-sp",
+   "air-flow-sp"
+  ],
+  "markers": [
+   "air",
+   "flow",
+   "sp"
+  ]
+ },
+ "sa_h": {
+  "classes": [
+   "discharge-air-humidity-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "humidity",
+   "sensor"
+  ]
+ },
+ "vav_total_flow": {
+  "classes": [],
+  "markers": [
+   "total",
+   "air",
+   "flow",
+   "sensor"
+  ]
+ },
+ "min_flow_sp": {
+  "classes": [],
+  "markers": [
+   "min",
+   "air",
+   "flow",
+   "sp"
+  ]
+ },
+ "chw_pump_status": {
+  "classes": [],
+  "markers": [
+   "chilled",
+   "water",
+   "pump",
+   "run",
+   "sensor"
+  ]
+ },
+ "compressor_status": {
+  "classes": [],
+  "markers": [
+   "compressor",
+   "run",
+   "sensor"
+  ]
+ },
+ "reheat_valve_pct": {
+  "classes": [
+   "reheat-cmd"
+  ],
+  "markers": [
+   "reheat",
+   "cmd"
+  ]
+ },
+ "vav_discharge_t": {
+  "classes": [
+   "discharge-air-temp-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "vav_inlet_t": {
+  "classes": [
+   "inlet-air-temp-sensor"
+  ],
+  "markers": [
+   "entering",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "ahu_sat": {
+  "classes": [
+   "discharge-air-temp-sensor"
+  ],
+  "markers": [
+   "discharge",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "chw_supply_t": {
+  "classes": [],
+  "markers": [
+   "chilled",
+   "water",
+   "leaving",
+   "temp",
+   "sensor"
+  ]
+ },
+ "chw_return_t": {
+  "classes": [],
+  "markers": [
+   "chilled",
+   "water",
+   "entering",
+   "temp",
+   "sensor"
+  ]
+ },
+ "chw_supply_sp": {
+  "classes": [],
+  "markers": [
+   "chilled",
+   "water",
+   "leaving",
+   "temp",
+   "sp"
+  ]
+ },
+ "hw_supply_t": {
+  "classes": [],
+  "markers": [
+   "hot",
+   "water",
+   "leaving",
+   "temp",
+   "sensor"
+  ]
+ },
+ "hw_return_t": {
+  "classes": [],
+  "markers": [
+   "hot",
+   "water",
+   "entering",
+   "temp",
+   "sensor"
+  ]
+ },
+ "chw_dp": {
+  "classes": [
+   "chilled-water-delta-pressure"
+  ],
+  "markers": [
+   "chilled",
+   "water",
+   "delta",
+   "pressure",
+   "sensor"
+  ]
+ },
+ "chw_dp_sp": {
+  "classes": [],
+  "markers": [
+   "chilled",
+   "water",
+   "delta",
+   "pressure",
+   "sp"
+  ]
+ },
+ "chw_flow": {
+  "classes": [
+   "chilled-water-delta-flow-sensor"
+  ],
+  "markers": [
+   "chilled",
+   "water",
+   "flow",
+   "sensor"
+  ]
+ },
+ "chw_pump_cmd": {
+  "classes": [],
+  "markers": [
+   "chilled",
+   "water",
+   "pump",
+   "run",
+   "cmd"
+  ]
+ },
+ "cw_pump_cmd": {
+  "classes": [],
+  "markers": [
+   "condenser",
+   "water",
+   "pump",
+   "run",
+   "cmd"
+  ]
+ },
+ "tower_fan_cmd": {
+  "classes": [],
+  "markers": [
+   "coolingTower",
+   "fan",
+   "run",
+   "cmd"
+  ]
+ },
+ "cw_supply_t": {
+  "classes": [],
+  "markers": [
+   "condenser",
+   "water",
+   "leaving",
+   "temp",
+   "sensor"
+  ]
+ },
+ "cw_return_t": {
+  "classes": [],
+  "markers": [
+   "condenser",
+   "water",
+   "entering",
+   "temp",
+   "sensor"
+  ]
+ },
+ "preheat_leave_t": {
+  "classes": [],
+  "markers": [
+   "preheat",
+   "leaving",
+   "air",
+   "temp",
+   "sensor"
+  ]
+ },
+ "web_oa_t": {
+  "classes": [],
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "temp"
+  ]
+ },
+ "web_oa_dp": {
+  "classes": [],
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "dewPoint"
+  ]
+ },
+ "web_wb_t": {
+  "classes": [],
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "wetBulb"
+  ]
+ },
+ "web_oa_h": {
+  "classes": [],
+  "markers": [
+   "weather",
+   "outside",
+   "air",
+   "humidity"
+  ]
+ },
+ "chiller_power": {
+  "classes": [
+   "total-active-ac-elec-power-sensor"
+  ],
+  "markers": [
+   "elec",
+   "power",
+   "sensor"
+  ]
+ },
+ "chiller_amps": {
+  "classes": [
+   "avg-ac-elec-current-magnitude-sensor"
+  ],
+  "markers": [
+   "elec",
+   "current",
+   "sensor"
+  ]
+ },
+ "chiller_current": {
+  "classes": [
+   "avg-ac-elec-current-magnitude-sensor"
+  ],
+  "markers": [
+   "elec",
+   "current",
+   "sensor"
+  ]
+ },
+ "pump_status": {
+  "classes": [],
+  "markers": [
+   "pump",
+   "run",
+   "sensor"
+  ]
+ },
+ "occ_mode": {
+  "classes": [
+   "occupied-sensor"
+  ],
+  "markers": [
+   "occupied"
+  ]
+ },
+ "building_zone_load_satisfied": {
+  "classes": [],
+  "markers": [
+   "zone",
+   "load",
+   "satisfied"
+  ]
+ },
+ "building_ahu_load_satisfied": {
+  "classes": [],
+  "markers": [
+   "ahu",
+   "load",
+   "satisfied"
+  ]
+ },
+ "electric_kw": {
+  "name": "electric-power",
+  "classes": [
+   "total-active-ac-elec-power-sensor"
+  ],
+  "markers": [
+   "elec",
+   "power",
+   "sensor"
+  ]
+ },
+ "electric_kwh": {
+  "name": "electric-energy",
+  "classes": [],
+  "markers": [
+   "elec",
+   "energy",
+   "sensor"
+  ]
+ },
+ "kwh": {
+  "name": "electric-energy",
+  "classes": [],
+  "markers": [
+   "elec",
+   "energy",
+   "sensor"
+  ]
+ },
+ "clg_available": {
+  "name": "cooling-available",
+  "classes": [],
+  "markers": [
+   "cool",
+   "enable",
+   "sensor"
+  ]
+ },
+ "chiller_cmd": {
+  "name": "chiller-cmd",
+  "classes": [],
+  "markers": [
+   "chiller",
+   "run",
+   "cmd"
+  ]
+ },
+ "hw_reset_request_sum": {
+  "name": "hot-water-reset-request-sum",
+  "classes": [],
+  "markers": [
+   "hot",
+   "water",
+   "request"
+  ]
+ },
+ "chw_reset_request_sum": {
+  "name": "chilled-water-reset-request-sum",
+  "classes": [],
+  "markers": [
+   "chilled",
+   "water",
+   "request"
+  ]
+ },
+ "_equipment_kinds": {
+  "_doc": "Rule equipment_kinds (registry.yaml) -> Haystack equip markers. An equip has a kind if it carries any of the listed markers.",
+  "ahu": [
+   "ahu",
+   "rtu",
+   "mau",
+   "doas"
+  ],
+  "vav": [
+   "vav"
+  ],
+  "chiller": [
+   "chiller"
+  ],
+  "chwPlant": [
+   "chilledWaterPlant",
+   "chilledWater"
+  ],
+  "cooling_tower": [
+   "coolingTower"
+  ],
+  "boiler": [
+   "boiler"
+  ],
+  "heatpump": [
+   "heatPump"
+  ],
+  "meter": [
+   "meter",
+   "elecMeter"
+  ],
+  "baseboard": [
+   "baseboard",
+   "radiantEquip"
+  ],
+  "zone_other": [
+   "fcu",
+   "unitVent",
+   "zone"
+  ],
+  "weather": [
+   "weatherStation"
+  ],
+  "general": [
+   "equip"
+  ]
+ }
+}
