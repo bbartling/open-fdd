@@ -114,8 +114,9 @@ portal_stack_init() {
   printf '%s' "$ts_pw" >"$PORTAL_PRIV/pw.timescale"
   umask 022
   jq -n --arg project "$PORTAL_PROJECT" --arg prefix "$PORTAL_PREFIX" \
-    --arg tag "$PORTAL_TAG" --arg base "$PORTAL_BASE" \
+    --arg tag "$PORTAL_TAG" --arg base "$PORTAL_BASE" --arg probe_base "$PORTAL_PROBE_BASE" \
     '{project: $project, prefix: $prefix, image_tag: $tag, base_url: $base,
+      probe_base_url: $probe_base,
       jwt_secret_chars: "redacted (>=48)", secrets: "private env file, removed on exit"}' \
     >"$ART/run.json"
 }
