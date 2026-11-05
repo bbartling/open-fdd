@@ -1,8 +1,15 @@
 # Open-FDD
 
+## Open-FDD 5 = NF app
+
+Open-FDD is now a **Normal Framework (NF) application**: the UI, hooks and SQL rule pack live in [`nf-app/`](nf-app/README.md) and run inside NF, reading NF's Haystack model and history directly. See [`docs/install/nf-plugin.md`](docs/install/nf-plugin.md) to install it, [ADR-014](docs/architecture/adr-014-open-fdd-as-nf-plugin.md) for the decision and [`docs/migration/nf-plugin/PLAN.md`](docs/migration/nf-plugin/PLAN.md) for the slices.
+
+The Rust **central** stack (`services/central`, its Timescale ingest, the portal compose files and the GHCR stack images) is **archived** in [`archive/central-v4/`](archive/central-v4/README.md); the last release of it is git tag `v4.0.11-central`. The sections below that describe GHCR images, compose and central are **archived** (pre-plugin 4.0) and kept for reference. The SQL FDD pack (`sql/fdd`), the PyPI package (`open_fdd`) and the schema bootstrap crates remain active.
+
+
 <p align="center">
   <a href="https://discord.gg/qjT3w9y3pu"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/rust-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/rust-ci.yml/badge.svg?branch=master" alt="CI"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg?branch=master" alt="CI"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml/badge.svg?branch=master" alt="Docs"></a>
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
   <img src="https://img.shields.io/badge/status-Alpha-orange" alt="Alpha">
@@ -44,7 +51,7 @@ Python tooling is for tests. A PyPI package ships pandas FDD for notebooks and c
 ---
 
 
-## Install / run GHCR images
+## Install / run GHCR images (archived, pre-plugin 4.0 stack)
 
 | Image | Role |
 |-------|------|

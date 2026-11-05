@@ -1,0 +1,72 @@
+# Open-FDD 5 NF app gate (ADR-014). Moved unchanged from rust-ci.yml (slice 8).
+name: NF app CI
+
+on:
+  push:
+    paths:
+      - "nf-app/**"
+      - "sql/fdd/**"
+      - "scripts/nf/**"
+      - "tools/rdf-check/**"
+      - ".github/workflows/nf-app-ci.yml"
+  pull_request:
+    paths:
+      - "nf-app/**"
+      - "sql/fdd/**"
+      - "scripts/nf/**"
+      - "tools/rdf-check/**"
+      - ".github/workflows/nf-app-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  nf-app:
+    name: NF app + RDF export
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install nf-app npm dependencies (when a lockfile exists)
+        run: |
+          if [ -f nf-app/package-lock.json ]; then
+            cd nf-app && npm ci
+          else
+            echo "no nf-app/package-lock.json; skipping npm ci"
+          fi
+
+      - name: NF app (ADR-014) unit tests + manifest check
+        run: |
+          node --test nf-app/tests/*.test.mjs
+          python3 - <<'EOF'
+          import json, pathlib, re
+          m = json.loads(pathlib.Path("nf-app/app.json").read_text())
+          app = m["application"]
+          slug = "-".join(re.findall(r"[a-z0-9]+", app["name"].lower()))
+          assert app["id"] == slug, f"app id {app['id']!r} must equal NF's id for its name ({slug!r})"
+          missing = [rel for rel in m["files"].values() if not (pathlib.Path("nf-app") / rel).is_file()]
+          assert not missing, f"manifest lists missing files: {missing}"
+          listed = {pathlib.Path(rel).as_posix() for rel in m["files"].values()}
+          on_disk = {p.relative_to("nf-app").as_posix() for p in pathlib.Path("nf-app/static").rglob("*") if p.is_file()}
+          assert on_disk <= listed, f"static files not in manifest: {sorted(on_disk - listed)}"
+          print(f"manifest OK: {len(m['files'])} files, {len(m['hooks'])} hook(s)")
+          EOF
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/nf/build_rule_catalog.py --check
+
+      - name: RDF export check (slice 6, Oxigraph + rdflib)
+        run: |
+          python3 -m pip install --quiet pyoxigraph rdflib
+          node tools/rdf-check/gen_ttl.js tools/rdf-check/fixtures/model.json "$RUNNER_TEMP/model.ttl"
+          python3 tools/rdf-check/check_ttl.py "$RUNNER_TEMP/model.ttl"

@@ -81,13 +81,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Forbid product DataFusion
-        run: bash scripts/ci/forbid_datafusion_product.sh
 
       - name: Registry + plot-role unit tests
         run: |
           cargo test -p fdd_rules
-          cargo test -p openfdd-central plot_role_tests
 
       - name: Record checkout revision
         run: |
@@ -95,7 +92,7 @@ jobs:
             echo "## Current SQL/Timescale pack"
             echo
             echo "- Git revision: \`${GITHUB_SHA}\`"
-            echo "- Test: \`cargo test -p fdd_rules\` + plot_role_tests"
+            echo "- Test: \`cargo test -p fdd_rules\`"
             echo "- Contract: 77-rule warehouse registry (DataFusion retired)"
           } >> "$GITHUB_STEP_SUMMARY"
 

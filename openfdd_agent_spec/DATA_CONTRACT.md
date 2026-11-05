@@ -1,3 +1,5 @@
+> **Superseded by [ADR-014](../docs/architecture/adr-014-open-fdd-as-nf-plugin.md) (Open-FDD as an NF app); central archived in [`archive/central-v4/`](../archive/central-v4/README.md).** The "one canonical telemetry writer" storage mandate below described the 4.0 central stack; in the NF app, NF writes telemetry and Open-FDD writes only FDD results.
+
 # Data contracts (agent-facing)
 
 Portable artifact shapes agents must respect. Prefer versioned schemas; do not

@@ -8,6 +8,8 @@ Code under this tree is **archived and unmaintained**.
 
 The product path is the Normal Framework portal: `openfdd-central`, static UI on central (`/app/`), optional `openfdd-web` rollback image, and Timescale. The React SPA source is archived under [`product-ui/`](product-ui/README.md).
 
+- [`central-v4/`](central-v4/README.md): the Rust central stack, portal/stack compose, MCP proxy and GHCR workflows retired by ADR-014 (tag `v4.0.11-central`). Replaced by the NF app in `nf-app/`.
+
 ## OT edge
 
 | Tree | What it is |

@@ -8,18 +8,12 @@ on:
       - "crates/**"
       - "sql/fdd/**"
       - "sql_rules/**"
-      - "services/central/**"
-      - "scripts/ci/forbid_datafusion_product.sh"
-      - "scripts/ci/test_forbid_datafusion_product.sh"
       - ".github/workflows/fdd-engine-ci.yml"
   pull_request:
     paths:
       - "crates/**"
       - "sql/fdd/**"
       - "sql_rules/**"
-      - "services/central/**"
-      - "scripts/ci/forbid_datafusion_product.sh"
-      - "scripts/ci/test_forbid_datafusion_product.sh"
       - ".github/workflows/fdd-engine-ci.yml"
 
 env:
@@ -36,18 +30,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Install PyYAML for registry validation
         run: python3 -m pip install --user PyYAML
-      - name: Forbid product DataFusion / fdd_sql
-        run: bash scripts/ci/test_forbid_datafusion_product.sh
       - name: cargo fmt
         run: cargo fmt --all --check
       - name: cargo clippy (Timescale FDD crates)
         run: |
-          cargo clippy -p fdd_core -p fdd_csv -p fdd_resources -p fdd_rules -p fdd_tsdb --all-targets -- -D warnings
-          cargo clippy -p openfdd-central --all-targets -- -D warnings
+          cargo clippy -p fdd_core -p fdd_csv -p fdd_rules -p fdd_tsdb --all-targets -- -D warnings
       - name: cargo test (plot roles + registry)
         run: |
           cargo test -p fdd_rules
-          cargo test -p openfdd-central plot_role_tests -- --nocapture
       - name: SQL/fdd registry = 77 warehouse rules
         run: |
           python3 - <<'PY'

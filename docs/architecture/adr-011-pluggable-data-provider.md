@@ -1,3 +1,5 @@
+> **Superseded by [ADR-014](adr-014-open-fdd-as-nf-plugin.md) (Open-FDD as an NF app); central archived in [`archive/central-v4/`](../../archive/central-v4/README.md).**
+
 # ADR-011: Pluggable DataProvider ingest (Wave-NF / 4.0)
 
 **Status:** Accepted (2026-10-18). Soft-OPEN ≠ FQ.  

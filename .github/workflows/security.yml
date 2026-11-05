@@ -37,34 +37,14 @@ jobs:
           test -f AGENTS.md
           grep -q "Never" AGENTS.md
 
-      - name: Keep container stack focused
+      - name: Keep NF app + archive layout
         run: |
           test -f Cargo.toml
-          test -f docker/compose.portal.yml
-          test -f docker/compose.csv.yml
-          test -f docker/compose.react.yml
-          test -f services/central/Dockerfile
-          test -f archive/product-ui/react-spa-v4/package.json
-          test -f archive/product-ui/react-spa-v4/Dockerfile
-          ! test -d services/ui
-          test -f Dockerfile.mcp
           test -f .env.example
-          test -d edge
-          test -d services/central
+          test -d nf-app
+          test -f nf-app/app.json
+          test -d archive/central-v4
           test -d archive/product-ui/react-spa-v4
-          test -d workspace
-          test ! -f Dockerfile
-          test ! -f docker/compose.edge.rust.yml
-          test ! -d workspace/dashboard/src
-
-      - name: Static product UI + archived React policy
-        run: |
-          chmod +x scripts/ci/static_product_guard.sh
-          ./scripts/ci/static_product_guard.sh
-          test -f docs/architecture/adr-001-react-rust-modernization.md
-          python3 scripts/architecture_react_policy_check.py
-          python3 -m pip install --user PyYAML
-          python3 scripts/validate_capabilities_ledger.py
-          python3 scripts/phase2_computation_policy_check.py
-          python3 scripts/phase2_computation_policy_check.py --self-test
-          python3 scripts/phase2_shadow_compare.py
+          test ! -d services/central
+          test ! -d edge
+          test ! -d mcp

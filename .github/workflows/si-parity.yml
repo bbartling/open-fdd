@@ -43,8 +43,6 @@ on:
       - "docs/rules/cookbook/fixtures/**"
       - "sql/analytics/**"
       - "open_fdd/analytics/**"
-      - "services/central/src/analytics/**"
-      - "services/central/src/timescale_analytics.rs"
       - ".github/workflows/si-parity.yml"
   pull_request:
     branches: [master, main]
@@ -90,8 +88,6 @@ on:
       - "docs/rules/cookbook/fixtures/**"
       - "sql/analytics/**"
       - "open_fdd/analytics/**"
-      - "services/central/src/analytics/**"
-      - "services/central/src/timescale_analytics.rs"
       - ".github/workflows/si-parity.yml"
 
 concurrency:

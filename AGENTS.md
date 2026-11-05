@@ -1,3 +1,5 @@
+> **Superseded by [ADR-014](docs/architecture/adr-014-open-fdd-as-nf-plugin.md) (Open-FDD as an NF app); central archived in [`archive/central-v4/`](archive/central-v4/README.md).** The sections below describe the pre-plugin 4.0 stack (tag `v4.0.11-central`) and are kept for reference. Current product: [`nf-app/`](nf-app/README.md).
+
 # Agent Guide (container stack + external agents)
 
 Open-FDD 4.0 ships as a **portal container stack**: `openfdd-central` (static **Open-FDD Central** UI at `/app/`), Timescale, plus optional `openfdd-mcp`. GHCR `openfdd-web` (archived React SPA) is rollback-only. BACnet/Modbus/Haystack wire and the
@@ -158,7 +160,7 @@ Runbook: [`docs/operations/LOCAL_HOSTING.md`](docs/operations/LOCAL_HOSTING.md).
 
 ## Low-RAM hosts (bensbench)
 
-- **Never** local `docker build` / heavy Rust compile for stack images. Ship via PR → GH Actions → GHCR `nightly` / `sha-*`.
+- **Never** local `docker build` / heavy Rust compile. The pre-plugin stack images (archived, `v4.0.11-central`) shipped via PR → GHCR; the NF app does not (`scripts/nf/hooks/nf_app_sync.py`).
 - Before pulling new images: prune unused/old digests first, then `./scripts/openfdd_stack_pull.sh …` and `./scripts/openfdd_stack_up.sh … --no-pull`.
 - Memory / AFDD: prefer lookback-bounded Timescale SQL cycles on small hosts; see [`docs/operations/AFDD_MODES.md`](docs/operations/AFDD_MODES.md). Legacy DataFusion spill pool vars are historical and prohibited on the product path ([ADR-010](docs/architecture/adr-010-timescale-hard-cutover.md)); do not set them.
 - Fieldbus, BACnet Who-Is, and Pi fieldbus-only soaks are `historical/non-executable` ([`docs/archive/ai-agent/historical-3.5-ot-ops.md`](docs/archive/ai-agent/historical-3.5-ot-ops.md)). Do not pull `openfdd-fieldbus` for a portal lab.
@@ -201,8 +203,8 @@ There is no file eviction pool: central writes no Parquet/Arrow/Feather, and `/a
 - report vulnerabilities in public GitHub issues/discussions
 - write BACnet without explicit human approval
 - embed vendor chat relays or model API keys in the stack
-- add Python to the product central/web request path
-- local stack image builds on low-RAM hosts (use GHCR)
+- add Python to the product request path (the NF app is static JS + Node.js hooks; Python is tooling, the PyPI package and the SQL pack verify scripts only)
+- build or publish central/stack images: central is archived (`archive/central-v4/`); the NF app ships through `scripts/nf/hooks/nf_app_sync.py` or the NF MCP, not PR -> GHCR (the old GHCR stack workflows are archived). Never build anything heavy on low-RAM hosts like the Pi
 - hardcode a building, campus, vendor, or fixture equipment id into product code, or select equipment by a substring or prefix match on `equipment_id` (type, roles, and registry only; exact id only after the type filter)
 
 See [docs/agent/index.md](docs/agent/index.md) for external-agent architecture.

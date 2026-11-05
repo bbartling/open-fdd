@@ -5,6 +5,9 @@ nav_order: 13
 nav_exclude: true
 ---
 
+> **Superseded by [ADR-014](adr-014-open-fdd-as-nf-plugin.md) (Open-FDD as an NF app); central archived in [`archive/central-v4/`](../../archive/central-v4/README.md).**
+
+
 # ADR-013 — Static product UI served by central
 
 - **Status:** Accepted (2026-11-01), Wave B shell

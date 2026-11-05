@@ -28,9 +28,13 @@ PRODUCT_ROOTS = (
     "open_fdd",
     "tools/wattlab_export",
     "mcp",
+    # Open-FDD 5 = NF app (ADR-014); central/edge/mcp above are archived and skipped if absent.
+    "nf-app/static",
+    "nf-app/hooks",
+    "scripts/nf",
 )
 
-SOURCE_SUFFIXES = {".rs", ".py", ".ts", ".tsx", ".sql"}
+SOURCE_SUFFIXES = {".rs", ".py", ".ts", ".tsx", ".sql", ".js", ".mjs"}
 
 POLICY_FILES = (
     "openfdd_agent_spec/DATA_CONTRACT.md",
@@ -235,10 +239,10 @@ def _skip_source(path: Path) -> bool:
     if path.suffix not in SOURCE_SUFFIXES:
         return True
     name = path.name
-    if name.endswith((".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx")):
+    if name.endswith((".test.ts", ".test.tsx", ".spec.ts", ".spec.tsx", ".test.mjs", ".min.js")):
         return True
     parts = set(path.parts)
-    return bool(parts & {"target", "node_modules", "__pycache__", "dist"})
+    return bool(parts & {"target", "node_modules", "__pycache__", "dist", "vendor"})
 
 
 def _code_line_violation(line: str) -> bool:

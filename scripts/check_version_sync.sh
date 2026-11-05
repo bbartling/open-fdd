@@ -15,12 +15,14 @@ fi
 
 MISMATCH=0
 while IFS= read -r f; do
-  pkg_ver="$(grep -E '^version = ' "$f" | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+  pkg_ver="$(grep -E '^version = ' "$f" | head -1 | sed -E 's/.*"([^"]+)".*/\1/' || true)"
+  # Crates inheriting version.workspace = true have no explicit version to compare.
+  [[ -z "$pkg_ver" ]] && continue
   if [[ "$pkg_ver" != "$VERSION_FILE" ]]; then
     echo "FAIL: $f version=$pkg_ver expected $VERSION_FILE" >&2
     MISMATCH=1
   fi
-done < <(find edge services crates/openfdd_contracts -name Cargo.toml)
+done < <(find crates -name Cargo.toml)
 
 if [[ "$MISMATCH" != "0" ]]; then
   exit 1

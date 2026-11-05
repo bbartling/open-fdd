@@ -11,7 +11,6 @@ on:
       - "scripts/stress/oat_meteo_asof_scaling_bench.py"
       - "tests/qualification/test_c3c_sqlqual_11_12a.py"
       - "tests/qualification/test_c3c_libpq.py"
-      - "services/central/src/t1284_3_si_cutover_test.rs"
       - "crates/fdd_tsdb/src/si_cutover.rs"
       - ".github/workflows/c3c-sqlqual-11-12a.yml"
   pull_request:
@@ -23,7 +22,6 @@ on:
       - "scripts/stress/oat_meteo_asof_scaling_bench.py"
       - "tests/qualification/test_c3c_sqlqual_11_12a.py"
       - "tests/qualification/test_c3c_libpq.py"
-      - "services/central/src/t1284_3_si_cutover_test.rs"
       - "crates/fdd_tsdb/src/si_cutover.rs"
       - ".github/workflows/c3c-sqlqual-11-12a.yml"
 
