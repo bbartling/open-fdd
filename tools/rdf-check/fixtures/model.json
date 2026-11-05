@@ -1,0 +1,13 @@
+{
+  "records": [
+    { "uuid": "11111111-0000-4000-8000-000000000001", "name": "Site A", "pointType": "SITE", "attrs": { "id": "site-a" } },
+    { "uuid": "11111111-0000-4000-8000-000000000002", "name": "AHU-1", "pointType": "EQUIPMENT", "attrs": { "id": "AHU-1", "siteRef": "site-a", "markers": "equip,ahu,rooftop" } },
+    { "uuid": "11111111-0000-4000-8000-000000000003", "name": "CTRL-1", "pointType": "DEVICE", "attrs": { "id": "CTRL-1", "siteRef": "site-a", "equipRef": "AHU-1", "markers": "device,bacnet,controller" } },
+    { "uuid": "11111111-0000-4000-8000-000000000004", "name": "SAT", "pointType": "POINT", "attrs": { "siteRef": "site-a", "equipRef": "AHU-1", "deviceRef": "CTRL-1", "markers": "point,sensor,discharge,air,temp,his,cur", "kind": "Number", "unit": "degF", "dis": "Supply air temp" } },
+    { "uuid": "11111111-0000-4000-8000-000000000005", "name": "OAT", "pointType": "POINT", "attrs": { "siteRef": "site-a", "equipRef": "AHU-1", "markers": "point,sensor,outside,air,temp,his,cur", "kind": "Number", "unit": "degF" } },
+    { "uuid": "11111111-0000-4000-8000-000000000006", "name": "FAN-C", "pointType": "POINT", "attrs": { "siteRef": "site-a", "equipRef": "AHU-1", "markers": "point,cmd,discharge,fan,run,writable,his,cur", "kind": "Bool" } },
+    { "uuid": "11111111-0000-4000-8000-000000000007", "name": "SPARE", "pointType": "POINT", "attrs": { "siteRef": "site-a", "equipRef": "AHU-1", "markers": "point,cmd,spare,his,cur", "kind": "Number" } },
+    { "uuid": "11111111-0000-4000-8000-000000000008", "name": "WX", "pointType": "POINT", "attrs": { "siteRef": "site-a", "weatherStationRef": "wx-1", "markers": "point,sensor,weather,outside,air,temp,his", "kind": "Number", "unit": "degF" } },
+    { "uuid": "11111111-0000-4000-8000-000000000009", "name": "INTERNAL", "pointType": "POINT", "attrs": { "siteRef": "site-a", "deviceRef": "CTRL-1" } }
+  ]
+}

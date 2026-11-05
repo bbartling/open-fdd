@@ -205,6 +205,12 @@ jobs:
           python3 -m pip install --quiet pyyaml
           python3 scripts/nf/build_rule_catalog.py --check
 
+      - name: RDF export check (slice 6, Oxigraph + rdflib)
+        run: |
+          python3 -m pip install --quiet pyoxigraph rdflib
+          node tools/rdf-check/gen_ttl.js tools/rdf-check/fixtures/model.json "$RUNNER_TEMP/model.ttl"
+          python3 tools/rdf-check/check_ttl.py "$RUNNER_TEMP/model.ttl"
+
   react-web:
     name: React web (archive/product-ui/react-spa-v4)
     runs-on: ubuntu-latest
