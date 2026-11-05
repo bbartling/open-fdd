@@ -166,6 +166,26 @@ class PortalQualHelpersTest(unittest.TestCase):
         self.assertEqual(warm["building_id"], plan["tenants"]["a"]["site"])
         self.assertTrue(warm["refresh"])
 
+    def test_security_seed_analytics_window_matches_package_and_survives_retain_clamp(self):
+        plan = portal_qual.build_plan(PREFIX)
+        fixed_now = dt.datetime(2026, 11, 5, 14, 37, 0, tzinfo=dt.timezone.utc)
+        rows = 96
+        start, end = portal_qual.security_seed_history_window(rows, now=fixed_now)
+        warm = portal_qual.security_analytics_warm_body(plan, rows=rows, now=fixed_now)
+        self.assertEqual(warm["start"], start.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        self.assertEqual(warm["end"], end.strftime("%Y-%m-%dT%H:%M:%SZ"))
+        retain_floor = fixed_now - dt.timedelta(days=portal_qual.DEFAULT_HISTORIAN_RETAIN_DAYS)
+        clamped_start = max(start, retain_floor)
+        self.assertLessEqual(clamped_start, end)
+        self.assertGreater(start, retain_floor)
+
+        raw = portal_qual.security_seed_package_zip(plan, rows=rows, now=fixed_now)
+        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+            canary = plan["tenants"]["a"]["canary_equipment"]
+            csv_lines = zf.read(f"{canary}/history_wide.csv").decode().splitlines()
+        self.assertEqual(csv_lines[1].split(",", 1)[0], warm["start"])
+        self.assertEqual(csv_lines[-1].split(",", 1)[0], warm["end"])
+
     def test_probe_config_loads_in_security_harness(self):
         sys.path.insert(0, str(ROOT / "scripts" / "security"))
         from openfdd_security.config import load_config

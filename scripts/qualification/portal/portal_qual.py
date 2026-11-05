@@ -28,6 +28,9 @@ PROJECT_RE = re.compile(r"^openfdd-qual-[a-z0-9-]{4,48}$")
 MIN_SECRET_CHARS = 32
 JWT_SECRET_BYTES = 48
 PACKAGE_START = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc)
+# Default central historian retain_days (historian_limits.rs); qual windows stay well inside.
+DEFAULT_HISTORIAN_RETAIN_DAYS = 365
+SECURITY_SEED_GRID_MINUTES = 5
 SECURITY_FDD_RULE_ID = "FC1"
 SECURITY_OWN_OBJECT_CHECK_IDS = frozenset(
     {
@@ -198,17 +201,59 @@ def package_zip(building_id: str, equipment_id: str, rows: int = 48) -> bytes:
     return buf.getvalue()
 
 
+def _align_grid_floor(instant: dt.datetime, grid_minutes: int) -> dt.datetime:
+    if instant.tzinfo is None:
+        raise ValueError("timestamp must be timezone-aware UTC")
+    aligned = instant.replace(second=0, microsecond=0)
+    minute_floor = (aligned.minute // grid_minutes) * grid_minutes
+    return aligned.replace(minute=minute_floor)
+
+
+def security_seed_history_window(
+    rows: int,
+    *,
+    now: dt.datetime | None = None,
+    grid_minutes: int = SECURITY_SEED_GRID_MINUTES,
+) -> tuple[dt.datetime, dt.datetime]:
+    """UTC span for tenant-A security seed CSV and analytics warm POST.
+
+    Ends on the last completed grid slot before *now* so samples exist before warm
+    runs. The span is far shorter than default historian retain_days so
+    ``gate_analytics`` / ``clamp_start`` never advances start past end.
+    """
+    if rows < 1 or rows > 10_000:
+        raise ValueError("rows out of bounds")
+    if grid_minutes < 1:
+        raise ValueError("grid_minutes out of bounds")
+    anchor = now or dt.datetime.now(dt.timezone.utc)
+    if anchor.tzinfo is None:
+        raise ValueError("now must be timezone-aware UTC")
+    end = _align_grid_floor(anchor, grid_minutes) - dt.timedelta(minutes=grid_minutes)
+    start = end - dt.timedelta(minutes=grid_minutes * (rows - 1))
+    retain_floor = anchor - dt.timedelta(days=DEFAULT_HISTORIAN_RETAIN_DAYS)
+    if start < retain_floor:
+        raise ValueError("security seed window would fall outside default retain_days")
+    return start, end
+
+
 def _grid_timestamps(rows: int, start: dt.datetime = PACKAGE_START) -> list[str]:
     if rows < 1 or rows > 10_000:
         raise ValueError("rows out of bounds")
     return [
-        (start + dt.timedelta(minutes=5 * i)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (start + dt.timedelta(minutes=SECURITY_SEED_GRID_MINUTES * i)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         for i in range(rows)
     ]
 
 
-def _history_csv(columns: list[str], rows: int, values_for_row: Any) -> str:
-    stamps = _grid_timestamps(rows)
+def _history_csv(
+    columns: list[str],
+    rows: int,
+    values_for_row: Any,
+    start: dt.datetime = PACKAGE_START,
+) -> str:
+    stamps = _grid_timestamps(rows, start)
     lines = ["timestamp_utc," + ",".join(columns)]
     for i, ts in enumerate(stamps):
         vals = values_for_row(i)
@@ -294,15 +339,21 @@ def security_seed_equipment(plan: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def security_seed_package_zip(plan: dict[str, Any], rows: int = 96) -> bytes:
+def security_seed_package_zip(
+    plan: dict[str, Any],
+    rows: int = 96,
+    *,
+    now: dt.datetime | None = None,
+) -> bytes:
     """Multi-equipment tenant-A package for security harness own-object controls."""
     building_id = plan["tenants"]["a"]["site"]
+    seed_start, _seed_end = security_seed_history_window(rows, now=now)
     if not re.fullmatch(r"[A-Za-z0-9_]{1,64}", building_id):
         raise ValueError(f"bad building_id {building_id!r}")
     manifest = {
         "schema_version": "openfdd_package_v1",
         "building_id": building_id,
-        "grid_minutes": 5,
+        "grid_minutes": SECURITY_SEED_GRID_MINUTES,
         "timezone": "UTC",
     }
     weather_map = {
@@ -316,6 +367,7 @@ def security_seed_package_zip(plan: dict[str, Any], rows: int = 96) -> bytes:
         ["web_oat", "web_rh"],
         rows,
         lambda i: (round(18.0 + (i % 24) * 0.4, 1), round(40.0 + (i % 20), 1)),
+        start=seed_start,
     )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -328,7 +380,7 @@ def security_seed_package_zip(plan: dict[str, Any], rows: int = 96) -> bytes:
             eid = equip["equipment_id"]
             cols = list(equip["points"].values())
             point_map = {"equipType": equip["equipType"], "points": equip["points"]}
-            csv_body = _history_csv(cols, rows, equip["values"])
+            csv_body = _history_csv(cols, rows, equip["values"], start=seed_start)
             entries.append((f"{eid}/history_wide.json", json.dumps(point_map, sort_keys=True)))
             entries.append((f"{eid}/history_wide.csv", csv_body))
         for name, content in entries:
@@ -350,9 +402,13 @@ def security_fdd_run_body(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def security_analytics_warm_body(plan: dict[str, Any]) -> dict[str, Any]:
-    start = PACKAGE_START
-    end = start + dt.timedelta(minutes=5 * 95)
+def security_analytics_warm_body(
+    plan: dict[str, Any],
+    rows: int = 96,
+    *,
+    now: dt.datetime | None = None,
+) -> dict[str, Any]:
+    start, end = security_seed_history_window(rows, now=now)
     return {
         "building_id": plan["tenants"]["a"]["site"],
         "start": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
