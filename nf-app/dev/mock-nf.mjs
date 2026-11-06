@@ -74,7 +74,7 @@ function signal(role, i, t) {
   }
 }
 
-const UNITS = (role) => /(_t|_sp|temp)$/.test(role) && !/static|airflow/.test(role) ? "°F"
+const UNITS = (role) => (/(_t|_sp|temp)$/.test(role) || ["sat", "mat", "rat"].includes(role)) && !/static|airflow/.test(role) ? "°F"
   : /pct|damper|valve|_h$/.test(role) ? "%" : /static/.test(role) ? "inH₂O" : /flow/.test(role) ? "cfm"
   : role === "electric_kw" ? "kW" : role === "electric_kwh" ? "kWh" : /status|cmd$/.test(role) ? "" : "";
 const isBool = (role) => /(_status|^fan_cmd|chiller_cmd)$/.test(role);
@@ -197,7 +197,12 @@ const server = http.createServer(async (req, res) => {
     const rel = decodeURIComponent(p.slice(APP_PREFIX.length)) || "index.html";
     const file = path.join(STATIC, rel);
     if (!file.startsWith(STATIC) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end(); }
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream", "Cache-Control": "no-store" });
+    // Same security headers as the Caddy front door (deploy/nf-caddy/routes.caddy), so the CI ZAP
+    // scan of the mock reflects a production deployment.
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream", "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff", "X-Frame-Options": "SAMEORIGIN", "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), usb=(), payment=()",
+      "Content-Security-Policy": "frame-ancestors 'self'" });
     return res.end(fs.readFileSync(file));
   }
   if (p === "/api/v1/platform/info") return json(res, 200, { version: "mock-3.10", provider: "", resources: [{ memory: { totalBytes: String(4 * 1024 ** 3) } }] });
@@ -217,4 +222,6 @@ const server = http.createServer(async (req, res) => {
   if (hook && hook[3]) return json(res, 200, { runs });
   json(res, 404, { error: `mock-nf: no route for ${req.method} ${p}` });
 });
-server.listen(PORT, "127.0.0.1", () => console.log(`mock NF: http://127.0.0.1:${PORT}${APP_PREFIX}  (${records.length} records, ${DAYS} days)`));
+// MOCK_HOST=0.0.0.0 lets a container (e.g. a local ZAP scan) reach the mock; default stays loopback.
+const HOST = process.env.MOCK_HOST || "127.0.0.1";
+server.listen(PORT, HOST, () => console.log(`mock NF: http://${HOST}:${PORT}${APP_PREFIX}  (${records.length} records, ${DAYS} days)`));

@@ -1,3 +1,9 @@
+---
+title: NF features
+parent: Architecture
+nav_order: 4
+---
+
 # What Open-FDD uses from NF's app platform
 
 This file checks which Normal Framework app/plugin features (NF 3.10, `nf://docs/hooks-guide`, docs.normal.dev) the
@@ -17,7 +23,7 @@ Open-FDD app uses, and why. The status is as of the `nf-plugin/slice-1` branch.
 | **Global variables** | Weather values (`oa_dry_bulb_web` …). | ✅ |
 | **NF BACnet server** (`/api/v1/bacnet/local`) | Opt-in (`config.bacnet.enabled`): one AV per equip holding its count of rules in fault, with the rules listed in its description, so any BAS front end can read Open-FDD faults. | ✅ code, off by default |
 | **npm dependencies** (`package.json` + `install_dependencies`) | `@electric-sql/pglite` for the full profile. sql.js is vendored, so small edges need no `npm install`. | ✅ |
-| **NF MCP** (`manage_app`, `deploy_hook`, `manage_hooks`) | The documented deploy recipe (`docs/install/nf-plugin.md`). Large files go through `nf_app_sync.py`. | ✅ |
+| **NF MCP** (`manage_app`, `deploy_hook`, `manage_hooks`) | The documented deploy recipe ([Install](../../install.html)). Large files go through `nf_app_sync.py`. | ✅ |
 | **Equipment-mode hooks** (`equipment_type_id`, `group_keys`) | Not used on purpose. Equipment types are per site, and the FDD hook binds every equip by tags in one run, which keeps it site-agnostic. | ⏸ by design |
 | **Group variables** | Not used. Result points carry Haystack tags and a model record, which group variables can't. | ⏸ by design |
 | **`on_data` hooks** | Not used. The rules are window-based (24 h, 5-minute grid), so hourly is the right cadence. | ⏸ by design |

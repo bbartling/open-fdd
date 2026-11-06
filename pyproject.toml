@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "open-fdd"
 version = "5.0.0"
-description = "Open-FDD for AI agents: RCx/FDD reports from mapped roles (local CSV, self-hosted local Open-FDD, or a future vendor API), plus ECM engineering workbooks. Production FDD remains the DataFusion/GHCR stack."
-readme = "docs/ecm/README.md"
+description = "Open-FDD for AI agents: RCx/FDD reports from mapped roles (local CSV, self-hosted local Open-FDD, or a future vendor API), plus ECM engineering workbooks. Production FDD is the Open-FDD Normal Framework app (SQL pack)."
+readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Ben Bartling", email = "ben.bartling@gmail.com" }
@@ -116,11 +116,5 @@ include = ["open_fdd*"]
 ]
 
 [tool.pytest.ini_options]
-testpaths = [
-    "tests/ecm",
-    "tests/ecm_engineering",
-    "tests/rules",
-    "tests/analytics",
-    "tests/reporting",
-]
+testpaths = ["tests/parity"]
 pythonpath = ["."]

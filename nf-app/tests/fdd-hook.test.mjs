@@ -23,7 +23,7 @@ const POINTS = [
 ];
 
 /** Fake NF: model + default layer queries, resampled history, records writes. */
-function fakeHttp() {
+function fakeHttp(extraPoints = [], fns = {}) {
   const writes = { points: [], data: [] };
   const series = (uuid, fn) => {
     const values = [];
@@ -33,7 +33,7 @@ function fakeHttp() {
   return {
     writes,
     async post(p, body) {
-      if (p === "/api/v1/point/query") return { data: { points: body.layer === "model" ? MODEL : POINTS } };
+      if (p === "/api/v1/point/query") return { data: { points: body.layer === "model" ? MODEL : [...POINTS, ...extraPoints] } };
       if (p === "/api/v1/point/points") { writes.points.push(...body.points); return { data: {} }; }
       if (p === "/api/v1/point/data") { writes.data.push(body); return { data: {} }; }
       throw new Error("unexpected POST " + p);
@@ -43,8 +43,8 @@ function fakeHttp() {
       if (p.startsWith("/api/v1/point/data?")) {
         assert.match(p, /window=300s&method=AVERAGE/);
         const uuids = [...p.matchAll(/uuids=([^&]+)/g)].map((m) => decodeURIComponent(m[1]));
-        const fns = { "u-FANC": () => 1, "u-FANS": (t) => ((t / 3600e3) % 2 < 1 ? 1 : 0), "u-OAT": () => 55 };
-        return { data: { data: uuids.map((u) => series(u, fns[u])) } };
+        const f = { "u-FANC": () => 1, "u-FANS": (t) => ((t / 3600e3) % 2 < 1 ? 1 : 0), "u-OAT": () => 55, ...fns };
+        return { data: { data: uuids.map((u) => series(u, f[u])) } };
       }
       throw new Error("unexpected GET " + p);
     },
@@ -126,4 +126,41 @@ test("fdd hook: BACnet export plan keeps instances by name and skips used ones",
   assert.deepEqual([by["AHU-2"].instance, by["AHU-2"].create, by["AHU-2"].count], [1001, false, 1]);
   assert.equal(by["AHU-2"].description, "Open-FDD faults: ECON-1");
   assert.deepEqual([by["VAV-9"].instance, by["VAV-9"].count, by["VAV-9"].description], [1003, 0, "Open-FDD: no faults"]);
+});
+
+test("fdd hook: history is converted to SI by each point's unit (°F -> °C), declared SI in authorized_series", async () => {
+  const extra = [
+    pt("u-ZNT", "ZN-T", ["zone", "air", "temp", "sensor"], { equipRef: "AHU-1", class: "zone-air-temp-sensor" }), // no unit
+    pt("u-DSP", "DSP", ["duct", "static", "pressure", "sensor"], { equipRef: "AHU-1", class: "discharge-air-pressure-sensor", unit: "inH2O" }),
+  ];
+  const http = fakeHttp(extra, { "u-ZNT": () => 70, "u-DSP": () => 1.5 });
+  const seen = { queries: [] };
+  const logs = [];
+  const pack = { ...PACK, contract: { history: [...PACK.contract.history, { name: "zone_t", type: "double" }, { name: "duct_static", type: "double" }] },
+    rules: { "SV-RANGE": { sql: "-", output_columns: ["equipment_id", "fault_hours"] } } };
+  await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { dryRun: true }, pack, createEngine: stubEngine(seen), now: NOW });
+  const row = seen.input.history[0];
+  assert.ok(Math.abs(row.oa_t - (55 - 32) * 5 / 9) < 1e-9, `oa_t ${row.oa_t} is 55 °F = 12.778 °C`);
+  assert.ok(Math.abs(row.duct_static - 1.5 * 249.0889) < 1e-6, "1.5 inH2O in Pa");
+  assert.equal(row.zone_t, undefined, "temperature point without a unit is skipped, not guessed");
+  const unit = Object.fromEntries(seen.input.authorizedSeries.map((a) => [a.role, a.unit]));
+  assert.equal(unit.oa_t, "°C");
+  assert.equal(unit.duct_static, "Pa");
+  assert.equal(unit.zone_t, undefined);
+  assert.equal(logs.filter((l) => /zone_t.*no unit/.test(l)).length, 1, "logged once: " + logs.join(" / "));
+});
+
+test("siPlan: known units convert, unitless roles pass through, unknown temperature/pressure/flow roles are skipped", () => {
+  const roles = {
+    oa_t: { uuid: "a", units: "degF" }, sat: { uuid: "b", units: "°C" }, fan_cmd: { uuid: "c", units: "" },
+    oa_h: { uuid: "d", units: "%RH" }, zone_flow: { uuid: "e", units: "cfm" }, mat: { uuid: "f", units: "weird" },
+  };
+  const plan = hook.siPlan(roles, { roles: { oa_t: { name: "outside-air-temp" }, sat: { name: "discharge-air-temp" }, zone_flow: { name: "zone-airflow" }, mat: { name: "mixed-air-temp" } } });
+  assert.ok(Math.abs(plan.convert.oa_t(32)) < 1e-12 && Math.abs(plan.convert.oa_t(212) - 100) < 1e-9);
+  assert.equal(plan.convert.sat(21), 21);
+  assert.ok(Math.abs(plan.convert.zone_flow(100) - 47.19474) < 1e-9);
+  assert.equal(plan.convert.fan_cmd, undefined);
+  assert.equal(plan.unit.fan_cmd, "");
+  assert.deepEqual([...plan.skipped], ["mat"]);
+  assert.deepEqual([plan.unit.oa_t, plan.unit.zone_flow, plan.unit.oa_h], ["°C", "L/s", "%"]);
 });

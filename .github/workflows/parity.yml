@@ -1,0 +1,62 @@
+# pandas == SQL parity: the open_fdd pandas oracle must agree with the SQL FDD pack
+# (sql/fdd) on synthetic SI data; plus a stress report.
+name: pandas == SQL parity
+
+on:
+  push:
+    paths:
+      - "sql/fdd/**"
+      - "open_fdd/**"
+      - "nf-app/hooks/**"
+      - "nf-app/rules/**"
+      - "nf-app/tests/**"
+      - "tests/parity/**"
+      - "pyproject.toml"
+      - ".github/workflows/parity.yml"
+  pull_request:
+    paths:
+      - "sql/fdd/**"
+      - "open_fdd/**"
+      - "nf-app/hooks/**"
+      - "nf-app/rules/**"
+      - "nf-app/tests/**"
+      - "tests/parity/**"
+      - "pyproject.toml"
+      - ".github/workflows/parity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    name: pandas oracle vs SQL pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install oracle (pandas) and nf-app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[oracle,test]"
+          cd nf-app && npm ci
+
+      # pandas oracle vs the SQL pack (SQLite + PGlite), all in SI. Known divergences are pinned
+      # in tests/parity (KNOWN_DIVERGENT, with reasons); the test fails if that set changes.
+      - name: pandas == SQL parity (SI)
+        run: python -m pytest tests/parity -q
+
+      - name: Stress report (8 equips x 7 days)
+        run: python tests/parity/stress.py --equips 8 --days 7

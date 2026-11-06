@@ -1,14 +1,15 @@
 ---
 title: ADR — Open-FDD as a Normal Framework plugin
 parent: Architecture
-nav_order: 14
-nav_exclude: true
+nav_order: 1
 ---
+
+> Historical record. `archive/central-v4/` was later removed entirely; the 4.x line is tag `v4.0.11-central`.
 
 # ADR-014 — Open-FDD as a Normal Framework plugin
 
 - **Status:** Proposed (2026-11-05), owner decision; implemented in slices on `nf-plugin/*` branches
-- **Supersedes when accepted:** the "central owns ingest + historian" parts of [ADR-010](adr-010-timescale-hard-cutover.md) and [ADR-011](adr-011-pluggable-data-provider.md); the `services/central` delivery in [ADR-013](adr-013-static-product-ui-central.md); the "one canonical telemetry writer" clause of the [DATA_CONTRACT storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)
+- **Supersedes when accepted:** the "central owns ingest + historian" parts of ADR-010 (Timescale hard cutover, in the 4.x tag) and ADR-011 (in the 4.x tag); the `services/central` delivery in ADR-013 (in the 4.x tag); the "one canonical telemetry writer" clause of the [DATA_CONTRACT storage mandate](../../openfdd_agent_spec/DATA_CONTRACT.md#storage-mandate-timescalepostgresql-only-mandatory)
 - **Keeps:** SQL as the single source of FDD math (the `sql/fdd/postgres/rules` pack, `registry.yaml`, `role_map.json`); Timescale/PostgreSQL as the long-term historian; strict CSP static UI with vendored ECharts; no hard-coded sites, equipment or points; no BACnet writes without human approval
 
 ## Context
@@ -70,6 +71,6 @@ Open-FDD ships as **one NF application** (`open-fdd`) instead of a separate stac
 - Rust product code shrinks to what has no NF equivalent (none planned for slice 1).
 - CI moves from Rust gates to: rule-pack SQL tests, node tests for the app, RDF validation, a
   manifest/deploy dry run, and live bench smoke.
-- Open questions tracked in [`docs/migration/nf-plugin/PLAN.md`](../migration/nf-plugin/PLAN.md):
+- Open questions tracked in [the migration plan](../migration/nf-plugin/PLAN.html):
   embedded Postgres memory on the Pi, hook runtime limits (npm deps, run time), NF Timescale
   schema details, and portal auth for app API calls.

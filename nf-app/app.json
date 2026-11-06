@@ -18,6 +18,7 @@
   "files": {
     "/hooks/fdd.js": "hooks/fdd.js",
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
+    "/hooks/sparql.js": "hooks/sparql.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
     "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
     "/hooks/vendor/sql.js/sql-wasm.wasm": "hooks/vendor/sql.js/sql-wasm.wasm",
@@ -31,6 +32,7 @@
     "/static/charts.js": "static/charts.js",
     "/static/echarts-global.js": "static/echarts-global.js",
     "/static/energy.js": "static/energy.js",
+    "/static/export.js": "static/export.js",
     "/static/fdd-catalog.json": "static/fdd-catalog.json",
     "/static/fdd-plots.js": "static/fdd-plots.js",
     "/static/fdd.js": "static/fdd.js",
@@ -40,13 +42,22 @@
     "/static/rcx-overview.js": "static/rcx-overview.js",
     "/static/rcx-presets.js": "static/rcx-presets.js",
     "/static/rcx.js": "static/rcx.js",
+    "/static/sparql.js": "static/sparql.js",
     "/static/style.css": "static/style.css",
     "/static/theme-init.js": "static/theme-init.js",
     "/static/theme.js": "static/theme.js",
     "/static/tree.css": "static/tree.css",
     "/static/tree.html": "static/tree.html",
     "/static/tree.js": "static/tree.js",
-    "/static/vendor/echarts.esm.min.js": "static/vendor/echarts.esm.min.js"
+    "/static/units.js": "static/units.js",
+    "/static/vendor/echarts.esm.min.js": "static/vendor/echarts.esm.min.js",
+    "/static/vendor/oxigraph/LICENSE-APACHE": "static/vendor/oxigraph/LICENSE-APACHE",
+    "/static/vendor/oxigraph/LICENSE-MIT": "static/vendor/oxigraph/LICENSE-MIT",
+    "/static/vendor/oxigraph/node.js": "static/vendor/oxigraph/node.js",
+    "/static/vendor/oxigraph/node_bg.wasm": "static/vendor/oxigraph/node_bg.wasm",
+    "/static/vendor/oxigraph/package.json": "static/vendor/oxigraph/package.json",
+    "/static/vendor/oxigraph/web.js": "static/vendor/oxigraph/web.js",
+    "/static/vendor/oxigraph/web_bg.wasm": "static/vendor/oxigraph/web_bg.wasm"
   },
   "hooks": [
     {
@@ -104,6 +115,16 @@
       },
       "mode": "MODE_SCHEDULED",
       "invokeTimeout": "300s"
+    },
+    {
+      "id": "sparql",
+      "name": "sparql",
+      "entryPoint": "/hooks/sparql.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "60s"
     }
   ]
 }

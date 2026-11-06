@@ -61,24 +61,74 @@ function rcxMissing(view, equips, model, catalog) {
   return [...missing];
 }
 
+// ---- units: calc in SI, display in the user's system -----------------------------------
+// NF points arrive in whatever unit the site uses. Everything a view computes runs on SI
+// values (units.js: °C, Pa, L/s, kW, kWh, %); only the last step before a chart/label maps
+// them to the display system (ofddUnits.displaySystem(): "imperial" | "si"). Unitless and
+// unknown units pass through unchanged. Without units.js (bare test contexts) everything
+// passes through.
+const rcxUnits = () => globalThis.ofddUnits || null;
+
+/** SI unit of a point (its own unit when unknown/unitless). */
+function rcxSiUnit(p) {
+  const U = rcxUnits(), u = (p && p.units) || "";
+  const r = U && u ? U.toSI(0, u) : null;
+  return r ? r.unit : u;
+}
+
+/** [[ms, v], …] in the point's own unit -> canonical SI. */
+function rcxToSI(arr, p) {
+  const U = rcxUnits();
+  if (!U || !p || !p.units || !U.toSI(0, p.units)) return arr;
+  return arr.map(([t, v]) => { const r = v == null ? null : U.toSI(v, p.units); return [t, r ? r.value : v]; });
+}
+
+/** SI value -> { value, unit } in the display system. */
+function rcxDisp(v, siUnit) {
+  const U = rcxUnits();
+  return U ? U.fromSI(v, siUnit, U.displaySystem()) : { value: v == null ? null : Number(v), unit: siUnit || "" };
+}
+/** SI difference (e.g. delta degC) -> { value, unit } in the display system (no 32 offset). */
+function rcxDispDelta(d, siUnit) {
+  const U = rcxUnits();
+  return U ? U.deltaFromSI(d, siUnit, U.displaySystem()) : { value: d == null ? null : Number(d), unit: siUnit || "" };
+}
+/** [[ms, v], …] SI -> display values (delta = true for differences). */
+function rcxDispSeries(arr, siUnit, delta = false) {
+  const U = rcxUnits();
+  if (!U) return arr;
+  const sys = U.displaySystem(), f = delta ? U.deltaFromSI : U.fromSI;
+  return arr.map(([t, v]) => [t, v == null ? null : f(v, siUnit, sys).value]);
+}
+
 /**
  * The context a view's render() gets.
  *   ctx.equips          bound equips (one for scope "equip", all for scope "site")
  *   ctx.hours           history span in hours
  *   ctx.first(eq, role) best point for a role on an equip (or null)
- *   ctx.series(pts, o)  Map(uuid -> [[ms, v], …]) from NF, resampled server side
+ *   ctx.series(pts, o)  Map(uuid -> [[ms, v], …]) from NF, resampled server side, values in SI
  *                       o = { hours, windowSec, method: "AVERAGE"|"MIN"|"MAX"|… }
- *   ctx.aligned(cols,o) one time grid for several points: { t: [ms…], cols: {key: [v|null…]} }
+ *   ctx.aligned(cols,o) one time grid for several points, values in SI: { t: [ms…], cols: {key: [v|null…]} }
  *                       cols = { key: point } — the shape most RCx math wants
  *   ctx.chart(el)       themed ECharts instance (theme.js ofddChart)
+ *   ctx.siUnit(p)       SI unit of a point (own unit when unknown)
+ *   ctx.disp(v, si)     SI value -> { value, unit } in the display system
+ *   ctx.dispDelta(d, si)  same for differences (Δ°C -> Δ°F ×1.8, no offset)
+ *   ctx.dispUnit(si)    display unit text for an SI unit
+ *   ctx.dispSystem()    "imperial" | "si"
+ *   ctx.dispSeries(arr, si, delta)  [[ms, SI]] -> [[ms, display]]
  *   ctx.unit(p)         display unit of a point
  *   ctx.weather         site weather points (tagged `weather`)
  *   ctx.model, ctx.catalog, ctx.view
  */
 function rcxContext(view, equips, hours, model, catalog) {
   const first = (eq, role) => (eq.bound[role] && eq.bound[role][0]) || null;
-  const series = (pts, o = {}) => fetchSeries(pts.filter(Boolean), o.hours || hours,
-    { method: o.method || "AVERAGE", ...(o.windowSec ? { windowSec: o.windowSec } : {}) });
+  const series = async (pts, o = {}) => {
+    const list = pts.filter(Boolean);
+    const data = await fetchSeries(list, o.hours || hours,
+      { method: o.method || "AVERAGE", ...(o.windowSec ? { windowSec: o.windowSec } : {}) });
+    return new Map(list.map((p) => [p.uuid, rcxToSI(data.get(p.uuid) || [], p)]));
+  };
   const aligned = async (cols, o = {}) => {
     const entries = Object.entries(cols).filter(([, p]) => p);
     const windowSec = o.windowSec || pickWindow(o.hours || hours);
@@ -96,11 +146,17 @@ function rcxContext(view, equips, hours, model, catalog) {
     for (const key of Object.keys(cols)) out[key] = t.map((x) => (byKey[key] ? byKey[key].get(x) ?? null : null));
     return { t, cols: out };
   };
-  const site = equips[0] && (equips[0].rec.attrs || {}).siteRef;
+  const site = equips[0] && equips[0].rec && (equips[0].rec.attrs || {}).siteRef;
   return {
     view, equips, hours, model, catalog, first, series, aligned,
     chart: (el) => ofddChart(el),
-    unit: (p) => (p && p.units) || "",
+    siUnit: rcxSiUnit,
+    disp: rcxDisp,
+    dispDelta: rcxDispDelta,
+    dispUnit: (si) => rcxDisp(0, si).unit,
+    dispSystem: () => (rcxUnits() ? rcxUnits().displaySystem() : "si"),
+    dispSeries: rcxDispSeries,
+    unit: (p) => rcxDisp(0, rcxSiUnit(p)).unit,
     weather: model.points.filter((p) => has(p, "weather") && has(p, "point") && p.siteRef === site),
   };
 }

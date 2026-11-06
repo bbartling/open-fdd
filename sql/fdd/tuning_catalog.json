@@ -997,7 +997,7 @@
           "frontend_control": "slider",
           "key": "eps_dsp",
           "kind": "air_pressure",
-          "label": "Duct-static error epsDSP (GL36 default 0.1 in.w.c.)",
+          "label": "Duct-static error epsDSP (Pa)",
           "max": 124.42,
           "min": 0.0,
           "sql_placeholder": "EPS_DSP",
@@ -1719,7 +1719,7 @@
           "frontend_control": "slider",
           "key": "delta_supply_fan",
           "kind": "temperature_difference",
-          "label": "Supply-fan delta (GL36 0.55 °F)",
+          "label": "Supply-fan delta (Δ°C)",
           "max": 2.777777778,
           "min": 0.0,
           "sql_placeholder": "DELTA_SUPPLY_FAN",
@@ -1961,7 +1961,7 @@
           "frontend_control": "slider",
           "key": "delta_supply_fan",
           "kind": "temperature_difference",
-          "label": "Supply-fan delta (GL36 0.55 °F)",
+          "label": "Supply-fan delta (Δ°C)",
           "max": 2.777777778,
           "min": 0.0,
           "sql_placeholder": "DELTA_SUPPLY_FAN",
@@ -2396,7 +2396,7 @@
           "frontend_control": "slider",
           "key": "delta_supply_fan",
           "kind": "temperature_difference",
-          "label": "Supply-fan delta (GL36 0.55 °F)",
+          "label": "Supply-fan delta (Δ°C)",
           "max": 2.777777778,
           "min": 0.0,
           "sql_placeholder": "DELTA_SUPPLY_FAN",
@@ -2623,7 +2623,7 @@
           "frontend_control": "slider",
           "key": "delta_supply_fan",
           "kind": "temperature_difference",
-          "label": "Supply-fan delta (GL36 0.55 °F)",
+          "label": "Supply-fan delta (Δ°C)",
           "max": 2.777777778,
           "min": 0.0,
           "sql_placeholder": "DELTA_SUPPLY_FAN",
@@ -3026,7 +3026,7 @@
           "frontend_control": "slider",
           "key": "oat_rat_delta_min",
           "kind": "temperature_difference",
-          "label": "Min |RAT−OAT| for OA-fraction estimate (°F)",
+          "label": "Min |RAT−OAT| for OA-fraction estimate (Δ°C)",
           "max": 5.555556,
           "min": 0.277778,
           "sql_placeholder": "OAT_RAT_DELTA_MIN",
@@ -3758,18 +3758,18 @@
         },
         "steady_fault_per_hour": {
           "control": "slider",
-          "default": 6.0,
+          "default": 3.333333,
           "effect": "unsupported",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "steady_fault_per_hour",
           "kind": "temperature_rate",
           "label": "Steady-state slew limit",
-          "max": 60.0,
-          "min": 1.0,
+          "max": 33.333333,
+          "min": 0.555556,
           "sql_placeholder": "STEADY_FAULT_PER_HOUR",
-          "step": 0.5,
-          "unit": "degF_per_h"
+          "step": 0.277778,
+          "unit": "degC_delta_per_h"
         }
       },
       "parity_status": "sql_screening",
@@ -4191,7 +4191,7 @@
           "frontend_control": "slider",
           "key": "delta_supply_fan",
           "kind": "temperature_difference",
-          "label": "Supply-fan delta (GL36 0.55 °F)",
+          "label": "Supply-fan delta (Δ°C)",
           "max": 2.777777778,
           "min": 0.0,
           "sql_placeholder": "DELTA_SUPPLY_FAN",
@@ -4420,21 +4420,20 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "min_cfm_design": {
+        "min_flow_design": {
           "control": "slider",
           "default": 2359.735,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "min_cfm_design",
+          "key": "min_flow_design",
           "kind": "volumetric_flow",
           "label": "Design minimum outdoor airflow",
           "max": 94389.4,
           "min": 0.0,
-          "sql_placeholder": "MIN_CFM_DESIGN",
+          "sql_placeholder": "MIN_FLOW_DESIGN",
           "step": 47.1947,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -4518,7 +4517,7 @@
         "EPS_AIRFLOW",
         "FAN_ON_MIN",
         "MINIMUM_ACTIVE_COVERAGE_PCT",
-        "MIN_CFM_DESIGN",
+        "MIN_FLOW_DESIGN",
         "MODE_DELAY_ROWS_PRECEDING",
         "OAT_RAT_DELTA_MIN",
         "POLL_SECONDS",
@@ -6050,7 +6049,7 @@
       "controls_without_sql_effect": [],
       "dashboard_wired": false,
       "delete_python_candidate": false,
-      "description": "Mechanical cooling below 60°F web OAT",
+      "description": "Mechanical cooling below 15.6 °C web OAT",
       "equipment_kinds": [
         "ahu",
         "chiller",
@@ -6580,8 +6579,7 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -6727,8 +6725,7 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "full_open_pct": {
           "control": "slider",
@@ -6875,21 +6872,20 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "flow_bias_cfm": {
+        "flow_bias": {
           "control": "slider",
           "default": 23.59735,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "flow_bias_cfm",
+          "key": "flow_bias",
           "kind": "volumetric_flow",
           "label": "Airflow bias threshold",
           "max": 94.3894,
           "min": 4.71947,
-          "sql_placeholder": "FLOW_BIAS_CFM",
+          "sql_placeholder": "FLOW_BIAS",
           "step": 2.359735,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -6941,7 +6937,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "DAMPER_CLOSED_MAX",
-        "FLOW_BIAS_CFM",
+        "FLOW_BIAS",
         "POLL_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -7131,8 +7127,7 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "min_rise": {
           "control": "slider",
@@ -7290,8 +7285,7 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         }
       },
       "parity_status": "sql_screening",
@@ -7377,8 +7371,7 @@
           "min": 0.471947,
           "sql_placeholder": "FIXED_FLOW_MAX_STD",
           "step": 0.471947,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "fixed_flow_min_mean": {
           "control": "slider",
@@ -7393,8 +7386,7 @@
           "min": 23.59735,
           "sql_placeholder": "FIXED_FLOW_MIN_MEAN",
           "step": 4.71947,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "flow_on_min": {
           "control": "slider",
@@ -7409,8 +7401,7 @@
           "min": 0.0,
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "high_min_flow_sp": {
           "control": "slider",
@@ -7425,8 +7416,7 @@
           "min": 23.59735,
           "sql_placeholder": "HIGH_MIN_FLOW_SP",
           "step": 4.71947,
-          "unit": "L_per_s",
-          "ip_unit": "cfm"
+          "unit": "L_per_s"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -7590,18 +7580,18 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "reset_sat_at_65": {
+        "reset_sat_at_ref": {
           "control": "slider",
           "default": 11.111111,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "reset_sat_at_65",
+          "key": "reset_sat_at_ref",
           "kind": "absolute_temperature",
-          "label": "SAT SP at 65F OAT",
+          "label": "SAT SP at the reset OAT reference",
           "max": 18.333333,
           "min": 7.222222,
-          "sql_placeholder": "RESET_SAT_AT_65",
+          "sql_placeholder": "RESET_SAT_AT_REF",
           "step": 0.277778,
           "unit": "degC"
         },
@@ -7642,7 +7632,7 @@
         "POLL_SECONDS",
         "RESET_ERR",
         "RESET_OAT_REF",
-        "RESET_SAT_AT_65",
+        "RESET_SAT_AT_REF",
         "RESET_SLOPE"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -7921,18 +7911,18 @@
         },
         "dp_margin": {
           "control": "slider",
-          "default": 15.168465,
+          "default": 15168.465,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "dp_margin",
           "kind": "hydronic_pressure",
           "label": "DP margin",
-          "max": 41.368542,
-          "min": 3.447379,
+          "max": 41368.542,
+          "min": 3447.379,
           "sql_placeholder": "DP_MARGIN",
-          "step": 0.689476,
-          "unit": "kPa"
+          "step": 689.476,
+          "unit": "Pa"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",
@@ -8168,8 +8158,7 @@
           "min": 12.61804,
           "sql_placeholder": "FLOW_HI",
           "step": 3.15451,
-          "unit": "L_per_s",
-          "ip_unit": "gpm"
+          "unit": "L_per_s"
         },
         "minimum_active_coverage_pct": {
           "control": "slider",

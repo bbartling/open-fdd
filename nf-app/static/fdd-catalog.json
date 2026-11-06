@@ -1644,7 +1644,7 @@
     "max_gap_hours": 1.0,
     "confirm_seconds": 600.0,
     "persistence_min": 10.0,
-    "steady_fault_per_hour": 6.0
+    "steady_fault_per_hour": 3.333333
    }
   },
   {
@@ -1778,7 +1778,7 @@
     "fan_on_min": 0.01,
     "eps_airflow": 0.15,
     "confirm_seconds": 600.0,
-    "min_cfm_design": 2359.735
+    "min_flow_design": 2359.735
    }
   },
   {
@@ -2061,7 +2061,7 @@
   },
   {
    "id": "MECH-OAT-1",
-   "description": "Mechanical cooling below 60°F web OAT",
+   "description": "Mechanical cooling below 15.6 °C web OAT",
    "sql_file": "mech_oat_1.sql",
    "priority": "P0",
    "equipment_kinds": [
@@ -2267,7 +2267,7 @@
     "startup_delay_min": 0.0,
     "require_operational_gate": 1.0,
     "confirm_seconds": 900.0,
-    "flow_bias_cfm": 23.59735,
+    "flow_bias": 23.59735,
     "damper_closed_max": 0.1
    }
   },
@@ -2405,7 +2405,7 @@
     "startup_delay_min": 0.0,
     "require_operational_gate": 1.0,
     "reset_err": 1.666667,
-    "reset_sat_at_65": 11.111111,
+    "reset_sat_at_ref": 11.111111,
     "reset_slope": 0.25,
     "reset_oat_ref": 18.333333,
     "confirm_seconds": 900.0
@@ -2497,7 +2497,7 @@
     "startup_delay_min": 0.0,
     "require_operational_gate": 1.0,
     "confirm_seconds": 300.0,
-    "dp_margin": 15.168465,
+    "dp_margin": 15168.465,
     "pump_hi": 0.87
    }
   },

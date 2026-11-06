@@ -1,3 +1,6 @@
+// Units: ctx.series hands over canonical SI (kW, kWh, degC), so the meter math, degree days (C-days,
+// base 18.333 C = 65 F), baselines and M&V all run in SI. Only the last step maps to the display
+// system: degree days x1.8 (F-days) and EUI as kBtu/ft2/yr (imperial) or kWh/m2/yr (SI).
 // Energy (fuel / EUI / M&V) views for the Open-FDD NF app, registered with rcxView().
 // Port of the archived central UI's fuel-charts.js + mv-charts.js, fed only from NF:
 // electric meter points (roles electric_kw / electric_kwh) + the site's outside-air temperature.
@@ -6,23 +9,26 @@
 //   * Meter kWh (role electric_kwh, energy register, cumulative) -> kWh = difference between
 //     consecutive windows (a negative step = register reset, skipped). Each view has a "(kWh register)"
 //     twin; the twin steps aside when the same meter already binds a kW point.
-//   * Degree days: base 65 °F, daily mean of the site outside-air temperature (equip oa_t, else the
-//     site's weather points); HDD = max(0, 65 - T), CDD = max(0, T - 65). Celsius points are converted.
+//   * Degree days: base 18.333 °C (65 °F), daily mean of the site outside-air temperature (equip oa_t,
+//     else the site's weather points); HDD = max(0, base - T), CDD = max(0, T - base), in °C-days.
 //   * Baseline (weather normalisation): daily kWh vs CDD or HDD, least squares (rcxStats.fit), the
 //     degree-day kind with the better r2 whose slope >= 0. Complete days only (>= 80 % coverage).
 //   * M&V: fit on a chosen baseline period, predict the reporting period from its degree days,
 //     savings = sum(predicted - actual); CV(RMSE) = sqrt(sum(res^2) / (n - 2)) / mean(actual).
-//   * EUI (kBtu/ft2/yr) = kWh x 3.412 / floor area x 365 / days covered. Floor area = the NF site
-//     record's `area` attribute (ft2). Without it, charts show kWh (per day for site comparisons).
+//   * EUI = kWh / floor area (m2) x 365 / days covered (kWh/m2/yr), shown as kBtu/ft2/yr in the
+//     imperial display system. Floor area = the NF site record's `area` attribute, assumed ft2 unless
+//     the site has `areaUnit` "m²". Without it, charts show kWh (per day for site comparisons).
 //   * Site comparison views need >= 2 modeled sites with a meter; a site's energy = its largest
 //     meter (submeters are assumed to be subsets), so nothing is double counted.
 // Utility bills and fuel prices are not in NF, so bill-based charts are not ported.
-// No import/export, no eval (strict CSP). Needs rcx.js, fdd.js, model.js, theme.js, charts.js.
+// No import/export, nothing eval-like: strict CSP. Needs rcx.js, fdd.js, model.js, theme.js, charts.js.
 (() => {
   "use strict";
 
-  const BASE_F = 65;
+  const TEMP = "°C";
+  const BASE_C = (65 - 32) * 5 / 9;          // degree-day base: 65 F = 18.333 C
   const KBTU_PER_KWH = 3.412;
+  const FT2_PER_M2 = 10.7639104;
   const COMPLETE = 0.8;
   const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -45,17 +51,6 @@
   /** Hourly windows up to ~400 days of history, daily beyond. */
   const pickEnergyWindow = (hours) => (hours <= 9600 ? 3600 : 86400);
 
-  /** Multiplier to kW (kind "power") or kWh (kind "energy") from a unit string. */
-  function energyScale(units, kind) {
-    const u = String(units || "").replace(/\s+/g, "").toLowerCase();
-    const power = { w: 0.001, kw: 1, mw: 1000, "btu/h": 0.00029307, "kbtu/h": 0.29307 };
-    const energy = { wh: 0.001, kwh: 1, mwh: 1000, kbtu: 0.29307, mmbtu: 293.07, therm: 29.307 };
-    const t = kind === "power" ? power : energy;
-    return u in t ? t[u] : 1;
-  }
-
-  const toF = (v, units) => (/c/i.test(String(units || "")) && !/f/i.test(String(units || "")) ? v * 9 / 5 + 32 : v);
-
   /** Cumulative register [[t, v]] -> per-step deltas [[t, d]]; the first sample and resets (d < 0) are skipped. */
   function cumulativeDeltas(pairs) {
     const out = [];
@@ -66,25 +61,27 @@
     return out;
   }
 
-  /** [[t, kWh]] per window. source "kw": average kW x window hours; "kwh": register deltas. */
-  function intervalKwh(pairs, source, windowSec, scale = 1) {
-    if (source === "kwh") return cumulativeDeltas(pairs).map(([t, d]) => [t, d * scale]);
-    return pairs.filter(([, v]) => finite(v)).map(([t, v]) => [t, v * scale * windowSec / 3600]);
+  /** [[t, kWh]] per window (pairs in SI: kW or kWh). source "kw": average kW x window hours; "kwh": register deltas. */
+  function intervalKwh(pairs, source, windowSec) {
+    if (source === "kwh") return cumulativeDeltas(pairs);
+    return pairs.filter(([, v]) => finite(v)).map(([t, v]) => [t, v * windowSec / 3600]);
   }
 
   /** [[t, kW]] per window (register deltas become average kW). */
-  function intervalKw(pairs, source, windowSec, scale = 1) {
-    if (source === "kwh") return cumulativeDeltas(pairs).map(([t, d]) => [t, d * scale * 3600 / windowSec]);
-    return pairs.filter(([, v]) => finite(v)).map(([t, v]) => [t, v * scale]);
+  function intervalKw(pairs, source, windowSec) {
+    if (source === "kwh") return cumulativeDeltas(pairs).map(([t, d]) => [t, d * 3600 / windowSec]);
+    return pairs.filter(([, v]) => finite(v)).map(([t, v]) => [t, v]);
   }
 
-  const degreeDays = (tF, base = BASE_F) => (finite(tF) ? { hdd: Math.max(0, base - tF), cdd: Math.max(0, tF - base) } : { hdd: null, cdd: null });
+  /** Degree days in C-days from a daily mean temperature in degC. */
+  const degreeDays = (tC, base = BASE_C) => (finite(tC) ? { hdd: Math.max(0, base - tC), cdd: Math.max(0, tC - base) } : { hdd: null, cdd: null });
 
   /**
    * One row per local day: { day, t, kwh, peakKw, hours, meanT, hdd, cdd, complete }.
-   * kwhPairs/kwPairs/oatPairs are [[ms, v]] (oat in °F); windowSec is their step.
+   * kwhPairs/kwPairs/oatPairs are [[ms, v]] (kWh, kW, oat in degC); windowSec is their step.
+   * hdd/cdd are C-days.
    */
-  function dailyTable(kwhPairs, kwPairs, oatPairs, windowSec, base = BASE_F) {
+  function dailyTable(kwhPairs, kwPairs, oatPairs, windowSec, base = BASE_C) {
     const days = new Map();
     const row = (k) => { if (!days.has(k)) days.set(k, { kwh: 0, n: 0, peak: null, temps: [] }); return days.get(k); };
     for (const [t, v] of kwhPairs) { const r = row(dayKey(t)); r.kwh += v; r.n++; }
@@ -169,8 +166,13 @@
     };
   }
 
-  /** kBtu/ft2/yr from kWh over `days` days; null without a positive area. */
-  const eui = (kwh, days, area) => (area > 0 && days > 0 ? (kwh * KBTU_PER_KWH / area) * (365 / days) : null);
+  /** EUI in kWh/m2/yr (SI) from kWh over `days` days and a floor area in m2; null without a positive area. */
+  const eui = (kwh, days, areaM2) => (areaM2 > 0 && days > 0 ? (kwh / areaM2) * (365 / days) : null);
+  /** EUI (kWh/m2/yr) -> display value: kBtu/ft2/yr (imperial) or unchanged (si). */
+  const euiDisp = (v, system) => (!finite(v) ? null : system === "imperial" ? v * KBTU_PER_KWH / FT2_PER_M2 : v);
+  const euiUnit = (system) => (system === "imperial" ? "kBtu/ft²/yr" : "kWh/m²/yr");
+  /** Display options for degree days: ddK x C-days, label unit and base in the display system. */
+  const ddDisplay = (k = 1) => (k === 1 ? { k, unit: "°C·day", base: +BASE_C.toFixed(1) } : { k, unit: "°F·day", base: Math.round(BASE_C * k + 32) });
 
   /** Trailing up-to-12-month totals: [{ month, kwh, days }]. */
   function rolling12(monthly) {
@@ -241,7 +243,8 @@
     };
   }
 
-  function weatherOption(rows, fit, res) {
+  // rows/fit/res are SI (C-days); `dd` (ddDisplay) only maps the degree-day axis to display units.
+  function weatherOption(rows, fit, res, dd = ddDisplay()) {
     const xs = rows.filter((r) => r.complete && finite(r[fit.xKey])).map((r) => r[fit.xKey]);
     const lo = Math.min(...xs), hi = Math.max(...xs);
     const label = fit.xKey.toUpperCase();
@@ -249,13 +252,13 @@
       grid: [{ left: 56, right: "56%", top: 44, bottom: 40 }, { left: "52%", right: 24, top: 44, bottom: 40 }],
       legend: { top: 0 },
       tooltip: { trigger: "item", formatter: (p) => (Array.isArray(p.value) ? `${label} ${num1(p.value[0])}: ${num1(p.value[1])}` : `${p.name}: ${num1(p.value)}`) },
-      xAxis: [{ type: "value", gridIndex: 0, name: `${label} (base ${BASE_F} °F)`, nameLocation: "middle", nameGap: 26, scale: true },
+      xAxis: [{ type: "value", gridIndex: 0, name: `${label} (${dd.unit}, base ${dd.base})`, nameLocation: "middle", nameGap: 26, scale: true },
         { type: "category", gridIndex: 1, data: res.map((r) => r.day.slice(5)), axisLabel: { hideOverlap: true } }],
       yAxis: [{ type: "value", gridIndex: 0, name: "kWh/day", scale: true }, { type: "value", gridIndex: 1, name: "actual − baseline kWh", scale: true }],
       series: [
-        { name: "Days", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, symbolSize: 8, data: res.map((r) => [r.x, r.actual]) },
+        { name: "Days", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, symbolSize: 8, data: res.map((r) => [r.x * dd.k, r.actual]) },
         { name: `Baseline (r² ${fit.r2.toFixed(2)})`, type: "line", xAxisIndex: 0, yAxisIndex: 0, showSymbol: false,
-          data: [[lo, predict(fit, lo)], [hi, predict(fit, hi)]] },
+          data: [[lo * dd.k, predict(fit, lo)], [hi * dd.k, predict(fit, hi)]] },
         { name: "Residual", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: res.map((r) => r.residual) },
       ],
       dataZoom: false,
@@ -289,7 +292,7 @@
     };
   }
 
-  function mvOption(res) {
+  function mvOption(res, dd = ddDisplay()) {
     const label = res.fit.xKey.toUpperCase();
     const xs = [...res.baseline, ...res.reporting].map((r) => r.x);
     const lo = Math.min(...xs), hi = Math.max(...xs);
@@ -297,24 +300,24 @@
       grid: { ...baseGrid, left: 62 },
       legend: { top: 0 },
       tooltip: { trigger: "item", formatter: (p) => `${p.seriesName}: ${label} ${num1(p.value[0])} → ${num1(p.value[1])} kWh` },
-      xAxis: { type: "value", name: `${label} (base ${BASE_F} °F)`, nameLocation: "middle", nameGap: 26, scale: true },
+      xAxis: { type: "value", name: `${label} (${dd.unit}, base ${dd.base})`, nameLocation: "middle", nameGap: 26, scale: true },
       yAxis: { type: "value", name: "kWh/day", scale: true },
       series: [
-        { name: "Baseline", type: "scatter", symbolSize: 8, data: res.baseline.map((r) => [r.x, r.actual]) },
-        { name: "Reporting", type: "scatter", symbolSize: 8, data: res.reporting.map((r) => [r.x, r.actual]) },
-        { name: "Baseline model", type: "line", showSymbol: false, data: [[lo, predict(res.fit, lo)], [hi, predict(res.fit, hi)]] },
-        { name: "Predicted (reporting)", type: "scatter", symbol: "diamond", symbolSize: 8, data: res.reporting.map((r) => [r.x, r.predicted]) },
+        { name: "Baseline", type: "scatter", symbolSize: 8, data: res.baseline.map((r) => [r.x * dd.k, r.actual]) },
+        { name: "Reporting", type: "scatter", symbolSize: 8, data: res.reporting.map((r) => [r.x * dd.k, r.actual]) },
+        { name: "Baseline model", type: "line", showSymbol: false, data: [[lo * dd.k, predict(res.fit, lo)], [hi * dd.k, predict(res.fit, hi)]] },
+        { name: "Predicted (reporting)", type: "scatter", symbol: "diamond", symbolSize: 8, data: res.reporting.map((r) => [r.x * dd.k, r.predicted]) },
       ],
       dataZoom: false,
     };
   }
 
   // Site comparison charts -----------------------------------------------------------------
-  /** Per-site value + axis label: EUI when every site has an area, else kWh/day. */
-  function siteMetric(sites) {
+  /** Per-site value + axis label: EUI (display system) when every site has an area (m2), else kWh/day. */
+  function siteMetric(sites, system = "si") {
     const allArea = sites.length > 0 && sites.every((s) => s.area > 0);
-    const value = (kwh, days, area) => (allArea ? eui(kwh, days, area) : days > 0 ? kwh / days : null);
-    return { allArea, value, label: allArea ? "kBtu/ft²/yr (annualized)" : "kWh/day" };
+    const value = (kwh, days, areaM2) => (allArea ? euiDisp(eui(kwh, days, areaM2), system) : days > 0 ? kwh / days : null);
+    return { allArea, value, label: allArea ? `${euiUnit(system)} (annualized)` : "kWh/day" };
   }
 
   const sortedBars = (rows) => [...rows].sort((a, b) => b.value - a.value);
@@ -408,8 +411,8 @@
   }
 
   globalThis.energyMath = {
-    BASE_F, KBTU_PER_KWH, pickEnergyWindow, energyScale, toF, cumulativeDeltas, intervalKwh, intervalKw,
-    degreeDays, dailyTable, monthlyTable, baselineFit, predict, residuals, mvSavings, eui, rolling12,
+    BASE_C, KBTU_PER_KWH, FT2_PER_M2, pickEnergyWindow, cumulativeDeltas, intervalKwh, intervalKw,
+    degreeDays, dailyTable, monthlyTable, baselineFit, predict, residuals, mvSavings, eui, euiDisp, euiUnit, ddDisplay, rolling12,
     heatmapGrid, seasonPeaks, siteMetric, dayKey, monthKey,
     charts: { demandHeatmapOption, intervalDemandOption, monthlyLinesOption, weatherOption, peakDualOption, peakSeasonOption,
       mvOption, peerBarsOption, peerBulletOption, rankedOption, rollingOption, intensityOption, stackedOption },
@@ -439,27 +442,35 @@
       oatPt ? ctx.series([oatPt], { ...opts, method: "AVERAGE" }) : Promise.resolve(null),
     ]);
     const raw = m.get(pt.uuid) || [];
-    const scale = energyScale(pt.units, source === "kw" ? "power" : "energy");
-    const kwh = intervalKwh(raw, source, windowSec, scale);
-    const kw = intervalKw(raw, source, windowSec, scale);
-    const oat = oatPt ? (o.get(oatPt.uuid) || []).map(([t, v]) => [t, toF(v, oatPt.units)]) : [];
+    // ctx.series already converted W/MW/Btu/h -> kW, Wh/kBtu/therm -> kWh and F/K -> degC
+    const kwh = intervalKwh(raw, source, windowSec);
+    const kw = intervalKw(raw, source, windowSec);
+    const oat = oatPt ? (o.get(oatPt.uuid) || []) : [];
     const daily = dailyTable(kwh, kw, oat, windowSec);
     return { pt, source, windowSec, kwh, kw, oat, oatPt, daily, monthly: monthlyTable(daily), total: sum(kwh.map((x) => x[1])) };
   }
 
   const siteRecord = (model, siteRef) => model.sites.find((s) => idOf(s) === siteRef) || null;
+  /** Site floor area in m2: the NF `area` attribute is ft2 unless the site has `areaUnit` m2. */
   const siteArea = (model, siteRef) => {
     const s = siteRecord(model, siteRef);
     const a = s ? parseFloat((s.attrs || {}).area) : NaN;
-    return a > 0 ? a : null;
+    if (!(a > 0)) return null;
+    const u = String((s.attrs || {}).areaUnit || "").toLowerCase().replace(/[\s²]/g, "").replace("2", "");
+    return u === "m" || u === "sqm" ? a : a / FT2_PER_M2;
   };
   const areaNote = (ctx, siteRef, monthly) => {
     const area = siteArea(ctx.model, siteRef);
     if (!area) return "No floor area (`area`) on the NF site record, so kWh is shown, not EUI.";
     const days = sum(monthly.map((m) => m.days));
-    const v = eui(sum(monthly.map((m) => m.kwh)), days, area);
-    return v == null ? "" : `EUI ${num1(v)} kBtu/ft²/yr (annualized from ${num1(days)} days, area ${num1(area)} ft²).`;
+    const sys = ctx.dispSystem();
+    const v = euiDisp(eui(sum(monthly.map((m) => m.kwh)), days, area), sys);
+    const areaTxt = sys === "imperial" ? `${num1(area * FT2_PER_M2)} ft²` : `${num1(area)} m²`;
+    return v == null ? "" : `EUI ${num1(v)} ${euiUnit(sys)} (annualized from ${num1(days)} days, area ${areaTxt}).`;
   };
+  globalThis.energyMath.siteArea = siteArea;   // pure; exposed for tests
+  /** Degree-day display options for the current display system. */
+  const ddOf = (ctx) => ddDisplay(ctx.dispDelta(1, TEMP).value);
 
   const noteNoData = (ctx, pt) => `No history for ${pt.dis} in the last ${ctx.hours} h.`;
   const noWeather = "No outside-air temperature (equip oa_t or site weather point) for degree days.";
@@ -512,8 +523,9 @@
     if (!d.oat.length) { el.textContent = noWeather; return noWeather; }
     const fit = baselineFit(d.daily);
     if (!fit) { el.textContent = "Need at least 2 complete days with outside-air data."; return "Need at least 2 complete days."; }
-    draw(ctx, el, weatherOption(d.daily, fit, residuals(d.daily, fit)), "energy-weather");
-    return `Daily kWh = ${num1(fit.intercept)} + ${fit.slope.toFixed(2)} × ${fit.xKey.toUpperCase()} (base ${BASE_F} °F), r² ${fit.r2.toFixed(2)}, ${fit.n} days.`;
+    const dd = ddOf(ctx);
+    draw(ctx, el, weatherOption(d.daily, fit, residuals(d.daily, fit), dd), "energy-weather");
+    return `Daily kWh = ${num1(fit.intercept)} + ${(fit.slope / dd.k).toFixed(2)} × ${fit.xKey.toUpperCase()} (${dd.unit}, base ${dd.base}), r² ${fit.r2.toFixed(2)}, ${fit.n} days.`;
   });
 
   equipView("energy-demand-peak", "Monthly peak kW vs kWh", (ctx, el, eq, d) => {
@@ -526,7 +538,7 @@
     const seasons = seasonPeaks(d.daily);
     if (!seasons.length) { el.textContent = "No days with both demand and outside air."; return "No usable days."; }
     draw(ctx, el, peakSeasonOption(seasons), "peak-vs-cooling");
-    return `Cooling day = daily mean outside air above ${BASE_F} °F.`;
+    return `Cooling day = daily mean outside air above ${ddOf(ctx).base} ${ctx.dispUnit(TEMP)}.`;
   });
 
   equipView("energy-mv", "M&V: baseline vs reporting period", async (ctx, el, eq, d) => {
@@ -555,14 +567,14 @@
     const redraw = () => {
       const res = mvSavings(d.daily, { from: inputs.bf.value, to: inputs.bt.value }, { from: inputs.rf.value, to: inputs.rt.value });
       if (!res) { summary.textContent = "Baseline needs >= 3 complete days and the reporting period at least 1."; return; }
-      draw(ctx, el, mvOption(res), "mv");
+      draw(ctx, el, mvOption(res, ddOf(ctx)), "mv");
       summary.textContent = `Baseline ${res.baseDays} d (r² ${res.fit.r2.toFixed(2)}, CV(RMSE) ${res.cvrmse == null ? "–" : (res.cvrmse * 100).toFixed(1) + " %"}); `
         + `reporting ${res.repDays} d: actual ${num1(res.actual)} kWh vs predicted ${num1(res.predicted)} kWh → `
         + `${res.savings >= 0 ? "savings" : "increase"} ${num1(Math.abs(res.savings))} kWh${res.pct == null ? "" : ` (${(res.pct * 100).toFixed(1)} %)`}.`;
     };
     for (const i of Object.values(inputs)) i.onchange = redraw;
     redraw();
-    return "Pick baseline and reporting days; degree days base 65 °F from the site outside air.";
+    return `Pick baseline and reporting days; degree days base ${ddOf(ctx).base} ${ctx.dispUnit(TEMP)} from the site outside air.`;
   }, { hours: 2160 });
 
   // ---- site views (all modeled sites) --------------------------------------------------------
@@ -612,7 +624,7 @@
           if (card) card.hidden = true;
           return "Needs at least 2 modeled sites with a meter.";
         }
-        const metric = siteMetric(sites);
+        const metric = siteMetric(sites, ctx.dispSystem());
         const rows = sites.map((s) => ({ ...s, value: metric.value(s.kwh, s.days, s.area) })).filter((r) => finite(r.value));
         if (rows.length < 2) { el.textContent = "Not enough data."; return "Not enough data."; }
         const note = await build(ctx, el, { sites, rows, metric });

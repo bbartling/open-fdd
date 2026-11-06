@@ -1,105 +1,51 @@
-# Open-FDD architecture locks
+# Architecture (5.0)
 
-Human-readable ownership. Machine-readable twin: [`ownership.yaml`](ownership.yaml).
+Open-FDD is an NF app. NF owns the field bus (BACnet, Modbus), the point model (Haystack tags), history, auth,
+remote access (Normal Online) and config backups. Open-FDD adds a UI and hooks. Decision: ADR-014 in `docs/architecture/`.
 
-Trust **tested current code**. Update this file when code truth changes.
+## Pieces
 
----
+| Piece | Where | Runs in |
+|---|---|---|
+| Static UI | `nf-app/static/` (served by NF at `/api/v1/apps/static/open-fdd/`) | the browser; plain JS, strict CSP, vendored ECharts |
+| `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node runtime; SQL rules in SQLite-WASM (sql.js) or PGlite |
+| `weather` hook | `nf-app/hooks/weather.js`, every 20 min | NF Node runtime; Open-Meteo to global variables |
+| `sparql` hook | `nf-app/hooks/sparql.js`, on request | NF Node runtime; Oxigraph over the model's Turtle |
+| Rule math | `sql/fdd/` (Postgres SQL) to `nf-app/rules/pack-*.json` | built by `scripts/nf/build_*.py` |
+| Manifest | `nf-app/app.json` (application, file map, hooks) | read by `nf_app_sync.py` / the NF MCP |
 
-## Surfaces
+The UI and the `fdd` hook share code: the hook loads `static/model.js`, `fdd.js`, `units.js` and the catalog, so they
+cannot disagree about binding or units. NF caches static files for 5 minutes.
 
-| Surface | Role | Must not |
-| --- | --- | --- |
-| **Open-FDD product** (GHCR stack) | Rust central (Timescale historian + `sql/fdd` FDD + `/api/analytics/*`), React SPA (`openfdd-web`). `architecture_epoch: portal-timescale-v1`. Ingest is the Normal Framework portal API and CSV. Deploy central + web + Timescale (`./scripts/openfdd_stack_up.sh portal`). Hosting is the local single-host stack only (Railway / cloud web-app hosting retired). Soft-OPEN ≠ FQ ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)) | Python/pandas in the product request path; FDD math in TypeScript; Parquet/DataFusion co-canonical; restoring MQTT or fieldbus as product ingest |
-| **React SPA** | Archived product UI (`archive/product-ui/react-spa-v4` → GHCR `openfdd-web` until Wave F) → central `/api` only ([ADR-001](../docs/architecture/adr-001-react-rust-modernization.md)); internet-facing hygiene (no bench credential hints on login) | Secret/path handoffs in product UI; BACnet wire ownership in the browser |
-| **Static product UI** | Default portal UI on central at `/app/` when `OPENFDD_STATIC_PRODUCT_UI=1` — lean HTML, modular JS, vendored ECharts, typed model graph projection, SI-aware charts, scope guards, RCx/FDD workflow parity ([ADR-013](../docs/architecture/adr-013-static-product-ui-central.md)); skill [`openfdd-static-ui`](skills/openfdd-static-ui/SKILL.md) | CDN scripts; Model tab calling `/api/model/agent-context`; CSP `unsafe-eval`; substring equipment selection |
-| **Historian** | **TimescaleDB durable history** + versioned SQL FDD (`sql/fdd`, `sql/schema`); ADR-010 Timescale hard cutover ([historian lock](docs/HISTORIAN_ARCHITECTURE.md)) | Dual-write; Parquet/Arrow/DataFusion co-canonical; Feather durability; Python on FDD equation path |
-| **Open-FDD PyPI** (`open-fdd`) | Third-party libraries: `ecm_engineering`, `rules`, `analytics`, `reporting` — runs **outside** the product app | Be mistaken for the product FDD runtime |
-| **Camber** (external) | [yroussev/camber](https://github.com/yroussev/camber) Apache-2.0 — algorithm reference for PyPI M&V / change-point ports only | GHCR request path; OT adapters; `camber serve` as product UI |
-| **Vibe 21 program kit** | [`tools/open-fdd-vibe21-production/`](../tools/open-fdd-vibe21-production/) — recovery → twin → Unity ZIP import | Skip Master Loop gates; Unity Editor in production |
-| **Vibe 19** (playground) | External pandas oracle demo + GHCR demo image | Own production FDD or product UI |
-| **Vibe 20** (playground) | EnergyPlus twin, calibration, ECM cross-check | Retain duplicate **generic** ECM formulas after Open-FDD parity |
-| **MCP** (`openfdd-mcp`) | Read-first stdio tools → central | Embed EnergyPlus dial tools without an explicit product decision |
-| **`edge/`** | Package, semantic, and SQL helper linked by central. The edge process is archived. | Be deleted “for cleanup” |
-| **`os/`** | Future OS concept | Be deleted “for cleanup” |
-| **WattLab export tooling** | `tools/wattlab_export` (optional offline Python) | Ship inside the product central image or block health/analytics |
+## Editions
 
----
+- **Full** (`nf-app/`, app id `open-fdd`): UI tabs Overview, Charts, FDD, RCx, Points, Export, BACnet Server, Model and RDF
+  (with SPARQL); hooks `fdd`, `weather`, `sparql`. Engine `sqlite` (small) or `pglite` (4 GB+); `engine: "auto"` picks.
+- **Lite** (`lite/`, app id `open-fdd-lite`): no FDD engine and no npm dependencies; Overview, Charts, Points, BACnet
+  Server, Model and RDF; `weather` hook with an optional BACnet mirror. For 1 GB boxes.
 
-## Historian ownership
+## Data flow
 
-Canonical contract: [`docs/HISTORIAN_ARCHITECTURE.md`](docs/HISTORIAN_ARCHITECTURE.md) + [`../docs/architecture/adr-010-timescale-hard-cutover.md`](../docs/architecture/adr-010-timescale-hard-cutover.md).
+```
+NF model (Haystack) --point/query--> bind roles (class, else markers; per equip, per site)
+NF history --point/data (window=300s, AVERAGE)--> 5-minute grid, SI --> SQL pack (one query per rule)
+  --> rows --> result points written to NF (one per equip and rule) --> trended, charted, in the RDF,
+      optionally served as BACnet AVs (config.bacnet.enabled)
+```
 
-- **TimescaleDB is the canonical durable historian** (Wave-X 3.6.0+).
-- FDD/analytics equations live in versioned SQL packs (`sql/fdd`, future `sql/analytics`); Rust binds/auth/serializes only.
-- **FORBIDDEN:** Parquet/Arrow/DataFusion/Feather co-canonical, dual-write, dual-read.
-- Continuous AFDD uses watermark/incremental windows over Timescale samples — not a full-DB hammer every tick.
-- Bulk package import and continuous AFDD remain separate modes.
+The UI reads the same model and history through the NF API and draws charts. Faults are drawn from the result points
+as a 0/1 lane at the bottom of each plot.
 
----
+## RDF and SPARQL
 
-## Rule cookbooks (both forever)
+`modelToTurtle()` (`static/model.js`) turns the model into Turtle: sites, equips, devices, points, markers, refs and
+one Brick `ref:TimeseriesReference` per point (`ref:hasTimeseriesId` = NF point uuid). The UI SPARQL panel loads it into
+Oxigraph (WASM, vendored, `wasm-unsafe-eval` in the CSP). The `sparql` hook does the same server-side:
+`POST /api/v1/apps/open-fdd/hooks/sparql` with `args.query` and `args.format` (`json`, `csv`, `turtle`); read the
+answer from `.../hooks/sparql/runs?include_results=true`. `tools/rdf-check` validates the export with Oxigraph and rdflib.
 
-| Cookbook | Location | Role |
-| --- | --- | --- |
-| PostgreSQL / Timescale SQL pack | `sql/fdd/` + `sql/schema/` (+ cookbook where dual-expression) | Production execution |
-| Pandas expression cookbook | `docs/rules/cookbook/pandas-cookbook.md` + `open_fdd.rules` | PyPI oracle / engineering explanation |
-| Parity matrix | `docs/rules/cookbook/parity-matrix.md` | Honesty about gaps |
+## Constraints
 
-Never replace cookbooks with generated API docs alone.
-Never delete one cookbook because the other engine “won.”
-
-**Execution:** versioned Timescale SQL packs (`sql/fdd/`, `sql/schema/`) on central — not DataFusion ([ADR-010](../docs/architecture/adr-010-timescale-hard-cutover.md)).
-**Oracle / PyPI:** pandas cookbook + `open_fdd.rules`.
-**Recovery evidence:** [`docs/migration/react-rust/capabilities.yaml`](../docs/migration/react-rust/capabilities.yaml).
-
----
-
-## Pandas allowed-use boundaries
-
-**Allowed:** vibe19 playground; PyPI oracle extras; notebooks; characterization/parity tests against cookbooks; clean-room / Apache-attributed ports inspired by Camber into `open_fdd.*`.
-
-**Forbidden:** production central computing FDD or Overview analytics via pandas; silent SQL→pandas fallback; claiming product FDD is pandas; vendoring Camber into GHCR images.
-
-## Data model / graph (Wave S)
-
-- ADR: [`docs/architecture/ADR_data_model_graph.md`](../docs/architecture/ADR_data_model_graph.md)
-- Consumer/route matrix: [`docs/modeling/consumer-route-matrix.md`](../docs/modeling/consumer-route-matrix.md)
-- Telemetry/FDD = Timescale + `sql/fdd`; RDF/SPARQL = relationships (when product central exposes them)
-- Package TTL namespace: `urn:openfdd:ns#`; legacy commissioning RDF: `https://open-fdd.dev/model#`
-
----
-
-## ECM ownership
-
-| Kind | Owner |
-| --- | --- |
-| Generic HVAC / finance formulas | `open_fdd.ecm_engineering` (PyPI) |
-| EnergyPlus IDF, sim orchestration, APIHelper, calibration | vibe20 |
-| Adapters / field-name translation | vibe20 (no recomputation of canonical formulas) |
-
----
-
-## Reporting ownership
-
-| Kind | Owner |
-| --- | --- |
-| Portable report builders / schemas | `open_fdd.reporting` (PyPI) |
-| Product download UX | Static UI on central `/app/`; React SPA archived at `archive/product-ui/react-spa-v4` |
-
----
-
-## Container ownership
-
-| Image | Channel | Notes |
-| --- | --- | --- |
-| `openfdd-central`, `openfdd-web` | newest-by-OCI-`created` `sha-*` (`./scripts/ghcr_newest_by_created.py`) | Central image is **Rust/debian only** (no Python). Timescale is the database, not a GHCR app image. |
-| `openfdd-fieldbus`, `openfdd-mqtt` | historical/non-executable | Unqualified archive. Do not pull them as the 4.0 stack. See [`docs/archive/ai-agent/historical-3.5-ot-ops.md`](../docs/archive/ai-agent/historical-3.5-ot-ops.md). |
-| `openfdd-mcp` | `:nightly` | Separate workflow |
-| `vibe19`, `vibe20` | `:develop` | External playgrounds |
-
----
-
-## Versioning ownership
-
-See [`docs/VERSIONING.md`](docs/VERSIONING.md).
+- No site-specific code; the model in NF is the only configuration.
+- NF's Envoy ends pushed stream batches without a final chunk behind proxies; `nf.js` treats that as a normal end.
+- Through the Normal Online portal API-key tokens cannot read `/api/v1/bacnet/*`; the page sends the console's Clerk token.

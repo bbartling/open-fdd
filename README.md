@@ -3,10 +3,12 @@
 <p align="center">
   <a href="https://discord.gg/qjT3w9y3pu"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg" alt="NF app CI"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/sql-pack-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/sql-pack-ci.yml/badge.svg" alt="SQL pack CI"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml/badge.svg" alt="pandas == SQL parity"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/security.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/security.yml/badge.svg" alt="Security"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml/badge.svg" alt="Docs"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/publish-open-fdd.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/publish-open-fdd.yml/badge.svg" alt="PyPI publish"></a>
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
   <img src="https://img.shields.io/badge/Normal%20Framework-app-0B7285" alt="Normal Framework app">
-  <img src="https://img.shields.io/badge/SQL-FDD-purple" alt="SQL FDD">
 </p>
 
 <p align="center">
@@ -15,22 +17,24 @@
 
 **Open-FDD is free, open-source fault detection and diagnostics (FDD) and retro-commissioning (RCx) for HVAC,
 shipped as a [Normal Framework](https://www.normal.dev/) (NF) app.** It runs inside NF on the building's edge
-box, reads NF's Haystack model and point history directly, and runs the same 77-rule SQL pack everywhere — from
-a small edge to a full IoT server, on the LAN or through the Normal Online portal.
+box and reads NF's Haystack model and point history directly, on the LAN or through the Normal Online portal.
+Documentation: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**.
 
-- **FDD:** 77 SQL rules (AHU, VAV, chiller/plant, boiler, heat pump, meters, sensors) run hourly by an NF hook;
-  each result is an NF point tagged `fault`, `ruleRef`, `equipRef` — trended, queryable, in the RDF, and
-  optionally served on NF's BACnet server for the BAS front end.
-- **Charts:** the full RCx library (60 views: air handlers, zones/VAV, plant, weather, sensors, energy/M&V) plus a
-  per-rule plot. Faults always show the same way: a 0/1 lane at the bottom of the plot.
+- **FDD:** 77 SQL rules (AHU, VAV, chiller/plant, boiler, heat pump, meters, sensors) run hourly by an NF hook in
+  SQLite-WASM or PGlite. Each result is an NF point tagged `fault`, `ruleRef`, `equipRef`: trended, queryable, in the RDF,
+  and optionally served on NF's BACnet server.
+- **Charts:** 60 RCx views (air handlers, zones/VAV, plant, weather, sensors, energy/M&V) plus a per-rule plot.
+  Faults always show the same way: a 0/1 lane at the bottom of the plot.
+- **Units:** FDD math is SI only; an imperial / SI toggle controls the display.
+- **Export:** CSV download for Excel (Export tab); Haystack to RDF/Turtle with Brick time-series references, a
+  browser SPARQL panel, and a SPARQL hook (`POST /api/v1/apps/open-fdd/hooks/sparql`, `args.query`, `args.format`).
 - **No site code:** equipment, points and units are found by Haystack tags and NF classes. Model the site in NF;
   never fork the app per building.
-- **Model export:** Haystack → RDF/Turtle with external time-series references (Brick `ref:`), checked with
-  Oxigraph + rdflib.
+- **Quality:** type-checked JavaScript (JSDoc + `tsc`), pandas == SQL parity tests, ZAP / npm audit / gitleaks in CI.
 
 ```mermaid
 flowchart LR
-  BAS[BACnet / Modbus / Niagara] --> NF[(Normal Framework<br/>points + history + Haystack model)]
+  BAS[BACnet / Modbus / Niagara] --> NF[(Normal Framework<br/>points, history, Haystack model)]
   NF -->|point/query, point/data| UI[Open-FDD UI<br/>nf-app/static]
   NF -->|hourly hook| FDD[FDD hook<br/>SQL pack in SQLite-WASM or PGlite]
   FDD -->|fault points| NF
@@ -38,50 +42,50 @@ flowchart LR
   Portal[Normal Online portal] --> UI
 ```
 
+## Editions
+
+| | **Open-FDD** (`nf-app/`) | **Open-FDD Lite** (`lite/`) |
+|---|---|---|
+| App id | `open-fdd` | `open-fdd-lite` |
+| Box | 2 GB or more (SQLite engine); 4 GB or more for PGlite | 1 GB, such as a Raspberry Pi 3 |
+| Tabs | Overview, Charts, FDD, RCx, Points, Export, BACnet Server, Model and RDF (SPARQL) | Overview, Charts, Points, BACnet Server, Model and RDF |
+| Hooks | `fdd`, `weather`, `sparql` | `weather` (optional BACnet mirror) |
+| Deploy | `python3 scripts/nf/hooks/nf_app_sync.py --env <console env> push nf-app/app.json` | `python3 scripts/nf/hooks/nf_app_sync.py --env <console env> push lite/app.json` |
+
+Never run builds, tests or heavy engines on a small box; deploy from a PC.
+
 ## Quick start
 
-**Try it on any PC — no NF box needed** (synthetic two-site building, every view draws):
+**Try it on any PC, no NF box needed** (synthetic two-site building; every view draws):
 
 ```bash
 node nf-app/dev/mock-nf.mjs
 # open http://127.0.0.1:8765/api/v1/apps/static/open-fdd/
 ```
 
-**Install on an NF box** (NF ≥ 3.10, console login): see [docs/install/nf-plugin.md](docs/install/nf-plugin.md).
-
-```bash
-python3 scripts/nf/hooks/nf_app_sync.py --env ~/.secrets/nf_site_console.env push nf-app/app.json
-```
+**Install on an NF box** (NF 3.10 or newer, console login): see [docs/install.md](docs/install.md).
 
 **Test:**
 
 ```bash
-node --test nf-app/tests/*.test.mjs
+node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
+(cd nf-app && npm ci && npm run typecheck)
 python3 scripts/nf/build_rule_catalog.py --check && python3 scripts/nf/build_sql_pack.py --check
 ```
-
-## Profiles
-
-| Profile | Box | FDD engine | Notes |
-|---|---|---|---|
-| edge-lite | ≥ 1 GB (2 GB+ recommended) | SQLite-WASM (sql.js, vendored, ~60 MB) | translated pack; 77/77 rules match Postgres in CI |
-| full | ≥ 4 GB | PGlite (real Postgres in WASM, ~300 MB) | the pack exactly as written; `engine: "auto"` picks it |
-| full + TimescaleDB | NF with the Timescale connector | in-database | planned — needs NF's connector schema ([status](docs/migration/nf-plugin/STATUS.md)) |
 
 ## Repository map
 
 | Path | What |
 |---|---|
-| [`nf-app/`](nf-app/README.md) | **The product.** NF app manifest, UI (`static/`), hooks (`hooks/`), rule packs (`rules/`), tests, mock NF (`dev/`) |
-| [`sql/fdd/`](sql/fdd/README.md) | The FDD math: 77 Postgres SQL rules, registry, role map, tuning catalog — the single source the packs are built from |
-| [`scripts/nf/`](scripts/nf) | Build the rule catalog and SQL packs, deploy/sync the app (`hooks/nf_app_sync.py`) |
-| [`deploy/nf-caddy/`](deploy/nf-caddy/README.md) | Optional Caddy front door: open dashboard, console and writes behind a login, HTTP or TLS |
-| [`tools/rdf-check/`](tools/rdf-check) | Turtle export checker (Oxigraph + rdflib) |
-| [`open_fdd/`](open_fdd) | PyPI package: pandas reference rules and report tools (notebooks, parity) |
-| [`crates/`](crates) | Rust helpers kept for SQL contracts and DB bootstrap (`fdd_core`, `fdd_rules`, `fdd_tsdb`, `fdd_csv`) |
-| [`tests/`](tests), [`scripts/qualification/`](scripts/qualification) | SQL pack qualification and parity suites |
-| [`docs/`](docs) | Architecture ([ADR-014](docs/architecture/adr-014-open-fdd-as-nf-plugin.md)), migration [plan](docs/migration/nf-plugin/PLAN.md) / [status](docs/migration/nf-plugin/STATUS.md) / [NF features](docs/migration/nf-plugin/NF_FEATURES.md), install |
-| [`archive/`](archive/README.md) | Retired code. `archive/central-v4/` = the Rust central stack (last release: tag `v4.0.11-central`) |
+| [`nf-app/`](nf-app/README.md) | **The full app.** Manifest, UI (`static/`), hooks (`hooks/`), rule packs (`rules/`), tests, mock NF (`dev/`) |
+| [`lite/`](lite/README.md) | **Open-FDD Lite** for 1 GB boxes |
+| [`sql/fdd/`](sql/fdd/README.md) | The FDD math: 77 Postgres SQL rules, registry, role map, tuning catalog; the packs are built from it |
+| [`scripts/nf/`](scripts/nf) | Build the rule catalog and SQL packs, generate the rule docs, deploy (`hooks/nf_app_sync.py`) |
+| [`deploy/nf-caddy/`](deploy/nf-caddy/README.md) | Optional Caddy front door: open dashboard, console and writes behind a login |
+| [`tools/rdf-check/`](tools/rdf-check/README.md) | Turtle export checker (Oxigraph + rdflib) |
+| [`open_fdd/`](open_fdd), [`tests/parity/`](tests/parity) | PyPI package (pandas reference rules) and the pandas == SQL parity tests |
+| [`openfdd_agent_spec/`](openfdd_agent_spec/README.md), [`AGENTS.md`](AGENTS.md) | Spec and skills for AI coding agents (Claude Code, Cursor, Codex) |
+| [`docs/`](docs) | The documentation site (GitHub Pages) and [ADR-014](docs/architecture/adr-014-open-fdd-as-nf-plugin.md) |
 
 ## PyPI package
 
@@ -89,8 +93,8 @@ python3 scripts/nf/build_rule_catalog.py --check && python3 scripts/nf/build_sql
 pip install open-fdd
 ```
 
-Reference library (`open_fdd.rules`) for notebooks and parity checks — not the app's request path. Rule catalog:
-[Rule Cookbook](https://bbartling.github.io/open-fdd/rules/).
+`open-fdd` is the pandas reference implementation of the rules plus tools for AI agents (reports, ECM workbooks). It is
+for notebooks and parity checks, not the app's request path. Rule reference: [FDD rules](https://bbartling.github.io/open-fdd/fdd-rules.html).
 
 <details>
 <summary>💛 Support This Work</summary>
@@ -109,5 +113,5 @@ with professional application-security testing to keep it strong, robust, free, 
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The pre-plugin 4.0 README is kept at
-[archive/central-v4/README-open-fdd-4.0.md](archive/central-v4/README-open-fdd-4.0.md).
+MIT: see [LICENSE](LICENSE). The 4.x line (Rust central stack) is frozen at tag `v4.0.11-central` (branch `release/4.x`);
+changes are in [CHANGELOG.md](CHANGELOG.md).

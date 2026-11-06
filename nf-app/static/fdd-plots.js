@@ -11,7 +11,9 @@
 // Classic script (no import/export/eval). Everything lives in the IIFE below; it exposes
 //   fddRulePlot(el, { rule, equipRec, bound, resultPoint, hours })  -> note string
 // plus pure helpers fddPlot* (for tests and other views) and registers three RCx views.
-// Needs nf.js, model.js, theme.js, charts.js, fdd.js, rcx.js loaded first.
+// Units: signals reach this file as canonical SI (ctx.series / rcxToSI); sensor health, limits and
+// masks all run in SI. Series are mapped to the display system (rcxDisp*) only when a chart is built.
+// Needs nf.js, model.js, theme.js, charts.js, fdd.js, rcx.js (and units.js) loaded first.
 
 (() => {
   "use strict";
@@ -27,15 +29,13 @@
   const hiddenX = (gridIndex, show) => ({ type: "time", gridIndex, show, axisPointer: { show: true } });
 
   // ---- unit families: one stacked grid per family, like the old role-units grouping ---
-  /** temp | pct | pressure | flow | power | bool | other:<unit or name> for a model point. */
+  const FAMILY_OF_QUANTITY = { temperature: "temp", percent: "pct", pressure: "pressure", flow: "flow", power: "power" };
+  /** temp | pct | pressure | flow | power | bool | other:<SI unit or name> for a model point (by quantity, not unit text). */
   function unitFamily(p) {
     if (p.kind === "Bool") return "bool";
-    const u = (p.units || "").toLowerCase();
-    if (/°|deg/.test(u)) return "temp";
-    if (u.includes("%")) return "pct";
-    if (/(^|\b)(pa|kpa|psi|inh|in\.?\s?w|wc)/.test(u)) return "pressure";
-    if (/cfm|gpm|l\/s|m3|flow/.test(u)) return "flow";
-    if (/(^|\s)k?w$|watt/.test(u)) return "power";
+    const q = rcxUnits() && p.units ? rcxUnits().quantityOf(p.units) : null;
+    if (q && FAMILY_OF_QUANTITY[q]) return FAMILY_OF_QUANTITY[q];
+    const u = rcxSiUnit(p).toLowerCase();
     if (u) return `other:${u}`;
     if (has(p, "temp")) return "temp";
     if (has(p, "humidity")) return "pct";
@@ -117,30 +117,17 @@
   const HEALTH = { OK: 0, STALE: 1, FLATLINE: 2, RANGE: 3 };
   const HEALTH_LABELS = ["ok", "stale", "flatline", "out of range"];
 
-  // Plausibility limits in canonical units (°F, %RH, inH2O) — what a working sensor of that
-  // family can physically report; the old SV-RANGE rule scaled similar bounds per family.
-  const SENSOR_LIMITS = { temp: { min: -40, max: 150 }, pct: { min: -2, max: 102 }, pressure: { min: -5, max: 15 } };
-
-  /** Convert a reading to the canonical unit of its family (°C -> °F, Pa/kPa/psi -> inH2O). */
-  function fddPlotCanon(v, fam, unit) {
-    if (!finite(v)) return null;
-    const u = (unit || "").toLowerCase();
-    if (fam === "temp" && /c$/.test(u.replace(/\s/g, ""))) return v * 9 / 5 + 32;
-    if (fam === "pressure") {
-      if (u === "pa") return v / 249.089;
-      if (u === "kpa") return v * 4.01463;
-      if (u === "psi") return v * 27.6799;
-    }
-    return v;
-  }
+  // Plausibility limits in SI (degC, %RH, Pa) — what a working sensor of that family can physically
+  // report: -40..65.556 C (-40..150 F), -2..102 %, -1245.4..3736.3 Pa (-5..15 inH2O).
+  const SENSOR_LIMITS = { temp: { min: -40, max: 65.556 }, pct: { min: -2, max: 102 }, pressure: { min: -1245.4, max: 3736.3 } };
 
   /**
    * Per-hour health of one sensor, aligned to `grid` (hour-start ms list).
-   * series = { avg, min, max, count }: Map(hourStart ms -> value) from NF AVERAGE/MIN/MAX/COUNT.
-   * opts: { family, unit, staleHours = 2, flatTol = 0.055556, minCount = 3, limits }
+   * series = { avg, min, max, count }: Map(hourStart ms -> value) from NF AVERAGE/MIN/MAX/COUNT, in SI.
+   * opts: { family, staleHours = 2, flatTol = 0.055556, minCount = 3, limits }
    * Thresholds (defaults mirror fdd-catalog SV-STALE / SV-FLATLINE / SV-RANGE parameters):
    *   out of range  an hour's MIN or MAX is outside the family's plausibility limits (priority);
-   *   flatline      >= minCount samples in the hour and (MAX - MIN) <= flatTol (canonical units);
+   *   flatline      >= minCount samples in the hour and (MAX - MIN) <= flatTol (SI units);
    *   stale         a run of >= staleHours consecutive hours with no samples after the sensor's
    *                 first sample (shorter gaps stay null = no verdict, leading hours before
    *                 the first sample are null = no history yet);
@@ -148,7 +135,7 @@
    * Returns [code|null, ...] with codes from HEALTH.
    */
   function fddPlotHealthStates(grid, series, opts = {}) {
-    const { family = "temp", unit = "", staleHours = 2, flatTol = 0.055556, minCount = 3 } = opts;
+    const { family = "temp", staleHours = 2, flatTol = 0.055556, minCount = 3 } = opts;
     const limits = opts.limits || SENSOR_LIMITS[family] || null;
     const out = grid.map(() => null);
     const present = grid.map((t) => series.avg.has(t));
@@ -157,8 +144,8 @@
     for (let i = first; i < grid.length; i++) {
       if (!present[i]) continue;
       const t = grid[i];
-      const lo = fddPlotCanon(series.min && series.min.has(t) ? series.min.get(t) : series.avg.get(t), family, unit);
-      const hi = fddPlotCanon(series.max && series.max.has(t) ? series.max.get(t) : series.avg.get(t), family, unit);
+      const lo = series.min && series.min.has(t) ? series.min.get(t) : series.avg.get(t);
+      const hi = series.max && series.max.has(t) ? series.max.get(t) : series.avg.get(t);
       const n = series.count ? series.count.get(t) : null;
       if (limits && (lo < limits.min || hi > limits.max)) out[i] = HEALTH.RANGE;
       else if (finite(n) && n >= minCount && finite(lo) && finite(hi) && hi - lo <= flatTol) out[i] = HEALTH.FLATLINE;
@@ -278,7 +265,7 @@
     if (!roles.length) return "No bound input points for this rule on this equip.";
     const pts = roles.map((r) => bound[r][0]);
     const windowSec = pickWindow(hours);
-    const [sig, res] = await Promise.all([
+    const [sigRaw, res] = await Promise.all([
       fetchSeries(pts, hours, { windowSec }),
       // Same data as rcxFaultData, but from the result point the caller already resolved.
       resultPoint ? fetchSeries([resultPoint], hours, { method: "MAX", windowSec: 3600 }) : Promise.resolve(null),
@@ -287,8 +274,11 @@
     roles.forEach((role, i) => {
       const p = pts[i];
       const fam = unitFamily(p);
-      const g = groups.get(fam) || { family: fam, unit: p.units || "", series: [] };
-      g.series.push({ name: `${role}${p.units ? ` (${p.units})` : ""}`, kind: p.kind, data: sig.get(p.uuid) || [] });
+      // history arrives in the point's own unit: SI first, then display units for the chart
+      const si = rcxSiUnit(p), unit = rcxDisp(0, si).unit;
+      const g = groups.get(fam) || { family: fam, unit, series: [] };
+      g.series.push({ name: `${role}${unit ? ` (${unit})` : ""}`, kind: p.kind,
+        data: rcxDispSeries(rcxToSI(sigRaw.get(p.uuid) || [], p), si) });
       groups.set(fam, g);
     });
     const lane = res ? (res.get(resultPoint.uuid) || []).map(([t, v]) => [t, v > 0 ? 1 : 0]) : [];
@@ -314,8 +304,8 @@
       const [sig, lane] = await Promise.all([ctx.series([bas, web]), rcxFaultData(ctx.model, eq.id, "OAT-METEO", ctx.hours)]);
       const built = fddPlotOatOption({
         title: `OAT-METEO · ${eq.name}`,
-        bas: { name: `BAS ${bas.dis || bas.name}`, data: sig.get(bas.uuid) || [] },
-        web: { name: `web ${web.dis || web.name}`, data: sig.get(web.uuid) || [] },
+        bas: { name: `BAS ${bas.dis || bas.name}`, data: ctx.dispSeries(sig.get(bas.uuid) || [], ctx.siUnit(bas)) },
+        web: { name: `web ${web.dis || web.name}`, data: ctx.dispSeries(sig.get(web.uuid) || [], ctx.siUnit(web)) },
         unit: ctx.unit(bas), withLane: lane.length > 0,
       });
       if (!(sig.get(bas.uuid) || []).length) return "No history in this range.";
@@ -356,7 +346,7 @@
         label: `${role} · ${p.dis || p.name}`,
         states: fddPlotHealthStates(grid, { avg: hourly(avg.get(p.uuid)), min: hourly(min.get(p.uuid)),
           max: hourly(max.get(p.uuid)), count: hourly(count.get(p.uuid)) },
-        { family: unitFamily(p), unit: p.units, staleHours: stale, flatTol: tol }),
+        { family: unitFamily(p), staleHours: stale, flatTol: tol }),
       }));
       const option = fddPlotHealthOption({ title: `Sensor health · ${eq.name}`, rows, hours: grid });
       draw(el, { option, heightPx: Math.max(220, 44 + 86 + rows.length * 26) }, `sensor_health_${eq.name}`);
@@ -380,9 +370,8 @@
         if (!arr.length) continue;
         const fam = unitFamily(p);
         const y = arr.map(([, v]) => v);
-        // Hourly samples: flatline = 3 identical hours; physical bounds in the sensor's own unit.
-        const lim = SENSOR_LIMITS[fam];
-        const bounds = lim ? { min: invertCanon(lim.min, fam, p.units), max: invertCanon(lim.max, fam, p.units) } : null;
+        // Hourly samples (SI): flatline = 3 identical hours; physical bounds are SI limits.
+        const bounds = SENSOR_LIMITS[fam] || null;
         const masks = fddPlotSensorMasks(y, { flatlineWindow: 3, minSlice: 3, bounds });
         const score = Object.values(masks).reduce((a, m) => a + m.reduce((x, z) => x + z, 0), 0);
         if (!worst || score > worst.score) worst = { role, p, arr, masks, score };
@@ -391,8 +380,8 @@
       const t = worst.arr.map(([x]) => x);
       const lanes = fddPlotMaskLanes(t, worst.masks);
       const built = fddPlotSensorFaultOption({
-        title: `Sensor fault lanes · ${eq.name} · ${worst.role}`, name: worst.p.dis || worst.p.name, yTitle: worst.p.units,
-        t, y: worst.arr.map(([, v]) => v), nLanes: lanes.length,
+        title: `Sensor fault lanes · ${eq.name} · ${worst.role}`, name: worst.p.dis || worst.p.name, yTitle: ctx.unit(worst.p),
+        t, y: ctx.dispSeries(worst.arr, ctx.siUnit(worst.p)).map(([, v]) => v), nLanes: lanes.length,
       });
       built.option = rcxWithFaultLane(built.option, lanes);
       draw(el, built, `sensor_fault_${eq.name}_${worst.role}`);
@@ -400,20 +389,8 @@
     },
   });
 
-  /** Inverse of fddPlotCanon for a limit value (canonical -> the sensor's own unit). */
-  function invertCanon(v, fam, unit) {
-    const u = (unit || "").toLowerCase();
-    if (fam === "temp" && /c$/.test(u.replace(/\s/g, ""))) return (v - 32) * 5 / 9;
-    if (fam === "pressure") {
-      if (u === "pa") return v * 249.089;
-      if (u === "kpa") return v / 4.01463;
-      if (u === "psi") return v / 27.6799;
-    }
-    return v;
-  }
-
   Object.assign(globalThis, {
     fddRulePlot, fddPlotMaskLanes, fddPlotExpandRoles, fddPlotRuleOption, fddPlotOatOption, fddPlotHealthStates,
-    fddPlotHealthOption, fddPlotSensorMasks, fddPlotSensorFaultOption, fddPlotUnitFamily: unitFamily, fddPlotCanon,
+    fddPlotHealthOption, fddPlotSensorMasks, fddPlotSensorFaultOption, fddPlotUnitFamily: unitFamily, fddPlotLimits: SENSOR_LIMITS,
   });
 })();

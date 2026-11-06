@@ -8,18 +8,25 @@
 // come from the registered ECharts theme; only the outlier flag is a fixed red.
 // Pure math is exposed on globalThis.rcxPresetMath (tests).
 //
-// Conventions (same as the old central defaults):
-//   comfort band      70-75 F (21.11-23.89 C) unless the zone has a setpoint: then
-//                     sp +/- 2.5 F, or heating_sp..cooling_sp when both exist.
-//   degree days       daily mean outdoor-air temperature, base 65 F: CDD = max(0, mean-65),
-//                     HDD = max(0, 65-mean), summed per calendar month (UTC days; NF's daily
-//                     resample buckets). Outdoor air = NF weather points (web_oa_t) first,
-//                     else the equip's own oa_t.
+// Units: ctx.series hands over canonical SI (degC, Pa, L/s, kW, kWh, %), so every threshold and
+// calculation below is SI. Values are mapped to the user's display system (ctx.disp /
+// ctx.dispDelta) only when an option or note is built. A least-squares line commutes with that
+// affine map, so scatters are fitted on the display values (same R2, same decision).
+//
+// Conventions (same physical defaults as the old central UI, expressed in SI):
+//   comfort band      21.111-23.889 C (70-75 F) unless the zone has a setpoint: then
+//                     sp +/- 1.3889 delta C (2.5 delta F), or heating_sp..cooling_sp when both exist.
+//   degree days       daily mean outdoor-air temperature, base 18.333 C (65 F): CDD = max(0, mean-base),
+//                     HDD = max(0, base-mean), in C-days, summed per calendar month (UTC days; NF's
+//                     daily resample buckets). Shown in F-days (x1.8) in the imperial display system.
+//                     Outdoor air = NF weather points (web_oa_t) first, else the equip's own oa_t.
 (function () {
   "use strict";
 
-  const DEGREE_DAY_BASE_F = 65;
-  const COMFORT_LO_F = 70, COMFORT_HI_F = 75;      // old defaults: 21.111 / 23.889 C
+  const TEMP = "°C";                                // SI temperature unit
+  const DEGREE_DAY_BASE_C = (65 - 32) * 5 / 9;  // 65 F = 18.333 C
+  const COMFORT_LO_C = (70 - 32) * 5 / 9, COMFORT_HI_C = (75 - 32) * 5 / 9;   // 21.111 / 23.889 C
+  const COMFORT_SP_HALF_C = 2.5 * 5 / 9;           // setpoint +/- 2.5 delta F = 1.3889 delta C
   const OUTLIER_RED = "#dc2626";
 
   const finite = (v) => v != null && Number.isFinite(v);
@@ -29,16 +36,10 @@
   const tsOf = (v) => (typeof v === "number" ? v : Date.parse(String(v ?? "")));
 
   // ---- pure math ----------------------------------------------------------------------
-  const isCelsius = (unit) => /(°|deg)?\s*C\b/i.test(String(unit || "")) && !/F/i.test(String(unit || ""));
-  /** Temperature in F from a value in `unit` (°F or °C; anything else passes through). */
-  const toF = (v, unit) => (v == null ? null : isCelsius(unit) ? v * 1.8 + 32 : v);
-
-  /** Comfort band [lo, hi] for a zone whose temperature is in `unit` (defaults 70-75 F). */
-  function defaultBand(unit) {
-    return isCelsius(unit) ? [(COMFORT_LO_F - 32) / 1.8, (COMFORT_HI_F - 32) / 1.8] : [COMFORT_LO_F, COMFORT_HI_F];
-  }
-  /** Half-width of the band around a single zone setpoint, in `unit` (2.5 F). */
-  const spHalfWidth = (unit) => (isCelsius(unit) ? 2.5 / 1.8 : 2.5);
+  /** Default comfort band [lo, hi] in degC (70-75 F). */
+  const defaultBand = () => [COMFORT_LO_C, COMFORT_HI_C];
+  /** Half-width of the band around a single zone setpoint, in delta degC (2.5 delta F). */
+  const spHalfWidth = () => COMFORT_SP_HALF_C;
 
   /**
    * Time in band. temps = number[]; lo/hi = number or number[] (per sample, null = unknown).
@@ -83,11 +84,10 @@
   const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
   const monthKey = (day) => day.slice(0, 7);
 
-  /** Map(UTC day -> mean) from [[ms, v]] (values in °F after `unit` conversion when unit given). */
-  function dailyMeans(arr, unit) {
+  /** Map(UTC day -> mean) from [[ms, v]] (SI values in, SI mean out). */
+  function dailyMeans(arr) {
     const acc = new Map();
-    for (const [t, v] of arr) {
-      const x = unit === undefined ? v : toF(v, unit);
+    for (const [t, x] of arr) {
       if (!finite(x)) continue;
       const k = dayKey(t), a = acc.get(k) || [0, 0];
       a[0] += x; a[1]++; acc.set(k, a);
@@ -95,12 +95,12 @@
     return new Map([...acc].map(([k, [s, n]]) => [k, s / n]));
   }
 
-  /** Degree days of one day's mean temperature (°F): kind "cdd" or "hdd". */
-  const degreeDay = (meanF, kind, base = DEGREE_DAY_BASE_F) =>
-    (!finite(meanF) ? null : kind === "hdd" ? Math.max(0, base - meanF) : Math.max(0, meanF - base));
+  /** Degree days (C-days) of one day's mean temperature (degC): kind "cdd" or "hdd". */
+  const degreeDay = (meanC, kind, base = DEGREE_DAY_BASE_C) =>
+    (!finite(meanC) ? null : kind === "hdd" ? Math.max(0, base - meanC) : Math.max(0, meanC - base));
 
-  /** Map(month -> { dd, days }) from Map(day -> mean °F). */
-  function monthlyDegreeDays(dayMeans, kind, base = DEGREE_DAY_BASE_F) {
+  /** Map(month -> { dd, days }) in C-days from Map(day -> mean degC). */
+  function monthlyDegreeDays(dayMeans, kind, base = DEGREE_DAY_BASE_C) {
     const out = new Map();
     for (const [day, m] of dayMeans) {
       const d = degreeDay(m, kind, base);
@@ -395,16 +395,20 @@
           eq, y: ctx.first(eq, role), sp: overlay ? ctx.first(eq, overlay) : null, rt: ret ? ctx.first(eq, ret) : null,
         }));
         const { data } = await load(ctx, want.flatMap((w) => [w.y, w.sp, w.rt]).filter(Boolean));
+        // data is SI; the last step maps each series to display units (delta T: a difference, no offset)
+        const toDisp = (arr, pt) => ctx.dispSeries(arr, ctx.siUnit(pt));
         const rows = [];
         for (const w of want) {
           const name = labelOf(w.eq), base = { equipment_id: name };
-          for (const [t, v] of data.get(w.y.uuid) || []) rows.push({ ...base, series: "primary", ts: t, value: v });
-          if (w.sp) for (const [t, v] of data.get(w.sp.uuid) || []) rows.push({ ...base, series: "overlay", ts: t, value: v });
+          const ySI = data.get(w.y.uuid) || [];
+          for (const [t, v] of toDisp(ySI, w.y)) rows.push({ ...base, series: "primary", ts: t, value: v });
+          if (w.sp) for (const [t, v] of toDisp(data.get(w.sp.uuid) || [], w.sp)) rows.push({ ...base, series: "overlay", ts: t, value: v });
           if (w.rt) {
             const rt = data.get(w.rt.uuid) || [];
-            for (const [t, v] of rt) rows.push({ ...base, series: "return", ts: t, value: v });
-            const supply = new Map((data.get(w.y.uuid) || []).map(([t, v]) => [t, v]));
-            for (const [t, v] of rt) if (supply.has(t)) rows.push({ ...base, series: "delta T", ts: t, value: v - supply.get(t) });
+            for (const [t, v] of toDisp(rt, w.rt)) rows.push({ ...base, series: "return", ts: t, value: v });
+            const supply = new Map(ySI.map(([t, v]) => [t, v]));
+            const dT = rt.filter(([t]) => supply.has(t)).map(([t, v]) => [t, v - supply.get(t)]);
+            for (const [t, v] of ctx.dispSeries(dT, ctx.siUnit(w.y), true)) rows.push({ ...base, series: "delta T", ts: t, value: v });
           }
         }
         const unit = unitsOf(ctx, want.map((w) => w.y));
@@ -437,21 +441,24 @@
         const { data, step } = await load(ctx, usable.flatMap((w) => [w.y, w.x]));
         const pts = [];
         for (const w of usable) {
-          const xs = (data.get(w.x.uuid) || []).map(([t, v]) => [t, toF(v, w.x.units)]);
-          for (const [x, y] of pairSeries(xs, data.get(w.y.uuid) || [], step)) pts.push({ equipment_id: labelOf(w.eq), oat: x, value: y });
+          // pair on the SI series, then map both axes to display units (the fit commutes with that)
+          const xSI = ctx.siUnit(w.x), ySI = ctx.siUnit(w.y);
+          for (const [x, y] of pairSeries(data.get(w.x.uuid) || [], data.get(w.y.uuid) || [], step)) {
+            pts.push({ equipment_id: labelOf(w.eq), oat: ctx.disp(x, xSI).value, value: ctx.disp(y, ySI).value });
+          }
         }
         const fit = resetFit(pts.map((p) => [p.oat, p.value]));
-        const unit = unitsOf(ctx, usable.map((w) => w.y));
-        const ok = draw(el, ctx, oatScatterOption(pts, { title, xTitle: `${xLabel} (°F)`, yTitle: `${role}${unit ? ` (${unit})` : ""}`, fit }), `rcx_${id}`);
-        return ok ? `${pts.length} samples · ${fit ? `slope ${round(fit.slope, 2)} / °F, R² ${round(fit.r2, 2)}` : "no fit"}` : noData(role);
+        const unit = unitsOf(ctx, usable.map((w) => w.y)), xUnit = ctx.dispUnit(TEMP);
+        const ok = draw(el, ctx, oatScatterOption(pts, { title, xTitle: `${xLabel} (${xUnit})`, yTitle: `${role}${unit ? ` (${unit})` : ""}`, fit }), `rcx_${id}`);
+        return ok ? `${pts.length} samples · ${fit ? `slope ${round(fit.slope, 2)} ${unit ? unit + " " : ""}/ ${xUnit}, R² ${round(fit.r2, 2)}` : "no fit"}` : noData(role);
       },
     });
   }
 
   // ---- the 18 presets -------------------------------------------------------------------
-  /** Per-sample comfort band for zone_t series `arr`: heating..cooling sp, else sp +/- 2.5 F, else 70-75 F. */
+  /** Per-sample comfort band (degC) for zone_t series `arr`: heating..cooling sp, else sp +/- 1.3889 delta C, else 21.111-23.889 C. */
   function bandsFor(arr, data, step, w) {
-    const [dl, dh] = defaultBand(w.t.units), half = spHalfWidth(w.t.units);
+    const [dl, dh] = defaultBand(), half = spHalfWidth();       // degC; data is SI
     const sp = w.sp ? bucketMap(data.get(w.sp.uuid) || [], step) : null;
     const cl = w.c && w.h ? bucketMap(data.get(w.c.uuid) || [], step) : null;
     const ht = w.c && w.h ? bucketMap(data.get(w.h.uuid) || [], step) : null;
@@ -487,7 +494,7 @@
       draw(b, ctx, comfortDonutOption([
         { label: "In band", value: tot.inBand }, { label: "Too warm", value: tot.above }, { label: "Too cool", value: tot.below },
       ], { title: "All zones — samples by comfort" }), "rcx_zone_comfort_donut");
-      return okA ? `${rows.length} zone(s) · band = setpoint ±2.5 °F, heating..cooling sp, else 70–75 °F` : noData("zone temperature");
+      return okA ? `${rows.length} zone(s) · band = setpoint ±${round(ctx.dispDelta(COMFORT_SP_HALF_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit}, heating..cooling sp, else ${round(ctx.disp(COMFORT_LO_C, TEMP).value, 0)}–${round(ctx.disp(COMFORT_HI_C, TEMP).value, 0)} ${ctx.dispUnit(TEMP)}` : noData("zone temperature");
     },
   });
   timeseriesPreset({ id: "zone_temps", group: "Zones", title: "Zones — all space temps (timeseries)", kinds: ZONES, role: "zone_t", overlay: "zone_air_temp_sp", rules: ["ZONE-COMFORT-PCT"] });
@@ -542,7 +549,7 @@
         for (const [t, v] of data.get(w.y.uuid) || []) {
           // fan proof when present: status/cmd above 50 % (0/1 or 0-100 both work)
           if (fan && !((rcxStats.frac(fan.get(Math.floor(t / step) * step)) ?? 0) > 0.5)) continue;
-          rows.push({ equipment_id: labelOf(w.eq), value: v });
+          rows.push({ equipment_id: labelOf(w.eq), value: ctx.disp(v, ctx.siUnit(w.y)).value });   // Pa -> display
         }
       }
       const unit = unitsOf(ctx, want.map((w) => w.y));
@@ -596,12 +603,16 @@
       else days = dailyEnergy(sum.get(s.p.uuid) || [], "interval");
       for (const [d, v] of days) energy.set(d, (energy.get(d) || 0) + v);
     }
-    const rows = meterRows(monthlySum(energy), monthlyDegreeDays(dailyMeans(data.get(oat.uuid) || [], oat.units), dd));
+    // degree days are C-days (SI); the last step shows them in the display system (F-days = x1.8)
+    const ddK = ctx.dispDelta(1, TEMP).value, ddUnit = ddK === 1 ? "°C·day" : "°F·day";
+    const baseDisp = round(ctx.disp(DEGREE_DAY_BASE_C, TEMP).value, ddK === 1 ? 1 : 0);
+    const siRows = meterRows(monthlySum(energy), monthlyDegreeDays(dailyMeans(data.get(oat.uuid) || []), dd));
+    const rows = siRows.map((r) => ({ ...r, dd: r.dd * ddK }));
     const fit = resetFit(rows.map((r) => [r.dd, r.energy]));
     const unit = gas ? unitsOf(ctx, sources.map((s) => s.p)) : "kWh";
     const ok = draw(el, ctx, meteringChartsOption(rows, {
-      title: gas ? "Gas per month vs HDD (base 65 °F)" : "Electric kWh per month vs CDD (base 65 °F)",
-      ddLabel: `${dd.toUpperCase()} (°F·day, base ${DEGREE_DAY_BASE_F})`, energyYTitle: `${gas ? "gas" : "electric"}${unit ? ` (${unit}${sources.some((s) => s.rate) && gas ? "/day" : ""})` : ""}`, fit,
+      title: `${gas ? "Gas per month vs HDD" : "Electric kWh per month vs CDD"} (base ${baseDisp} ${ctx.dispUnit(TEMP)})`,
+      ddLabel: `${dd.toUpperCase()} (${ddUnit}, base ${baseDisp})`, energyYTitle: `${gas ? "gas" : "electric"}${unit ? ` (${unit}${sources.some((s) => s.rate) && gas ? "/day" : ""})` : ""}`, fit,
     }), gas ? "rcx_meter_gas_hdd" : "rcx_meter_elec_cdd");
     return ok ? `${rows.length} month(s) (partial months included) · ${sources.length} meter point(s) summed${fit ? ` · R² ${round(fit.r2, 2)}` : ""}` : "No month has both energy and outdoor-air history in this window.";
   }
@@ -620,7 +631,7 @@
   });
 
   globalThis.rcxPresetMath = {
-    DEGREE_DAY_BASE_F, toF, defaultBand, spHalfWidth, comfortStats, rankComfort, resetFit, pairSeries, bucketMap,
+    DEGREE_DAY_BASE_C, COMFORT_LO_C, COMFORT_HI_C, COMFORT_SP_HALF_C, defaultBand, spHalfWidth, comfortStats, rankComfort, resetFit, pairSeries, bucketMap,
     vavHealthStats, vavVerdict, dailyMeans, degreeDay, monthlyDegreeDays, isCumulative, dailyEnergy, monthlySum, meterRows, outlierEquipmentIds,
     options: {
       multiEquipmentTimeseriesOption, oatScatterOption, multiEquipmentBoxOption, rankingBarsOption, comfortDonutOption,

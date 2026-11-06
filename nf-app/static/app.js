@@ -13,7 +13,7 @@ const $ = (id) => document.getElementById(id);
 const fmtPoint = (p) => {
   const v = latestOf(p);
   if (v == null) return "–";
-  return p.kind === "Bool" ? (v ? "on" : "off") : `${fmt(v, 2)} ${unitLabel(p.units)}`.trim();
+  return p.kind === "Bool" ? (v ? "on" : "off") : `${fmt(dispVal(p, v), 2)} ${unitLabel(dispUnit(p))}`.trim();
 };
 
 let model = null;                        // loadModel() result
@@ -95,7 +95,7 @@ function renderCards() {
     <div class="card" id="card-${i}" title="${esc(p.tags.join(" "))}">
       <div class="name">${esc(p.name)}</div>
       <div class="desc">${esc(p.dis)}</div>
-      <div class="val"><span id="val-${i}">–</span><small>${unitLabel(p.units)}</small></div>
+      <div class="val"><span id="val-${i}">–</span><small>${esc(unitLabel(dispUnit(p)))}</small></div>
       <div class="delta" id="delta-${i}">&nbsp;</div>
       <div class="spark" id="spark-${i}"></div>
     </div>`).join("");
@@ -104,9 +104,10 @@ function renderCards() {
 
 function updateCard(i, flash) {
   const p = points[i];
-  const v = latestOf(p);
+  const v = dispVal(p, latestOf(p));
+  const shown = dispSeries(p, history.get(p.uuid) || []);   // history is kept as NF stores it
   $(`val-${i}`).textContent = fmt(v, isRH(p) || isTemp(p) ? 1 : 2);
-  const hour = since(history.get(p.uuid) || [], 1);
+  const hour = since(shown, 1);
   if (hour.length > 1 && v != null) {
     const d = v - hour[0][1];
     const arrow = Math.abs(d) < 0.05 ? "→" : d > 0 ? "▲" : "▼";
@@ -119,7 +120,7 @@ function updateCard(i, flash) {
     grid: { left: 0, right: 0, top: 4, bottom: 0 },
     xAxis: { type: "time", show: false }, yAxis: { type: "value", show: false, scale: true },
     series: [{
-      type: "line", data: since(history.get(p.uuid) || [], 6), showSymbol: false, smooth: true,
+      type: "line", data: since(shown, 6), showSymbol: false, smooth: true,
       lineStyle: { width: 1.5, color },
       areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
         { offset: 0, color: color + "66" }, { offset: 1, color: color + "00" }]) },
@@ -280,13 +281,13 @@ async function renderFddResults(equips) {
     const v = latestOf(p);
     const hot = has(p, "fault") && v > 0;
     return `<tr class="clickable" data-rule="${esc(ruleRefOf(p))}" data-equip="${esc(p.equipRef)}" title="plot this rule"><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
-      <td class="${hot ? "warn" : "ok"}">${fmt(v)} ${esc(p.units)}</td><td class="sub">${esc(when(p))}</td></tr>`;
+      <td class="${hot ? "warn" : "ok"}">${fmt(dispVal(p, v))} ${esc(dispUnit(p))}</td><td class="sub">${esc(when(p))}</td></tr>`;
   }).join("");
   const faults = results.filter((p) => has(p, "fault"));
   const el = $("fddLanes");
   el.hidden = !faults.length;
   if (!faults.length) return;
-  const series = await fetchSeries(faults, 24 * 7, { method: "MAX", windowSec: 3600 });
+  const series = await fetchDisplay(faults, 24 * 7, { method: "MAX", windowSec: 3600 });
   const label = (p) => (equips.length > 1 ? `${ruleRefOf(p)} · ${equipName(p.equipRef)}` : ruleRefOf(p));
   el.style.height = `${Math.max(160, 26 * faults.length + 70)}px`;
   // Heatmaps need category axes: one column per hour.
@@ -341,11 +342,11 @@ async function renderPointHistory() {
   const p = model.points.find((x) => x.uuid === selectedPoint);
   if (!p) return;
   $("histHint").textContent = `${p.dis} · ${p.tags.filter((t) => !GENERIC.has(t)).join(" ")}`;
-  const data = (await fetchSeries([p], histHours)).get(p.uuid) || [];
+  const data = (await fetchDisplay([p], histHours)).get(p.uuid) || [];
   ofddRender(mk("histChart"), {
     tooltip, grid: { left: 50, right: 20, top: 30, bottom: 50 },
     xAxis: { type: "time" },
-    yAxis: { type: "value", scale: true, name: p.kind === "Bool" ? "on / off" : unitLabel(p.units) },
+    yAxis: { type: "value", scale: true, name: p.kind === "Bool" ? "on / off" : unitLabel(dispUnit(p)) },
     series: [{
       name: p.name, type: "line", showSymbol: false, step: p.kind === "Bool" ? "end" : false,
       lineStyle: { width: 1.6 }, areaStyle: { opacity: 0.08 },
@@ -623,6 +624,20 @@ async function renderRcx() {
   }
 }
 
+// ---- display units: imperial | si (units.js, localStorage "openfdd-units") -------------------
+function syncUnitsToggle() {
+  const si = unitSystem() === "si";
+  $("unitsToggle").textContent = si ? "°C · SI" : "°F · imperial";
+  $("unitsToggle").title = `Showing ${si ? "SI (°C, Pa, L/s)" : "imperial (°F, inH₂O, cfm)"} · click for ${si ? "imperial" : "SI"}. Calculations are always SI.`;
+}
+
+function setUnits(sys) {
+  try { localStorage.setItem("openfdd-units", sys); } catch { /* storage blocked: stays imperial */ }
+  syncUnitsToggle();
+  renderCards();                 // unit labels sit in the card markup
+  renderTab(activeTab);
+}
+
 // ---- tabs + live loop -----------------------------------------------------------------
 
 function renderTab(name) {
@@ -633,6 +648,7 @@ function renderTab(name) {
   if (name === "rcx") renderRcx().catch(errs);
   if (name === "points") { renderPoints(); if (selectedPoint) renderPointHistory().catch(errs); }
   if (name === "bacnet") renderBacnet().catch((e) => ($("bacHint").textContent = `BACnet server: ${e.message}`));
+  if (name === "export") ofddExport.render({ model, scope });
   if (name === "model") renderModel();
   // Charts created while their tab was hidden have zero size until resized.
   requestAnimationFrame(ofddResizeAll);
@@ -780,6 +796,8 @@ function wireControls() {
     renderPoints();
     renderPointHistory().catch((e) => setLive(false, e.message));
   };
+  $("unitsToggle").onclick = () => setUnits(unitSystem() === "si" ? "imperial" : "si");
+  syncUnitsToggle();
   $("dlTtl").onclick = () => download(`${scope.site || "nf"}-haystack.ttl`, rdf.turtle, "text/turtle");
   $("dlJson").onclick = () => download(`${scope.site || "nf"}-haystack.json`, JSON.stringify({
     sites: model.sites, equips: model.equips, devices: model.devices,

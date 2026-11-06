@@ -2,7 +2,7 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fc6_oa_frac_mismatch.sql — Estimated OA fraction mismatch (GL36 fault 6)
 -- |RATavg − OATavg| >= ΔTmin AND |estimated OA% − design min OA%| > εF, where
--- design min OA% = MIN_CFM_DESIGN / total VAV airflow.
+-- design min OA% = MIN_FLOW_DESIGN / total VAV airflow.
 WITH h AS (
   SELECT
     equipment_id,
@@ -30,7 +30,7 @@ base AS (
       WHEN fan < {{FAN_ON_MIN}} THEN 0
       WHEN ABS(rat - oa_t) < {{OAT_RAT_DELTA_MIN}} THEN 0
       WHEN ABS((mat - rat) / NULLIF(oa_t - rat, 0)
-               - {{MIN_CFM_DESIGN}} / NULLIF(vav_total_flow, 0)) > {{EPS_AIRFLOW}} THEN 1
+               - {{MIN_FLOW_DESIGN}} / NULLIF(vav_total_flow, 0)) > {{EPS_AIRFLOW}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM (

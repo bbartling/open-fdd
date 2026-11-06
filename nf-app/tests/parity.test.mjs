@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
-const OLD = path.join(ROOT, "archive/central-v4/services/central/static/product");
 const STATIC = path.join(ROOT, "nf-app/static");
 const parity = JSON.parse(fs.readFileSync(path.join(ROOT, "nf-app/rcx-parity.json"), "utf8"));
 
@@ -25,33 +24,19 @@ function loadApp() {
   return { ids: new Set(Array.from(vm.runInContext("RCX_VIEWS", ctx), (v) => v.id)), has: (name) => vm.runInContext(`typeof ${name}`, ctx) === "function" };
 }
 
-const oldBuilders = () => {
-  const dir = path.join(OLD, "assets/js");
-  const out = new Set();
-  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".js"))) {
-    for (const m of fs.readFileSync(path.join(dir, f), "utf8").matchAll(/export function (\w+Option)\b/g)) out.add(`${f}#${m[1]}`);
-  }
-  // chart-parity.json "new_renderer" entries (incl. non-*Option helpers such as expandFddPlotRoles)
-  for (const c of JSON.parse(fs.readFileSync(path.join(OLD, "chart-parity.json"), "utf8")).charts) {
-    if (c.new_renderer) out.add(c.new_renderer.split("/").pop());
-  }
-  return out;
-};
+// The 4.x central UI was removed in 5.0 (it lives at tag v4.0.11-central). Its chart inventory is
+// frozen in rcx-parity.json: 40 builders + 18 presets. These counts must not shrink.
+const BUILDERS_4X = 40;
+const PRESETS_4X = 18;
 
-test("parity: every old chart builder is mapped", { skip: !fs.existsSync(OLD) && "archive not present" }, () => {
-  const missing = [...oldBuilders()].filter((k) => !parity.builders[k]);
-  assert.deepEqual(missing, [], `old charts with no NF-app home: ${missing.join(", ")}`);
+test("parity: the frozen 4.x chart inventory is fully mapped", () => {
+  assert.ok(Object.keys(parity.builders).length >= BUILDERS_4X, "a 4.x chart builder lost its mapping");
+  assert.equal(Object.keys(parity.presets).length, PRESETS_4X);
 });
 
-test("parity: all 18 RCx presets map to registered views", { skip: !fs.existsSync(OLD) && "archive not present" }, () => {
-  const src = fs.readFileSync(path.join(OLD, "assets/js/rcx-catalog.js"), "utf8");
-  const ids = [...src.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
-  assert.equal(ids.length, 18);
+test("parity: all 18 RCx presets map to registered views", () => {
   const app = loadApp();
-  for (const id of ids) {
-    assert.ok(parity.presets[id], `preset ${id} not in rcx-parity.json`);
-    assert.ok(app.ids.has(parity.presets[id]), `preset ${id} -> view ${parity.presets[id]} is not registered`);
-  }
+  for (const [id, view] of Object.entries(parity.presets)) assert.ok(app.ids.has(view), `preset ${id} -> view ${view} is not registered`);
 });
 
 test("parity: mapped views and functions exist in the app", () => {

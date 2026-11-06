@@ -217,3 +217,12 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding-botto
 .rcx-split { width: 100%; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--panel2); }
+
+/* ---- Export tab ---------------------------------------------------------------------- */
+.exform { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 6px 0 10px; }
+.exform label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.exform input, .exform select { font: inherit; padding: 5px 8px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+.exbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0; }
+.exbar input[type=search] { flex: 1 1 260px; max-width: 420px; }
+.exlist { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; columns: 2 320px; }
+.ex-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; font-size: 13px; break-inside: avoid; }

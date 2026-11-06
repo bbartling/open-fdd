@@ -1,6 +1,14 @@
+---
+title: Migration plan
+parent: Architecture
+nav_order: 2
+---
+
+> Historical record. `archive/central-v4/` was later removed entirely; the 4.x line is tag `v4.0.11-central`.
+
 # Open-FDD → Normal Framework plugin: migration plan
 
-Decision record: [ADR-014](../../architecture/adr-014-open-fdd-as-nf-plugin.md). Branches: `nf-plugin/slice-N`.
+Decision record: [ADR-014](../../architecture/adr-014-open-fdd-as-nf-plugin.html). Branches: `nf-plugin/slice-N`.
 Dev bench: Raspberry Pi 3 "bosspi" (NF 3.10.9-1, 1 GB — **edge-lite only**). Production target: an
 NF edge with ≥ 4 GB RAM and NF's TimescaleDB integration (**full**).
 

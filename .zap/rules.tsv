@@ -1,0 +1,6 @@
+10027	IGNORE	(Suspicious comments: words like token/password in source comments; no secrets - gitleaks guards that)
+10049	IGNORE	(Non-storable content: dev mock sends no-store; NF sets its own cache headers)
+10055	IGNORE	(CSP script-src https: is needed to load Clerk from the portal-derived host behind Normal Online)
+10109	IGNORE	(Modern web application: informational)
+90004	IGNORE	(COEP require-corp would block the cross-origin Clerk script on the portal)
+90005	IGNORE	(Sec-Fetch-Dest is a browser request header; scanner artifact)

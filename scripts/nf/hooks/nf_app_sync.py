@@ -2,14 +2,14 @@
 """Sync an NF Applications SDK app between open-fdd (source of truth) and an NF box.
 
 The app is described by a manifest next to the hook source, e.g.
-``scripts/nf/hooks/open_meteo_weather.app.json``: the application (id, runtime,
+``nf-app/app.json`` or ``lite/app.json``: the application (id, runtime,
 auth scopes), a map of NF file path -> repo file, and the hook definitions
 (UpdateHook bodies). Talks to the NF *local console* API with HTTP Basic auth
 (the remote portal token is read-only and cannot deploy).
 
     # credentials: CONSOLE_USERNAME / CONSOLE_PASSWORD, NF_CONSOLE_URL
-    ENV=~/.secrets/nf_acme_console.env
-    M=scripts/nf/hooks/open_meteo_weather.app.json
+    ENV=~/.secrets/nf_site_console.env
+    M=nf-app/app.json
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV status $M
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M   # create/update app, files, hooks; restart
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --skip-hooks   # files only
@@ -231,7 +231,7 @@ def cmd_pull(c: Console, m: dict, write: bool) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Sync an NF app manifest with an NF console")
-    ap.add_argument("--env", type=Path, default=Path("~/.secrets/nf_acme_console.env"))
+    ap.add_argument("--env", type=Path, default=Path("~/.secrets/nf_site_console.env"))
     ap.add_argument("--console", help="console base URL (default NF_CONSOLE_URL from --env)")
     ap.add_argument("action", choices=["status", "push", "run", "pull", "diff"])
     ap.add_argument("manifest", type=Path)

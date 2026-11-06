@@ -26,7 +26,7 @@
 const fs = require("fs");
 const path = require("path");
 
-// ---------------------------------------------------------------- fdd.* helpers (twins of postgres_helpers.sql)
+// ---------------------------------------------------------------- fdd.* helpers (twins of sql/fdd/postgres/postgres_helpers.sql; SI units only)
 
 const normUnit = (v) => (v == null ? "" : String(v).replace(/[^a-zA-Z0-9]/g, "").toLowerCase());
 
@@ -42,12 +42,12 @@ const quantityForRole = (role) => (role == null ? null : QUANTITY[String(role).t
 const unitDeclaresQuantity = (unit, quantity) => {
   if (unit == null || String(unit).trim() === "") return 0;
   const n = normUnit(unit);
-  if (quantity === "absolute_temperature") return ["f", "degf", "fahrenheit", "c", "degc", "celsius"].includes(n) ? 1 : 0;
+  if (quantity === "absolute_temperature") return ["c", "degc", "celsius"].includes(n) ? 1 : 0;
   if (quantity === "relative_humidity") {
     return ["pct", "percent", "rh", "percentrelativehumidity"].includes(n) || String(unit).includes("%") ? 1 : 0;
   }
   if (quantity === "air_pressure") {
-    return ["inwc", "inh2o", "inw.c.", "pa", "pascal"].includes(n) || String(unit).toLowerCase().includes("w.c") ? 1 : 0;
+    return ["pa", "pascal"].includes(n) ? 1 : 0;
   }
   return 0;
 };

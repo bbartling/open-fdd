@@ -1,15 +1,14 @@
 # NF front door (Caddy) for the Open-FDD plugin
 
 Small Caddy container in front of Normal Framework (NF) on a LAN: the Open-FDD dashboard is open,
-the NF console and every write sit behind a login, optional self-signed HTTPS. (The older
-`deploy/caddy/` folder belongs to the previous central stack and is unrelated.)
+the NF console and every write sit behind a login, optional self-signed HTTPS.
 
 ## How it fits
 
 - NF's Envoy listens on **loopback only**: in NF's compose set `ENVOY_BIND_ADDRESS=127.0.0.1`
   (NF port is `8090` on small installs, `8080` on others; set `NF_UPSTREAM` and `NF_PORT` to match).
   The portal tunnel, app hooks and the NF MCP keep using loopback.
-- Caddy (`caddy:2-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` only.
+- Caddy (`caddy:2.11.7-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` only.
 
 | Request | Access |
 |---|---|
@@ -28,7 +27,7 @@ Without TLS the basic-auth password crosses the LAN in the clear; use `Caddyfile
 ```bash
 cp .env.example .env                 # set LAN_IP (this box), NF_UPSTREAM, NF_PORT
 cp auth.caddy.example auth.caddy     # then replace its line with a real hash:
-docker run --rm caddy:2-alpine caddy hash-password -p 'choose-a-password'
+docker run --rm caddy:2.11.7-alpine caddy hash-password -p 'choose-a-password'
 #   auth.caddy = one line:  admin <hash>      (never commit it; it is gitignored)
 docker compose up -d
 ```
@@ -50,7 +49,7 @@ cert volumes; import `certs/server.crt` into client trust stores. `certs/` is gi
 ## Operate
 
 - Restart after edits: `docker compose restart caddy` (admin API is off, no live reload).
-- Validate: `docker run --rm -e LAN_IP=192.0.2.10 -e NF_UPSTREAM=127.0.0.1:8090 -v "$PWD:/etc/caddy:ro" caddy:2-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile`
+- Validate: `docker run --rm -e LAN_IP=192.0.2.10 -e NF_UPSTREAM=127.0.0.1:8090 -v "$PWD:/etc/caddy:ro" caddy:2.11.7-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile`
   (needs an `auth.caddy` and, for the TLS file, certs).
 - Lost login: write a new hash to `auth.caddy` and restart.
 - NF's Envoy ends each pushed stream batch without the final chunk, so Caddy may log

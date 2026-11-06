@@ -3,7 +3,7 @@
 # Set the values in a .env file next to this one (see README.md); defaults below are examples.
 services:
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.7-alpine
     network_mode: host          # LAN side + NF upstream on loopback
     restart: unless-stopped
     environment:

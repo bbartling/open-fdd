@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open-FDD</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https: 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!--
   Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js.
   NF static plugin: served by Normal from the app's static/ folder at
@@ -20,6 +20,7 @@
 <script type="module" src="echarts-global.js"></script>
 <script defer src="nf.js"></script>
 <script defer src="model.js"></script>
+<script defer src="units.js"></script>
 <script defer src="theme.js"></script>
 <script defer src="charts.js"></script>
 <script defer src="fdd.js"></script>
@@ -28,7 +29,9 @@
 <script defer src="rcx-overview.js"></script>
 <script defer src="rcx-presets.js"></script>
 <script defer src="energy.js"></script>
+<script defer src="export.js"></script>
 <script defer src="app.js"></script>
+<script defer src="sparql.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -42,6 +45,7 @@
   <label class="scope">equip <select id="equipPick"></select></label>
   <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
   <span class="pill" id="clock"></span>
+  <button class="btn" id="unitsToggle" type="button" title="Display units">°F · imperial</button>
   <button class="btn" id="themeToggle" type="button">☾ dark</button>
 </header>
 <nav class="tabs" id="tabs">
@@ -51,6 +55,7 @@
   <button data-tab="rcx">RCx <span class="count" id="nRcx"></span></button>
   <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
+  <button data-tab="export">Export</button>
   <button data-tab="model">Model &amp; RDF</button>
 </nav>
 
@@ -172,6 +177,36 @@
     <section class="panel">
       <h2>Object properties <span class="hint">full property list from /api/v1/bacnet/local, with linked Haystack tags</span></h2>
       <div class="objs" id="objCards"></div>
+    </section>
+  </section>
+
+  <!-- Export: CSV download of point history (export.js) -->
+  <section class="tab" id="tab-export">
+    <section class="panel">
+      <h2>Export CSV <span class="hint">history for the points in the site / equip scope above, resampled by NF · opens in Excel</span></h2>
+      <div class="exform">
+        <label>Start <input type="datetime-local" id="exStart"></label>
+        <label>End <input type="datetime-local" id="exEnd"></label>
+        <label>Resolution <select id="exRes"></select></label>
+        <label>Units <select id="exUnits">
+          <option value="display">As displayed</option>
+          <option value="stored">As stored in NF</option>
+        </select></label>
+      </div>
+      <div class="exbar">
+        <input type="search" id="exFilter" placeholder="filter points (all words must match)">
+        <button class="btn" id="exAll" type="button">Select all shown</button>
+        <button class="btn" id="exNone" type="button">Select none shown</button>
+        <span class="hint" id="exShown"></span>
+      </div>
+      <div class="exlist" id="exList"></div>
+      <div class="exbar">
+        <button class="btn primary" id="exGo" type="button">Export CSV</button>
+        <span class="hint" id="exSummary"></span>
+      </div>
+      <div class="sub" id="exStatus"></div>
+      <p class="sub">Columns: <code>timestamp</code> (local time), <code>timestamp_utc</code>, then one column per point as
+        <code>equip point [unit]</code>. Boolean / fault points use the window maximum, everything else the average. 1 day windows follow UTC days.</p>
     </section>
   </section>
 

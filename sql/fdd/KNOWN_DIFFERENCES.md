@@ -20,9 +20,8 @@ Some SQL rules check fan-on stability, while pandas GL36 rules suppress faults a
 
 - SV-RATE is excluded from the `W4e_si_sensor_util` parity family. It stays unsupported on SI (see the SV-RATE section above) and is not claimed by W4e.
 - Sensor-sweep tolerances (`flatline_tol`, `stale_tol`, `spike_limit`) and `oat_err` are temperature differences (K / delta degC), never absolute temperatures. Humidity roles use declared percent-RH literals (flatline 0.1, stale 0.05), not the temperature tolerance.
-- SV-RANGE, SV-FLATLINE and SV-SPIKE SQL now mirror the pandas operational gate fallback order (fan status, fan command, VAV zone airflow, pump, chiller). The airflow proof is 50 cfm = 23.597350 L/s on SI storage. The SQL checks airflow per row while pandas checks column presence; rows with NULL airflow fall through to the next proof in SQL.
-- The IP (P0, report-only) SQL rendering applies the SI airflow literal to cfm data, so P0 shows SV-FLATLINE value differences on VAV fixtures. P1 and P2 are the blocking stages.
-- The CI Timescale harness now seeds `point_map.unit` (authorized_series reads units from point_map since W1a #1406). Earlier goldens masked every sweep value and recorded zero SQL fault seconds.
+- SV-RANGE, SV-FLATLINE and SV-SPIKE SQL now mirror the pandas operational gate fallback order (fan status, fan command, VAV zone airflow, pump, chiller). The airflow proof is 23.597350 L/s (SI). The SQL checks airflow per row while pandas checks column presence; rows with NULL airflow fall through to the next proof in SQL.
+- `authorized_series` must carry each role's SI unit (the NF app hook fills it from the point unit after converting to SI); without it the sensor sweep masks every value and records zero fault time.
 - SCHED-1 comfort tuners are `comfort_low`/`comfort_high` (degC), matching the SI runner parameters.
 
 ## Oracle versions
@@ -31,7 +30,7 @@ The preparation host's installed `open-fdd` distribution is 4.4.1 (62 diagnostic
 
 ## Other caveats
 
-- Actual PostgreSQL and other warehouse engines were not available here; offline DuckDB execution does not qualify those engines.
+- The pack is executed by PGlite (real Postgres) and a translated SQLite in nf-app/tests/engines.test.mjs; a PostgreSQL server was not used.
 - The six analytic/utility cases use authored numerical expectations; they are not diagnostic `open_fdd.rules.run_rule` twins.
 - Three aggregate-only FCU rules do not implement configurable confirmation. The tests keep their confirmation at zero and the UI must label/disable unsupported controls.
 - Utility fault-hours retain a fixed 720-hour proxy. This is not measured fault duration, including in the interval-MAE rule.

@@ -48,7 +48,10 @@ function bindRoles(roles, pool, catalog) {
 function equipPool(equipRec, model) {
   const eid = idOf(equipRec);
   const siteRef = (equipRec.attrs || {}).siteRef;
-  return model.points.filter((p) => has(p, "point") && (p.equipRef === eid || (p.siteRef === siteRef && has(p, "weather"))));
+  // Equip ids are only unique within a site: a point belongs to this equip only if both its
+  // equipRef and its siteRef match (GitHub #1538: never bind across sites).
+  const sameSite = (p) => !siteRef || p.siteRef === siteRef;
+  return model.points.filter((p) => has(p, "point") && sameSite(p) && (p.equipRef === eid || has(p, "weather")));
 }
 
 function equipRules(equipRec, model, catalog) {

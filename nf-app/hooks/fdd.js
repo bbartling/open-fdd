@@ -4,6 +4,7 @@
 //   1. bind rule roles to the equip's points (static/fdd.js — the exact code the FDD tab runs)
 //   2. read the bound points' history from NF, resampled server side to the pack's grid
 //      (GET /api/v1/point/data …&window=300s&method=AVERAGE) for the trailing window
+//      (values are converted to SI by each point's unit first: units.js toSI; see siPlan)
 //   3. run every runnable rule of the SQL pack (sql/fdd → rules/pack-*.json) in an
 //      embedded engine: SQLite-WASM on small edges, PGlite (real Postgres) on big ones
 //   4. write one result point per (equip, rule): automation layer (history) + model layer
@@ -22,6 +23,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
+// Units: FDD math is SI only. Every NF history value goes through toSI() before the rules see it.
+const ofddUnits = require('../static/units.js');
 
 const APP_ID = 'open-fdd';
 const STATIC = path.join(__dirname, '..', 'static');
@@ -102,6 +105,51 @@ async function fetchHistory(http, uuids, fromMs, toMs, stepSec) {
   return out;
 }
 
+// ---- SI conversion --------------------------------------------------------------------
+// Quantities whose unit must be known: guessing °F vs °C (or inH2O vs Pa) would silently change the physics.
+const STRICT_QUANTITY = ['temperature', 'pressure', 'flow'];
+
+/** Quantity a role carries, from its Haystack-style name (fdd-catalog roles). null = unitless/other. */
+function roleQuantity(role, catalog) {
+  const name = String(((catalog && catalog.roles && catalog.roles[role]) || {}).name || role);
+  if (/request|count/.test(name)) return null;
+  if (/temp|dewpoint|wetbulb/.test(name)) return 'temperature';
+  if (/pressure/.test(name)) return 'pressure';
+  if (/airflow|(^|-)flow($|-)/.test(name)) return 'flow';
+  return null;
+}
+
+/**
+ * Per bound role: how to bring the point's values to SI and which SI unit to declare.
+ *   convert[role](v) -> SI value; unit[role] -> SI unit string; skipped = roles with no usable unit.
+ * A known unit is converted (°F -> °C, inH2O -> Pa, cfm -> L/s ...). An unknown or empty unit leaves the
+ * value as it is (statuses, commands, percent), except for temperature/pressure/flow roles: those are
+ * skipped, logged once per point, never guessed.
+ */
+function siPlan(roles, catalog, log, warned) {
+  const plan = { convert: {}, unit: {}, skipped: new Set() };
+  for (const [role, p] of Object.entries(roles)) {
+    const unit = p.units || '';
+    const probe = ofddUnits.toSI(1, unit);
+    const want = roleQuantity(role, catalog);
+    if (probe) {
+      if (want && probe.quantity !== want) { // e.g. a temperature role whose point says kPa: wrong binding, not ours to fix
+        plan.skipped.add(role);
+        if (log && warned && !warned.has(p.uuid)) { warned.add(p.uuid); log(`${p.name || p.uuid}: role ${role} is a ${want} but unit "${unit}" is a ${probe.quantity}, role skipped`); }
+        continue;
+      }
+      plan.convert[role] = (v) => { const r = ofddUnits.toSI(v, unit); return r ? r.value : v; };
+      plan.unit[role] = probe.unit;
+    } else if (want && STRICT_QUANTITY.includes(want)) {
+      plan.skipped.add(role);
+      if (log && warned && !warned.has(p.uuid)) { warned.add(p.uuid); log(`${p.name || p.uuid}: role ${role} (${want}) has ${unit ? `unknown unit "${unit}"` : 'no unit'}, role skipped`); }
+    } else {
+      plan.unit[role] = unit;
+    }
+  }
+  return plan;
+}
+
 // ---- rule inputs ----------------------------------------------------------------------
 /** The point that feeds each bound role of the runnable rules (best match = first). */
 function roleInputs(rows) {
@@ -114,7 +162,9 @@ function roleInputs(rows) {
 }
 
 /** Engine input for one equip: history on the grid, weather, unit catalog for the SV rules. */
-function buildInput({ equipId, siteId, roles, hist, grid, pack }) {
+function buildInput({ equipId, siteId, roles, hist, grid, pack, si }) {
+  si = si || siPlan(roles, null);
+  const conv = (role, v) => (si.convert[role] ? si.convert[role](v) : v);
   const contract = pack.contract.history.filter((c) => c.name !== 'equipment_id' && c.name !== 'timestamp_utc');
   const history = [];
   for (const ts of grid) {
@@ -122,7 +172,7 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack }) {
     let any = false;
     for (const [role, p] of Object.entries(roles)) {
       const v = hist[p.uuid].get(ts);
-      if (v != null) { row[role] = v; any = true; }
+      if (v != null) { row[role] = conv(role, v); any = true; }
     }
     if (any) history.push(row);          // a timestamp with no data at all is a gap, not zeros
   }
@@ -133,7 +183,7 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack }) {
     for (const role of ['oa_t', 'web_oa_t', 'web_oa_dp']) {
       const p = roles[role];
       const v = p && hist[p.uuid].get(ts);
-      if (v != null) { w[role] = v; any = true; }
+      if (v != null) { w[role] = conv(role, v); any = true; }
     }
     if (any) weather.push(w);
   }
@@ -141,7 +191,7 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack }) {
     historyColumns: contract.map((c) => ({ name: c.name, type: c.type })),
     history,
     weather,
-    authorizedSeries: Object.entries(roles).map(([role, p]) => ({ site_id: siteId, equipment_id: equipId, role, unit: p.units || '' })),
+    authorizedSeries: Object.entries(roles).map(([role, p]) => ({ site_id: siteId, equipment_id: equipId, role, unit: si.unit[role] != null ? si.unit[role] : (p.units || '') })),
     equipment: [{ building_id: siteId, equipment_id: equipId }],
   };
 }
@@ -211,19 +261,27 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   const model = await loadModel(http, shared);
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const summary = { engine: kind, equips: 0, rules: 0, errors: 0, written: 0, results: [] };
+  const warnedUnits = new Set();
   const engine = await createEngine({ kind, pack });
   try {
     for (const equipRec of model.equips) {
       const equipId = shared.idOf(equipRec);
       if (only && !only.has(equipId)) continue;
       const siteId = (equipRec.attrs || {}).siteRef || '';
-      const runnable = shared.equipRules(equipRec, model, shared.catalog)
+      let runnable = shared.equipRules(equipRec, model, shared.catalog)
         .filter((r) => r.runnable && pack.rules[r.rule.id]);
       if (!runnable.length) continue;
-      const roles = roleInputs(runnable);
+      let roles = roleInputs(runnable);
+      const si = siPlan(roles, shared.catalog, log, warnedUnits);
+      if (si.skipped.size) {
+        runnable = runnable.filter((r) => !r.required.some((x) => si.skipped.has(x)));
+        roles = roleInputs(runnable);
+        for (const x of si.skipped) delete roles[x];
+        if (!runnable.length) continue;
+      }
       const uuids = [...new Set(Object.values(roles).map((p) => p.uuid))];
       const hist = await fetchHistory(http, uuids, from, to, step);
-      const input = buildInput({ equipId, siteId, roles, hist, grid, pack });
+      const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si });
       if (!input.history.length) { log(`${equipId}: no history in the last ${windowHours} h, skipped`); continue; }
       await engine.load(input);
       summary.equips++;
@@ -341,5 +399,6 @@ module.exports = async ({ sdk, config }) => {
 module.exports.runFdd = runFdd;
 module.exports.nameUuid = nameUuid;
 module.exports.buildInput = buildInput;
+module.exports.siPlan = siPlan;
 module.exports.resultValue = resultValue;
 module.exports.bacnetPlan = bacnetPlan;

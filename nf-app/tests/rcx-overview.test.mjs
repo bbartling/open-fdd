@@ -1,6 +1,8 @@
 // node --test nf-app/tests/rcx-overview.test.mjs — overview RCx views (rcx-overview.js).
 // Classic browser scripts run in a vm context, like app.test.mjs. NF history, ECharts and the
-// theme are stubbed: fetchSeries serves fixtures, ofddRender captures the option it is given.
+// theme are stubbed: fetchSeries serves fixtures (in the point's own unit), ofddRender captures the
+// option it is given. The math runs in SI (ctx.series converts through units.js); charts and notes
+// show the display system (ctx.units = "imperial" | "si").
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -13,7 +15,9 @@ const HOUR = 3600e3;
 const T0 = Date.UTC(2026, 9, 26);            // a Monday 00:00 UTC (ISO week 2026-W44)
 
 function load() {
-  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
+  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa,
+    localStorage: { getItem: () => ctx.units } });          // ofddUnits.displaySystem()
+  ctx.units = "imperial";
   ctx.pickWindow = () => 3600;                // one value per hour
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
   ctx.ofddChart = (el) => ({ el });
@@ -21,13 +25,15 @@ function load() {
   ctx.ofddRender = (chart, option, name) => ctx.rendered.push({ option, name });
   ctx.series = new Map();                      // uuid -> [[ms, v]] served by the fetchSeries stub
   ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));
-  for (const f of ["nf.js", "model.js", "fdd.js", "rcx.js", "rcx-overview.js"]) {
+  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "rcx.js", "rcx-overview.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.get = (name) => vm.runInContext(name, ctx);
   return ctx;
 }
 const arr = (x, f) => Array.from(x, f);
+const near = (a, b, e = 1e-6) => assert.ok(Math.abs(a - b) < e, `${a} != ${b}`);
+const F2C = (f) => (f - 32) * 5 / 9;
 
 // ---- fixture model: one AHU with every role, a chiller, weather, an ECON-1 result point ------
 const rec = (name, pointType, attrs) => ({ uuid: `u-${name}`, name, pointType, attrs });
@@ -118,20 +124,30 @@ test("weeklyRuntime: duty vs threshold, 0.05 on-limit, gap cap, week split, OAT 
   assert.equal(o.get(Date.UTC(2026, 10, 2)).oat, 60);
 });
 
-test("mechBins: degF and degC bins, only on-intervals count", () => {
+test("mechBins: bins are fixed in degC (50..90 degF); labels follow the display system", () => {
   const { rcxOverviewMath: m } = setup().ctx;
-  assert.deepEqual(arr(m.oatBinLabels("°F")), ["<50", "50-60", "60-70", "70-80", "80-90", ">=90"]);
-  assert.deepEqual(arr(m.oatBinLabels("°C")), ["<10", "10-16", "16-21", "21-27", "27-32", ">=32"]);
+  assert.deepEqual(arr(m.oatBinLabels()), ["<10", "10-16", "16-21", "21-27", "27-32", ">=32"]);
+  assert.deepEqual(arr(m.oatBinLabels((c) => c * 1.8 + 32)), ["<50", "50-60", "60-70", "70-80", "80-90", ">=90"]);
   const t = Array.from({ length: 6 }, (_, i) => T0 + i * HOUR);
-  const r = m.mechBins(t, [1, 1, 0, 1, 1, 1], [45, 55, 55, 75, 95, 95], { unit: "°F", duty: true });
+  // the same physical temperatures (given in degC) land in the same bins whichever labels are shown
+  const oat = [45, 55, 55, 75, 95, 95].map(F2C);
+  const r = m.mechBins(t, [1, 1, 0, 1, 1, 1], oat, { duty: true });
   assert.deepEqual(arr(r.hours), [1, 1, 0, 1, 0, 1]);           // last sample has no interval
-  const c = m.mechBins(t, [1, 1, 1, 1, 1, 1], [5, 5, 12, 33, 33, 33], { unit: "°C" });
+  assert.deepEqual(arr(r.labels), ["<10", "10-16", "16-21", "21-27", "27-32", ">=32"]);
+  assert.deepEqual(arr(m.mechBins(t, [1, 1, 0, 1, 1, 1], oat, { duty: true, toDisp: (c) => c * 1.8 + 32 }).hours), arr(r.hours));
+  const c = m.mechBins(t, [1, 1, 1, 1, 1, 1], [5, 5, 12, 33, 33, 33]);
   assert.deepEqual(arr(c.hours), [2, 1, 0, 0, 0, 2]);
+});
+
+test("economizerRows: SI default identifiable delta is 5.5556 delta degC (= 10 delta degF)", () => {
+  const { rcxOverviewMath: m } = setup().ctx;
+  near(m.ECON_DT_MIN_C, 50 / 9, 1e-12);
+  const g = { t: [1, 2, 3], rat: [21, 21, 21], mat: [18, 18, 18], fan: [1, 1, 1], oa_t: [21 - 5.5, 21 - 5.6, 21 + 5.6] };
+  assert.deepEqual(arr(m.economizerRows(g), (r) => r.ident), [false, true, true]);   // |OAT-RAT| >= 5.5556
 });
 
 test("economizerRows: fan gate, identifiable delta, OA fraction, damper mixing residual", () => {
   const { rcxOverviewMath: m } = setup().ctx;
-  assert.ok(Math.abs(m.ECON_DT_MIN_C * 1.8 - 10) < 1e-9);      // 50/9 degC = 10 degF delta
   const g = {
     t: [1, 2, 3, 4, 5],
     oa_t: [50, 50, 50, 50, 50], rat: [70, 70, 70, 70, 70], mat: [60, 65, 60, 70, 60],
@@ -161,13 +177,13 @@ test("basVsWeb: web joined as-of within its cadence, delta, band stats, histogra
   const bas = [50, 51, 52, 53, 54, 55, 56, 57];
   const web = [50, null, null, 50, null, null, 50, null];       // 3 h cadence
   assert.equal(m.webMaxAgeMs(t, web), 4.5 * HOUR);
-  const r = m.basVsWeb(t, bas, web, { unit: "°F" });
+  const r = m.basVsWeb(t, bas, web);
   assert.deepEqual(arr(r.rows, (x) => x.d), [0, 1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(r.band, 3.6);                                    // 2 degC delta in degF
+  assert.equal(r.band, 2);                                      // delta degC (= 3.6 delta degF)
   assert.equal(r.stats.n, 8);
   assert.equal(r.stats.bias, 3.5);
   assert.equal(r.stats.maxAbs, 7);
-  assert.equal(r.stats.withinBand, 4 / 8);
+  assert.equal(r.stats.withinBand, 3 / 8);                      // |d| <= 2 degC: 0, 1, 2
   // stale web (older than the bound) is not joined
   const stale = m.asOfFill(t, [10, null, null, null, null, null, null, null], 2 * HOUR);
   assert.deepEqual(arr(stale), [10, 10, 10, null, null, null, null, null]);
@@ -254,8 +270,8 @@ test("bas-vs-web views: overlay with OAT-METEO lane, band uses theme colors, his
   assert.equal(o.series[o.series.length - 1].name, "OAT-METEO");
   assert.deepEqual(arr(o.series.slice(0, 2), (s) => s.name), ["Web OAT", "BAS oa_t"]);
   assert.equal(o.series[3].areaStyle.color, undefined);         // color comes from the theme palette
-  assert.equal(o.series[3].data[0][1], 7.2);                    // 2 x 3.6 degF band
-  assert.match(note, /bias 0\.50 °F/);
+  near(o.series[3].data[0][1], 7.2, 1e-9);                      // 2 x 3.6 delta degF band (2 degC in SI math)
+  assert.match(note, /bias 0\.50 Δ°F/);
   const h = await renderView(ctx, model, "bas-vs-web-oat-hist", 24);
   assert.ok(!Array.isArray(h.out.option.grid));
   assert.deepEqual(arr(h.out.option.series[0].data), [12, 12]);
@@ -274,4 +290,52 @@ test("mech-cooling view bins on-hours by web OAT", async () => {
   assert.equal(bar.name, "AHU-1");
   assert.deepEqual(arr(out.option.xAxis.data), ["<50", "50-60", "60-70", "70-80", "80-90", ">=90"]);
   assert.deepEqual(arr(bar.data), [null, null, null, null, 5, null]);
+});
+
+// ---- the same physical data in degF and degC points: same SI decisions, display switches last ----
+function unitSetup(unit) {
+  const conv = unit === "°F" ? (f) => f : F2C;                  // fixtures are written in degF
+  const pts = POINTS.map((p) => (p.attrs.unit === "°F" ? { ...p, attrs: { ...p.attrs, unit } } : p));
+  const s = setup(pts.concat([pt("OATM", "fdd,fault", { ruleRef: "OAT-METEO", unit: "" })]));
+  const set = (n, f) => s.ctx.series.set(s.byName(n).uuid, hourly(48, (i) => conv(f(i))));
+  set("OAT", (i) => 50 + (i % 2)); set("WX", () => 50); set("RAT", () => 70); set("MAT", (i) => 60 + (i % 3));
+  set("SAT", () => 55);
+  s.ctx.series.set(s.byName("DMP").uuid, hourly(48, () => 50));   // percent: not a temperature, never converted
+  s.ctx.series.set(s.byName("FAN-S").uuid, hourly(48, () => 1));
+  return s;
+}
+
+test("BAS vs web OAT: a degF point and a degC point give the same decision (within band %, bias)", async () => {
+  const f = unitSetup("°F"), c = unitSetup("°C");
+  const rf = await renderView(f.ctx, f.model, "bas-vs-web-oat", 48), rc = await renderView(c.ctx, c.model, "bas-vs-web-oat", 48);
+  assert.equal(rf.note, rc.note);                               // 24 + 24 samples, bias 0.50 delta degF, 100 % in band
+  assert.match(rf.note, /within band 100%/);
+  const a = rf.out.option.series[1].data, b = rc.out.option.series[1].data;
+  a.forEach(([, v], i) => near(v, b[i][1], 1e-9));
+});
+
+test("display system switches last: SI shows degC / delta degC, imperial degF / delta degF, same math", async () => {
+  const s = unitSetup("°F");
+  s.ctx.units = "imperial";
+  const imp = await renderView(s.ctx, s.model, "bas-vs-web-oat", 48);
+  s.ctx.units = "si";
+  const si = await renderView(s.ctx, s.model, "bas-vs-web-oat", 48);
+  assert.equal(imp.out.option.yAxis.name, "°F"); assert.equal(si.out.option.yAxis.name, "°C");
+  near(imp.out.option.series[1].data[0][1], 50, 1e-9);          // BAS 50 degF ...
+  near(si.out.option.series[1].data[0][1], 10, 1e-9);           // ... = 10 degC
+  assert.match(si.note, /bias 0\.28 Δ°C/);                      // 0.5 delta degF = 0.278 delta degC
+  near(si.out.option.series[3].data[0][1], 4, 1e-9);            // band = 2 x 2 delta degC (imperial: 7.2)
+  // economizer scatter: the identifiable-delta note shows 10 delta degF or 5.6 delta degC
+  const eImp = (s.ctx.units = "imperial", await renderView(s.ctx, s.model, "economizer-delta", 48));
+  const eSi = (s.ctx.units = "si", await renderView(s.ctx, s.model, "economizer-delta", 48));
+  assert.match(eImp.note, />= 10\.0 Δ°F/); assert.match(eSi.note, />= 5\.6 Δ°C/);
+  const x = (o) => o.series.flatMap((q) => q.data.map((d) => d[0]));
+  x(eImp.out.option).forEach((v, i) => near(v, x(eSi.out.option)[i] * 1.8, 0.02));
+});
+
+test("economizer residual / mech-cooling: degF and degC points give identical SI decisions", async () => {
+  const f = unitSetup("°F"), c = unitSetup("°C");
+  const rf = await renderView(f.ctx, f.model, "economizer-mat-residual", 48), rc = await renderView(c.ctx, c.model, "economizer-mat-residual", 48);
+  assert.equal(rf.note, rc.note);
+  assert.deepEqual(arr(rf.out.option.series[0].data, (d) => d[1]), arr(rc.out.option.series[0].data, (d) => d[1]));
 });

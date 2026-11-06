@@ -1,4 +1,4 @@
-# Open-FDD 5 NF app gate (ADR-014). Moved unchanged from rust-ci.yml (slice 8).
+# Open-FDD 5 NF app gate: unit tests, manifest, generated catalog/SQL pack, RDF export.
 name: NF app CI
 
 on:
@@ -8,6 +8,7 @@ on:
       - "sql/fdd/**"
       - "scripts/nf/**"
       - "tools/rdf-check/**"
+      - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - "sql/fdd/**"
       - "scripts/nf/**"
       - "tools/rdf-check/**"
+      - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
 
 permissions:
@@ -46,9 +48,12 @@ jobs:
             echo "no nf-app/package-lock.json; skipping npm ci"
           fi
 
-      - name: NF app (ADR-014) unit tests + manifest check
+      - name: Type-check (tsc --noEmit over JSDoc-typed JS)
+        run: cd nf-app && npm run typecheck
+
+      - name: NF app unit tests, manifest, catalog + SQL pack checks
         run: |
-          node --test nf-app/tests/*.test.mjs
+          node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
           python3 - <<'EOF'
           import json, pathlib, re
           m = json.loads(pathlib.Path("nf-app/app.json").read_text())
@@ -64,6 +69,7 @@ jobs:
           EOF
           python3 -m pip install --quiet pyyaml
           python3 scripts/nf/build_rule_catalog.py --check
+          python3 scripts/nf/build_sql_pack.py --check
 
       - name: RDF export check (slice 6, Oxigraph + rdflib)
         run: |

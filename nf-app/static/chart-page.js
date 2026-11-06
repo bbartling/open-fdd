@@ -33,6 +33,9 @@ async function draw() {
 }
 
 async function main() {
+  // chart.html may not list units.js; the display-unit helpers in charts.js need it.
+  if (typeof ofddUnits === "undefined") await loadScript("units.js").catch(() => {});
+  window.addEventListener("storage", (e) => { if (e.key === "openfdd-units") draw(); });  // toggled in the dashboard
   await initAuth();
   model = await loadModel();
   if (!model.sites.some((s) => idOf(s) === sel.site)) sel.site = idOf(model.sites[0]);

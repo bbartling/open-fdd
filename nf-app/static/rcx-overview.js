@@ -11,9 +11,12 @@
 //     as in motor_weekly_runtime.sql / mechanical_cooling_oat_bins.sql / economizer_deltas.sql.
 //   * Gap cap: a sample interval only counts when it is <= 3600 s (raised to 1.5 x the NF
 //     resample window when that is longer, so coarse windows are not all dropped).
-//   * Economizer: fan_status > 0.05 gate, |OAT-RAT| >= 50/9 degC (= 10 degF delta) to be identifiable.
-//   * BAS vs web OAT: band +-2 degC delta (= 3.6 degF); web value is carried as-of (last value)
+//   * Economizer: fan_status > 0.05 gate, |OAT-RAT| >= 50/9 delta degC (= 10 delta degF) to be identifiable.
+//   * BAS vs web OAT: band +-2 delta degC (= 3.6 delta degF); web value is carried as-of (last value)
 //     for at most ~1.5 x its own cadence.
+// Units: ctx.series/aligned hand over canonical SI (degC, Pa, L/s, ...), so all the math and every
+// threshold here is SI. Values are mapped to the user's display system (ctx.disp / ctx.dispDelta)
+// only when a chart or note is built.
 // Needs rcx.js (rcxView, rcxStats, rcxFaultData, rcxWithFaultLane), model.js (has),
 // charts.js (pickWindow), theme.js (ofddRender).
 (function () {
@@ -30,11 +33,6 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   // ================= pure math (globalThis.rcxOverviewMath) =============================
-
-  /** Scale of a delta in the point's unit relative to degC: 1.8 for degF, else 1. */
-  function tempScale(unit) {
-    return /(^|[^a-z])f($|[^a-z])|degf|fahrenheit/i.test(String(unit || "")) ? 1.8 : 1;
-  }
 
   /** Monday 00:00 UTC of the ISO week containing ms (central's date_trunc('week')). */
   function weekStart(ms) {
@@ -95,24 +93,26 @@
     return out;
   }
 
-  /** Bin edges in the OAT point's unit (degC edges converted for degF). */
-  function oatEdges(unit) {
-    return tempScale(unit) === 1.8 ? OAT_EDGES_C.map((c) => c * 1.8 + 32) : OAT_EDGES_C.slice();
-  }
-  /** Bin labels, lowest to highest: "<10", "10-16", ... ">=32". */
-  function oatBinLabels(unit) {
-    const e = oatEdges(unit).map((x) => Math.round(x));
+  /** Bin edges in degC (50/60/70/80/90 degF). */
+  const oatEdges = () => OAT_EDGES_C.slice();
+  /**
+   * Bin labels, lowest to highest, edges shown through `toDisp` (degC -> display number; default
+   * identity = degC): "<10", "10-16", ... ">=32" in degC, "<50", "50-60", ... in degF.
+   */
+  function oatBinLabels(toDisp = (c) => c) {
+    const e = oatEdges().map((x) => Math.round(toDisp(x)));
     return [`<${e[0]}`, ...e.slice(1).map((x, i) => `${e[i]}-${x}`), `>=${e[e.length - 1]}`];
   }
   const oatBinIndex = (oat, edges) => { const i = edges.findIndex((e) => oat < e); return i < 0 ? edges.length : i; };
 
   /**
-   * Hours the cooling device was on, per OAT bin (mechanical_cooling_oat_bins.sql).
+   * Hours the cooling device was on, per OAT bin (mechanical_cooling_oat_bins.sql). oat in degC;
+   * toDisp only relabels the bins for the display system.
    * Only intervals where the device is on (weight > 0) and OAT is known count.
    * Returns { labels, hours: [h per label] }.
    */
-  function mechBins(t, active, oat, { unit = "", duty = false, gapMaxSec = GAP_MAX_SEC } = {}) {
-    const edges = oatEdges(unit), labels = oatBinLabels(unit), hours = labels.map(() => 0);
+  function mechBins(t, active, oat, { toDisp, duty = false, gapMaxSec = GAP_MAX_SEC } = {}) {
+    const edges = oatEdges(), labels = oatBinLabels(toDisp), hours = labels.map(() => 0);
     for (let i = 0; i + 1 < t.length; i++) {
       const dt = (t[i + 1] - t[i]) / 1000;
       if (!(dt > 0 && dt <= gapMaxSec) || !isNum(oat[i])) continue;
@@ -125,7 +125,7 @@
   /**
    * Economizer samples (economizer_deltas.sql + economizer.rs). Row inputs are parallel arrays on
    * one grid: oa_t, rat, mat, sat?, fan (fan_status), damper? (oa_damper_pct, 0-1 or 0-100).
-   * Kept: fan on (> 0.05) and oa_t/rat/mat present. Per sample (temps in the point's unit):
+   * Kept: fan on (> 0.05) and oa_t/rat/mat present. Per sample (temps in degC, deltas in delta degC):
    *   dOR = OAT - RAT, dMR = MAT - RAT, identifiable = |dOR| >= dtMin,
    *   oaFrac% = 100 dMR / dOR (identifiable, clamped -20..120),
    *   matPred = RAT + damperFrac * dOR, matResid = MAT - matPred (needs a damper).
@@ -175,11 +175,11 @@
 
   /**
    * BAS vs web outdoor-air temperature (bas_vs_web_oat.sql): web is joined as-of to each BAS
-   * sample; delta = BAS - web. bandC is in delta degC and is scaled to the unit.
+   * sample; delta = BAS - web. All temperatures in degC, bandC in delta degC.
    * Returns { rows: [{t, bas, web, d}], stats: { n, bias, mae, maxAbs, withinBand } }.
    */
-  function basVsWeb(t, bas, web, { unit = "", bandC = BAS_BAND_C } = {}) {
-    const webAs = asOfFill(t, web, webMaxAgeMs(t, web)), band = bandC * tempScale(unit);
+  function basVsWeb(t, bas, web, { bandC = BAS_BAND_C } = {}) {
+    const webAs = asOfFill(t, web, webMaxAgeMs(t, web)), band = bandC;
     const rows = [];
     for (let i = 0; i < t.length; i++) {
       if (isNum(bas[i]) && webAs[i] != null) rows.push({ t: t[i], bas: bas[i], web: webAs[i], d: bas[i] - webAs[i] });
@@ -210,7 +210,7 @@
   }
 
   globalThis.rcxOverviewMath = {
-    tempScale, weekStart, isoWeekLabel, onWeight, weeklyRuntime, oatEdges, oatBinLabels, mechBins,
+    weekStart, isoWeekLabel, onWeight, weeklyRuntime, oatEdges, oatBinLabels, mechBins,
     economizerRows, economizerSummary, asOfFill, webMaxAgeMs, basVsWeb, deltaHist, mergeFaultLanes,
     ECON_DT_MIN_C, BAS_BAND_C, ON,
   };
@@ -219,7 +219,7 @@
   // ================= view helpers ======================================================
 
   const gapMax = (hours) => Math.max(GAP_MAX_SEC, 1.5 * pickWindow(hours));
-  const unitOf = (p) => (p && p.units) || "";
+  const TEMP = "°C";                    // SI unit of every temperature in this file
   const eqName = (eq) => eq.name;
   const nan = (x) => (isNum(x) ? x : null);
 
@@ -274,14 +274,16 @@
     const g = await ctx.aligned(cols, { hours: ctx.hours });
     const gm = gapMax(ctx.hours);
     const perEq = eqs.map((eq, i) => ({ eq, weeks: M.weeklyRuntime(g.t, g.cols[`m${i}`],
-      { duty: cols[`m${i}`].kind === "Bool", gapMaxSec: gm, oat: g.cols[`o${i}`] }), oatUnit: unitOf(cols[`o${i}`]) }));
+      { duty: cols[`m${i}`].kind === "Bool", gapMaxSec: gm, oat: g.cols[`o${i}`] }) }));
     const starts = [...new Set(perEq.flatMap((p) => [...p.weeks.keys()]))].sort((a, b) => a - b);
     if (!starts.length || !perEq.some((p) => [...p.weeks.values()].some((w) => w.hours > 0))) return "no running time in this window";
     const partial = new Set(starts.filter((k) => perEq.every((p) => !p.weeks.has(k) || p.weeks.get(k).partial)));
     const series = perEq.map((p) => ({ name: eqName(p.eq), type: "bar",
       data: starts.filter((k) => p.weeks.has(k)).map((k) => [k, +p.weeks.get(k).hours.toFixed(2)]) }));
-    const oatMeans = starts.map((k) => [k, rcxStats.mean(perEq.map((p) => p.weeks.get(k)?.oat))]).filter(([, v]) => v != null);
-    const oatUnit = perEq.map((p) => p.oatUnit).find(Boolean) || "";
+    // mean OAT while on: averaged in degC, shown in the display system
+    const oatMeans = ctx.dispSeries(starts.map((k) => [k, rcxStats.mean(perEq.map((p) => p.weeks.get(k)?.oat))]).filter(([, v]) => v != null), TEMP)
+      .map(([k, v]) => [k, +v.toFixed(1)]);
+    const oatUnit = ctx.dispUnit(TEMP);
     if (oatMeans.length) {
       series.push(lineS(`Avg OAT ${oatUnit} (while on)`, oatMeans, { yAxisIndex: 1, showSymbol: true, symbolSize: 7,
         lineStyle: { width: 2, type: "dotted" } }));
@@ -334,11 +336,11 @@
         const gm = gapMax(ctx.hours);
         const per = ctx.equips.map((eq, i) => {
           const op = cols[`o${i}`], oat = op ? g.cols[`o${i}`] : null;
-          return oat ? { eq, unit: unitOf(op), bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
-            { unit: unitOf(op), duty: cols[`a${i}`].kind === "Bool", gapMaxSec: gm }) } : null;
+          return oat ? { eq, bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
+            { toDisp: (c) => ctx.disp(c, TEMP).value, duty: cols[`a${i}`].kind === "Bool", gapMaxSec: gm }) } : null;
         }).filter(Boolean);
         if (!per.length) return "no outdoor-air data";
-        const unit = per[0].unit, labels = M.oatBinLabels(unit);
+        const unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
         const series = per.map((p) => ({ name: eqName(p.eq), type: "bar", stack: "hours",
           data: p.bins.hours.map((h) => (h > 0 ? +h.toFixed(2) : null)) }));
         if (!per.some((p) => p.bins.hours.some((h) => h > 0))) return "cooling never ran in this window";
@@ -362,8 +364,7 @@
     const col = (r) => ctx.first(eq, r);
     const g = await ctx.aligned({ oa_t: col("oa_t"), rat: col("rat"), mat: col("mat"), fan: col("fan_status"),
       sat: col("sat"), damper: col("oa_damper_pct") }, { hours: ctx.hours });
-    const unit = unitOf(col("oa_t"));
-    return { eq, unit, rows: M.economizerRows({ t: g.t, ...g.cols }, { dtMin: ECON_DT_MIN_C * M.tempScale(unit) }) };
+    return { eq, rows: M.economizerRows({ t: g.t, ...g.cols }) };
   }
 
   rcxView({
@@ -374,12 +375,12 @@
       const per = await Promise.all(ctx.equips.map((eq) => econGrid(ctx, eq)));
       const rows = per.flatMap((p) => p.rows.filter((r) => r.ident));
       if (rows.length < 5) return "fewer than 5 identifiable fan-on samples (needs |OAT-RAT| above the minimum delta)";
-      const unit = per[0].unit, dmin = (ECON_DT_MIN_C * M.tempScale(unit)).toFixed(1);
+      const dmin = ctx.dispDelta(ECON_DT_MIN_C, TEMP), unit = dmin.unit;   // deltas: no 32 offset
       // Damper position bands stand in for central's visual map (theme palette colors only).
       const bands = [["damper n/a", (r) => r.damperPct == null], ["damper 0-33%", (r) => r.damperPct != null && r.damperPct < 33.34],
         ["damper 33-67%", (r) => r.damperPct >= 33.34 && r.damperPct < 66.67], ["damper 67-100%", (r) => r.damperPct >= 66.67]];
       const series = bands.map(([name, test]) => ({ name, type: "scatter", symbolSize: 7,
-        data: rows.filter(test).map((r) => [+r.dOR.toFixed(2), +r.dMR.toFixed(2), r.damperPct]) })).filter((s) => s.data.length);
+        data: rows.filter(test).map((r) => [+ctx.dispDelta(r.dOR, TEMP).value.toFixed(2), +ctx.dispDelta(r.dMR, TEMP).value.toFixed(2), r.damperPct]) })).filter((s) => s.data.length);
       draw(ctx, el, {
         tooltip: plainItemTip((p) => `${p.seriesName}: OAT-RAT ${p.value[0]}, MAT-RAT ${p.value[1]}`), legend: { top: 0 }, dataZoom: false,
         grid: baseGrid({ bottom: 44 }),
@@ -387,7 +388,7 @@
         yAxis: { type: "value", name: `MAT - RAT (${unit})`, scale: true }, series,
       }, null, "economizer_free_cooling_delta");
       const s = M.economizerSummary(rows);
-      return `fan on, |OAT-RAT| >= ${dmin} ${unit} · ${s.nIdent} samples`;
+      return `fan on, |OAT-RAT| >= ${dmin.value.toFixed(1)} ${unit} · ${s.nIdent} samples`;
     },
   });
 
@@ -397,15 +398,16 @@
     render: async (el, ctx) => {
       const per = await Promise.all(ctx.equips.map((eq) => econGrid(ctx, eq)));
       const series = per.map((p) => lineS(eqName(p.eq),
-        p.rows.filter((r) => r.ident && r.matResid != null).map((r) => [r.t, +r.matResid.toFixed(2)])))
+        ctx.dispSeries(p.rows.filter((r) => r.ident && r.matResid != null).map((r) => [r.t, r.matResid]), TEMP, true)
+          .map(([t, v]) => [t, +v.toFixed(2)])))
         .filter((s) => s.data.length);
       if (!series.length) return "no identifiable fan-on samples with a damper position";
-      const unit = per[0].unit;
+      const unit = ctx.dispDelta(0, TEMP).unit;
       const lanes = await faultLanes(ctx, ECON_RULES, ctx.equips);
       draw(ctx, el, { tooltip: { trigger: "axis" }, legend: { top: 0 }, grid: baseGrid({ bottom: 56 }),
         xAxis: { type: "time" }, yAxis: { type: "value", name: `residual (${unit})`, scale: true }, series }, lanes, "economizer_mat_residual");
       const med = M.economizerSummary(per.flatMap((p) => p.rows.filter((r) => r.ident)));
-      return `MAT - (RAT + damper% x (OAT - RAT)), fan on, identifiable · median ${med.medianResid == null ? "n/a" : med.medianResid.toFixed(2)} ${unit}`;
+      return `MAT - (RAT + damper% x (OAT - RAT)), fan on, identifiable · median ${med.medianResid == null ? "n/a" : ctx.dispDelta(med.medianResid, TEMP).value.toFixed(2)} ${unit}`;
     },
   });
 
@@ -417,14 +419,15 @@
       const cols = { OAT: col("oa_t"), RAT: col("rat"), MAT: col("mat"), SAT: col("sat"), "OA damper %": col("oa_damper_pct") };
       const g = await ctx.aligned(cols, { hours: ctx.hours });
       const pairs = (k) => g.t.map((t, i) => [t, g.cols[k][i]]).filter((d) => isNum(d[1]));
-      const series = ["OAT", "RAT", "MAT", "SAT"].map((k) => [k, pairs(k)]).filter(([, d]) => d.length).map(([k, d]) => lineS(k, d));
+      const tempPairs = (k) => ctx.dispSeries(pairs(k), TEMP);
+      const series = ["OAT", "RAT", "MAT", "SAT"].map((k) => [k, tempPairs(k)]).filter(([, d]) => d.length).map(([k, d]) => lineS(k, d));
       const dmp = pairs("OA damper %").map(([t, v]) => [t, +(rcxStats.frac(v) * 100).toFixed(1)]);
       if (dmp.length) series.push(lineS("OA damper %", dmp, { yAxisIndex: 1, lineStyle: { width: 1.2, type: "dashed" } }));
       if (series.length < 3) return "not enough temperature data";
       const lanes = await faultLanes(ctx, ECON_RULES, [eq]);
       draw(ctx, el, { tooltip: { trigger: "axis" }, legend: { top: 0 }, grid: baseGrid({ right: 56, bottom: 56 }),
         xAxis: { type: "time" },
-        yAxis: [{ type: "value", name: unitOf(col("oa_t")), scale: true },
+        yAxis: [{ type: "value", name: ctx.dispUnit(TEMP), scale: true },
           { type: "value", name: "OA damper %", min: 0, max: 100, position: "right", splitLine: { show: false } }], series }, lanes, "economizer_temps_oa_damper");
     },
   });
@@ -435,7 +438,7 @@
     const eq = ctx.equips[0];                      // primary reference: first bound equip's oa_t
     const bas = ctx.first(eq, "oa_t"), web = ctx.first(eq, "web_oa_t");
     const g = await ctx.aligned({ bas, web }, { hours: ctx.hours });
-    return { eq, unit: unitOf(bas), ...M.basVsWeb(g.t, g.cols.bas, g.cols.web, { unit: unitOf(bas) }), g, web };
+    return { eq, ...M.basVsWeb(g.t, g.cols.bas, g.cols.web), g, web };
   }
   const BAS_ROLES = { required: ["oa_t", "web_oa_t"], optional: [] };
 
@@ -445,22 +448,23 @@
     render: async (el, ctx) => {
       const d = await basData(ctx);
       if (!d.rows.length) return "no coincident BAS and web outdoor-air samples in this window";
-      const half = d.band;
+      // math above is degC; the chart gets display values (band base = web - band, width = 2 x band)
+      const T = (c) => ctx.disp(c, TEMP).value, half = ctx.dispDelta(d.band, TEMP).value, unit = ctx.dispUnit(TEMP);
       const series = [
-        lineS("Web OAT", d.rows.map((r) => [r.t, r.web])),
-        lineS("BAS oa_t", d.rows.map((r) => [r.t, r.bas])),
+        lineS("Web OAT", d.rows.map((r) => [r.t, T(r.web)])),
+        lineS("BAS oa_t", d.rows.map((r) => [r.t, T(r.bas)])),
         // Band = transparent base (web - band) + stacked 2 x band wide area; theme palette colors.
         { name: "band base", type: "line", stack: "band", symbol: "none", silent: true, lineStyle: { opacity: 0 },
-          data: d.rows.map((r) => [r.t, +(r.web - half).toFixed(2)]) },
+          data: d.rows.map((r) => [r.t, +(T(r.web) - half).toFixed(2)]) },
         { name: `+-${+half.toFixed(1)} band`, type: "line", stack: "band", symbol: "none", silent: true,
           lineStyle: { opacity: 0 }, areaStyle: { opacity: 0.18 }, data: d.rows.map((r) => [r.t, +(2 * half).toFixed(2)]) },
       ];
       const lanes = await faultLanes(ctx, ["OAT-METEO"], ctx.equips);
       draw(ctx, el, { tooltip: { trigger: "axis" }, legend: { top: 0, data: ["Web OAT", "BAS oa_t", `+-${+half.toFixed(1)} band`] },
         grid: baseGrid({ bottom: 56 }), xAxis: { type: "time" },
-        yAxis: { type: "value", name: d.unit, scale: true }, series }, lanes, "bas_vs_web_oat");
+        yAxis: { type: "value", name: unit, scale: true }, series }, lanes, "bas_vs_web_oat");
       const s = d.stats;
-      return `${eqName(d.eq)} vs web · ${s.n} samples · bias ${s.bias.toFixed(2)} ${d.unit} · within band ${(s.withinBand * 100).toFixed(0)}%`;
+      return `${eqName(d.eq)} vs web · ${s.n} samples · bias ${ctx.dispDelta(s.bias, TEMP).value.toFixed(2)} ${ctx.dispDelta(0, TEMP).unit} · within band ${(s.withinBand * 100).toFixed(0)}%`;
     },
   });
 
@@ -471,11 +475,13 @@
     render: async (el, ctx) => {
       const d = await basData(ctx);
       if (!d.rows.length) return "no coincident BAS and web outdoor-air samples in this window";
-      const h = M.deltaHist(d.rows.map((r) => r.d), M.tempScale(d.unit) === 1.8 ? 1 : 0.5);
+      // bin the deltas in display units (1 degF / 0.5 degC wide) so the labels are round numbers
+      const dd = ctx.dispDelta(1, TEMP), du = dd.unit;
+      const h = M.deltaHist(d.rows.map((r) => +ctx.dispDelta(r.d, TEMP).value.toFixed(6)), dd.value > 1 ? 1 : 0.5);
       draw(ctx, el, { tooltip: { trigger: "axis" }, dataZoom: false, grid: baseGrid({ top: 20, bottom: 44 }),
-        xAxis: { type: "category", data: h.labels, name: `BAS - web (${d.unit})`, nameLocation: "middle", nameGap: 26 },
+        xAxis: { type: "category", data: h.labels, name: `BAS - web (${du})`, nameLocation: "middle", nameGap: 26 },
         yAxis: { type: "value", name: "count" }, series: [{ name: "samples", type: "bar", data: h.counts }] }, null, "bas_web_oat_deviation_hist");
-      return `bin = lower edge · mean ${d.stats.bias.toFixed(2)} ${d.unit}, max |delta| ${d.stats.maxAbs.toFixed(1)} ${d.unit}`;
+      return `bin = lower edge · mean ${ctx.dispDelta(d.stats.bias, TEMP).value.toFixed(2)} ${du}, max |delta| ${ctx.dispDelta(d.stats.maxAbs, TEMP).value.toFixed(1)} ${du}`;
     },
   });
 })();

@@ -1,9 +1,11 @@
-"""Render vetted numeric tuning into a PostgreSQL rule; no DB connection required."""
+"""Render vetted numeric tuning into a PostgreSQL rule; no DB connection required.
+
+All tuning values are SI (degC, delta-degC, Pa, L/s, ...); the rules read SI inputs."""
 import argparse, json, math, re, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
-def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', parameter_controls=None):
+def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None):
     rules = json.loads((ROOT / 'tuning_catalog.json').read_text())['rules']
     rule = next((r for r in rules if r['rule_id'] == rule_id or rule_id in r.get('aliases',[])), None)
     if rule is None:
@@ -52,11 +54,7 @@ def render(rule_id, poll_seconds=300, overrides=None, dialect='postgres', parame
     # OAT-METEO joins web weather as-of: bound = web cadence + margin (same as central's renderer).
     if 'WEB_CADENCE_SECONDS' in values and 'WEB_ASOF_MARGIN_SECONDS' in values:
         values['WEB_ASOF_BOUND_SECONDS'] = round(values['WEB_CADENCE_SECONDS'] + values['WEB_ASOF_MARGIN_SECONDS'])
-    if dialect not in ('postgres','warehouse','datafusion'):
-        raise ValueError('dialect must be postgres, warehouse or datafusion')
-    folder = ROOT/'original_datafusion' if dialect=='datafusion' else ROOT/dialect/'rules'
-    if dialect=='postgres' and not folder.exists():
-        folder=ROOT/'rules'
+    folder = ROOT / 'postgres' / 'rules'
     sql = (folder / rule['sql_file']).read_text(encoding='utf-8')
     # Substitution is numeric only; data scope/identifiers belong in bound application queries.
     def replace(match):
@@ -72,9 +70,8 @@ if __name__ == '__main__':
     p.add_argument('rule_id')
     p.add_argument('--poll-seconds',type=float,default=300)
     p.add_argument('--params',default='{}',help='JSON tuner overrides')
-    p.add_argument('--dialect',choices=['postgres','warehouse','datafusion'],default='postgres')
     args = p.parse_args()
     try:
-        print(render(args.rule_id,args.poll_seconds,json.loads(args.params),args.dialect))
+        print(render(args.rule_id,args.poll_seconds,json.loads(args.params)))
     except (ValueError,TypeError) as exc:
         p.error(str(exc))

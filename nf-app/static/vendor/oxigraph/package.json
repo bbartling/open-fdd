@@ -1,0 +1,28 @@
+{
+  "name": "oxigraph",
+  "description": "JavaScript bindings of Oxigraph",
+  "version": "0.5.13",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oxigraph/oxigraph.git",
+    "directory": "js"
+  },
+  "files": [
+    "*.{js,wasm,d.ts}"
+  ],
+  "main": "node.js",
+  "types": "node.d.ts",
+  "keywords": [
+    "RDF",
+    "N-Triples",
+    "Turtle",
+    "XML",
+    "SPARQL"
+  ],
+  "browser": "web.js",
+  "homepage": "https://github.com/oxigraph/oxigraph/tree/main/js",
+  "bugs": {
+    "url": "https://github.com/oxigraph/oxigraph/issues"
+  }
+}

@@ -16,18 +16,12 @@ from pathlib import Path
 from typing import Any
 
 CATALOG_SCHEMA_VERSION = "open-fdd-catalog-v1"
-RULE_CATALOG_VERSION = "59-diagnostics+4-sql-analytics"
-
-_CARGO_VERSION_RE = re.compile(
-    r"^\[workspace\.package\][^\[]*?^version\s*=\s*\"([^\"]+)\"",
-    re.MULTILINE | re.DOTALL,
-)
-
+RULE_CATALOG_VERSION = "77-sql-pack"
 
 def _repo_root() -> Path | None:
     here = Path(__file__).resolve()
     for parent in here.parents:
-        if (parent / "Cargo.toml").is_file() and (parent / "open_fdd").is_dir():
+        if (parent / "VERSION").is_file() and (parent / "open_fdd").is_dir():
             return parent
     return None
 
@@ -51,19 +45,15 @@ def git_revision() -> str | None:
         return None
 
 
-def rust_engine_version() -> str | None:
-    env = os.environ.get("OPENFDD_RUST_ENGINE_VERSION")
-    if env:
-        return env.strip()
+def release_version() -> str | None:
+    """Repo release version (the VERSION file), e.g. 5.0.0; None outside a checkout."""
     root = _repo_root()
     if root is None:
         return None
     try:
-        text = (root / "Cargo.toml").read_text(encoding="utf-8")
+        return (root / "VERSION").read_text(encoding="utf-8").strip() or None
     except OSError:
         return None
-    m = _CARGO_VERSION_RE.search(text)
-    return m.group(1) if m else None
 
 
 def _catalog_hashes() -> tuple[str | None, str | None]:
@@ -86,7 +76,7 @@ def manifest(*, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     doc = {
         "open_fdd_python_version": python_version(),
         "git_revision": git_revision(),
-        "rust_engine_version": rust_engine_version(),
+        "release_version": release_version(),
         "rule_catalog_version": RULE_CATALOG_VERSION,
         "catalog_schema_version": CATALOG_SCHEMA_VERSION,
         "rule_catalog_hash": cat_hash,

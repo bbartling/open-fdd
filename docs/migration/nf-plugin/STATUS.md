@@ -1,6 +1,12 @@
+---
+title: Migration status
+parent: Architecture
+nav_order: 3
+---
+
 # NF plugin migration: status and findings
 
-Living notes per slice (plan: [PLAN.md](PLAN.md), decision: [ADR-014](../../architecture/adr-014-open-fdd-as-nf-plugin.md)).
+Living notes per slice (plan: [PLAN.md](PLAN.html), decision: [ADR-014](../../architecture/adr-014-open-fdd-as-nf-plugin.html)).
 Pre-plugin release pinned as git tag `v4.0.11-central`.
 
 ## Slice 3: FDD engine (edge-lite + full)

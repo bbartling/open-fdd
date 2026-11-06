@@ -3,7 +3,7 @@
 Open-FDD as **one Normal Framework (NF) application**, id `open-fdd`
 ([ADR-014](../docs/architecture/adr-014-open-fdd-as-nf-plugin.md)). NF does the field bus, the point model
 (Haystack tags), history, auth, remote access (Normal Online) and config backups; this app adds the Open-FDD UI,
-the FDD hook and the weather hook. Install: [docs/install/nf-plugin.md](../docs/install/nf-plugin.md).
+the FDD hook and the weather hook. Install: [docs/install.md](../docs/install.md).
 What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FEATURES.md).
 
 ## Layout
@@ -11,7 +11,7 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | Path | What | Run by |
 |---|---|---|
 | `app.json` | Manifest: application, file map, hook definitions | `scripts/nf/hooks/nf_app_sync.py` / NF MCP |
-| `static/index.html` | UI tabs: Overview · Charts · FDD · RCx · Points · BACnet Server · Model & RDF (+ `chart.html`, `tree.html`) | NF at `/api/v1/apps/static/open-fdd/` |
+| `static/index.html` | UI tabs: Overview · Charts · FDD · RCx · Points · BACnet Server · Export · Model & RDF (+ `chart.html`, `tree.html`) | NF at `/api/v1/apps/static/open-fdd/` |
 | `static/nf.js` | NF access: login (LAN or Normal Online/Clerk), `api()`, live push stream | browser |
 | `static/model.js` | Haystack model loader + RDF/Turtle export with time-series refs | browser + FDD hook |
 | `static/fdd.js`, `fdd-catalog.json` | Rule catalog + role binding (NF class, else Haystack markers) | browser + FDD hook |
@@ -19,8 +19,10 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | `static/fdd-plots.js` | Per-rule plot, OAT-METEO, sensor health / sensor faults | browser |
 | `static/rcx-overview.js` | Weekly runtimes, mechanical cooling, economizer, BAS vs web OAT | browser |
 | `static/rcx-presets.js` | The 18 RCx presets + VAV health | browser |
+| `static/export.js` | Export tab: CSV download (date range, point picker, resolution, display/stored units; pure helpers tested in node) | browser |
+| `static/units.js` | SI math / imperial-or-SI display (`ofddUnits`); the header toggle sets `localStorage["openfdd-units"]` | browser + FDD hook |
 | `static/energy.js` | Demand, monthly energy, degree-day baseline, M&V, EUI / peers | browser |
-| `static/charts.js`, `theme*.js`, `style.css`, `vendor/` | Charts tab, light/dark themes, vendored ECharts 5.5.1 (ESM) | browser |
+| `static/charts.js`, `theme*.js`, `style.css`, `vendor/` | Charts tab, light/dark themes, vendored ECharts 6.1.0 (ESM) | browser |
 | `hooks/fdd.js` | Hourly FDD: bind roles, read NF history (5-min grid), run the SQL pack, write result points, optional BACnet AVs | NF Node runtime |
 | `hooks/lib/engines.js` | SQL engines: `sqlite` (sql.js, vendored in `hooks/vendor/`) and `pglite` | FDD hook |
 | `hooks/weather.js` | Open-Meteo outdoor air every 20 min → global variables (site lat/lon from NF) | NF Node runtime |
@@ -54,6 +56,17 @@ python3 scripts/nf/hooks/nf_app_sync.py --env ~/.secrets/nf_site_console.env run
 
 NF derives an app's id from its **name**, so `application.id` must equal the slug of `application.name` (CI
 checks it). Static files are cached 5 minutes; `nf_app_sync.py` stamps js/css URLs with a content hash on push.
+
+## Vendored libraries
+
+| Library | Version | File | sha256 |
+|---|---|---|---|
+| ECharts (ESM build, `dist/echarts.esm.min.mjs` from npm) | 6.1.0 | `static/vendor/echarts.esm.min.js` | `28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da` |
+| sql.js | 1.15.1 | `hooks/vendor/sql.js/sql-wasm.{js,wasm}` | from `npm install` (`package-lock.json`) |
+| @electric-sql/pglite | 0.5.11 | npm only (`package.json`) | `package-lock.json` |
+
+Supply-chain rule: never take a release younger than two weeks (sql.js 1.15.2 and pglite 0.5.12+ were too new on 2026-11-06).
+Caddy front door: `caddy:2.11.7-alpine`, pinned in `deploy/nf-caddy/docker-compose.yml`.
 
 ## Rules this app follows
 

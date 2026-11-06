@@ -31,6 +31,18 @@
 	path /api/v1/point/updates/data
 }
 
+# Security headers on every response (ZAP baseline: clickjacking, MIME sniffing, permissions).
+# frame-ancestors can't be set from the pages' <meta> CSP, so it lives here; the meta CSP still
+# governs scripts/styles. NF's console may frame its own pages, hence 'self' (not 'none').
+header {
+	X-Content-Type-Options "nosniff"
+	X-Frame-Options "SAMEORIGIN"
+	Referrer-Policy "strict-origin-when-cross-origin"
+	Permissions-Policy "camera=(), microphone=(), geolocation=(), usb=(), payment=()"
+	Content-Security-Policy "frame-ancestors 'self'"
+	-Server
+}
+
 # Compress everything except the live stream (it must flush chunk by chunk).
 @compress not path /api/v1/point/updates/data
 encode @compress gzip

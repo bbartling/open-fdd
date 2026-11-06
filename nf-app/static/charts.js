@@ -8,6 +8,16 @@
 // theme.js: options here are theme-free (colors come from the registered ECharts themes).
 
 const unitLabel = (u) => u || "";
+
+// ---- display units (units.js: calculations are SI, the UI shows the user's system) -------
+// Raw series from fetchSeries() stay in the unit NF stores; these helpers convert for display only.
+const unitSystem = () => (typeof ofddUnits !== "undefined" ? ofddUnits.displaySystem() : "imperial");
+/** One value of point `p` in the display system. */
+const dispVal = (p, v) => (typeof ofddUnits === "undefined" || v == null ? v : ofddUnits.display(v, p.units, unitSystem()).value);
+/** Unit label of point `p` in the display system. */
+const dispUnit = (p) => (typeof ofddUnits === "undefined" ? p.units || "" : ofddUnits.display(0, p.units, unitSystem()).unit);
+/** [[ms, value], ...] of point `p` converted to the display system. */
+const dispSeries = (p, arr) => (typeof ofddUnits === "undefined" || !arr ? arr : arr.map(([t, v]) => [t, dispVal(p, v)]));
 const parseTs = (ts) => Date.parse(ts.replace(/(\.\d{3})\d+/, "$1"));
 const fmt = (v, d = 1) => (v == null || isNaN(v) ? "–" : v.toFixed(d));
 const latestOf = (p) => p.latest?.double ?? p.latest?.real;
@@ -43,10 +53,13 @@ function rhPair(points) {
   return t && rh ? [t, rh] : null;
 }
 
-function dewPointF(tF, rh) {
-  const tC = (tF - 32) / 1.8, a = 17.62, b = 243.12;
+function dewPointC(tC, rh) {
+  const a = 17.62, b = 243.12;
   const g = Math.log(rh / 100) + (a * tC) / (b + tC);
-  return ((b * g) / (a - g)) * 1.8 + 32;
+  return (b * g) / (a - g);
+}
+function dewPointF(tF, rh) {
+  return dewPointC((tF - 32) / 1.8, rh) * 1.8 + 32;
 }
 
 // ---- history: resampled by NF, cached briefly ---------------------------------------
@@ -89,6 +102,13 @@ async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWi
   return out;
 }
 
+/** fetchSeries() with every series converted to the display system (per point unit). */
+async function fetchDisplay(list, hours, opts) {
+  const out = await fetchSeries(list, hours, opts);
+  for (const p of list) out.set(p.uuid, dispSeries(p, out.get(p.uuid)));
+  return out;
+}
+
 const localDay = (t) => new Date(t).toLocaleDateString(undefined, { weekday: "short", month: "numeric", day: "numeric" });
 
 /** Group [[ms, v]] by local calendar day -> Map(day -> values[]), days in time order. */
@@ -120,13 +140,13 @@ const CHARTS = [
     applies: (c) => c.cards.some(isTemp),
     async build(c, hours) {
       const temps = c.cards.filter(isTemp);
-      const s = await fetchSeries(temps, hours);
+      const s = await fetchDisplay(temps, hours);
       return {
         hint: `${temps.length} points · ${pickWindow(hours) / 60} min averages`,
         option: {
           tooltip, legend, grid: { left: 50, right: 20, top: 36, bottom: 60 },
           xAxis: { type: "time", ...axisStyle },
-          yAxis: { type: "value", scale: true, name: unitLabel(temps[0]?.units), ...axisStyle },
+          yAxis: { type: "value", scale: true, name: temps[0] ? dispUnit(temps[0]) : "", ...axisStyle },
           series: temps.map((p) => lineSeries(p, s.get(p.uuid))),
         },
       };
@@ -138,7 +158,8 @@ const CHARTS = [
     applies: (c) => c.weather.length > 0,
     async build(c, hours) {
       const pair = rhPair(c.cards) || [];
-      const s = await fetchSeries([...pair, ...c.weather], hours);
+      const s = await fetchDisplay([...pair, ...c.weather], hours);
+      const tUnit = dispUnit([...pair, ...c.weather].find((p) => !isRH(p)) || { units: "°F" });
       const line = (p, axis, dashed) => ({
         name: p.name, type: "line", yAxisIndex: axis, data: s.get(p.uuid), showSymbol: dashed, symbolSize: 4,
         step: dashed ? "end" : false, smooth: !dashed, lineStyle: { width: dashed ? 2 : 1.4, type: dashed ? "dashed" : "solid" },
@@ -150,7 +171,7 @@ const CHARTS = [
           grid: { left: 50, right: 50, top: 36, bottom: 60 },
           xAxis: { type: "time", ...axisStyle },
           yAxis: [
-            { type: "value", scale: true, name: "°F", ...axisStyle },
+            { type: "value", scale: true, name: tUnit, ...axisStyle },
             { type: "value", scale: true, name: "%RH", position: "right", ...axisStyle, splitLine: { show: false } },
           ],
           series: [...pair.map((p) => line(p, isRH(p) ? 1 : 0, false)), ...c.weather.map((p) => line(p, isRH(p) ? 1 : 0, true))],
@@ -166,7 +187,7 @@ const CHARTS = [
     defaultPick: (c) => (c.cards.find((p) => has(p, "discharge", "air", "temp")) || c.cards[0])?.uuid,
     async build(c, hours, opt) {
       const p = c.cards.find((x) => x.uuid === opt.point) || c.cards[0];
-      const arr = (await fetchSeries([p], hours, { windowSec: 3600 })).get(p.uuid);
+      const arr = (await fetchDisplay([p], hours, { windowSec: 3600 })).get(p.uuid);
       const days = [];
       const data = arr.map(([t, v]) => {
         const day = localDay(t);
@@ -177,7 +198,7 @@ const CHARTS = [
       return {
         hint: `${p.dis} · hourly averages, local time`,
         option: {
-          tooltip: { position: "top", formatter: (x) => `${days[x.value[1]]} ${x.value[0]}:00<br><b>${x.value[2]} ${unitLabel(p.units)}</b>` },
+          tooltip: { position: "top", formatter: (x) => `${days[x.value[1]]} ${x.value[0]}:00<br><b>${x.value[2]} ${dispUnit(p)}</b>` },
           grid: { left: 90, right: 20, top: 10, bottom: 80 },
           xAxis: { type: "category", data: [...Array(24).keys()].map(String), ...axisStyle },
           yAxis: { type: "category", data: days, ...axisStyle },
@@ -201,7 +222,7 @@ const CHARTS = [
       // Hourly MIN / MAX / AVERAGE from NF, folded into local days here (NF's daily
       // windows are UTC-aligned). 3 small requests instead of every raw sample.
       const [lo, hi, avg] = await Promise.all(["MIN", "MAX", "AVERAGE"].map((method) =>
-        fetchSeries(temps, hours, { method, windowSec: 3600 })));
+        fetchDisplay(temps, hours, { method, windowSec: 3600 })));
       const days = [...byDay(avg.get(temps[0].uuid) || []).keys()];
       return {
         hint: "hourly MIN / MAX / AVERAGE from NF, grouped by local day",
@@ -210,7 +231,7 @@ const CHARTS = [
           tooltip: { trigger: "item", formatter: (x) => `${x.seriesName} · ${x.name}<br>min ${fmt(x.value[3])} · mean ${fmt((x.value[1] + x.value[2]) / 2)} · max ${fmt(x.value[4])}` },
           grid: { left: 50, right: 20, top: 36, bottom: 56 },
           xAxis: { type: "category", data: days, ...axisStyle },
-          yAxis: { type: "value", scale: true, name: unitLabel(temps[0]?.units), ...axisStyle },
+          yAxis: { type: "value", scale: true, name: temps[0] ? dispUnit(temps[0]) : "", ...axisStyle },
           // Candlestick as a range bar: open/close = mean (thin), low/high = min/max.
           series: temps.map((p, i) => {
             const L = byDay(lo.get(p.uuid)), H = byDay(hi.get(p.uuid)), A = byDay(avg.get(p.uuid));
@@ -259,18 +280,20 @@ const CHARTS = [
     applies: (c) => !!rhPair(c.cards),
     async build(c, hours) {
       const [t, rh] = rhPair(c.cards);
-      const s = await fetchSeries([t, rh], hours, { windowSec: 900 });
+      const s = await fetchDisplay([t, rh], hours, { windowSec: 900 });
       const rhAt = new Map(s.get(rh.uuid));
       const pts = s.get(t.uuid).filter(([k]) => rhAt.has(k))
         .map(([k, tv]) => [tv, rhAt.get(k), new Date(k).getHours() + new Date(k).getMinutes() / 60, k]);
-      const lastT = latestOf(t), lastRH = latestOf(rh);
+      const lastT = dispVal(t, latestOf(t)), lastRH = dispVal(rh, latestOf(rh));
+      const tU = dispUnit(t);
       return {
         hint: `${t.name} × ${rh.name} · 15 min averages · ringed dot = now`,
         option: {
-          tooltip: { formatter: (x) => `${new Date(x.value[3] ?? Date.now()).toLocaleString()}<br>${fmt(x.value[0])} ${unitLabel(t.units)} · ${fmt(x.value[1])} %RH`
-              + (/F$/.test(t.units) ? `<br>dew point ${fmt(dewPointF(x.value[0], x.value[1]))} °F` : "") },
+          tooltip: { formatter: (x) => `${new Date(x.value[3] ?? Date.now()).toLocaleString()}<br>${fmt(x.value[0])} ${tU} · ${fmt(x.value[1])} %RH`
+              + (/F$/.test(tU) ? `<br>dew point ${fmt(dewPointF(x.value[0], x.value[1]))} °F`
+                : /C$/.test(tU) ? `<br>dew point ${fmt(dewPointC(x.value[0], x.value[1]))} °C` : "") },
           grid: { left: 50, right: 70, top: 20, bottom: 40 },
-          xAxis: { type: "value", scale: true, name: unitLabel(t.units), nameLocation: "center", nameGap: 26, ...axisStyle },
+          xAxis: { type: "value", scale: true, name: tU, nameLocation: "center", nameGap: 26, ...axisStyle },
           yAxis: { type: "value", scale: true, name: "%RH", ...axisStyle },
           visualMap: { dimension: 2, min: 0, max: 24, right: 0, top: "middle", itemHeight: 180, calculable: false,
             text: ["24h", "0h"],
@@ -290,14 +313,14 @@ const CHARTS = [
     applies: (c) => c.cards.some((p) => !isTemp(p) && !isRH(p)),
     async build(c, hours) {
       const others = c.cards.filter((p) => !isTemp(p) && !isRH(p)).slice(0, 2);
-      const s = await fetchSeries(others, hours);
+      const s = await fetchDisplay(others, hours);
       return {
         hint: `${pickWindow(hours) / 60} min averages`,
         option: {
           tooltip, legend, grid: { left: 50, right: 50, top: 36, bottom: 60 },
           xAxis: { type: "time", ...axisStyle },
           yAxis: others.map((p, i) => ({
-            type: "value", scale: true, name: unitLabel(p.units), position: i ? "right" : "left",
+            type: "value", scale: true, name: dispUnit(p), position: i ? "right" : "left",
             ...axisStyle, splitLine: { show: !i },
           })),
           series: others.map((p, i) => lineSeries(p, s.get(p.uuid), { yAxisIndex: i, smooth: false, areaStyle: { opacity: 0.08 } })),

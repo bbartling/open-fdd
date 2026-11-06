@@ -1,4 +1,4 @@
-# Open-FDD — NF app repo (ADR-014). Pre-plugin stack lives in archive/central-v4 (tag v4.0.11-central).
+# Open-FDD 5 - NF app repo. The 4.x Rust/central stack lives at tag v4.0.11-central (branch release/4.x).
 
 # ---- secrets: never commit ----------------------------------------------------------
 .env
@@ -17,9 +17,8 @@ deploy/nf-caddy/certs/
 # ---- NF app (nf-app/) -------------------------------------------------------------------
 nf-app/node_modules/
 
-# ---- Node / Python / Rust build output ------------------------------------------------
+# ---- Node / Python build output -------------------------------------------------------
 node_modules/
-/target
 __pycache__/
 .pytest_cache/
 *.egg-info/
@@ -27,16 +26,12 @@ dist/
 build/
 .venv/
 .venv-*/
-.cargo-ben/
-.cargo-docker/
 /.cache/
 
 # ---- local outputs (qualification runs, benchmarks, backups) --------------------------
-# reports/ holds generated run output; the few committed reports were force-added.
 /backups/
 openfdd-backups/
 /reports/
-/docs/benchmarks/parity_b100_latest/
 *.db
 
 # ---- editor / OS / agent scratch ------------------------------------------------------

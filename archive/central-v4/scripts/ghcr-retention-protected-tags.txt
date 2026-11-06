@@ -1,4 +1,0 @@
-# Floating channel tags — never deleted by ghcr_prune_packages.sh
-nightly
-beta
-latest

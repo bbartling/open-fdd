@@ -54,6 +54,6 @@ test("no page origin and no nfBase: uuid-only reference, no URL, nothing hard-co
   const ctx = load();
   const { turtle } = ctx.modelToTurtle(model(ctx), "urn:test:");
   assert.ok(turtle.includes('ref:hasTimeseriesId "uuid-A"'));
-  assert.ok(!/rdfs:seeAlso <http/.test(turtle));
+  assert.ok(!/schema:url <http/.test(turtle));
   assert.ok(!/\d+\.\d+\.\d+\.\d+/.test(turtle));
 });
