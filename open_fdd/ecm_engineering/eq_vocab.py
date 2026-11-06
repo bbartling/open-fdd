@@ -1,7 +1,7 @@
 """EQ-VOCAB: versioned engineering quantity records (ofdd_engineering_quantities_v1).
 
 Public vocabulary lives under ``data/ofdd_engineering_quantities_v1.ttl`` (and a
-Pages copy under ``docs/modeling/vocab/``). This module validates JSON quantity
+Pages copy removed in 5.0). This module validates JSON quantity
 records and loads the shipped schema — it does not invent capacities.
 """
 

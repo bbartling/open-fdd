@@ -1,0 +1,75 @@
+# Which NF URLs are open and which need a login. Imported by Caddyfile (plain HTTP)
+# and Caddyfile.tls (HTTPS), so both front doors apply the same rules.
+#
+#   open (no login)  NF app static pages + the read-only API calls they make
+#   basic auth       everything else: NF console, app/hook config, every write
+#
+# The login lives in /etc/caddy/auth.caddy (one line: `<user> <bcrypt hash>` from
+# `caddy hash-password`) and is never committed.
+
+# App pages (Open-FDD dashboard and any other NF app) — files only, no app config.
+# (+ NF's favicon: browsers ask for /favicon.ico on every page, else a 401 per load)
+@appStatic {
+	method GET HEAD
+	path /api/v1/apps/static/* /favicon.ico
+}
+# Read-only API the pages use: history, platform info, BACnet server reads.
+@readGet {
+	method GET HEAD
+	path /api/v1/point/data /api/v1/platform/info
+	path /api/v1/bacnet/configuration /api/v1/bacnet/local /api/v1/bacnet/ports /api/v1/bacnet/readproperty
+}
+# Reads that are POSTs in NF's API; the token call still needs a client id/secret.
+@readPost {
+	method POST
+	path /api/v1/point/query /api/v1/auth/token
+}
+# Live values NF pushes (PointManager.ObserveDataUpdates, read-only, one long
+# chunked response). Flush every chunk at once instead of buffering it.
+@liveStream {
+	method GET
+	path /api/v1/point/updates/data
+}
+
+# Security headers on every response (ZAP baseline: clickjacking, MIME sniffing, permissions).
+# frame-ancestors can't be set from the pages' <meta> CSP, so it lives here; the meta CSP still
+# governs scripts/styles. NF's console may frame its own pages, hence 'self' (not 'none').
+header {
+	X-Content-Type-Options "nosniff"
+	X-Frame-Options "SAMEORIGIN"
+	Referrer-Policy "strict-origin-when-cross-origin"
+	Permissions-Policy "camera=(), microphone=(), geolocation=(), usb=(), payment=()"
+	Content-Security-Policy "frame-ancestors 'self'"
+	-Server
+}
+
+# Compress everything except the live stream (it must flush chunk by chunk).
+@compress not path /api/v1/point/updates/data
+encode @compress gzip
+
+handle @liveStream {
+	reverse_proxy {$NF_UPSTREAM} {
+		flush_interval -1
+		# NF's Envoy ends a quiet stream after ~15 s with a 504; send 204 instead so
+		# browsers don't log a red error for every routine reconnect.
+		@quiet status 504
+		handle_response @quiet {
+			respond 204
+		}
+	}
+}
+handle @appStatic {
+	reverse_proxy {$NF_UPSTREAM}
+}
+handle @readGet {
+	reverse_proxy {$NF_UPSTREAM}
+}
+handle @readPost {
+	reverse_proxy {$NF_UPSTREAM}
+}
+handle {
+	basic_auth {
+		import /etc/caddy/auth.caddy
+	}
+	reverse_proxy {$NF_UPSTREAM}
+}

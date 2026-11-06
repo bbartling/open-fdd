@@ -480,9 +480,8 @@ def run_cookbook_rule(
     )
 
     q_roles = list(dict.fromkeys(list(rule.required_roles) + list(rule.optional_roles)))
-    # FCU pass-through setpoints are site-native Celsius. The generic temperature
-    # quality ranges are Fahrenheit and must not null these before FCU-DEADBAND /
-    # FCU-SENSOR-NULL evaluates them.
+    # FCU pass-through setpoints are exempt from the generic role-bound screen so
+    # FCU-DEADBAND / FCU-SENSOR-NULL see the raw setpoint (a null is the signal there).
     if rule.id.startswith("FCU-"):
         q_roles = [
             role

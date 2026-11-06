@@ -1,92 +1,49 @@
 ---
 title: Home
-layout: default
 nav_order: 1
 permalink: /
 ---
 
 # Open-FDD
 
-**Open-FDD is a Normal Framework portal: Timescale historian, SQL fault detection, and a React UI.**
+![Open-FDD fault detection & analytics plugin for the Normal Framework](assets/open-fdd-nf-plugin.webp)
 
-Open-source building analytics for operators and engineers. Live BACnet, Modbus, Haystack wire, and the MQTT broker are archived and are not part of the product build.
+Open-FDD is free, open-source fault detection and diagnostics (FDD) and retro-commissioning (RCx) for HVAC.
+Since 5.0 it is a **[Normal Framework](https://www.normal.dev/) (NF) app**: it runs inside NF on the building's
+edge box, reads NF's Haystack model and point history directly, and needs no database, historian or login of its own.
 
-## Portal
+- **77 SQL FDD rules** (air handlers, VAV, chillers and plants, boilers, heat pumps, meters, sensors), run hourly
+  by an NF hook. Every result is an NF point, so it is trended, queryable and available to BACnet.
+  See [FDD rules](fdd-rules.html).
+- **RCx chart library**: plots for air handlers, zones, plants, weather, sensors and energy. Faults always show as
+  a 0/1 lane at the bottom. See [Charts](charts.html).
+- **No site code**: equipment, points and units are found from Haystack tags and NF point classes.
+  Model the site in NF; never fork the app per building. See [Modeling](modeling.html).
+- **Model export**: Haystack to RDF/Turtle with Brick time-series references, a browser SPARQL panel and a
+  SPARQL hook. See [RDF and SPARQL](rdf-sparql.html).
+- **CSV export** for Excel. See [Export](export.html).
 
-Fault detection and portfolio access for mechanical systems. Sites are polled through the Normal Framework portal or loaded from CSV. BACnet, Modbus, Haystack wire, and MQTT are archived and are not product ingest paths.
+> Screenshot placeholder: add `assets/screenshot-overview.png` (Overview tab) and `assets/screenshot-fdd.png`
+> (FDD tab with a fault lane), then embed them here.
 
-<figure class="architecture-diagram">
-  <img
-    src="{{ site.baseurl }}/assets/open-fdd-field-to-cloud.png"
-    alt="Open-FDD field-to-cloud architecture — BACnet/Modbus at the building, MQTTS to the hub, HTTPS/JWT for office and AI agents"
-    width="1672"
-    height="941"
-    loading="eager"
-    decoding="async"
-  />
-</figure>
+## Editions
 
-| Path | Protocol |
-|------|----------|
-| Normal Framework portal | Provider poll into central |
-| Office browser | HTTPS → React SPA |
-| AI / automation agents | JWT REST (+ optional MCP) |
-| Temporary ACME bridge | MQTT ingest into central (existing broker) |
-| Offline import | CSV / JSON package |
+| | **Open-FDD** (`nf-app/`) | **Open-FDD Lite** (`lite/`) |
+|---|---|---|
+| NF app id | `open-fdd` | `open-fdd-lite` |
+| For | machines with real resources (about 2 GB or more) | 1 GB boxes such as a Raspberry Pi 3 |
+| Tabs | Overview, Charts, FDD, RCx, Points, Export, BACnet Server, Model and RDF (with SPARQL) | Overview, Charts, Points, BACnet Server, Model and RDF |
+| FDD engine | yes: SQLite-WASM or PGlite | none |
+| Hooks | `fdd` (hourly), `weather`, `sparql` | `weather` |
 
-## What it does
+Both can run on the same NF; on a small box run only Lite. See [Lite](lite.html).
 
-- Ingests portal and **CSV** packages (live BACnet / Modbus / Haystack wire containers are archived)
-- Stores telemetry in a **TimescaleDB** historian (PostgreSQL + hypertables; [ADR-010]({{ site.baseurl }}/architecture/adr-010-timescale-hard-cutover.html))
-- Models sites with **Project Haystack** semantics
-- Runs **Timescale / PostgreSQL SQL** rules (`sql/fdd/registry.yaml`) — not Arrow/DataFusion
-- Serves a **React** SPA — Overview, FDD, RCx, findings against central `/api` only
-- Exposes **JWT REST** and optional **MCP** for engineering agents
+## Where to go next
 
-Pandas recipes stay in the [Pandas cookbook](rules/cookbook/pandas-cookbook.html) for notebooks / PyPI. Product FDD is **Timescale SQL only** (Soft-OPEN ≠ FQ; see [ADR-010]({{ site.baseurl }}/architecture/adr-010-timescale-hard-cutover.html)). No Parquet historian and no DataFusion on the product path.
+1. [Install](install.html): deploy to an NF box.
+2. [Modeling](modeling.html): tag your site in NF so the rules and charts bind.
+3. [Development](development.html): run it locally against the mock NF in one command.
 
-The web application runs SQL against Timescale. Python/pandas is offline/oracle validation only — see the [Python analytics source examples]({{ site.baseurl }}/rules/pandas-analytics-cookbook/) and [historian architecture]({{ site.baseurl }}/architecture/historian.html) (Timescale supersession note).
-
-## Who it is for
-
-| Role | Typical use |
-|------|-------------|
-| **Operators** | Portal historian, SQL FDD, React UI on LAN/VPN |
-| **Energy / RCx engineers** | CSV analytics on a workstation — import, SQL rules, reports |
-| **Developers & agents** | API + MCP for commissioning and validation |
-
-## Deployment models
-
-### Portal
-
-Central, React web, and Timescale. Pull GHCR images, bind-mount `workspace/`, keep API on loopback or behind a reverse proxy. Field containers are under `archive/ot-edge/`.
-
-### Offline engineering
-
-Same stack in Docker on a laptop. Import CSVs, map Haystack roles, run SQL FDD — no live field bus required.
-
-{: .important }
-Intended for **LAN, VPN, or OT-network** deployment. Do not expose the API on the public internet without an independent security review.
-
-## Get started
-
-1. [Quick Start]({{ site.baseurl }}/quick-start/) — Compose + GHCR (local single-host stack)
-2. [**Rule Cookbook**]({{ site.baseurl }}/rules/) — Timescale SQL + Pandas oracle patterns (+ [anomaly screening]({{ site.baseurl }}/rules/sql-anomaly-detection/))
-3. [Haystack modeling]({{ site.baseurl }}/modeling/) — packages and SQL roles
-4. [Architecture]({{ site.baseurl }}/architecture/) — services and data flow
-5. [API & Security]({{ site.baseurl }}/api/) — REST + vulnerability reporting
-6. [MCP & Agents]({{ site.baseurl }}/mcp-agents/) — Cursor / OpenClaw
-7. [PyPI agent tools]({{ site.baseurl }}/ecm/) — `open-fdd-anomaly report` from mapped roles (local CSV, self-hosted local Open-FDD, or a future vendor API) plus ECM workbooks (`pip install open-fdd`)
-8. [Web App]({{ site.baseurl }}/web-app/) — SPA routes and RCx examples
-
-## Stack images
-
-```text
-ghcr.io/bbartling/openfdd-central:${OPENFDD_IMAGE_TAG:-nightly}
-ghcr.io/bbartling/openfdd-web:${OPENFDD_IMAGE_TAG:-nightly}
-ghcr.io/bbartling/openfdd-fieldbus:${OPENFDD_IMAGE_TAG:-nightly}
-ghcr.io/bbartling/openfdd-mqtt:${OPENFDD_IMAGE_TAG:-nightly}
-ghcr.io/bbartling/openfdd-mcp:${OPENFDD_IMAGE_TAG:-nightly}
-```
-
-See [Build recipes]({{ site.baseurl }}/operations/build-recipes.html) and [Release channels]({{ site.baseurl }}/operations/release-channels.html).
+Source: [github.com/bbartling/open-fdd](https://github.com/bbartling/open-fdd) (MIT). Community:
+[Discord](https://discord.gg/qjT3w9y3pu). The 4.x line (Rust central stack) is frozen at tag
+[`v4.0.11-central`](https://github.com/bbartling/open-fdd/tree/v4.0.11-central).

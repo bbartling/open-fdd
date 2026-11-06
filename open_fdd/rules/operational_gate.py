@@ -130,7 +130,7 @@ PUMP_PROOF_ROLES = (
 )
 PUMP_CMD_FALLBACK = ("pump-cmd", "chw-pump-cmd", "hw-pump-cmd")
 
-VAV_AIRFLOW_PROOF_CFM = 50.0
+VAV_AIRFLOW_PROOF_LPS = 23.59735  # L/s (SI); same literal as the SV-* SQL rules
 
 COMPRESSOR_ROLES = ("compressor-status", "equipment-enable", "fan-status", "fan-cmd")
 
@@ -166,11 +166,7 @@ def resolve_fan_running(df: pd.DataFrame, *, command_fallback: bool = True) -> t
             return mask.fillna(False), f"{role} (cmd fallback)"
     # VAV airflow proxy
     if "zone-airflow" in df.columns and df["zone-airflow"].notna().any():
-        from open_fdd.quality import _storage_si
-        from open_fdd.units.convert import LPS_PER_CFM
-
-        # 50 cfm proof threshold; SI storage carries airflow in L/s.
-        threshold = VAV_AIRFLOW_PROOF_CFM * LPS_PER_CFM if _storage_si(df) else VAV_AIRFLOW_PROOF_CFM
+        threshold = VAV_AIRFLOW_PROOF_LPS  # airflow is L/s
         flow = pd.to_numeric(df["zone-airflow"], errors="coerce").fillna(0)
         return (flow > threshold), "zone-airflow"
     return pd.Series(True, index=df.index), "ungated_no_proof_roles"
@@ -238,9 +234,7 @@ def resolve_conditional(
         # Evaluate when fan is proven on OR duct static itself shows live pressure.
         # This catches high static while fan-status falsely reports off.
         fan, src = resolve_fan_running(df)
-        from open_fdd.quality import _storage_si
-
-        default_thr = 49.768 if _storage_si(df) else 0.20
+        default_thr = 49.768  # Pa
         try:
             thr = float(params.get("pressure_on_min", default_thr) or default_thr)
         except (TypeError, ValueError):

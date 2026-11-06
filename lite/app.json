@@ -1,0 +1,90 @@
+{
+  "application": {
+    "id": "open-fdd-lite",
+    "name": "Open-FDD Lite",
+    "description": "Open-FDD Lite: the small-box edition for Normal Framework. Tag-driven dashboard, charts, BACnet server view, RDF export and an Open-Meteo weather hook mirrored to NF's BACnet server. No FDD engine. Source of truth: open-fdd lite/",
+    "runtime": "RUNTIME_NODE_JS",
+    "auth": {
+      "apiKey": {
+        "scopes": [
+          "normalgw.hpl.v1.readwrite",
+          "normalgw.hpl.v2.readwrite",
+          "normalgw.bacnet.v1.readwrite",
+          "normalgw.bacnet.v2.readwrite",
+          "normalgw.ontology.v1.readonly"
+        ]
+      }
+    }
+  },
+  "files": {
+    "/hooks/open_meteo_weather.js": "hooks/open_meteo_weather.js",
+    "/static/app.js": "static/app.js",
+    "/static/chart-page.js": "static/chart-page.js",
+    "/static/chart.html": "static/chart.html",
+    "/static/charts.js": "static/charts.js",
+    "/static/index.html": "static/index.html",
+    "/static/lite-theme.js": "static/lite-theme.js",
+    "/static/model.js": "static/model.js",
+    "/static/nf.js": "static/nf.js",
+    "/static/style.css": "static/style.css",
+    "/static/theme-init.js": "static/theme-init.js",
+    "/static/tree.css": "static/tree.css",
+    "/static/tree.html": "static/tree.html",
+    "/static/tree.js": "static/tree.js",
+    "/static/vendor/echarts.min.js": "static/vendor/echarts.min.js",
+    "/static/version.js": "static/version.js"
+  },
+  "hooks": [
+    {
+      "id": "open-meteo-weather",
+      "name": "open-meteo-weather",
+      "entryPoint": "/hooks/open_meteo_weather.js",
+      "points": {
+        "noPoints": true,
+        "globalVariables": [
+          {
+            "label": "oa_dry_bulb_web",
+            "attrs": {
+              "bacnet_object": "av.1",
+              "description": "Outdoor air dry bulb (Open-Meteo, NF site coordinates)",
+              "units": "degF",
+              "source": "open-meteo"
+            }
+          },
+          {
+            "label": "oa_rh_web",
+            "attrs": {
+              "bacnet_object": "av.2",
+              "description": "Outdoor air relative humidity (Open-Meteo, NF site coordinates)",
+              "units": "%",
+              "source": "open-meteo"
+            }
+          },
+          {
+            "label": "oa_dewpoint_web",
+            "attrs": {
+              "bacnet_object": "av.3",
+              "description": "Outdoor air dewpoint (Open-Meteo, NF site coordinates)",
+              "units": "degF",
+              "source": "open-meteo"
+            }
+          }
+        ]
+      },
+      "config": {
+        "site": "",
+        "bacnetMirror": true,
+        "avInstances": [
+          1,
+          2,
+          3
+        ]
+      },
+      "schedule": {
+        "rrule": "DTSTART:20261101T000000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"
+      },
+      "mode": "MODE_SCHEDULED",
+      "invokeTimeout": "60s"
+    }
+  ]
+}

@@ -1,1 +1,0 @@
-Proven on + low ΔT.

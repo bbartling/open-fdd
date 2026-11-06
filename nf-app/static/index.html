@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-FDD</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https: 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<!--
+  Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js.
+  NF static plugin: served by Normal from the app's static/ folder at
+  /api/v1/apps/static/<app-id>/ — same origin as the console, so the page
+  calls /api/v1/* directly (LAN or portal tunnel, whichever you opened).
+  Everything is rendered from the Haystack model (model.js): SITE / EQUIPMENT /
+  DEVICE records and point markers + refs. BACnet server objects come from
+  /api/v1/bacnet/local. Code: nf.js (NF access) → model.js (Haystack) → charts.js
+  (chart catalog, NF-resampled history) → app.js (tabs). chart.html = one chart per window.
+  Strict CSP: no inline scripts or styles; ECharts is a vendored ES module (echarts-global.js).
+-->
+<script src="theme-init.js"></script>
+<script type="module" src="echarts-global.js"></script>
+<script defer src="version.js"></script>
+<script defer src="nf.js"></script>
+<script defer src="model.js"></script>
+<script defer src="units.js"></script>
+<script defer src="theme.js"></script>
+<script defer src="charts.js"></script>
+<script defer src="fdd.js"></script>
+<script defer src="rcx.js"></script>
+<script defer src="fdd-plots.js"></script>
+<script defer src="rcx-overview.js"></script>
+<script defer src="rcx-presets.js"></script>
+<script defer src="energy.js"></script>
+<script defer src="export.js"></script>
+<script defer src="app.js"></script>
+<script defer src="sparql.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>⚡ Open-FDD</h1>
+    <div class="sub" id="sub">Loading the Haystack model…</div>
+  </div>
+  <div class="spacer"></div>
+  <label class="scope">site <select id="sitePick"></select></label>
+  <label class="scope">equip <select id="equipPick"></select></label>
+  <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
+  <span class="pill" id="clock"></span>
+  <button class="btn" id="unitsToggle" type="button" title="Display units">°F · imperial</button>
+  <button class="btn" id="themeToggle" type="button">☾ dark</button>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="on">Overview</button>
+  <button data-tab="charts">Charts</button>
+  <button data-tab="fdd">FDD <span class="count" id="nRules"></span></button>
+  <button data-tab="rcx">RCx <span class="count" id="nRcx"></span></button>
+  <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
+  <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
+  <button data-tab="export">Export</button>
+  <button data-tab="model">Model &amp; RDF</button>
+</nav>
+
+<main>
+  <div id="err"></div>
+
+  <!-- Overview: live cards + equipment status -->
+  <section class="tab on" id="tab-overview">
+    <div class="stats" id="summary"></div>
+    <section class="cards" id="cards"></section>
+    <section class="panel">
+      <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
+      <div class="chips" id="chips"></div>
+    </section>
+  </section>
+
+  <!-- Charts: pick one; only that chart's points are fetched (resampled by NF) -->
+  <section class="tab" id="tab-charts">
+    <section class="panel">
+      <h2>Charts <span class="hint">one at a time · each loads only its own points, averaged on the NF box</span></h2>
+      <div class="gallery" id="gallery"></div>
+    </section>
+    <section class="panel">
+      <h2><span id="chartTitle">–</span>
+        <select id="chartPick" class="hidden"></select>
+        <span class="hint" id="chartHint"></span>
+        <span class="seg" id="chartRange"></span>
+        <a class="btn" id="chartOpen" target="_blank" rel="noopener" title="open this chart in its own window">open in new window ↗</a>
+      </h2>
+      <div class="chart tall" id="chartHost"></div>
+    </section>
+  </section>
+
+  <!-- FDD: which Open-FDD rules each equip can run, with inputs bound by Haystack class/markers -->
+  <section class="tab" id="tab-fdd">
+    <div class="stats" id="fddStats"></div>
+    <section class="panel" id="fddPlotPanel" hidden>
+      <h2><span id="fddPlotTitle">Rule plot</span> <span class="hint" id="fddPlotNote"></span>
+        <button class="btn" id="fddPlotClose">Close</button></h2>
+      <div class="chart" id="fddPlot"></div>
+    </section>
+    <section class="panel" id="fddResultsPanel" hidden>
+      <h2>Faults <span class="hint" id="fddResultsHint">written by the open-fdd hook · fault % of covered time over its window</span></h2>
+      <div class="chart" id="fddLanes"></div>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Rule</th><th>Equip</th><th>Latest</th><th>Run</th></tr></thead>
+        <tbody id="fddResultRows"></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>Rule inputs <span class="hint" id="fddHint">rules from sql/fdd/registry.yaml · inputs found by NF class or Haystack markers</span>
+        <label class="hint"><input type="checkbox" id="fddRunnableOnly"> runnable only</label>
+        <button class="btn" id="fddRunNow" title="Run the open-fdd hook now (NF StartHook; needs the console login)">Run FDD now</button>
+        <span class="hint" id="fddRunState"></span>
+      </h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Rule</th><th>Equip</th><th>Inputs</th><th>Status</th></tr></thead>
+        <tbody id="fddRows"></tbody>
+      </table></div>
+    </section>
+  </section>
+
+  <!-- RCx: retro-commissioning views (rcx-*.js modules), roles bound like the FDD rules -->
+  <section class="tab" id="tab-rcx">
+    <section class="panel">
+      <h2>Retro-commissioning <span class="hint" id="rcxHint">views draw when their roles bind on the equips in scope</span>
+        <label class="hint">range <select id="rcxRange">
+          <option value="24">24 h</option><option value="72">3 days</option><option value="168" selected>7 days</option>
+        </select></label>
+      </h2>
+    </section>
+    <div id="rcxBody"></div>
+    <section class="panel">
+      <details id="rcxMissingBox"><summary>Not available here <span class="count" id="nRcxMissing"></span></summary>
+        <div class="tablewrap"><table class="bac"><thead><tr><th>View</th><th>Needs</th></tr></thead>
+          <tbody id="rcxMissing"></tbody></table></div>
+      </details>
+    </section>
+  </section>
+
+  <!-- Points: every point on the site, filter by markers, click for history -->
+  <section class="tab" id="tab-points">
+    <section class="panel">
+      <h2>Point data
+        <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
+        <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
+        <span class="hint" id="pointHint"></span>
+      </h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Ref</th><th>Binding</th><th>Updated</th></tr></thead>
+        <tbody id="pointRows"></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>History <span class="hint" id="histHint">click a point above</span>
+        <span class="seg" id="histRange">
+          <button data-h="6">6h</button><button data-h="24" class="on">24h</button>
+          <button data-h="72">3d</button><button data-h="168">7d</button>
+        </span>
+      </h2>
+      <div class="chart short" id="histChart"></div>
+    </section>
+  </section>
+
+  <!-- BACnet server: what NF serves, read back over BACnet -->
+  <section class="tab" id="tab-bacnet">
+    <div class="devcard" id="devcard"></div>
+    <section class="panel">
+      <h2>NF BACnet server <span class="hint" id="bacHint">reading local objects…</span></h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr>
+          <th>Object</th><th>Name / description</th><th>Units</th>
+          <th class="num">PV in server config</th><th class="num">PV read over BACnet</th>
+          <th class="num">Haystack point</th><th>Match</th>
+        </tr></thead>
+        <tbody id="bacRows"><tr><td colspan="7" class="sub">–</td></tr></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>Object properties <span class="hint">full property list from /api/v1/bacnet/local, with linked Haystack tags</span></h2>
+      <div class="objs" id="objCards"></div>
+    </section>
+  </section>
+
+  <!-- Export: CSV download of point history (export.js) -->
+  <section class="tab" id="tab-export">
+    <section class="panel">
+      <h2>Export CSV <span class="hint">history for the points in the site / equip scope above, resampled by NF · opens in Excel</span></h2>
+      <div class="exform">
+        <label>Start <input type="datetime-local" id="exStart"></label>
+        <label>End <input type="datetime-local" id="exEnd"></label>
+        <label>Resolution <select id="exRes"></select></label>
+        <label>Units <select id="exUnits">
+          <option value="display">As displayed</option>
+          <option value="stored">As stored in NF</option>
+        </select></label>
+      </div>
+      <div class="exbar">
+        <input type="search" id="exFilter" placeholder="filter points (all words must match)">
+        <button class="btn" id="exAll" type="button">Select all shown</button>
+        <button class="btn" id="exNone" type="button">Select none shown</button>
+        <span class="hint" id="exShown"></span>
+      </div>
+      <div class="exlist" id="exList"></div>
+      <div class="exbar">
+        <button class="btn primary" id="exGo" type="button">Export CSV</button>
+        <span class="hint" id="exSummary"></span>
+      </div>
+      <div class="sub" id="exStatus"></div>
+      <p class="sub">Columns: <code>timestamp</code> (local time), <code>timestamp_utc</code>, then one column per point as
+        <code>equip point [unit]</code>. Boolean / fault points use the window maximum, everything else the average. 1 day windows follow UTC days.</p>
+    </section>
+  </section>
+
+  <!-- Model: Haystack tree, model checks, RDF export -->
+  <section class="tab" id="tab-model">
+    <div class="stats" id="modelStats"></div>
+    <section class="grid57">
+      <div class="panel">
+        <h2>Haystack device tree <span class="hint">click a node for its tags · scroll to zoom · drag to pan</span></h2>
+        <div class="legend" id="legend"></div>
+        <div id="tree"></div>
+      </div>
+      <div class="stack">
+        <div class="detail" id="detail"><span class="hint">Select a node.</span></div>
+        <div class="panel">
+          <h2>Model checks</h2>
+          <div id="checks"></div>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>RDF (Turtle) <span class="hint">Haystack-style triples generated from the model; non-standard tags go under <code>local:</code></span>
+        <span class="actions">
+          <button class="btn" id="dlTtl">Download .ttl</button>
+          <button class="btn" id="dlJson">Download model .json</button>
+        </span>
+      </h2>
+      <pre class="ttl" id="ttl"></pre>
+    </section>
+  </section>
+</main>
+<footer>Open-FDD · Normal Framework static plugin · Haystack model from <code>/api/v1/point/query</code> · history <code>/api/v1/point/data</code> ·
+  BACnet <code>/api/v1/bacnet/*</code> · <a href="tree.html">standalone tree</a></footer>
+
+</body>
+</html>

@@ -1,2 +1,0 @@
-# Synthetic digest for the prune dry-run. Not a published GHCR digest.
-sha256:archivedfixturekeep0000000000000000000000000000000000000000000000000000

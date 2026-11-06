@@ -1,5 +1,5 @@
 title: Open-FDD
-description: Local-first Rust + TimescaleDB platform for building telemetry, semantic modeling, and HVAC fault detection (Soft-OPEN ≠ FQ).
+description: Open-source HVAC fault detection and retro-commissioning, shipped as a Normal Framework app.
 theme: just-the-docs
 
 url: https://bbartling.github.io
@@ -17,8 +17,6 @@ back_to_top_text: "Back to top"
 aux_links:
   GitHub:
     - //github.com/bbartling/open-fdd
-  GHCR:
-    - //github.com/bbartling/open-fdd/pkgs/container/openfdd-central
   Releases:
     - //github.com/bbartling/open-fdd/releases
 
@@ -38,31 +36,14 @@ gh_edit_source: docs
 gh_edit_view_mode: "tree"
 
 exclude:
-  - archive
-  - verification
-  - agent
-  - ai-agent-context.md
-  # Historical ledgers — stay in git for agents/MCP; not human Pages nav.
-  - migration
-  - maintenance
-  - operations/patch_trains
-  - operations/recovery
-  - PORT_FINISH_PLAN.md
-  - PORT_FROM_VIBE19_INVENTORY.md
-  - PORT_FROM_VIBE19_REMOVALS.md
-  - COOKBOOK_OWNERSHIP.md
-  - central-fieldbus-cutover.md
-  - BUILDING_100_BENCHMARK.md
-  - OVERVIEW_HEALTH_API.md
-  - RUST_DATAFUSION_ENGINE.md
-  - rules/cookbook/fixtures
   - Gemfile
   - Gemfile.lock
-  - openapi.yaml
-  - README.md
   - vendor
   - .sass-cache
   - .jekyll-cache
+
+mermaid:
+  version: "10.9.1"
 
 plugins:
   - jekyll-seo-tag

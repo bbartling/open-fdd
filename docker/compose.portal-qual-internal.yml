@@ -1,8 +1,0 @@
-# Optional overlay: keep central on qual-private only (no loopback host publish).
-#
-# Use with PORTAL_QUAL_INTERNAL=1 in scripts/qualification/lib/portal_stack.sh.
-# Clients reach central at http://central:8080 from containers on qual-private.
-
-services:
-  central:
-    ports: !reset []

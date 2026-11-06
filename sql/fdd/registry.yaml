@@ -590,7 +590,7 @@ rules:
         frontend_control: slider
         sql_placeholder: MODE_DELAY_MIN
       eps_dsp:
-        label: Duct-static error epsDSP (GL36 default 0.1 in.w.c.)
+        label: Duct-static error epsDSP (Pa)
         default: 29.8608
         min: 0.0
         max: 124.42
@@ -1051,7 +1051,7 @@ rules:
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
-        label: Supply-fan delta (GL36 0.55 °F)
+        label: Supply-fan delta (Δ°C)
         default: 0.305555556
         min: 0.0
         max: 2.777777778
@@ -1186,7 +1186,7 @@ rules:
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
-        label: Supply-fan delta (GL36 0.55 °F)
+        label: Supply-fan delta (Δ°C)
         default: 0.305555556
         min: 0.0
         max: 2.777777778
@@ -1456,7 +1456,7 @@ rules:
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
-        label: Supply-fan delta (GL36 0.55 °F)
+        label: Supply-fan delta (Δ°C)
         default: 0.305555556
         min: 0.0
         max: 2.777777778
@@ -1601,7 +1601,7 @@ rules:
         frontend_control: slider
         sql_placeholder: MIX_TOL
       delta_supply_fan:
-        label: Supply-fan delta (GL36 0.55 °F)
+        label: Supply-fan delta (Δ°C)
         default: 0.305555556
         min: 0.0
         max: 2.777777778
@@ -1761,7 +1761,7 @@ rules:
         frontend_control: slider
         sql_placeholder: OA_MIN_PCT
       oat_rat_delta_min:
-        label: Min |RAT−OAT| for OA-fraction estimate (°F)
+        label: Min |RAT−OAT| for OA-fraction estimate (Δ°C)
         default: 1.222222
         min: 0.277778
         max: 5.555556
@@ -2145,11 +2145,11 @@ rules:
         sql_placeholder: PERSISTENCE_MIN
       steady_fault_per_hour:
         label: Steady-state slew limit
-        default: 6.0
-        min: 1.0
-        max: 60.0
-        step: 0.5
-        unit: degF_per_h
+        default: 3.333333
+        min: 0.555556
+        max: 33.333333
+        step: 0.277778
+        unit: degC_delta_per_h
         kind: temperature_rate
         frontend_control: slider
         sql_placeholder: STEADY_FAULT_PER_HOUR
@@ -2479,7 +2479,7 @@ rules:
         frontend_control: slider
         sql_placeholder: HTG_ON_MIN
       delta_supply_fan:
-        label: Supply-fan delta (GL36 0.55 °F)
+        label: Supply-fan delta (Δ°C)
         default: 0.305555556
         min: 0.0
         max: 2.777777778
@@ -2583,17 +2583,16 @@ rules:
         kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      min_cfm_design:
+      min_flow_design:
         label: Design minimum outdoor airflow
         default: 2359.735
         min: 0.0
         max: 94389.4
         step: 47.1947
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
-        sql_placeholder: MIN_CFM_DESIGN
+        sql_placeholder: MIN_FLOW_DESIGN
 
   - rule_id: FC14
     equipment_kinds: [ahu]
@@ -3484,7 +3483,7 @@ rules:
     equipment_kinds: [ahu, chiller, heatpump]
     sql_file: mech_oat_1.sql
     pandas_function: null
-    description: Mechanical cooling below 60°F web OAT
+    description: Mechanical cooling below 15.6 °C web OAT
     required_roles: [web_oa_t]
     optional_roles: [clg_valve_pct, chiller_status]
     output_columns: [equipment_id, fault_hours]
@@ -3835,7 +3834,6 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -3911,7 +3909,6 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -3980,17 +3977,16 @@ rules:
         kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      flow_bias_cfm:
+      flow_bias:
         label: Airflow bias threshold
         default: 23.59735
         min: 4.71947
         max: 94.3894
         step: 2.359735
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
-        sql_placeholder: FLOW_BIAS_CFM
+        sql_placeholder: FLOW_BIAS
       damper_closed_max:
         label: Damper closed maximum
         default: 0.10
@@ -4158,7 +4154,6 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -4204,7 +4199,6 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -4270,7 +4264,6 @@ rules:
         max: 943.894
         step: 4.71947
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: HIGH_MIN_FLOW_SP
@@ -4281,7 +4274,6 @@ rules:
         max: 94.3894
         step: 2.359735
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_ON_MIN
@@ -4302,7 +4294,6 @@ rules:
         max: 37.75576
         step: 0.471947
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_MAX_STD
@@ -4313,7 +4304,6 @@ rules:
         max: 943.894
         step: 4.71947
         unit: L_per_s
-        ip_unit: cfm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FIXED_FLOW_MIN_MEAN
@@ -4372,8 +4362,8 @@ rules:
         kind: temperature_difference
         frontend_control: slider
         sql_placeholder: RESET_ERR
-      reset_sat_at_65:
-        label: SAT SP at 65F OAT
+      reset_sat_at_ref:
+        label: SAT SP at the reset OAT reference
         default: 11.111111
         min: 7.222222
         max: 18.333333
@@ -4381,7 +4371,7 @@ rules:
         unit: degC
         kind: absolute_temperature
         frontend_control: slider
-        sql_placeholder: RESET_SAT_AT_65
+        sql_placeholder: RESET_SAT_AT_REF
       reset_slope:
         label: Reset slope
         default: 0.25
@@ -4599,11 +4589,11 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
       dp_margin:
         label: DP margin
-        default: 15.168465
-        min: 3.447379
-        max: 41.368542
-        step: 0.689476
-        unit: kPa
+        default: 15168.465
+        min: 3447.379
+        max: 41368.542
+        step: 689.476
+        unit: Pa
         kind: hydronic_pressure
         frontend_control: slider
         sql_placeholder: DP_MARGIN
@@ -4744,7 +4734,6 @@ rules:
         max: 189.2706
         step: 3.15451
         unit: L_per_s
-        ip_unit: gpm
         kind: volumetric_flow
         frontend_control: slider
         sql_placeholder: FLOW_HI

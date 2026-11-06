@@ -1,7 +1,7 @@
 """Effective mode-delay holdoff shared by the pandas oracle and harness (#1459).
 
 Single Python definition of the product rule implemented in
-``sql/fdd/render_rule.py`` and ``crates/fdd_rules/src/params.rs``:
+``sql/fdd/render_rule.py``:
 
 * effective delay (min) = max(MODE_DELAY_MIN, STARTUP_DELAY_MIN)
 * holdoff rows = max(1, ceil(delay_min * 60 / poll_seconds))
@@ -17,7 +17,7 @@ import math
 
 import pandas as pd
 
-# Product default (sql/fdd/runtime_defaults.json MODE_DELAY_MIN, params.rs).
+# Product default (sql/fdd/runtime_defaults.json MODE_DELAY_MIN).
 # tests/qualification/test_mode_delay_shared.py pins this to both sources.
 PRODUCT_MODE_DELAY_MIN_DEFAULT = 10.0
 

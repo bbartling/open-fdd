@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-FDD Lite</title>
+<!--
+  NF static plugin: served by Normal from the app's static/ folder at
+  /api/v1/apps/static/<app-id>/ — same origin as the console, so the page
+  calls /api/v1/* directly (LAN or portal tunnel, whichever you opened).
+  Everything is rendered from the Haystack model (model.js): SITE / EQUIPMENT /
+  DEVICE records and point markers + refs. BACnet server objects come from
+  /api/v1/bacnet/local. Code: nf.js (NF access) → model.js (Haystack) → charts.js
+  (chart catalog, NF-resampled history) → app.js (tabs). chart.html = one chart per window.
+-->
+<script src="theme-init.js"></script>
+<script src="lite-theme.js"></script>
+<script src="vendor/echarts.min.js"></script>  <!-- ECharts 6.1.0, served by NF: no internet needed -->
+<script src="nf.js"></script>
+<script src="model.js"></script>
+<script src="charts.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>⚡ Open-FDD Lite</h1>
+    <div class="sub" id="sub">Loading the Haystack model…</div>
+  </div>
+  <div class="spacer"></div>
+  <label class="scope">site <select id="sitePick"></select></label>
+  <label class="scope">equip <select id="equipPick"></select></label>
+  <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
+  <span class="pill" id="clock"></span>
+  <button class="btn" id="themeToggle" type="button">☾ dark</button>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="on">Overview</button>
+  <button data-tab="charts">Charts</button>
+  <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
+  <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
+  <button data-tab="model">Model &amp; RDF</button>
+</nav>
+
+<main>
+  <div id="err"></div>
+
+  <!-- Overview: live cards + equipment status -->
+  <section class="tab on" id="tab-overview">
+    <div class="stats" id="summary"></div>
+    <section class="cards" id="cards"></section>
+    <section class="panel">
+      <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
+      <div class="chips" id="chips"></div>
+    </section>
+  </section>
+
+  <!-- Charts: pick one; only that chart's points are fetched (resampled by NF) -->
+  <section class="tab" id="tab-charts">
+    <section class="panel">
+      <h2>Charts <span class="hint">one at a time · each loads only its own points, averaged on the NF box</span></h2>
+      <div class="gallery" id="gallery"></div>
+    </section>
+    <section class="panel">
+      <h2><span id="chartTitle">–</span>
+        <select id="chartPick" style="display:none"></select>
+        <span class="hint" id="chartHint"></span>
+        <span class="seg" id="chartRange"></span>
+        <a class="btn" id="chartOpen" target="_blank" rel="noopener" title="open this chart in its own window">open in new window ↗</a>
+      </h2>
+      <div class="chart tall" id="chartHost"></div>
+    </section>
+  </section>
+
+  <!-- Points: every point on the site, filter by markers, click for history -->
+  <section class="tab" id="tab-points">
+    <section class="panel">
+      <h2>Point data
+        <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
+        <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
+        <span class="hint" id="pointHint"></span>
+      </h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Ref</th><th>Binding</th><th>Updated</th></tr></thead>
+        <tbody id="pointRows"></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>History <span class="hint" id="histHint">click a point above</span>
+        <span class="seg" id="histRange">
+          <button data-h="6">6h</button><button data-h="24" class="on">24h</button>
+          <button data-h="72">3d</button><button data-h="168">7d</button>
+        </span>
+      </h2>
+      <div class="chart short" id="histChart"></div>
+    </section>
+  </section>
+
+  <!-- BACnet server: what NF serves, read back over BACnet -->
+  <section class="tab" id="tab-bacnet">
+    <div class="devcard" id="devcard"></div>
+    <section class="panel">
+      <h2>NF BACnet server <span class="hint" id="bacHint">reading local objects…</span></h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr>
+          <th>Object</th><th>Name / description</th><th>Units</th>
+          <th class="num">PV in server config</th><th class="num">PV read over BACnet</th>
+          <th class="num">Haystack point</th><th>Match</th>
+        </tr></thead>
+        <tbody id="bacRows"><tr><td colspan="7" class="sub">–</td></tr></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>Object properties <span class="hint">full property list from /api/v1/bacnet/local, with linked Haystack tags</span></h2>
+      <div class="objs" id="objCards"></div>
+    </section>
+  </section>
+
+  <!-- Model: Haystack tree, model checks, RDF export -->
+  <section class="tab" id="tab-model">
+    <div class="stats" id="modelStats"></div>
+    <section class="grid57">
+      <div class="panel">
+        <h2>Haystack device tree <span class="hint">click a node for its tags · scroll to zoom · drag to pan</span></h2>
+        <div class="legend" id="legend"></div>
+        <div id="tree"></div>
+      </div>
+      <div style="display:grid; gap:18px; align-content:start">
+        <div class="detail" id="detail"><span class="hint">Select a node.</span></div>
+        <div class="panel">
+          <h2>Model checks</h2>
+          <div id="checks"></div>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>RDF (Turtle) <span class="hint">Haystack-style triples generated from the model; non-standard tags go under <code>local:</code></span>
+        <span style="margin-left:auto; display:flex; gap:8px">
+          <button class="btn" id="dlTtl">Download .ttl</button>
+          <button class="btn" id="dlJson">Download model .json</button>
+        </span>
+      </h2>
+      <pre class="ttl" id="ttl"></pre>
+    </section>
+  </section>
+</main>
+<footer>Normal Framework static plugin · Haystack model from <code>/api/v1/point/query</code> · history <code>/api/v1/point/data</code> ·
+  BACnet <code>/api/v1/bacnet/*</code> · <a href="tree.html">standalone tree</a></footer>
+
+<script src="app.js"></script>
+<script src="version.js"></script>
+</body>
+</html>

@@ -12,8 +12,6 @@ import pandas as pd
 
 from open_fdd.rules.base import confirm_fault
 from open_fdd.rules.sensor_rate_profiles import (
-    IN_WC_TO_PA,
-    PSI_TO_KPA,
     ROLE_TO_PROFILE,
     SensorRateProfile,
     apply_profile_overrides,
@@ -252,35 +250,18 @@ def evaluate_point(
         series = pd.to_numeric(values, errors="coerce") / float(scale)
     else:
         series = pd.to_numeric(values, errors="coerce")
-        # Profiles use SI canonical rates. Convert only when source is imperial.
-        # Already-Pa / already-kPa inputs must not be scaled again (#1284).
+        # Profiles are SI (delta-degC/h, Pa/h). A declared unit must be the SI one; nothing is converted.
         unit = (source_unit or "").strip().lower().replace("°", "").replace(".", "")
-        if profile.quantity == "air_pressure":
-            if unit in {"", "inh2o", "inwc", "in wc", "in w c", "in_wc"}:
-                series = series * IN_WC_TO_PA
-            elif unit not in {"pa", "pascal"}:
-                return {
-                    "status_hint": "INSUFFICIENT_DATA",
-                    "fault_mask": empty_mask,
-                    "diagnostic_message": (
-                        f"Profile {profile.profile_id}: unsupported air_pressure unit {source_unit!r}"
-                    ),
-                    "confidence": "skipped_unknown_unit",
-                    "resolved_profile_id": profile.profile_id,
-                }
-        elif profile.quantity == "hydronic_pressure":
-            if unit in {"", "psi"}:
-                series = series * PSI_TO_KPA
-            elif unit not in {"kpa"}:
-                return {
-                    "status_hint": "INSUFFICIENT_DATA",
-                    "fault_mask": empty_mask,
-                    "diagnostic_message": (
-                        f"Profile {profile.profile_id}: unsupported hydronic unit {source_unit!r}"
-                    ),
-                    "confidence": "skipped_unknown_unit",
-                    "resolved_profile_id": profile.profile_id,
-                }
+        if profile.quantity in ("air_pressure", "hydronic_pressure") and unit not in {"", "pa", "pascal"}:
+            return {
+                "status_hint": "INSUFFICIENT_DATA",
+                "fault_mask": empty_mask,
+                "diagnostic_message": (
+                    f"Profile {profile.profile_id}: unsupported {profile.quantity} unit {source_unit!r} (SI Pa only)"
+                ),
+                "confidence": "skipped_unknown_unit",
+                "resolved_profile_id": profile.profile_id,
+            }
         if profile.normalize_by == "sensor_span" and sensor_span and float(sensor_span) > 0:
             series = series / float(sensor_span)
 

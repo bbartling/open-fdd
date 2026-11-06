@@ -11,7 +11,9 @@ EXCEPTION
 END;
 $$;
 
--- Sensor sweep assessability (twin of fdd_core::sensor_sweep / pandas sensor_sweep_catalog).
+-- Sensor sweep assessability (twin of pandas sensor_sweep_catalog). Inputs are SI only:
+-- a series is assessed only when its declared unit is the SI unit of the role's quantity
+-- (degC, %, Pa). Any other unit, or none, masks the series; nothing is converted or guessed here.
 CREATE OR REPLACE FUNCTION fdd.norm_unit(value text)
 RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
@@ -48,13 +50,12 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
   SELECT CASE
     WHEN unit IS NULL OR btrim(unit) = '' THEN false
     WHEN quantity = 'absolute_temperature' THEN
-      fdd.norm_unit(unit) IN ('f', 'degf', 'fahrenheit', 'c', 'degc', 'celsius')
+      fdd.norm_unit(unit) IN ('c', 'degc', 'celsius')
     WHEN quantity = 'relative_humidity' THEN
       fdd.norm_unit(unit) IN ('pct', 'percent', 'rh', 'percentrelativehumidity')
       OR position('%' IN unit) > 0
     WHEN quantity = 'air_pressure' THEN
-      fdd.norm_unit(unit) IN ('inwc', 'inh2o', 'inw.c.', 'pa', 'pascal')
-      OR position('w.c' IN lower(unit)) > 0
+      fdd.norm_unit(unit) IN ('pa', 'pascal')
     ELSE false
   END;
 $$;

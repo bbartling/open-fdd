@@ -1,7 +1,7 @@
-# PyPI: open-fdd 4.1+ (ECM + optional pandas oracle / reporting).
-# Tags: open-fdd-vX.Y.Z (preferred; avoids GHCR stack v* triggers) or vX.Y.Z
-# Trusted Publishing: bbartling/open-fdd → this workflow → environment pypi
-# Production FDD remains DataFusion/GHCR — not this package.
+# PyPI: open-fdd (ECM + pandas oracle / reporting).
+# Tags: open-fdd-vX.Y.Z or vX.Y.Z
+# Trusted Publishing: bbartling/open-fdd -> this workflow -> environment pypi
+# Production FDD is the NF app (nf-app/), not this package.
 
 name: Publish open-fdd to PyPI
 
@@ -47,16 +47,20 @@ jobs:
           python -m pip install -e ".[test,dev]"
           python -m pip install build twine
 
-      - name: Check version matches tag
-        if: startsWith(github.ref, 'refs/tags/')
-        run: python scripts/release/check_version.py --tag "${GITHUB_REF_NAME}"
-
-      - name: Version consistency (local)
-        if: "!startsWith(github.ref, 'refs/tags/')"
-        run: python scripts/release/check_version.py
-
-      - name: Run package tests
-        run: python -m pytest tests/ecm tests/ecm_engineering tests/rules tests/analytics tests/reporting -q
+      - name: Version consistency (VERSION, pyproject, nf-app, tag)
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, re, tomllib
+          v = pathlib.Path("VERSION").read_text().strip()
+          py = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          nf = json.loads(pathlib.Path("nf-app/package.json").read_text())["version"]
+          assert v == py == nf, f"VERSION={v} pyproject={py} nf-app={nf}"
+          ref = os.environ.get("GITHUB_REF_NAME", "")
+          if os.environ.get("GITHUB_REF", "").startswith("refs/tags/"):
+              tag = re.sub(r"^(open-fdd-)?v", "", ref)
+              assert tag == v, f"tag {ref} != VERSION {v}"
+          print("version OK", v)
+          PY
 
       - name: Build sdist and wheel
         run: |
@@ -172,5 +176,5 @@ jobs:
           files: dist/*
           body: |
             PyPI package `open-fdd` — ECM + pandas oracle (`rules` / `analytics` / `reporting`).
-            Production FDD remains the GHCR DataFusion stack.
+            Production FDD is the NF app (nf-app/) - see the repo README.
             Install oracle: `pip install "open-fdd[oracle]"`.

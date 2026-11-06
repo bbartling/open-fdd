@@ -1,6 +1,6 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
--- mech_oat_1.sql — Mechanical cooling below 60°F web OAT
+-- mech_oat_1.sql — Mechanical cooling below 15.6 °C web OAT
 -- Proof: chiller_status OR cooling valve (pandas mechanical_proof_mask).
 WITH h AS (
   SELECT

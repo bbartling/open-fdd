@@ -1,0 +1,20 @@
+{
+  "name": "open-fdd-nf-app",
+  "version": "5.0.0",
+  "private": true,
+  "description": "Open-FDD NF app: hook dependencies (SQL engines for the FDD rule pack).",
+  "license": "MIT",
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.11",
+    "pg": "8.23.1",
+    "sql.js": "1.15.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.chart.json && tsc -p tsconfig.tree.json && tsc -p tsconfig.hooks.json",
+    "typecheck:lite": "tsc -p ../lite/tsconfig.json && tsc -p ../lite/tsconfig.chart.json && tsc -p ../lite/tsconfig.tree.json && tsc -p ../lite/tsconfig.hooks.json"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  // Shared options for the Lite editions's type check (JSDoc over plain JS; no build step).
+  // Run with: cd nf-app && npm run typecheck:lite  (uses nf-app's TypeScript). static/vendor/** is never listed.
+  "compilerOptions": {
+    "allowJs": true, "checkJs": true, "noEmit": true, "strict": false, "noImplicitAny": false,
+    "strictNullChecks": false, "target": "es2022", "module": "commonjs",
+    "lib": ["es2022", "dom"], "types": ["node"], "typeRoots": ["../nf-app/node_modules/@types"], "skipLibCheck": true
+  }
+}

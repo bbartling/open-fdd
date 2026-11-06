@@ -4,24 +4,24 @@ from __future__ import annotations
 
 from typing import Final
 
-from open_fdd.units.convert import ip_bound_to_si
-
+# SI only: temperature degC (spike = delta-degC), humidity %, air pressure Pa. The same numbers
+# are the literals in sql/fdd/postgres/rules/sv_range.sql and sv_spike.sql.
 QUANTITY_LIMITS: Final[dict[str, dict[str, float]]] = {
-    "absolute_temperature": {"lo": -60.0, "hi": 130.0, "spike": 36.0},
+    "absolute_temperature": {"lo": -51.111111, "hi": 54.444444, "spike": 20.0},
     "relative_humidity": {"lo": 0.0, "hi": 100.0, "spike": 25.0},
-    "air_pressure": {"lo": -1.0, "hi": 8.0, "spike": 2.0},
+    "air_pressure": {"lo": -248.84, "hi": 1990.72, "spike": 497.68},
 }
 
 _ROLE_LIMITS: Final[dict[str, dict[str, float]]] = {
-    "outside-air-temp": {"lo": -60.0, "hi": 130.0, "spike": 36.0},
-    "return-air-temp": {"lo": 40.0, "hi": 100.0, "spike": 12.0},
-    "mixed-air-temp": {"lo": -20.0, "hi": 110.0, "spike": 25.0},
-    "discharge-air-temp": {"lo": 30.0, "hi": 150.0, "spike": 40.0},
-    "zone-air-temp": {"lo": 40.0, "hi": 100.0, "spike": 12.0},
-    "chilled-water-supply-temp": {"lo": 30.0, "hi": 80.0, "spike": 20.0},
-    "chilled-water-return-temp": {"lo": 30.0, "hi": 90.0, "spike": 20.0},
-    "hot-water-supply-temp": {"lo": 40.0, "hi": 220.0, "spike": 60.0},
-    "hot-water-return-temp": {"lo": 40.0, "hi": 220.0, "spike": 60.0},
+    "outside-air-temp": {"lo": -51.111111, "hi": 54.444444, "spike": 20.0},
+    "return-air-temp": {"lo": 4.444444, "hi": 37.777778, "spike": 6.666667},
+    "mixed-air-temp": {"lo": -28.888889, "hi": 43.333333, "spike": 13.888889},
+    "discharge-air-temp": {"lo": -1.111111, "hi": 65.555556, "spike": 22.222222},
+    "zone-air-temp": {"lo": 4.444444, "hi": 37.777778, "spike": 6.666667},
+    "chilled-water-supply-temp": {"lo": -1.111111, "hi": 26.666667, "spike": 11.111111},
+    "chilled-water-return-temp": {"lo": -1.111111, "hi": 32.222222, "spike": 11.111111},
+    "hot-water-supply-temp": {"lo": 4.444444, "hi": 104.444444, "spike": 33.333333},
+    "hot-water-return-temp": {"lo": 4.444444, "hi": 104.444444, "spike": 33.333333},
     "outside-air-humidity": QUANTITY_LIMITS["relative_humidity"],
     "return-air-humidity": QUANTITY_LIMITS["relative_humidity"],
     "zone-air-humidity": QUANTITY_LIMITS["relative_humidity"],
@@ -63,36 +63,9 @@ def limits_for_haystack_role(role: str) -> dict[str, float] | None:
     return None
 
 
-# Declared imperial units of the limit table above (SV-RANGE / SV-SPIKE source).
-_QUANTITY_IP_UNITS: Final[dict[str, tuple[str, str] | None]] = {
-    "absolute_temperature": ("degF", "degF_delta"),
-    "air_pressure": ("inH2O", "inH2O"),
-    "relative_humidity": None,
-}
-
-
-def limits_for_haystack_role_si(role: str) -> dict[str, float] | None:
-    """Same limit table as :func:`limits_for_haystack_role`, in canonical SI storage units."""
-    lim = limits_for_haystack_role(role)
-    if lim is None:
-        return None
-    q = quantity_for_haystack_role(role)
-    if q is None or q not in _QUANTITY_IP_UNITS:
-        raise ValueError(f"sensor limit role {role!r} has no declared quantity unit")
-    units = _QUANTITY_IP_UNITS[q]
-    if units is None:
-        return lim
-    abs_unit, delta_unit = units
-    return {
-        "lo": float(ip_bound_to_si(lim["lo"], abs_unit)),
-        "hi": float(ip_bound_to_si(lim["hi"], abs_unit)),
-        "spike": float(ip_bound_to_si(lim["spike"], delta_unit)),
-    }
-
-
 # Flatline tolerance per quantity. Temperature roles use the tuned ``flatline_tol``
-# (a temperature difference, so it is unit-system invariant up to the K/delta-F scale).
-# %RH is identical in IP and SI, so its tolerance is a declared %RH constant matching
+# (a temperature difference in delta-degC).
+# %RH tolerance is a declared %RH constant matching
 # ``sv_flatline.sql``; it must never inherit a temperature tolerance.
 HUMIDITY_FLATLINE_TOL_PCT: Final[float] = 0.1
 
@@ -121,16 +94,17 @@ def _norm_unit(unit: str) -> str:
 
 
 def unit_declares_quantity(unit: str | None, quantity: str) -> bool:
+    """True only for the SI unit of ``quantity`` (degC, %, Pa); anything else is not assessed, never converted."""
     if unit is None or not str(unit).strip():
         return False
     raw = str(unit).strip()
     t = _norm_unit(raw)
     if quantity == "absolute_temperature":
-        return t in {"f", "degf", "fahrenheit", "c", "degc", "celsius"}
+        return t in {"c", "degc", "celsius"}
     if quantity == "relative_humidity":
         return t in {"pct", "percent", "rh", "percentrelativehumidity"} or "%" in raw
     if quantity == "air_pressure":
-        return t in {"inwc", "inh2o", "pa", "pascal"} or "w.c" in raw
+        return t in {"pa", "pascal"}
     return False
 
 

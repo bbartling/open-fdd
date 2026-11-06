@@ -1,0 +1,142 @@
+--- a/nf-app/hooks/fdd.js	2026-11-06 09:18:21.341125300 -0600
++++ b/nf-app/hooks/fdd.js	2026-11-06 09:18:48.610631400 -0600
+@@ -48,7 +48,7 @@
+ }
+ 
+ // pglite runs the Postgres pack as written; sqlite runs the translated one.
+-const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json' };
++const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json', timescale: 'pack-postgres.json' };
+ const loadPack = (kind) => JSON.parse(fs.readFileSync(path.join(RULES, PACK_FILE[kind]), 'utf8'));
+ 
+ // ---- NF reads -----------------------------------------------------------------------
+@@ -233,7 +233,9 @@
+ }
+ 
+ // ---- run ----------------------------------------------------------------------------
+-async function pickEngine(http, wanted) {
++async function pickEngine(http, wanted, timescaleConfig) {
++  // FULL edition: config.timescale set -> run the pack inside NF's TimescaleDB (engine "timescale", or "auto")
++  if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return 'timescale';
+   if (wanted === 'sqlite' || wanted === 'pglite') return wanted;
+   try {
+     const { data } = await http.get('/api/v1/platform/info');
+@@ -249,7 +251,7 @@
+   const http = sdk.http;
+   const log = (m) => (sdk.logEvent ? sdk.logEvent(m) : console.log(m));
+   const shared = loadShared();
+-  const kind = await pickEngine(http, config.engine);
++  const kind = await pickEngine(http, config.engine, config.timescale);
+   const pack = packIn || loadPack(kind);
+   const step = pack.poll_seconds;
+   const windowHours = Number(config.windowHours) > 0 ? Number(config.windowHours) : 24;
+@@ -262,7 +264,7 @@
+   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
+   const summary = { engine: kind, equips: 0, rules: 0, errors: 0, written: 0, results: [] };
+   const warnedUnits = new Set();
+-  const engine = await createEngine({ kind, pack });
++  const engine = await createEngine({ kind, pack, config: config.timescale });
+   try {
+     for (const equipRec of model.equips) {
+       const equipId = shared.idOf(equipRec);
+@@ -280,13 +282,22 @@
+         if (!runnable.length) continue;
+       }
+       const uuids = [...new Set(Object.values(roles).map((p) => p.uuid))];
+-      const hist = await fetchHistory(http, uuids, from, to, step);
+-      const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si });
+-      if (!input.history.length) { log(`${equipId}: no history in the last ${windowHours} h, skipped`); continue; }
+-      await engine.load(input);
++      let loadedRows;
++      if (kind === 'timescale') {   // history stays in the database: SQL builds the wide table (SI conversion included)
++        const roleToUuid = Object.fromEntries(Object.entries(roles).map(([r, p]) => [r, p.uuid]));
++        const unitsByUuid = Object.fromEntries(Object.values(roles).map((p) => [p.uuid, p.units || '']));
++        loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, from, to, stepSec: step });
++      } else {
++        const hist = await fetchHistory(http, uuids, from, to, step);
++        const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si });
++        loadedRows = input.history.length;
++        if (loadedRows) await engine.load(input);
++      }
++      if (!loadedRows) { log(`${equipId}: no history in the last ${windowHours} h, skipped`); continue; }
+       summary.equips++;
+       const records = [];
+       const values = [];
++      const dbRows = [];            // timescale: rows for openfdd.fdd_results
+       for (const r of runnable) {
+         let rows;
+         try {
+@@ -301,10 +312,13 @@
+         const out = row && resultValue(pack.rules[r.rule.id], row);
+         if (!out || !Number.isFinite(out.value)) continue;
+         summary.results.push({ equip: equipId, rule: r.rule.id, ...out });
++        if (engine.resultRow) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to }));
+         records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours }));
+         values.push({ uuid: nameUuid(`${equipId}:${r.rule.id}`), value: out.value });
+       }
+-      if (config.dryRun || !records.length) continue;
++      if (config.dryRun) continue;
++      if (dbRows.length) await engine.writeResults(dbRows);   // timescale: also keep results in the database
++      if (!records.length) continue;
+       await http.post('/api/v1/point/points', { points: records });
+       const ts = new Date(to).toISOString();
+       for (const v of values) {
+@@ -312,6 +326,9 @@
+         summary.written++;
+       }
+     }
++    if (engine.maybeEnforceCap && !config.dryRun) {   // retention cap (a no-op when the TimescaleDB job exists)
++      try { summary.cap = await engine.maybeEnforceCap(); } catch (e) { summary.errors++; log(`size cap: ${errText(e)}`); }
++    }
+   } finally {
+     await engine.close();
+     // Small edges: hand freed engine memory back now rather than at the next GC.
+--- a/nf-app/hooks/lib/engines.js	2026-11-06 09:18:21.479155200 -0600
++++ b/nf-app/hooks/lib/engines.js	2026-11-06 09:18:48.640267400 -0600
+@@ -254,13 +254,45 @@
+   };
+ }
+ 
++// ---------------------------------------------------------------- timescale (FULL edition: rules run inside NF's TimescaleDB)
++
++/**
++ * Not fed with prebuilt rows: load() takes { equipId, siteId, roleToUuid, unitsByUuid, from, to, stepSec } and builds
++ * the pack's wide `history` in SQL from openfdd.nf_samples (see timescale/adapter_nf.sql); returns the row count.
++ * opts.client = an already connected pg client (tests); otherwise opts.config (hook config.timescale) is used.
++ */
++async function createTimescale(pack, opts = {}) {
++  const ts = require("./timescale");
++  const client = opts.client || (await ts.connect(opts.config));
++  const owned = !opts.client;
++  try {
++    const have = await client.query("SELECT to_regclass('openfdd.fdd_results') AS r");
++    if (!have.rows[0].r) await ts.install(client);   // first run only; re-run install.sql by hand after editing adapter_nf.sql
++  } catch (e) { if (owned) await client.end(); throw e; }
++  return {
++    kind: "timescale",
++    client,
++    async load(args) { return (await ts.loadHistory(client, { pack, ...args })).rows; },
++    async query(ruleId) {
++      const { results, errors } = await ts.runRules(client, pack, [ruleId]);
++      if (errors[ruleId]) throw new Error(errors[ruleId]);
++      return results[ruleId];
++    },
++    resultRow: (a) => ts.toResultRow({ engine: "timescale", ...a }),
++    writeResults: (rows) => ts.writeResults(client, rows),
++    maybeEnforceCap: () => ts.maybeEnforceCap(client),
++    async close() { if (owned) await client.end(); },
++  };
++}
++
+ // ---------------------------------------------------------------- public
+ 
+-async function createEngine({ kind, pack }) {
++async function createEngine({ kind, pack, ...opts }) {
+   if (!pack || !pack.rules || !pack.contract) throw new Error("createEngine: pack (parsed pack-*.json) is required");
+   if (kind === "sqlite") return createSqlite(pack);
+   if (kind === "pglite") return createPglite(pack);
+-  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite" or "pglite")`);
++  if (kind === "timescale") return createTimescale(pack, opts);
++  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite" or "timescale")`);
+ }
+ 
+ module.exports = { createEngine, HELPERS };

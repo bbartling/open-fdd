@@ -93,7 +93,7 @@ def _sql_index() -> dict[str, dict]:
     except ImportError:
         return {}
     root = Path(__file__).resolve().parents[1]
-    path = root / "sql_rules" / "registry.yaml"
+    path = root / "sql" / "fdd" / "registry.yaml"
     if not path.is_file():
         return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}

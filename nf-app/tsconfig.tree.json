@@ -1,0 +1,9 @@
+{
+  // static/tree.html
+  "extends": "./tsconfig.base.json",
+  "files": [
+    "types/globals.d.ts", "types/shapes.d.ts",
+    "static/theme-init.js", 
+    "static/nf.js", "static/theme.js", "static/tree.js"
+  ]
+}

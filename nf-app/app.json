@@ -1,0 +1,145 @@
+{
+  "application": {
+    "id": "open-fdd",
+    "name": "Open-FDD",
+    "description": "Open-FDD fault detection and diagnostics as a Normal Framework app (ADR-014). Source of truth: open-fdd nf-app/",
+    "runtime": "RUNTIME_NODE_JS",
+    "auth": {
+      "apiKey": {
+        "scopes": [
+          "normalgw.hpl.v1.readwrite",
+          "normalgw.hpl.v2.readwrite",
+          "normalgw.ontology.v1.readonly",
+          "normalgw.automation.v1.readonly"
+        ]
+      }
+    }
+  },
+  "files": {
+    "/hooks/fdd.js": "hooks/fdd.js",
+    "/hooks/history.js": "hooks/history.js",
+    "/hooks/lib/engines.js": "hooks/lib/engines.js",
+    "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
+    "/hooks/sparql.js": "hooks/sparql.js",
+    "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
+    "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
+    "/hooks/vendor/sql.js/sql-wasm.wasm": "hooks/vendor/sql.js/sql-wasm.wasm",
+    "/hooks/weather.js": "hooks/weather.js",
+    "/package.json": "package.json",
+    "/rules/pack-postgres.json": "rules/pack-postgres.json",
+    "/rules/pack-sqlite.json": "rules/pack-sqlite.json",
+    "/static/app.js": "static/app.js",
+    "/static/chart-page.js": "static/chart-page.js",
+    "/static/chart.html": "static/chart.html",
+    "/static/charts.js": "static/charts.js",
+    "/static/echarts-global.js": "static/echarts-global.js",
+    "/static/energy.js": "static/energy.js",
+    "/static/export.js": "static/export.js",
+    "/static/fdd-catalog.json": "static/fdd-catalog.json",
+    "/static/fdd-plots.js": "static/fdd-plots.js",
+    "/static/fdd.js": "static/fdd.js",
+    "/static/index.html": "static/index.html",
+    "/static/model.js": "static/model.js",
+    "/static/nf.js": "static/nf.js",
+    "/static/rcx-overview.js": "static/rcx-overview.js",
+    "/static/rcx-presets.js": "static/rcx-presets.js",
+    "/static/rcx.js": "static/rcx.js",
+    "/static/sparql.js": "static/sparql.js",
+    "/static/style.css": "static/style.css",
+    "/static/theme-init.js": "static/theme-init.js",
+    "/static/theme.js": "static/theme.js",
+    "/static/tree.css": "static/tree.css",
+    "/static/tree.html": "static/tree.html",
+    "/static/tree.js": "static/tree.js",
+    "/static/units.js": "static/units.js",
+    "/static/vendor/echarts.esm.min.js": "static/vendor/echarts.esm.min.js",
+    "/static/vendor/oxigraph/LICENSE-APACHE": "static/vendor/oxigraph/LICENSE-APACHE",
+    "/static/vendor/oxigraph/LICENSE-MIT": "static/vendor/oxigraph/LICENSE-MIT",
+    "/static/vendor/oxigraph/node.js": "static/vendor/oxigraph/node.js",
+    "/static/vendor/oxigraph/node_bg.wasm": "static/vendor/oxigraph/node_bg.wasm",
+    "/static/vendor/oxigraph/package.json": "static/vendor/oxigraph/package.json",
+    "/static/vendor/oxigraph/web.js": "static/vendor/oxigraph/web.js",
+    "/static/vendor/oxigraph/web_bg.wasm": "static/vendor/oxigraph/web_bg.wasm",
+    "/static/version.js": "static/version.js",
+    "/timescale/adapter_nf.sql": "timescale/adapter_nf.sql",
+    "/timescale/install.sql": "timescale/install.sql"
+  },
+  "hooks": [
+    {
+      "id": "weather",
+      "name": "weather",
+      "entryPoint": "/hooks/weather.js",
+      "points": {
+        "noPoints": true,
+        "globalVariables": [
+          {
+            "label": "oa_dry_bulb_web",
+            "attrs": {
+              "description": "Outdoor air dry bulb (Open-Meteo, NF site coordinates)",
+              "units": "degF",
+              "source": "open-meteo"
+            }
+          },
+          {
+            "label": "oa_rh_web",
+            "attrs": {
+              "description": "Outdoor air relative humidity (Open-Meteo, NF site coordinates)",
+              "units": "%",
+              "source": "open-meteo"
+            }
+          },
+          {
+            "label": "oa_dewpoint_web",
+            "attrs": {
+              "description": "Outdoor air dewpoint (Open-Meteo, Magnus fallback, NF site coordinates)",
+              "units": "degF",
+              "source": "open-meteo"
+            }
+          }
+        ]
+      },
+      "schedule": {
+        "rrule": "DTSTART:20261101T000000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"
+      },
+      "mode": "MODE_SCHEDULED",
+      "invokeTimeout": "60s"
+    },
+    {
+      "id": "fdd",
+      "name": "fdd",
+      "entryPoint": "/hooks/fdd.js",
+      "points": {
+        "noPoints": true
+      },
+      "config": {
+        "engine": "auto",
+        "windowHours": 24
+      },
+      "schedule": {
+        "rrule": "DTSTART:20261101T000700Z\nRRULE:FREQ=HOURLY;INTERVAL=1"
+      },
+      "mode": "MODE_SCHEDULED",
+      "invokeTimeout": "300s"
+    },
+    {
+      "id": "sparql",
+      "name": "sparql",
+      "entryPoint": "/hooks/sparql.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "60s"
+    },
+    {
+      "id": "history",
+      "name": "history",
+      "entryPoint": "/hooks/history.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "60s"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open-FDD Lite · BACnet + Haystack Tree</title>
+<!--
+  Read-only companion to index.html (same NF app, same static/ folder).
+  Left: what NF's own BACnet server actually serves, read back over BACnet.
+  Right: the Haystack model (site → equip → device → points, weather stations)
+  built only from tags in NF's model layer. Nothing here writes to NF.
+-->
+<script src="theme-init.js"></script>
+<script src="lite-theme.js"></script>
+<script src="vendor/echarts.min.js"></script>  <!-- ECharts 6.1.0, served by NF: no internet needed -->
+<script src="nf.js"></script>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="tree.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>🌳 BACnet + Haystack Tree</h1>
+    <div class="sub" id="sub">read-only · loading…</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="pill">read-only</span>
+  <button class="btn" id="themeToggle" type="button">☾ dark</button>
+  <a class="pill" href="./">← dashboard</a>
+</header>
+
+<main>
+  <div id="err"></div>
+  <section class="panel">
+    <h2>Served over BACnet <span class="hint" id="bacHint"></span></h2>
+    <div id="device"></div>
+    <div id="objects"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Haystack model <span class="hint">click a node for its tags · scroll to zoom · drag to pan</span></h2>
+    <div class="legend" id="legend"></div>
+    <div id="tree"></div>
+    <div id="detail"><span class="hint">Select a node.</span></div>
+  </section>
+</main>
+
+<script src="tree.js"></script>
+</body>
+</html>

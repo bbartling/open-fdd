@@ -136,7 +136,7 @@ def mech_oat1_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     d.attrs["mech_oat1_weather_source"] = src
     if db is None:
         return _false(d.index)
-    oat_max = _f(p, "mech_oat_max", 60.0)
+    oat_max = _f(p, "mech_oat_max", 15.555556)
     run, kind = mechanical_proof_mask(d)
     d.attrs["mech_oat1_proof"] = kind
     if not kind:
@@ -153,7 +153,7 @@ def econ6_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     d.attrs["econ6_weather_source"] = src
     if db is None:
         return _false(d.index)
-    oat_max = _f(p, "econ6_oat_max", 25.0)
+    oat_max = _f(p, "econ6_oat_max", -3.888889)
     damper_max = _f(p, "econ6_damper_max", 0.25)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     return (db.notna() & (db < oat_max) & (econ > damper_max)).fillna(False)

@@ -1,2 +1,0 @@
-# Independent RDF parser/query engine for qualification tooling, never product runtime.
-rdflib==7.1.4

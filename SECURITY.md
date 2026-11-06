@@ -11,7 +11,7 @@ https://github.com/bbartling/open-fdd/security/advisories/new
 A useful report should include:
 
 - a description of the vulnerability;
-- the affected Open-FDD component and version/image tag when known;
+- the affected component (`nf-app`, `lite`, a hook, the Caddy front door) and the Open-FDD version;
 - complete reproduction steps;
 - proof of impact;
 - screenshots or logs with credentials, tokens, private hostnames, and OT details removed;
@@ -23,4 +23,7 @@ If the private reporting form is unavailable to you, contact the maintainer thro
 
 ## Deployment scope
 
-Open-FDD is currently local-first and intended primarily for LAN/VPN/OT deployments. Hosting is the local single-host stack only; Railway and cloud web-app hosting are retired. Open-FDD makes no claim of production public-internet hardening. Never commit deployment secrets, registry credentials, BAS credentials, JWT secrets, or admin passwords.
+Open-FDD 5.0 is a Normal Framework (NF) app intended for LAN, VPN and OT deployments behind NF (authentication, remote
+access and the console are NF's). It makes no claim of production public-internet hardening. The optional Caddy front
+door (`deploy/nf-caddy`) keeps the console and writes behind a login. CI runs ZAP against the mock NF, `npm audit` and
+gitleaks; see the [security docs](docs/security.md). Never commit NF passwords, API keys, tokens, certificates or BAS credentials.

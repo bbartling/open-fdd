@@ -1,9 +1,0 @@
-{
-  "pandas_rule_id": "VAV-6",
-  "equipment_id": "EQ_1",
-  "equipment_type": "VAV",
-  "poll_seconds": 300,
-  "any_fault": false,
-  "datafusion_compare": "pending",
-  "fault_hours": 0.0
-}

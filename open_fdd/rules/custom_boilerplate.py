@@ -7,7 +7,7 @@ Location (copy / extend from here)
 | ``app/rules/custom_boilerplate.py`` | **This file** — templates, helpers, worked examples |
 | ``app/rules/custom_rules.py`` | **Agent workspace** — put finished ``CookbookRule`` objects in ``CUSTOM_RULES`` |
 | ``app/rules/custom_registry.py`` | Merges custom rules into the active catalog |
-| ``docs/rules/cookbook/`` | Dual expression cookbooks |
+| ``docs/fdd-rules.md`` | Generated rule catalog (SQL pack) |
 
 Hard rules
 ----------
@@ -99,7 +99,7 @@ def compute_sat_high_while_fan_on(d: pd.DataFrame, p: dict, poll: float) -> pd.S
     if "discharge-air-temp" not in d.columns:
         return _false(d.index)
     sat = pd.to_numeric(d["discharge-air-temp"], errors="coerce")
-    thr = _f(p, "sat_hi", 75.0)
+    thr = _f(p, "sat_hi", 23.888889)
     fault = sat.notna() & (sat > thr)
     # Prefer fan_status; fall back to fan_cmd
     for role in ("fan-status", "fan-cmd"):
@@ -116,11 +116,11 @@ EXAMPLE_SAT_HIGH = make_custom_rule(
     compute=compute_sat_high_while_fan_on,
     required_roles=["discharge-air-temp"],
     optional_roles=["fan-status", "fan-cmd"],
-    equation="Fan on AND SAT > sat_hi (°F). Boilerplate threshold rule for agents.",
+    equation="Fan on AND SAT > sat_hi (°C). Boilerplate threshold rule for agents.",
     equipment_kinds=["ahu"],
     family="custom",
     extra_params=[
-        CookbookParam("sat_hi", "SAT high threshold", "°F", 55.0, 120.0, 1.0, 75.0),
+        CookbookParam("sat_hi", "SAT high threshold", "°C", 12.777778, 48.888889, 0.555556, 23.888889),
     ],
     confirm_seconds=300.0,
 )

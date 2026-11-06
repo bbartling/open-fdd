@@ -1,70 +1,82 @@
-name: Stack Security Guards
+name: Security
 
 on:
-  pull_request:
   push:
-    branches: [ master, main ]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  deny-old-python-shape:
+  npm-audit:
+    name: npm audit (nf-app)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: npm audit
+        working-directory: nf-app
+        run: npm audit --audit-level=high
 
-      - name: Ensure slim PyPI shape (ECM + oracle libs; no old FDD wheel surface)
-        run: |
-          test -f pyproject.toml
-          test -d open_fdd
-          test -d open_fdd/ecm_engineering
-          test -f open_fdd/ecm_engineering/data/Open_FDD_ECM_Engineering_Toolkit.xlsx
-          test -f open_fdd/ecm_engineering/data/open_fdd_model.json
-          test -d open_fdd/rules
-          test -d open_fdd/analytics
-          test -d open_fdd/reporting
-          test -f open_fdd/rules/cookbook_catalog.py
-          # Old Arrow/pandas FDD wheel surface must stay deleted.
-          test ! -d open_fdd/arrow_runtime
-          test ! -d open_fdd/playground
-          test ! -d open_fdd/faults
-          test ! -f requirements.txt
-          test ! -d bacnet_toolshed
-          grep -q 'name = "open-fdd"' pyproject.toml
-          grep -q 'ecm_engineering' pyproject.toml
-          grep -q 'oracle' pyproject.toml
+  secret-scan:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Ensure safety docs exist
-        run: |
-          test -f AGENTS.md
-          grep -q "Never" AGENTS.md
+  zap-baseline:
+    name: ZAP baseline (mock NF server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
-      - name: Keep container stack focused
+      - name: Start the mock NF server
         run: |
-          test -f Cargo.toml
-          test -f docker/compose.portal.yml
-          test -f docker/compose.csv.yml
-          test -f docker/compose.react.yml
-          test -f services/central/Dockerfile
-          test -f archive/product-ui/react-spa-v4/package.json
-          test -f archive/product-ui/react-spa-v4/Dockerfile
-          ! test -d services/ui
-          test -f Dockerfile.mcp
-          test -f .env.example
-          test -d edge
-          test -d services/central
-          test -d archive/product-ui/react-spa-v4
-          test -d workspace
-          test ! -f Dockerfile
-          test ! -f docker/compose.edge.rust.yml
-          test ! -d workspace/dashboard/src
+          node nf-app/dev/mock-nf.mjs 8765 > mock-nf.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8765/api/v1/apps/static/open-fdd/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat mock-nf.log
+          exit 1
 
-      - name: Static product UI + archived React policy
-        run: |
-          chmod +x scripts/ci/static_product_guard.sh
-          ./scripts/ci/static_product_guard.sh
-          test -f docs/architecture/adr-001-react-rust-modernization.md
-          python3 scripts/architecture_react_policy_check.py
-          python3 -m pip install --user PyYAML
-          python3 scripts/validate_capabilities_ledger.py
-          python3 scripts/phase2_computation_policy_check.py
-          python3 scripts/phase2_computation_policy_check.py --self-test
-          python3 scripts/phase2_shadow_compare.py
+      # The action runs ZAP in Docker with host networking, so 127.0.0.1 reaches the mock.
+      - name: ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "http://127.0.0.1:8765/api/v1/apps/static/open-fdd/"
+          cmd_options: "-a"
+          # Accepted-by-design alerts, each with its reason (anything new still fails).
+          rules_file_name: ".zap/rules.tsv"
+          allow_issue_writing: false
+          fail_action: true
+
+      - name: Keep ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md
+          if-no-files-found: ignore

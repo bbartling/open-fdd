@@ -1,14 +1,12 @@
 """SV-RATE sensor rate-of-change profiles (engineering screening defaults).
 
 Thresholds are configurable screening values — not universal code limits.
-Canonical units are used for computation; display conversion is separate.
+All thresholds are SI (delta-degC/h, Pa/h); display conversion is separate.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from typing import Literal
-
-from open_fdd.units.convert import PA_PER_IN_WC
 
 Quantity = Literal[
     "temperature",
@@ -58,36 +56,6 @@ class SensorRateProfile:
             raise ValueError(f"{self.profile_id}: canonical_unit required")
 
 
-IN_WC_TO_PA = PA_PER_IN_WC
-PSI_TO_KPA = 6.894757
-F_TO_C_RATE = 5.0 / 9.0
-
-
-def f_per_h_to_c_per_h(rate_f: float) -> float:
-    """Temperature *rate* conversion — no 32° offset."""
-    return float(rate_f) * F_TO_C_RATE
-
-
-def c_per_h_to_f_per_h(rate_c: float) -> float:
-    return float(rate_c) / F_TO_C_RATE
-
-
-def inwc_per_h_to_pa_per_h(rate: float) -> float:
-    return float(rate) * IN_WC_TO_PA
-
-
-def pa_per_h_to_inwc_per_h(rate: float) -> float:
-    return float(rate) / IN_WC_TO_PA
-
-
-def psi_per_h_to_kpa_per_h(rate: float) -> float:
-    return float(rate) * PSI_TO_KPA
-
-
-def kpa_per_h_to_psi_per_h(rate: float) -> float:
-    return float(rate) / PSI_TO_KPA
-
-
 def _t(
     pid: str,
     location: str,
@@ -105,7 +73,7 @@ def _t(
         profile_id=pid,
         quantity="temperature",
         location=location,
-        canonical_unit="°F/h",
+        canonical_unit="Δ°C/h",
         steady_warning_per_hour=sw,
         steady_fault_per_hour=sf,
         transient_warning_per_hour=tw,
@@ -114,7 +82,7 @@ def _t(
         transition_window_minutes=window,
         extreme_interval_change=extreme,
         extreme_interval_minutes=5,
-        rationale=rationale or "Temperature rate screening default (°F/h).",
+        rationale=rationale or "Temperature rate screening default (Δ°C/h).",
     )
 
 
@@ -154,19 +122,18 @@ def _co2(pid: str, location: str, sw: float, sf: float, tw: float, tf: float) ->
 
 
 def _air_p(pid: str, location: str, sw: float, sf: float, tw: float, tf: float) -> SensorRateProfile:
-    # Store canonical Pa/h derived from in.w.c./h defaults
     return SensorRateProfile(
         profile_id=pid,
         quantity="air_pressure",
         location=location,
         canonical_unit="Pa/h",
-        steady_warning_per_hour=inwc_per_h_to_pa_per_h(sw),
-        steady_fault_per_hour=inwc_per_h_to_pa_per_h(sf),
-        transient_warning_per_hour=inwc_per_h_to_pa_per_h(tw),
-        transient_fault_per_hour=inwc_per_h_to_pa_per_h(tf),
+        steady_warning_per_hour=sw,
+        steady_fault_per_hour=sf,
+        transient_warning_per_hour=tw,
+        transient_fault_per_hour=tf,
         persistence_minutes=10,
         transition_window_minutes=20,
-        rationale=f"Air pressure; authored as {sw}/{sf}/{tw}/{tf} in.w.c./h → Pa/h.",
+        rationale="Air pressure rate, Pa/h.",
     )
 
 
@@ -175,15 +142,15 @@ def _hyd_p(pid: str, location: str, sw: float, sf: float, tw: float, tf: float) 
         profile_id=pid,
         quantity="hydronic_pressure",
         location=location,
-        canonical_unit="kPa/h",
-        steady_warning_per_hour=psi_per_h_to_kpa_per_h(sw),
-        steady_fault_per_hour=psi_per_h_to_kpa_per_h(sf),
-        transient_warning_per_hour=psi_per_h_to_kpa_per_h(tw),
-        transient_fault_per_hour=psi_per_h_to_kpa_per_h(tf),
+        canonical_unit="Pa/h",
+        steady_warning_per_hour=sw,
+        steady_fault_per_hour=sf,
+        transient_warning_per_hour=tw,
+        transient_fault_per_hour=tf,
         persistence_minutes=10,
         transition_window_minutes=10,
         normalize_by=None,
-        rationale=f"Hydronic pressure; authored as {sw}/{sf}/{tw}/{tf} psi/h → kPa/h.",
+        rationale="Hydronic pressure rate, Pa/h.",
     )
 
 
@@ -221,38 +188,38 @@ def _cmd(pid: str, location: str, sw: float, sf: float, tw: float, tf: float) ->
 
 
 DEFAULT_PROFILES: dict[str, SensorRateProfile] = {
-    # Temperature (°F/h authored → stored as °F/h)
-    "zone_air_temperature": _t("zone_air_temperature", "zone", 4, 6, 8, 12, extreme=15.0, window=30),
-    "return_air_temperature": _t("return_air_temperature", "return", 6, 10, 12, 20),
-    "outside_air_temperature": _t("outside_air_temperature", "outside", 12, 18, 20, 30, window=15),
-    "mixed_air_temperature": _t("mixed_air_temperature", "mixed", 12, 20, 30, 45, window=15),
-    "supply_air_temperature": _t("supply_air_temperature", "supply", 10, 16, 35, 50, window=20),
+    # Temperature (delta-degC / h)
+    "zone_air_temperature": _t("zone_air_temperature", "zone", 2.2222, 3.3333, 4.4444, 6.6667, extreme=8.3333, window=30),
+    "return_air_temperature": _t("return_air_temperature", "return", 3.3333, 5.5556, 6.6667, 11.1111),
+    "outside_air_temperature": _t("outside_air_temperature", "outside", 6.6667, 10.0, 11.1111, 16.6667, window=15),
+    "mixed_air_temperature": _t("mixed_air_temperature", "mixed", 6.6667, 11.1111, 16.6667, 25.0, window=15),
+    "supply_air_temperature": _t("supply_air_temperature", "supply", 5.5556, 8.8889, 19.4444, 27.7778, window=20),
     "heating_coil_leaving_air_temperature": _t(
-        "heating_coil_leaving_air_temperature", "heating_coil_leave", 15, 25, 50, 75, window=10
+        "heating_coil_leaving_air_temperature", "heating_coil_leave", 8.3333, 13.8889, 27.7778, 41.6667, window=10
     ),
     "cooling_coil_leaving_air_temperature": _t(
-        "cooling_coil_leaving_air_temperature", "cooling_coil_leave", 12, 20, 35, 50, window=10
+        "cooling_coil_leaving_air_temperature", "cooling_coil_leave", 6.6667, 11.1111, 19.4444, 27.7778, window=10
     ),
     "vav_discharge_air_temperature": _t(
-        "vav_discharge_air_temperature", "vav_discharge", 12, 20, 35, 50
+        "vav_discharge_air_temperature", "vav_discharge", 6.6667, 11.1111, 19.4444, 27.7778
     ),
     "chilled_water_supply_temperature": _t(
-        "chilled_water_supply_temperature", "chw_supply", 6, 10, 15, 25, window=30
+        "chilled_water_supply_temperature", "chw_supply", 3.3333, 5.5556, 8.3333, 13.8889, window=30
     ),
     "chilled_water_return_temperature": _t(
-        "chilled_water_return_temperature", "chw_return", 8, 12, 15, 25, window=30
+        "chilled_water_return_temperature", "chw_return", 4.4444, 6.6667, 8.3333, 13.8889, window=30
     ),
     "hot_water_supply_temperature": _t(
-        "hot_water_supply_temperature", "hw_supply", 15, 25, 50, 75, window=30
+        "hot_water_supply_temperature", "hw_supply", 8.3333, 13.8889, 27.7778, 41.6667, window=30
     ),
     "hot_water_return_temperature": _t(
-        "hot_water_return_temperature", "hw_return", 12, 20, 30, 50, window=30
+        "hot_water_return_temperature", "hw_return", 6.6667, 11.1111, 16.6667, 27.7778, window=30
     ),
     "condenser_water_temperature": _t(
-        "condenser_water_temperature", "cw", 10, 16, 20, 30, window=20
+        "condenser_water_temperature", "cw", 5.5556, 8.8889, 11.1111, 16.6667, window=20
     ),
     "refrigerant_temperature": _t(
-        "refrigerant_temperature", "refrigerant", 40, 75, 150, 250, window=15
+        "refrigerant_temperature", "refrigerant", 22.2222, 41.6667, 83.3333, 138.8889, window=15
     ),
     # RH (pp/h)
     "zone_relative_humidity": _rh("zone_relative_humidity", "zone", 10, 15, 15, 25),
@@ -268,15 +235,15 @@ DEFAULT_PROFILES: dict[str, SensorRateProfile] = {
     "dense_occupancy_zone_co2": _co2("dense_occupancy_zone_co2", "zone_dense", 1000, 2000, 2000, 3500),
     "return_air_co2": _co2("return_air_co2", "return", 500, 1000, 1000, 2000),
     "outside_air_co2": _co2("outside_air_co2", "outside", 150, 300, 300, 500),
-    # Air pressure (authored in.w.c./h)
-    "building_static_pressure": _air_p("building_static_pressure", "building", 0.10, 0.20, 0.30, 0.50),
-    "duct_static_pressure": _air_p("duct_static_pressure", "duct", 0.75, 1.25, 3.00, 5.00),
-    "filter_differential_pressure": _air_p("filter_differential_pressure", "filter", 0.25, 0.50, 1.00, 2.00),
-    "vav_differential_pressure": _air_p("vav_differential_pressure", "vav_dp", 0.50, 1.00, 2.00, 4.00),
-    # Hydronic (authored psi/h)
-    "hydronic_differential_pressure": _hyd_p("hydronic_differential_pressure", "hydronic_dp", 5, 10, 20, 35),
-    "pump_pressure": _hyd_p("pump_pressure", "pump", 10, 20, 40, 60),
-    "static_hydronic_pressure": _hyd_p("static_hydronic_pressure", "hydronic_static", 3, 6, 10, 20),
+    # Air pressure (Pa / h)
+    "building_static_pressure": _air_p("building_static_pressure", "building", 24.88, 49.77, 74.65, 124.42),
+    "duct_static_pressure": _air_p("duct_static_pressure", "duct", 186.63, 311.05, 746.52, 1244.2),
+    "filter_differential_pressure": _air_p("filter_differential_pressure", "filter", 62.21, 124.42, 248.84, 497.68),
+    "vav_differential_pressure": _air_p("vav_differential_pressure", "vav_dp", 124.42, 248.84, 497.68, 995.36),
+    # Hydronic (Pa / h)
+    "hydronic_differential_pressure": _hyd_p("hydronic_differential_pressure", "hydronic_dp", 34473.8, 68947.6, 137895.1, 241316.5),
+    "pump_pressure": _hyd_p("pump_pressure", "pump", 68947.6, 137895.1, 275790.3, 413685.4),
+    "static_hydronic_pressure": _hyd_p("static_hydronic_pressure", "hydronic_static", 20684.3, 41368.5, 68947.6, 137895.1),
     # Flow (design-flow fraction / h)
     "vav_airflow": _flow("vav_airflow", "vav", 1.0, 2.0, 4.0, 6.0),
     "ahu_airflow": _flow("ahu_airflow", "ahu", 0.75, 1.5, 3.0, 5.0),

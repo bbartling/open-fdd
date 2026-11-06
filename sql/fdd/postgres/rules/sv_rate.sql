@@ -1,7 +1,7 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- sv_rate.sql — Context-aware sensor rate of change (portable channels)
--- Rate is normalized to °F/h so the threshold is poll-interval independent, and
+-- Rate is normalized to Δ°C/h so the threshold is poll-interval independent, and
 -- the exceedance must be *sustained* (two consecutive samples) to separate a
 -- slew from a one-sample SV-SPIKE. Samples separated by more than
 -- PERSISTENCE_MIN are treated as a data gap, not a slew.

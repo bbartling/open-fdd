@@ -20,27 +20,27 @@ REASON_NON_NUMERIC = "NON_NUMERIC"
 REASON_OUT_OF_RANGE = "OUT_OF_RANGE"
 REASON_IMPOSSIBLE = "IMPOSSIBLE_FOR_ROLE"
 
-# Role family → (lo, hi) in native units after 0–1 vs 0–100 scaling for positions.
-# None bound means “do not apply that side”.
+# Role family -> (lo, hi) in SI (degC, L/s, Pa) after 0-1 vs 0-100 scaling for positions.
+# None bound means "do not apply that side". Inputs are SI: no unit is converted here.
 ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
-    "zone-air-temp": (40.0, 100.0),
-    "zone-temp": (40.0, 100.0),
-    "discharge-air-temp": (35.0, 140.0),
-    "supply-air-temp": (35.0, 140.0),
-    "mixed-air-temp": (20.0, 130.0),
-    "return-air-temp": (40.0, 110.0),
-    "outside-air-temp": (-40.0, 130.0),
-    "chilled-water-supply-temp": (32.0, 80.0),
-    "chilled-water-return-temp": (32.0, 90.0),
-    "hot-water-supply-temp": (60.0, 220.0),
-    "hot-water-return-temp": (50.0, 210.0),
-    "zone-airflow": (0.0, 20000.0),
-    "supply-airflow": (0.0, 100000.0),
-    "airflow": (0.0, 100000.0),
-    "duct-static-pressure": (-2.0, 6.0),
-    "chw-diff-pressure": (0.0, 50.0),
-    "chw-flow": (0.0, 20000.0),
-    "water-flow": (0.0, 20000.0),
+    "zone-air-temp": (4.444444, 37.777778),
+    "zone-temp": (4.444444, 37.777778),
+    "discharge-air-temp": (1.666667, 60.0),
+    "supply-air-temp": (1.666667, 60.0),
+    "mixed-air-temp": (-6.666667, 54.444444),
+    "return-air-temp": (4.444444, 43.333333),
+    "outside-air-temp": (-40.0, 54.444444),
+    "chilled-water-supply-temp": (0.0, 26.666667),
+    "chilled-water-return-temp": (0.0, 32.222222),
+    "hot-water-supply-temp": (15.555556, 104.444444),
+    "hot-water-return-temp": (10.0, 98.888889),
+    "zone-airflow": (0.0, 9438.94),
+    "supply-airflow": (0.0, 47194.7),
+    "airflow": (0.0, 47194.7),
+    "duct-static-pressure": (-497.68, 1493.04),
+    "chw-diff-pressure": (0.0, 344737.85),
+    "chw-flow": (0.0, 1261.804),
+    "water-flow": (0.0, 1261.804),
     "cooling-valve": (0.0, 100.0),
     "heating-valve": (0.0, 100.0),
     "economizer-damper": (0.0, 100.0),
@@ -57,20 +57,6 @@ ROLE_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "fan-speed-feedback": (0.0, 100.0),
     "pump-speed-feedback": (0.0, 100.0),
 }
-
-
-def _storage_si(df: pd.DataFrame) -> bool:
-    if str(df.attrs.get("storage_abi") or "").strip().lower() == "metric-c-v2":
-        return True
-    for key in ("role_units", "units_map"):
-        block = df.attrs.get(key)
-        if not isinstance(block, dict):
-            continue
-        for unit in block.values():
-            tok = str(unit).strip().lower().replace(" ", "")
-            if tok in {"°c", "degc", "c", "celsius"}:
-                return True
-    return False
 
 
 STATUS_ROLES = {
@@ -183,49 +169,6 @@ def _scale_position(num: pd.Series) -> pd.Series:
     return num
 
 
-def _storage_bounds(
-    bounds: tuple[float | None, float | None],
-    *,
-    declared_unit: str | None,
-) -> tuple[float | None, float | None]:
-    """Map legacy °F / in.w.c. cookbook bounds to SI when the frame is metric."""
-    if not declared_unit:
-        return bounds
-    unit = str(declared_unit).strip()
-    lo, hi = bounds
-    if unit in ("°C", "degC", "C"):
-        def _f2c(v: float | None) -> float | None:
-            if v is None:
-                return None
-            return (float(v) - 32.0) * (5.0 / 9.0)
-
-        return _f2c(lo), _f2c(hi)
-    if unit in ("Pa", "pascal"):
-        from open_fdd.units.convert import PA_PER_IN_WC
-
-        def _inwc2pa(v: float | None) -> float | None:
-            if v is None:
-                return None
-            return float(v) * PA_PER_IN_WC
-
-        return _inwc2pa(lo), _inwc2pa(hi)
-    if unit in ("L/s", "L_per_s", "lps"):
-        def _gpm2lps(v: float | None) -> float | None:
-            if v is None:
-                return None
-            return float(v) * 0.0630902
-
-        return _gpm2lps(lo), _gpm2lps(hi)
-    if unit in ("kPa",):
-        def _psi2kpa(v: float | None) -> float | None:
-            if v is None:
-                return None
-            return float(v) * 6.89476
-
-        return _psi2kpa(lo), _psi2kpa(hi)
-    return bounds
-
-
 def normalize_role_series(
     series: pd.Series,
     role: str,
@@ -306,7 +249,7 @@ def normalize_role_series(
 
     lo_hi = bounds if bounds is not None else ROLE_BOUNDS.get(family)
     if lo_hi is not None:
-        lo, hi = _storage_bounds(lo_hi, declared_unit=declared_unit)
+        lo, hi = lo_hi  # declared_unit is informational: values are SI by contract
         scaled = _scale_position(num)
         if family in POSITION_ROLES or any(k in family for k in ("valve", "damper", "speed")):
             # Accept 0–1 or 0–100
