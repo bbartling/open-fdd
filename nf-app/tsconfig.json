@@ -1,24 +1,11 @@
 {
-  // Type-check the app's plain JavaScript (no build step: NF serves these files as-is).
-  // `npm run typecheck` in nf-app/ (CI: nf-app-ci.yml). Files join the list as they get JSDoc types
-  // (next: export.js, sparql.js need DOM casts; hooks need module.exports typing).
-  "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
-    "noEmit": true,
-    "strict": false,
-    "noImplicitAny": false,
-    "strictNullChecks": false,
-    "target": "es2022",
-    "module": "commonjs",
-    "lib": ["es2022", "dom"],
-    "types": ["node"],
-    "skipLibCheck": true
-  },
+  // Main page: static/index.html (script order). static/vendor/** is never listed.
+  "extends": "./tsconfig.base.json",
   "files": [
-    "types/globals.d.ts",
-    "static/units.js",
-    "static/model.js",
-    "static/fdd.js"
+    "types/globals.d.ts", "types/shapes.d.ts",
+    "static/theme-init.js",
+    "static/version.js", "static/nf.js", "static/model.js", "static/units.js", "static/theme.js", "static/charts.js",
+    "static/fdd.js", "static/rcx.js", "static/fdd-plots.js", "static/rcx-overview.js",
+    "static/rcx-presets.js", "static/energy.js", "static/export.js", "static/app.js", "static/sparql.js"
   ]
 }

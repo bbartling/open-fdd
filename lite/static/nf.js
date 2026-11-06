@@ -32,7 +32,13 @@ async function initAuth() {
   return info;
 }
 
+/**
+ * @param {string} path
+ * @param {unknown} [body] POSTed as JSON when given
+ * @returns {Promise<any>}
+ */
 async function api(path, body) {
+  /** @type {Record<string, string>} */
   const headers = body ? { "Content-Type": "application/json" } : {};
   const opts = body ? { method: "POST", body: JSON.stringify(body) } : {};
   for (let attempt = 1; ; attempt++) {
@@ -53,6 +59,12 @@ async function api(path, body) {
  * that Envoy exposes as one long chunked JSON array at /api/v1/point/updates/data).
  * Calls onValue({ uuid, value }) per update as it arrives; reconnects with backoff.
  * onState(true|false) reports whether the stream is up. Returns a stop() function.
+ */
+/**
+ * @param {string[]} uuids
+ * @param {(v: {uuid: string, value: any}) => void} onValue
+ * @param {(up: boolean, err?: any) => void} [onState]
+ * @returns {() => void}
  */
 function streamUpdates(uuids, onValue, onState = () => {}) {
   let stopped = false, ctrl = null, delay = 2000;
@@ -145,7 +157,7 @@ function selfAddress(ports) {
 async function readProp(dev, addr, objectId, property = "PROP_PRESENT_VALUE") {
   const q = new URLSearchParams({
     "object_id.object_type": objectId.objectType, "object_id.instance": objectId.instance,
-    property_id: property, array_index: 4294967295,
+    property_id: property, array_index: "4294967295",
   });
   if (addr) { q.set("device_address.mac", addr.mac); q.set("device_address.port_id", addr.portId); }
   else q.set("device_address.device_id", dev);

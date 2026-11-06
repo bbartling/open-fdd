@@ -193,6 +193,12 @@ const server = http.createServer(async (req, res) => {
   for await (const chunk of req) body += chunk;
   const b = body ? JSON.parse(body) : {};
   if (p === "/" || p === "/api/v1/apps/static/open-fdd") { res.writeHead(302, { Location: APP_PREFIX }); return res.end(); }
+  if (p === `${APP_PREFIX}version.json`) {
+    // Same shape nf_app_sync.py writes on deploy (VERSION + git commit); dev mock marks it "dev".
+    const root = path.join(HERE, "..", "..");
+    const version = fs.existsSync(path.join(root, "VERSION")) ? fs.readFileSync(path.join(root, "VERSION"), "utf8").trim() : "0.0.0";
+    return json(res, 200, { version, commit: "", dirty: true, deployed: "dev mock" });
+  }
   if (p.startsWith(APP_PREFIX)) {
     const rel = decodeURIComponent(p.slice(APP_PREFIX.length)) || "index.html";
     const file = path.join(STATIC, rel);

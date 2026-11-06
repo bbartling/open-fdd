@@ -5,6 +5,7 @@
 // Needs model.js (has, markersOf, idOf). The FDD hook uses the same rules (slice 3).
 
 /** Equipment kinds (ahu, vav, chiller, …) an equip record has, from its Haystack markers. */
+/** @param {NfRecord} equipRec @param {FddCatalog} catalog @returns {string[]} */
 function equipKinds(equipRec, catalog) {
   const markers = new Set(markersOf(equipRec));
   return Object.entries(catalog.equipment_kinds)
@@ -74,6 +75,7 @@ function equipRules(equipRec, model, catalog) {
     || a.missing.length - b.missing.length || a.rule.id.localeCompare(b.rule.id));
 }
 
+/** @type {FddCatalog | null} */
 let fddCatalog = null;
 async function loadCatalog() {
   if (!fddCatalog) {

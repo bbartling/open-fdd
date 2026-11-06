@@ -618,7 +618,7 @@
       scope: "site", hours: 2160,
       render: async (el, ctx) => {
         const sites = await loadSites(ctx);
-        const card = el.closest && el.closest(".rcx-card");
+        const card = /** @type {HTMLElement | null} */ (el.closest && el.closest(".rcx-card"));
         if (sites.length < 2) {
           el.textContent = "Needs at least 2 modeled sites with a meter.";
           if (card) card.hidden = true;
@@ -667,7 +667,7 @@
       }
       if (meters.length < 2) {
         el.textContent = "Needs at least 2 meters with history in scope.";
-        const card = el.closest && el.closest(".rcx-card");
+        const card = /** @type {HTMLElement | null} */ (el.closest && el.closest(".rcx-card"));
         if (card) card.hidden = true;
         return "Needs at least 2 meters.";
       }

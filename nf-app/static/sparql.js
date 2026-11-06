@@ -11,7 +11,7 @@
 "use strict";
 
 const SPARQL_ROW_CAP = 5000;
-const SPARQL_SCRIPT_SRC = typeof document !== "undefined" && document.currentScript ? document.currentScript.src : "";
+const SPARQL_SCRIPT_SRC = typeof document !== "undefined" && document.currentScript ? /** @type {HTMLScriptElement} */ (document.currentScript).src : "";
 
 // ---- pure helpers (browser + hook + tests) -------------------------------------------------
 /** "PREFIX x: <iri>" lines, copied from the @prefix lines of the generated Turtle. */

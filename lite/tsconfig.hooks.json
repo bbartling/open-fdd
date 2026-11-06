@@ -1,0 +1,5 @@
+{
+  // CommonJS hook
+  "extends": "./tsconfig.base.json",
+  "files": ["types/globals.d.ts", "hooks/open_meteo_weather.js"]
+}

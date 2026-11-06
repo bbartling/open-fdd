@@ -38,3 +38,7 @@ openfdd-backups/
 .DS_Store
 .worktrees/
 *.swp
+
+# generated at deploy time by nf_app_sync.py (version pin shown in the UI)
+nf-app/static/version.json
+lite/static/version.json

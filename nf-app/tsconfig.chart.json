@@ -1,0 +1,9 @@
+{
+  // static/chart.html
+  "extends": "./tsconfig.base.json",
+  "files": [
+    "types/globals.d.ts", "types/shapes.d.ts",
+    "static/theme-init.js", 
+    "static/nf.js", "static/model.js", "static/theme.js", "static/charts.js", "static/chart-page.js"
+  ]
+}

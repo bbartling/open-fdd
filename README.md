@@ -1,18 +1,22 @@
 # Open-FDD
 
 <p align="center">
-  <a href="https://discord.gg/qjT3w9y3pu"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg" alt="NF app CI"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml/badge.svg" alt="pandas == SQL parity"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/security.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/security.yml/badge.svg" alt="Security"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml/badge.svg" alt="Docs"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/publish-open-fdd.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/publish-open-fdd.yml/badge.svg" alt="PyPI publish"></a>
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
-  <img src="https://img.shields.io/badge/Normal%20Framework-app-0B7285" alt="Normal Framework app">
+  <img src="docs/assets/open-fdd-nf-plugin.webp" alt="open-fdd: fault detection &amp; analytics plugin for the Normal Framework" width="720">
 </p>
 
 <p align="center">
-  <img src="docs/assets/image_new_chiller.png" alt="Open-FDD logo" width="440">
+  <a href="https://github.com/bbartling/open-fdd/releases"><img src="https://img.shields.io/github/package-json/v/bbartling/open-fdd?filename=nf-app%2Fpackage.json&label=version&color=1E40AF" alt="version"></a>
+  <img src="https://img.shields.io/badge/Normal%20Framework-plugin-5B21B6" alt="Normal Framework plugin">
+  <img src="https://img.shields.io/badge/FDD%20rules-77%20SQL-7C3AED" alt="77 SQL FDD rules">
+  <img src="https://img.shields.io/badge/units-SI%20math-0E7490" alt="SI math">
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg" alt="NF app CI"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml/badge.svg" alt="pandas == SQL parity"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/security.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/security.yml/badge.svg" alt="Security (ZAP, audit, gitleaks)"></a>
+  <a href="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml/badge.svg" alt="Docs"></a>
+  <a href="https://pypi.org/project/open-fdd/"><img src="https://img.shields.io/pypi/v/open-fdd?label=PyPI&color=3775A9" alt="PyPI"></a>
+  <a href="https://bbartling.github.io/open-fdd/"><img src="https://img.shields.io/badge/docs-online-2563EB" alt="Docs online"></a>
+  <a href="https://discord.gg/qjT3w9y3pu"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
 </p>
 
 **Open-FDD is free, open-source fault detection and diagnostics (FDD) and retro-commissioning (RCx) for HVAC,

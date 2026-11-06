@@ -250,6 +250,7 @@
       .filter((r) => r.d[0] != null && r.d[1] != null);
     if (!data.length) return null;
     const eqs = [...new Set(data.map((r) => r.eq))].sort();
+    /** @type {any[]} */
     const series = eqs.map((eq) => ({
       name: eq || "points", type: "scatter", symbolSize: 7, itemStyle: { opacity: 0.7 },
       data: data.filter((r) => r.eq === eq).map((r) => r.d),
@@ -386,6 +387,7 @@
   const noData = (what) => `No ${what} history in this window.`;
 
   // One timeseries preset: role (+ optional overlay / return) per equip, all equips on one chart.
+  /** @param {{id: string, group: string, title: string, kinds: any, role: string, overlay?: string, ret?: string, extra?: string[], rules?: string[]}} o */
   function timeseriesPreset({ id, group, title, kinds, role, overlay, ret, extra = [], rules = [] }) {
     rcxView({
       id, group, title, kinds, scope: "site", minEquips: 1, hours: 168,

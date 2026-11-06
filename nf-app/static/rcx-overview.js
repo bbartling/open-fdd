@@ -111,6 +111,7 @@
    * Only intervals where the device is on (weight > 0) and OAT is known count.
    * Returns { labels, hours: [h per label] }.
    */
+  /** @param {any} t @param {any} active @param {any} oat @param {{toDisp?: (c: number) => number, duty?: boolean, gapMaxSec?: number}} [o] */
   function mechBins(t, active, oat, { toDisp, duty = false, gapMaxSec = GAP_MAX_SEC } = {}) {
     const edges = oatEdges(), labels = oatBinLabels(toDisp), hours = labels.map(() => 0);
     for (let i = 0; i + 1 < t.length; i++) {
@@ -377,6 +378,7 @@
       if (rows.length < 5) return "fewer than 5 identifiable fan-on samples (needs |OAT-RAT| above the minimum delta)";
       const dmin = ctx.dispDelta(ECON_DT_MIN_C, TEMP), unit = dmin.unit;   // deltas: no 32 offset
       // Damper position bands stand in for central's visual map (theme palette colors only).
+      /** @type {[string, (r: any) => boolean][]} */
       const bands = [["damper n/a", (r) => r.damperPct == null], ["damper 0-33%", (r) => r.damperPct != null && r.damperPct < 33.34],
         ["damper 33-67%", (r) => r.damperPct >= 33.34 && r.damperPct < 66.67], ["damper 67-100%", (r) => r.damperPct >= 66.67]];
       const series = bands.map(([name, test]) => ({ name, type: "scatter", symbolSize: 7,

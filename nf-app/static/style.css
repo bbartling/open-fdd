@@ -226,3 +226,7 @@ tr.clickable:hover td { background: var(--panel2); }
 .exbar input[type=search] { flex: 1 1 260px; max-width: 420px; }
 .exlist { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; columns: 2 320px; }
 .ex-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; font-size: 13px; break-inside: avoid; }
+
+/* app version (version.js) */
+.app-version { font-size: 12px; color: var(--muted, #64748b); text-decoration: none; margin-left: 10px; align-self: center; }
+.app-version:hover { text-decoration: underline; }

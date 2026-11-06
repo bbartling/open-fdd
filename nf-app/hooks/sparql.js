@@ -25,8 +25,9 @@ const MAX_RESULT_CHARS = 200000;      // cap on the returned/logged answer text
 const FORMATS = ['json', 'csv', 'turtle'];
 
 const sparqlLib = () => require('../static/sparql.js');
+// The module names are cast to `string` so tsc does not follow them into the vendored build (never type-checked).
 const oxigraph = () => {
-  try { return require('oxigraph'); } catch (e) { return require('../static/vendor/oxigraph/node.js'); }
+  try { return require(/** @type {string} */ ('oxigraph')); } catch (e) { return require(/** @type {string} */ ('../static/vendor/oxigraph/node.js')); }
 };
 
 /** Pure: Turtle + query -> answer. Throws Error on a bad format, parse error or evaluation error. */
@@ -87,6 +88,7 @@ const argsOf = (ctx) => {
   return typeof a === 'string' ? JSON.parse(a) : a;
 };
 
+/** @param {{sdk: any, args?: any, nfBase?: string, now?: () => number}} o */
 async function handle({ sdk, args = {}, nfBase, now = () => Date.now() }) {
   const log = (m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   const t0 = now();
@@ -119,8 +121,8 @@ async function handle({ sdk, args = {}, nfBase, now = () => Date.now() }) {
   return result;
 }
 
-module.exports = async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx) });
-module.exports.runSparql = runSparql;
-module.exports.handle = handle;
-module.exports.argsOf = argsOf;
-module.exports.loadShared = loadShared;
+// The hook is the function; the helpers hang off it for the tests (assigned in one go so tsc sees the shape).
+module.exports = Object.assign(
+  async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx) }),
+  { runSparql, handle, argsOf, loadShared },
+);

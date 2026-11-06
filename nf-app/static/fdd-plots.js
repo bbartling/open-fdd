@@ -259,6 +259,7 @@
    * Per-rule result plot: the rule's bound input signals grouped by unit family plus a fault
    * lane from the hook's result point. Returns a short note.
    */
+  /** @param {HTMLElement} el @param {{rule?: any, equipRec?: any, bound?: Record<string, any[]>, resultPoint?: any, hours?: number}} [o] */
   async function fddRulePlot(el, { rule, equipRec, bound = {}, resultPoint = null, hours = 168 } = {}) {
     const wanted = [...new Set([...(rule.required_roles || []), ...(rule.optional_roles || [])])];
     const roles = fddPlotExpandRoles(rule.id, wanted, bound).filter((r) => bound[r] && bound[r].length);

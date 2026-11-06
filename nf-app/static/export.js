@@ -116,6 +116,7 @@
    * Fetch every point's resampled history. Returns Map(uuid -> Map(ms -> raw value)).
    * Chunks of <= 7 days, points grouped by method and batched; `apiFn(url)` -> NF JSON.
    */
+  /** @param {{points: any[], startMs: number, endMs: number, windowSec: number, apiFn: (url: string) => Promise<any>, onProgress?: (done: number, total: number) => void, isCancelled?: () => boolean}} o */
   async function collect({ points, startMs, endMs, windowSec, apiFn, onProgress = () => {}, isCancelled = () => false }) {
     const out = new Map(points.map((p) => [p.uuid, new Map()]));
     const groups = new Map();
@@ -185,7 +186,8 @@
   };
 
   // ---- DOM (browser only) ----------------------------------------------------------------
-  const $ = (id) => root.document.getElementById(id);
+    /** @param {string} id @returns {AnyEl} */
+  const $ = (id) => /** @type {AnyEl} */ (root.document.getElementById(id));
   const st = { key: "", selected: new Set(), mounted: false, busy: false, cur: null };
 
   const equipName = (model, p) => {
@@ -298,9 +300,10 @@
     $("exAll").addEventListener("click", () => { for (const r of visibleRows()) st.selected.add(r.p.uuid); drawList(); });
     $("exNone").addEventListener("click", () => { for (const r of visibleRows()) st.selected.delete(r.p.uuid); drawList(); });
     $("exList").addEventListener("change", (ev) => {
-      const id = ev.target.dataset && ev.target.dataset.uuid;
+      const t = /** @type {HTMLInputElement} */ (ev.target);
+      const id = t.dataset && t.dataset.uuid;
       if (!id) return;
-      if (ev.target.checked) st.selected.add(id); else st.selected.delete(id);
+      if (t.checked) st.selected.add(id); else st.selected.delete(id);
       refreshSummary();
     });
     $("exGo").addEventListener("click", () => run());

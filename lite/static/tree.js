@@ -1,7 +1,8 @@
 // tree.html: read-only view of NF's own BACnet server (left) and the Haystack
 // model tree (right). Needs nf.js loaded first. Nothing here writes to NF.
 
-const $ = (id) => document.getElementById(id);
+/** @param {string} id @returns {AnyEl} */
+const $ = (id) => /** @type {AnyEl} */ (document.getElementById(id));
 const COLORS = {
   site: "#b5179e", equip: "#f8961e", device: "#4361ee", sensor: "#43aa8b", sp: "#f9c74f",
   cmd: "#f94144", weather: "#4cc9f0", bacnet: "#90be6d", other: "#577590",

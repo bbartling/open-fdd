@@ -30,6 +30,7 @@ import difflib
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -139,6 +140,25 @@ def cmd_status(c: Console, m: dict) -> int:
     return 0
 
 
+def version_info(start: Path) -> dict:
+    """{version, commit, dirty, deployed} for the app's static/version.json: the repo's VERSION
+    file (searched upward from the manifest) and the git commit the files come from."""
+    root = next((d for d in [start.resolve(), *start.resolve().parents] if (d / "VERSION").is_file()), None)
+    version = (root / "VERSION").read_text(encoding="utf-8").strip() if root else "0.0.0"
+
+    def git(*args: str) -> str:
+        try:
+            return subprocess.run(["git", *args], cwd=root or start, capture_output=True, text=True,
+                                  timeout=20, check=True).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    commit = git("rev-parse", "HEAD")
+    dirty = bool(git("status", "--porcelain", "--untracked-files=no"))
+    return {"version": version, "commit": commit, "dirty": dirty,
+            "deployed": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+
+
 def app_slug(name: str) -> str:
     """NF 3.10 derives an app's id from its name (lower case, non-alphanumerics -> "-");
     the id sent in CreateApplication is ignored."""
@@ -166,6 +186,11 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
         # WriteFile maps the HTTP body to the bytes field: send a JSON string of base64.
         c.call("POST", f"/api/v1/apps/{app_id}/files{nf_path}", base64.b64encode(data).decode())
         print(f"wrote {nf_path} ({len(data)} bytes)")
+    # The version the UI shows (static/version.js): generated from the repo, never committed.
+    info = version_info(m["_dir"])
+    c.call("POST", f"/api/v1/apps/{app_id}/files/static/version.json",
+           base64.b64encode(json.dumps(info).encode()).decode())
+    print(f"wrote /static/version.json (v{info['version']} {info['commit'][:7]}{'+dirty' if info['dirty'] else ''})")
     for hook in [] if skip_hooks else [h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks]:
         # UpdateHook maps the HTTP body to the hook message itself.
         c.call("POST", f"/api/v1/apps/{app_id}/hooks", hook)

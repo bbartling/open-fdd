@@ -6,7 +6,7 @@ permalink: /
 
 # Open-FDD
 
-![Open-FDD](assets/image_new_chiller.png)
+![Open-FDD fault detection & analytics plugin for the Normal Framework](assets/open-fdd-nf-plugin.webp)
 
 Open-FDD is free, open-source fault detection and diagnostics (FDD) and retro-commissioning (RCx) for HVAC.
 Since 5.0 it is a **[Normal Framework](https://www.normal.dev/) (NF) app**: it runs inside NF on the building's

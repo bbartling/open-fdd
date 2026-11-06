@@ -1,0 +1,8 @@
+{
+  // CommonJS hooks (fdd.js, history.js, lib/engines.js, lib/timescale.js are added by their owners).
+  "extends": "./tsconfig.base.json",
+  "files": [
+    "types/globals.d.ts", "types/shapes.d.ts", "types/hooks.d.ts",
+    "hooks/sparql.js", "hooks/weather.js", "hooks/lib/synthetic_dataset.js"
+  ]
+}

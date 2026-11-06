@@ -31,7 +31,8 @@
     "/static/tree.css": "static/tree.css",
     "/static/tree.html": "static/tree.html",
     "/static/tree.js": "static/tree.js",
-    "/static/vendor/echarts.min.js": "static/vendor/echarts.min.js"
+    "/static/vendor/echarts.min.js": "static/vendor/echarts.min.js",
+    "/static/version.js": "static/version.js"
   },
   "hooks": [
     {
@@ -73,7 +74,11 @@
       "config": {
         "site": "",
         "bacnetMirror": true,
-        "avInstances": [1, 2, 3]
+        "avInstances": [
+          1,
+          2,
+          3
+        ]
       },
       "schedule": {
         "rrule": "DTSTART:20261101T000000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"

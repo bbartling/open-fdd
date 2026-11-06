@@ -15,6 +15,7 @@ const idOf = (r) => (r.attrs || {}).id || r.name;
 const markersOf = (r) => ((r.attrs || {}).markers || "").split(",").filter(Boolean);
 const ENTITY_TYPES = ["SITE", "EQUIPMENT", "DEVICE"];
 
+/** @param {NfRecord} r @returns {OfddPoint} */
 function toPoint(r) {
   const a = r.attrs || {};
   const tags = markersOf(r);
@@ -28,9 +29,11 @@ function toPoint(r) {
 }
 
 /** Whole site model: entity records plus every point on every modeled site. */
+/** @returns {Promise<OfddModel>} */
 async function loadModel() {
   const recs = await queryAll({ layer: "model" });
   const of = (t) => recs.filter((r) => r.pointType === t);
+  /** @type {OfddModel} */
   const model = { sites: of("SITE"), equips: of("EQUIPMENT"), devices: of("DEVICE"), points: [] };
   if (!model.sites.length) {
     throw new Error("no Haystack site in this NF's model layer; tag the site, equipment and points first");
@@ -40,6 +43,7 @@ async function loadModel() {
 }
 
 /** Points for every site in the model (cheap enough to re-run on the live loop). */
+/** @param {OfddModel} model @returns {Promise<OfddPoint[]>} */
 async function loadPoints(model) {
   const pages = await Promise.all(model.sites.map((s) =>
     queryAll({ layer: "default", structuredQuery: field("siteRef", idOf(s)) })));

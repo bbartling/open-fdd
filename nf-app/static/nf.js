@@ -32,7 +32,13 @@ async function initAuth() {
   return info;
 }
 
+/**
+ * @param {string} path
+ * @param {unknown} [body] POSTed as JSON when given
+ * @returns {Promise<any>}
+ */
 async function api(path, body) {
+  /** @type {Record<string, string>} */
   const headers = body ? { "Content-Type": "application/json" } : {};
   const opts = body ? { method: "POST", body: JSON.stringify(body) } : {};
   for (let attempt = 1; ; attempt++) {
@@ -53,6 +59,12 @@ async function api(path, body) {
  * that Envoy exposes as one long chunked JSON array at /api/v1/point/updates/data).
  * Calls onValue({ uuid, value }) per update as it arrives; reconnects with backoff.
  * onState(true|false) reports whether the stream is up. Returns a stop() function.
+ */
+/**
+ * @param {string[]} uuids
+ * @param {(v: {uuid: string, value: any}) => void} onValue
+ * @param {(up: boolean, err?: any) => void} [onState]
+ * @returns {() => void}
  */
 function streamUpdates(uuids, onValue, onState = () => {}) {
   let stopped = false, ctrl = null, delay = 2000;
@@ -106,8 +118,10 @@ function streamUpdates(uuids, onValue, onState = () => {}) {
   return () => { stopped = true; ctrl?.abort(); };
 }
 
+/** @param {string} property @param {string} text */
 const field = (property, text) => ({ field: { property, text } });
 
+/** @param {object} body point/query body; pages are followed @returns {Promise<any[]>} */
 async function queryAll(body) {
   const out = [];
   let pageToken = "";
@@ -119,6 +133,7 @@ async function queryAll(body) {
   return out;
 }
 
+/** @param {unknown} s */
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 // ---- BACnet helpers -----------------------------------------------------------
@@ -142,10 +157,11 @@ function selfAddress(ports) {
   return { mac: btoa(String.fromCharCode(...bytes)), portId: ip.portId, label: `${host}:${ip.ip.port}` };
 }
 
+/** @param {any} dev @param {{mac: string, portId: any} | null} addr @param {{objectType: string, instance: any}} objectId @param {string} [property] */
 async function readProp(dev, addr, objectId, property = "PROP_PRESENT_VALUE") {
   const q = new URLSearchParams({
     "object_id.object_type": objectId.objectType, "object_id.instance": objectId.instance,
-    property_id: property, array_index: 4294967295,
+    property_id: property, array_index: "4294967295",
   });
   if (addr) { q.set("device_address.mac", addr.mac); q.set("device_address.port_id", addr.portId); }
   else q.set("device_address.device_id", dev);

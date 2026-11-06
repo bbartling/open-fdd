@@ -217,3 +217,7 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding-botto
 .rcx-split { width: 100%; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--panel2); }
+
+/* app version (version.js) */
+.app-version { font-size: 12px; color: var(--muted, #64748b); text-decoration: none; margin-left: 10px; align-self: center; }
+.app-version:hover { text-decoration: underline; }

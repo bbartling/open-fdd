@@ -9,7 +9,8 @@ const RESYNC_MS = 5 * 60e3;       // full refresh while it is up (untagged point
 const SPARK_HOURS = 6;            // Overview sparklines: 6 h of 5-min averages
 const CHART_REFRESH_MS = 5 * 60e3;
 
-const $ = (id) => document.getElementById(id);
+/** @param {string} id @returns {AnyEl} */
+const $ = (id) => /** @type {AnyEl} */ (document.getElementById(id));
 const fmtPoint = (p) => {
   const v = latestOf(p);
   if (v == null) return "–";
@@ -21,7 +22,7 @@ const scope = { site: "", equip: "" };   // equip "" = every equip on the site
 let points = [];          // numeric sensor/sp points on the scoped equips (cards + charts)
 let variables = [];       // `weather` points on the site, charted against the equip's outside air
 let statusPts = [];       // kind Bool points on the scoped equips (status chips)
-let history = new Map();  // uuid -> [[ms, value], ...] for the sparklines (+ live samples)
+let sparkHist = new Map();  // uuid -> [[ms, value], ...] for the sparklines (+ live samples)
 let histHours = 24;
 const chartSel = { id: "", hours: 0, point: "" };  // Charts tab: the one chart on screen
 let selectedPoint = null; // Points tab
@@ -67,7 +68,7 @@ async function applyScope() {
 
 // ---- sparkline history ---------------------------------------------------------------
 async function loadSparks() {
-  history = await fetchSeries(points, SPARK_HOURS, { windowSec: 300 });
+  sparkHist = await fetchSeries(points, SPARK_HOURS, { windowSec: 300 });
 }
 
 const since = (arr, hours) => {
@@ -105,7 +106,7 @@ function renderCards() {
 function updateCard(i, flash) {
   const p = points[i];
   const v = dispVal(p, latestOf(p));
-  const shown = dispSeries(p, history.get(p.uuid) || []);   // history is kept as NF stores it
+  const shown = dispSeries(p, sparkHist.get(p.uuid) || []);   // history is kept as NF stores it
   $(`val-${i}`).textContent = fmt(v, isRH(p) || isTemp(p) ? 1 : 2);
   const hour = since(shown, 1);
   if (hour.length > 1 && v != null) {
@@ -154,7 +155,7 @@ function saveChartPref() {
 }
 
 function chartUrl(def) {
-  const q = new URLSearchParams({ c: def.id, site: scope.site, h: chartSel.hours });
+  const q = new URLSearchParams({ c: def.id, site: scope.site, h: String(chartSel.hours) });
   if (scope.equip) q.set("equip", scope.equip);
   if (def.pick && chartSel.point) q.set("point", chartSel.point);
   return `chart.html?${q}`;
@@ -314,7 +315,7 @@ function pointRows() {
     .filter((p) => p.siteRef === scope.site && (showUntagged || has(p, "point")))
     .filter((p) => !scope.equip || p.equipRef === scope.equip || p.weatherStationRef || !has(p, "point"))
     .filter((p) => tokens.every((t) => p.tags.some((m) => m.toLowerCase() === t) || p.dis.toLowerCase().includes(t)))
-    .sort((a, b) => (has(b, "point") - has(a, "point")) || (a.equipRef || a.weatherStationRef).localeCompare(b.equipRef || b.weatherStationRef)
+    .sort((a, b) => (Number(has(b, "point")) - Number(has(a, "point"))) || (a.equipRef || a.weatherStationRef).localeCompare(b.equipRef || b.weatherStationRef)
       || rank(a) - rank(b) || a.name.localeCompare(b.name));
 }
 
@@ -586,8 +587,8 @@ async function renderRcx() {
   const hours = Number($("rcxRange").value) || 168;
   const { ready, missing } = rcxPlan(equips, model, catalog);
   const cards = ready.flatMap(({ view, equips: eqs }) => (view.scope === "site" ? [{ view, eqs }] : eqs.map((eq) => ({ view, eqs: [eq] }))));
-  $("nRcx").textContent = cards.length;
-  $("nRcxMissing").textContent = missing.length;
+  $("nRcx").textContent = String(cards.length);
+  $("nRcxMissing").textContent = String(missing.length);
   $("rcxMissing").innerHTML = missing.map(({ view, roles }) => `<tr><td>${esc(view.title)}<div class="sub">${esc(view.group)}</div></td>
     <td class="sub">${roles.length ? esc(roles.join(", ")) : `equipment kind: ${esc(view.kinds.join(" / "))}`}</td></tr>`).join("");
   const groups = [...new Set(cards.map((c) => c.view.group))];
@@ -611,12 +612,12 @@ async function renderRcx() {
       // Drew nothing (inputs present but no usable data / not enough equips): list it with the
       // other unavailable views instead of leaving an empty box on the page.
       if (!el.querySelector("canvas, svg")) {
-        el.closest(".rcx-card").hidden = true;
+        /** @type {HTMLElement} */ (el.closest(".rcx-card")).hidden = true;
         const who = c.view.scope === "equip" ? ` · ${c.eqs[0].name}` : "";
         $("rcxMissing").insertAdjacentHTML("beforeend", `<tr><td>${esc(c.view.title + who)}<div class="sub">${esc(c.view.group)}</div></td>
           <td class="sub">${esc(note || "no data in this range")}</td></tr>`);
-        $("nRcxMissing").textContent = $("rcxMissing").rows.length;
-        $("nRcx").textContent = Number($("nRcx").textContent) - 1;
+        $("nRcxMissing").textContent = String($("rcxMissing").rows.length);
+        $("nRcx").textContent = String(Number($("nRcx").textContent) - 1);
       }
     } catch (e) {
       $(`rcx-note-${i}`).textContent = `could not draw: ${e.message}`;
@@ -657,7 +658,7 @@ function renderTab(name) {
 function showTab(name) {
   if (!$(`tab-${name}`)) name = "overview";
   activeTab = name;
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  document.querySelectorAll("#tabs button").forEach((/** @type {HTMLElement} */ b) => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === `tab-${name}`));
   // Keep the tab in the URL hash so a link opens straight on it.
   if (location.hash !== `#${name}`) window.history.replaceState(null, "", `#${name}`);
@@ -690,8 +691,8 @@ function onUpdate(u) {
   const i = points.findIndex((p) => p.uuid === u.uuid);
   if (i >= 0) {
     changed.add(i);
-    if (!history.has(u.uuid)) history.set(u.uuid, []);
-    history.get(u.uuid).push([parseTs(v.ts), num]);
+    if (!sparkHist.has(u.uuid)) sparkHist.set(u.uuid, []);
+    sparkHist.get(u.uuid).push([parseTs(v.ts), num]);
   }
   // NF pushes one batch per poll; coalesce the redraw.
   clearTimeout(uiTimer);
@@ -724,8 +725,8 @@ async function refreshLive() {
       p.latest = f.latest;
       const v = latestOf(f);
       if (v == null) continue;
-      if (!history.has(p.uuid)) history.set(p.uuid, []);
-      history.get(p.uuid).push([parseTs(f.latest.ts), v]);
+      if (!sparkHist.has(p.uuid)) sparkHist.set(p.uuid, []);
+      sparkHist.get(p.uuid).push([parseTs(f.latest.ts), v]);
       const i = points.indexOf(p);
       if (i >= 0) updateCard(i, activeTab === "overview");
     }
@@ -753,26 +754,26 @@ function showErr(e) {
 }
 
 function wireControls() {
-  $("tabs").onclick = (ev) => { const b = ev.target.closest("button"); if (b) showTab(b.dataset.tab); };
+  $("tabs").onclick = (ev) => { const b = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("button")); if (b) showTab(b.dataset.tab); };
   $("sitePick").onchange = () => { scope.site = $("sitePick").value; scope.equip = ""; fillPickers(); applyScope().catch(showErr); };
   $("equipPick").onchange = () => { scope.equip = $("equipPick").value; applyScope().catch(showErr); };
   const chartErr = (e) => ($("chartHint").textContent = `could not load: ${e.message}`);
   $("gallery").onclick = (ev) => {
-    const b = ev.target.closest("[data-chart]");
+    const b = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("[data-chart]"));
     if (!b || b.dataset.chart === chartSel.id) return;
     chartSel.id = b.dataset.chart;
     chartSel.hours = 0;
     renderCharts().catch(chartErr);
   };
   $("chartRange").onclick = (ev) => {
-    const h = Number(ev.target.dataset.h);
+    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
     if (!h || h === chartSel.hours) return;
     chartSel.hours = h;
     renderCharts().catch(chartErr);
   };
   $("chartPick").onchange = () => { chartSel.point = $("chartPick").value; renderCharts().catch(chartErr); };
   $("histRange").onclick = (ev) => {
-    const h = Number(ev.target.dataset.h);
+    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
     if (!h) return;
     histHours = h;
     document.querySelectorAll("#histRange button").forEach((b) => b.classList.toggle("on", b === ev.target));
@@ -783,14 +784,14 @@ function wireControls() {
   // Click a rule (Faults or Rule inputs) → stacked signal plot + bottom fault lane (fdd-plots.js).
   const plotErr = (e) => ($("fddPlotNote").textContent = `could not draw: ${e.message}`);
   for (const id of ["fddRows", "fddResultRows"]) {
-    $(id).onclick = (ev) => { const tr = ev.target.closest("tr[data-rule]"); if (tr) showRulePlot(tr.dataset.rule, tr.dataset.equip).catch(plotErr); };
+    $(id).onclick = (ev) => { const tr = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("tr[data-rule]")); if (tr) showRulePlot(tr.dataset.rule, tr.dataset.equip).catch(plotErr); };
   }
   $("fddPlotClose").onclick = () => { $("fddPlotPanel").hidden = true; };
   $("fddRunNow").onclick = () => runFddNow().catch((e) => ($("fddRunState").textContent = `could not start: ${e.message}`));
   $("pointFilter").oninput = renderPoints;
   $("showUntagged").onchange = renderPoints;
   $("pointRows").onclick = (ev) => {
-    const tr = ev.target.closest("tr[data-uuid]");
+    const tr = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("tr[data-uuid]"));
     if (!tr) return;
     selectedPoint = tr.dataset.uuid;
     renderPoints();
@@ -817,7 +818,7 @@ async function main() {
   fillPickers();
   activeTab = (location.hash || "#overview").slice(1);
   if (!$(`tab-${activeTab}`)) activeTab = "overview";
-  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === activeTab));
+  document.querySelectorAll("#tabs button").forEach((/** @type {HTMLElement} */ b) => b.classList.toggle("on", b.dataset.tab === activeTab));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === `tab-${activeTab}`));
   await applyScope();
   api("/api/v1/bacnet/local").then((l) => ($("nBacnet").textContent = (l.objects || []).length)).catch(() => {});

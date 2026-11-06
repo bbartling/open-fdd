@@ -1,7 +1,8 @@
 // chart.html: one catalog chart per window (charts.js), chosen by the query string.
 // Needs nf.js, model.js, theme.js and charts.js loaded first.
 
-const $ = (id) => document.getElementById(id);
+/** @param {string} id @returns {AnyEl} */
+const $ = (id) => /** @type {AnyEl} */ (document.getElementById(id));
 const q = new URLSearchParams(location.search);
 const sel = { id: q.get("c") || CHARTS[0].id, site: q.get("site") || "", equip: q.get("equip") || "",
   hours: Number(q.get("h")) || 0, point: q.get("point") || "" };
@@ -13,7 +14,7 @@ function setLive(ok, txt) {
 }
 
 function syncUrl() {
-  const u = new URLSearchParams({ c: def.id, site: sel.site, h: sel.hours });
+  const u = new URLSearchParams({ c: def.id, site: sel.site, h: String(sel.hours) });
   if (sel.equip) u.set("equip", sel.equip);
   if (def.pick && sel.point) u.set("point", sel.point);
   history.replaceState(null, "", `?${u}`);
@@ -57,7 +58,7 @@ async function main() {
     $("pick").onchange = () => { sel.point = $("pick").value; draw(); };
   }
   $("range").onclick = (ev) => {
-    const h = Number(ev.target.dataset.h);
+    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
     if (h && h !== sel.hours) { sel.hours = h; draw(); }
   };
   onThemeChange(draw);

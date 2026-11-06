@@ -94,7 +94,7 @@ function getJson(url) {
     // req.setTimeout only fires on an idle socket; the hard total deadline is in getJsonWithRetry.
     req.setTimeout(HTTP_TIMEOUT_MS, () => req.destroy(new Error(`Open-Meteo idle timeout after ${HTTP_TIMEOUT_MS} ms`)));
     req.on('error', reject);
-    getJson.lastReq = req;
+    /** @type {any} */ (getJson).lastReq = req;
   });
 }
 
@@ -104,7 +104,8 @@ async function getJsonWithRetry(url, log) {
   for (let attempt = 0; attempt <= HTTP_RETRIES; attempt += 1) {
     try {
       return await withDeadline(getJson(url), HTTP_TIMEOUT_MS, 'Open-Meteo request', () => {
-        if (getJson.lastReq) getJson.lastReq.destroy(new Error('Open-Meteo hard deadline'));
+        const lr = /** @type {any} */ (getJson).lastReq;
+        if (lr) lr.destroy(new Error('Open-Meteo hard deadline'));
       });
     } catch (e) {
       lastErr = e;
@@ -218,10 +219,9 @@ async function runOnce({ globalVariables, sdk, config }) {
   return summary;
 }
 
-module.exports = async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run');
-
-// Exported for offline tests (node -e "require('./open_meteo_weather.js').magnusDewpointF(70,50)").
-module.exports.magnusDewpointF = magnusDewpointF;
-module.exports.openMeteoUrl = openMeteoUrl;
-module.exports.pickSite = pickSite;
-module.exports.withDeadline = withDeadline;
+// The hook is the function; the helpers hang off it for offline tests
+// (node -e "require('./open_meteo_weather.js').magnusDewpointF(70,50)").
+module.exports = Object.assign(
+  async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
+  { magnusDewpointF, openMeteoUrl, pickSite, withDeadline },
+);

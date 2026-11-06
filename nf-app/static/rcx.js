@@ -25,6 +25,7 @@ const RCX_VIEWS = [];
  *   render: async (el, ctx) => {…}            draw into el; return a short text note or nothing
  * }
  */
+/** @param {RcxViewDef} def */
 function rcxView(def) {
   if (RCX_VIEWS.some((v) => v.id === def.id)) throw new Error(`rcxView: duplicate id ${def.id}`);
   RCX_VIEWS.push({ kinds: [], roles: { required: [], optional: [] }, scope: "equip", minEquips: 1, hours: 168, ...def });
@@ -36,6 +37,7 @@ const equipLabel = (e) => (e.attrs || {}).dis || e.name;
  * Which equips can feed a view: [{ rec, id, name, kinds, bound: {role: [points]} }].
  * An equip qualifies when its kinds match and every required role has at least one point.
  */
+/** @param {RcxViewDef} view @param {NfRecord[]} equips @param {OfddModel} model @param {FddCatalog} catalog @returns {OfddEquip[]} */
 function rcxBind(view, equips, model, catalog) {
   const out = [];
   for (const rec of equips) {
@@ -121,6 +123,7 @@ function rcxDispSeries(arr, siUnit, delta = false) {
  *   ctx.weather         site weather points (tagged `weather`)
  *   ctx.model, ctx.catalog, ctx.view
  */
+/** @param {RcxViewDef} view @param {OfddEquip[]} equips @param {number} hours @param {OfddModel} model @param {FddCatalog} catalog @returns {RcxContext} */
 function rcxContext(view, equips, hours, model, catalog) {
   const first = (eq, role) => (eq.bound[role] && eq.bound[role][0]) || null;
   const series = async (pts, o = {}) => {

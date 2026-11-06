@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "nf-app/**"
+      - "lite/**"
       - "sql/fdd/**"
       - "scripts/nf/**"
       - "tools/rdf-check/**"
@@ -13,6 +14,7 @@ on:
   pull_request:
     paths:
       - "nf-app/**"
+      - "lite/**"
       - "sql/fdd/**"
       - "scripts/nf/**"
       - "tools/rdf-check/**"
@@ -51,6 +53,9 @@ jobs:
       - name: Type-check (tsc --noEmit over JSDoc-typed JS)
         run: cd nf-app && npm run typecheck
 
+      - name: Type-check Lite (same compiler, lite/tsconfig*.json)
+        run: cd nf-app && npm run typecheck:lite
+
       - name: NF app unit tests, manifest, catalog + SQL pack checks
         run: |
           node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
@@ -66,6 +71,11 @@ jobs:
           on_disk = {p.relative_to("nf-app").as_posix() for p in pathlib.Path("nf-app/static").rglob("*") if p.is_file()}
           assert on_disk <= listed, f"static files not in manifest: {sorted(on_disk - listed)}"
           print(f"manifest OK: {len(m['files'])} files, {len(m['hooks'])} hook(s)")
+          # The UI shows VERSION (+ commit) via version.json written at deploy; keep the pins in step.
+          v = pathlib.Path("VERSION").read_text().strip()
+          pkg = json.loads(pathlib.Path("nf-app/package.json").read_text())["version"]
+          assert v == pkg, f"VERSION {v} != nf-app/package.json {pkg}"
+          print(f"version OK: {v}")
           EOF
           python3 -m pip install --quiet pyyaml
           python3 scripts/nf/build_rule_catalog.py --check

@@ -57,7 +57,8 @@
     "/static/vendor/oxigraph/node_bg.wasm": "static/vendor/oxigraph/node_bg.wasm",
     "/static/vendor/oxigraph/package.json": "static/vendor/oxigraph/package.json",
     "/static/vendor/oxigraph/web.js": "static/vendor/oxigraph/web.js",
-    "/static/vendor/oxigraph/web_bg.wasm": "static/vendor/oxigraph/web_bg.wasm"
+    "/static/vendor/oxigraph/web_bg.wasm": "static/vendor/oxigraph/web_bg.wasm",
+    "/static/version.js": "static/version.js"
   },
   "hooks": [
     {

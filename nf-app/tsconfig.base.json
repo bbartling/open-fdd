@@ -1,0 +1,17 @@
+{
+  // Shared options. Each tsconfig*.json lists the files of one page (classic <script> load order) or the hooks.
+  // Pages are separate programs because their scripts redeclare the same top-level names (`$`, `GENERIC`, ...).
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "target": "es2022",
+    "module": "commonjs",
+    "lib": ["es2022", "dom"],
+    "types": ["node"],
+    "skipLibCheck": true
+  }
+}
