@@ -5,24 +5,36 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/bbartling/open-fdd/releases"><img src="https://img.shields.io/github/package-json/v/bbartling/open-fdd?filename=nf-app%2Fpackage.json&label=version&color=1E40AF" alt="version"></a>
-  <img src="https://img.shields.io/badge/Normal%20Framework-plugin-5B21B6" alt="Normal Framework plugin">
-  <img src="https://img.shields.io/badge/FDD%20rules-77%20SQL-7C3AED" alt="77 SQL FDD rules">
-  <img src="https://img.shields.io/badge/units-SI%20math-0E7490" alt="SI math">
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg" alt="NF app CI"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/parity.yml/badge.svg" alt="pandas == SQL parity"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/security.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/security.yml/badge.svg" alt="Security (ZAP, audit, gitleaks)"></a>
-  <a href="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/docs-pages.yml/badge.svg" alt="Docs"></a>
-  <a href="https://pypi.org/project/open-fdd/"><img src="https://img.shields.io/pypi/v/open-fdd?label=PyPI&color=3775A9" alt="PyPI"></a>
-  <a href="https://bbartling.github.io/open-fdd/"><img src="https://img.shields.io/badge/docs-online-2563EB" alt="Docs online"></a>
-  <a href="https://discord.gg/qjT3w9y3pu"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2.svg?logo=discord&logoColor=white" alt="Discord"></a>
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT">
+</p>
+
+<p align="center">
+  <a href="https://bbartling.github.io/open-fdd/">
+    <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/rules/">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-77%20SQL%20%2B%2071%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 77 SQL + 71 pandas, SI units">
+  </a>
+  <a href="https://pypi.org/project/open-fdd/">
+    <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/install.html">
+    <img src="https://img.shields.io/badge/Quick%20Start-NF%20app-059669?style=for-the-badge" alt="Quick start: install the NF app">
+  </a>
+  <a href="https://www.normal.dev/">
+    <img src="https://img.shields.io/badge/Normal%20Framework-plugin-5B21B6?style=for-the-badge" alt="Normal Framework plugin">
+  </a>
+  <a href="https://bbartling.github.io/open-fdd/architecture/adr-014-open-fdd-as-nf-plugin.html">
+    <img src="https://img.shields.io/badge/ADR--014-NF%20plugin-6D28D9?style=for-the-badge" alt="ADR-014: Open-FDD as an NF plugin">
+  </a>
 </p>
 
 **Open-FDD is free, open-source fault detection and diagnostics (FDD) and retro-commissioning (RCx) for HVAC,
 shipped as a [Normal Framework](https://www.normal.dev/) (NF) app.** It runs inside NF on the building's edge
 box and reads NF's Haystack model and point history directly, on the LAN or through the Normal Online portal.
-Documentation: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)**.
+Documentation: **[bbartling.github.io/open-fdd](https://bbartling.github.io/open-fdd/)** · Community: [Discord](https://discord.gg/qjT3w9y3pu).
 
 - **FDD:** 77 SQL rules (AHU, VAV, chiller/plant, boiler, heat pump, meters, sensors) run hourly by an NF hook in
   SQLite-WASM or PGlite. Each result is an NF point tagged `fault`, `ruleRef`, `equipRef`: trended, queryable, in the RDF,

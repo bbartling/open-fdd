@@ -16,7 +16,8 @@ from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = ["README.md", "SECURITY.md", "AGENTS.md", "CHANGELOG.md", "nf-app/README.md", "lite/README.md",
-           "deploy/nf-caddy/README.md", "tools/rdf-check/README.md"]
+           "deploy/nf-caddy/README.md", "tools/rdf-check/README.md",
+           "tools/bacnet-scan/README.md", "scripts/nf/README.md", "scripts/nf/tools/README.md"]
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)|(?:src|href)=\"([^\"]+)\"")
 FENCE = re.compile(r"^(```|~~~)")
 

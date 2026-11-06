@@ -57,3 +57,5 @@ Browse the rules and their roles in [FDD rules](fdd-rules.html).
 - Tag spare or unused I/O so it is not mistaken for a sensor.
 - One equip instance per physical unit; give every point an `equipRef` and `siteRef`.
 - Check the Model and RDF tab for dangling references ([RDF and SPARQL](rdf-sparql.html)).
+- How NF stores these tags (layers, one marker per query clause, markers are not derived from `class`) and how to
+  check a site from a terminal: [Haystack tagging](operations/nf/haystack-tagging.html).

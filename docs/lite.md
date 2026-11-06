@@ -51,5 +51,8 @@ Never pass an existing point uuid to `POST /api/v1/bacnet/local`: it overwrites 
 | Hook dependencies | none (Node built-ins) | sql.js, PGlite |
 | ECharts build | UMD, classic scripts | ES module |
 
+Which hosts get which edition, in more detail: [Lite or full](operations/nf/lite-vs-full.html). The Caddy front door
+redirects the bare URL to the Lite dashboard when `APP_ID=open-fdd-lite`.
+
 To move a box off the old `bench-viz` app, follow the migration steps in the
 [Lite README](https://github.com/bbartling/open-fdd/blob/master/lite/README.md).

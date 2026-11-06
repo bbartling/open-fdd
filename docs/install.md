@@ -68,7 +68,9 @@ self-signed HTTPS. See the
 3. `docker compose up -d`.
 
 Once NF is behind Caddy, later pushes run on the NF host against loopback, or go through the Caddy URL with its
-basic-auth user (`/api/v1/apps*` is locked).
+basic-auth user (`/api/v1/apps*` is locked). Reasoning, safe order, verify checklist and client setup:
+[Front door](operations/nf/front-door-caddy.html). Refreshing or upgrading NF itself:
+[Upgrade NF](operations/nf/nf-upgrade-compose.html).
 
 ## 6. Remote access (Normal Online portal)
 
@@ -82,6 +84,9 @@ the portal. Through the portal, `/api/v1/bacnet/*` is not readable with API-key 
 |---|---|---|
 | edge-lite | 1 GB or more (2 GB recommended) | SQLite-WASM (vendored sql.js, about 60 MB); the pack is translated and matches Postgres on all rules in CI |
 | full | 4 GB or more | PGlite (real Postgres in WASM, about 300 MB); `engine: "auto"` picks it when NF reports enough RAM |
+| full + TimescaleDB | larger hosts | the Postgres pack runs inside NF's TimescaleDB connector database; results and long-range history stay there, with a size cap (default 100 GB). See [`nf-app/timescale`](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale) |
+
+Which host gets which edition: [Lite or full](operations/nf/lite-vs-full.html).
 
 ## 8. Verify
 
@@ -100,4 +105,6 @@ the portal. Through the portal, `/api/v1/bacnet/*` is not readable with API-key 
 - **Hooks return 401:** once NF login is enabled the app needs `auth.apiKey.scopes` in `app.json`.
 - **Intermittent empty 403 from `/api/v1/auth/token`:** retry.
 - **Live values stop behind a proxy:** the stream route needs `flush_interval -1` (included in `deploy/nf-caddy`).
+- **Anything odd in NF itself:** [NF gotchas](operations/nf/nf-gotchas.html).
+- **Check values against the BACnet wire:** [BACnet validation](operations/nf/bacnet-validate.html).
 - **1 GB Pi restarts:** check the power supply (`vcgencmd get_throttled`); keep Caddy at `mem_limit: 64m`.

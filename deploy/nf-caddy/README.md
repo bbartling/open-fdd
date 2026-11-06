@@ -17,7 +17,7 @@ the NF console and every write sit behind a login, optional self-signed HTTPS.
 | `POST /api/v1/point/query`, `/api/v1/auth/token` (reads; the token call still needs a client id/secret) | open |
 | `GET /api/v1/point/updates/data` (live push stream) | open, `flush_interval -1`, Envoy's quiet-stream 504 becomes 204 |
 | everything else: NF console, `/api/v1/apps*` (app/hook config), config, every write | **basic auth** |
-| `:80` `/` | 302 to `/api/v1/apps/static/open-fdd/` |
+| `:80` `/` | 302 to `/api/v1/apps/static/<APP_ID>/` (`open-fdd`; set `APP_ID=open-fdd-lite` on a Lite box) |
 
 Rules live in `routes.caddy`, shared by `Caddyfile` (HTTP) and `Caddyfile.tls` (HTTPS).
 Without TLS the basic-auth password crosses the LAN in the clear; use `Caddyfile.tls` when that matters.
@@ -25,7 +25,7 @@ Without TLS the basic-auth password crosses the LAN in the clear; use `Caddyfile
 ## Setup
 
 ```bash
-cp .env.example .env                 # set LAN_IP (this box), NF_UPSTREAM, NF_PORT
+cp .env.example .env                 # set LAN_IP (this box), NF_UPSTREAM, NF_PORT, APP_ID
 cp auth.caddy.example auth.caddy     # then replace its line with a real hash:
 docker run --rm caddy:2.11.7-alpine caddy hash-password -p 'choose-a-password'
 #   auth.caddy = one line:  admin <hash>      (never commit it; it is gitignored)
@@ -40,7 +40,9 @@ Then browse `http://<LAN_IP>/` (redirects to the dashboard).
 ```bash
 mkdir -p certs && openssl req -x509 -newkey rsa:2048 -nodes -days 1095 \
   -keyout certs/server.key -out certs/server.crt -subj "/CN=nf" \
-  -addext "subjectAltName=IP:192.0.2.10,DNS:nf.local"
+  -addext "subjectAltName=IP:192.0.2.10,DNS:nf.local" \
+  -addext "basicConstraints=critical,CA:TRUE" \
+  -addext "keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign" -addext "extendedKeyUsage=serverAuth"
 ```
 
 In `docker-compose.yml` mount `./Caddyfile.tls` as `/etc/caddy/Caddyfile` and uncomment the two
@@ -54,3 +56,6 @@ cert volumes; import `certs/server.crt` into client trust stores. `certs/` is gi
 - Lost login: write a new hash to `auth.caddy` and restart.
 - NF's Envoy ends each pushed stream batch without the final chunk, so Caddy may log
   "unexpected EOF"; `nf.js` treats that as a normal end when values arrived.
+
+More (why not NF's built-in TLS, adding a route, verify checklist, clients, roll back):
+[NF operations: front door](../../docs/operations/nf/front-door-caddy.md).

@@ -6,7 +6,7 @@ at tag `v4.0.11-central`. Read [README.md](README.md), [nf-app/README.md](nf-app
 [docs/architecture/adr-014-open-fdd-as-nf-plugin.md](docs/architecture/adr-014-open-fdd-as-nf-plugin.md) first.
 
 The agent spec lives in [`openfdd_agent_spec/`](openfdd_agent_spec/README.md): architecture, data contract and
-task skills (add a chart, add a rule, model a site, deploy, security checks, TypeScript). Claude Code and Cursor
+task skills (add a chart, add a rule, model a site, deploy, security checks, TypeScript, BACnet validation, NF gotchas). Claude Code and Cursor
 find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`.
 
 ## Layout
@@ -16,10 +16,12 @@ find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`
 | `nf-app/` | The full app: `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
 | `lite/` | Open-FDD Lite: the no-FDD edition for 1 GB boxes (Raspberry Pi) |
 | `sql/fdd/` | The FDD math (77 Postgres rules, registry, role map). Packs in `nf-app/rules/` are generated from it |
-| `scripts/nf/` | `build_rule_catalog.py`, `build_sql_pack.py`, `gen_rule_docs.py`, `hooks/nf_app_sync.py` (deploy) |
+| `scripts/nf/` | `build_rule_catalog.py`, `build_sql_pack.py`, `gen_rule_docs.py`, `hooks/nf_app_sync.py` (deploy), `tools/` (read-only NF checks: LAN vs portal, history, BACnet wire validation) |
 | `deploy/nf-caddy/` | Optional Caddy front door |
 | `open_fdd/`, `tests/parity/` | PyPI pandas reference rules and the pandas == SQL parity tests |
 | `tools/rdf-check/` | Turtle export checker |
+| `tools/bacnet-scan/` | Read-only BACnet/IP site scanner (CSV + RDF); run it on a PC, never on the NF box |
+| `docs/operations/nf/` | NF runbooks: Lite or full, Caddy front door, NF upgrade, Haystack tagging, BACnet validation, NF gotchas |
 | `docs/` | GitHub Pages site (Jekyll, Just the Docs) |
 
 ## Rules

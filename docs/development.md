@@ -78,6 +78,24 @@ rcxView({
 ([`tests/parity/`](https://github.com/bbartling/open-fdd/tree/master/tests/parity), workflow `parity.yml`) runs the pandas oracle
 and the SQL pack on synthetic data and requires the same answers. It is being finalized; see its workflow for the current command.
 
+## Roadmap ideas
+
+Not built; each is small enough for its own slice.
+
+- **Headless RDF on Lite hosts.** The full edition has the `sparql` hook (CONSTRUCT returns Turtle with no browser
+  open). Lite builds Turtle only in the page, so nothing is produced when nobody opens it. Options: a timer on
+  another host that runs the export against the open read-only routes and keeps the last file that passes
+  `tools/rdf-check/check_ttl.py` (extend `gen_ttl.js` with a live-NF mode); or a Lite hook, which first needs an answer
+  to whether a hook may write a file NF serves from the app's `static/` folder. Ask Normal whether NF can export
+  Brick or RDF itself; an NF-produced export would be more authoritative than ours.
+- **More standard RDF.** Today's `phIoT` namespace is a simplified Haystack form and the standard-tag list is
+  hand-picked; load Project Haystack's published defs and align the namespaces before the files leave one site.
+  Run `check_ttl.py` in CI against a saved model snapshot.
+- **Longer history on small hosts.** NF's Redis keeps about 7 days; for more, configure NF's northbound
+  Postgres/TimescaleDB integration (see [Lite or full](operations/nf/lite-vs-full.html)) or export history on a schedule.
+- **Pin the Clerk domain.** Tighten the CSP `script-src` for the portal sign-in script to the exact Clerk domain
+  instead of `https:`.
+
 ## Conventions
 
 - Small, reviewable PR slices; one concern each.

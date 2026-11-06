@@ -7,6 +7,7 @@
 | `gen_rule_docs.py` | Catalog → `docs/fdd-rules.md` (`--check` in the docs build) |
 | `measure_engines.mjs` | Memory/time of the FDD engines: `node scripts/nf/measure_engines.mjs sqlite 1 7` |
 | `hooks/nf_app_sync.py` | Deploy an app manifest to an NF console: `status`, `push`, `run`, `diff`, `pull` |
+| `tools/` | Read-only, tag-driven checks of a live NF: `nf_portal_sensors.py` (LAN vs portal), `nf_sensor_history.py`, `nf_bacnet_validate.py` (bacpypes3, run on a PC); see [`tools/README.md`](tools/README.md) |
 
 Deploy (env file outside git — see [`../../.env.example`](../../.env.example)):
 

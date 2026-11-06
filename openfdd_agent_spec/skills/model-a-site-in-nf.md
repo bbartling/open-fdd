@@ -16,5 +16,8 @@ The app has no site configuration; the NF Haystack model is the configuration. N
 5. Verify in the app: FDD tab shows "missing inputs" per equip (roles not bound); RCx lists views that cannot draw;
    Model and RDF has no dangling references.
 
+How NF stores the tags and how to query them from a terminal: `docs/operations/nf/haystack-tagging.md`
+(`scripts/nf/tools/nf_portal_sensors.py --tags ...` prints the model tree and live values).
+
 Never rename points to make them match; fix tags. Binding never reads names (`DATA_CONTRACT.md`).
 Tests (when binding code changes): `node --test nf-app/tests/binding-issues.test.mjs nf-app/tests/rdf.test.mjs`.

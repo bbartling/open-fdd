@@ -11,6 +11,7 @@ services:
       - NF_PORT=${NF_PORT:-8090}                      # LAN port Caddy serves (plain HTTP)
       - TLS_PORT=${TLS_PORT:-443}                     # only used by Caddyfile.tls
       - LAN_IP=${LAN_IP:-192.0.2.10}                  # this box's LAN address (Caddy binds only it)
+      - APP_ID=${APP_ID:-open-fdd}                     # NF app the bare :80 URL redirects to (open-fdd-lite on Lite boxes)
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./routes.caddy:/etc/caddy/routes.caddy:ro

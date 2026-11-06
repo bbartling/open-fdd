@@ -43,6 +43,8 @@ Haystack model fills the rule's roles (see [Modeling](modeling.html)). All thres
   every *required* role is bound; *optional* roles refine the result.
 - **Equipment kinds** are the Haystack equipment kinds a rule applies to (empty = any equipment).
 - `confirm` is how long a condition must hold before it counts as a fault.
+- Each rule id links to its entry in the [Rule Cookbook](rules/): the SQL at defaults, the full parameter limits,
+  the pandas twin and the parity status. This page is only the one-table catalog.
 - Rule SQL lives in `sql/fdd/postgres/rules/`; the SQLite pack is generated from it
   (see [Development](development.html)).
 
@@ -97,7 +99,7 @@ def render() -> str:
         if confirm:
             desc += f" (confirm {confirm // 60} min)" if confirm % 60 == 0 else f" (confirm {confirm} s)"
         params = fmt_params(r.get("parameters") or {}, units.get(r["id"], {}))
-        lines.append(f"| **{cell(r['id'])}** ({cell(r.get('priority', ''))}) | {desc} | {cell(kinds)} | {req} | {opt} | {params} |\n")
+        lines.append(f"| [**{cell(r['id'])}**](rules/sql-cookbook.html#{r['id'].lower()}) ({cell(r.get('priority', ''))}) | {desc} | {cell(kinds)} | {req} | {opt} | {params} |\n")
     return "".join(lines)
 
 
