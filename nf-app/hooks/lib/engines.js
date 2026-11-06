@@ -165,7 +165,7 @@ async function createSqlite(pack) {
               stmt.run(spec.map((c) => {
                 const v = cellValue(row, c);
                 if (v === null) return null;
-                if (c.type === "timestamp") return v / 1000;
+                if (c.type === "timestamp") return Number(v) / 1000;
                 return typeof v === "number" && Number.isNaN(v) ? null : v; // SQLite stores NaN as NULL anyway
               }));
             }
@@ -254,13 +254,45 @@ async function createPglite(pack) {
   };
 }
 
+// ---------------------------------------------------------------- timescale (FULL edition: rules run inside NF's TimescaleDB)
+
+/**
+ * Not fed with prebuilt rows: load() takes { equipId, siteId, roleToUuid, unitsByUuid, from, to, stepSec } and builds
+ * the pack's wide `history` in SQL from openfdd.nf_samples (see timescale/adapter_nf.sql); returns the row count.
+ * opts.client = an already connected pg client (tests); otherwise opts.config (hook config.timescale) is used.
+ */
+async function createTimescale(pack, opts = {}) {
+  const ts = require("./timescale");
+  const client = opts.client || (await ts.connect(opts.config));
+  const owned = !opts.client;
+  try {
+    const have = await client.query("SELECT to_regclass('openfdd.fdd_results') AS r");
+    if (!have.rows[0].r) await ts.install(client);   // first run only; re-run install.sql by hand after editing adapter_nf.sql
+  } catch (e) { if (owned) await client.end(); throw e; }
+  return {
+    kind: "timescale",
+    client,
+    async load(args) { return (await ts.loadHistory(client, { pack, ...args })).rows; },
+    async query(ruleId) {
+      const { results, errors } = await ts.runRules(client, pack, [ruleId]);
+      if (errors[ruleId]) throw new Error(errors[ruleId]);
+      return results[ruleId];
+    },
+    resultRow: (a) => ts.toResultRow({ engine: "timescale", ...a }),
+    writeResults: (rows) => ts.writeResults(client, rows),
+    maybeEnforceCap: () => ts.maybeEnforceCap(client),
+    async close() { if (owned) await client.end(); },
+  };
+}
+
 // ---------------------------------------------------------------- public
 
-async function createEngine({ kind, pack }) {
+async function createEngine({ kind, pack, ...opts }) {
   if (!pack || !pack.rules || !pack.contract) throw new Error("createEngine: pack (parsed pack-*.json) is required");
   if (kind === "sqlite") return createSqlite(pack);
   if (kind === "pglite") return createPglite(pack);
-  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite" or "pglite")`);
+  if (kind === "timescale") return createTimescale(pack, opts);
+  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite" or "timescale")`);
 }
 
 module.exports = { createEngine, HELPERS };

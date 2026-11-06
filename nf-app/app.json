@@ -17,7 +17,9 @@
   },
   "files": {
     "/hooks/fdd.js": "hooks/fdd.js",
+    "/hooks/history.js": "hooks/history.js",
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
+    "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
     "/hooks/sparql.js": "hooks/sparql.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
     "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
@@ -58,7 +60,9 @@
     "/static/vendor/oxigraph/package.json": "static/vendor/oxigraph/package.json",
     "/static/vendor/oxigraph/web.js": "static/vendor/oxigraph/web.js",
     "/static/vendor/oxigraph/web_bg.wasm": "static/vendor/oxigraph/web_bg.wasm",
-    "/static/version.js": "static/version.js"
+    "/static/version.js": "static/version.js",
+    "/timescale/adapter_nf.sql": "timescale/adapter_nf.sql",
+    "/timescale/install.sql": "timescale/install.sql"
   },
   "hooks": [
     {
@@ -121,6 +125,16 @@
       "id": "sparql",
       "name": "sparql",
       "entryPoint": "/hooks/sparql.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "60s"
+    },
+    {
+      "id": "history",
+      "name": "history",
+      "entryPoint": "/hooks/history.js",
       "points": {
         "noPoints": true
       },

@@ -48,7 +48,7 @@ function loadShared() {
 }
 
 // pglite runs the Postgres pack as written; sqlite runs the translated one.
-const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json' };
+const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json', timescale: 'pack-postgres.json' };
 const loadPack = (kind) => JSON.parse(fs.readFileSync(path.join(RULES, PACK_FILE[kind]), 'utf8'));
 
 // ---- NF reads -----------------------------------------------------------------------
@@ -233,7 +233,9 @@ function resultRecords({ equipRec, siteId, rule, out, shared, windowHours }) {
 }
 
 // ---- run ----------------------------------------------------------------------------
-async function pickEngine(http, wanted) {
+async function pickEngine(http, wanted, timescaleConfig) {
+  // FULL edition: config.timescale set -> run the pack inside NF's TimescaleDB (engine "timescale", or "auto")
+  if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return 'timescale';
   if (wanted === 'sqlite' || wanted === 'pglite') return wanted;
   try {
     const { data } = await http.get('/api/v1/platform/info');
@@ -244,12 +246,17 @@ async function pickEngine(http, wanted) {
   }
 }
 
+/**
+ * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
+ *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object }} FddConfig
+ * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number }} args
+ */
 async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date.now() }) {
   createEngine = createEngine || require('./lib/engines.js').createEngine;
   const http = sdk.http;
   const log = (m) => (sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   const shared = loadShared();
-  const kind = await pickEngine(http, config.engine);
+  const kind = await pickEngine(http, config.engine, config.timescale);
   const pack = packIn || loadPack(kind);
   const step = pack.poll_seconds;
   const windowHours = Number(config.windowHours) > 0 ? Number(config.windowHours) : 24;
@@ -262,7 +269,7 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const summary = { engine: kind, equips: 0, rules: 0, errors: 0, written: 0, results: [] };
   const warnedUnits = new Set();
-  const engine = await createEngine({ kind, pack });
+  const engine = await createEngine({ kind, pack, config: config.timescale });
   try {
     for (const equipRec of model.equips) {
       const equipId = shared.idOf(equipRec);
@@ -280,13 +287,22 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
         if (!runnable.length) continue;
       }
       const uuids = [...new Set(Object.values(roles).map((p) => p.uuid))];
-      const hist = await fetchHistory(http, uuids, from, to, step);
-      const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si });
-      if (!input.history.length) { log(`${equipId}: no history in the last ${windowHours} h, skipped`); continue; }
-      await engine.load(input);
+      let loadedRows;
+      if (kind === 'timescale') {   // history stays in the database: SQL builds the wide table (SI conversion included)
+        const roleToUuid = Object.fromEntries(Object.entries(roles).map(([r, p]) => [r, p.uuid]));
+        const unitsByUuid = Object.fromEntries(Object.values(roles).map((p) => [p.uuid, p.units || '']));
+        loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, from, to, stepSec: step });
+      } else {
+        const hist = await fetchHistory(http, uuids, from, to, step);
+        const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si });
+        loadedRows = input.history.length;
+        if (loadedRows) await engine.load(input);
+      }
+      if (!loadedRows) { log(`${equipId}: no history in the last ${windowHours} h, skipped`); continue; }
       summary.equips++;
       const records = [];
       const values = [];
+      const dbRows = [];            // timescale: rows for openfdd.fdd_results
       for (const r of runnable) {
         let rows;
         try {
@@ -301,16 +317,22 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
         const out = row && resultValue(pack.rules[r.rule.id], row);
         if (!out || !Number.isFinite(out.value)) continue;
         summary.results.push({ equip: equipId, rule: r.rule.id, ...out });
+        if (engine.resultRow) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to }));
         records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours }));
         values.push({ uuid: nameUuid(`${equipId}:${r.rule.id}`), value: out.value });
       }
-      if (config.dryRun || !records.length) continue;
+      if (config.dryRun) continue;
+      if (dbRows.length) await engine.writeResults(dbRows);   // timescale: also keep results in the database
+      if (!records.length) continue;
       await http.post('/api/v1/point/points', { points: records });
       const ts = new Date(to).toISOString();
       for (const v of values) {
         await http.post('/api/v1/point/data', { uuid: v.uuid, values: [{ ts, real: v.value }] });
         summary.written++;
       }
+    }
+    if (engine.maybeEnforceCap && !config.dryRun) {   // retention cap (a no-op when the TimescaleDB job exists)
+      try { summary.cap = await engine.maybeEnforceCap(); } catch (e) { summary.errors++; log(`size cap: ${errText(e)}`); }
     }
   } finally {
     await engine.close();
@@ -393,12 +415,8 @@ async function exportToBacnet(http, results, cfg, log) {
   return plan.map((p) => ({ object: `av.${p.instance}`, name: p.name, faults: p.count }));
 }
 
-module.exports = async ({ sdk, config }) => {
+/** NF hook entry point; helpers are exported for tests. */
+async function hook({ sdk, config }) {
   await runFdd({ sdk, config: config || {} });
-};
-module.exports.runFdd = runFdd;
-module.exports.nameUuid = nameUuid;
-module.exports.buildInput = buildInput;
-module.exports.siPlan = siPlan;
-module.exports.resultValue = resultValue;
-module.exports.bacnetPlan = bacnetPlan;
+}
+module.exports = Object.assign(hook, { runFdd, nameUuid, buildInput, siPlan, resultValue, bacnetPlan });
