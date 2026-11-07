@@ -11,6 +11,12 @@
 // The answer is the hook's return value and one sdk.logEvent line (JSON, capped), so it shows up
 // both in the run's result and in the run's logs.
 //
+// Read-only: SELECT / ASK / CONSTRUCT / DESCRIBE only; UPDATE operations and SERVICE are refused, and a model over
+// the triple limit (default 500000) is refused before evaluation. LIMITS: the query text is capped (20000 chars),
+// the answer is capped, but one evaluation runs synchronously inside the NF applications process and cannot be
+// interrupted from here (no Worker/timeout in the hook); NF's hook invokeTimeout bounds how long the *run* is waited on,
+// not necessarily the CPU work. Keep queries selective (LIMIT).
+//
 // The Turtle is built by static/model.js (modelToTurtle) from the model NF holds right now, exactly
 // as the UI builds it, then loaded into Oxigraph (Node build, vendored in static/vendor/oxigraph).
 // Nothing site-specific here: sites, equips, points and tags all come from NF.
@@ -21,6 +27,9 @@ const vm = require('vm');
 const STATIC = path.join(__dirname, '..', 'static');
 const PAGE = 500;
 const MAX_QUERY_CHARS = 20000;
+// Refuse models bigger than this before evaluating. Ceiling from env OPENFDD_SPARQL_MAX_TRIPLES (default
+// 500000); a caller's args.maxTriples may only lower it.
+const DEFAULT_MAX_TRIPLES = 500000;
 const MAX_RESULT_CHARS = 200000;      // cap on the returned/logged answer text
 const FORMATS = ['json', 'csv', 'turtle'];
 
@@ -30,6 +39,14 @@ const oxigraph = () => {
   try { return require(/** @type {string} */ ('oxigraph')); } catch (e) { return require(/** @type {string} */ ('../static/vendor/oxigraph/node.js')); }
 };
 
+/** Effective triple limit: the env ceiling, lowered (never raised) by the caller's value. */
+function maxTriples(requested) {
+  const env = Number(process.env.OPENFDD_SPARQL_MAX_TRIPLES);
+  const ceiling = Number.isFinite(env) && env > 0 ? env : DEFAULT_MAX_TRIPLES;
+  const asked = Number(requested);
+  return Number.isFinite(asked) && asked > 0 ? Math.min(asked, ceiling) : ceiling;
+}
+
 /** Pure: Turtle + query -> answer. Throws Error on a bad format, parse error or evaluation error. */
 function runSparql(turtle, query, format = 'json', opts = {}) {
   format = String(format || 'json').toLowerCase();
@@ -38,8 +55,8 @@ function runSparql(turtle, query, format = 'json', opts = {}) {
   if (query.length > MAX_QUERY_CHARS) throw new Error(`query longer than ${MAX_QUERY_CHARS} characters`);
   const lib = sparqlLib();
   const ox = opts.ox || oxigraph();
-  const store = new ox.Store();
-  store.load(turtle, { format: 'text/turtle' });
+  lib.sparqlCheckQuery(query);                          // read-only: SELECT/ASK/CONSTRUCT/DESCRIBE, no SERVICE
+  const store = lib.sparqlLoadStore(ox, turtle, maxTriples(opts.maxTriples));   // oversize model: refused here
   const r = lib.sparqlExec(store, query, opts.cap || lib.SPARQL_ROW_CAP);
   if (format === 'turtle') {
     if (r.kind !== 'graph') throw new Error('format "turtle" needs a CONSTRUCT or DESCRIBE query');
@@ -102,7 +119,7 @@ async function handle({ sdk, args = {}, nfBase, now = () => Date.now() }) {
     const host = args.base || nfBase || (sdk.http && sdk.http.defaults && sdk.http.defaults.baseURL) || 'nf';
     const base = String(args.base || `urn:nf:${String(host).replace(/^https?:\/\//, '').replace(/\/$/, '')}:`);
     const { turtle } = shared.modelToTurtle(model, base, { nfBase: args.nfBase || '' });
-    const r = runSparql(turtle, args.query, args.format);
+    const r = runSparql(turtle, args.query, args.format, { maxTriples: args.maxTriples });
     result = { ok: true, ms: now() - t0, base, ...r };
     if (typeof result.body === 'string' && result.body.length > MAX_RESULT_CHARS) {
       result.body = result.body.slice(0, MAX_RESULT_CHARS);
@@ -124,5 +141,5 @@ async function handle({ sdk, args = {}, nfBase, now = () => Date.now() }) {
 // The hook is the function; the helpers hang off it for the tests (assigned in one go so tsc sees the shape).
 module.exports = Object.assign(
   async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx) }),
-  { runSparql, handle, argsOf, loadShared },
+  { runSparql, handle, argsOf, loadShared, maxTriples },
 );

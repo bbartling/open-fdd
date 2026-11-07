@@ -48,14 +48,36 @@ async function connect(config = {}) {
   return client;
 }
 
-/** Runs adapter_nf.sql then install.sql. Returns { jobRegistered, maxBytes }. */
+/** schema_version of install.sql this release needs (scoped retention = 2). */
+const SCHEMA_VERSION = 2;
+
+/** Installed openfdd schema_version, 0 when the schema / config table / key is absent (pre-scoped release = 0). */
+async function schemaVersion(client) {
+  const have = await client.query("SELECT to_regclass('openfdd.config') AS r");
+  if (!have.rows[0].r) return 0;
+  const { rows } = await client.query("SELECT value FROM openfdd.config WHERE key = 'schema_version'");
+  return rows.length ? Number(rows[0].value) || 0 : 0;
+}
+
+/**
+ * Runs adapter_nf.sql then install.sql (run it as the INSTALLER role; an older install is upgraded in place:
+ * scoped retention functions + the existing daily job altered). Returns { jobRegistered, maxBytes, schemaVersion }.
+ */
 async function install(client) {
   for (const f of ["adapter_nf.sql", "install.sql"]) {
     await client.query(fs.readFileSync(path.join(SQL_DIR, f), "utf8"));
   }
-  const { rows } = await client.query("SELECT key, value FROM openfdd.config WHERE key IN ('job_registered', 'max_bytes')");
+  const { rows } = await client.query("SELECT key, value FROM openfdd.config WHERE key IN ('job_registered', 'max_bytes', 'schema_version')");
   const cfg = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return { jobRegistered: cfg.job_registered === true || cfg.job_registered === "true", maxBytes: Number(cfg.max_bytes) };
+  return { jobRegistered: cfg.job_registered === true || cfg.job_registered === "true", maxBytes: Number(cfg.max_bytes), schemaVersion: Number(cfg.schema_version) };
+}
+
+/** Throws a clear error when the engine "timescale" is selected but hook config.timescale is missing (never a silent fallback). */
+function requireConfig(config) {
+  if (!config || typeof config !== "object" || !(config.connectionString || config.host)) {
+    throw new Error('engine "timescale" is selected but config.timescale is missing or has no connectionString/host; set the hook config "timescale" (see docs/install.md) or choose another engine');
+  }
+  return config;
 }
 
 // ---------------------------------------------------------------- history -> session TEMP tables
@@ -82,15 +104,28 @@ async function createTempTables(client, pack) {
  * Builds the pack's wide `history` (+ weather, authorized_series, equipment) as TEMP tables in this session.
  *   roleToUuid  {role: pointUuid}   roles must be history columns of pack.contract
  *   unitsByUuid {pointUuid: nfUnit} values are converted to SI in SQL (a + b*avg): one avg per role per bucket
+ *   fractionRoles [role]  roles to divide by 100 (declared-% fraction/boolean roles): siPlan().scaled from hooks/fdd.js
+ *   booleanRoles  [role]  roles whose bucket average must lie in [0, 1], else NULL (rejected): siPlan().bool
+ * The scale decisions (fraction / boolean / unitless-skipped) are made ONLY by siPlan; this function applies them and
+ * does not look at role names or units to guess one. Roles siPlan skipped are not passed in. Without the two arrays
+ * the roles are plain SI conversions by unit.
  * Returns { rows, roles, si: {role: unit}, bytes: 0 }. rows = history rows written (0 = no data in the window).
  */
-async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, unitsByUuid = {}, from, to, stepSec }) {
+async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, unitsByUuid = {}, fractionRoles = [], booleanRoles = [], from, to, stepSec }) {
   if (!pack || !pack.contract) throw new Error("loadHistory: pack is required");
   const step = Number(stepSec || pack.poll_seconds);
   if (!(step > 0)) throw new Error("loadHistory: stepSec must be > 0");
   const histCols = new Map(pack.contract.history.map((c) => [c.name, c]));
   const roles = Object.entries(roleToUuid || {}).filter(([r]) => histCols.has(r) && r !== "equipment_id" && r !== "timestamp_utc");
   await createTempTables(client, pack);
+  const frac = new Set(fractionRoles);
+  const bools = new Set(booleanRoles);
+  const factorsFor = (role, uuid) => {
+    const unit = unitsByUuid[uuid];
+    if (bools.has(role)) return { a: 0, b: frac.has(role) ? 0.01 : 1, unit: "bool", bool: true };
+    if (frac.has(role)) return { a: 0, b: 0.01, unit: "fraction" };
+    return siFactors(unit);
+  };
 
   const params = [step, iso(from), iso(to), [...new Set(roles.map(([, u]) => u))], equipId];
   const exprs = roles.map(([role, uuid]) => {
@@ -99,9 +134,11 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
     if (histCols.get(role).type === "text") {
       return `max(value) FILTER (WHERE point_uuid = ${u})::text AS ${quoteId(role)}`;
     }
-    const f = siFactors(unitsByUuid[uuid]);
+    const f = factorsFor(role, uuid);
     params.push(f.a, f.b);
-    return `(avg(value) FILTER (WHERE point_uuid = ${u})) * $${params.length}::double precision + $${params.length - 1}::double precision AS ${quoteId(role)}`;
+    const v = `(avg(value) FILTER (WHERE point_uuid = ${u})) * $${params.length}::double precision + $${params.length - 1}::double precision`;
+    // boolean roles: an on-fraction in [0, 1] (clamped for float noise); anything else is rejected (NULL), see siPlan
+    return f.bool ? `(CASE WHEN ${v} BETWEEN -1e-9 AND 1 + 1e-9 THEN least(1, greatest(0, ${v})) END) AS ${quoteId(role)}` : `${v} AS ${quoteId(role)}`;
   });
   let rows = 0;
   if (roles.length) {
@@ -133,7 +170,7 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
        WHERE ${wcols.map((n) => `${quoteId(n)} IS NOT NULL`).join(" OR ")}`);
   }
   const si = {};
-  for (const [role, uuid] of roles) si[role] = siFactors(unitsByUuid[uuid]).unit;
+  for (const [role, uuid] of roles) si[role] = factorsFor(role, uuid).unit;
   for (const [role, unit] of Object.entries(si)) {
     await client.query("INSERT INTO pg_temp.authorized_series (site_id, equipment_id, role, unit) VALUES ($1, $2, $3, $4)", [siteId, equipId, role, unit]);
   }
@@ -215,12 +252,20 @@ async function writeResults(client, rows) {
   return n;
 }
 
-// ---------------------------------------------------------------- size cap
+// ---------------------------------------------------------------- size cap (scoped retention)
 
 const DAY_MS = 24 * 3600e3;
 
-/** Once a day (unless the TimescaleDB job exists): openfdd.enforce_size_cap(config max_bytes). */
+/**
+ * Once a day (unless the TimescaleDB job exists): openfdd.enforce_size_cap(config max_bytes). Scope = schema openfdd
+ * + config retention_allowlist ONLY (never NF's own tables unless listed). Returns the function's JSON result
+ * (always has status). Throws when the installed schema is the old global-retention release: re-run install.sql
+ * as the installer role (the old job is then altered in place).
+ */
 async function maybeEnforceCap(client, { now = Date.now() } = {}) {
+  if ((await schemaVersion(client)) < SCHEMA_VERSION) {
+    throw new Error("openfdd schema is older than this release (global retention): run timescale/install.sql as the installer role to upgrade; retention skipped");
+  }
   const cfg = Object.fromEntries((await client.query("SELECT key, value FROM openfdd.config")).rows.map((r) => [r.key, r.value]));
   const job = await client.query("SELECT 1 FROM timescaledb_information.jobs WHERE proc_schema = 'openfdd' AND proc_name = 'size_cap_job'");
   if (job.rowCount) return { skipped: "job" };
@@ -233,43 +278,129 @@ async function maybeEnforceCap(client, { now = Date.now() } = {}) {
   return rows[0].r;
 }
 
+/** Dry run: what enforce_size_cap(maxBytes) would drop (default = config max_bytes). Drops nothing. */
+async function retentionPreview(client, maxBytes) {
+  const { rows } = maxBytes == null
+    ? await client.query("SELECT openfdd.retention_preview() AS r")
+    : await client.query("SELECT openfdd.retention_preview($1::bigint) AS r", [String(maxBytes)]);
+  return rows[0].r;
+}
+
 // ---------------------------------------------------------------- long-range history (on-request hook)
 
-const BUCKET_RE = /^\s*(\d+)\s*(second|minute|hour|day|week|month)s?\s*$/i;
+const BUCKET_RE = /^\s*(\d{1,6})\s*(second|minute|hour|day|week|month)s?\s*$/i;
+const UNIT_SECS = { second: 1, minute: 60, hour: 3600, day: 86400, week: 604800, month: 2592000 };
 const MAX_UUIDS = 200;
 const MAX_BYTES = 200000;
 const TARGET_BUCKETS = 1000;
+/** Server-side defaults; override with hook config `history` (never from the request args). */
+const HISTORY_LIMITS = { maxPoints: 200000, maxSpanDays: 3660, minBucketSec: 60, statementTimeoutMs: 20000, maxBytes: MAX_BYTES, maxUuids: MAX_UUIDS };
 /** @type {[string, number][]} */
 const NICE = [["1 minute", 60], ["5 minutes", 300], ["15 minutes", 900], ["1 hour", 3600], ["6 hours", 21600], ["1 day", 86400], ["1 week", 604800]];
+/** @type {[string, number][]} */
+const COARSE = [...NICE, ["1 month", 2592000]];
 
-/** history_buckets rows, JSON capped at ~200 KB. bucket optional: picked so each series has ~1000 buckets. */
-async function historyRoute(client, { uuids, from, to, bucket, maxBytes = MAX_BYTES }) {
-  if (!Array.isArray(uuids) || !uuids.length) throw new Error("args.uuids (array) is required");
-  if (uuids.length > MAX_UUIDS) throw new Error(`at most ${MAX_UUIDS} uuids`);
-  const f = new Date(from), t = new Date(to);
-  if (Number.isNaN(+f) || Number.isNaN(+t) || t <= f) throw new Error("args.from / args.to must be ISO times with from < to");
-  let width = bucket;
-  if (width) {
-    const m = BUCKET_RE.exec(String(width));
-    if (!m) throw new Error('args.bucket like "15 minutes", "1 hour", "1 day"');
-    width = `${m[1]} ${m[2].toLowerCase()}s`;
-  } else {
-    const secs = (t.getTime() - f.getTime()) / 1000 / TARGET_BUCKETS;
-    width = (NICE.find(([, s]) => s >= secs) || NICE[NICE.length - 1])[0];
-  }
-  const res = await client.query(
-    "SELECT point_uuid, bucket, avg, min, max, n FROM openfdd.history_buckets($1::text[], $2::timestamptz, $3::timestamptz, $4::interval)",
-    [uuids.map(String), f.toISOString(), t.toISOString(), width]);
-  const rows = [];
-  let size = 200;
-  let truncated = false;
-  for (const r of res.rows) {
-    const o = { point_uuid: r.point_uuid, bucket: r.bucket.toISOString(), avg: r.avg, min: r.min, max: r.max, n: Number(r.n) };
-    size += JSON.stringify(o).length + 1;
-    if (size > maxBytes) { truncated = true; break; }
-    rows.push(o);
-  }
-  return { bucket: width, from: f.toISOString(), to: t.toISOString(), total: res.rowCount, truncated, rows };
+/** A positive, finite time (ISO string, epoch ms number or Date). */
+function parseTime(v, name) {
+  let ms = NaN;
+  if (v instanceof Date) ms = v.getTime();
+  else if (typeof v === "number") ms = v;
+  else if (typeof v === "string" && v.trim()) ms = Date.parse(v);
+  if (!Number.isFinite(ms) || ms <= 0 || ms > 253402300799999) throw new Error(`args.${name} must be a positive, finite time (ISO string or epoch ms)`);
+  return new Date(ms);
 }
 
-module.exports = { connect, install, loadHistory, runRules, toResultRow, writeResults, maybeEnforceCap, historyRoute, siFactors };
+const posNum = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
+
+/**
+ * history_buckets rows with hard bounds. args (request): { uuids, from, to, bucket?, coarsen? (default true) }.
+ * limits (server config, NOT the request): { maxPoints 200000, maxSpanDays 3660, minBucketSec 60,
+ * statementTimeoutMs 20000, maxBytes 200000, maxUuids 200 }. Before querying: times positive/finite with from < to,
+ * span <= maxSpanDays, bucket >= minBucketSec, and (buckets per series) x (uuids) <= maxPoints; otherwise the bucket is
+ * coarsened (coarsened = true, requested_bucket kept) or the request is rejected (coarsen: false / nothing fits).
+ * The query runs in a transaction with SET LOCAL statement_timeout and LIMIT maxPoints + 1. Result:
+ * { bucket, requested_bucket, coarsened, from, to, total, truncated, max_points, coverage, rows }.
+ */
+async function historyRoute(client, args = {}, limits = {}) {
+  const L = {};
+  for (const k of Object.keys(HISTORY_LIMITS)) L[k] = posNum(limits[k], HISTORY_LIMITS[k]);
+  const { uuids, from, to, bucket } = args;
+  if (!Array.isArray(uuids) || !uuids.length) throw new Error("args.uuids (array) is required");
+  const ids = [...new Set(uuids.map((u) => (typeof u === "string" ? u.trim() : "")))];
+  if (ids.some((u) => !u || u.length > 128)) throw new Error("args.uuids must be non-empty strings (point uuids)");
+  if (ids.length > L.maxUuids) throw new Error(`at most ${L.maxUuids} uuids`);
+  const f = parseTime(from, "from"), t = parseTime(to, "to");
+  if (t <= f) throw new Error("args.from must be before args.to");
+  const spanSec = (t.getTime() - f.getTime()) / 1000;
+  if (spanSec > L.maxSpanDays * 86400) throw new Error(`time span is longer than ${L.maxSpanDays} days; query a shorter range`);
+
+  let requested = null;
+  let secs;
+  let width;
+  if (bucket !== undefined && bucket !== null && bucket !== "") {
+    const m = BUCKET_RE.exec(String(bucket));
+    if (!m || Number(m[1]) < 1) throw new Error('args.bucket like "15 minutes", "1 hour", "1 day" (a positive count)');
+    width = `${Number(m[1])} ${m[2].toLowerCase()}s`;
+    secs = Number(m[1]) * UNIT_SECS[m[2].toLowerCase()];
+    if (secs < L.minBucketSec) throw new Error(`args.bucket must be at least ${L.minBucketSec} seconds (got ${width})`);
+    requested = String(bucket).trim();
+  } else {
+    const want = Math.max(spanSec / TARGET_BUCKETS, L.minBucketSec);
+    [width, secs] = NICE.find(([, s]) => s >= want) || NICE[NICE.length - 1];
+  }
+  // upper bound of output rows: buckets per series (+2 for epoch alignment at both ends) x series
+  const points = (s) => (Math.floor(spanSec / s) + 2) * ids.length;
+  let coarsened = false;
+  if (points(secs) > L.maxPoints) {
+    if (args.coarsen === false) throw new Error(`request would return about ${points(secs)} points (max ${L.maxPoints}); use a larger bucket, fewer uuids or a shorter range`);
+    const next = COARSE.find(([, s]) => s >= secs && points(s) <= L.maxPoints);
+    if (!next) throw new Error(`request would return about ${points(secs)} points (max ${L.maxPoints}) even with the coarsest bucket; use fewer uuids or a shorter range`);
+    [width, secs] = next;
+    coarsened = true;
+  }
+
+  let res;
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('statement_timeout', $1::text, true)", [`${Math.floor(L.statementTimeoutMs)}ms`]);
+    res = await client.query(
+      "SELECT point_uuid, bucket, avg, min, max, n FROM openfdd.history_buckets($1::text[], $2::timestamptz, $3::timestamptz, $4::interval) LIMIT $5::int",
+      [ids, f.toISOString(), t.toISOString(), width, L.maxPoints + 1]);
+    await client.query("COMMIT");
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch (_) { /* connection may be gone */ }
+    if (e && e.code === "57014") {
+      const err = /** @type {any} */ (new Error(`history query exceeded ${L.statementTimeoutMs} ms and was cancelled; use fewer uuids, a shorter range or a larger bucket`));
+      err.code = "history_timeout";
+      throw err;
+    }
+    throw e;
+  }
+
+  let truncated = res.rows.length > L.maxPoints;
+  const rows = [];
+  const per = new Map();
+  let size = 400;
+  for (const r of res.rows.slice(0, L.maxPoints)) {
+    const o = { point_uuid: r.point_uuid, bucket: r.bucket.toISOString(), avg: r.avg, min: r.min, max: r.max, n: Number(r.n) };
+    size += JSON.stringify(o).length + 1;
+    if (size > L.maxBytes) { truncated = true; break; }
+    rows.push(o);
+    const c = per.get(o.point_uuid) || { buckets: 0, samples: 0, first: o.bucket, last: o.bucket };
+    c.buckets++; c.samples += o.n; c.last = o.bucket;
+    per.set(o.point_uuid, c);
+  }
+  const coverage = {
+    requested: ids.length, with_data: per.size, without_data: ids.filter((u) => !per.has(u)),
+    complete: !truncated, points: Object.fromEntries(per),
+  };
+  return {
+    bucket: width, requested_bucket: requested, coarsened, from: f.toISOString(), to: t.toISOString(),
+    total: res.rows.length, truncated, max_points: L.maxPoints, coverage, rows,
+  };
+}
+
+module.exports = {
+  connect, install, schemaVersion, requireConfig, SCHEMA_VERSION, loadHistory, runRules, toResultRow, writeResults,
+  maybeEnforceCap, retentionPreview, historyRoute, siFactors,
+};

@@ -9,7 +9,7 @@ nav_order: 4
 Open-FDD 5.0 is a complete reset ([ADR-014](../../architecture/adr-014-open-fdd-as-nf-plugin.html)). Everything
 below is gone from the tree and recoverable from git:
 
-- **Tag `v4.0.11-central`** (branch `release/4.x`) is the last 4.x state. `git checkout v4.0.11-central` has all of it.
+- **Tag `v4.0.11-central`** is the last 4.x state. `git checkout v4.0.11-central` has all of it.
 
 | Removed | What it was |
 |---|---|

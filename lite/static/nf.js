@@ -24,7 +24,7 @@ async function initAuth() {
   if (info.provider !== "IAM_NF_CLERK" || !info.clientid) return info;
   const pk = info.clientid;
   const fapi = atob(pk.split("_")[2]).replace(/\$$/, "");
-  await loadScript(`https://${fapi}/npm/@clerk/clerk-js@5/dist/clerk.browser.js`,
+  await loadScript(`https://${fapi}/npm/@clerk/clerk-js@${CLERK_JS_VERSION}/dist/clerk.browser.js`,
     { "data-clerk-publishable-key": pk });
   await window.Clerk.load();
   if (!window.Clerk.session) throw new Error("not signed in to Normal Portal on this host");
@@ -32,21 +32,38 @@ async function initAuth() {
   return info;
 }
 
+// Pinned: the portal sign-in loads clerk-js from the host in the portal's publishable key
+// (the only script these pages load from outside their own origin). Bump deliberately.
+const CLERK_JS_VERSION = "5.128.1";
+
+// Reads that are safe to repeat. Everything else (StartHook, writes, deletes) is sent once:
+// if the response is lost the caller must look, not re-fire (a second StartHook = a second run).
+const IDEMPOTENT_POSTS = new Set(["/api/v1/point/query", "/api/v1/auth/token"]);
+
+/** @param {string} path @param {string} method */
+function isRetryable(path, method) {
+  if (method === "GET") return true;
+  return method === "POST" && IDEMPOTENT_POSTS.has(path.split("?")[0]);
+}
+
 /**
  * @param {string} path
  * @param {unknown} [body] POSTed as JSON when given
+ * @param {{method?: string}} [opts] override the method (PATCH/DELETE); default GET, or POST with a body
  * @returns {Promise<any>}
  */
-async function api(path, body) {
+async function api(path, body, opts = {}) {
   /** @type {Record<string, string>} */
   const headers = body ? { "Content-Type": "application/json" } : {};
-  const opts = body ? { method: "POST", body: JSON.stringify(body) } : {};
+  const method = opts.method || (body ? "POST" : "GET");
+  const init = body ? { method, body: JSON.stringify(body) } : method === "GET" ? {} : { method };
+  const retry = isRetryable(path, method);
   for (let attempt = 1; ; attempt++) {
     if (getToken) headers.Authorization = `Bearer ${await getToken()}`;
-    const r = await fetch(path, { credentials: "same-origin", headers, ...opts });
+    const r = await fetch(path, { credentials: "same-origin", headers, ...init });
     if (r.ok) return r.json();
-    // NF occasionally answers a transient empty-body 403; retry a few times.
-    if ([403, 429, 502, 503, 504].includes(r.status) && attempt < 4) {
+    // NF occasionally answers a transient empty-body 403; retry reads a few times.
+    if (retry && [403, 429, 502, 503, 504].includes(r.status) && attempt < 4) {
       await new Promise((ok) => setTimeout(ok, 500 * 2 ** attempt));
       continue;
     }

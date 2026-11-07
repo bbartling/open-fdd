@@ -36,3 +36,7 @@ The preparation host's installed `open-fdd` distribution is 4.4.1 (62 diagnostic
 - Utility fault-hours retain a fixed 720-hour proxy. This is not measured fault duration, including in the interval-MAE rule.
 - The suite has a healthy background for each positive case but does not yet prove every threshold, tuner, input gap, irregular interval or site-isolation branch. The passing contract tests prove the harness/unit/duration machinery and representative tuning effects.
 - Sensor-sweep tolerance metadata may span different physical quantities. Temperature display conversions are a convenience, not permission to apply Celsius offsets to humidity or pressure tolerances. Resolve per-role quantities explicitly for a warehouse UI.
+
+## Percent / fraction contract (#1541)
+
+Every command and position role is a fraction 0-1, every status is 0/1, humidity is %RH 0-100 (`sql/fdd/role_scales.json`). No SQL rule and no pandas rule guesses a scale by magnitude any more (the `> 1.0` / `>= 1.5` branches, `pid_hunt_1`'s reverse guess and the pandas `num <= 1.5` / series-level `auto` guesses are gone). The pandas oracle's `norm_cmd` is a plain pass-through for fractions; only RCx analytics (`open_fdd/analytics`) keeps a series-level guess, for legacy mixed-scale exports. Removing the element-wise (SQL) vs series-level (pandas) guesses also removed three parity divergences: AHU-SIMUL, CHW-2 and FCU-VALVE-PASS-CLG now match. A caller that feeds the SQL directly must supply fractions and 0/1.

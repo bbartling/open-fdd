@@ -1,8 +1,8 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- econ1_stuck_closed.sql — ECON-1 economizer stuck closed
--- CAST DOUBLE + percent gate >= 1.5 on damper and fan_cmd (B100 0–100).
--- Pandas _fan is fan-cmd first (percent-normalized), then fan-status (> 0.5).
+-- CAST DOUBLE. fan_cmd and oa_damper_pct are fractions 0-1 (input_contract.sql), no magnitude guess.
+-- Pandas _fan is fan-cmd first, then fan-status (> 0.5).
 WITH base AS (
   SELECT
     equipment_id,
@@ -10,26 +10,14 @@ WITH base AS (
     CAST(CASE
       WHEN CASE
         WHEN fan_cmd IS NOT NULL THEN CASE
-          WHEN (
-            CASE
-              WHEN CAST(fan_cmd AS DOUBLE PRECISION) >= 1.5
-              THEN CAST(fan_cmd AS DOUBLE PRECISION) / 100.0
-              ELSE CAST(fan_cmd AS DOUBLE PRECISION)
-            END
-          ) > 0.01 THEN 1
+          WHEN CAST(fan_cmd AS DOUBLE PRECISION) > 0.01 THEN 1
           ELSE 0
         END
         WHEN fan_status IS NOT NULL THEN CASE WHEN CAST(fan_status AS DOUBLE PRECISION) > 0.5 THEN 1 ELSE 0 END
         ELSE 0
       END = 0 THEN 0
       WHEN oa_damper_pct IS NOT NULL AND oa_t IS NOT NULL
-       AND (
-         CASE
-           WHEN CAST(oa_damper_pct AS DOUBLE PRECISION) >= 1.5
-           THEN CAST(oa_damper_pct AS DOUBLE PRECISION) / 100.0
-           ELSE CAST(oa_damper_pct AS DOUBLE PRECISION)
-         END
-       ) < {{ECON1_DAMPER_MAX}}
+       AND CAST(oa_damper_pct AS DOUBLE PRECISION) < {{ECON1_DAMPER_MAX}}
        AND CAST(oa_t AS DOUBLE PRECISION) > {{ECON1_OAT_MIN}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history

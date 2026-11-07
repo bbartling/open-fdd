@@ -9,7 +9,7 @@ WITH ordered AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd,
+    fan_cmd AS fan_cmd,
     EXTRACT(EPOCH FROM (
       LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
       - timestamp_utc

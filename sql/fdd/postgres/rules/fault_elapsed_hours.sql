@@ -28,7 +28,7 @@ held AS (
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN zone_t < 20.0 OR zone_t > 24.444444 THEN 1 ELSE 0 END) AS fault_samples,
+  SUM(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END) AS fault_samples,
   SUM(CASE
     WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN held_seconds
     ELSE 0.0

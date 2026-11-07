@@ -105,7 +105,7 @@ def compute_sat_high_while_fan_on(d: pd.DataFrame, p: dict, poll: float) -> pd.S
     for role in ("fan-status", "fan-cmd"):
         if role in d.columns and d[role].notna().any():
             num = pd.to_numeric(d[role], errors="coerce")
-            on = num.where(num <= 1.5, num / 100.0).fillna(0) > 0.05
+            on = num.fillna(0) > 0.05   # fan-status (0/1) and fan-cmd (fraction 0-1): one declared scale each
             return fault & on
     return fault
 

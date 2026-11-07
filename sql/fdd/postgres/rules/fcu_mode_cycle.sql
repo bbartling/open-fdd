@@ -7,8 +7,8 @@ WITH modes AS (
     equipment_id,
     timestamp_utc,
     CASE
-      WHEN clg_valve_pct IS NOT NULL AND (CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END) > {{MODE_VALVE_MIN}} THEN -1
-      WHEN htg_valve_pct IS NOT NULL AND (CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END) > {{MODE_VALVE_MIN}} THEN 1
+      WHEN clg_valve_pct IS NOT NULL AND clg_valve_pct > {{MODE_VALVE_MIN}} THEN -1
+      WHEN htg_valve_pct IS NOT NULL AND htg_valve_pct > {{MODE_VALVE_MIN}} THEN 1
       ELSE 0
     END AS mode
   FROM history

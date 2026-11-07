@@ -138,8 +138,7 @@ COMPRESSOR_ROLES = ("compressor-status", "equipment-enable", "fan-status", "fan-
 def _series_on(series: pd.Series, *, threshold: float = 0.05) -> pd.Series:
     num = pd.to_numeric(series, errors="coerce")
     if num.notna().any():
-        scaled = num.where(num <= 1.5, num / 100.0)
-        return scaled.fillna(0) > threshold
+        return num.fillna(0) > threshold      # status 0/1 and command fraction 0-1 (input contract): no magnitude guess
     return as_bool(series)
 
 

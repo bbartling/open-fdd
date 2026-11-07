@@ -85,6 +85,14 @@ MECH_COOL_SERIES_KINDS = (
 )
 
 
+
+def _legacy_norm_cmd(series):
+    """RCx analytics reads legacy mixed-scale exports: its series-level percent/fraction guess lives here,
+    not in the rule oracle (issue #1541: the rules take one declared scale per column)."""
+    from open_fdd.units.convert import norm_command
+
+    return norm_command(series, representation="auto")
+
 def _is_on(series: pd.Series) -> pd.Series:
     """True when a command/status indicates the motor is running."""
     num = pd.to_numeric(series, errors="coerce")
@@ -2075,7 +2083,7 @@ def economizer_weather_summary(
     Uses strict web dry-bulb + dewpoint (or Magnus from web RH) and actual timestamp
     deltas — never fixed-interval assumptions and never BAS OAT fallback.
     """
-    from open_fdd.rules.cookbook_catalog import norm_cmd
+    norm_cmd = _legacy_norm_cmd
     from open_fdd.rules.economizer_weather import (
         free_cool_opportunity_mask,
         mechanical_proof_mask,
@@ -2263,7 +2271,7 @@ def build_economizer_delta_points(
     if "damper_fb_pct" in frame.columns:
         points["damper_fb_pct"] = pd.to_numeric(frame["damper_fb_pct"], errors="coerce")
     elif "outside-air-damper" in frame.columns:
-        from open_fdd.rules.cookbook_catalog import norm_cmd
+        norm_cmd = _legacy_norm_cmd
 
         points["damper_fb_pct"] = norm_cmd(frame["outside-air-damper"]) * 100.0
     else:
@@ -2322,7 +2330,7 @@ def economizer_free_cooling_diagnostics(
     (Guideline 36 default 10°F). Returns ``points`` (long DF), ``metrics`` (summary),
     and ``skipped`` (equipment without required signals).
     """
-    from open_fdd.rules.cookbook_catalog import norm_cmd
+    norm_cmd = _legacy_norm_cmd
     from open_fdd.rules.runner import merge_weather
 
     role_map = role_map or {}

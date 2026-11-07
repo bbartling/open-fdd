@@ -3,13 +3,13 @@
 -- fcu_htg_coil.sql — first-class FCU screening rule
 WITH normalized AS (
   SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN damper_cmd IS NULL THEN NULL WHEN damper_cmd > 1.0 THEN damper_cmd / 100.0 ELSE damper_cmd END AS dcmd,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dpos,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
+    damper_cmd AS dcmd,
+    damper_pct AS dpos,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.10 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history

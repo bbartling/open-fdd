@@ -34,14 +34,11 @@ def _infer_interval(index: pd.DatetimeIndex, poll_seconds: float | None) -> pd.T
 
 
 def to_percent_output(series: pd.Series) -> pd.Series:
-    """Normalize a command/position series to 0–100%."""
-    s = pd.to_numeric(series, errors="coerce")
-    finite = s.dropna()
-    if finite.empty:
-        return s
-    # Values already on 0–1 fraction → scale to percent.
-    if float(finite.quantile(0.95)) <= 1.5:
-        s = s * 100.0
+    """Fraction 0–1 command/position -> percent points 0–100 (the *_pct tuning parameters are percent points).
+
+    The input is a fraction by contract (sql/fdd/role_scales.json); there is no magnitude guess.
+    """
+    s = pd.to_numeric(series, errors="coerce") * 100.0
     return s.clip(lower=0.0, upper=100.0)
 
 

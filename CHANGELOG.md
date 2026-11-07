@@ -1,5 +1,39 @@
 # Changelog
 
+## 5.0.1 — 2026-11-07
+
+Patch release from an external review (Codex / ChatGPT) and open issues. No new features; correctness, data safety and hardening.
+
+### Fixed
+
+- **TimescaleDB retention could delete NF or other apps' history (P1).** The size cap (default 100 GB) now only drops chunks of
+  Open-FDD's own tables (`openfdd.*`); other hypertables only via an explicit, validated `retention_allowlist` (fails closed).
+  Chunk budget, no-progress exit, `retention_preview()` dry run and a `retention_log`. Upgrading re-scopes an existing job in place.
+- **Percent vs fraction (#1541).** Every command/position column has one declared scale (`sql/fdd/role_scales.json`): the hook
+  converts by declared unit, the SQL rules and the pandas oracle no longer guess by magnitude; unitless command points are skipped,
+  not guessed. A 1 % fan command is no longer read as full speed. Same rules on SQLite, PGlite and TimescaleDB.
+- **Comfort fault-sample count used fixed bounds (#1542).** `fault_samples` now uses `ZONE_T_LO` / `ZONE_T_HI` like hours and pct.
+- **Result identity is site-scoped.** Two sites with the same equipment id no longer share (and overwrite) a result point.
+  5.0.0 result points are not reused; operators can delete them later.
+- **Unknown is not healthy.** Fault rules with no coverage are `not-assessed` (no value written), results that could not be
+  refreshed become `stale`, every result carries `fddStatus` / `fddReason` / `fddLastRun`, and a run with rule errors fails visibly.
+- History route bounded before querying (span, bucket, UUIDs, max points, 20 s statement timeout, coverage/truncation flags).
+  Explicitly selecting the Timescale engine without settings fails instead of silently falling back.
+- UI client never auto-retries non-idempotent POSTs (e.g. "Run FDD now"); CSV export neutralizes spreadsheet formulas.
+- SPARQL: read-only query policy (no UPDATE / SERVICE), single execution, model size limit, browser queries in a Web Worker
+  with a 20 s kill. `nf_app_sync.py run` waits up to the hook's timeout, reports "still running" (exit 3), supports `--resume`.
+- #1537 / #1538 (4.x analytics SQL): resolved by the 5.0 binding — regression tests in `nf-app/tests/binding-issues.test.mjs`.
+
+### Changed
+
+- Caddy front door: structured access log with secrets redacted; security posture documented (plain HTTP = trusted LAN/lab,
+  HTTPS = production; the open read routes are an explicit choice). Clerk login script pinned to an exact version and the
+  CSP exception documented truthfully.
+- Destructive Timescale test fixture only runs in a throwaway, marked database it creates itself; CI runs the Timescale suite
+  against a real TimescaleDB service and fails on skips.
+- Installed version recorded as the NF app setting `version` on every deploy (also shown in the app header).
+- `release/4.x` branch removed (4.x stays reachable at tag `v4.0.11-central`).
+
 ## 5.0.0 — 2026-11-06
 
 Open-FDD is now a **Normal Framework (NF) app**: a complete reset. FDD and analytics math run in SI only; the UI
@@ -24,4 +58,4 @@ shows imperial or SI through a toggle.
 
 ## 4.x and earlier
 
-4.x history: see tag `v4.0.11-central` (branch `release/4.x`).
+4.x history: see tag `v4.0.11-central`.

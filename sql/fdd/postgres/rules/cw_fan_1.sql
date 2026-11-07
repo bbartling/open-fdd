@@ -6,7 +6,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     cw_supply_t, web_wb_t,
-    CASE WHEN tower_fan_cmd IS NULL THEN NULL WHEN tower_fan_cmd > 1.0 THEN tower_fan_cmd / 100.0 ELSE tower_fan_cmd END AS fan,
+    tower_fan_cmd AS fan,
     pump_status,
     chiller_status,
     chw_flow,
@@ -15,7 +15,7 @@ WITH h AS (
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 0
     END AS proof_on
 

@@ -51,7 +51,7 @@ From an MCP client (for example Claude Code) connected to the NF MCP server:
 1. `connect` with the site uuid; confirm the site is healthy.
 2. `manage_app` `create` with the name `Open-FDD` (id `open-fdd`), Node runtime, scopes from `nf-app/app.json`.
 3. `manage_app` `write_file` for each entry in the `files` map of `nf-app/app.json`.
-4. `manage_hooks` / `deploy_hook` for each entry in `hooks` (`weather`, `fdd`, `sparql`).
+4. `manage_hooks` / `deploy_hook` for each entry in `hooks` (`weather`, `fdd`, `sparql`, `history`).
 5. `manage_app` `restart`; run a hook once with `manage_hooks` `run` (it needs the hook **uuid**, not its name).
 
 `write_file` uploads whole files and the MCP session can expire mid-task (`connect` again). Large files, such as
@@ -87,6 +87,39 @@ the portal. Through the portal, `/api/v1/bacnet/*` is not readable with API-key 
 | full + TimescaleDB | larger hosts | the Postgres pack runs inside NF's TimescaleDB connector database; results and long-range history stay there, with a size cap (default 100 GB). See [`nf-app/timescale`](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale) |
 
 Which host gets which edition: [Lite or full](operations/nf/lite-vs-full.html).
+
+## 7a. Optional: the TimescaleDB engine (full edition)
+
+Enabling NF's Timescale/Postgres connector **alone does not switch Open-FDD to the Timescale engine**. The engine is
+chosen by hook configuration: the `fdd` hook uses it when its `config` has `"engine": "timescale"`, or when
+`engine` is unset or `"auto"` and a `timescale` block is present. `"engine": "timescale"` without a `timescale`
+block fails with a clear error; it never falls back to another engine.
+
+Hooks read the connection settings from their own **hook config** (the `config` object of the hook in
+`nf-app/app.json` / the hook settings in NF, not from the repo). Both the `fdd` and the `history` hook need the same
+`timescale` block. Secrets come from an environment variable named by `passwordEnv`, never from git:
+
+`fdd` hook config:
+
+```json
+{ "engine": "timescale", "windowHours": 24,
+  "timescale": { "host": "127.0.0.1", "port": 5432, "database": "nf", "user": "openfdd_rt", "passwordEnv": "OPENFDD_PG_PASSWORD" } }
+```
+
+`history` hook config:
+
+```json
+{ "timescale": { "host": "127.0.0.1", "port": 5432, "database": "nf", "user": "openfdd_rt", "passwordEnv": "OPENFDD_PG_PASSWORD" },
+  "history": { "maxPoints": 200000, "statementTimeoutMs": 20000 } }
+```
+
+(`history` limits are optional; the values above are the defaults.) Set `OPENFDD_PG_PASSWORD` in the NF app's
+environment, not in `app.json`.
+
+Run `nf-app/timescale/install.sql` once as an installer role (it also upgrades an older install), then give the hooks a
+runtime role that can only read NF's tables and write schema `openfdd`. Retention only trims Open-FDD's own tables; trimming
+NF history is an explicit opt-in. Details, grants and the upgrade path:
+[`nf-app/timescale/README.md`](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
 
 ## 8. Verify
 

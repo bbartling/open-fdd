@@ -68,10 +68,20 @@ checks it). Static files are cached 5 minutes; `nf_app_sync.py` stamps js/css UR
 Supply-chain rule: never take a release younger than two weeks (sql.js 1.15.2 and pglite 0.5.12+ were too new on 2026-11-06).
 Caddy front door: `caddy:2.11.7-alpine`, pinned in `deploy/nf-caddy/docker-compose.yml`.
 
+## TimescaleDB full edition (optional)
+
+`hooks/lib/timescale.js`, `hooks/history.js` and `timescale/` run the rule pack inside NF's TimescaleDB connector
+database. It is selected by hook **config** (`engine: "timescale"` plus a `timescale` block in the `fdd` and `history` hook
+config), not by enabling the connector; a missing block is an error, never a silent fallback. Retention only drops chunks
+of Open-FDD's own tables (schema `openfdd`); NF's `data` table or other apps' tables are trimmed only if listed in
+`openfdd.config.retention_allowlist`. Use a separate installer role (runs `install.sql`) and a runtime role (SELECT on NF's
+tables, write on schema `openfdd`). Setup, grants, `retention_preview()`, upgrade and tests:
+[`timescale/README.md`](timescale/README.md); config examples: [docs/install.md](../docs/install.md).
+
 ## Rules this app follows
 
 - **Nothing site-specific in code:** sites, equips and points come from NF's Haystack model.
 - **One FDD math:** `sql/fdd` → packs; the SQLite pack must match Postgres on every rule (`engines.test.mjs`).
 - **Faults look the same everywhere:** a 0/1 lane at the bottom of the plot (`rcxWithFaultLane`).
-- **Strict CSP:** no inline scripts/styles, no CDN at runtime.
+- **Strict CSP:** no inline scripts/styles; all assets self-hosted except the pinned Clerk login script on the portal path.
 - **Light on the box:** NF resamples history; small edges use the SQLite engine; heavy work never runs on the box.

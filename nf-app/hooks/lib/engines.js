@@ -257,21 +257,32 @@ async function createPglite(pack) {
 // ---------------------------------------------------------------- timescale (FULL edition: rules run inside NF's TimescaleDB)
 
 /**
- * Not fed with prebuilt rows: load() takes { equipId, siteId, roleToUuid, unitsByUuid, from, to, stepSec } and builds
+ * Not fed with prebuilt rows: load() takes { equipId, siteId, roleToUuid, unitsByUuid, fractionRoles, booleanRoles, from,
+ * to, stepSec } (the last two arrays are siPlan's scale decisions, #1541) and builds
  * the pack's wide `history` in SQL from openfdd.nf_samples (see timescale/adapter_nf.sql); returns the row count.
  * opts.client = an already connected pg client (tests); otherwise opts.config (hook config.timescale) is used.
  */
 async function createTimescale(pack, opts = {}) {
   const ts = require("./timescale");
+  if (!opts.client) ts.requireConfig(opts.config);   // engine "timescale" without config.timescale fails visibly, never falls back
   const client = opts.client || (await ts.connect(opts.config));
   const owned = !opts.client;
+  const warnings = [];
   try {
-    const have = await client.query("SELECT to_regclass('openfdd.fdd_results') AS r");
-    if (!have.rows[0].r) await ts.install(client);   // first run only; re-run install.sql by hand after editing adapter_nf.sql
+    // First run, or an install older than this release (global retention): (re)apply install.sql. That needs the
+    // INSTALLER role; a runtime-only role keeps working but retention refuses until install.sql is run.
+    const ver = await ts.schemaVersion(client);
+    if (ver < ts.SCHEMA_VERSION) {
+      try { await ts.install(client); } catch (e) {
+        if (ver === 0) throw e;
+        warnings.push(`openfdd schema upgrade not applied (${e.message}); run timescale/install.sql as the installer role`);
+      }
+    }
   } catch (e) { if (owned) await client.end(); throw e; }
   return {
     kind: "timescale",
     client,
+    warnings,
     async load(args) { return (await ts.loadHistory(client, { pack, ...args })).rows; },
     async query(ruleId) {
       const { results, errors } = await ts.runRules(client, pack, [ruleId]);

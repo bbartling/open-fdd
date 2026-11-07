@@ -131,3 +131,194 @@ test("hook handle(): loads the model through sdk.http, logs and returns the answ
   assert.equal(bad.ok, false);
   assert.ok(bad.error);
 });
+
+// ---- read-only policy ---------------------------------------------------------------------
+const P0 = () => lib.sparqlPrefixes(TTL);
+
+test("policy: SELECT, ASK, CONSTRUCT, DESCRIBE are allowed (also after PREFIX/BASE, comments, any case)", () => {
+  for (const q of [
+    "SELECT * WHERE { ?s ?p ?o } LIMIT 1",
+    "select * where { ?s ?p ?o }",
+    "# insert delete load\nASK { ?s ?p ?o }",
+    "PREFIX a: <http://x/> BASE <http://y/>\nCONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }",
+    "DESCRIBE <http://x/a>",
+    // the words inside literals, IRIs, comments and variable/prefixed names are data, not operations
+    'SELECT ?load ?service WHERE { ?s <http://x/insert> "DELETE SERVICE LOAD" ; ex:drop ?load } # CLEAR',
+    "SELECT * WHERE { ?s ?p ?o . FILTER(?o < 5 && ?o > 1) }",
+  ]) assert.equal(typeof lib.sparqlCheckQuery(q).form, "string", q);
+});
+
+test("policy: updates are refused", () => {
+  for (const q of [
+    "INSERT DATA { <http://x/a> <http://x/b> <http://x/c> }",
+    "insert data { <http://x/a> <http://x/b> 1 }",
+    "DELETE WHERE { ?s ?p ?o }",
+    "DELETE DATA { <http://x/a> <http://x/b> 1 }",
+    "WITH <http://g> DELETE { ?s ?p ?o } WHERE { ?s ?p ?o }",
+    "LOAD <http://evil.example/data.ttl>",
+    "CLEAR ALL", "DROP ALL", "CREATE GRAPH <http://g>", "COPY DEFAULT TO <http://g>", "MOVE DEFAULT TO <http://g>", "ADD DEFAULT TO <http://g>",
+    "PREFIX a: <http://x/>\nINSERT { ?s ?p ?o } WHERE { ?s ?p ?o }",
+    "# SELECT\nCLEAR DEFAULT",
+    "SELECT * WHERE { ?s ?p ?o } ; DROP ALL",
+    "ASK { ?s ?p ?o } ; INSERT DATA { <http://x/a> <http://x/b> 1 }",
+    "S\\u0045LECT * { ?s ?p ?o } ; \\u0049NSERT DATA { <http://x/a> <http://x/b> 1 }",
+  ]) assert.throws(() => lib.sparqlCheckQuery(q), /read-only|not allowed|only SELECT/, q);
+});
+
+test("policy: SERVICE is refused, however it is hidden", () => {
+  for (const q of [
+    "SELECT * WHERE { SERVICE <http://evil.example/sparql> { ?s ?p ?o } }",
+    "SELECT * WHERE { service silent <http://evil.example/sparql> { ?s ?p ?o } }",
+    "SELECT * WHERE { ?s ?p ?o .SERVICE <http://evil.example/s> { ?a ?b ?c } }",
+    "SELECT * WHERE { { SELECT * WHERE { SERVICE ?e { ?s ?p ?o } } } }",
+    "SELECT * WHERE { ?s ?p ?o }\nSERVICE <http://x/>{}",
+    "SELECT * WHERE { \\u0053ERVICE <http://evil.example/s> { ?a ?b ?c } }",
+  ]) assert.throws(() => lib.sparqlCheckQuery(q), /SERVICE/, q);
+});
+
+test("policy: other garbage, empty and oversize queries", () => {
+  assert.throws(() => lib.sparqlCheckQuery("SELEC nope"), /only SELECT/);
+  assert.throws(() => lib.sparqlCheckQuery("{ ?s ?p ?o }"), /only SELECT/);
+  assert.throws(() => lib.sparqlCheckQuery("   "), /required/);
+  assert.throws(() => lib.sparqlCheckQuery(5), /required/);
+  assert.throws(() => lib.sparqlCheckQuery("SELECT * WHERE { ?s ?p ?o } #" + "x".repeat(lib.SPARQL_QUERY_CAP)), /longer than 20000/);
+  assert.equal(lib.SPARQL_QUERY_CAP, 20000);
+});
+
+test("policy is enforced on the engine path: sparqlExec and runSparql reject before touching the store", () => {
+  let touched = 0;
+  const spy = { query() { touched++; throw new Error("must not run"); } };
+  assert.throws(() => lib.sparqlExec(spy, "DROP ALL"), /read-only|only SELECT/);
+  assert.throws(() => lib.sparqlExec(spy, "SELECT * { SERVICE <http://x/> { ?s ?p ?o } }"), /SERVICE/);
+  assert.equal(touched, 0);
+  assert.throws(() => hook.runSparql(TTL, `${P0()}\nINSERT DATA { <urn:a> <urn:b> <urn:c> }`, "json", { ox }), /read-only|only SELECT/);
+  assert.throws(() => hook.runSparql(TTL, "SELECT * { SERVICE <http://127.0.0.1:1/> { ?s ?p ?o } }", "json", { ox }), /SERVICE/);
+});
+
+// ---- single execution (mock store) ---------------------------------------------------------
+const term = (type, value) => ({ type, value });
+function mockStore(select) {
+  const seen = [];
+  return { seen, query(q, o) { seen.push({ q, o }); return select(q, o); } };
+}
+
+test("SELECT evaluates exactly once (vars come from the same JSON result), also with zero rows", () => {
+  const json = JSON.stringify({ head: { vars: ["a", "b"] }, results: { bindings: [{ a: term("uri", "urn:x"), b: term("literal", "7") }, { a: term("bnode", "b1") }] } });
+  const st = mockStore(() => json);
+  const r = lib.sparqlExec(st, "SELECT ?a ?b WHERE { ?a ?p ?b }");
+  assert.equal(st.seen.length, 1);
+  assert.deepEqual(r, { kind: "select", vars: ["a", "b"], rows: [["urn:x", "7"], ["_:b1", null]], total: 2, truncated: false });
+  const empty = mockStore(() => JSON.stringify({ head: { vars: ["a", "b"] }, results: { bindings: [] } }));
+  assert.deepEqual(lib.sparqlExec(empty, "SELECT ?a ?b WHERE { ?a ?p ?b }").vars, ["a", "b"]);
+  assert.equal(empty.seen.length, 1);
+  const capped = lib.sparqlExec(mockStore(() => json), "SELECT ?a ?b WHERE { ?a ?p ?b }", 1);
+  assert.equal(capped.rows.length, 1);
+  assert.equal(capped.truncated, true);
+  assert.equal(capped.total, 2);
+});
+
+test("ASK and CONSTRUCT also evaluate once", () => {
+  const ask = mockStore(() => true);
+  assert.deepEqual(lib.sparqlExec(ask, "ASK { ?s ?p ?o }"), { kind: "ask", value: true });
+  assert.equal(ask.seen.length, 1);
+  const g = mockStore(() => "<urn:a> <urn:b> <urn:c> .");
+  assert.equal(lib.sparqlExec(g, "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }").kind, "graph");
+  assert.equal(g.seen.length, 1);
+});
+
+test("real engine: SELECT on the fixture returns the column and string rows", () => {
+  const store = lib.sparqlLoadStore(ox, TTL);
+  const r = lib.sparqlExec(store, `${P0()}\nSELECT ?l WHERE { ?p a phIoT:point ; rdfs:label ?l } ORDER BY ?l`);
+  assert.deepEqual(r.vars, ["l"]);
+  assert.ok(r.rows.length >= 6 && r.rows.every((x) => typeof x[0] === "string"));
+});
+
+// ---- model size limit (hook) ---------------------------------------------------------------
+test("a model over the triple limit is refused before evaluation; args can only lower the limit", () => {
+  let evaluated = 0;
+  const fakeOx = { Store: class { load() {} get size() { return 600000; } query() { evaluated++; return true; } } };
+  assert.throws(() => hook.runSparql("", "ASK { ?s ?p ?o }", "json", { ox: fakeOx }), /600000 triples.*limit of 500000/);
+  assert.equal(evaluated, 0);
+  const small = { Store: class { load() {} get size() { return 10; } query() { evaluated++; return true; } } };
+  assert.throws(() => hook.runSparql("", "ASK { ?s ?p ?o }", "json", { ox: small, maxTriples: 5 }), /limit of 5/);
+  assert.equal(hook.runSparql("", "ASK { ?s ?p ?o }", "json", { ox: small }).value, true);
+  assert.equal(hook.maxTriples(10), 10);
+  assert.equal(hook.maxTriples(10 ** 9), 500000);        // a caller cannot raise it
+  process.env.OPENFDD_SPARQL_MAX_TRIPLES = "1000";
+  try { assert.equal(hook.maxTriples(), 1000); assert.equal(hook.maxTriples(5000), 1000); }
+  finally { delete process.env.OPENFDD_SPARQL_MAX_TRIPLES; }
+});
+
+test("hook handle() reports a policy violation as ok:false", async () => {
+  const http = { post: async () => ({ data: { points: [] } }), defaults: { baseURL: "http://127.0.0.1:8080" } };
+  const out = await hook.handle({ sdk: { http, logEvent() {} }, args: { query: "DROP ALL" } });
+  assert.equal(out.ok, false);
+  assert.match(out.error, /read-only|only SELECT/);
+});
+
+// ---- worker client (fake Worker): timeout terminates it -------------------------------------
+function fakeWorkerFactory(behaviour) {
+  const made = [];
+  const spawn = () => {
+    const w = { terminated: false, posted: [], onmessage: null, onerror: null,
+      postMessage(m) { this.posted.push(m); behaviour(w, m); },
+      terminate() { this.terminated = true; } };
+    made.push(w);
+    return w;
+  };
+  return { spawn, made };
+}
+
+test("worker client: result flows back; the Turtle is sent once until it changes", async () => {
+  const { spawn, made } = fakeWorkerFactory((w, m) => setTimeout(() => w.onmessage({ data: { id: m.id, ok: true, result: { kind: "ask", value: true } } }), 1));
+  const c = lib.sparqlWorkerClient(spawn, 500);
+  assert.deepEqual(await c.run("ttl-1", "ASK {}", 10), { kind: "ask", value: true });
+  await c.run("ttl-1", "ASK {}", 10);
+  await c.run("ttl-2", "ASK {}", 10);
+  assert.equal(made.length, 1);
+  assert.deepEqual(made[0].posted.map((m) => m.turtle), ["ttl-1", undefined, "ttl-2"]);
+  c.dispose();
+  assert.equal(made[0].terminated, true);
+});
+
+test("worker client: a query that never answers is stopped by terminating the worker; the next run uses a new one", async () => {
+  let hang = true;
+  const { spawn, made } = fakeWorkerFactory((w, m) => { if (!hang) setTimeout(() => w.onmessage({ data: { id: m.id, ok: true, result: { kind: "ask", value: false } } }), 1); });
+  const c = lib.sparqlWorkerClient(spawn, 30);
+  await assert.rejects(c.run("t", "SELECT * { ?s ?p ?o }", 10), (e) => e.timedOut === true && /stopped after/.test(e.message));
+  assert.equal(made[0].terminated, true);
+  hang = false;
+  assert.equal((await c.run("t", "ASK {}", 10)).value, false);
+  assert.equal(made.length, 2);
+  assert.equal(made[1].posted[0].turtle, "t");            // fresh worker gets the Turtle again
+  c.dispose();
+});
+
+test("worker client: worker errors reject; a worker that cannot start is flagged for fallback", async () => {
+  const bad = fakeWorkerFactory((w, m) => setTimeout(() => w.onmessage({ data: { id: m.id, ok: false, error: "parse error" } }), 1));
+  const c1 = lib.sparqlWorkerClient(bad.spawn, 500);
+  await assert.rejects(c1.run("t", "SELECT", 1), /parse error/);
+  await assert.rejects(c1.run("t", "SELECT", 1), /parse error/);
+  assert.equal(bad.made[0].posted[1].turtle, "t");        // after a failure the Turtle is re-sent
+  const dead = fakeWorkerFactory((w) => setTimeout(() => w.onerror({ message: "blocked" }), 1));
+  const c2 = lib.sparqlWorkerClient(dead.spawn, 500);
+  await assert.rejects(c2.run("t", "ASK {}", 1), (e) => e.workerUnavailable === true);
+  assert.equal(dead.made[0].terminated, true);
+  const nowasm = fakeWorkerFactory((w, m) => setTimeout(() => w.onmessage({ data: { id: m.id, ok: false, unavailable: true, error: "no wasm" } }), 1));
+  await assert.rejects(lib.sparqlWorkerClient(nowasm.spawn, 500).run("t", "ASK {}", 1), (e) => e.workerUnavailable === true);
+  const throwing = lib.sparqlWorkerClient(() => { throw new Error("Worker blocked by CSP"); }, 500);
+  await assert.rejects(throwing.run("t", "ASK {}", 1), (e) => e.workerUnavailable === true);
+});
+
+test("worker side: loaded as a classic worker script it answers messages (engine load failure -> unavailable)", async () => {
+  const posted = [];
+  const ctx = vm.createContext({ console, URL, location: { href: "http://h/api/v1/apps/static/open-fdd/sparql.js?v=abc" }, postMessage: (m) => posted.push(m) });
+  vm.runInContext("globalThis.WorkerGlobalScope = class {}; Object.setPrototypeOf(globalThis, WorkerGlobalScope.prototype);", ctx);
+  vm.runInContext(readFileSync(new URL("sparql.js", dir), "utf8"), ctx, { filename: "sparql.js" });
+  assert.equal(typeof vm.runInContext("onmessage", ctx), "function");
+  await vm.runInContext("onmessage", ctx)({ data: { id: 7, query: "ASK {}", turtle: "", cap: 5 } });
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].id, 7);
+  assert.equal(posted[0].ok, false);
+  assert.equal(posted[0].unavailable, true);          // dynamic import() is not available here -> page falls back
+});

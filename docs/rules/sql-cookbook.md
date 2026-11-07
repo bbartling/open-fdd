@@ -96,10 +96,10 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     duct_static, duct_static_sp,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    fan_cmd AS fan,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE NULL
     END AS fan_on
   FROM history
@@ -243,7 +243,7 @@ WITH h AS (
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
@@ -337,7 +337,7 @@ GROUP BY equipment_id;
 
 Heating and cooling simultaneous
 
-**Priority** P0 · **Equipment** `ahu` · **Confirm** 5 min · **Parity** [known divergence](parity.html#ahu-simul) · [pandas twin](pandas-cookbook.html#ahu-simul)
+**Priority** P0 · **Equipment** `ahu` · **Confirm** 5 min · **Parity** [match](parity.html#ahu-simul) · [pandas twin](pandas-cookbook.html#ahu-simul)
 
 **Inputs**
 
@@ -373,13 +373,13 @@ WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -502,7 +502,7 @@ WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    fan_cmd AS fan,
     fan_status
   FROM history
 ),
@@ -632,12 +632,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     oa_t, mat,
-    CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
+    oa_damper_pct AS oa_d,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -759,14 +759,14 @@ Economizer stuck closed when OAT favorable
 **Output columns**: `equipment_id`, `fault_hours`, `covered_hours`, `fault_pct`
 
 <details markdown="1">
-<summary>SQL at defaults (104 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/econ1_stuck_closed.sql">template file</a></summary>
+<summary>SQL at defaults (92 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/econ1_stuck_closed.sql">template file</a></summary>
 
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- econ1_stuck_closed.sql — ECON-1 economizer stuck closed
--- CAST DOUBLE + percent gate >= 1.5 on damper and fan_cmd (B100 0–100).
--- Pandas _fan is fan-cmd first (percent-normalized), then fan-status (> 0.5).
+-- CAST DOUBLE. fan_cmd and oa_damper_pct are fractions 0-1 (input_contract.sql), no magnitude guess.
+-- Pandas _fan is fan-cmd first, then fan-status (> 0.5).
 WITH base AS (
   SELECT
     equipment_id,
@@ -774,26 +774,14 @@ WITH base AS (
     CAST(CASE
       WHEN CASE
         WHEN fan_cmd IS NOT NULL THEN CASE
-          WHEN (
-            CASE
-              WHEN CAST(fan_cmd AS DOUBLE PRECISION) >= 1.5
-              THEN CAST(fan_cmd AS DOUBLE PRECISION) / 100.0
-              ELSE CAST(fan_cmd AS DOUBLE PRECISION)
-            END
-          ) > 0.01 THEN 1
+          WHEN CAST(fan_cmd AS DOUBLE PRECISION) > 0.01 THEN 1
           ELSE 0
         END
         WHEN fan_status IS NOT NULL THEN CASE WHEN CAST(fan_status AS DOUBLE PRECISION) > 0.5 THEN 1 ELSE 0 END
         ELSE 0
       END = 0 THEN 0
       WHEN oa_damper_pct IS NOT NULL AND oa_t IS NOT NULL
-       AND (
-         CASE
-           WHEN CAST(oa_damper_pct AS DOUBLE PRECISION) >= 1.5
-           THEN CAST(oa_damper_pct AS DOUBLE PRECISION) / 100.0
-           ELSE CAST(oa_damper_pct AS DOUBLE PRECISION)
-         END
-       ) < 0.05
+       AND CAST(oa_damper_pct AS DOUBLE PRECISION) < 0.05
        AND CAST(oa_t AS DOUBLE PRECISION) > 12.777778
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
@@ -902,14 +890,14 @@ Economizing when outdoor air unfavorable
 **Output columns**: `equipment_id`, `fault_hours`, `covered_hours`, `fault_pct`
 
 <details markdown="1">
-<summary>SQL at defaults (91 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/economizer_fault.sql">template file</a></summary>
+<summary>SQL at defaults (85 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/economizer_fault.sql">template file</a></summary>
 
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- economizer_fault.sql — ECON-2 economizing when outdoor unfavorable + confirm
--- CAST DOUBLE + percent gate >= 1.5 (not > 1.0) so Utf8/int 0–100 (B100 min OA 20)
--- becomes 0.20 and does not fire vs ECON2_DAMPER 0.42. Fraction 0–1 stays 0–1.
+-- CAST DOUBLE. oa_damper_pct is a fraction 0-1 (input_contract.sql): a 20 % minimum OA position arrives as 0.20
+-- and does not fire vs ECON2_DAMPER 0.42. No magnitude guess.
 -- Pandas econ2 has no fan gate.
 WITH base AS (
   SELECT
@@ -918,13 +906,7 @@ WITH base AS (
     CAST(CASE
       WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
        AND CAST(oa_t AS DOUBLE PRECISION) > 17.222222
-       AND (
-         CASE
-           WHEN CAST(oa_damper_pct AS DOUBLE PRECISION) >= 1.5
-           THEN CAST(oa_damper_pct AS DOUBLE PRECISION) / 100.0
-           ELSE CAST(oa_damper_pct AS DOUBLE PRECISION)
-         END
-       ) > 0.42
+       AND CAST(oa_damper_pct AS DOUBLE PRECISION) > 0.42
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
 ),
@@ -1059,13 +1041,13 @@ h AS (
     h.timestamp_utc,
     COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
     COALESCE(h.web_oa_dp, wx.wx_web_oa_dp) AS web_oa_dp,
-    CASE WHEN h.oa_damper_pct IS NULL THEN NULL WHEN h.oa_damper_pct > 1.0 THEN h.oa_damper_pct / 100.0 ELSE h.oa_damper_pct END AS oa_d,
-    CASE WHEN h.clg_valve_pct IS NULL THEN NULL WHEN h.clg_valve_pct > 1.0 THEN h.clg_valve_pct / 100.0 ELSE h.clg_valve_pct END AS clg,
+    h.oa_damper_pct AS oa_d,
+    h.clg_valve_pct AS clg,
     h.fan_cmd,
     h.fan_status,
     CASE
       WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN h.fan_cmd > 1.0 THEN h.fan_cmd / 100.0 ELSE h.fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history h
@@ -1203,10 +1185,10 @@ WITH h AS (
     mat,
     rat,
     oa_t,
-    COALESCE(CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) AS fan,
+    COALESCE(COALESCE(fan_cmd, 0.0), 0.0) AS fan,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -1343,12 +1325,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     preheat_leave_t, sat_sp, oa_t,
-    CASE WHEN htg_valve_pct IS NULL THEN 0.0 WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
+    COALESCE(htg_valve_pct, 0.0) AS htg,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -1492,12 +1474,12 @@ h AS (
     h.equipment_id,
     h.timestamp_utc,
     COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
-    CASE WHEN h.oa_damper_pct IS NULL THEN NULL WHEN h.oa_damper_pct > 1.0 THEN h.oa_damper_pct / 100.0 ELSE h.oa_damper_pct END AS oa_d,
+    h.oa_damper_pct AS oa_d,
     h.fan_cmd,
     h.fan_status,
     CASE
       WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN h.fan_cmd > 1.0 THEN h.fan_cmd / 100.0 ELSE h.fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history h
@@ -1646,13 +1628,13 @@ h AS (
     h.timestamp_utc,
     COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
     COALESCE(h.web_oa_dp, wx.wx_web_oa_dp) AS web_oa_dp,
-    CASE WHEN h.oa_damper_pct IS NULL THEN NULL WHEN h.oa_damper_pct > 1.0 THEN h.oa_damper_pct / 100.0 ELSE h.oa_damper_pct END AS oa_d,
-    CASE WHEN h.clg_valve_pct IS NULL THEN NULL WHEN h.clg_valve_pct > 1.0 THEN h.clg_valve_pct / 100.0 ELSE h.clg_valve_pct END AS clg,
+    h.oa_damper_pct AS oa_d,
+    h.clg_valve_pct AS clg,
     h.fan_cmd,
     h.fan_status,
     CASE
       WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN h.fan_cmd > 1.0 THEN h.fan_cmd / 100.0 ELSE h.fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history h
@@ -1788,11 +1770,11 @@ WITH h AS (
     timestamp_utc,
     duct_static,
     duct_static_sp,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd,
+    fan_cmd AS fan_cmd,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on,
     -- Match pandas cookbook `_fan()`: prefer fan_status for the "full fan" gate.
@@ -1800,7 +1782,7 @@ WITH h AS (
     -- cmd-only gating under-counts (1h vs 40h).
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
-      ELSE CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END
+      ELSE fan_cmd
     END AS fan_for_hi
   FROM history
 ),
@@ -1966,14 +1948,14 @@ WITH h AS (
     timestamp_utc,
     mat,
     oa_t,
-    COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
+    COALESCE(oa_damper_pct, 0.0) AS oa_damper_pct,
+    COALESCE(clg_valve_pct, 0.0) AS clg_valve_pct,
     fan_cmd,
     fan_status,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -2142,14 +2124,14 @@ WITH h AS (
     timestamp_utc,
     oa_t,
     sat_sp,
-    COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
+    COALESCE(oa_damper_pct, 0.0) AS oa_damper_pct,
+    COALESCE(clg_valve_pct, 0.0) AS clg_valve_pct,
     fan_cmd,
     fan_status,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -2320,14 +2302,14 @@ WITH h AS (
     timestamp_utc,
     sat,
     mat,
-    COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
+    COALESCE(oa_damper_pct, 0.0) AS oa_damper_pct,
+    COALESCE(clg_valve_pct, 0.0) AS clg_valve_pct,
     fan_cmd,
     fan_status,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -2495,14 +2477,14 @@ WITH h AS (
     timestamp_utc,
     sat,
     sat_sp,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
-    COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
+    COALESCE(clg_valve_pct, 0.0) AS clg_valve_pct,
+    COALESCE(oa_damper_pct, 0.0) AS oa_damper_pct,
     fan_cmd,
     fan_status,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -2677,13 +2659,13 @@ WITH h AS (
     timestamp_utc,
     COALESCE(cooling_coil_entering_temp, mat) AS enter_t,
     COALESCE(cooling_coil_leaving_temp, sat) AS leave_t,
-    CASE WHEN clg_valve_pct IS NULL THEN 0.0 WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN oa_damper_pct IS NULL THEN 0.0 WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
-    CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    COALESCE(clg_valve_pct, 0.0) AS clg,
+    COALESCE(oa_damper_pct, 0.0) AS oa_d,
+    COALESCE(fan_cmd, 0.0) AS fan,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -2860,13 +2842,13 @@ WITH h AS (
     timestamp_utc,
     COALESCE(heating_coil_entering_temp, mat) AS enter_t,
     COALESCE(heating_coil_leaving_temp, sat) AS leave_t,
-    CASE WHEN htg_valve_pct IS NULL THEN 0.0 WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN 0.0 WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    COALESCE(htg_valve_pct, 0.0) AS htg,
+    COALESCE(clg_valve_pct, 0.0) AS clg,
+    COALESCE(fan_cmd, 0.0) AS fan,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -3033,11 +3015,11 @@ WITH h AS (
     mat,
     oa_t,
     rat,
-    COALESCE(CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) AS fan,
+    COALESCE(COALESCE(fan_cmd, 0.0), 0.0) AS fan,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -3201,11 +3183,11 @@ WITH h AS (
     mat,
     oa_t,
     rat,
-    COALESCE(CASE WHEN fan_cmd IS NULL THEN 0.0 WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END, 0.0) AS fan,
+    COALESCE(COALESCE(fan_cmd, 0.0), 0.0) AS fan,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -3354,7 +3336,7 @@ PID hunting (operating-state oscillation)
 **Output columns**: `equipment_id`, `fault_hours`, `covered_hours`, `fault_pct`
 
 <details markdown="1">
-<summary>SQL at defaults (162 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/fc4_os_hunting.sql">template file</a></summary>
+<summary>SQL at defaults (161 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/fc4_os_hunting.sql">template file</a></summary>
 
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
@@ -3369,18 +3351,17 @@ WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
+    oa_damper_pct AS oa_d,
+    clg_valve_pct AS clg,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
       WHEN fan_cmd IS NULL THEN NULL
-      WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0
       ELSE fan_cmd
     END AS fan,
     CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -3572,12 +3553,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     sat, mat,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    htg_valve_pct AS htg,
+    fan_cmd AS fan,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -3743,11 +3724,11 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     mat, rat, oa_t, vav_total_flow,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    fan_cmd AS fan,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -3903,7 +3884,7 @@ SAT low while heating at full
 **Output columns**: `equipment_id`, `fault_hours`, `covered_hours`, `fault_pct`
 
 <details markdown="1">
-<summary>SQL at defaults (120 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/fc7_sat_low_heating.sql">template file</a></summary>
+<summary>SQL at defaults (119 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/fc7_sat_low_heating.sql">template file</a></summary>
 
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
@@ -3919,7 +3900,6 @@ WITH h AS (
       CASE
         WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
         WHEN fan_cmd IS NULL THEN 0.0
-        WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0
         ELSE fan_cmd
       END,
       0.0
@@ -3927,10 +3907,10 @@ WITH h AS (
     CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on,
-    COALESCE(CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END, 0.0) AS htg_valve_pct
+    COALESCE(htg_valve_pct, 0.0) AS htg_valve_pct
   FROM history
 ),
 base AS (
@@ -4081,14 +4061,14 @@ WITH h AS (
     timestamp_utc,
     sat,
     mat,
-    COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
+    COALESCE(oa_damper_pct, 0.0) AS oa_damper_pct,
+    COALESCE(clg_valve_pct, 0.0) AS clg_valve_pct,
     fan_cmd,
     fan_status,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -4257,14 +4237,14 @@ WITH h AS (
     timestamp_utc,
     oa_t,
     sat_sp,
-    COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
+    COALESCE(oa_damper_pct, 0.0) AS oa_damper_pct,
+    COALESCE(clg_valve_pct, 0.0) AS clg_valve_pct,
     fan_cmd,
     fan_status,
         CASE
       WHEN 1 < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -4418,7 +4398,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     web_oa_t,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
+    clg_valve_pct AS clg,
     CASE WHEN chiller_status IS NULL THEN NULL WHEN chiller_status > 0.05 THEN 1.0 ELSE 0.0 END AS chill_on
   FROM history
 ),
@@ -4551,10 +4531,10 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     mat, rat, oa_t,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    fan_cmd AS fan,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -4695,7 +4675,7 @@ WITH h AS (
     oa_t,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -4962,7 +4942,7 @@ WITH h AS (
     fan_status,
     pump_status,
     chiller_status,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan
+    fan_cmd AS fan
   FROM history
 ),
 proof AS (
@@ -5123,7 +5103,7 @@ WITH base AS (
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -5246,12 +5226,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     sat, sat_sp, mat,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
+    clg_valve_pct AS clg,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -5670,12 +5650,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     oa_t, zone_flow,
-    CASE WHEN reheat_valve_pct IS NULL THEN NULL WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct / 100.0 ELSE reheat_valve_pct END AS rh,
+    reheat_valve_pct AS rh,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -5813,12 +5793,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     zone_flow,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dmp,
+    damper_pct AS dmp,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       WHEN zone_flow IS NOT NULL AND zone_flow > 11.798675 THEN 1
       ELSE 1
     END AS fan_on
@@ -5974,12 +5954,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     zone_flow,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dmp,
+    damper_pct AS dmp,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -6100,7 +6080,7 @@ Reheat when cooling available
 **Output columns**: `equipment_id`, `fault_hours`, `covered_hours`, `fault_pct`
 
 <details markdown="1">
-<summary>SQL at defaults (94 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/vav6_reheat_free_cool.sql">template file</a></summary>
+<summary>SQL at defaults (92 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/vav6_reheat_free_cool.sql">template file</a></summary>
 
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
@@ -6112,9 +6092,7 @@ WITH h AS (
     timestamp_utc,
     oa_t,
     clg_available,
-    CASE WHEN reheat_valve_pct IS NULL THEN NULL
-         WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct / 100.0
-         ELSE reheat_valve_pct END AS rh
+    reheat_valve_pct AS rh
   FROM history
 ),
 base AS (
@@ -6253,7 +6231,7 @@ WITH h AS (
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       WHEN zone_flow IS NOT NULL AND zone_flow > 11.798675 THEN 1
       ELSE 1
     END AS fan_on
@@ -6413,7 +6391,7 @@ WITH h AS (
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -6549,12 +6527,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     vav_discharge_t, vav_inlet_t, zone_flow,
-    CASE WHEN reheat_valve_pct IS NULL THEN NULL WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct / 100.0 ELSE reheat_valve_pct END AS rh,
+    reheat_valve_pct AS rh,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 
@@ -6690,13 +6668,13 @@ Fan-on cooling coil under-delivery
 -- fcu_clg_coil.sql — first-class FCU screening rule
 WITH normalized AS (
   SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN damper_cmd IS NULL THEN NULL WHEN damper_cmd > 1.0 THEN damper_cmd / 100.0 ELSE damper_cmd END AS dcmd,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dpos,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
+    damper_cmd AS dcmd,
+    damper_pct AS dpos,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.10 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
@@ -6801,13 +6779,13 @@ High valid CO2 with low outdoor-air damper command
 -- fcu_co2_damper.sql — first-class FCU screening rule
 WITH normalized AS (
   SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN damper_cmd IS NULL THEN NULL WHEN damper_cmd > 1.0 THEN damper_cmd / 100.0 ELSE damper_cmd END AS dcmd,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dpos,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
+    damper_cmd AS dcmd,
+    damper_pct AS dpos,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.10 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
@@ -6912,13 +6890,13 @@ Damper feedback more than 15 points below command
 -- fcu_damper_pos.sql — first-class FCU screening rule
 WITH normalized AS (
   SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN damper_cmd IS NULL THEN NULL WHEN damper_cmd > 1.0 THEN damper_cmd / 100.0 ELSE damper_cmd END AS dcmd,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dpos,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
+    damper_cmd AS dcmd,
+    damper_pct AS dpos,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.10 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
@@ -7098,13 +7076,13 @@ Fan-on heating coil under-delivery
 -- fcu_htg_coil.sql — first-class FCU screening rule
 WITH normalized AS (
   SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN damper_cmd IS NULL THEN NULL WHEN damper_cmd > 1.0 THEN damper_cmd / 100.0 ELSE damper_cmd END AS dcmd,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dpos,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
+    damper_cmd AS dcmd,
+    damper_pct AS dpos,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.10 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
@@ -7208,8 +7186,8 @@ WITH modes AS (
     equipment_id,
     timestamp_utc,
     CASE
-      WHEN clg_valve_pct IS NOT NULL AND (CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END) > 0.1 THEN -1
-      WHEN htg_valve_pct IS NOT NULL AND (CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END) > 0.1 THEN 1
+      WHEN clg_valve_pct IS NOT NULL AND clg_valve_pct > 0.1 THEN -1
+      WHEN htg_valve_pct IS NOT NULL AND htg_valve_pct > 0.1 THEN 1
       ELSE 0
     END AS mode
   FROM history
@@ -7353,7 +7331,7 @@ FROM coverage;
 
 Cooling valve passing with both commands shut
 
-**Priority** P1 · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · **Parity** [known divergence](parity.html#fcu-valve-pass-clg) · [pandas twin](pandas-cookbook.html#fcu-valve-pass-clg)
+**Priority** P1 · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · **Parity** [match](parity.html#fcu-valve-pass-clg) · [pandas twin](pandas-cookbook.html#fcu-valve-pass-clg)
 
 **Inputs**
 
@@ -7387,13 +7365,13 @@ Cooling valve passing with both commands shut
 -- fcu_valve_pass_clg.sql — first-class FCU screening rule
 WITH normalized AS (
   SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN damper_cmd IS NULL THEN NULL WHEN damper_cmd > 1.0 THEN damper_cmd / 100.0 ELSE damper_cmd END AS dcmd,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dpos,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
+    damper_cmd AS dcmd,
+    damper_pct AS dpos,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.10 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
@@ -7497,13 +7475,13 @@ Heating valve passing with both commands shut
 -- fcu_valve_pass_htg.sql — first-class FCU screening rule
 WITH normalized AS (
   SELECT equipment_id, timestamp_utc, sat, zone_t, zone_co2,
-    CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END AS htg,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
-    CASE WHEN damper_cmd IS NULL THEN NULL WHEN damper_cmd > 1.0 THEN damper_cmd / 100.0 ELSE damper_cmd END AS dcmd,
-    CASE WHEN damper_pct IS NULL THEN NULL WHEN damper_pct > 1.0 THEN damper_pct / 100.0 ELSE damper_pct END AS dpos,
+    htg_valve_pct AS htg,
+    clg_valve_pct AS clg,
+    damper_cmd AS dcmd,
+    damper_pct AS dpos,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.10 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.10 THEN 1 ELSE 0 END
       ELSE 0
     END AS fan_on
   FROM history
@@ -7623,7 +7601,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     chw_supply_t, chw_return_t,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump,
+    chw_pump_cmd AS pump,
     chiller_status,
     chiller_current,
     chiller_amps,
@@ -7737,7 +7715,7 @@ GROUP BY equipment_id;
 
 DP below SP at max pump speed
 
-**Priority** P0 · **Equipment** `chiller`, `chwPlant` · **Confirm** 5 min · **Parity** [known divergence](parity.html#chw-2) · [pandas twin](pandas-cookbook.html#chw-2)
+**Priority** P0 · **Equipment** `chiller`, `chwPlant` · **Confirm** 5 min · **Parity** [match](parity.html#chw-2) · [pandas twin](pandas-cookbook.html#chw-2)
 
 **Inputs**
 
@@ -7777,7 +7755,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     chw_dp, chw_dp_sp,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump,
+    chw_pump_cmd AS pump,
     pump_status, chiller_status, chw_flow
   FROM history
 ),
@@ -7921,7 +7899,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     chw_supply_t, chw_supply_sp,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump,
+    chw_pump_cmd AS pump,
     pump_status, chiller_status, chw_flow
   FROM history
 ),
@@ -8063,7 +8041,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     chw_flow,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump,
+    chw_pump_cmd AS pump,
     pump_status, chiller_status
   FROM history
 ),
@@ -8210,7 +8188,7 @@ WITH h AS (
     chiller_status,
     chiller_cmd,
     chw_pump_status,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump_cmd,
+    chw_pump_cmd AS pump_cmd,
     building_zone_load_satisfied,
     building_ahu_load_satisfied,
     CASE
@@ -8375,7 +8353,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     cw_supply_t, web_wb_t,
-    CASE WHEN tower_fan_cmd IS NULL THEN NULL WHEN tower_fan_cmd > 1.0 THEN tower_fan_cmd / 100.0 ELSE tower_fan_cmd END AS fan,
+    tower_fan_cmd AS fan,
     pump_status,
     chiller_status,
     chw_flow,
@@ -8384,7 +8362,7 @@ WITH h AS (
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 0
     END AS proof_on
 
@@ -8522,7 +8500,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     cw_supply_t, web_wb_t,
-    CASE WHEN tower_fan_cmd IS NULL THEN NULL WHEN tower_fan_cmd > 1.0 THEN tower_fan_cmd / 100.0 ELSE tower_fan_cmd END AS fan,
+    tower_fan_cmd AS fan,
     pump_status,
     chiller_status,
     chw_flow,
@@ -8531,7 +8509,7 @@ WITH h AS (
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 0
     END AS proof_on
 
@@ -8676,7 +8654,7 @@ WITH h AS (
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 0
     END AS proof_on
   FROM history
@@ -8819,7 +8797,7 @@ WITH h AS (
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 0
     END AS proof_on
   FROM history
@@ -8968,7 +8946,7 @@ WITH h AS (
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 0
     END AS proof_on
   FROM history
@@ -9107,13 +9085,13 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     sat, zone_t,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    fan_cmd AS fan,
     compressor_status,
     fan_status,
     CASE
       WHEN compressor_status IS NOT NULL THEN CASE WHEN compressor_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS proof_on
 
@@ -9435,7 +9413,7 @@ Suspected control-output hunting
 **Output columns**: `equipment_id`, `fault_hours`, `covered_hours`, `fault_pct`
 
 <details markdown="1">
-<summary>SQL at defaults (185 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/pid_hunt_1.sql">template file</a></summary>
+<summary>SQL at defaults (187 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/pid_hunt_1.sql">template file</a></summary>
 
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
@@ -9446,38 +9424,40 @@ Suspected control-output hunting
 -- Fault hours integrate eligible forward deltas and do not add a phantom
 -- interval after the last sample. 12 / 11
 -- are derived from WINDOW_HOURS + POLL_SECONDS (literal ROWS bounds).
+-- Inputs are fractions 0-1 (input_contract.sql); the control output is converted to percent points (x 100)
+-- exactly here, once, because the *_PCT parameters (span, deadband, total variation) are percent points.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CASE
       WHEN oa_damper_pct IS NOT NULL THEN
-        CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct ELSE oa_damper_pct * 100.0 END
+        oa_damper_pct * 100.0
       WHEN clg_valve_pct IS NOT NULL THEN
-        CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct ELSE clg_valve_pct * 100.0 END
+        clg_valve_pct * 100.0
       WHEN htg_valve_pct IS NOT NULL THEN
-        CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct ELSE htg_valve_pct * 100.0 END
+        htg_valve_pct * 100.0
       WHEN damper_pct IS NOT NULL THEN
-        CASE WHEN damper_pct > 1.0 THEN damper_pct ELSE damper_pct * 100.0 END
+        damper_pct * 100.0
       ELSE NULL
     END AS out_pct,
     LAG(
       CASE
         WHEN oa_damper_pct IS NOT NULL THEN
-          CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct ELSE oa_damper_pct * 100.0 END
+          oa_damper_pct * 100.0
         WHEN clg_valve_pct IS NOT NULL THEN
-          CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct ELSE clg_valve_pct * 100.0 END
+          clg_valve_pct * 100.0
         WHEN htg_valve_pct IS NOT NULL THEN
-          CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct ELSE htg_valve_pct * 100.0 END
+          htg_valve_pct * 100.0
         WHEN damper_pct IS NOT NULL THEN
-          CASE WHEN damper_pct > 1.0 THEN damper_pct ELSE damper_pct * 100.0 END
+          damper_pct * 100.0
         ELSE NULL
       END
     ) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_out,
     COALESCE(loop_enabled, 1.0) AS loop_on,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history
@@ -9746,11 +9726,11 @@ h AS (
     oa_h, ra_h, zone_rh, ma_h, sa_h,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       -- VAV airflow proxy (operational_gate.resolve_fan_running): 50 cfm = 23.597350 L/s SI.
       WHEN zone_flow IS NOT NULL THEN CASE WHEN zone_flow > 23.597350 THEN 1 ELSE 0 END
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS energized
@@ -10023,11 +10003,11 @@ h AS (
     fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status, zone_flow,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       -- VAV airflow proxy (operational_gate.resolve_fan_running): 50 cfm = 23.597350 L/s SI.
       WHEN zone_flow IS NOT NULL THEN CASE WHEN zone_flow > 23.597350 THEN 1 ELSE 0 END
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS energized
@@ -10373,11 +10353,11 @@ WITH h AS (
     fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status, zone_flow,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       -- VAV airflow proxy (operational_gate.resolve_fan_running): 50 cfm = 23.597350 L/s SI.
       WHEN zone_flow IS NOT NULL THEN CASE WHEN zone_flow > 23.597350 THEN 1 ELSE 0 END
       WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END) > 0.05 THEN 1 ELSE 0 END
+      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       ELSE 1
     END AS energized
@@ -11130,7 +11110,7 @@ WITH ordered AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd,
+    fan_cmd AS fan_cmd,
     EXTRACT(EPOCH FROM (
       LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
       - timestamp_utc
@@ -11217,7 +11197,7 @@ held AS (
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN zone_t < 20.0 OR zone_t > 24.444444 THEN 1 ELSE 0 END) AS fault_samples,
+  SUM(CASE WHEN zone_t < 20 OR zone_t > 24.444444 THEN 1 ELSE 0 END) AS fault_samples,
   SUM(CASE
     WHEN zone_t < 20 OR zone_t > 24.444444 THEN held_seconds
     ELSE 0.0

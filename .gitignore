@@ -1,4 +1,4 @@
-# Open-FDD 5 - NF app repo. The 4.x Rust/central stack lives at tag v4.0.11-central (branch release/4.x).
+# Open-FDD 5 - NF app repo. The 4.x Rust/central stack lives at tag v4.0.11-central.
 
 # ---- secrets: never commit ----------------------------------------------------------
 .env

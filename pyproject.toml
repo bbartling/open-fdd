@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "5.0.0"
+version = "5.0.1"
 description = "Open-FDD for AI agents: RCx/FDD reports from mapped roles (local CSV, self-hosted local Open-FDD, or a future vendor API), plus ECM engineering workbooks. Production FDD is the Open-FDD Normal Framework app (SQL pack)."
 readme = "README.md"
 license = { text = "MIT" }

@@ -7,7 +7,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     web_oa_t,
-    CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END AS clg,
+    clg_valve_pct AS clg,
     CASE WHEN chiller_status IS NULL THEN NULL WHEN chiller_status > 0.05 THEN 1.0 ELSE 0.0 END AS chill_on
   FROM history
 ),

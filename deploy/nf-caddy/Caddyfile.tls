@@ -1,4 +1,4 @@
-# TLS variant of the front door (HTTPS only). Same routes as Caddyfile (routes.caddy).
+# TLS variant of the front door (HTTPS only): the production profile. Same routes as Caddyfile (routes.caddy).
 # Mount this file as /etc/caddy/Caddyfile plus the certs (see docker-compose.yml).
 #
 # NF listens on loopback (plain HTTP); this is the only way in from the LAN. The portal

@@ -21,15 +21,17 @@ ROOT = h.ROOT
 # problem (their threshold equations were checked in SI: same constants on both sides); they differ by how the
 # operational gate / equipment proof / weather join / fan proof is defined. Keep the set exact: a fix removes an
 # entry, a regression adds one, and either way this test says so. Reasons are grouped by cause.
+# #1541 (one declared scale per column: fractions in, no magnitude guess on either side) removed AHU-SIMUL, CHW-2 and
+# FCU-VALVE-PASS-CLG: their old differences were the SQL element-wise vs pandas series-level percent guess.
 _EDGE = ("SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: "
          "differs by a few samples at fault edges")
 _PROOF = "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve"
 _WX = "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
 _GATE = "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
 KNOWN_DIVERGENT = {
-    "AHU-SATDEV": _GATE, "AHU-SIMUL": _EDGE, "CHW-1": _EDGE, "CHW-2": _GATE, "CHW-NOLOAD-1": _PROOF,
+    "AHU-SATDEV": _GATE, "CHW-1": _EDGE, "CHW-NOLOAD-1": _PROOF,
     "ECON-3": _WX, "ECON-4": _EDGE, "ECON-7": _WX, "FC13-SAT-HIGH": _GATE, "FC14": _GATE, "FC5": _EDGE, "FC6": _GATE, "FC7": _GATE,
-    "FCU-HTG-COIL": _GATE, "FCU-MODE-CYCLE": _EDGE, "FCU-VALVE-PASS-CLG": _EDGE, "HP-1": _GATE,
+    "FCU-HTG-COIL": _GATE, "FCU-MODE-CYCLE": _EDGE, "HP-1": _GATE,
     "MECH-OAT-1": _PROOF, "OA-1": _EDGE, "OAT-METEO": _WX,
     "SV-RATE": "documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances",
     "TRIM-1": _GATE, "TRIM-4": "pandas skips (missing roles: reset requests); SQL treats absent requests as zero",
@@ -61,6 +63,24 @@ def test_dataset_is_si(data):
     assert len(pg) == 77
 
 
+def test_dataset_follows_the_declared_scales(data):
+    """Issue #1541: both oracles are fed fractions 0-1 for command/position roles and 0/1 for statuses."""
+    scales = json.loads((ROOT / "sql/fdd/role_scales.json").read_text(encoding="utf-8"))["roles"]
+    seen = {"fraction": 0, "boolean": 0}
+    for equip, cols in data["history"].items():
+        for role, vals in cols.items():
+            sc = scales.get(role)
+            nums = [v for v in vals if isinstance(v, (int, float))] if sc in seen else []
+            if not nums:
+                continue
+            seen[sc] += 1
+            lo, hi = min(nums), max(nums)
+            assert 0.0 <= lo and hi <= 1.0, (equip, role, sc, lo, hi)
+            if sc == "boolean":
+                assert set(nums) <= {0, 1, 0.0, 1.0}, (equip, role)
+    assert seen["fraction"] >= 20 and seen["boolean"] >= 10, seen
+
+
 def test_sql_engines_agree(data):
     pg, lite = data["results"]["pglite"], data["results"]["sqlite"]
     bad = []
@@ -87,7 +107,7 @@ def test_pandas_equals_sql_in_si(report):
     assert diverged == set(KNOWN_DIVERGENT), (
         f"newly diverging: {sorted(diverged - set(KNOWN_DIVERGENT))}; now matching (drop from KNOWN_DIVERGENT): "
         f"{sorted(set(KNOWN_DIVERGENT) - diverged)}")
-    assert len(matched) >= 46, sorted(matched)
+    assert len(matched) >= 49, sorted(matched)
     # the matched set must actually trip faults, otherwise equality proves nothing
     tripped = [r for r in matched if any(v["sql"] > 0 for v in report["compared"][r].values())]
     assert len(tripped) >= 20, tripped

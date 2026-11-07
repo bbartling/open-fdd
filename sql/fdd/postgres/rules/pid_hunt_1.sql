@@ -6,38 +6,40 @@
 -- Fault hours integrate eligible forward deltas and do not add a phantom
 -- interval after the last sample. {{WINDOW_ROWS}} / {{WINDOW_ROWS_PRECEDING}}
 -- are derived from WINDOW_HOURS + POLL_SECONDS (literal ROWS bounds).
+-- Inputs are fractions 0-1 (input_contract.sql); the control output is converted to percent points (x 100)
+-- exactly here, once, because the *_PCT parameters (span, deadband, total variation) are percent points.
 WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
     CASE
       WHEN oa_damper_pct IS NOT NULL THEN
-        CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct ELSE oa_damper_pct * 100.0 END
+        oa_damper_pct * 100.0
       WHEN clg_valve_pct IS NOT NULL THEN
-        CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct ELSE clg_valve_pct * 100.0 END
+        clg_valve_pct * 100.0
       WHEN htg_valve_pct IS NOT NULL THEN
-        CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct ELSE htg_valve_pct * 100.0 END
+        htg_valve_pct * 100.0
       WHEN damper_pct IS NOT NULL THEN
-        CASE WHEN damper_pct > 1.0 THEN damper_pct ELSE damper_pct * 100.0 END
+        damper_pct * 100.0
       ELSE NULL
     END AS out_pct,
     LAG(
       CASE
         WHEN oa_damper_pct IS NOT NULL THEN
-          CASE WHEN oa_damper_pct > 1.0 THEN oa_damper_pct ELSE oa_damper_pct * 100.0 END
+          oa_damper_pct * 100.0
         WHEN clg_valve_pct IS NOT NULL THEN
-          CASE WHEN clg_valve_pct > 1.0 THEN clg_valve_pct ELSE clg_valve_pct * 100.0 END
+          clg_valve_pct * 100.0
         WHEN htg_valve_pct IS NOT NULL THEN
-          CASE WHEN htg_valve_pct > 1.0 THEN htg_valve_pct ELSE htg_valve_pct * 100.0 END
+          htg_valve_pct * 100.0
         WHEN damper_pct IS NOT NULL THEN
-          CASE WHEN damper_pct > 1.0 THEN damper_pct ELSE damper_pct * 100.0 END
+          damper_pct * 100.0
         ELSE NULL
       END
     ) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc) AS prev_out,
     COALESCE(loop_enabled, 1.0) AS loop_on,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history

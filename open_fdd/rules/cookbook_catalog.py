@@ -40,19 +40,20 @@ from open_fdd.rules.sensor_sweep_catalog import (
 def norm_cmd(
     s: pd.Series | None,
     *,
-    representation: str = "auto",
+    representation: str = "fraction",
 ) -> pd.Series:
-    """Normalize a command/position to fraction 0–1.
+    """Command/position as a fraction 0–1 (issue #1541: one declared scale per column).
 
-    Prefer ``representation='percent'|'fraction'`` when the point unit is known.
-    Default ``auto`` decides once per series (max > 1 → percent). The old
-    element-wise ``value <= 1`` passthrough is forbidden (1% → 100%).
+    The input contract (sql/fdd/role_scales.json) says every command/position role arrives as a fraction 0–1,
+    so the default is a plain numeric pass-through: there is NO magnitude guess (a stored 1 is 100 %, a 0.01 is
+    1 %). Pass ``representation='percent'`` only for a source that is explicitly declared 0–100; ``auto`` (a
+    series-level magnitude guess) is not offered by the rules any more.
     """
     from open_fdd.units.convert import norm_command
 
-    if representation not in {"percent", "fraction", "auto"}:
+    if representation not in {"percent", "fraction"}:
         raise ValueError(
-            f"norm_cmd representation must be percent|fraction|auto, got {representation!r}"
+            f"norm_cmd representation must be percent|fraction, got {representation!r}"
         )
     return norm_command(s, representation=representation)  # type: ignore[arg-type]
 

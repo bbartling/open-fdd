@@ -6,6 +6,7 @@ Inputs (all in git, no NF needed):
   sql/fdd/role_map.json            role -> Haystack-style name (sat -> discharge-air-temp)
   nf-app/rules/nf_classes.json     NF ontology class names (from /api/v1/equipment/classes)
   nf-app/rules/role_overrides.json hand mapping for roles NF names differently
+  sql/fdd/role_scales.json         role -> declared scale (fraction | boolean | percent_rh | text | si:<unit>)
 
 For every role it records the NF classes that fill it and a Haystack marker set used when a
 point has no class. The app (static/fdd.js) and the FDD hook match points with exactly this file.
@@ -51,6 +52,7 @@ def build() -> dict:
     if unnamed:
         raise SystemExit(f"role_overrides.json roles not in role_map.json need a \"name\": {unnamed}")
 
+    scales = json.loads((ROOT / "sql/fdd/role_scales.json").read_text(encoding="utf-8"))["roles"]
     roles = {}
     for role, name in sorted({**role_map, **{r: o["name"] for r, o in overrides.items() if r not in role_map}}.items()):
         if role in overrides:
@@ -58,6 +60,15 @@ def build() -> dict:
         else:
             found = [c for c in (name, f"{name}-sensor", f"{name}-cmd", f"{name}-status") if c in classes]
             roles[role] = {"name": name, "classes": found, "markers": derived_markers(name)}
+
+    no_scale = sorted(set(roles) - set(scales))
+    extra = sorted(set(scales) - set(roles))
+    if no_scale or extra:
+        raise SystemExit(f"sql/fdd/role_scales.json must declare exactly the catalog roles: missing {no_scale}, unknown {extra}")
+    for role, scale in scales.items():
+        if not (scale in ("fraction", "boolean", "percent_rh", "text") or scale.startswith("si:")):
+            raise SystemExit(f"role_scales.json: {role} has an invalid scale {scale!r}")
+        roles[role]["scale"] = scale
 
     rules = []
     for r in registry["rules"]:
@@ -80,7 +91,7 @@ def build() -> dict:
         })
     return {
         "_generated_by": "scripts/nf/build_rule_catalog.py",
-        "source": ["sql/fdd/registry.yaml", "sql/fdd/role_map.json", "nf-app/rules/role_overrides.json"],
+        "source": ["sql/fdd/registry.yaml", "sql/fdd/role_map.json", "sql/fdd/role_scales.json", "nf-app/rules/role_overrides.json"],
         "equipment_kinds": kinds,
         "roles": roles,
         "rules": rules,

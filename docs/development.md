@@ -99,6 +99,6 @@ Not built; each is small enough for its own slice.
 ## Conventions
 
 - Small, reviewable PR slices; one concern each.
-- No inline scripts or styles, no CDN at runtime (strict CSP, see [Security](security.html)).
+- No inline scripts or styles; everything is self-hosted except the Clerk login script on the Normal Online portal path (pinned version; see [Security](security.html)).
 - Vendored libraries are pinned and never younger than two weeks (see the table in `nf-app/README.md`).
 - Never commit secrets: env files live outside git.

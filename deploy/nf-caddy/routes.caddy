@@ -13,6 +13,7 @@
 	method GET HEAD
 	path /api/v1/apps/static/* /favicon.ico
 }
+@favicon path /favicon.ico
 # Read-only API the pages use: history, platform info, BACnet server reads.
 @readGet {
 	method GET HEAD
@@ -29,6 +30,43 @@
 @liveStream {
 	method GET
 	path /api/v1/point/updates/data
+}
+
+# Access log: one JSON line per request, rolled by size, secrets redacted.
+#   - Authorization / Cookie / Set-Cookie headers and token-like query parameters never reach the file.
+#   - Bounded: 5 MiB per file, 5 files kept, nothing older than 30 days (roll_*), on the caddy_logs volume.
+#   - Not logged at all (log_skip): /favicon.ico and the live stream (one line per ~15 s per open tab,
+#     it would push everything useful out of the 5 files).
+# Everything that needs a decision (who got in, what was written, which status) is in the file.
+log_skip @favicon
+log_skip @liveStream
+log {
+	output file /var/log/caddy/access.log {
+		roll_size 5MiB
+		roll_keep 5
+		roll_keep_for 720h
+	}
+	format filter {
+		wrap json
+		request>headers>Authorization replace REDACTED
+		request>headers>Proxy-Authorization replace REDACTED
+		request>headers>Cookie replace REDACTED
+		resp_headers>Set-Cookie replace REDACTED
+		request>uri query {
+			replace token REDACTED
+			replace access_token REDACTED
+			replace id_token REDACTED
+			replace refresh_token REDACTED
+			replace jwt REDACTED
+			replace api_key REDACTED
+			replace apikey REDACTED
+			replace client_secret REDACTED
+			replace secret REDACTED
+			replace password REDACTED
+			replace sig REDACTED
+			replace code REDACTED
+		}
+	}
 }
 
 # Security headers on every response (ZAP baseline: clickjacking, MIME sniffing, permissions).
@@ -50,8 +88,14 @@ encode @compress gzip
 handle @liveStream {
 	reverse_proxy {$NF_UPSTREAM} {
 		flush_interval -1
-		# NF's Envoy ends a quiet stream after ~15 s with a 504; send 204 instead so
-		# browsers don't log a red error for every routine reconnect.
+		# Why this rewrite exists: NF's Envoy closes a push stream that has been quiet for ~15 s
+		# ("upstream request timeout", HTTP 504). That is Envoy's normal idle close, not an outage:
+		# nf.js reopens the stream at once. Without the rewrite every such reconnect shows up as a
+		# red 504 in the browser console and the network tab. ONLY upstream 504s on this one route
+		# are rewritten (to an empty 204), so an Envoy 504 for any other reason on this route is
+		# hidden too; a real outage is not hidden by it: NF down or Caddy
+		# unreachable gives connection errors (502 from Caddy, refused/reset), and the page
+		# reports the failed reconnects ("live" turns off and backs off 2 s .. 60 s).
 		@quiet status 504
 		handle_response @quiet {
 			respond 204

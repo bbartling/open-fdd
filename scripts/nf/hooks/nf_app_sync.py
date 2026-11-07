@@ -15,10 +15,14 @@ auth scopes), a map of NF file path -> repo file, and the hook definitions
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --skip-hooks   # files only
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --hook fdd     # files + only the fdd hook
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M   # run every hook once now (StartHook)
+    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M --hook fdd --wait 900   # custom wait (seconds)
+    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M --hook fdd --resume 12345   # wait on a run already started
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV pull   $M   # copy NF files back over the repo files
     python3 scripts/nf/hooks/nf_app_sync.py --env $ENV diff   $M   # show NF vs repo differences
 
-``run`` does not touch the schedule. Never prints passwords or the app's API
+``run`` does not touch the schedule. It waits for each run up to the hook's ``invokeTimeout`` + 60 s
+(``--wait SECONDS`` overrides). If the wait runs out the run is reported as still running with its pid
+and the exit status is 3 (1 = a run failed); the hook is never started a second time: use ``--resume PID``. Never prints passwords or the app's API
 client secret (GetApplications returns it; this script drops it).
 """
 
@@ -219,31 +223,86 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
     return 0
 
 
-def cmd_run(c: Console, m: dict, only_hooks: list[str] | None = None) -> int:
+ACTIVE_STATES = ("STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED")
+EXIT_FAILED = 1
+EXIT_STILL_RUNNING = 3  # the wait ran out; the run itself was NOT stopped or restarted
+POLL_SECONDS = 2
+WAIT_GRACE_SECONDS = 60  # added to the hook's invokeTimeout for the default wait
+DEFAULT_INVOKE_TIMEOUT = 300.0  # when a hook definition has no invokeTimeout
+
+
+def parse_duration(text, default: float = DEFAULT_INVOKE_TIMEOUT) -> float:
+    """Seconds from an NF duration such as "300s", "90s", "5m", "1h" or "1.5s"; default if unparseable."""
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)?\s*", str(text or ""))
+    if not m:
+        return default
+    return float(m.group(1)) * {"ms": 0.001, None: 1.0, "s": 1.0, "m": 60.0, "h": 3600.0}[m.group(2)]
+
+
+def default_wait(hook: dict) -> float:
+    """How long `run` waits by default: the hook's invokeTimeout plus a minute, so a run NF itself
+    would still let finish is not reported as lost."""
+    return parse_duration(hook.get("invokeTimeout")) + WAIT_GRACE_SECONDS
+
+
+def find_run(c, app_id: str, hook_id: str, pid):
+    """The run with this pid (last 20 runs, with results and logs), or None. API errors raise SystemExit/OSError."""
+    runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{hook_id}/runs"
+                         "?page_size=20&include_results=true&include_logs=true").get("runs", [])
+    return next((x for x in runs if x.get("pid") == pid), None)
+
+
+def wait_for_run(c, app_id: str, hook_id: str, pid, wait: float, clock=time.monotonic, sleep=time.sleep):
+    """Poll until the run leaves the active states or `wait` seconds pass. Returns the finished run,
+    or None on timeout. Never starts anything: a failed poll is retried, not answered with a re-run."""
+    deadline = clock() + wait
+    while clock() < deadline:
+        sleep(min(POLL_SECONDS, max(0.0, deadline - clock())))
+        try:
+            run = find_run(c, app_id, hook_id, pid)
+        except (SystemExit, OSError) as e:  # transient console/network error: keep waiting
+            print(f"  (could not read the run state: {e}; still waiting)")
+            continue
+        if run and run.get("state") not in ACTIVE_STATES:
+            return run
+    return None
+
+
+def report_run(run: dict) -> int:
+    print(f"  {run['state']} start={run.get('startTime')}")
+    for g in (run.get("results") or {}).values():
+        if g.get("error"):
+            print(f"  error: {g['error'].get('message')}")
+        for e in g.get("events", []):
+            print(f"  event {e.get('ts')}: {e.get('message')}")
+    return 0 if run["state"] == "STATE_SUCCESS" else EXIT_FAILED
+
+
+def cmd_run(c, m: dict, only_hooks: list[str] | None = None, wait: float | None = None,
+            resume: int | None = None, clock=time.monotonic, sleep=time.sleep) -> int:
+    """Start each selected hook once and wait for it. Exit 0 = all succeeded, 1 = a run failed,
+    3 = a wait ran out with the run still going (check it, or `--resume PID`); 1 wins over 3.
+    --resume PID waits on an existing run of the single selected hook and starts nothing."""
     app_id = m["application"]["id"]
+    hooks = [h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks]
+    if resume is not None and len(hooks) != 1:
+        raise SystemExit("--resume needs exactly one hook: pass --hook ID")
     rc = 0
-    for hook in [h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks]:
-        r = c.call("POST", f"/api/v1/apps/{app_id}/hooks/{hook['id']}", {})
-        pid = r.get("pid")
-        print(f"started {hook['id']} pid={pid}")
-        for _ in range(30):
-            time.sleep(2)
-            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{hook['id']}/runs"
-                                 "?page_size=5&include_results=true&include_logs=true").get("runs", [])
-            run = next((x for x in runs if x.get("pid") == pid), None)
-            if run and run.get("state") not in ("STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED"):
-                print(f"  {run['state']} start={run.get('startTime')}")
-                for g in (run.get("results") or {}).values():
-                    if g.get("error"):
-                        print(f"  error: {g['error'].get('message')}")
-                    for e in g.get("events", []):
-                        print(f"  event {e.get('ts')}: {e.get('message')}")
-                if run["state"] != "STATE_SUCCESS":
-                    rc = 1
-                break
+    for hook in hooks:
+        limit = wait if wait is not None else default_wait(hook)
+        if resume is not None:
+            pid = resume
+            print(f"waiting for {hook['id']} pid={pid} (up to {limit:.0f} s)")
         else:
-            print("  timed out waiting for the run")
-            rc = 1
+            pid = c.call("POST", f"/api/v1/apps/{app_id}/hooks/{hook['id']}", {}).get("pid")
+            print(f"started {hook['id']} pid={pid} (waiting up to {limit:.0f} s)")
+        run = wait_for_run(c, app_id, hook["id"], pid, limit, clock, sleep)
+        if run is None:
+            print(f"  still running after {limit:.0f} s: {hook['id']} pid={pid}. NOT restarted. "
+                  f"Wait again with: run <manifest> --hook {hook['id']} --resume {pid}")
+            rc = rc or EXIT_STILL_RUNNING
+        elif report_run(run):
+            rc = EXIT_FAILED
     return rc
 
 
@@ -280,6 +339,11 @@ def main() -> int:
     ap.add_argument("manifest", type=Path)
     ap.add_argument("--skip-hooks", action="store_true",
                     help="push: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
+    ap.add_argument("--wait", type=float, metavar="SECONDS",
+                    help="run: how long to wait for each run (default: the hook's invokeTimeout + 60 s). "
+                         "On timeout the run is reported as still running (exit 3) and is never re-started")
+    ap.add_argument("--resume", type=int, metavar="PID",
+                    help="run: wait on this existing run of the one --hook instead of starting a new one")
     ap.add_argument("--hook", action="append", dest="hooks", metavar="ID",
                     help="push/run: only these hook ids (repeatable), e.g. --hook fdd on a box whose weather comes from elsewhere")
     a = ap.parse_args()
@@ -296,7 +360,7 @@ def main() -> int:
     if a.action == "push":
         return cmd_push(c, m, a.skip_hooks, a.hooks)
     if a.action == "run":
-        return cmd_run(c, m, a.hooks)
+        return cmd_run(c, m, a.hooks, a.wait, a.resume)
     return cmd_pull(c, m, write=(a.action == "pull"))
 
 

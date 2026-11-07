@@ -5,6 +5,16 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.1
+
+Patch release (correctness, data safety, hardening). Full list: [CHANGELOG.md](https://github.com/bbartling/open-fdd/blob/master/CHANGELOG.md).
+
+- TimescaleDB retention only trims Open-FDD's own tables unless you explicitly allowlist others.
+- One declared scale per command/position column; no more percent-vs-fraction guessing in SQL or pandas (#1541).
+- Comfort fault-sample count follows the band settings (#1542).
+- Site-scoped result ids; results carry `ok` / `fault` / `not-assessed` / `stale` status.
+- Bounded history and SPARQL routes, safer UI retries, CSV formula neutralizing, Caddy access logs.
+
 ## 5.0.0
 
 Open-FDD is a Normal Framework app. This is a complete reset of the project.
@@ -24,6 +34,6 @@ Open-FDD is a Normal Framework app. This is a complete reset of the project.
 
 - All Rust, the 4.x central stack, GHCR images, Timescale ingest, the qualification harnesses, the old
   React/static UI, and the 4.x docs, runbooks and agent prompts.
-- The 4.x line is frozen at tag `v4.0.11-central` (branch `release/4.x`). See [Removed in 5.0](migration/nf-plugin/ARCHIVE_MAP.html).
+- The 4.x line is frozen at tag `v4.0.11-central`. See [Removed in 5.0](migration/nf-plugin/ARCHIVE_MAP.html).
 
 Full list: [CHANGELOG.md](https://github.com/bbartling/open-fdd/blob/master/CHANGELOG.md).

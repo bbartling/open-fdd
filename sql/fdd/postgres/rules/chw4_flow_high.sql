@@ -6,7 +6,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     chw_flow,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump,
+    chw_pump_cmd AS pump,
     pump_status, chiller_status
   FROM history
 ),

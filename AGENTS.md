@@ -33,8 +33,13 @@ find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`
 3. **Faults are the bottom lane.** Show faults only with `rcxWithFaultLane(option, lanes)` (`static/rcx.js`):
    a 0/1 lane at the bottom of the plot. New charts register with `rcxView({...})` and an entry in
    `nf-app/rcx-parity.json`.
-4. **Strict CSP.** No inline scripts or styles, no CDN at runtime; libraries are vendored and pinned (never a
-   release younger than two weeks).
+4. **Strict CSP, one honest exception.** No inline scripts or styles; every library is vendored and pinned (never a
+   release younger than two weeks) and served from the app itself. The single exception is the Normal Online
+   (portal) login: when NF reports Clerk, `static/nf.js` loads `clerk-js` at an **exact pinned version**
+   (`CLERK_JS_VERSION`) from the Clerk host named in the portal's publishable key. Because that host is only known
+   at runtime, the page CSP keeps `script-src 'self' https:` (and `connect-src 'self' https:`). Do not describe the
+   app as "self-only" or "no CDN at runtime", and do not add any other remote script. Bump the Clerk pin only to a
+   release at least two weeks old, in both `nf-app/static/nf.js` and `lite/static/nf.js`.
 5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs; the SQLite pack must match Postgres.
 6. **Small PR slices** (one concern each, easy for a small model to review). Update the docs page that describes
    what you changed; `docs/fdd-rules.md` is generated.

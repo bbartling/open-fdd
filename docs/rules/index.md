@@ -16,7 +16,7 @@ verification, all in **SI units**. Every page here is generated from the same co
 |---|---|---:|
 | [SQL cookbook](sql-cookbook.html) | Each rule's inputs, tunable parameters with SI limits, output columns and the exact PostgreSQL at its defaults | 77 |
 | [Pandas cookbook](pandas-cookbook.html) | The same rules as Python: the real function source, SI defaults, and a runnable example | 71 |
-| [Parity](parity.html) | Does pandas equal SQL, rule by rule, and why 25 differ | 77 |
+| [Parity](parity.html) | Does pandas equal SQL, rule by rule, and why 22 differ | 77 |
 | [FDD rules catalog](../fdd-rules.html) | One-table summary of every rule and its default | 77 |
 
 ## How to read a rule
@@ -34,8 +34,10 @@ Each rule section answers the same questions:
 ## SI units
 
 Everything is SI, with no exceptions: temperature **°C**, temperature differences **Δ°C** (no 32-degree offset), pressure **Pa**, flow **L/s**, power **kW**,
-energy **kWh**, percent **%** (0-100) or fraction (0-1), concentration **ppm**. Rules never convert or guess units. Points are converted once at
-ingest, and back to the user's display system only in the UI. Sensor-validation rules (`SV-*`) assess a series only when its declared unit is the SI unit of its
+energy **kWh**, concentration **ppm**. Every command and position (fan, pump and tower commands, valve and damper positions) is a **fraction (0-1)**,
+every status is **0/1**, and humidity is **%RH (0-100)**: one declared scale per column, from `sql/fdd/role_scales.json`. Rules never convert units and never
+guess a scale by magnitude. Points are converted once at ingest (a `%` point is divided by 100, a command point with no unit is skipped, not guessed), and back
+to the user's display system only in the UI. Sensor-validation rules (`SV-*`) assess a series only when its declared unit is the SI unit of its
 quantity. See [Units](../units.html).
 
 ## Equipment kinds
@@ -75,7 +77,7 @@ A rule's **equipment kinds** are Open-FDD kinds; each matches these Haystack equ
 ## At a glance
 
 - **77** SQL rules, **71** pandas twins, **6** SQL-only analytics.
-- **46 of 71** twins match the SQL exactly on the synthetic parity suite; **25** differ in gating, proof or weather join, never in units. Details in [Parity](parity.html).
+- **49 of 71** twins match the SQL exactly on the synthetic parity suite; **22** differ in gating, proof or weather join, never in units. Details in [Parity](parity.html).
 - Source of truth: [`sql/fdd/`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd) (SQL + tuning), [`nf-app/rules/pack-postgres.json`](https://github.com/bbartling/open-fdd/blob/master/nf-app/rules/pack-postgres.json) (the pack the app runs),
   [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules) (pandas).
 - Regenerate with `python3 scripts/nf/gen_cookbook.py` (`--check` fails when a page is stale).
