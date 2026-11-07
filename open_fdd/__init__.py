@@ -1,17 +1,17 @@
-"""Open-FDD Python package.
+"""Open-FDD Python package (PyPI ``open-fdd``): the AI-agent and engineer toolbox.
 
-- ``open_fdd.ecm_engineering`` — ECM workbooks (default install)
-- ``open_fdd.rules`` / ``analytics`` / ``reporting`` — pandas oracle libs (extras)
+- ``open_fdd.nf``  - read a Normal Framework box (LAN or portal), SI frames, run the pandas rules
+- ``open_fdd.rules`` / ``analytics`` / ``reporting`` - pandas reference rules and reports (extras)
+- ``open_fdd.ecm_engineering`` - ECM workbooks (default install)
 
-Production FDD runs as DataFusion SQL in the GHCR container stack.
+Production FDD runs in the Open-FDD Normal Framework app (SQL pack). This package's version line
+(4.x) is separate from the app's (5.x); see ``open-fdd-version``.
 """
 
 from open_fdd.ecm_engineering import ECMJob
-from open_fdd.compat import maybe_warn_vibe19_from_env
+from open_fdd.version import package_version
 
-__version__ = "5.0.0"
-
-maybe_warn_vibe19_from_env()
+__version__ = package_version()
 
 __all__ = ["ECMJob", "__version__", "manifest"]
 

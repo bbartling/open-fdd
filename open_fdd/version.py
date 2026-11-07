@@ -45,8 +45,27 @@ def git_revision() -> str | None:
         return None
 
 
-def release_version() -> str | None:
-    """Repo release version (the VERSION file), e.g. 5.0.0; None outside a checkout."""
+def package_version() -> str:
+    """The PyPI package version (``importlib.metadata``), falling back to ``pyproject.toml``.
+
+    Inside a checkout the checkout's ``pyproject.toml`` wins: the source tree is what runs, and an
+    older installed copy would report a stale version.
+    """
+    root = _repo_root()
+    if root is not None and (root / "pyproject.toml").is_file():
+        m = re.search(r'^version\s*=\s*"([^"]+)"', (root / "pyproject.toml").read_text(encoding="utf-8"), re.M)
+        if m:
+            return m.group(1)
+    try:
+        from importlib.metadata import version
+
+        return version("open-fdd")
+    except Exception:
+        return "0+unknown"
+
+
+def app_version() -> str | None:
+    """Open-FDD Normal Framework app version (the repo ``VERSION`` file, 5.x); None outside a checkout."""
     root = _repo_root()
     if root is None:
         return None
@@ -54,6 +73,11 @@ def release_version() -> str | None:
         return (root / "VERSION").read_text(encoding="utf-8").strip() or None
     except OSError:
         return None
+
+
+def release_version() -> str | None:
+    """Alias of :func:`app_version` (kept for existing callers)."""
+    return app_version()
 
 
 def _catalog_hashes() -> tuple[str | None, str | None]:
@@ -65,9 +89,7 @@ def _catalog_hashes() -> tuple[str | None, str | None]:
 
 
 def python_version() -> str:
-    from open_fdd import __version__
-
-    return __version__
+    return package_version()
 
 
 def manifest(*, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -75,8 +97,10 @@ def manifest(*, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     cat_hash, cfg_hash = _catalog_hashes()
     doc = {
         "open_fdd_python_version": python_version(),
+        "package_version": python_version(),
+        "app_version": app_version(),
         "git_revision": git_revision(),
-        "release_version": release_version(),
+        "release_version": app_version(),
         "rule_catalog_version": RULE_CATALOG_VERSION,
         "catalog_schema_version": CATALOG_SCHEMA_VERSION,
         "rule_catalog_hash": cat_hash,

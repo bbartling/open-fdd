@@ -25,7 +25,14 @@ const POINTS = [
 /** Fake NF: model + default layer queries, resampled history, records writes. */
 function fakeHttp(extraPoints = [], fns = {}, opts = {}) {
   const model = opts.model || MODEL, points = opts.points || POINTS;
-  const writes = { points: [], data: [] };
+  const writes = { points: [], data: [], calls: { points: 0, data: 0 } };
+  const fail = opts.fail || {};   // { points|data: (attempt, body) => HTTP status or 0 }, simulates NF errors
+  const attempts = { points: 0, data: 0 };
+  const maybeFail = (kind, body) => {
+    attempts[kind]++;
+    const st = fail[kind] ? fail[kind](attempts[kind], body) : 0;
+    if (st) { const e = new Error("HTTP " + st); e.response = { status: st }; throw e; }
+  };
   const series = (uuid, fn) => {
     const values = [];
     for (let t = NOW - 24 * 3600e3; t < NOW; t += STEP * 1e3) values.push({ ts: new Date(t).toISOString(), double: fn(t) });
@@ -39,8 +46,13 @@ function fakeHttp(extraPoints = [], fns = {}, opts = {}) {
         const site = body.structuredQuery && body.structuredQuery.field && body.structuredQuery.field.text;
         return { data: { points: [...points, ...extraPoints].filter((x) => !site || x.attrs.siteRef === site) } };
       }
-      if (p === "/api/v1/point/points") { writes.points.push(...body.points); return { data: {} }; }
-      if (p === "/api/v1/point/data") { writes.data.push(body); return { data: {} }; }
+      if (p === "/api/v1/point/points") { writes.calls.points++; maybeFail("points", body); writes.points.push(...body.points); return { data: {} }; }
+      if (p === "/api/v1/points/data") {   // AddData (batched): flattened into one {uuid, values} entry per point
+        writes.calls.data++; maybeFail("data", body);
+        for (const x of body.points) writes.data.push({ uuid: x.uuid, values: x.values });
+        return { data: { success: true } };
+      }
+      if (p === "/api/v1/point/data") throw new Error("per-point data write is no longer used");
       throw new Error("unexpected POST " + p);
     },
     async get(p) {
@@ -106,7 +118,8 @@ test("fdd hook: binds, reads the 5-min grid, runs runnable pack rules, writes re
   assert.equal(metric.fddOutput, "fan_runtime_hours");
   assert.deepEqual(http.writes.data.map((d) => d.values[0].real).sort(), [24, 50]);
   assert.equal(http.writes.data[0].values[0].ts, new Date(Math.floor(NOW / 3e5) * 3e5).toISOString());
-  assert.match(logs.at(-1), /1 equips, 2 rule runs, 0 errors, 1 with fault time, 2 values written/);
+  assert.match(logs.at(-1), /1 equips, 2 rule runs, 0 errors, 1 with fault time, 2 values written.*requests: 1 metadata, 1 data/s);
+  assert.deepEqual(summary.requests, { metadata: 1, data: 1 });
   assert.deepEqual(summary.status, { ok: 1, fault: 1, "not-assessed": 0, stale: 0 });
   assert.equal(tags.fddStatus, "fault");
   assert.equal(tags.fddCoverageHours, "24");
@@ -371,4 +384,95 @@ test("fdd hook: a status outside 0..1 (enum, 0-100 analog) is rejected, not thre
   const seen = { queries: [] };
   await hook.runFdd({ sdk: { http, logEvent() {} }, config: { dryRun: true }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
   assert.ok(!seen.input.history.some((r) => "fan_status" in r), "value 3 never reaches the engine as a status");
+});
+
+// ---- review F09: batched writes -------------------------------------------------------------------------
+// N equips, each with the two pack rules (CMD-1, FAN-RUNTIME-HOURS); writeRetryMs 0 keeps retries instant.
+const bigModel = (n) => [MODEL[0], ...Array.from({ length: n }, (_, i) => ({ uuid: `e${i}`, name: `AHU-${i}`,
+  pointType: "EQUIPMENT", attrs: { id: `AHU-${i}`, siteRef: "site-a", markers: "equip,ahu" } }))];
+const inEquip = (p, i) => ({ ...p, uuid: `${p.uuid}-${i}`, attrs: { ...p.attrs, equipRef: `AHU-${i}` } });
+const bigPoints = (n) => Array.from({ length: n }, (_, i) => POINTS.slice(0, 2).map((p) => inEquip(p, i))).flat();
+const BIG_ENGINE = () => scripted({ "CMD-1": [{ equipment_id: "AHU-0", fault_pct: 5, fault_hours: 1, covered_hours: 24 }], "FAN-RUNTIME-HOURS": FAN_OK });
+async function runBig(n, opts = {}) {
+  const http = fakeHttp([], {}, { model: bigModel(n), points: bigPoints(n), ...opts });
+  const logs = [];
+  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { writeRetryMs: 0, ...(opts.config || {}) },
+    pack: statusPack, createEngine: BIG_ENGINE(), now: NOW });
+  return { http, summary, logs };
+}
+
+test("fdd writes: metadata for all equips is ONE UpdatePoints call, values ONE AddData call", async () => {
+  const { http, summary } = await runBig(10);
+  assert.equal(summary.equips, 10);
+  assert.equal(http.writes.calls.points, 1, "one metadata call for 10 equips");
+  assert.equal(http.writes.points.length, 10 * 2 * 2, "10 equips x 2 rules x (automation + model)");
+  assert.equal(http.writes.calls.data, 1);
+  assert.equal(http.writes.data.length, 20);
+  assert.equal(summary.written, 20);
+  assert.deepEqual(summary.requests, { metadata: 1, data: 1 });
+  assert.equal(summary.errors, 0);
+});
+
+test("fdd writes: chunked by record count (500 per UpdatePoints call, 500 points per AddData call)", async () => {
+  const { http, summary } = await runBig(150);   // 150 x 2 rules x 2 records = 600 records, 300 values
+  assert.equal(http.writes.points.length, 600);
+  assert.equal(http.writes.calls.points, 2, "600 records -> 500 + 100");
+  assert.equal(http.writes.calls.data, 1, "300 points fit one AddData call");
+  assert.deepEqual(summary.requests, { metadata: 2, data: 1 });
+  assert.equal(summary.written, 300);
+  // and by payload size
+  const big = Array.from({ length: 10 }, (_, i) => ({ i, pad: "x".repeat(100) }));
+  assert.equal(hook.chunkBySize(big, 500, 450).length, 4, "3 items of ~117 bytes per 450-byte chunk");
+  assert.deepEqual(hook.chunkBySize([1, 2, 3], 2, 1e6).map((c) => c.length), [2, 1]);
+});
+
+test("fdd writes: 429 and 503 are retried (max 3 attempts), 400 is not", async () => {
+  const flaky = await runBig(2, { fail: { points: (n) => (n < 3 ? 429 : 0), data: (n) => (n === 1 ? 503 : 0) } });
+  assert.equal(flaky.summary.errors, 0);
+  assert.deepEqual(flaky.summary.requests, { metadata: 3, data: 2 }, "every attempt is counted");
+  assert.equal(flaky.http.writes.points.length, 8);
+  assert.equal(flaky.summary.written, 4);
+
+  const never = await runBig(2, { fail: { points: () => 503 } });
+  assert.equal(never.summary.requests.metadata, 3, "gives up after 3 attempts");
+  assert.equal(never.summary.errors, 4, "one error per point of the failed call (2 equips x 2 rules)");
+  assert.equal(never.http.writes.points.length, 0);
+  assert.equal(never.summary.written, 0, "no values for points whose metadata failed");
+  assert.equal(never.summary.requests.data, 0);
+
+  const bad = await runBig(2, { fail: { points: () => 400 } });
+  assert.equal(bad.summary.requests.metadata, 1, "400 is not retried");
+  assert.equal(bad.summary.errors, 4);
+  const bad2 = await runBig(2, { fail: { data: () => 400 } });
+  assert.equal(bad2.summary.requests.data, 1, "400 is not retried");
+  assert.equal(bad2.summary.errors, 4, "4 value points failed");
+  assert.equal(bad2.http.writes.points.length, 8, "metadata was still written");
+});
+
+test("fdd writes: a partial failure counts per point, keeps going, and the hook still throws at the end", async () => {
+  // 150 equips -> 2 metadata chunks (500 + 100 records); the second one fails with 400 = 50 points
+  const opts = { fail: { points: (n) => (n === 2 ? 400 : 0) } };
+  const { http, summary, logs } = await runBig(150, opts);
+  assert.equal(http.writes.points.length, 500);
+  assert.equal(summary.errors, 50, "one error per point whose metadata failed");
+  assert.equal(summary.written, 300 - 50, "values of the failed points are skipped, the rest are written");
+  assert.ok(logs.some((l) => /50 points not written/.test(l)));
+  const http2 = fakeHttp([], {}, { model: bigModel(150), points: bigPoints(150), ...opts });
+  await assert.rejects(hook({ sdk: { http: http2, logEvent() {} }, config: { writeRetryMs: 0 }, pack: statusPack,
+    createEngine: BIG_ENGINE(), now: NOW }), /50 errors/);
+  assert.equal(http2.writes.data.length, 250, "everything it could was written before throwing");
+});
+
+test("fdd writes: stale flags ride in the same metadata batch", async () => {
+  const http = fakeHttp([], {}, { model: [...MODEL, resultRec("CMD-1")] });
+  const boom = scripted({ "CMD-1": new Error("boom"), "FAN-RUNTIME-HOURS": FAN_OK });
+  const summary = await hook.runFdd({ sdk: { http, logEvent() {} }, pack: statusPack, createEngine: boom, now: NOW });
+  assert.equal(http.writes.calls.points, 1, "stale + fresh records in one call");
+  assert.deepEqual(summary.requests, { metadata: 1, data: 1 });
+});
+
+test("fdd writes: dryRun sends no write requests", async () => {
+  const { http, summary } = await runBig(3, { config: { dryRun: true } });
+  assert.deepEqual(summary.requests, { metadata: 0, data: 0 });
+  assert.equal(http.writes.calls.points + http.writes.calls.data, 0);
 });

@@ -1,5 +1,33 @@
 # Changelog
 
+Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
+`open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
+
+## 5.0.2 (app) / open-fdd 4.5.0 (PyPI) — 2026-11-07
+
+### Added
+
+- **`open_fdd.nf`** and the **`open-fdd-nf`** CLI (`info`, `model`, `pull`, `rules`, `report`): AI agents and engineers
+  work directly against a local NF box or the Normal Online portal — load the Haystack model, bind rule roles,
+  pull SI history as pandas DataFrames and run the pandas reference rules. Docs: `docs/python-tools.md`.
+- `open-fdd-report` reads from NF (`--nf`) or the app's CSV export (`--csv`).
+- FDD hook writes results in batches (NF `AddData` + one `UpdatePoints` per run): 10 equips × 20 rules goes from
+  ~215 requests to 2. Retries only on 429/503; partial failures counted per point.
+- README: Open-FDD Grok bot skills badge and button.
+
+### Changed
+
+- Open-FDD Lite: strict CSP on every page (no inline styles/handlers); RDF export matches the full edition
+  (Brick time-series references, defined terms).
+- PyPI package versioned separately (4.5.0) and published only by `open-fdd-v*` tags; app tags no longer trigger PyPI.
+- `open_fdd.__version__` is the package version; `open-fdd-version` also shows the app version.
+- README rewritten shorter.
+
+### Removed
+
+- Readers for the retired central API (`OpenFddApiSource`, central SPARQL consumer bundle), the 4.x `vibe19`
+  compatibility shims, and the dead `--dump` / `--package` report inputs.
+
 ## 5.0.1 — 2026-11-07
 
 Patch release from an external review (Codex / ChatGPT) and open issues. No new features; correctness, data safety and hardening.

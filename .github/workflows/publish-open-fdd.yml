@@ -1,14 +1,14 @@
-# PyPI: open-fdd (ECM + pandas oracle / reporting).
-# Tags: open-fdd-vX.Y.Z or vX.Y.Z
+# PyPI: open-fdd (pandas reference rules, NF agent tools, ECM, reporting).
+# The PyPI package has its OWN version line (pyproject.toml, 4.x) and is released ONLY by tags
+# "open-fdd-vX.Y.Z". The NF app (nf-app/, VERSION, nf-app/package.json, 5.x) is tagged "vX.Y.Z"
+# and never triggers this workflow.
 # Trusted Publishing: bbartling/open-fdd -> this workflow -> environment pypi
-# Production FDD is the NF app (nf-app/), not this package.
 
 name: Publish open-fdd to PyPI
 
 on:
   push:
     tags:
-      - "v*.*.*"
       - "open-fdd-v*"
   workflow_dispatch:
     inputs:
@@ -47,19 +47,17 @@ jobs:
           python -m pip install -e ".[test,dev]"
           python -m pip install build twine
 
-      - name: Version consistency (VERSION, pyproject, nf-app, tag)
+      - name: Version consistency (pyproject vs open-fdd-v tag)
         run: |
           python - <<'PY'
-          import json, os, pathlib, re, tomllib
-          v = pathlib.Path("VERSION").read_text().strip()
+          import os, pathlib, re, tomllib
           py = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
-          nf = json.loads(pathlib.Path("nf-app/package.json").read_text())["version"]
-          assert v == py == nf, f"VERSION={v} pyproject={py} nf-app={nf}"
           ref = os.environ.get("GITHUB_REF_NAME", "")
           if os.environ.get("GITHUB_REF", "").startswith("refs/tags/"):
-              tag = re.sub(r"^(open-fdd-)?v", "", ref)
-              assert tag == v, f"tag {ref} != VERSION {v}"
-          print("version OK", v)
+              assert ref.startswith("open-fdd-v"), f"PyPI releases use open-fdd-vX.Y.Z tags, got {ref}"
+              tag = ref[len("open-fdd-v"):]
+              assert tag == py, f"tag {ref} != pyproject version {py}"
+          print("PyPI package version OK", py)
           PY
 
       - name: Build sdist and wheel

@@ -51,7 +51,7 @@ async function main() {
     if (!opts.some((p) => p.uuid === sel.point)) sel.point = def.defaultPick(ctx);
     $("pick").innerHTML = opts.map((p) => `<option value="${p.uuid}">${esc(p.name)}</option>`).join("");
     $("pick").value = sel.point;
-    $("pick").style.display = "";
+    $("pick").hidden = false;
     $("pick").onchange = () => { sel.point = $("pick").value; draw(); };
   }
   $("range").onclick = (ev) => {

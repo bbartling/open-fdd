@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open-FDD Lite chart</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<!-- CSP: script-src allows https: ONLY for the portal path, where nf.js loads the pinned clerk-js from the
+     Clerk host named in the portal's publishable key (host unknown until runtime). Everything else is 'self';
+     no inline style attributes, inline scripts or eval. -->
 <!--
   One Open-FDD Lite chart per window: chart.html?c=<id>&site=<siteRef>[&equip=<equipRef>][&h=<hours>][&point=<uuid>]
   Loads the Haystack model, then fetches ONLY this chart's points, resampled by NF
@@ -24,8 +28,8 @@
     <div class="sub" id="sub">Loading the Haystack model…</div>
   </div>
   <div class="spacer"></div>
-  <select id="pick" style="display:none"></select>
-  <span class="seg" id="range" style="margin-left:0"></span>
+  <select id="pick" hidden></select>
+  <span class="seg flush" id="range"></span>
   <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
   <button class="btn" id="themeToggle" type="button">☾ dark</button>
   <a class="btn" id="back" href="index.html#charts">all charts</a>

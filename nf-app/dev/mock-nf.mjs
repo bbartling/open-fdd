@@ -185,13 +185,22 @@ function data(params) {
 const json = (res, code, body) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)); };
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json" };
 let runs = [];
+// In-memory store of what a client WROTE (the synthetic building itself stays read-only).
+//   POST /api/v1/point/points  { points: [record] }                   -> writes.points
+//   POST /api/v1/point/data    { uuid, values: [..] }                 -> writes.data  (one point)
+//   POST /api/v1/points/data   { points: [{ uuid, values: [..] }] }   -> writes.data  (AddData, batched)
+//   GET /api/v1/_mock/writes   (mock only, not an NF route) returns the store; DELETE clears it.
+// writes.calls lists every accepted write request: { route, n = records or points in it }.
+const writes = { points: [], data: [], calls: [] };
+const note = (route, n) => writes.calls.push({ route, n });
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
   let body = "";
   for await (const chunk of req) body += chunk;
-  const b = body ? JSON.parse(body) : {};
+  let b = {};
+  try { b = body ? JSON.parse(body) : {}; } catch (e) { return json(res, 400, { error: "mock-nf: invalid JSON body" }); }
   if (p === "/" || p === "/api/v1/apps/static/open-fdd") { res.writeHead(302, { Location: APP_PREFIX }); return res.end(); }
   if (p === `${APP_PREFIX}version.json`) {
     // Same shape nf_app_sync.py writes on deploy (VERSION + git commit); dev mock marks it "dev".
@@ -213,7 +222,27 @@ const server = http.createServer(async (req, res) => {
   }
   if (p === "/api/v1/platform/info") return json(res, 200, { version: "mock-3.10", provider: "", resources: [{ memory: { totalBytes: String(4 * 1024 ** 3) } }] });
   if (p === "/api/v1/point/query") return json(res, 200, query(b));
-  if (p === "/api/v1/point/data") return json(res, 200, data(url.searchParams));
+  if (p === "/api/v1/point/data" && req.method !== "POST") return json(res, 200, data(url.searchParams));
+  if (p === "/api/v1/_mock/writes") {
+    if (req.method === "DELETE") { writes.points.length = 0; writes.data.length = 0; writes.calls.length = 0; return json(res, 200, {}); }
+    return json(res, 200, writes);
+  }
+  if (req.method === "POST" && p === "/api/v1/point/points") {
+    if (!Array.isArray(b.points)) return json(res, 400, { error: "points must be an array" });
+    writes.points.push(...b.points); note(p, b.points.length);
+    return json(res, 200, { results: b.points.map((r) => ({ uuid: r.uuid, success: true, newVersion: "1" })) });
+  }
+  if (req.method === "POST" && p === "/api/v1/point/data") {
+    if (!b.uuid || !Array.isArray(b.values)) return json(res, 400, { error: "uuid and values are required" });
+    writes.data.push({ uuid: b.uuid, values: b.values }); note(p, 1);
+    return json(res, 200, { success: true });
+  }
+  if (req.method === "POST" && p === "/api/v1/points/data") {
+    if (!Array.isArray(b.points) || b.points.some((x) => !x || !x.uuid)) return json(res, 400, { error: "points[].uuid is required" });
+    for (const x of b.points) writes.data.push({ uuid: x.uuid, values: x.values || [] });
+    note(p, b.points.length);
+    return json(res, 200, { success: true });
+  }
   if (p === "/api/v1/point/updates/data") { res.writeHead(204); return res.end(); }
   if (p === "/api/v1/sites") return json(res, 200, { sites: sites.map((s) => ({ id: s.id, name: s.dis, latitude: s.lat, longitude: s.lon, timezone: s.tz })) });
   if (p === "/api/v1/bacnet/configuration") return json(res, 200, { deviceInstance: 54321, deviceName: "MockNF" });

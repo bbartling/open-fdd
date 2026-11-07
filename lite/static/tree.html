@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Open-FDD Lite · BACnet + Haystack Tree</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https:; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<!-- CSP: script-src allows https: ONLY for the portal path, where nf.js loads the pinned clerk-js from the
+     Clerk host named in the portal's publishable key (host unknown until runtime). Everything else is 'self';
+     no inline style attributes, inline scripts or eval. -->
 <!--
   Read-only companion to index.html (same NF app, same static/ folder).
   Left: what NF's own BACnet server actually serves, read back over BACnet.

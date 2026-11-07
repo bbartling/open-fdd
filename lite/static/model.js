@@ -54,6 +54,8 @@ const HS_NS = {
   phScience: "https://project-haystack.org/def/phScience/",
   phIoT: "https://project-haystack.org/def/phIoT/",
   phIct: "https://project-haystack.org/def/phIct/",
+  ref: "https://brickschema.org/schema/Brick/ref#",
+  schema: "https://schema.org/",
 };
 const TAG_LIB = {
   phScience: ["air", "water", "temp", "humidity", "pressure", "dewPoint", "co2", "flow", "enthalpy", "concentration"],
@@ -70,9 +72,24 @@ const TAG_NS = Object.fromEntries(Object.entries(TAG_LIB).flatMap(([ns, tags]) =
 const ttlStr = (s) => `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 const ttlId = (s) => String(s).replace(/[^A-Za-z0-9_-]/g, "_");
 
-/** Turtle for the model + the set of tags that aren't in the Haystack libs above. */
-function modelToTurtle(model, base) {
+/**
+ * Turtle for the model + the set of tags that aren't in the Haystack libs above.
+ *
+ * External time-series references (slice 6): every exported point links to where its history
+ * lives using Brick's reference schema (ref:):
+ *   <point> ref:hasExternalReference [ a ref:TimeseriesReference ;
+ *       ref:hasTimeseriesId "<NF point uuid>" ; ref:storedAt local:store_nf ;
+ *       rdfs:label "NF history" ; schema:url <{nfBase}/api/v1/point/data?uuids=<uuid>> ] .
+ * local:store_nf is the NF store node. nfBase = opts.nfBase, else the page origin (never a
+ * hard-coded host); with neither, the URL is omitted and the uuid is the only key. NF's class and
+ * the FDD hook's ruleRef are exported as local:nfClass / local:ruleRef (defined as rdf:Property).
+ * Lite has no TimescaleDB; opts.timescale is kept for parity with the full edition.
+ */
+function modelToTurtle(model, base, opts = {}) {
+  const nfBase = (opts.nfBase ?? (typeof location !== "undefined" && location.origin !== "null" ? location.origin : "")).replace(/\/$/, "");
+  const tsdb = opts.timescale || null;
   const nonStandard = new Set();
+  const usedProps = new Set();
   const tag = (t) => {
     if (TAG_NS[t]) return `${TAG_NS[t]}:${t}`;
     nonStandard.add(t);
@@ -80,6 +97,7 @@ function modelToTurtle(model, base) {
   };
   const lines = [
     ...Object.entries(HS_NS).map(([p, u]) => `@prefix ${p}: <${u}> .`),
+    "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .",
     "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
     `@prefix local: <${base}> .`, "",
   ];
@@ -108,11 +126,37 @@ function modelToTurtle(model, base) {
     const extra = [];
     if (p.units) extra.push(`ph:unit ${ttlStr(p.units)}`);
     if (p.kind) extra.push(`ph:kind ${ttlStr(p.kind)}`);
+    // Typed link to the point's history (schema:url, not an untyped rdfs:seeAlso).
+    const link = nfBase ? ` ;
+            schema:url <${nfBase}/api/v1/point/data?uuids=${encodeURIComponent(p.uuid)}>` : "";
+    const tsRef = (store, extraLink = "") =>
+      `ref:hasExternalReference [ a ref:TimeseriesReference ;
+            rdfs:label "${store === "store_nf" ? "NF history" : "TimescaleDB history"}" ;
+            ref:hasTimeseriesId ${ttlStr(p.uuid)} ;
+            ref:storedAt local:${store}${extraLink} ]`;
+    if (p.cls) { extra.push(`local:nfClass ${ttlStr(p.cls)}`); usedProps.add("nfClass"); }
+    const ruleRef = ((p.rec || {}).attrs || {}).ruleRef;
+    if (ruleRef) { extra.push(`local:ruleRef ${ttlStr(ruleRef)}`); usedProps.add("ruleRef"); }
+    extra.push(tsRef("store_nf", link));
+    if (tsdb) extra.push(tsRef("store_timescaledb"));
     entity(p.uuid, "phIoT:point", p.dis, p.tags, [
       ["phIoT:siteRef", p.siteRef], ["phIoT:equipRef", p.equipRef],
       ["phIct:deviceRef", p.deviceRef], ["phIoT:weatherStationRef", p.weatherStationRef],
     ], extra);
   }
+  // Define the time-series stores the point references point at.
+  if (model.points.some((x) => x.tags.length)) {
+    entity("store_nf", "ref:Database", "Normal Framework point history", [], [], [
+      `schema:description "Time series read with GET /api/v1/point/data?uuids=<ref:hasTimeseriesId>"`,
+      ...(nfBase ? [`schema:url <${nfBase}>`] : [])]);
+    if (tsdb) {
+      entity("store_timescaledb", "ref:Database", tsdb.label || "TimescaleDB", [], [],
+        [`rdfs:comment ${ttlStr(tsdb.uri || "full profile: NF TimescaleDB northbound, keyed by ref:hasTimeseriesId")}`]);
+    }
+  }
+  // Define the local properties we used (NF class, FDD rule of a result point).
+  const PROPS = { nfClass: "NF ontology class of the point", ruleRef: "Open-FDD rule this result point belongs to" };
+  for (const p of [...usedProps].sort()) entity(p, "rdf:Property", p, [], [], [`rdfs:comment ${ttlStr(PROPS[p])}`]);
   // Define every non-standard tag we used, so no term in the graph is left undefined.
   for (const t of [...nonStandard].sort()) {
     entity(t, "ph:marker", t, [], [], [`rdfs:comment "site-specific tag (not in the Haystack libs)"`]);

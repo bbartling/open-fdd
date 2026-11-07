@@ -1,6 +1,9 @@
-"""Adapt central ``ofdd_haystack_typed_bindings_v1`` / ECM consumer plans.
+"""Adapt Haystack point bindings for ECM work.
 
-Python stays on PyPI (offline/agent). Does not invent tariffs or fetch URLs.
+Bindings come from a Normal Framework model (``open_fdd.nf.model``: live via ``load_model`` or offline
+from the app's Turtle export via ``read_turtle``), or from a plain ``ofdd_haystack_typed_bindings_v1`` /
+``ofdd_haystack_ecm_binding_plan_v1`` JSON document. Python stays on PyPI (offline/agent). Does not invent
+tariffs or fetch URLs.
 """
 
 from __future__ import annotations
@@ -31,11 +34,10 @@ class BindingAdaptResult:
 
 
 def adapt_typed_bindings(payload: dict[str, Any]) -> BindingAdaptResult:
-    """Consume ECM consumer plan or raw typed binding set from central.
+    """Consume an ECM binding plan or a raw typed binding set (plain JSON).
 
-    Accepts either:
-    - ``POST /api/model/sparql/consumers`` bundle (uses ``ecm`` key), or
-    - ``ofdd_haystack_ecm_binding_plan_v1`` document directly.
+    Accepts either a bundle whose ``ecm`` key holds the plan, or the
+    ``ofdd_haystack_ecm_binding_plan_v1`` / ``ofdd_haystack_typed_bindings_v1`` document directly.
     """
     issues: list[str] = []
     if not isinstance(payload, dict):
@@ -111,3 +113,41 @@ def adapt_typed_bindings(payload: dict[str, Any]) -> BindingAdaptResult:
         missing_units=missing_units,
         blocking_issues=issues,
     )
+
+
+def bindings_from_model(model: Any, site: str | None = None) -> dict[str, Any]:
+    """Typed bindings (``ofdd_haystack_typed_bindings_v1``) from an ``open_fdd.nf.model.Model``.
+
+    One entry per equipment; one point per FDD role the equipment fills (best match). ``unit`` is the
+    point's declared unit, ``canonical_role`` the pandas Haystack role name, ``fdd_ready`` is true when
+    the unit can be brought to SI for that role.
+    """
+    from open_fdd.nf.model import bind_equipment, column_for, si_plan_for
+
+    equipment = []
+    for b in bind_equipment(model, site=site):
+        points = []
+        for role, p in b.best().items():
+            points.append({
+                "point_id": p.uuid,
+                "column": p.dis,
+                "canonical_role": column_for(role),
+                "unit": p.unit or None,
+                "kind": p.kind,
+                "fdd_ready": si_plan_for(role, p).convert is not None,
+            })
+        if points:
+            equipment.append({"equipment_id": b.equip, "equip_type": b.stamp or None, "points": points})
+    return {"schema": "ofdd_haystack_typed_bindings_v1", "equipment": equipment}
+
+
+def adapt_nf_model(model: Any, site: str | None = None) -> BindingAdaptResult:
+    """ECM assets from a live (``load_model``) or Turtle-derived (``read_turtle``) NF model."""
+    return adapt_typed_bindings(bindings_from_model(model, site=site))
+
+
+def adapt_turtle(path: Any, site: str | None = None) -> BindingAdaptResult:
+    """ECM assets from the NF app's RDF/Turtle export (needs the ``rdf`` extra)."""
+    from open_fdd.nf.export import read_turtle
+
+    return adapt_nf_model(read_turtle(path), site=site)
