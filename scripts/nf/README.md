@@ -17,7 +17,9 @@ python3 scripts/nf/hooks/nf_app_sync.py --env ~/.secrets/nf_site_console.env pus
 python3 scripts/nf/hooks/nf_app_sync.py --env ~/.secrets/nf_site_console.env run  nf-app/app.json --hook fdd
 ```
 
-`push` stamps js/css URLs with a content hash (NF caches app files for 5 minutes), checks that the
+`push` records the installed revision twice — `static/version.json` (shown in the app header as
+"v5.0.0 · <commit>") and the NF app setting `version` (shown in the NF console, and by `status`) —
+stamps js/css URLs with a content hash (NF caches app files for 5 minutes), checks that the
 manifest id equals NF's slug of the app name, and restarts the app runtimes. `--hook ID` limits
 push/run to selected hooks; `--skip-hooks` pushes files only. Agents can also deploy through the
 NF MCP connector (`manage_app`, `deploy_hook`) — see [docs/install.md](../../docs/install.md).

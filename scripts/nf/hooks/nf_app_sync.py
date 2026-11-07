@@ -128,7 +128,9 @@ def cmd_status(c: Console, m: dict) -> int:
     if not a:
         print(f"app {app_id}: not installed")
         return 1
-    print(f"app {app_id}: {a.get('status')} files={[f['path'] for f in a.get('files', [])]}")
+    installed = next(((o.get("value") or {}).get("string") for o in a.get("options", []) if o.get("name") == "version"), None)
+    print(f"app {app_id}: {a.get('status')} version={installed or 'unknown'}")
+    print(f"  files={[f['path'] for f in a.get('files', [])]}")
     for h in a.get("hooks", []):
         rt = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runtimes")
         runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=5&include_results=true")
