@@ -5,6 +5,10 @@ nav_order: 14
 
 # Changelog
 
+## open-fdd 4.5.2 (PyPI)
+
+- Python 3.14 and 3.15 are now supported, with CI over 3.10-3.15. No code changes.
+
 ## 5.0.3 (app) / open-fdd 4.5.1 (PyPI)
 
 - Weekly runtime on RCx: in-schedule vs after-hours bars and a schedule line read from NF schedules (holidays included); default Mon-Fri 07:00-17:00 in the site timezone; new 28-day range.
