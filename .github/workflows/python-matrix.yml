@@ -39,16 +39,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # tests/ includes the pandas == SQL parity suite, which runs the SQL pack through nf-app's Node engines.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
           cache: pip
 
-      - name: Install package and test deps
+      - name: Install package, test deps and nf-app engines
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[test,dev]"
+          python -m pip install -e ".[oracle,test,rdf,dev]"
+          cd nf-app && npm ci
 
       - name: Tests
         run: python -m pytest tests -q
