@@ -7,7 +7,7 @@ Python stays on PyPI (agent / offline path); never wire this into a web request 
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from enum import StrEnum
+from open_fdd._compat import StrEnum
 from typing import Any
 
 from .contracts import InteractionStatus, SourceType
