@@ -32,8 +32,10 @@ def main(argv: list[str] | None = None) -> int:
     stale = []
     for src_rel, dst_rel in PAIRS:
         src, dst = ROOT / src_rel, ROOT / dst_rel
-        data = src.read_bytes()
-        if dst.is_file() and dst.read_bytes() == data:
+        # Compare with line endings normalized: git may check the source out as CRLF and the
+        # copy as LF (or the other way round) depending on the platform; content is what matters.
+        data = src.read_bytes().replace(b"\r\n", b"\n")
+        if dst.is_file() and dst.read_bytes().replace(b"\r\n", b"\n") == data:
             continue
         stale.append(dst_rel)
         if not args.check:
