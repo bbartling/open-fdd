@@ -3,6 +3,7 @@
  "source": [
   "sql/fdd/registry.yaml",
   "sql/fdd/role_map.json",
+  "sql/fdd/role_scales.json",
   "nf-app/rules/role_overrides.json"
  ],
  "equipment_kinds": {
@@ -62,7 +63,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "building_ahu_load_satisfied": {
    "name": "building-ahu-load-satisfied",
@@ -71,7 +73,8 @@
     "ahu",
     "load",
     "satisfied"
-   ]
+   ],
+   "scale": "boolean"
   },
   "building_zone_load_satisfied": {
    "name": "building-zone-load-satisfied",
@@ -80,7 +83,8 @@
     "zone",
     "load",
     "satisfied"
-   ]
+   ],
+   "scale": "boolean"
   },
   "chiller_amps": {
    "name": "chiller-amps",
@@ -91,7 +95,8 @@
     "elec",
     "current",
     "sensor"
-   ]
+   ],
+   "scale": "si:A"
   },
   "chiller_cmd": {
    "name": "chiller-cmd",
@@ -100,7 +105,8 @@
     "chiller",
     "run",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "chiller_current": {
    "name": "chiller-current",
@@ -111,7 +117,8 @@
     "elec",
     "current",
     "sensor"
-   ]
+   ],
+   "scale": "si:A"
   },
   "chiller_power": {
    "name": "chiller-power",
@@ -122,7 +129,8 @@
     "elec",
     "power",
     "sensor"
-   ]
+   ],
+   "scale": "si:kW"
   },
   "chiller_status": {
    "name": "chiller-status",
@@ -131,7 +139,8 @@
     "chiller",
     "run",
     "sensor"
-   ]
+   ],
+   "scale": "boolean"
   },
   "chw_dp": {
    "name": "chw-diff-pressure",
@@ -144,7 +153,8 @@
     "delta",
     "pressure",
     "sensor"
-   ]
+   ],
+   "scale": "si:Pa"
   },
   "chw_dp_sp": {
    "name": "chw-diff-pressure-sp",
@@ -155,7 +165,8 @@
     "delta",
     "pressure",
     "sp"
-   ]
+   ],
+   "scale": "si:Pa"
   },
   "chw_flow": {
    "name": "chw-flow",
@@ -167,7 +178,8 @@
     "water",
     "flow",
     "sensor"
-   ]
+   ],
+   "scale": "si:L/s"
   },
   "chw_pump_cmd": {
    "name": "chw-pump-cmd",
@@ -178,7 +190,8 @@
     "pump",
     "run",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "chw_pump_status": {
    "name": "chw-pump-status",
@@ -189,7 +202,8 @@
     "pump",
     "run",
     "sensor"
-   ]
+   ],
+   "scale": "boolean"
   },
   "chw_reset_request_sum": {
    "name": "chilled-water-reset-request-sum",
@@ -198,7 +212,8 @@
     "chilled",
     "water",
     "request"
-   ]
+   ],
+   "scale": "si:count"
   },
   "chw_return_t": {
    "name": "chilled-water-return-temp",
@@ -209,7 +224,8 @@
     "entering",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "chw_supply_sp": {
    "name": "chilled-water-supply-temp-sp",
@@ -220,7 +236,8 @@
     "leaving",
     "temp",
     "sp"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "chw_supply_t": {
    "name": "chilled-water-supply-temp",
@@ -231,7 +248,8 @@
     "leaving",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "clg_available": {
    "name": "cooling-available",
@@ -240,7 +258,8 @@
     "cool",
     "enable",
     "sensor"
-   ]
+   ],
+   "scale": "boolean"
   },
   "clg_valve_pct": {
    "name": "cooling-valve",
@@ -252,7 +271,8 @@
     "cool",
     "valve",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "compressor_status": {
    "name": "compressor-status",
@@ -261,7 +281,8 @@
     "compressor",
     "run",
     "sensor"
-   ]
+   ],
+   "scale": "boolean"
   },
   "cooling_coil_entering_temp": {
    "name": "cooling-coil-entering-temp",
@@ -272,7 +293,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "cooling_coil_leaving_temp": {
    "name": "cooling-coil-leaving-temp",
@@ -283,7 +305,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "cooling_sp": {
    "name": "cooling-sp",
@@ -296,7 +319,8 @@
     "temp",
     "cooling",
     "sp"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "cw_pump_cmd": {
    "name": "cw-pump-cmd",
@@ -307,7 +331,8 @@
     "pump",
     "run",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "cw_return_t": {
    "name": "condenser-water-return-temp",
@@ -318,7 +343,8 @@
     "entering",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "cw_supply_t": {
    "name": "condenser-water-supply-temp",
@@ -329,7 +355,8 @@
     "leaving",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "damper_cmd": {
    "name": "damper-cmd",
@@ -339,7 +366,8 @@
    "markers": [
     "damper",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "damper_pct": {
    "name": "damper",
@@ -350,7 +378,8 @@
    "markers": [
     "damper",
     "sensor"
-   ]
+   ],
+   "scale": "fraction"
   },
   "duct_static": {
    "name": "duct-static-pressure",
@@ -362,7 +391,8 @@
     "air",
     "pressure",
     "sensor"
-   ]
+   ],
+   "scale": "si:Pa"
   },
   "duct_static_sp": {
    "name": "duct-static-pressure-sp",
@@ -374,7 +404,8 @@
     "air",
     "pressure",
     "sp"
-   ]
+   ],
+   "scale": "si:Pa"
   },
   "electric_kw": {
    "name": "electric-power",
@@ -385,7 +416,8 @@
     "elec",
     "power",
     "sensor"
-   ]
+   ],
+   "scale": "si:kW"
   },
   "electric_kwh": {
    "name": "electric-energy",
@@ -394,7 +426,8 @@
     "elec",
     "energy",
     "sensor"
-   ]
+   ],
+   "scale": "si:kWh"
   },
   "fan_cmd": {
    "name": "fan-cmd",
@@ -406,7 +439,8 @@
     "fan",
     "run",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "fan_status": {
    "name": "fan-status",
@@ -418,7 +452,8 @@
     "fan",
     "run",
     "sensor"
-   ]
+   ],
+   "scale": "boolean"
   },
   "heating_coil_entering_temp": {
    "name": "heating-coil-entering-temp",
@@ -429,7 +464,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "heating_coil_leaving_temp": {
    "name": "heating-coil-leaving-temp",
@@ -440,7 +476,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "heating_sp": {
    "name": "heating-sp",
@@ -453,7 +490,8 @@
     "temp",
     "heating",
     "sp"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "htg_valve_pct": {
    "name": "heating-valve",
@@ -466,7 +504,8 @@
     "heat",
     "valve",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "hw_reset_request_sum": {
    "name": "hot-water-reset-request-sum",
@@ -475,7 +514,8 @@
     "hot",
     "water",
     "request"
-   ]
+   ],
+   "scale": "si:count"
   },
   "hw_return_t": {
    "name": "hot-water-return-temp",
@@ -486,7 +526,8 @@
     "entering",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "hw_supply_t": {
    "name": "hot-water-supply-temp",
@@ -497,7 +538,8 @@
     "leaving",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "kwh": {
    "name": "electric-energy",
@@ -506,7 +548,8 @@
     "elec",
     "energy",
     "sensor"
-   ]
+   ],
+   "scale": "si:kWh"
   },
   "loop_enabled": {
    "name": "loop-enabled",
@@ -516,7 +559,8 @@
    ],
    "markers": [
     "enable"
-   ]
+   ],
+   "scale": "boolean"
   },
   "ma_h": {
    "name": "mixed-air-humidity",
@@ -528,7 +572,8 @@
     "air",
     "humidity",
     "sensor"
-   ]
+   ],
+   "scale": "percent_rh"
   },
   "mat": {
    "name": "mixed-air-temp",
@@ -540,7 +585,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "min_flow_sp": {
    "name": "min-flow-sp",
@@ -550,7 +596,8 @@
     "air",
     "flow",
     "sp"
-   ]
+   ],
+   "scale": "si:L/s"
   },
   "oa_damper_pct": {
    "name": "outside-air-damper",
@@ -561,7 +608,8 @@
    "markers": [
     "outside",
     "damper"
-   ]
+   ],
+   "scale": "fraction"
   },
   "oa_h": {
    "name": "outside-air-humidity",
@@ -573,7 +621,8 @@
     "air",
     "humidity",
     "sensor"
-   ]
+   ],
+   "scale": "percent_rh"
   },
   "oa_t": {
    "name": "outside-air-temp",
@@ -585,7 +634,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "occ_mode": {
    "name": "occupied",
@@ -594,7 +644,8 @@
    ],
    "markers": [
     "occupied"
-   ]
+   ],
+   "scale": "text"
   },
   "preheat_leave_t": {
    "name": "preheat-leaving-temp",
@@ -605,7 +656,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "pump_status": {
    "name": "pump-status",
@@ -614,7 +666,8 @@
     "pump",
     "run",
     "sensor"
-   ]
+   ],
+   "scale": "boolean"
   },
   "ra_h": {
    "name": "return-air-humidity",
@@ -626,7 +679,8 @@
     "air",
     "humidity",
     "sensor"
-   ]
+   ],
+   "scale": "percent_rh"
   },
   "rat": {
    "name": "return-air-temp",
@@ -638,7 +692,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "reheat_valve_pct": {
    "name": "reheat-valve",
@@ -648,7 +703,8 @@
    "markers": [
     "reheat",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "return_fan": {
    "name": "return-fan-cmd",
@@ -660,7 +716,8 @@
     "fan",
     "run",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "sa_h": {
    "name": "supply-air-humidity",
@@ -672,7 +729,8 @@
     "air",
     "humidity",
     "sensor"
-   ]
+   ],
+   "scale": "percent_rh"
   },
   "sat": {
    "name": "discharge-air-temp",
@@ -684,7 +742,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "sat_sp": {
    "name": "discharge-air-temp-sp",
@@ -696,7 +755,8 @@
     "air",
     "temp",
     "sp"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "static_reset_request": {
    "name": "vav-pressure-request-sum",
@@ -704,7 +764,8 @@
    "markers": [
     "pressure",
     "request"
-   ]
+   ],
+   "scale": "si:count"
   },
   "tower_fan_cmd": {
    "name": "tower-fan-cmd",
@@ -714,7 +775,8 @@
     "fan",
     "run",
     "cmd"
-   ]
+   ],
+   "scale": "fraction"
   },
   "vav_discharge_t": {
    "name": "vav-discharge-air-temp",
@@ -726,7 +788,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "vav_inlet_t": {
    "name": "vav-inlet-air-temp",
@@ -738,7 +801,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "vav_total_flow": {
    "name": "vav-total-airflow",
@@ -748,7 +812,8 @@
     "air",
     "flow",
     "sensor"
-   ]
+   ],
+   "scale": "si:L/s"
   },
   "web_oa_dp": {
    "name": "web-outside-air-dewpoint",
@@ -758,7 +823,8 @@
     "outside",
     "air",
     "dewPoint"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "web_oa_h": {
    "name": "web-outside-air-humidity",
@@ -768,7 +834,8 @@
     "outside",
     "air",
     "humidity"
-   ]
+   ],
+   "scale": "percent_rh"
   },
   "web_oa_t": {
    "name": "web-outside-air-temp",
@@ -778,7 +845,8 @@
     "outside",
     "air",
     "temp"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "web_wb_t": {
    "name": "web-outside-air-wetbulb",
@@ -788,7 +856,8 @@
     "outside",
     "air",
     "wetBulb"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "zone_air_temp_sp": {
    "name": "zone-air-temp-sp",
@@ -800,7 +869,8 @@
     "air",
     "temp",
     "sp"
-   ]
+   ],
+   "scale": "si:degC"
   },
   "zone_airflow_sp": {
    "name": "zone-airflow-sp",
@@ -812,7 +882,8 @@
     "air",
     "flow",
     "sp"
-   ]
+   ],
+   "scale": "si:L/s"
   },
   "zone_co2": {
    "name": "zone-co2",
@@ -824,7 +895,8 @@
     "air",
     "co2",
     "sensor"
-   ]
+   ],
+   "scale": "si:ppm"
   },
   "zone_flow": {
    "name": "zone-airflow",
@@ -836,7 +908,8 @@
     "air",
     "flow",
     "sensor"
-   ]
+   ],
+   "scale": "si:L/s"
   },
   "zone_rh": {
    "name": "zone-air-humidity",
@@ -848,7 +921,8 @@
     "air",
     "humidity",
     "sensor"
-   ]
+   ],
+   "scale": "percent_rh"
   },
   "zone_t": {
    "name": "zone-air-temp",
@@ -860,7 +934,8 @@
     "air",
     "temp",
     "sensor"
-   ]
+   ],
+   "scale": "si:degC"
   }
  },
  "rules": [

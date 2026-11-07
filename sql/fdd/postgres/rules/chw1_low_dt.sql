@@ -9,7 +9,7 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     chw_supply_t, chw_return_t,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump,
+    chw_pump_cmd AS pump,
     chiller_status,
     chiller_current,
     chiller_amps,

@@ -16,13 +16,13 @@ h AS (
     h.timestamp_utc,
     COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
     COALESCE(h.web_oa_dp, wx.wx_web_oa_dp) AS web_oa_dp,
-    CASE WHEN h.oa_damper_pct IS NULL THEN NULL WHEN h.oa_damper_pct > 1.0 THEN h.oa_damper_pct / 100.0 ELSE h.oa_damper_pct END AS oa_d,
-    CASE WHEN h.clg_valve_pct IS NULL THEN NULL WHEN h.clg_valve_pct > 1.0 THEN h.clg_valve_pct / 100.0 ELSE h.clg_valve_pct END AS clg,
+    h.oa_damper_pct AS oa_d,
+    h.clg_valve_pct AS clg,
     h.fan_cmd,
     h.fan_status,
     CASE
       WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN h.fan_cmd > 1.0 THEN h.fan_cmd / 100.0 ELSE h.fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
   FROM history h

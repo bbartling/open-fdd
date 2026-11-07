@@ -7,11 +7,11 @@ WITH h AS (
     timestamp_utc,
     duct_static,
     duct_static_sp,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan_cmd,
+    fan_cmd AS fan_cmd,
         CASE
       WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on,
     -- Match pandas cookbook `_fan()`: prefer fan_status for the "full fan" gate.
@@ -19,7 +19,7 @@ WITH h AS (
     -- cmd-only gating under-counts (1h vs 40h).
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
-      ELSE CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END
+      ELSE fan_cmd
     END AS fan_for_hi
   FROM history
 ),

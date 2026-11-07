@@ -16,7 +16,7 @@ the reference the SQL is tested against ([parity](parity.html)). The code shown 
 **Conventions**
 
 - Input is a `DataFrame` with a UTC `DatetimeIndex` and one **Haystack-role column per signal** (`duct-static-pressure`,
-  `outside-air-temp`, ...). Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh, % (0-100) or fractions (0-1). The rules never convert units; convert at
+  `outside-air-temp`, ...). Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh; commands and positions are fractions (0-1), statuses 0/1, humidity %RH (0-100) (`sql/fdd/role_scales.json`). The rules never convert units or guess a scale; convert at
   ingest.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns a result with `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours`, `confirmed_fault` and `raw_fault` masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]` (`AHU`, `VAV`, `CHILLER`, ...).

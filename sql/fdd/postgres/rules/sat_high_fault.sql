@@ -7,14 +7,14 @@ WITH h AS (
     timestamp_utc,
     sat,
     sat_sp,
-    COALESCE(CASE WHEN clg_valve_pct IS NULL THEN NULL WHEN clg_valve_pct > 1.0 THEN clg_valve_pct / 100.0 ELSE clg_valve_pct END, 0.0) AS clg_valve_pct,
-    COALESCE(CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END, 0.0) AS oa_damper_pct,
+    COALESCE(clg_valve_pct, 0.0) AS clg_valve_pct,
+    COALESCE(oa_damper_pct, 0.0) AS oa_damper_pct,
     fan_cmd,
     fan_status,
         CASE
       WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 

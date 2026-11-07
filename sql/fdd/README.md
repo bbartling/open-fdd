@@ -37,7 +37,7 @@ Execute against **one authorized tenant and building at a time**. These SQL file
 
 ## Units: SI only
 
-Every input and every tuning value is SI: temperature degC, temperature differences delta-degC (no offset), pressure Pa (duct static included), flow L/s, power kW, energy kWh, percent 0-100 (or the 0-1 fraction a rule normalizes). The rules never convert units and never guess them. Convert at ingest (the NF hook runs `nf-app/static/units.js toSI` on every history value) and convert back to the user's display system only in the UI. Sensor-sweep rules (SV-*) assess a series only when its declared unit is the SI unit of its quantity (degC, %, Pa); otherwise the series is masked, not converted. Thresholds were converted from the earlier imperial defaults without re-tuning (65 F = 18.333 degC, 10 delta-F = 5.556 delta-degC, 0.25 in.w.c. = 62.21 Pa, 1 cfm = 0.471947 L/s). Setpoints are inputs in the same SI units. Preserve each source rule's percent/fraction behavior: ECON-1/2 use a 1.5 cutoff while many other rules use >1.0. Do not silently standardize these inequalities during a port.
+Every input and every tuning value is SI: temperature degC, temperature differences delta-degC (no offset), pressure Pa (duct static included), flow L/s, power kW, energy kWh. Command and position roles are fractions 0-1, statuses are 0/1 and humidity is %RH 0-100 (next section). The rules never convert units and never guess a scale. Convert at ingest (the NF hook runs `nf-app/static/units.js toSI` on every history value) and convert back to the user's display system only in the UI. Sensor-sweep rules (SV-*) assess a series only when its declared unit is the SI unit of its quantity (degC, %, Pa); otherwise the series is masked, not converted. Thresholds were converted from the earlier imperial defaults without re-tuning (65 F = 18.333 degC, 10 delta-F = 5.556 delta-degC, 0.25 in.w.c. = 62.21 Pa, 1 cfm = 0.471947 L/s). Setpoints are inputs in the same SI units.
 
 Weather must be selected for the same site and aligned to the input grid with an explicit maximum age. Do not use unlimited forward filling. Utility inputs require a meter/aggregation mapping; summing all equipment meters can double-count master/submeters. Distinguish interval kWh from cumulative meter totals and from average kW. Exact utility joins require aligned intervals.
 
@@ -64,6 +64,32 @@ For incremental runs, load sufficient pre-window history for rolling windows, st
 ## Other SQL databases
 
 The equations can be ported to SQL engines with CTEs, window functions and adequate numeric/date functions. They cannot run unchanged on every SQL database. Implement a dialect adapter for safe casts, double types, NaN/invalid values, text conversion, month/timezone functions, window bounds and statistical aggregates. PostgreSQL `IS DISTINCT FROM`, PL/pgSQL helpers and `to_char` are not universal. MySQL 8, SQL Server, BigQuery, Snowflake, Redshift and SQLite need their own execution and numerical tests; SQLite also needs a strategy for sample standard deviation. Keep tuning metadata and fixtures shared across dialects.
+
+## Input contract: one declared scale per column (#1541)
+
+The `history` columns are bare `DOUBLE PRECISION`, so a stored `1` could mean 1 % or full scale, and the rules used to guess by magnitude (`> 1.0` / `>= 1.5` meant percent, `pid_hunt_1` guessed the other way). That guess was wrong exactly at the boundary. Every column now has ONE declared scale, and no rule guesses:
+
+| Scale | Roles | Meaning |
+|---|---|---|
+| `fraction` | `fan_cmd`, `return_fan`, `chw_pump_cmd`, `cw_pump_cmd`, `tower_fan_cmd`, `chiller_cmd`, `clg_valve_pct`, `htg_valve_pct`, `reheat_valve_pct`, `damper_pct`, `damper_cmd`, `oa_damper_pct` | 0-1; 1 is 100 %, 0.01 is 1 %. The `_pct` in a name is historical |
+| `boolean` | `fan_status`, `chiller_status`, `chw_pump_status`, `pump_status`, `compressor_status`, `loop_enabled`, `clg_available`, `building_zone_load_satisfied`, `building_ahu_load_satisfied` | 0 or 1 (a resampled bucket is the on-fraction in [0, 1]) |
+| `percent_rh` | `oa_h`, `ra_h`, `zone_rh`, `ma_h`, `sa_h`, `web_oa_h` | relative humidity 0-100: a physical quantity, not a command (SV-RANGE and the sensor sweep are %RH) |
+| `text` | `occ_mode` | categorical string |
+| `si:<unit>` | every other role: temperatures `si:degC`, `duct_static`/`chw_dp` `si:Pa`, flows `si:L/s`, `electric_kw`/`chiller_power` `si:kW`, `kwh` `si:kWh`, `chiller_amps`/`chiller_current` `si:A`, `zone_co2` `si:ppm`, `*_request_sum` `si:count` | physical SI, unchanged |
+
+The table lives in `role_scales.json` (role -> scale; `input_contract.sql` repeats it as comments). `scripts/nf/build_rule_catalog.py` copies it into `nf-app/static/fdd-catalog.json` as `roles.<role>.scale` and fails when a role has none, so the hook, the docs and the Timescale path read one source.
+
+**Ingest rule** (`siPlan` in `nf-app/hooks/fdd.js`; `hooks/lib/timescale.js` applies exactly its decisions, it never decides itself). Decided per role from the point's declared unit and kind:
+
+- `fraction`: unit `%`/`percent` -> divide by 100. Unit `ratio`/`fraction`/`0-1` -> as is. Kind Bool -> as is (0/1 is a valid fraction). **No unit (or an unrelated unit) -> the role is skipped and logged once per point, never guessed**; a rule that requires it is not assessed (no result is written, a previously published result goes stale). BACnet analog outputs normally carry the percent unit.
+- `boolean`: kind Bool -> as is. Number/Enum: a `%` unit is divided by 100 first. The value must then lie in [0, 1]; a value outside it (a 0-100 analog, an enum 1/2/3) is **rejected** (not thresholded at 0.5, not rescaled) and the sample is treated as missing. Thresholding would turn a 0.4 on-fraction bucket into "off" and a 3-state enum into data it is not.
+- `percent_rh`, `si:<unit>`, `text`: the existing SI conversion by unit (`units.js toSI`); temperature/pressure/flow roles with a missing or foreign unit are skipped.
+
+A caller that feeds the SQL directly (a warehouse view, the pandas oracle, the parity harness, `synthetic_dataset.js`) must supply fractions and 0/1 itself.
+
+**Thresholds** that are commands or positions are fractions too (`tuning_catalog.json` unit `frac`: `FULL_OPEN_PCT` 0.975, `ECON1_DAMPER_MAX` 0.05, `FAN_ON_MIN` 0.01, `PUMP_HI` 0.87, `REHEAT_PCT` 0.25, ...). `*_pct` parameters with unit `pct` are percent points of something that is not a command (coverage, OA fraction from temperatures `OA_MIN_PCT`, PID-HUNT span/deadband/variation).
+
+**PID-HUNT-1** measures the control output in percent points because its span, deadband and total-variation parameters are percent points. It now converts the fraction to points once (`fraction * 100`) at the top of the rule. Before, a stored `1` stayed 1 point while `0.99` became 99 points, so a 0 <-> 1 % wiggle looked like a full-stroke swing.
 
 ## Verification
 

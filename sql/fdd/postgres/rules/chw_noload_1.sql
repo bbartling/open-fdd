@@ -11,7 +11,7 @@ WITH h AS (
     chiller_status,
     chiller_cmd,
     chw_pump_status,
-    CASE WHEN chw_pump_cmd IS NULL THEN NULL WHEN chw_pump_cmd > 1.0 THEN chw_pump_cmd / 100.0 ELSE chw_pump_cmd END AS pump_cmd,
+    chw_pump_cmd AS pump_cmd,
     building_zone_load_satisfied,
     building_ahu_load_satisfied,
     CASE

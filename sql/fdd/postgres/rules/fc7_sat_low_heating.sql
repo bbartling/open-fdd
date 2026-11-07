@@ -11,7 +11,6 @@ WITH h AS (
       CASE
         WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1.0 ELSE 0.0 END
         WHEN fan_cmd IS NULL THEN 0.0
-        WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0
         ELSE fan_cmd
       END,
       0.0
@@ -19,10 +18,10 @@ WITH h AS (
     CASE
       WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on,
-    COALESCE(CASE WHEN htg_valve_pct IS NULL THEN NULL WHEN htg_valve_pct > 1.0 THEN htg_valve_pct / 100.0 ELSE htg_valve_pct END, 0.0) AS htg_valve_pct
+    COALESCE(htg_valve_pct, 0.0) AS htg_valve_pct
   FROM history
 ),
 base AS (

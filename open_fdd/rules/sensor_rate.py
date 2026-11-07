@@ -35,10 +35,10 @@ DEADBAND_REFERENCE_HOURS = 5.0 / 60.0
 
 
 def _norm_cmd(s: pd.Series) -> pd.Series:
-    """Normalize command to fraction 0–1 (series-level auto; no element-wise ≤1)."""
+    """Command as a fraction 0–1 (input contract: already a fraction, no magnitude guess)."""
     from open_fdd.units.convert import norm_command
 
-    return norm_command(s, representation="auto")
+    return norm_command(s, representation="fraction")
 
 
 def _as_bool(s: pd.Series) -> pd.Series:

@@ -23,7 +23,9 @@ const PSI = 6894.757;                    // Pa per psi
 
 const T0 = Date.UTC(2026, 0, 5, 0, 0, 0); // Monday 00:00 UTC
 
-// Columns that are 0/1 statuses and commands (0-100 %): the rest are analog.
+// Input contract (sql/fdd/role_scales.json): STATUS columns are 0/1, PERCENT columns are FRACTIONS 0-1 (a stored 1 is
+// 100 %), humidity is %RH 0-100, everything else physical SI. The base waves below are written in percent for
+// readability and divided by 100 for the PERCENT columns in baseSignal().
 const STATUS = new Set(["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "clg_available",
   "loop_enabled", "building_ahu_load_satisfied", "building_zone_load_satisfied"]);
 const PERCENT = new Set(["fan_cmd", "damper_cmd", "damper_pct", "oa_damper_pct", "clg_valve_pct", "htg_valve_pct",
@@ -43,9 +45,9 @@ function signal(col, e, i, h, occ, step) {
   const d = i % 288;
   if (d >= 100 && d < 180) {
     switch (col) {
-      case "fan_cmd": return 100;
+      case "fan_cmd": return 1;
       case "mat": return v - D(15);
-      case "htg_valve_pct": return 100;
+      case "htg_valve_pct": return 1;
       case "sat": return v - D(12);
       case "chw_return_t": return baseSignal("chw_supply_t", e, i, h, occ, step) + D(1);
       case "chw_pump_status": case "pump_status": case "chw_pump_cmd": return 1;
@@ -57,7 +59,7 @@ function signal(col, e, i, h, occ, step) {
     switch (col) {
       case "oa_damper_pct": case "damper_pct": case "damper_cmd": return 0;
       case "mat": return baseSignal("oa_t", e, i, h, occ, step) + D(0.2);
-      case "fan_cmd": return 80;
+      case "fan_cmd": return 0.8;
       case "sat": return C(70);
       case "sat_sp": return C(55);
       default:
@@ -67,6 +69,11 @@ function signal(col, e, i, h, occ, step) {
 }
 
 function baseSignal(col, e, i, h, occ, step) {
+  const v = percentSignal(col, e, i, h, occ, step);
+  return v !== null && PERCENT.has(col) ? v / 100 : v;
+}
+
+function percentSignal(col, e, i, h, occ, step) {
   const sick = e === 1;
   const seed = hashCode(col);
   const oa = C(48) + D(24) * wave(h, 24, -2.2) + D(2) * wave(i, 17);

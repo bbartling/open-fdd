@@ -25,11 +25,17 @@
   const windowFor = (id) => (RESOLUTIONS.find((r) => r.id === id) || RESOLUTIONS[0]).windowSec;
 
   // ---- CSV text ------------------------------------------------------------------------
-  /** One CSV field: numbers as-is (empty for null/NaN), strings quoted when they hold , " or a line break. */
+  // CSV/formula injection: a text cell Excel/Sheets would read as a formula (starts with = + - @,
+  // also after leading whitespace, or with TAB/CR) gets a leading ' so it opens as plain text.
+  // Real numbers are written as numbers; a text cell that is only a plain number (-3.2) is left alone.
+  const FORMULA_START = /^\s*[=+\-@]|^[\t\r]/;
+  const PLAIN_NUMBER = /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/;
+  /** One CSV field: numbers as-is (empty for null/NaN), text neutralised against formulas, quoted when it holds , " or a line break. */
   function csvCell(v) {
     if (v == null) return "";
     if (typeof v === "number") return Number.isFinite(v) ? String(v) : "";
-    const s = String(v);
+    let s = String(v);
+    if (FORMULA_START.test(s) && !PLAIN_NUMBER.test(s)) s = "'" + s;
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   }
   const csvLine = (cells) => cells.map(csvCell).join(",");

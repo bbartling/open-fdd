@@ -2,6 +2,17 @@
 -- Tables: instances, points, data (hypertable, 1-day chunks) in schema public, like the NF connector.
 -- ~60 days (2026-09-01 .. 2026-10-31 UTC) of 5-minute data for one AHU's roles, values in NF units (°F, inH2O, %).
 -- Re-runnable: drops and rebuilds the three tables (CASCADE also drops openfdd.nf_samples; run install again).
+-- DESTRUCTIVE: drops public.data / points / instances. Refuses to run (before any DDL) unless the current
+-- database carries the marker comment the test runner puts on a database it created itself.
+DO $guard$
+BEGIN
+  IF coalesce(shobj_description((SELECT oid FROM pg_database WHERE datname = current_database()), 'pg_database'), '')
+       NOT LIKE 'openfdd-ts-test-disposable:%' THEN
+    RAISE EXCEPTION 'seed_nf_like.sql refused: database "%" is not marked as a disposable Open-FDD test database', current_database();
+  END IF;
+END
+$guard$;
+
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 DROP TABLE IF EXISTS public.data CASCADE;

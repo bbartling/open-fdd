@@ -129,5 +129,5 @@ with professional application-security testing to keep it strong, robust, free, 
 
 ## License
 
-MIT: see [LICENSE](LICENSE). The 4.x line (Rust central stack) is frozen at tag `v4.0.11-central` (branch `release/4.x`);
+MIT: see [LICENSE](LICENSE). The 4.x line (Rust central stack) is frozen at tag `v4.0.11-central`;
 changes are in [CHANGELOG.md](CHANGELOG.md).

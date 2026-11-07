@@ -1,6 +1,6 @@
 # Throwaway TimescaleDB for the Open-FDD timescale tests (example password, local port 55432 only).
 #   docker compose -f nf-app/timescale/test/docker-compose.yml up -d
-#   PGURL=postgres://postgres:example@localhost:55432/postgres node --test nf-app/timescale/test/timescale.test.mjs
+#   OPENFDD_TS_TEST_DISPOSABLE=1 PGURL=postgres://postgres:example@localhost:55432/postgres node --test nf-app/timescale/test/timescale.test.mjs
 #   docker compose -f nf-app/timescale/test/docker-compose.yml down -v     # stop and delete the data
 name: openfdd-timescale-test
 services:

@@ -7,9 +7,7 @@ WITH h AS (
     timestamp_utc,
     oa_t,
     clg_available,
-    CASE WHEN reheat_valve_pct IS NULL THEN NULL
-         WHEN reheat_valve_pct > 1.0 THEN reheat_valve_pct / 100.0
-         ELSE reheat_valve_pct END AS rh
+    reheat_valve_pct AS rh
   FROM history
 ),
 base AS (

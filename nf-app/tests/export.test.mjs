@@ -184,3 +184,40 @@ test("collect: batches many points and can be cancelled", async () => {
   assert.equal(n, 3);                                                     // 40 + 40 + 15
   await assert.rejects(X.collect({ points, startMs: 0, endMs: 3600e3, windowSec: 300, apiFn: async () => ({ data: [] }), isCancelled: () => true }), /cancelled/);
 });
+
+// ---- CSV formula injection ----------------------------------------------------------------
+test("csvCell neutralises formula-looking text with a leading apostrophe", () => {
+  for (const bad of ["=1+1", "+cmd", "-2+3", "@SUM(A1)", "\tTAB", "\rCR", "  =HYPERLINK(\"x\")", "\t =x", " @x", "-cmd|' /C calc'!A0"]) {
+    const out = X.csvCell(bad);
+    assert.ok(out.replace(/^"/, "").startsWith("'"), `${JSON.stringify(bad)} -> ${JSON.stringify(out)}`);
+  }
+  assert.equal(X.csvCell("=1+1"), "'=1+1");
+  assert.equal(X.csvCell("=a,b"), "\"'=a,b\"");
+  assert.equal(X.csvCell("  =x"), "'  =x");
+  // not formulas: untouched
+  for (const ok of ["plain", "a=b", "x-1", "72 °F", "", "mail@x", "'=already"]) assert.equal(X.csvCell(ok), ok);
+});
+
+test("csvCell keeps numbers numeric, including negative samples", () => {
+  assert.equal(X.csvCell(-3.2), "-3.2");
+  assert.equal(X.csvCell(0), "0");
+  assert.equal(X.csvCell(1e-7), "1e-7");
+  assert.equal(X.csvCell("-3.2"), "-3.2");        // plain numeric text cannot run anything
+  assert.equal(X.csvCell("+5"), "'+5");
+});
+
+test("toCsv neutralises malicious point and equip names in the header, not the data", () => {
+  const evil = [
+    { uuid: "u1", equip: "=cmd|' /C calc'!A0", dis: "Temp", unit: "°F" },
+    { uuid: "u2", equip: "AHU", dis: "@SUM(1+1)", unit: "" },
+    { uuid: "u3", equip: "+1", dis: "-2", unit: "" },
+  ];
+  const data = new Map([["u1", new Map([[t(12), -3.2]])], ["u2", new Map([[t(12), 5]])], ["u3", new Map([[t(12), -0.5]])]]);
+  const { csv } = X.toCsv({ columns: evil, data, mode: "stored", system: "si" });
+  const [head, row] = csv.slice(1).split("\r\n");
+  const cells = head.split(",");
+  assert.equal(cells[2], "'=cmd|' /C calc'!A0 Temp [°F]");
+  assert.equal(cells[3], "AHU @SUM(1+1)");   // starts with "AHU": not a formula
+  assert.equal(cells[4], "'+1 -2");
+  assert.ok(row.endsWith(",-3.2,5,-0.5"), row);
+});

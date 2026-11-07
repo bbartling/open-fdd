@@ -16,6 +16,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./routes.caddy:/etc/caddy/routes.caddy:ro
       - ./auth.caddy:/etc/caddy/auth.caddy:ro         # `<user> <bcrypt hash>`, not in git
+      - caddy_logs:/var/log/caddy                     # rolled access log (routes.caddy `log`): 5 MiB x 5 files max
       # HTTPS instead: mount ./Caddyfile.tls as /etc/caddy/Caddyfile (replace the first line) and add
       # - ./certs/server.crt:/certs/server.crt:ro
       # - ./certs/server.key:/certs/server.key:ro
@@ -25,3 +26,6 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+
+volumes:
+  caddy_logs:

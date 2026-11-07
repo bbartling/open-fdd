@@ -1,8 +1,8 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- economizer_fault.sql — ECON-2 economizing when outdoor unfavorable + confirm
--- CAST DOUBLE + percent gate >= 1.5 (not > 1.0) so Utf8/int 0–100 (B100 min OA 20)
--- becomes 0.20 and does not fire vs ECON2_DAMPER 0.42. Fraction 0–1 stays 0–1.
+-- CAST DOUBLE. oa_damper_pct is a fraction 0-1 (input_contract.sql): a 20 % minimum OA position arrives as 0.20
+-- and does not fire vs ECON2_DAMPER 0.42. No magnitude guess.
 -- Pandas econ2 has no fan gate.
 WITH base AS (
   SELECT
@@ -11,13 +11,7 @@ WITH base AS (
     CAST(CASE
       WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
        AND CAST(oa_t AS DOUBLE PRECISION) > {{ECON2_OAT_HI}}
-       AND (
-         CASE
-           WHEN CAST(oa_damper_pct AS DOUBLE PRECISION) >= 1.5
-           THEN CAST(oa_damper_pct AS DOUBLE PRECISION) / 100.0
-           ELSE CAST(oa_damper_pct AS DOUBLE PRECISION)
-         END
-       ) > {{ECON2_DAMPER}}
+       AND CAST(oa_damper_pct AS DOUBLE PRECISION) > {{ECON2_DAMPER}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM history
 ),

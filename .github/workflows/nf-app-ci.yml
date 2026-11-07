@@ -63,6 +63,9 @@ jobs:
       - name: NF app unit tests, manifest, catalog + SQL pack checks
         run: |
           node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
+          python3 -m pip install --quiet pytest
+          python3 -m pytest -q tests/test_nf_app_sync.py
+          node --test nf-app/timescale/test/bounds.test.mjs
           python3 - <<'EOF'
           import json, pathlib, re
           m = json.loads(pathlib.Path("nf-app/app.json").read_text())
@@ -93,3 +96,32 @@ jobs:
           python3 -m pip install --quiet pyoxigraph rdflib
           node tools/rdf-check/gen_ttl.js tools/rdf-check/fixtures/model.json "$RUNNER_TEMP/model.ttl"
           python3 tools/rdf-check/check_ttl.py "$RUNNER_TEMP/model.ttl"
+
+  # Full edition on real TimescaleDB (disposable service DB). Must not skip: a skipped run fails.
+  timescale:
+    name: TimescaleDB integration (retention scope, history bounds, rule parity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      tsdb:
+        image: timescale/timescaledb:2.31.0-pg17
+        env:
+          POSTGRES_PASSWORD: example
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: cd nf-app && npm ci
+      - name: Timescale suites (fail on any skip)
+        env:
+          OPENFDD_TS_TEST_DISPOSABLE: "1"
+          PGURL: postgres://postgres:example@localhost:5432/postgres
+        run: |
+          node --test nf-app/timescale/test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/ts.log"
+          if grep -Eq "^# skipped [1-9]|^ℹ skipped [1-9]" "$RUNNER_TEMP/ts.log"; then echo "Timescale tests skipped: failing the lane"; exit 1; fi

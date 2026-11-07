@@ -15,8 +15,8 @@ Is the SQL rule the same as its pandas twin? This page answers that for every on
 |---|---:|
 | SQL rules | **77** |
 | With a pandas twin | **71** |
-| Match on the synthetic suite | **46** |
-| Known divergence (documented below) | **25** |
+| Match on the synthetic suite | **49** |
+| Known divergence (documented below) | **22** |
 | SQL only (no twin) | **6** |
 
 ## What "match" means
@@ -27,15 +27,15 @@ to 1e-6 h on every equipment. The two SQL engines must agree with each other on 
 to diverge, or one that starts to match, has to be moved in the table below, so this page cannot go stale. Matching on this dataset is strong
 evidence, not a proof for every possible input.
 
-## Why 25 of 71 differ
+## Why 22 of 71 differ
 
 **Not units.** Every value on both sides is SI and the threshold equations were checked to use the same constants. The differences are in **how the rule
 decides the equipment is "on" (the gate), how it proves cooling or heating (the proof), how weather is joined, or how many samples it holds after a mode
 change**. Two rules differ for their own reasons: `SV-RATE` is a different algorithm and `TRIM-4` treats missing inputs differently.
 
 
-- **9 rules**: SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds. (`AHU-SATDEV`, `CHW-2`, `FC13-SAT-HIGH`, `FC14`, `FC6`, `FC7`, `FCU-HTG-COIL`, `HP-1`, `TRIM-1`)
-- **9 rules**: SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges. (`AHU-SIMUL`, `CHW-1`, `ECON-4`, `FC5`, `FCU-MODE-CYCLE`, `FCU-VALVE-PASS-CLG`, `OA-1`, `VAV-6`, `VAV-AHU-LEAVE`)
+- **8 rules**: SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds. (`AHU-SATDEV`, `FC13-SAT-HIGH`, `FC14`, `FC6`, `FC7`, `FCU-HTG-COIL`, `HP-1`, `TRIM-1`)
+- **7 rules**: SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges. (`CHW-1`, `ECON-4`, `FC5`, `FCU-MODE-CYCLE`, `OA-1`, `VAV-6`, `VAV-AHU-LEAVE`)
 - **3 rules**: weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns. (`ECON-3`, `ECON-7`, `OAT-METEO`)
 - **2 rules**: pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve. (`CHW-NOLOAD-1`, `MECH-OAT-1`)
 - **1 rule**: documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances. (`SV-RATE`)
@@ -51,10 +51,10 @@ before comparing numbers between them. Other known differences: [`sql/fdd/KNOWN_
 |---|---|---|
 | <a id="ahu-ducthi"></a>[AHU-DUCTHI](sql-cookbook.html#ahu-ducthi) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
 | <a id="ahu-satdev"></a>[AHU-SATDEV](sql-cookbook.html#ahu-satdev) | Known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="ahu-simul"></a>[AHU-SIMUL](sql-cookbook.html#ahu-simul) | Known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="ahu-simul"></a>[AHU-SIMUL](sql-cookbook.html#ahu-simul) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
 | <a id="avg-zone-temp"></a>[AVG-ZONE-TEMP](sql-cookbook.html#avg-zone-temp) | SQL only | Aggregate or utility analytic: it has no pandas function in `open_fdd.rules`, so there is nothing to compare. |
 | <a id="chw-1"></a>[CHW-1](sql-cookbook.html#chw-1) | Known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
-| <a id="chw-2"></a>[CHW-2](sql-cookbook.html#chw-2) | Known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
+| <a id="chw-2"></a>[CHW-2](sql-cookbook.html#chw-2) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
 | <a id="chw-3"></a>[CHW-3](sql-cookbook.html#chw-3) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
 | <a id="chw-4"></a>[CHW-4](sql-cookbook.html#chw-4) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
 | <a id="chw-noload-1"></a>[CHW-NOLOAD-1](sql-cookbook.html#chw-noload-1) | Known divergence | pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve |
@@ -94,7 +94,7 @@ before comparing numbers between them. Other known differences: [`sql/fdd/KNOWN_
 | <a id="fcu-htg-coil"></a>[FCU-HTG-COIL](sql-cookbook.html#fcu-htg-coil) | Known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
 | <a id="fcu-mode-cycle"></a>[FCU-MODE-CYCLE](sql-cookbook.html#fcu-mode-cycle) | Known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
 | <a id="fcu-sensor-null"></a>[FCU-SENSOR-NULL](sql-cookbook.html#fcu-sensor-null) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
-| <a id="fcu-valve-pass-clg"></a>[FCU-VALVE-PASS-CLG](sql-cookbook.html#fcu-valve-pass-clg) | Known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="fcu-valve-pass-clg"></a>[FCU-VALVE-PASS-CLG](sql-cookbook.html#fcu-valve-pass-clg) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
 | <a id="fcu-valve-pass-htg"></a>[FCU-VALVE-PASS-HTG](sql-cookbook.html#fcu-valve-pass-htg) | Match | Same confirmed fault hours as the SQL on the synthetic suite. |
 | <a id="hp-1"></a>[HP-1](sql-cookbook.html#hp-1) | Known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
 | <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | Known divergence | pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve |

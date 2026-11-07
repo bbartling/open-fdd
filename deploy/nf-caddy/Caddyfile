@@ -1,5 +1,6 @@
 # Plain-HTTP front door for Normal Framework on the LAN (light enough for a Raspberry Pi).
-# Use Caddyfile.tls instead for HTTPS (same routes, see README.md).
+# TRUSTED LAN / LAB ONLY: basic auth over plain HTTP exposes the password to anyone on the network.
+# Caddyfile.tls (HTTPS, same routes) is the production profile, see README.md (Security posture).
 #
 # NF's Envoy listens on loopback only (ENVOY_BIND_ADDRESS=127.0.0.1 in NF's compose); the
 # portal tunnel, app hooks and the NF MCP keep using that. Caddy takes the LAN side:

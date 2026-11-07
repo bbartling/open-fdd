@@ -6,12 +6,12 @@ WITH h AS (
     equipment_id,
     timestamp_utc,
     oa_t, mat,
-    CASE WHEN oa_damper_pct IS NULL THEN NULL WHEN oa_damper_pct > 1.0 THEN oa_damper_pct / 100.0 ELSE oa_damper_pct END AS oa_d,
+    oa_damper_pct AS oa_d,
     fan_cmd,
     fan_status,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN (CASE WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END) > 0.01 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
       ELSE 1
     END AS fan_on
 

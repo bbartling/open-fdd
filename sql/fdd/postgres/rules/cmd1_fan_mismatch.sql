@@ -5,7 +5,7 @@ WITH h AS (
   SELECT
     equipment_id,
     timestamp_utc,
-    CASE WHEN fan_cmd IS NULL THEN NULL WHEN fan_cmd > 1.0 THEN fan_cmd / 100.0 ELSE fan_cmd END AS fan,
+    fan_cmd AS fan,
     fan_status
   FROM history
 ),
