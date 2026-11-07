@@ -199,8 +199,11 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
     opt = {"name": "version", "description": "Installed Open-FDD revision (set on deploy by nf_app_sync.py)",
            "optionType": "TYPE_STRING", "defaultValue": {"string": stamp}, "value": {"string": stamp}}
     try:
+        # 1) define the option, 2) set its value (NF stores the two separately).
         c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "updateMask": ["options"],
                "options": [o for o in current if o.get("name") != "version"] + [opt]})
+        c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "updateMask": ["configuration"],
+               "configuration": {"version": {"string": stamp}}})
         print(f"app setting version = {stamp}")
     except SystemExit as e:  # older NF: version.json still carries the revision
         print(f"could not set the app's version option ({e}); version.json still shows the revision")
