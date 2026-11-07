@@ -191,17 +191,19 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
     c.call("POST", f"/api/v1/apps/{app_id}/files/static/version.json",
            base64.b64encode(json.dumps(info).encode()).decode())
     print(f"wrote /static/version.json (v{info['version']} {info['commit'][:7]}{'+dirty' if info['dirty'] else ''})")
-    # NF's app record has no version field; its description is what the NF console's Apps page
-    # shows, so stamp the installed revision there too ("<name> 5.0.0 (abc1234) — <description>").
-    stamp = f"{spec.get('name', app_id)} {info['version']}"
-    if info["commit"]:
-        stamp += f" ({info['commit'][:7]}{'+' if info['dirty'] else ''})"
-    desc = f"{stamp} — {spec.get('description', '')}".rstrip(" —")
+    # NF's app record has no version field (and ignores description updates), so record the
+    # installed revision as a read-only app setting "version" — shown in the NF console's app
+    # settings and returned by GET /api/v1/apps. Other options the app has are kept.
+    stamp = info["version"] + (f" ({info['commit'][:7]}{'+' if info['dirty'] else ''})" if info["commit"] else "")
+    current = (c.app(app_id) or {}).get("options", [])
+    opt = {"name": "version", "description": "Installed Open-FDD revision (set on deploy by nf_app_sync.py)",
+           "optionType": "TYPE_STRING", "defaultValue": {"string": stamp}, "value": {"string": stamp}}
     try:
-        c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "description": desc, "updateMask": ["description"]})
-        print(f"app description: {stamp}")
-    except SystemExit as e:  # older NF without description updates: version.json still carries it
-        print(f"could not stamp the app description ({e}); version.json still shows the revision")
+        c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "updateMask": ["options"],
+               "options": [o for o in current if o.get("name") != "version"] + [opt]})
+        print(f"app setting version = {stamp}")
+    except SystemExit as e:  # older NF: version.json still carries the revision
+        print(f"could not set the app's version option ({e}); version.json still shows the revision")
     for hook in [] if skip_hooks else [h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks]:
         # UpdateHook maps the HTTP body to the hook message itself.
         c.call("POST", f"/api/v1/apps/{app_id}/hooks", hook)
