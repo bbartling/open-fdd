@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "4.5.1"
+version = "4.5.2"
 description = "Open-FDD Python tools: pandas reference FDD rules (SI), Normal Framework data access for AI agents, reports and ECM workbooks."
 readme = "README.md"
 license = { text = "MIT" }
@@ -23,6 +23,8 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Scientific/Engineering",
 ]
 keywords = [

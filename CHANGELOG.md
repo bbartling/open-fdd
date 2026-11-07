@@ -3,6 +3,10 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## open-fdd 4.5.2 (PyPI) — 2026-11-07
+
+- Python 3.14 and 3.15 are now supported (classifiers + a CI matrix over 3.10-3.15, `.github/workflows/python-matrix.yml`). No code changes; the app version is unchanged.
+
 ## 5.0.3 (app) / open-fdd 4.5.1 (PyPI) — 2026-11-07
 
 ### Added

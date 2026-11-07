@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, asdict
-from enum import StrEnum
+from open_fdd._compat import StrEnum
 from typing import Any
 
 class ProvenanceClass(StrEnum):

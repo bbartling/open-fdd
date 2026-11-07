@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
+from open_fdd._compat import StrEnum
 from typing import Any
 
 

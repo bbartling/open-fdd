@@ -1,0 +1,63 @@
+# Python version matrix for the PyPI package open-fdd (3.10 - 3.15).
+# Separate from publish-open-fdd.yml, which builds and publishes on open-fdd-v* tags.
+
+name: Python matrix
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "open_fdd/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/python-matrix.yml"
+  pull_request:
+    paths:
+      - "open_fdd/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - ".github/workflows/python-matrix.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      # tests/ includes the pandas == SQL parity suite, which runs the SQL pack through nf-app's Node engines.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
+          cache: pip
+
+      - name: Install package, test deps and nf-app engines
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[oracle,test,rdf,dev]"
+          cd nf-app && npm ci
+
+      - name: Tests
+        run: python -m pytest tests -q
+
+      - name: Smoke import
+        run: python -c "import open_fdd, open_fdd.nf, open_fdd.rules"
