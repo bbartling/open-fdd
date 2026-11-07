@@ -16,6 +16,7 @@
     }
   },
   "files": {
+    "/hooks/analytics.js": "hooks/analytics.js",
     "/hooks/fdd.js": "hooks/fdd.js",
     "/hooks/history.js": "hooks/history.js",
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
@@ -44,6 +45,7 @@
     "/static/rcx-overview.js": "static/rcx-overview.js",
     "/static/rcx-presets.js": "static/rcx-presets.js",
     "/static/rcx.js": "static/rcx.js",
+    "/static/schedule.js": "static/schedule.js",
     "/static/sparql.js": "static/sparql.js",
     "/static/style.css": "static/style.css",
     "/static/theme-init.js": "static/theme-init.js",
@@ -130,6 +132,16 @@
       },
       "mode": "MODE_ON_REQUEST",
       "invokeTimeout": "60s"
+    },
+    {
+      "id": "analytics",
+      "name": "analytics",
+      "entryPoint": "/hooks/analytics.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "120s"
     },
     {
       "id": "history",

@@ -9,8 +9,11 @@
 // Thresholds kept from the SQL pack (sql/analytics/postgres/queries):
 //   * ON threshold: command/status fraction > 0.05 (rcxStats.frac normalizes percent to 0-1),
 //     as in motor_weekly_runtime.sql / mechanical_cooling_oat_bins.sql / economizer_deltas.sql.
-//   * Gap cap: a sample interval only counts when it is <= 3600 s (raised to 1.5 x the NF
-//     resample window when that is longer, so coarse windows are not all dropped).
+//   * Gap cap: a sample interval only counts when it is <= 3600 s. Hours (weekly runtime, after-hours
+//     split, cooling bins) integrate on the FINE grid (ctx.alignedFine, 300 s window), never on the
+//     ~360-point display grid (ctx.aligned): a coarse AVERAGE bucket smears a short pulse or hides a
+//     short cooling event. Intervals run to the signal's own next non-null sample (4.x LEAD()), so a
+//     null stretch is uncovered, not "off".
 //   * Economizer: fan_status > 0.05 gate, |OAT-RAT| >= 50/9 delta degC (= 10 delta degF) to be identifiable.
 //   * BAS vs web OAT: band +-2 delta degC (= 3.6 delta degF); web value is carried as-of (last value)
 //     for at most ~1.5 x its own cadence.
@@ -68,27 +71,35 @@
    * gapMaxSec are skipped (data gap). Returns Map(weekStartMs -> { hours, oat, n, partial })
    * partial = the observed span inside that week is under 6 days (central's partial_week).
    */
-  function weeklyRuntime(t, v, { duty = false, gapMaxSec = GAP_MAX_SEC, oat = null } = {}) {
+  function weeklyRuntime(t, v, { duty = false, gapMaxSec = GAP_MAX_SEC, oat = null, weekOf = weekStart, occ = null } = {}) {
     const weeks = new Map();
     const get = (k) => {
-      if (!weeks.has(k)) weeks.set(k, { hours: 0, oatSum: 0, oatN: 0, n: 0, first: Infinity, last: -Infinity });
+      if (!weeks.has(k)) weeks.set(k, { hours: 0, inH: 0, afterH: 0, oatSum: 0, oatN: 0, n: 0, first: Infinity, last: -Infinity });
       return weeks.get(k);
     };
-    for (let i = 0; i < t.length; i++) {
-      if (!isNum(v[i])) continue;
-      const w = get(weekStart(t[i]));
+    // 4.x LEAD() runs over the signal's own rows: a null sample is not a row, so a null stretch is neither
+    // "off" nor covered. The interval from the last real sample before it to the next real one is simply
+    // long, and the gap cap drops it (a short null hole under the cap is bridged, as in the SQL).
+    const rows = [];
+    for (let i = 0; i < t.length; i++) if (isNum(v[i])) rows.push(i);
+    for (let j = 0; j < rows.length; j++) {
+      const i = rows[j];
+      const w = get(weekOf(t[i]));
       w.n++; w.first = Math.min(w.first, t[i]); w.last = Math.max(w.last, t[i]);
-      if (i + 1 >= t.length) continue;
-      const dt = (t[i + 1] - t[i]) / 1000;
+      if (j + 1 >= rows.length) continue;
+      const dt = (t[rows[j + 1]] - t[i]) / 1000;
       if (!(dt > 0 && dt <= gapMaxSec)) continue;
       const wt = onWeight(v[i], duty);
       if (!wt) continue;
-      w.hours += (wt * dt) / 3600;
+      const h = (wt * dt) / 3600;
+      w.hours += h;
+      if (occ) { if (occ(t[i])) w.inH += h; else w.afterH += h; }   // an interval belongs to the occupancy at its start
       if (oat && isNum(oat[i])) { w.oatSum += oat[i]; w.oatN++; }
     }
     const out = new Map();
     for (const [k, w] of [...weeks].sort((a, b) => a[0] - b[0])) {
-      out.set(k, { hours: w.hours, oat: w.oatN ? w.oatSum / w.oatN : null, n: w.n, partial: w.last - w.first < 6 * 86400e3 });
+      out.set(k, { hours: w.hours, inHours: occ ? w.inH : null, afterHours: occ ? w.afterH : null,
+        oat: w.oatN ? w.oatSum / w.oatN : null, n: w.n, partial: w.last - w.first < 6 * 86400e3 });
     }
     return out;
   }
@@ -114,9 +125,13 @@
   /** @param {any} t @param {any} active @param {any} oat @param {{toDisp?: (c: number) => number, duty?: boolean, gapMaxSec?: number}} [o] */
   function mechBins(t, active, oat, { toDisp, duty = false, gapMaxSec = GAP_MAX_SEC } = {}) {
     const edges = oatEdges(), labels = oatBinLabels(toDisp), hours = labels.map(() => 0);
-    for (let i = 0; i + 1 < t.length; i++) {
-      const dt = (t[i + 1] - t[i]) / 1000;
-      if (!(dt > 0 && dt <= gapMaxSec) || !isNum(oat[i])) continue;
+    // Like the SQL: only rows where the device signal AND the OAT both exist (joined), and the interval runs
+    // to the next joined row, so a null stretch is uncovered (gap cap), never "off".
+    const rows = [];
+    for (let i = 0; i < t.length; i++) if (isNum(active[i]) && isNum(oat[i])) rows.push(i);
+    for (let j = 0; j + 1 < rows.length; j++) {
+      const i = rows[j], dt = (t[rows[j + 1]] - t[i]) / 1000;
+      if (!(dt > 0 && dt <= gapMaxSec)) continue;
       const w = onWeight(active[i], duty);
       if (w) hours[oatBinIndex(oat[i], edges)] += (w * dt) / 3600;
     }
@@ -203,11 +218,18 @@
     return { labels: counts.map((_, k) => ((lo + k) * width).toFixed(dec)), counts };
   }
 
-  /** OR several equips' 0/1 fault series into one lane: [[ms, 0|1]]. */
+  /**
+   * OR several equips' fault lanes into one: [[ms, 1|0|null]]. 1 if any equip is 1, else 0 if any is 0, else null
+   * (not assessed stays a gap, it is never turned into ok). The result is approximate when any input lane was.
+   */
   function mergeFaultLanes(arrays) {
     const m = new Map();
-    for (const a of arrays) for (const [t, v] of a || []) m.set(t, Math.max(m.get(t) || 0, v));
-    return [...m].sort((a, b) => a[0] - b[0]);
+    for (const a of arrays) for (const [t, v] of a || []) {
+      const cur = m.has(t) ? m.get(t) : null;
+      m.set(t, v == null ? cur : cur == null ? v : Math.max(cur, v));
+    }
+    const out = [...m].sort((a, b) => a[0] - b[0]);
+    return arrays.some((a) => a && a.approximate) ? Object.defineProperty(out, "approximate", { value: true }) : out;
   }
 
   globalThis.rcxOverviewMath = {
@@ -216,10 +238,11 @@
     ECON_DT_MIN_C, BAS_BAND_C, ON,
   };
   const M = globalThis.rcxOverviewMath;
+  // Data entry points (no drawing) for the agent analytics hook (hooks/analytics.js); the views above use the same ones.
+  M.data = { weeklyData, mechData, econGrid, siteSchedules, weekIndexer, weatherOat };
 
   // ================= view helpers ======================================================
 
-  const gapMax = (hours) => Math.max(GAP_MAX_SEC, 1.5 * pickWindow(hours));
   const TEMP = "°C";                    // SI unit of every temperature in this file
   const eqName = (eq) => eq.name;
   const nan = (x) => (isNum(x) ? x : null);
@@ -234,7 +257,7 @@
   async function faultLanes(ctx, rules, eqs) {
     const lanes = [];
     for (const rule of rules) {
-      const arrays = await Promise.all(eqs.map((eq) => rcxFaultData(ctx.model, eq.id, rule, ctx.hours)));
+      const arrays = await Promise.all(eqs.map((eq) => rcxFaultData(ctx.model, eq, rule, ctx.hours)));
       const data = M.mergeFaultLanes(arrays);
       if (data.length) lanes.push({ name: rule, data });
     }
@@ -265,22 +288,98 @@
     { id: "tower-fan", title: "Cooling-tower fans", group: "Plant", kinds: ["cooling_tower", "chiller", "chwPlant"], signals: ["tower_fan_cmd"] },
   ];
 
+  // ---- schedules for the weekly views (read only; schedule.js = ofddSchedule) ----------------
+  const sched = () => globalThis.ofddSchedule || null;
+  const siteOf = (eq) => (eq.rec && eq.rec.attrs && eq.rec.attrs.siteRef) || "";
+  const AFTER_HOURS_DECAL = { symbol: "rect", dashArrayX: [1, 0], dashArrayY: [2, 3], rotation: Math.PI / 4, color: "rgba(127,127,127,0.65)" };
+
+  /** ISO-week start function: Monday 00:00 in `tz` (cached per week, so 8000 samples cost a handful of Intl calls); UTC Monday without a tz. */
+  function weekIndexer(tz) {
+    const S = sched();
+    if (!tz || !S) return weekStart;
+    let lo = Infinity, hi = -Infinity, cur = 0;
+    return (ms) => {
+      if (ms >= lo && ms < hi) return cur;
+      cur = S.localWeekStartMs(ms, tz);
+      lo = cur; hi = S.localWeekStartMs(cur + 8 * 86400e3, tz);   // next local Monday (a DST week is 167 or 169 h)
+      return cur;
+    };
+  }
+
+  /**
+   * Per siteRef of the given equips: { siteRef, schedule, tz, weekOf, occ } with the schedule NF binds to
+   * the site's occupancy point (else the 4.x default 50 h/week calendar), loaded once. Empty Map when
+   * schedule.js is not loaded (the view then draws no schedule split).
+   */
+  async function siteSchedules(ctx, eqs) {
+    const S = sched(), out = new Map();
+    if (!S) return out;
+    let schedules = [];
+    try { if (typeof api === "function") schedules = await S.loadSchedules(api); } catch (e) { schedules = []; }
+    for (const ref of new Set(eqs.map(siteOf))) {
+      const rec = ((ctx.model && ctx.model.sites) || []).find((r) => ((r.attrs && r.attrs.id) || r.name) === ref);
+      const tz = (rec && rec.attrs && (rec.attrs.tz || rec.attrs.timezone)) || null;
+      const schedule = S.pickSiteSchedule(schedules, ctx.model, ref) || S.defaultSchedule(tz);
+      const zone = schedule.tz || tz || null;
+      out.set(ref, { siteRef: ref, schedule, tz: zone, weekOf: weekIndexer(zone), occ: (ms) => S.occupied(schedule, ms, zone) });
+    }
+    return out;
+  }
+
+  /**
+   * Weekly runtime per equip on the FINE grid (shared by the chart and the agent analytics hook): { perEq, sites }.
+   * perEq = [{ eq, site, role, weeks: Map(weekStartMs -> weeklyRuntime row) }], sites = Map(siteRef -> schedule info).
+   * Hours integrate on the fine grid (alignedFine), schedules are read once per call (read only).
+   */
+  async function weeklyData(ctx, eqs, role) {
+    const wx = weatherOat(ctx);
+    const cols = {};
+    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = ctx.first(eq, "oa_t") || wx; });
+    const [g, sites] = await Promise.all([ctx.alignedFine(cols, { hours: ctx.hours }), siteSchedules(ctx, eqs)]);
+    const perEq = eqs.map((eq, i) => {
+      const site = sites.get(siteOf(eq));
+      return { eq, site, role, weeks: M.weeklyRuntime(g.t, g.cols[`m${i}`], { duty: cols[`m${i}`].kind === "Bool", gapMaxSec: GAP_MAX_SEC,
+        oat: g.cols[`o${i}`], weekOf: site && site.weekOf, occ: site && site.occ }) };
+    });
+    return { perEq, sites };
+  }
+
   async function renderWeekly(el, ctx, motor, role) {
     const preferred = motor.signals.slice(0, motor.signals.indexOf(role));
     const eqs = ctx.equips.filter((eq) => !preferred.some((r) => ctx.first(eq, r)));
     if (!eqs.length) return `every equip here is counted by the ${preferred.join("/")} view`;
-    const wx = weatherOat(ctx);
-    const cols = {};
-    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = ctx.first(eq, "oa_t") || wx; });
-    const g = await ctx.aligned(cols, { hours: ctx.hours });
-    const gm = gapMax(ctx.hours);
-    const perEq = eqs.map((eq, i) => ({ eq, weeks: M.weeklyRuntime(g.t, g.cols[`m${i}`],
-      { duty: cols[`m${i}`].kind === "Bool", gapMaxSec: gm, oat: g.cols[`o${i}`] }) }));
+    const { perEq, sites } = await weeklyData(ctx, eqs, role);
     const starts = [...new Set(perEq.flatMap((p) => [...p.weeks.keys()]))].sort((a, b) => a - b);
     if (!starts.length || !perEq.some((p) => [...p.weeks.values()].some((w) => w.hours > 0))) return "no running time in this window";
     const partial = new Set(starts.filter((k) => perEq.every((p) => !p.weeks.has(k) || p.weeks.get(k).partial)));
-    const series = perEq.map((p) => ({ name: eqName(p.eq), type: "bar",
-      data: starts.filter((k) => p.weeks.has(k)).map((k) => [k, +p.weeks.get(k).hours.toFixed(2)]) }));
+    // One stack per equip: solid = in-schedule run hours, hatched = after-hours run hours (total = both).
+    const pal = typeof palette === "function" ? palette() : null;
+    const series = perEq.flatMap((p, i) => {
+      const color = pal ? { color: pal[i % pal.length] } : {};
+      // hours are kept unrounded (agents / exports read the option); the tooltip formats them
+      const bars = (pick) => starts.filter((k) => p.weeks.has(k)).map((k) => [k, pick(p.weeks.get(k))]);
+      // two sites can both have an "AHU-1": the legend must tell them apart
+      const name = sites.size > 1 ? `${eqName(p.eq)} · ${siteOf(p.eq)}` : eqName(p.eq);
+      if (!p.site) return [{ name, type: "bar", data: bars((w) => w.hours) }];
+      return [
+        { name: `${name} · in schedule`, type: "bar", stack: `eq${i}`, itemStyle: color, data: bars((w) => w.inHours) },
+        { name: `${name} · after hours`, type: "bar", stack: `eq${i}`, itemStyle: { ...color, decal: AFTER_HOURS_DECAL }, data: bars((w) => w.afterHours) },
+      ];
+    });
+    // Schedule reference: hours per ISO week as a step line (holiday weeks step down), one per site.
+    const S = sched(), refs = [];
+    if (S) {
+      for (const site of new Set(perEq.map((p) => p.site).filter(Boolean))) {
+        const ks = [...new Set(perEq.filter((p) => p.site === site).flatMap((p) => [...p.weeks.keys()]))].sort((a, b) => a - b);
+        if (!ks.length) continue;
+        const infos = ks.map((k) => S.weeklyScheduleInfo(site.schedule, k, site.tz));
+        const end = site.tz ? S.localWeekStartMs(ks[ks.length - 1] + 8 * 86400e3, site.tz) : ks[ks.length - 1] + WEEK_MS;
+        const label = infos[0].label + (sites.size > 1 ? ` · ${site.siteRef}` : "");
+        refs.push({ site, label, end });
+        series.push({ id: `schedule-ref:${site.siteRef}`, name: label, type: "line", step: "end", showSymbol: false, z: 5,
+          lineStyle: { width: 2, type: "dashed" }, data: [...ks.map((k, i) => [k, infos[i].hours]), [end, infos[infos.length - 1].hours]] });
+      }
+    }
     // mean OAT while on: averaged in degC, shown in the display system
     const oatMeans = ctx.dispSeries(starts.map((k) => [k, rcxStats.mean(perEq.map((p) => p.weeks.get(k)?.oat))]).filter(([, v]) => v != null), TEMP)
       .map(([k, v]) => [k, +v.toFixed(1)]);
@@ -289,11 +388,12 @@
       series.push(lineS(`Avg OAT ${oatUnit} (while on)`, oatMeans, { yAxisIndex: 1, showSymbol: true, symbolSize: 7,
         lineStyle: { width: 2, type: "dotted" } }));
     }
-    const xMin = starts[0], xMax = starts[starts.length - 1] + WEEK_MS;
+    const xMin = starts[0], xMax = Math.max(starts[starts.length - 1] + WEEK_MS, ...refs.map((r) => r.end));
+    const tzs = [...new Set([...sites.values()].map((s) => s.tz || "UTC"))], tzLabel = tzs.length <= 1 ? tzs[0] || "UTC" : "site local";
     const option = {
-      tooltip: { trigger: "axis" }, legend: { top: 0 },
+      tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 0 },
       grid: baseGrid({ right: oatMeans.length ? 56 : 24 }),
-      xAxis: { type: "time", min: xMin, max: xMax, name: "week of (UTC)" },
+      xAxis: { type: "time", min: xMin, max: xMax, name: `week of (${tzLabel})` },
       yAxis: [{ type: "value", name: "Run hours" },
         ...(oatMeans.length ? [{ type: "value", name: oatUnit, position: "right", scale: true, splitLine: { show: false } }] : [])],
       series,
@@ -302,8 +402,9 @@
     let out = lanes.length ? rcxWithFaultLane(option, lanes) : option;
     out = { ...out, xAxis: [].concat(out.xAxis).map((x) => ({ ...x, min: xMin, max: xMax })) };   // bars and lane share one range
     ofddRender(ctx.chart(el), out, `${motor.id}_weekly_runtime`);
-    return `ISO weeks (UTC), ${starts.length} shown; ${partial.size ? `${partial.size} partial (under 6 days of data); ` : ""}`
-      + `on = signal > ${ON * 100}%${role.endsWith("_status") ? " (status)" : " (command)"}`;
+    return `ISO weeks (${tzLabel}), ${starts.length} shown; ${partial.size ? `${partial.size} partial (under 6 days of data); ` : ""}`
+      + `on = signal > ${ON * 100}%${role.endsWith("_status") ? " (status)" : " (command)"}`
+      + (refs.length ? `; hatched = after-hours run time; line = ${refs.map((r) => r.label).join(", ")}` : "");
   }
 
   for (const motor of MOTORS) {
@@ -321,6 +422,26 @@
 
   // ================= mechanical cooling x OAT bins =====================================
 
+  /**
+   * Cooling hours per OAT bin per equip on the FINE grid (shared by the chart and the agent analytics hook).
+   * toDisp only relabels the bins. -> { per: [{ eq, bins: { labels, hours } }], wx } or { error } (no OAT point at all).
+   */
+  async function mechData(ctx, role, toDisp) {
+    const wx = weatherOat(ctx);
+    const cols = {};
+    ctx.equips.forEach((eq, i) => { cols[`a${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
+    if (!Object.keys(cols).some((k) => k[0] === "o" && cols[k])) return { error: "needs an outdoor-air temperature (weather point or oa_t)", per: [], wx };
+    const g = await ctx.alignedFine(cols, { hours: ctx.hours });   // fine grid: a short low-OAT event must not vanish
+    const per = ctx.equips.map((eq, i) => {
+      const op = cols[`o${i}`];
+      // a slow weather series (20 min) is carried as-of onto the 5 min device rows, bounded by its own cadence
+      const oat = op ? M.asOfFill(g.t, g.cols[`o${i}`], Math.max(M.webMaxAgeMs(g.t, g.cols[`o${i}`]), g.windowSec * 1e3)) : null;
+      return oat ? { eq, bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
+        { toDisp, duty: cols[`a${i}`].kind === "Bool", gapMaxSec: GAP_MAX_SEC }) } : null;
+    }).filter(Boolean);
+    return { per, wx };
+  }
+
   for (const role of ["compressor_status", "chiller_status", "chiller_cmd"]) {
     rcxView({
       id: `mech-cooling-${role.split("_").slice(0, -1).join("-")}-${role.split("_").pop()}`,
@@ -329,24 +450,16 @@
       kinds: [], scope: "site", hours: 720,
       roles: { required: [role], optional: ["oa_t"] },
       render: async (el, ctx) => {
-        const wx = weatherOat(ctx);
-        const cols = {};
-        ctx.equips.forEach((eq, i) => { cols[`a${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
-        if (!Object.keys(cols).some((k) => k[0] === "o" && cols[k])) return "needs an outdoor-air temperature (weather point or oa_t)";
-        const g = await ctx.aligned(cols, { hours: ctx.hours });
-        const gm = gapMax(ctx.hours);
-        const per = ctx.equips.map((eq, i) => {
-          const op = cols[`o${i}`], oat = op ? g.cols[`o${i}`] : null;
-          return oat ? { eq, bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
-            { toDisp: (c) => ctx.disp(c, TEMP).value, duty: cols[`a${i}`].kind === "Bool", gapMaxSec: gm }) } : null;
-        }).filter(Boolean);
+        const res = await mechData(ctx, role, (c) => ctx.disp(c, TEMP).value);
+        if (res.error) return res.error;
+        const { per, wx } = res;
         if (!per.length) return "no outdoor-air data";
         const unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
         const series = per.map((p) => ({ name: eqName(p.eq), type: "bar", stack: "hours",
-          data: p.bins.hours.map((h) => (h > 0 ? +h.toFixed(2) : null)) }));
+          data: p.bins.hours.map((h) => (h > 0 ? h : null)) }));   // unrounded; the tooltip formats
         if (!per.some((p) => p.bins.hours.some((h) => h > 0))) return "cooling never ran in this window";
         draw(ctx, el, {
-          tooltip: { trigger: "axis" }, legend: { top: 0 }, dataZoom: false,
+          tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 0 }, dataZoom: false,
           grid: baseGrid({ bottom: 40 }),
           xAxis: { type: "category", data: labels, name: `OAT bin ${unit}`, nameLocation: "middle", nameGap: 26 },
           yAxis: { type: "value", name: "hours" }, series,
@@ -361,9 +474,10 @@
   const ECON_RULES = ["ECON-1", "ECON-2", "DMP-1"];
   const ECON_ROLES = { required: ["oa_t", "rat", "mat", "fan_status"], optional: ["sat", "oa_damper_pct"] };
 
-  async function econGrid(ctx, eq) {
+  /** Economizer samples of one equip. `fine` = the fine grid (agent numbers); the charts keep the display grid. */
+  async function econGrid(ctx, eq, fine = false) {
     const col = (r) => ctx.first(eq, r);
-    const g = await ctx.aligned({ oa_t: col("oa_t"), rat: col("rat"), mat: col("mat"), fan: col("fan_status"),
+    const g = await (fine ? ctx.alignedFine : ctx.aligned)({ oa_t: col("oa_t"), rat: col("rat"), mat: col("mat"), fan: col("fan_status"),
       sat: col("sat"), damper: col("oa_damper_pct") }, { hours: ctx.hours });
     return { eq, rows: M.economizerRows({ t: g.t, ...g.cols }) };
   }

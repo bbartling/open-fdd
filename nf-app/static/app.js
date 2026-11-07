@@ -260,7 +260,7 @@ async function showRulePlot(ruleId, equipId) {
   $("fddPlotNote").textContent = row.rule.description || "";
   $("fddPlotPanel").scrollIntoView({ behavior: "smooth", block: "start" });
   const note = await fddRulePlot($("fddPlot"), { rule: row.rule, equipRec, bound: row.bound,
-    resultPoint: rcxResultPoint(model, equipId, ruleId), hours: 168 });
+    resultPoint: rcxResultPoint(model, equipRec, ruleId), model, hours: 168 });
   $("fddPlot").classList.add("rendered");
   if (note) $("fddPlotNote").textContent = note;
 }
@@ -580,11 +580,14 @@ function download(name, text, type) {
 // (scope "equip") or one per site (scope "site"); each card renders on its own so one
 // failing view never blanks the tab.
 let rcxRun = 0;
+let rcxRangeChosen = false;          // set once the user touches #rcxRange
 async function renderRcx() {
   const run = ++rcxRun;
   const catalog = await loadCatalog();
   const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
   const hours = Number($("rcxRange").value) || 168;
+  // Weekly views want a month of history; until the user picks a range themselves they get their own 672 h.
+  const hoursFor = (view) => (!rcxRangeChosen && /^weekly-/.test(view.id) ? view.hours || hours : hours);
   const { ready, missing } = rcxPlan(equips, model, catalog);
   const cards = ready.flatMap(({ view, equips: eqs }) => (view.scope === "site" ? [{ view, eqs }] : eqs.map((eq) => ({ view, eqs: [eq] }))));
   $("nRcx").textContent = String(cards.length);
@@ -601,7 +604,7 @@ async function renderRcx() {
     if (run !== rcxRun) return;                      // a newer render (range/scope change) took over
     const el = $(`rcx-${i}`);
     try {
-      const note = await c.view.render(el, rcxContext(c.view, c.eqs, hours, model, catalog));
+      const note = await c.view.render(el, rcxContext(c.view, c.eqs, hoursFor(c.view), model, catalog));
       el.classList.add("rendered");
       if (note) $(`rcx-note-${i}`).textContent = note;
       // Fault lanes (rcxWithFaultLane) add grids under the signals: give each lane its own room
@@ -780,7 +783,8 @@ function wireControls() {
     renderPointHistory().catch((e) => setLive(false, e.message));
   };
   $("fddRunnableOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
-  $("rcxRange").onchange = () => renderRcx().catch((e) => setLive(false, e.message));
+  $("rcxRange").onchange = () => { rcxRangeChosen = true; renderRcx().catch((e) => setLive(false, e.message)); };
+
   // Click a rule (Faults or Rule inputs) → stacked signal plot + bottom fault lane (fdd-plots.js).
   const plotErr = (e) => ($("fddPlotNote").textContent = `could not draw: ${e.message}`);
   for (const id of ["fddRows", "fddResultRows"]) {

@@ -420,7 +420,7 @@
           const lanes = [];
           for (const w of want) for (const rule of rules) {
             if (lanes.length >= MAX_LANES) break;
-            const data = await rcxFaultData(ctx.model, w.eq.id, rule, ctx.hours);
+            const data = await rcxFaultData(ctx.model, w.eq, rule, ctx.hours);
             if (data.length) lanes.push({ name: want.length > 1 ? `${labelOf(w.eq)} ${rule}` : rule, data });
           }
           option = rcxWithFaultLane(option, lanes);

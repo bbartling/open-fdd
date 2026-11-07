@@ -19,6 +19,28 @@
 // points appear next to them. The operator can delete the old ones (application_id open-fdd, no siteRef-scoped name,
 // no fddStatus attribute) once the new ones are trending. Nothing is deleted automatically.
 //
+// FAULT TIMELINE (5.0.3). fault_pct is a rolling number (one value per run over the trailing window): a fault that
+// cleared an hour ago still shows a percentage, and it says nothing about WHEN. So every fault rule whose pack entry has
+// a timeline_sql (68 of 77; see scripts/nf/build_sql_pack.py) also publishes a per-timestamp series on a SECOND result
+// point per (equip, rule): markers point,his,fault_timeline (deliberately NOT `fdd`/`fault`, so the FDD results table
+// and the old fault_pct lookups never see it), uuid = nameUuid("<resultKey>:<rule id>:timeline"), same ruleRef /
+// equipRef / siteRef (+ equipUuid) attributes. Each sample is the rule's own confirmed flag at that history timestamp:
+//   1 = confirmed fault, 0 = assessed and ok, NOT WRITTEN = not assessed (last sample, a gap longer than MAX_GAP_HOURS,
+//   or a REQUIRED input of the rule missing at that timestamp). Unknown is never written as 0.
+// Append-only: a run writes only samples newer than the point's attribute fddTimelineThrough (ISO, the newest sample
+// written so far; advanced only after the AddData call that carried them succeeded), so nothing is written twice and
+// NF is never asked to overwrite. The first run writes the whole trailing window. A rule without a timeline_sql
+// (ratio / count / window-statistic rules) keeps only its per-run status sample.
+// The fault_pct point, its uuid and its meaning are unchanged (FDD table, BACnet export, 5.0.1/5.0.2 readers).
+//
+// OCCUPANCY (5.0.3). A runnable rule that lists occ_mode as OPTIONAL (VAV-1, ...) and has no bound occ_mode point gets
+// occ_mode synthesized onto its history rows before the SQL runs, from the site's NF schedule (read only,
+// static/schedule.js: a schedule that targets the site's occupancy point, holidays included) else the 4.x default
+// calendar (Mon-Fri 07:00-17:00), in the site timezone: 1 = occupied, 0 = unoccupied (the SQL treats <= 0.05 as
+// unoccupied). The source lands in the result attributes as fddOccSource = point | schedule | default (rules with
+// occ_mode REQUIRED, e.g. VAV-2, are untouched: no point, no run). Not available on the timescale engine (its wide
+// history is built in SQL), where the rule keeps its old behaviour (no occ_mode = occupied limits).
+//
 // Result contract (typed, unknown is never healthy):
 //   fault rule   = pack output_columns contain fault_pct or fault_hours. Published value = fault_pct (unit %) else
 //                  fault_hours (unit h). covered_hours null/0 -> fddStatus "not-assessed", NO numeric value written.
@@ -86,11 +108,12 @@ async function queryAll(http, body) {
 async function loadModel(http, shared) {
   const recs = await queryAll(http, { layer: 'model' });
   const of = (t) => recs.filter((r) => r.pointType === t);
-  const model = { sites: of('SITE'), equips: of('EQUIPMENT'), devices: of('DEVICE'), points: [], results: new Map() };
+  const model = { sites: of('SITE'), equips: of('EQUIPMENT'), devices: of('DEVICE'), points: [], results: new Map(), timelines: new Map() };
   // result points published by earlier runs (model-layer records), by uuid; used to mark them stale
   for (const r of recs) {
     const a = r.attrs || {};
     if (r.uuid && a.ruleRef && /(^|,)fdd(,|$)/.test(String(a.markers || ''))) model.results.set(r.uuid, r);
+    if (r.uuid && a.ruleRef && /(^|,)fault_timeline(,|$)/.test(String(a.markers || ''))) model.timelines.set(r.uuid, r);
   }
   for (const s of model.sites) {
     const pts = await queryAll(http, { layer: 'default', structuredQuery: { field: { property: 'siteRef', text: shared.idOf(s) } } });
@@ -230,7 +253,7 @@ function roleInputs(rows) {
 }
 
 /** Engine input for one equip: history on the grid, weather, unit catalog for the SV rules. */
-function buildInput({ equipId, siteId, roles, hist, grid, pack, si }) {
+function buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ }) {
   si = si || siPlan(roles, null);
   const conv = (role, v) => (si.convert[role] ? si.convert[role](v) : v);
   const contract = pack.contract.history.filter((c) => c.name !== 'equipment_id' && c.name !== 'timestamp_utc');
@@ -243,7 +266,10 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack, si }) {
       const x = v != null ? conv(role, v) : null;
       if (x != null) { row[role] = x; any = true; }
     }
-    if (any) history.push(row);          // a timestamp with no data at all is a gap, not zeros
+    if (any) {                           // a timestamp with no data at all is a gap, not zeros
+      if (occ) row.occ_mode = occ(ts) ? 1 : 0;   // synthesized from the schedule (occ is only passed when no occ_mode point is bound)
+      history.push(row);
+    }
   }
   const weather = [];
   for (const ts of grid) {
@@ -316,7 +342,7 @@ function resultValue(packRule, row) {
 
 const siteEquipLabel = (siteId, equipId) => (siteId ? `${siteId}/${equipId}` : equipId);
 
-function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, runIso }) {
+function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, runIso, occSource }) {
   const equipId = shared.idOf(equipRec);
   const uuid = resultUuid(key, rule.id);
   const dis = `${(equipRec.attrs || {}).dis || equipRec.name} ${rule.id}`;
@@ -328,12 +354,74 @@ function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, 
     fddWindowHours: String(windowHours), fddOutput: out.column,
     fddStatus: out.status, fddReason: out.reason || '', fddLastRun: runIso };
   if (out.coverage != null) attrs.fddCoverageHours = String(out.coverage);
+  if (equipRec.uuid) attrs.equipUuid = equipRec.uuid;     // lets the UI match this point to its equip without guessing from names
+  if (occSource) attrs.fddOccSource = occSource;
   return [
     { uuid, name, layer: 'automation', pointType: 'POINT', attrs: {
       application_id: APP_ID, type: 'fdd-result', label: rule.id, group_key: siteEquipLabel(siteId, equipId),
       description: rule.description || rule.id, units: out.unit } },
     { uuid, name, layer: 'model', attrs },
   ];
+}
+
+// ---- fault timeline (see the header) ---------------------------------------------------------
+const timelineUuid = (key, ruleId) => nameUuid(`${key}:${ruleId}:timeline`);
+
+/**
+ * Timeline rows (engine.timeline) -> the samples to publish: [{ ms, value: 1 | 0 }], oldest first.
+ * Skipped (= not assessed, nothing written): held_seconds 0 (last sample, gap over MAX_GAP_HOURS), a null flag,
+ * a timestamp for which assessed(ms) is false (a required input missing), and anything at or before `after` (already written).
+ * @param {any[]} rows @param {{ assessed?: ((ms: number) => boolean) | null, after?: number, equipId?: string }} [o]
+ */
+function timelineSamples(rows, { assessed, after = -Infinity, equipId } = {}) {
+  const out = [];
+  for (const r of rows || []) {
+    if (equipId != null && r.equipment_id !== equipId) continue;
+    const ms = Math.round(Number(r.ts_epoch) * 1000);
+    if (!Number.isFinite(ms) || ms <= after) continue;
+    if (!(Number(r.held_seconds) > 0) || r.confirmed == null) continue;
+    if (assessed && !assessed(ms)) continue;
+    out.push({ ms, value: Number(r.confirmed) === 1 ? 1 : 0 });
+  }
+  return out.sort((a, b) => a.ms - b.ms);
+}
+
+/** The two records (automation + model) of an equip + rule's timeline point; `through` (ms) = newest sample written so far. */
+function timelineRecords({ equipRec, siteId, rule, shared, windowHours, key, runIso, through }) {
+  const equipId = shared.idOf(equipRec);
+  const uuid = timelineUuid(key, rule.id);
+  const dis = `${(equipRec.attrs || {}).dis || equipRec.name} ${rule.id} fault timeline`;
+  const name = `${siteEquipLabel(siteId, equipId)}/${rule.id}/timeline`;
+  const attrs = { dis, markers: ['point', 'his', 'fault_timeline'].join(','), kind: 'Number', unit: '',
+    siteRef: siteId, equipRef: equipId, ruleRef: rule.id, fddKind: 'fault-timeline', fddTimelineOf: resultUuid(key, rule.id),
+    fddWindowHours: String(windowHours), fddLastRun: runIso };
+  if (equipRec.uuid) attrs.equipUuid = equipRec.uuid;
+  if (Number.isFinite(through)) attrs.fddTimelineThrough = new Date(through).toISOString();
+  return [
+    { uuid, name, layer: 'automation', pointType: 'POINT', attrs: {
+      application_id: APP_ID, type: 'fdd-fault-timeline', label: `${rule.id} timeline`, group_key: siteEquipLabel(siteId, equipId),
+      description: `${rule.id} confirmed fault per assessed timestamp: 1 fault, 0 ok, no sample = not assessed`, units: '' } },
+    { uuid, name, layer: 'model', attrs },
+  ];
+}
+
+// ---- occupancy for rules whose occ_mode is optional and unbound -------------------------------------
+const scheduleLib = require('../static/schedule.js');
+const hostTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
+
+/**
+ * { source: 'schedule' | 'default', label, tz, at(ms) -> occupied } for a site. NF schedules are read once per run
+ * (cache.schedules) and never written. Timezone: the site record's tz / timezone, else the host's.
+ */
+async function siteOccupancy({ http, model, shared, siteId, cache }) {
+  if (!cache.schedules) cache.schedules = scheduleLib.loadSchedules(async (p) => { const r = await http.get(p); return r && r.data; });
+  const schedules = await cache.schedules;
+  const site = model.sites.find((x) => shared.idOf(x) === siteId);
+  const sa = (site && site.attrs) || {};
+  const tz = sa.tz || sa.timezone || hostTz();
+  const picked = scheduleLib.pickSiteSchedule(schedules, { sites: model.sites, points: model.points }, siteId);
+  const sched = picked || scheduleLib.defaultSchedule(tz);
+  return { source: picked ? 'schedule' : 'default', label: sched.label, tz, at: (ms) => scheduleLib.occupied(sched, ms, tz) };
 }
 
 /** Model record of a previously published result, flagged stale: nothing else about it changes. */
@@ -405,16 +493,27 @@ async function flushWrites(http, queue, summary, log, baseMs) {
   // a point whose metadata failed is not written to (it may not exist); it is already counted as an error
   const pending = queue.values.filter((v) => !failedMeta.has(v.uuid))
     .map((v) => ({ uuid: v.uuid, values: [{ ts: v.ts, real: v.value }] }));
+  // fault timelines: one entry per point with all its new samples, in the same batched AddData calls
+  const seriesByUuid = new Map((queue.series || []).filter((s) => !failedMeta.has(s.uuid)).map((s) => [s.uuid, s]));
+  for (const s of seriesByUuid.values()) pending.push({ uuid: s.uuid, values: s.values });
+  const wrote = new Set();            // timeline uuids whose samples reached NF
   for (const chunk of chunkBySize(pending)) {
     try {
       const res = await postRetry(http, '/api/v1/points/data', { points: chunk }, counters.data, baseMs); const data = res && res.data;
       if (data && data.success === false) throw new Error('AddData success=false');
-      summary.written += chunk.length;
+      for (const x of chunk) { if (seriesByUuid.has(x.uuid)) wrote.add(x.uuid); else summary.written++; }
     } catch (e) {
       failedData += chunk.length;
       log(`result values: ${chunk.length} points failed: ${errText(e)}`);
     }
   }
+  // advance each timeline's fddTimelineThrough only now that its samples are in NF (a failed AddData is retried next run)
+  const advance = [...seriesByUuid.values()].filter((s) => wrote.has(s.uuid));
+  for (const chunk of chunkBySize(advance.map((s) => s.record))) {
+    try { await postRetry(http, '/api/v1/point/points', { points: chunk }, counters.metadata, baseMs); }
+    catch (e) { failedData += chunk.length; log(`timeline watermark: ${chunk.length} records failed (those samples are written again next run): ${errText(e)}`); }
+  }
+  summary.timeline = { points: advance.length, samples: advance.reduce((a, s) => a + s.values.length, 0) };
   summary.errors += failedMeta.size + failedData;
   summary.requests = { metadata: counters.metadata.n, data: counters.data.n };
 }
@@ -457,7 +556,8 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   const runIso = new Date(now).toISOString();
   const summary = { engine: kind, equips: 0, rules: 0, errors: 0, written: 0, results: [],
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 } };
-  const queue = { meta: [], values: [] };    // writes, flushed in batches after all equips ran
+  const queue = { meta: [], values: [], series: [] };    // writes, flushed in batches after all equips ran
+  const occCache = { logged: new Set() };    // NF schedules (read once per run) and which sites were logged
   const warnedUnits = new Set();
   const engine = await createEngine({ kind, pack, config: config.timescale });
   try {
@@ -485,14 +585,26 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
         }
         const uuids = [...new Set(Object.values(roles).map((p) => p.uuid))];
         let loadedRows;
+        let histByTs = null;          // ms -> history row (which required inputs exist at a timestamp); not on timescale
+        let occ = null;               // synthesized occupancy: a runnable rule has occ_mode optional and no point is bound
+        if (kind !== 'timescale' && !roles.occ_mode && runnable.some((r) => r.optional.includes('occ_mode'))) {
+          try {
+            occ = await siteOccupancy({ http, model, shared, siteId, cache: occCache });
+            if (!occCache.logged.has(siteId)) {
+              occCache.logged.add(siteId);
+              log(`${siteId || 'site'}: occ_mode synthesized from ${occ.source} (${occ.label}, ${occ.tz})`);
+            }
+          } catch (e) { log(`${equipId}: occupancy schedule unavailable (${errText(e)}); occ_mode not synthesized`); }
+        }
         if (kind === 'timescale') {   // history stays in the database: SQL builds the wide table (SI conversion included)
           const roleToUuid = Object.fromEntries(Object.entries(roles).map(([r, p]) => [r, p.uuid]));
           const unitsByUuid = Object.fromEntries(Object.values(roles).map((p) => [p.uuid, p.units || '']));
           loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
         } else {
           const hist = await fetchHistory(http, uuids, from, to, step);
-          const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si });
+          const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ: occ && occ.at });
           loadedRows = input.history.length;
+          histByTs = new Map(input.history.map((row) => [row.ts, row]));
           if (loadedRows) await engine.load(input);
         }
         if (!loadedRows) {
@@ -504,6 +616,7 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
         summary.equips++;
         const records = [];
         const values = [];
+        const timelines = [];         // { records, series } per fault rule with a timeline_sql
         const dbRows = [];            // timescale: rows for openfdd.fdd_results
         for (const r of runnable) {
           let rows;
@@ -525,13 +638,38 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
           }
           const uuid = resultUuid(key, r.rule.id);
           touched.add(uuid);
-          records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso }));
+          const usesOcc = r.required.includes('occ_mode') || r.optional.includes('occ_mode');
+          const occSource = usesOcc ? (roles.occ_mode ? 'point' : occ ? occ.source : undefined) : undefined;
+          records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso, occSource }));
           if (out.status !== 'not-assessed') values.push({ uuid, value: out.value });
+          if (out.kind === 'fault' && !config.dryRun && engine.timeline && pack.rules[r.rule.id].timeline_sql) {
+            try {
+              const tuuid = timelineUuid(key, r.rule.id);
+              const prev = model.timelines.get(tuuid);
+              const prevThrough = prev ? Date.parse((prev.attrs || {}).fddTimelineThrough || '') : NaN;
+              // a timestamp is assessed only when every REQUIRED input of the rule has a value there (unknown is not ok)
+              const assessed = histByTs ? (ms) => { const row = histByTs.get(ms); return !!row && r.required.every((role) => row[role] != null); } : null;
+              const samples = timelineSamples(await engine.timeline(r.rule.id),
+                { assessed, equipId, after: Number.isFinite(prevThrough) ? prevThrough : -Infinity });
+              const [auto, model2] = timelineRecords({ equipRec, siteId, rule: r.rule, shared, windowHours, key, runIso, through: prevThrough });
+              const t = { records: [auto, model2], series: null };
+              if (samples.length) {
+                const through = samples[samples.length - 1].ms;
+                t.series = { uuid: tuuid, values: samples.map((x) => ({ ts: new Date(x.ms).toISOString(), real: x.value })),
+                  record: { ...model2, attrs: { ...model2.attrs, fddTimelineThrough: new Date(through).toISOString() } } };
+              }
+              timelines.push(t);
+            } catch (e) {
+              summary.errors++;
+              log(`${equipId} ${r.rule.id} timeline: ${errText(e)}`);
+            }
+          }
         }
         if (config.dryRun) continue;
         if (dbRows.length) await engine.writeResults(dbRows);   // timescale: also keep results in the database
         if (!records.length) continue;
         queue.meta.push(...records);
+        for (const t of timelines) { queue.meta.push(...t.records); if (t.series) queue.series.push(t.series); }
         const ts = new Date(to).toISOString();
         for (const v of values) queue.values.push({ uuid: v.uuid, ts, value: v.value });
       } catch (e) {
@@ -662,4 +800,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, nameUuid, resultKey, resultUuid, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { runFdd, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });

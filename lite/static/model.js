@@ -101,6 +101,29 @@ function modelToTurtle(model, base, opts = {}) {
     "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
     `@prefix local: <${base}> .`, "",
   ];
+  // Subjects (5.0.3): a Haystack id is only unique within a site (two sites can both have "AHU-1"), so site, equip and
+  // device subjects are the record's NF uuid when it has one (like the points), else a site-prefixed id
+  // (`<siteRef>/<id>`, sanitized; a site is just its id). Refs resolve to the referenced record's subject through the
+  // model (equipRef / deviceRef inside the referrer's own site); a ref whose target is unknown or ambiguous keeps the
+  // old `local:<id>` form, so the checker flags it as dangling.
+  const siteOfRec = (r) => (r.attrs || {}).siteRef || "";
+  const subjectOf = (r, isSite) => (r.uuid ? ttlId(r.uuid) : ttlId(isSite ? idOf(r) : `${siteOfRec(r)}/${idOf(r)}`));
+  const subjects = { site: new Map(), equip: new Map(), device: new Map() };   // kind -> id -> [{ site, subject }]
+  const register = (kind, r) => {
+    const id = idOf(r), list = subjects[kind].get(id) || [];
+    list.push({ site: kind === "site" ? id : siteOfRec(r), subject: subjectOf(r, kind === "site") });
+    subjects[kind].set(id, list);
+  };
+  for (const s of model.sites) register("site", s);
+  for (const e of model.equips) register("equip", e);
+  for (const d of model.devices) register("device", d);
+  /** Subject a ref points at, or null (unknown / ambiguous). `site` = the referrer's siteRef. */
+  const resolve = (kind, id, site) => {
+    const list = subjects[kind].get(id) || [];
+    const scoped = kind === "site" ? list : list.filter((x) => x.site === site);
+    const pick = scoped.length ? scoped : !site ? list : list.filter((x) => !x.site);   // an entity without a siteRef is shared
+    return pick.length === 1 ? pick[0].subject : null;
+  };
   const entity = (subject, type, label, tags, refs, extra = []) => {
     const body = [`a ${type}`, `rdfs:label ${ttlStr(label)}`];
     if (tags.length) body.push(`ph:hasTag ${tags.map(tag).join(", ")}`);
@@ -108,17 +131,19 @@ function modelToTurtle(model, base, opts = {}) {
     body.push(...extra);
     lines.push(`local:${ttlId(subject)}\n    ${body.join(" ;\n    ")} .`, "");
   };
+  // refs of a record in `site`: [prop, kind, id] -> [prop, subject-or-raw-id]
+  const refsOf = (site, list) => list.map(([prop, kind, id]) => [prop, id && (kind ? resolve(kind, id, site) || id : id)]);
   for (const s of model.sites) {
-    entity(idOf(s), "phIoT:site", s.name, ["site"], []);
+    entity(subjectOf(s, true), "phIoT:site", s.name, ["site"], []);
   }
   for (const e of model.equips) {
     const a = e.attrs || {};
-    entity(idOf(e), "phIoT:equip", e.name, markersOf(e), [["phIoT:siteRef", a.siteRef]]);
+    entity(subjectOf(e), "phIoT:equip", e.name, markersOf(e), refsOf(a.siteRef, [["phIoT:siteRef", "site", a.siteRef]]));
   }
   for (const d of model.devices) {
     const a = d.attrs || {};
-    entity(idOf(d), "phIct:device", a.dis || d.name, markersOf(d),
-      [["phIoT:siteRef", a.siteRef], ["phIoT:equipRef", a.equipRef]]);
+    entity(subjectOf(d), "phIct:device", a.dis || d.name, markersOf(d),
+      refsOf(a.siteRef, [["phIoT:siteRef", "site", a.siteRef], ["phIoT:equipRef", "equip", a.equipRef]]));
   }
   const stations = [...new Set(model.points.map((p) => p.weatherStationRef).filter(Boolean))];
   for (const ws of stations) entity(ws, "phIoT:weatherStation", ws, ["weatherStation"], []);
@@ -139,10 +164,10 @@ function modelToTurtle(model, base, opts = {}) {
     if (ruleRef) { extra.push(`local:ruleRef ${ttlStr(ruleRef)}`); usedProps.add("ruleRef"); }
     extra.push(tsRef("store_nf", link));
     if (tsdb) extra.push(tsRef("store_timescaledb"));
-    entity(p.uuid, "phIoT:point", p.dis, p.tags, [
-      ["phIoT:siteRef", p.siteRef], ["phIoT:equipRef", p.equipRef],
-      ["phIct:deviceRef", p.deviceRef], ["phIoT:weatherStationRef", p.weatherStationRef],
-    ], extra);
+    entity(p.uuid, "phIoT:point", p.dis, p.tags, refsOf(p.siteRef, [
+      ["phIoT:siteRef", "site", p.siteRef], ["phIoT:equipRef", "equip", p.equipRef],
+      ["phIct:deviceRef", "device", p.deviceRef], ["phIoT:weatherStationRef", null, p.weatherStationRef],
+    ]), extra);
   }
   // Define the time-series stores the point references point at.
   if (model.points.some((x) => x.tags.length)) {

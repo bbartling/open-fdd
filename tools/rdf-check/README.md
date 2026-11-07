@@ -13,6 +13,12 @@ Checks: strict Turtle parse (Oxigraph) + rdflib parse and N-Triples round trip; 
 defined entity; no undefined `local:` terms; labels and `siteRef`s present; and (slice 6) every point has
 exactly one NF time-series reference (Brick `ref:`) with a non-empty `ref:hasTimeseriesId`.
 
+## Subjects
+
+Site, equip, device and point subjects are the NF record uuid (`local:<uuid>`), else a site-prefixed id
+(`local:<siteRef>_<id>`), so two sites that both have an `AHU-1` never collide; `*Ref` links point at those subjects.
+`nf-app/tests/rdf.test.mjs` builds the two-site fixture's Turtle and runs `check_ttl.py` on it.
+
 ## Time-series reference scheme
 
 ```turtle

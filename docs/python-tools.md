@@ -83,12 +83,13 @@ Common options: `--url`, `--env FILE`, `--via lan|portal`, `--ca-file`, `--timeo
 exit 2.
 
 ```text
-open-fdd-nf {info,model,pull,rules,report}
+open-fdd-nf {info,model,pull,rules,report,analyze}
   info     platform info and the sites in the model
   model    equipment with the points bound to each FDD role
   pull     history of the bound roles as SI CSV (or parquet)
   rules    run the pandas reference rules and print a summary
   report   rules.csv + summary.md (and findings with --findings)
+  analyze  read-only agent analytics tools, run on the box (see below)
 ```
 
 | Command | Output | Example |
@@ -98,6 +99,30 @@ open-fdd-nf {info,model,pull,rules,report}
 | `pull --out F` | one wide file, columns `"<equip> <role> [<unit>]"`, UTF-8 BOM, SI. `.parquet` needs pyarrow | `open-fdd-nf pull --equip AHU-1 --days 7 --out ahu1.csv` |
 | `rules [--rules A,B] [--all] [--json]` | status counts and the fault rows (all rows with `--all`) | `open-fdd-nf rules --days 7 --json` |
 | `report --out DIR [--findings] [--docx]` | `rules.csv`, `summary.md`; with `--findings` the Engineering Findings JSON (+ DOCX) | `open-fdd-nf report --days 14 --out out --findings` |
+
+#### `open-fdd-nf analyze`: the six read-only analytics tools
+
+`open-fdd-nf analyze TOOL [--site S] [--equip E] [--rule R] [--days N] [--view V] [--dense] [--json] [--wait SEC]`
+starts the NF app's on-request `analytics` hook (`POST /api/v1/apps/open-fdd/hooks/analytics`, `args.tool`), waits for the
+run and prints its answer. The math exists once, in JavaScript (the same code as the dashboard, on the fine 5-minute grid);
+Python only transports. The hook only reads: it cannot write points, schedules or BACnet values (its HTTP client refuses
+everything but GET and the read-only `point/query` / `auth/token` POSTs). StartHook is sent exactly once, never retried.
+Needs the 5.0.3 app (hook `analytics`); an older app answers `404`.
+
+| TOOL (short name) | Args | Rows / result |
+|---|---|---|
+| `analyze_ahu_weekly_runtime` (`weekly-runtime`) | `--site --equip --days` (28) | per ISO week: `run_hours`, `schedule_hours`, `in_schedule_hours`, `after_hours`, `partial_week`, `mean_oat_on_c`, `schedule_source` / `schedule_label` |
+| `analyze_mechanical_cooling` (`cooling`) | `--site --equip --days` (28) | `bins`: hours in the six SI outdoor-air bins (`<10`, `10-16`, `16-21`, `21-27`, `27-32`, `>=32` degC), `total_hours` |
+| `analyze_economizer` (`economizer`) | `--site --equip --days` (7) | `n`, `n_identifiable`, `median_residual_k`, `mae_k` |
+| `get_fdd_fault_timeline` (`fault-timeline`) | `--equip --rule` (+ `--site --days` (1) `--dense`) | `timeline` of `{ts, state}` with state `confirmed` / `ok` / `unknown`, from the hook's timeline point, never `fault_pct`; state changes only unless `--dense`; `approximate: true` only when no timeline point exists |
+| `resolve_equipment_roles` (`roles`) | `--equip` (NF uuid, or an id with `--site`) | `roles`: role to bound points; `runnable_rules` |
+| `explain_missing_rcx_view` (`explain-view`) | `--view` (+ `--site --equip`) | `available`, `missing_roles`, `reasons`, per-equip `status` (`ready`, `kind_mismatch`, `missing_roles`, `no_data`) |
+
+Every row carries `siteRef`, `equipRef` and `equipUuid`: key on `equipUuid`, so two sites that both have an `AHU-1` never
+share a row. `--equip` matches an NF uuid first, then a Haystack id or name. The list tools return every matching equip;
+the single-equip tools (`fault-timeline`, `roles`) **fail** when the id matches several sites and list the candidates
+(pass `--site` or the uuid): they never guess. Answers are capped at about 200 KB (`truncated: true`, newest timeline entries
+kept). From Python: `from open_fdd.nf.analytics import analyze; analyze(client, "weekly-runtime", site="S", days=28)`.
 
 `rules` statuses: `fault`, `ok`, `not-assessed` (missing roles, equipment never proven on, or zero covered samples: an
 unknown is never healthy) and `error`. `coverage` is the share of the frame the rule was assessed over.

@@ -11,6 +11,7 @@ remote access (Normal Online) and config backups. Open-FDD adds a UI and hooks. 
 | `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node runtime; SQL rules in SQLite-WASM (sql.js) or PGlite |
 | `weather` hook | `nf-app/hooks/weather.js`, every 20 min | NF Node runtime; Open-Meteo to global variables |
 | `sparql` hook | `nf-app/hooks/sparql.js`, on request | NF Node runtime; Oxigraph over the model's Turtle |
+| `analytics` hook | `nf-app/hooks/analytics.js`, on request (`args.tool`) | NF Node runtime; read-only agent tools (weekly runtime, cooling bins, economizer, fault timeline, roles, view explanations) on the dashboard's own `static/*.js`; CLI `open-fdd-nf analyze` |
 | Rule math | `sql/fdd/` (Postgres SQL) to `nf-app/rules/pack-*.json` | built by `scripts/nf/build_*.py` |
 | Manifest | `nf-app/app.json` (application, file map, hooks) | read by `nf_app_sync.py` / the NF MCP |
 

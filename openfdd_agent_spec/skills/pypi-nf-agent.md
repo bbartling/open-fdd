@@ -20,4 +20,12 @@ Full guide: `docs/python-tools.md`. The package is 4.x; the NF app is 5.x (`open
 7. Portal (`--via portal`) needs an API key and cannot read `/api/v1/bacnet/*`; use the LAN for BACnet.
 8. Never print or paste secrets, `docker logs` or env dumps (NF logs the backup SAS URL in plain text).
 
+9. **Read-only analytics tools** (5.0.3 app, run on the box by its `analytics` hook): `open-fdd-nf analyze weekly-runtime |
+   cooling | economizer | fault-timeline | roles | explain-view [--site --equip --rule --days --view --json]`. Use them
+   instead of re-deriving run hours, cooling bins, economizer residuals or fault timelines from raw history: the numbers
+   match the dashboard (fine 5-minute grid, schedule-aware). They cannot write. Every row has `siteRef`, `equipRef` and
+   `equipUuid`: key on `equipUuid` (two sites can both have an `AHU-1`). `fault-timeline` states are `confirmed` / `ok` /
+   `unknown`; `unknown` (no data) is never `ok`. An ambiguous `--equip` is an error listing the candidates: add `--site`
+   or pass the uuid. Details: `docs/python-tools.md`.
+
 Python: `NFClient.from_env()` -> `load_model` -> `equipment_frames(client, model, start, end)` -> `run_rules(frames)`.

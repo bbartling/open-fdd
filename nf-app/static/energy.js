@@ -508,13 +508,13 @@
   });
 
   equipView("energy-interval-demand", "Interval demand (kW)", async (ctx, el, eq, d) => {
-    const lane = await rcxFaultData(ctx.model, eq.id, "UTIL-INTERVAL", ctx.hours);
+    const lane = await rcxFaultData(ctx.model, eq, "UTIL-INTERVAL", ctx.hours);
     draw(ctx, el, rcxWithFaultLane(intervalDemandOption(d.kw), [{ name: "UTIL-INTERVAL", data: lane }]), "interval-demand");
     return lane.length ? "Fault lane: UTIL-INTERVAL." : "";
   });
 
   equipView("energy-monthly", "Monthly energy (kWh)", async (ctx, el, eq, d) => {
-    const lane = await rcxFaultData(ctx.model, eq.id, "UTIL-MONTHLY", ctx.hours);
+    const lane = await rcxFaultData(ctx.model, eq, "UTIL-MONTHLY", ctx.hours);
     draw(ctx, el, rcxWithFaultLane(monthlyLinesOption(d.monthly), [{ name: "UTIL-MONTHLY", data: lane }]), "monthly-energy");
     return `${areaNote(ctx, siteRefOf(eq), d.monthly)} Edge months may be partial; history is limited to ${ctx.hours} h.`;
   }, { hours: 2160 });

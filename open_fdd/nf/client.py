@@ -9,9 +9,10 @@ Auth:
   * ``("portal", client_id, client_secret)``  NF API key: client-credentials token from
                                               ``/api/v1/auth/token``, refreshed on expiry / 401
 
-Retries apply to idempotent calls only (every call here is a read, plus the token call) on
-HTTP 403 / 429 / 5xx and connection errors, with exponential backoff. NF has a known
-intermittent empty-body 403 on the token call that succeeds moments later.
+Retries apply to idempotent calls only (every read, plus the token call) on HTTP 403 / 429 / 5xx and
+connection errors, with exponential backoff. NF has a known intermittent empty-body 403 on the token
+call that succeeds moments later. The one non-idempotent call, ``start_hook`` (StartHook), is sent
+exactly once: if its response is lost, look at the runs instead of firing a second run.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ RETRY_CODES = (403, 429, 500, 502, 503, 504)
 BATCH = 40  # uuids per point/data request (keeps the URL short)
 CHUNK_DAYS = 7  # NF caps samples per request; history is fetched in pieces of at most 7 days
 PAGE_SIZE = 500
+PENDING_STATES = ("STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED", "STATE_UNSPECIFIED", None)
 MAX_PAGES = 10_000
 
 
@@ -191,14 +193,15 @@ class NFClient:
         self._token = str(token)
         self._token_exp = time.time() + max(ttl_s - 30.0, 5.0)  # refresh a little early
 
-    def _raw(self, method: str, path: str, body: Any, headers: Mapping[str, str]) -> dict:
+    def _raw(self, method: str, path: str, body: Any, headers: Mapping[str, str], once: bool = False) -> dict:
         url = self.base_url + path
         data = json.dumps(body).encode() if body is not None else None
         hdrs = {"User-Agent": UA, "Accept": "application/json", **headers}
         if data is not None:
             hdrs["Content-Type"] = "application/json"
         last: NFError | None = None
-        for attempt in range(1, self.retries + 1):
+        tries = 1 if once else self.retries
+        for attempt in range(1, tries + 1):
             req = urllib.request.Request(url, data=data, headers=hdrs, method=method)
             try:
                 with urllib.request.urlopen(req, timeout=self.timeout, context=self._ctx) as resp:
@@ -207,28 +210,28 @@ class NFClient:
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode(errors="replace")[:300]
                 last = NFError(f"{method} {path.split('?')[0]} failed HTTP {exc.code}: {detail}", exc.code)
-                if exc.code not in RETRY_CODES:
+                if once or exc.code not in RETRY_CODES:
                     raise last from exc
             except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
                 last = NFError(f"{method} {path.split('?')[0]} failed: {exc}")
             except json.JSONDecodeError as exc:
                 raise NFError(f"{method} {path.split('?')[0]}: response is not JSON ({exc})") from exc
-            if attempt < self.retries:
+            if attempt < tries:
                 (self._sleep or time.sleep)(self.backoff * 2 ** (attempt - 1))
         assert last is not None
         raise last
 
-    def request(self, method: str, path: str, body: Any = None) -> dict:
-        """One authenticated call (retried: every NF call this client makes is a read).
+    def request(self, method: str, path: str, body: Any = None, *, once: bool = False) -> dict:
+        """One authenticated call (retried unless ``once``: reads are idempotent, StartHook is not).
 
-        A 401 with a portal token triggers one token refresh and a repeat.
+        A 401 with a portal token triggers one token refresh and a repeat (a 401 means nothing ran).
         """
         try:
-            return self._raw(method, path, body, self._auth_header())
+            return self._raw(method, path, body, self._auth_header(), once)
         except NFError as exc:
             if exc.status == 401 and self.auth and self.auth[0] == "portal":
                 self._token = None
-                return self._raw(method, path, body, self._auth_header())
+                return self._raw(method, path, body, self._auth_header(), once)
             raise
 
     def get(self, path: str) -> dict:
@@ -236,6 +239,38 @@ class NFClient:
 
     def post(self, path: str, body: Any) -> dict:
         return self.request("POST", path, body)
+
+    # ------------------------------------------------------------------ hooks
+    def start_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None) -> str:
+        """StartHook: run an on-request hook once now with ``args``; returns the run id (``pid``). Sent once, never retried."""
+        path = f"/api/v1/apps/{urllib.parse.quote(app_id, safe='')}/hooks/{urllib.parse.quote(hook_id, safe='')}"
+        pid = self.request("POST", path, {"args": dict(args or {})}, once=True).get("pid")
+        if not pid:
+            raise NFError("StartHook returned no run id (pid)")
+        return str(pid)
+
+    def hook_runs(self, app_id: str, hook_id: str, page_size: int = 10) -> list[dict]:
+        """Recent runs of a hook, newest first, with their results (events)."""
+        path = (f"/api/v1/apps/{urllib.parse.quote(app_id, safe='')}/hooks/{urllib.parse.quote(hook_id, safe='')}"
+                f"/runs?page_size={int(page_size)}&include_results=true")
+        return list(self.get(path).get("runs") or [])
+
+    def run_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None, *,
+                 timeout: float = 120.0, poll: float = 1.0) -> dict:
+        """Start an on-request hook and wait for its run: returns the finished run (``state`` STATE_SUCCESS ...).
+
+        Polls the hook's runs until the run with the started ``pid`` leaves RUNNING / ENQUEUED / SCHEDULED;
+        raises ``NFError`` when it is still running after ``timeout`` seconds.
+        """
+        pid = self.start_hook(app_id, hook_id, args)
+        deadline = time.monotonic() + timeout
+        while True:
+            run = next((r for r in self.hook_runs(app_id, hook_id) if str(r.get("pid")) == pid), None)
+            if run is not None and run.get("state") not in PENDING_STATES:
+                return run
+            if time.monotonic() >= deadline:
+                raise NFError(f"hook {app_id}/{hook_id} run {pid} still running after {timeout:g} s (read its runs later)")
+            (self._sleep or time.sleep)(poll)
 
     # ------------------------------------------------------------------ API
     def platform_info(self) -> dict:

@@ -49,6 +49,7 @@ interface RcxContext {
   first(eq: OfddEquip, role: string): OfddPoint | null;
   series(pts: OfddPoint[], o?: { hours?: number; method?: string; windowSec?: number }): Promise<Map<string, [number, number][]>>;
   aligned(cols: Record<string, OfddPoint>, o?: { hours?: number; method?: string; windowSec?: number }): Promise<{ t: number[]; cols: Record<string, (number | null)[]> }>;
+  alignedFine(cols: Record<string, OfddPoint>, o?: { hours?: number; method?: string; windowSec?: number }): Promise<{ t: number[]; cols: Record<string, (number | null)[]>; windowSec: number; fine: boolean }>;
   chart(el: Element): any;
   siUnit(p: OfddPoint): string;
   disp(v: number, siUnit: string): { value: number; unit: string };

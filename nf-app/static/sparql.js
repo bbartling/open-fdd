@@ -37,13 +37,15 @@ function sparqlExamples(turtle) {
 }
 ORDER BY ?equip ?point` },
     { id: "equips-kinds", label: "Equips and the kinds of points they own", query: P +
-`SELECT ?equip ?kind (COUNT(?p) AS ?points) WHERE {
+`SELECT ?site ?equip ?kind (COUNT(?p) AS ?points) WHERE {
   ?e a phIoT:equip ; rdfs:label ?equip .
+  OPTIONAL { ?e phIoT:siteRef ?s . ?s rdfs:label ?siteLabel }
   OPTIONAL { ?p phIoT:equipRef ?e ; a phIoT:point . OPTIONAL { ?p ph:kind ?k } }
+  BIND(COALESCE(?siteLabel, "") AS ?site)
   BIND(COALESCE(?k, "(no points)") AS ?kind)
 }
-GROUP BY ?equip ?kind
-ORDER BY ?equip ?kind` },
+GROUP BY ?e ?site ?equip ?kind
+ORDER BY ?site ?equip ?kind` },
     { id: "faults", label: "Fault result points (markers fdd + fault, with ruleRef if exported)", query: P +
 `SELECT ?point ?equip ?rule WHERE {
   ?p a phIoT:point ; rdfs:label ?point ; ph:hasTag local:fdd, local:fault .
