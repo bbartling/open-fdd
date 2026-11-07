@@ -238,3 +238,71 @@ test("pages load the vendored UMD build and the Lite theme scripts in the right 
     assert.ok(html.includes("ECharts 6.1.0"), `${f}: comment`);
   }
 });
+
+// ---- strict CSP + RDF export (Lite parity with the full edition) ----------------------
+const pages = ["index.html", "chart.html", "tree.html"];
+
+test("CSP meta on every page: self-only styles, no eval, https: scripts only for clerk-js", () => {
+  for (const f of pages) {
+    const html = read(`static/${f}`);
+    const m = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/);
+    assert.ok(m, `${f}: CSP meta missing`);
+    const csp = m[1];
+    assert.match(csp, /style-src 'self'(;|$)/, f);
+    assert.match(csp, /script-src 'self' https:(;|$)/, f);
+    assert.ok(!/unsafe-inline|unsafe-eval|wasm-unsafe-eval/.test(csp), `${f}: ${csp}`);
+    assert.match(csp, /object-src 'none'/, f);
+    assert.ok(html.indexOf("Content-Security-Policy") < html.indexOf("<script"), `${f}: CSP must precede scripts`);
+  }
+  assert.match(read("static/nf.js"), /clerk-js@\$\{CLERK_JS_VERSION\}/); // the reason for https: in script-src
+});
+
+test("no inline style=, event handlers, javascript: URLs, eval or new Function in Lite static files", () => {
+  const files = readdirSync(path.join(root, "static")).filter((f) => /\.(html|js)$/.test(f));
+  for (const f of files) {
+    const src = read(`static/${f}`).replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm, "");
+    assert.ok(!/\sstyle\s*=/.test(src), `${f}: inline style=`);
+    assert.ok(!/\son[a-z]+\s*=\s*["']/.test(src), `${f}: inline event handler`);
+    assert.ok(!/javascript:/.test(src), `${f}: javascript: URL`);
+    assert.ok(!/\beval\s*\(|new Function\b/.test(src), `${f}: eval / new Function`);
+  }
+  for (const f of pages) assert.ok(!/<script>/.test(read(`static/${f}`)), `${f}: inline script`);
+});
+
+async function liteTurtle() {
+  const { createContext, runInContext } = await import("node:vm");
+  const ctx = createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
+  for (const f of ["nf.js", "model.js"]) runInContext(read(`static/${f}`), ctx, { filename: f });
+  const repo = path.resolve(root, "..");
+  ctx.records = JSON.parse(readFileSync(path.join(repo, "tools/rdf-check/fixtures/model.json"), "utf8")).records;
+  const pt = ctx.records.find((x) => x.pointType === "POINT");
+  pt.attrs = { ...pt.attrs, class: "discharge-air-temp-sensor" }; // the fixture has no NF class
+  return runInContext(`(() => {
+    const of = (t) => records.filter((x) => x.pointType === t);
+    const model = { sites: of("SITE"), equips: of("EQUIPMENT"), devices: of("DEVICE"), points: of("POINT").map(toPoint) };
+    return modelToTurtle(model, "urn:test:", { nfBase: "http://nf.example.test" });
+  })()`, ctx);
+}
+
+test("Turtle export: Brick time-series refs, schema:url, nfClass property, every term defined", async () => {
+  const { turtle } = await liteTurtle();
+  assert.match(turtle, /@prefix ref: <https:\/\/brickschema.org\/schema\/Brick\/ref#>/);
+  assert.match(turtle, /ref:hasExternalReference \[ a ref:TimeseriesReference/);
+  assert.match(turtle, /ref:hasTimeseriesId "/);
+  assert.match(turtle, /schema:url <http:\/\/nf.example.test\/api\/v1\/point\/data\?uuids=/);
+  assert.match(turtle, /local:store_nf\n\s+a ref:Database/);
+  assert.match(turtle, /local:nfClass "/);
+  assert.match(turtle, /local:nfClass\n\s+a rdf:Property/);
+});
+
+test("Turtle export passes the Oxigraph + rdflib checker (tools/rdf-check/check_ttl.py)", async (t) => {
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const py = ["python", "python3"].find((p) => spawnSync(p, ["-c", "import pyoxigraph, rdflib"]).status === 0);
+  if (!py) return t.skip("python with pyoxigraph + rdflib not available");
+  const file = path.join(mkdtempSync(path.join(tmpdir(), "lite-ttl-")), "lite.ttl");
+  writeFileSync(file, (await liteTurtle()).turtle);
+  const r = spawnSync(py, [path.resolve(root, "..", "tools/rdf-check/check_ttl.py"), file], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});

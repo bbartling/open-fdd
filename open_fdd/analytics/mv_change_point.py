@@ -1,9 +1,8 @@
-"""Thin IPMVP Option C–style monthly M&V twin (oracle for Wave S4 SQL compare).
+"""Thin IPMVP Option C-style monthly M&V: a 2P change-point model.
 
-Product surface is **2P only** (``energy = intercept + slope * degree_days``) to
-match ``POST /api/analytics/mv``. Full 3P/4P/5P + G14 live in
-``open_fdd.ecm_engineering.changepoint`` (Wave S3) — this module does not reinvent
-Camber; it twins the thin central OLS path for qualification.
+``energy = intercept + slope * degree_days`` (ordinary least squares). This is the small, dependency-free
+fit used as the oracle for the SQL M&V check. The full 3P/4P/5P models and the ASHRAE Guideline 14
+statistics live in ``open_fdd.ecm_engineering.changepoint``; this module does not reinvent them.
 """
 
 from __future__ import annotations

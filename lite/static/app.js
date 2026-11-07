@@ -186,7 +186,7 @@ async function renderCharts() {
   const opts = def.pick ? def.pick(ctx) : [];
   if (def.pick && !opts.some((p) => p.uuid === chartSel.point)) chartSel.point = def.defaultPick(ctx);
   $("chartTitle").textContent = def.title;
-  $("chartPick").style.display = def.pick ? "" : "none";
+  $("chartPick").hidden = !def.pick;
   $("chartPick").innerHTML = opts.map((p) => `<option value="${p.uuid}">${esc(p.name)}</option>`).join("");
   $("chartPick").value = chartSel.point || "";
   $("chartRange").innerHTML = def.ranges.map((h) =>
@@ -308,7 +308,7 @@ async function renderBacnet() {
     return `<div class="obj">
       <div class="top"><span class="id">${esc(id)}</span><b>${esc(propOf(o, "PROP_OBJECT_NAME"))}</b>
         <span class="pv">${typeof reads[i].wire === "number" ? reads[i].wire.toFixed(2) : "–"} <small>${esc(BAC_UNITS[units] ?? "")}</small></span></div>
-      ${hv ? `<div class="tags" style="margin-top:6px">${tagChips(hv)}</div>` : `<div class="sub">no Haystack point references ${esc(id)}</div>`}
+      ${hv ? `<div class="tags mt6">${tagChips(hv)}</div>` : `<div class="sub">no Haystack point references ${esc(id)}</div>`}
       <table class="props">${rows}</table>
     </div>`;
   }).join("");
@@ -414,8 +414,8 @@ function renderModelChecks() {
     [stale.length === 0, "trended points with no sample in 30 min", stale.map((p) => p.dis)],
   ];
   $("checks").innerHTML = checks.map(([ok, label, items]) => `
-    <div style="margin-bottom:8px"><span class="${ok ? "ok" : "warn"}">${ok ? "✓" : "!"}</span> ${esc(label)}
-      ${items.length ? `<div class="tags" style="margin:4px 0 0 18px">${items.map((x) => `<span class="tag odd">${esc(x)}</span>`).join("")}</div>` : ""}
+    <div class="check-row"><span class="${ok ? "ok" : "warn"}">${ok ? "✓" : "!"}</span> ${esc(label)}
+      ${items.length ? `<div class="tags check-items">${items.map((x) => `<span class="tag odd">${esc(x)}</span>`).join("")}</div>` : ""}
     </div>`).join("");
   const tagSet = new Set(tagged.flatMap((p) => p.tags));
   const stat = (n, label) => `<div class="stat"><b>${n}</b><span>${label}</span></div>`;
@@ -428,7 +428,8 @@ function renderModelChecks() {
 
 function renderModel() {
   $("ttl").textContent = rdf.turtle;
-  $("legend").innerHTML = Object.entries(TREE_COLORS).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("");
+  $("legend").innerHTML = Object.entries(TREE_COLORS).map(([k, c]) => `<span><i data-c="${c}"></i>${k}</span>`).join("");
+  paintLegend($("legend"));
   renderModelChecks();
   const root = buildTree();
   const leaves = (n, depth) => (!n.children?.length || n.collapsed || depth >= 4 ? 1

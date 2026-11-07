@@ -159,7 +159,7 @@ function showDetail(node) {
     ...(lv ? [["latest", `${fmtVal(r)} @ ${lv.ts}`]] : []),
     ...Object.entries(a).filter(([k]) => k !== "markers").sort(([x], [y]) => x.localeCompare(y)),
   ].filter(([, v]) => v !== undefined && v !== "");
-  $("detail").innerHTML = `<div class="tags" style="margin:0 0 8px">${haystackChips(r)}</div>
+  $("detail").innerHTML = `<div class="tags tags-top">${haystackChips(r)}</div>
     <table>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>`;
 }
 
@@ -181,7 +181,8 @@ async function main() {
 
   $("sub").textContent = `read-only · ${model.sites.length} site · ${model.equips.length} equip · ${model.devices.length} device · `
     + `${points.length} points · BACnet server d.${bacnet.dev} with ${bacnet.objects.length} objects · ${location.host}`;
-  $("legend").innerHTML = Object.entries(COLORS).map(([k, c]) => `<span><i style="background:${c}"></i>${k}</span>`).join("");
+  $("legend").innerHTML = Object.entries(COLORS).map(([k, c]) => `<span><i data-c="${c}"></i>${k}</span>`).join("");
+  paintLegend($("legend"));
 
   const root = buildTree(model, points, bacnet);
   // Size the canvas to the leaves visible at the initial depth so labels don't stack.
@@ -191,7 +192,7 @@ async function main() {
   const chart = echarts.init($("tree"));
   chart.setOption({
     tooltip: { trigger: "item", backgroundColor: LT.tipBg, borderColor: LT.axisLine, textStyle: { color: LT.tipText },
-      formatter: (x) => `${esc(x.data.rec?.attrs?.dis || x.name)}<br><span style="color:${LT.label}">${esc(markersOf(x.data.rec || {}).join(" "))}</span>` },
+      formatter: (x) => `${esc(x.data.rec?.attrs?.dis || x.name)}<br><small>${esc(markersOf(x.data.rec || {}).join(" "))}</small>` },
     series: [{
       type: "tree", data: [root], top: 30, bottom: 20, left: 90, right: 330,
       orient: "LR", initialTreeDepth: 4, roam: true, expandAndCollapse: true, animationDuration: 400,

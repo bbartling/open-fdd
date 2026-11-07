@@ -7,7 +7,8 @@
 //      (values are brought to the role's declared scale first: SI by unit, fraction 0-1, boolean 0/1; see siPlan)
 //   3. run every runnable rule of the SQL pack (sql/fdd → rules/pack-*.json) in an
 //      embedded engine: SQLite-WASM on small edges, PGlite (real Postgres) on big ones
-//   4. write one result point per (site, equip, rule): automation layer (history) + model layer
+//   4. write one result point per (site, equip, rule): automation layer (history) + model layer (all queued, then
+//      flushed in batches at the end of the run: one UpdatePoints + one AddData call per chunk, see flushWrites)
 //      (Haystack tags fault/ruleRef/equipRef/siteRef), value = fault % of covered time
 //      (metric rules: their first declared output), trended every run.
 //
@@ -341,6 +342,83 @@ function staleRecord(rec, reason, runIso) {
     attrs: { ...(rec.attrs || {}), fddStatus: 'stale', fddReason: reason, fddLastRun: runIso } };
 }
 
+// ---- NF writes (batched) ------------------------------------------------------------------
+// Everything a run publishes is queued while the equips are processed and flushed once at the end:
+//   metadata  POST /api/v1/point/points   { points: [record, ...] }              (UpdatePoints, many records per call)
+//   values    POST /api/v1/points/data    { points: [{ uuid, values: [{ ts, real }] }, ...] }   (AddData, batched)
+// https://docs.normal.dev/api/html/api.html : AddData "carries any number of (uuid, values, errors) tuples in one
+// request"; its reply is only { success, taskUuid }, so a failed call cannot say which point failed.
+const WRITE_MAX_RECORDS = 500;          // records (metadata) or points (values) per call
+const WRITE_MAX_BYTES = 512 * 1024;     // JSON payload cap per call
+const RETRY_ATTEMPTS = 3;               // 429/503 only
+const RETRY_BASE_MS = 500;
+const httpStatus = (e) => Number((e && ((e.response && e.response.status) || e.status || e.statusCode)) || 0);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Split items into chunks of at most maxCount items and about maxBytes of JSON (a single big item stands alone). */
+function chunkBySize(items, maxCount = WRITE_MAX_RECORDS, maxBytes = WRITE_MAX_BYTES) {
+  const chunks = [];
+  let cur = [];
+  let bytes = 0;
+  for (const it of items) {
+    const n = JSON.stringify(it).length + 1;
+    if (cur.length && (cur.length >= maxCount || bytes + n > maxBytes)) { chunks.push(cur); cur = []; bytes = 0; }
+    cur.push(it);
+    bytes += n;
+  }
+  if (cur.length) chunks.push(cur);
+  return chunks;
+}
+
+/**
+ * One POST with retry: only 429/503 are retried (at most RETRY_ATTEMPTS attempts, exponential backoff);
+ * any other error (400, 500, network) fails at once. counter.n counts every request actually sent.
+ */
+async function postRetry(http, url, body, counter, baseMs) {
+  for (let attempt = 1; ; attempt++) {
+    counter.n++;
+    try {
+      return await http.post(url, body);
+    } catch (e) {
+      const st = httpStatus(e);
+      if ((st !== 429 && st !== 503) || attempt >= RETRY_ATTEMPTS) throw e;
+      await sleep(baseMs * 2 ** (attempt - 1));
+    }
+  }
+}
+
+/** Flush the queued metadata + values; fills summary.written / errors / requests. Never throws. */
+async function flushWrites(http, queue, summary, log, baseMs) {
+  const counters = { metadata: { n: 0 }, data: { n: 0 } };
+  const failedMeta = new Set();     // uuids whose metadata could not be written
+  for (const chunk of chunkBySize(queue.meta)) {
+    try {
+      const res = await postRetry(http, '/api/v1/point/points', { points: chunk }, counters.metadata, baseMs); const data = res && res.data;
+      for (const r of (data && data.results) || []) if (r && r.success === false && r.uuid) failedMeta.add(r.uuid);
+    } catch (e) {
+      for (const r of chunk) failedMeta.add(r.uuid);
+      log(`result metadata: ${chunk.length} records failed: ${errText(e)}`);
+    }
+  }
+  if (failedMeta.size) log(`result metadata: ${failedMeta.size} points not written`);
+  let failedData = 0;
+  // a point whose metadata failed is not written to (it may not exist); it is already counted as an error
+  const pending = queue.values.filter((v) => !failedMeta.has(v.uuid))
+    .map((v) => ({ uuid: v.uuid, values: [{ ts: v.ts, real: v.value }] }));
+  for (const chunk of chunkBySize(pending)) {
+    try {
+      const res = await postRetry(http, '/api/v1/points/data', { points: chunk }, counters.data, baseMs); const data = res && res.data;
+      if (data && data.success === false) throw new Error('AddData success=false');
+      summary.written += chunk.length;
+    } catch (e) {
+      failedData += chunk.length;
+      log(`result values: ${chunk.length} points failed: ${errText(e)}`);
+    }
+  }
+  summary.errors += failedMeta.size + failedData;
+  summary.requests = { metadata: counters.metadata.n, data: counters.data.n };
+}
+
 // ---- run ----------------------------------------------------------------------------
 async function pickEngine(http, wanted, timescaleConfig) {
   // FULL edition: config.timescale set -> run the pack inside NF's TimescaleDB (engine "timescale", or "auto")
@@ -357,7 +435,7 @@ async function pickEngine(http, wanted, timescaleConfig) {
 
 /**
  * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
- *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object }} FddConfig
+ *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number }} FddConfig
  * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number }} args
  */
 async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date.now() }) {
@@ -378,7 +456,8 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
   const summary = { engine: kind, equips: 0, rules: 0, errors: 0, written: 0, results: [],
-    status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 } };
+    status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 } };
+  const queue = { meta: [], values: [] };    // writes, flushed in batches after all equips ran
   const warnedUnits = new Set();
   const engine = await createEngine({ kind, pack, config: config.timescale });
   try {
@@ -452,12 +531,9 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
         if (config.dryRun) continue;
         if (dbRows.length) await engine.writeResults(dbRows);   // timescale: also keep results in the database
         if (!records.length) continue;
-        await http.post('/api/v1/point/points', { points: records });
+        queue.meta.push(...records);
         const ts = new Date(to).toISOString();
-        for (const v of values) {
-          await http.post('/api/v1/point/data', { uuid: v.uuid, values: [{ ts, real: v.value }] });
-          summary.written++;
-        }
+        for (const v of values) queue.values.push({ uuid: v.uuid, ts, value: v.value });
       } catch (e) {
         summary.errors++;
         defaultReason = `run error: ${errText(e)}`;
@@ -472,10 +548,12 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
           stale.push(staleRecord(prev, reasons.get(ruleId) || defaultReason, runIso));
         }
         summary.status.stale += stale.length;
-        if (stale.length && !config.dryRun) {
-          try { await http.post('/api/v1/point/points', { points: stale }); } catch (e) { summary.errors++; log(`${equipId}: stale flags: ${errText(e)}`); }
-        }
+        if (stale.length && !config.dryRun) queue.meta.push(...stale);
       }
+    }
+    if (!config.dryRun) {
+      const retryMs = Number(config.writeRetryMs) >= 0 && config.writeRetryMs != null ? Number(config.writeRetryMs) : RETRY_BASE_MS;
+      await flushWrites(http, queue, summary, log, retryMs);
     }
     if (engine.maybeEnforceCap && !config.dryRun) {   // retention cap (a no-op when the TimescaleDB job exists)
       try { summary.cap = await engine.maybeEnforceCap(); } catch (e) { summary.errors++; log(`size cap: ${errText(e)}`); }
@@ -497,7 +575,8 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   const st = summary.status;
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h); `
-    + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}`);
+    + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
+    + `requests: ${summary.requests.metadata} metadata, ${summary.requests.data} data`);
   return summary;
 }
 
@@ -583,4 +662,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, nameUuid, resultKey, resultUuid, buildInput, siPlan, resultValue, bacnetPlan });
+module.exports = Object.assign(hook, { runFdd, nameUuid, resultKey, resultUuid, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });

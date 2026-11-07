@@ -1,9 +1,9 @@
 """Generic RCx report template: profiles, figure selection, history sources.
 
 Any agent can build the same PDF from mapped roles and a history frame. The
-deploy host is not part of the template. A device folder, an Open-FDD HTTP
-API (self-hosted or hosted), or a future vendor adapter all land on
-``RoleHistory``.
+deploy host is not part of the template. A device folder (offline), a Normal
+Framework box (LAN or portal, ``open_fdd.nf``), the NF app's CSV export, or a
+future vendor adapter all land on ``RoleHistory``.
 
 Only the VAV-style air-handler profile draws RCx week figures today. Motor
 run-hours charts are drawn for every profile, including stubs, when fan or
@@ -299,40 +299,80 @@ class DeviceFolderSource:
         )
 
 
-@dataclass
-class OpenFddApiSource:
-    """History from any Open-FDD central. Pass ``reader`` to supply the frame.
+def _si_frame_history(frame: pd.DataFrame, equipment_id: str, source_id: str) -> RoleHistory:
+    """Wrap an SI role frame from ``open_fdd.nf`` as ``RoleHistory`` (values are already SI)."""
+    from open_fdd.analytics.report_storage import ensure_storage_frame
 
-    ``base_url`` is the central origin (self-hosted or hosted). This class does
-    not open a network connection. An agent that already holds a JWT passes a
-    ``reader`` that returns a role-named frame.
+    frame = ensure_storage_frame(frame, {"storage_abi": "metric-c-v2", **_storage_column_map(frame), "source_units": "si"})
+    points = [(str(column), str(column)) for column in frame.columns]
+    return RoleHistory(
+        frame=frame,
+        equipment_id=equipment_id,
+        equipment_type=str(frame.attrs.get("equipment_type") or "UNKNOWN"),
+        points=points,
+        source_id=source_id,
+    )
+
+
+@dataclass
+class NfSource:
+    """History pulled from a Normal Framework box (LAN or Normal Online portal).
+
+    ``client`` is an ``open_fdd.nf.NFClient`` (default: ``NFClient.from_env()``). ``equip`` is the
+    equipment id or name; ``site`` narrows it when ids repeat across sites. ``start`` / ``end`` are UTC
+    datetimes (default: the last 7 days).
     """
 
-    base_url: str
-    reader: Callable[[], pd.DataFrame] | None = None
-    equipment_id: str = ""
-    equipment_type: str = "UNKNOWN"
-    source_id: str = field(default="openfdd_api", init=False)
+    equip: str
+    site: str | None = None
+    client: object | None = None
+    start: object | None = None
+    end: object | None = None
+    window_sec: int = 300
+    source_id: str = field(default="nf", init=False)
 
     def load(self) -> RoleHistory:
-        if self.reader is None:
-            raise NotImplementedError(
-                "Open-FDD API history needs a reader that returns a role-named frame. "
-                "Use a device folder (history_wide.csv + column_map.json) until that reader is supplied. "
-                f"Central origin: {self.base_url}"
-            )
-        from open_fdd.analytics.report_storage import ensure_storage_frame
+        from open_fdd.nf import NFClient
+        from open_fdd.nf.model import default_range, equipment_frames, load_model
 
-        frame = self.reader()
-        frame = ensure_storage_frame(frame, _storage_column_map(frame))
-        points = [(str(column), str(column)) for column in frame.columns]
-        return RoleHistory(
-            frame=frame,
-            equipment_id=self.equipment_id,
-            equipment_type=self.equipment_type,
-            points=points,
-            source_id=self.source_id,
-        )
+        client = self.client or NFClient.from_env()
+        start, end = (self.start, self.end) if self.start and self.end else default_range(7)
+        model = load_model(client)
+        frames = equipment_frames(client, model, start, end, window_sec=self.window_sec,
+                                  site=self.site, equip=self.equip)
+        if not frames:
+            raise ValueError(f"no history for equipment {self.equip!r} in that range")
+        if len(frames) > 1:
+            raise ValueError(f"equipment {self.equip!r} matches {len(frames)} sites; pass site=")
+        (_, equip_id), frame = next(iter(frames.items()))
+        return _si_frame_history(frame, equip_id, self.source_id)
+
+
+@dataclass
+class CsvExportSource:
+    """History from the NF app's CSV export (Export tab), fully offline.
+
+    A column is matched to a role by its point name; pass ``column_roles`` to map the rest
+    (see ``open_fdd.nf.export.csv_frames``). ``equip`` picks one equipment when the file has several.
+    """
+
+    path: Path | str
+    equip: str | None = None
+    column_roles: dict[str, str] | None = None
+    source_id: str = field(default="nf_csv", init=False)
+
+    def load(self) -> RoleHistory:
+        from open_fdd.nf.export import csv_frames
+
+        frames = csv_frames(self.path, column_roles=self.column_roles)
+        if self.equip:
+            frames = {k: v for k, v in frames.items() if k[1].lower() == self.equip.lower()}
+        if not frames:
+            raise ValueError("no equipment with mapped roles in the CSV (pass column_roles)")
+        if len(frames) > 1:
+            raise ValueError("the CSV holds several equipment; pass equip=" + ", ".join(sorted(k[1] for k in frames)))
+        (_, equip_id), frame = next(iter(frames.items()))
+        return _si_frame_history(frame, equip_id, self.source_id)
 
 
 @dataclass
@@ -367,6 +407,7 @@ class VendorApiSource:
 
 HISTORY_SOURCES: dict[str, type] = {
     "device_folder": DeviceFolderSource,
-    "openfdd_api": OpenFddApiSource,
+    "nf": NfSource,
+    "nf_csv": CsvExportSource,
     "vendor_api": VendorApiSource,
 }

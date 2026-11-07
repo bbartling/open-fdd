@@ -221,3 +221,11 @@ tr.clickable:hover td { background: var(--panel2); }
 /* app version (version.js) */
 .app-version { font-size: 12px; color: var(--muted, #64748b); text-decoration: none; margin-left: 10px; align-self: center; }
 .app-version:hover { text-decoration: underline; }
+
+/* classes that replaced inline style="" attributes (the page CSP forbids them) */
+[hidden] { display: none !important; }
+.stack { display: grid; gap: 18px; align-content: start; }
+.push-actions { margin-left: auto; display: flex; gap: 8px; }
+.mt6 { margin-top: 6px; }
+.check-row { margin-bottom: 8px; }
+.check-items { margin: 4px 0 0 18px; }

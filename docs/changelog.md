@@ -5,6 +5,13 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.2 (app) / open-fdd 4.5.0 (PyPI)
+
+- New `open-fdd-nf` Python CLI and `open_fdd.nf` API: work with a local NF box or the Normal Online portal from Python. See [Python tools](python-tools.html).
+- FDD results written to NF in batches (about 2 requests per run instead of one per result).
+- Open-FDD Lite gets a strict CSP and the full edition's RDF export.
+- The PyPI package now has its own version line (4.x), released by `open-fdd-v*` tags.
+
 ## 5.0.1
 
 Patch release (correctness, data safety, hardening). Full list: [CHANGELOG.md](https://github.com/bbartling/open-fdd/blob/master/CHANGELOG.md).

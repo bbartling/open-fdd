@@ -12,7 +12,7 @@ app. The 4.x spec (Rust central stack) lives at tag `v4.0.11-central`.
 Skills: [add-rcx-chart](skills/add-rcx-chart.md), [add-or-tune-fdd-rule](skills/add-or-tune-fdd-rule.md),
 [model-a-site-in-nf](skills/model-a-site-in-nf.md), [deploy-to-nf-box](skills/deploy-to-nf-box.md),
 [security-checks](skills/security-checks.md), [typescript](skills/typescript.md),
-[bacnet-validate](skills/bacnet-validate.md), [nf-gotchas](skills/nf-gotchas.md).
+[bacnet-validate](skills/bacnet-validate.md), [nf-gotchas](skills/nf-gotchas.md), [pypi-nf-agent](skills/pypi-nf-agent.md).
 
 ## How agents use it
 

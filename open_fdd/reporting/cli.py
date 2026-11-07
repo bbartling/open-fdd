@@ -1,4 +1,5 @@
-"""Headless CLI: Engineering Findings from checklist JSON and/or WattLab dump package."""
+"""Headless CLI: Engineering Findings from a checklist JSON, a Normal Framework box (--nf) or the
+NF app's CSV export (--csv)."""
 
 from __future__ import annotations
 
@@ -8,60 +9,54 @@ import sys
 from pathlib import Path
 
 
-def _overview_context_from_dataset(ds) -> dict:
-    """Build overview_context from an AgentDataset (frames + session knobs)."""
-    from open_fdd.analytics.core import dataset_time_span
-    from open_fdd.analytics.occupancy import OccupancySchedule, occupied_hours_per_week
-    from open_fdd.reporting.overview_export import build_overview_context
+def _frames_from_source(args, p):
+    """Equipment frames (SI role columns) from NF (--nf) or the app's CSV export (--csv)."""
+    from open_fdd.nf.client import NFError
 
-    frames = getattr(ds, "frames", None) or {}
-    span = dataset_time_span(frames) if frames else {}
-    session = getattr(ds, "session_config", None) or {}
-    params = getattr(ds, "params", None) or session.get("params") or {}
-    oat_err = 5.0
     try:
-        oat_err = float((params.get("OAT-METEO") or {}).get("oat_err", 5.0))
-    except (TypeError, ValueError):
-        oat_err = 5.0
-    sched = OccupancySchedule.from_dict(session.get("occupancy_schedule"))
-    return build_overview_context(
-        frames=frames,
-        role_map=getattr(ds, "role_map", None) or {},
-        weather=getattr(ds, "weather", None),
-        prefer_web_oat=bool(getattr(ds, "prefer_web_oat", session.get("prefer_web_oat", True))),
-        oat_err=oat_err,
-        chw_leave_max=float(
-            getattr(ds, "chw_leave_max", None) or session.get("chw_leave_max", 8.8888888889)
-        ),
-        use_status_proof=bool(
-            getattr(
-                ds,
-                "use_mech_cooling_status_proof",
-                session.get("use_mech_cooling_status_proof", True),
-            )
-        ),
-        zone_lo=float(session.get("zone_lo", 21.111111)),
-        zone_hi=float(session.get("zone_hi", 23.888889)),
-        bare_min_occ_hours=float(occupied_hours_per_week(sched)),
-        occupancy_schedule=sched.to_dict(),
-        dataset_start=span.get("start"),
-        dataset_end=span.get("end"),
-        span_hours=span.get("span_hours"),
-    )
+        if args.csv:
+            from open_fdd.nf.export import csv_frames
+
+            return csv_frames(args.csv), args.building
+        import os
+        from open_fdd.nf.client import NFClient, parse_nf_ts
+        from open_fdd.nf.model import default_range, equipment_frames, load_model, site_name
+
+        env = dict(os.environ)
+        if args.url:
+            env.update(NF_URL=args.url, NF_LAN_URL=args.url, NFURL=args.url)
+        client = NFClient.from_env(via=args.via, env_file=args.env or None, env=env)
+        model = load_model(client)
+        start, end = (parse_nf_ts(args.start), parse_nf_ts(args.end)) if args.start and args.end else default_range(args.days)
+        frames = equipment_frames(client, model, start, end, site=args.site, equip=args.equip)
+        building = args.building or (site_name(model, args.site) if args.site else
+                                     ", ".join((s.get("attrs") or {}).get("dis") or s.get("name", "") for s in model.sites))
+        return frames, building
+    except NFError as exc:
+        p.error(str(exc))
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description=(
             "Generate an FDD Engineering Findings Report (evidence-reviewed). "
-            "Detection ≠ finding; likely false positives stay in Appendix C. "
+            "Detection is not a finding; likely false positives stay in Appendix C. "
             "Agent knobs: --systems / --equipment-prefix / --rule-ids / "
             "--allow-priority / --pin-finding / --drop-finding / --write-inventory."
         )
     )
     p.add_argument("--checklist-json", type=Path, help="controls_service_checklist JSON")
-    p.add_argument("--dump", type=Path, help="WattLab dump / site package zip or folder")
-    p.add_argument("--package", type=Path, help="Alias for --dump (agent-friendly)")
+    src = p.add_argument_group("history source (run the pandas rules on real data)")
+    src.add_argument("--nf", action="store_true", help="pull history from a Normal Framework box (see open-fdd-nf)")
+    src.add_argument("--csv", type=Path, help="the NF app's CSV export (Export tab); fully offline")
+    src.add_argument("--url", help="with --nf: NF base URL (default: NF_URL / NF_LAN_URL / NFURL)")
+    src.add_argument("--env", default="", metavar="FILE", help="with --nf: KEY=VALUE env file with NF_* settings")
+    src.add_argument("--via", choices=("lan", "portal"), help="with --nf: which URL to prefer")
+    src.add_argument("--site", help="with --nf: site id or name")
+    src.add_argument("--equip", help="with --nf: one equipment id or name")
+    src.add_argument("--days", type=float, default=7.0, help="with --nf: trailing days (default 7)")
+    src.add_argument("--start", help="with --nf: ISO UTC start (use with --end)")
+    src.add_argument("--end", help="with --nf: ISO UTC end")
     p.add_argument("--building", default="", help="Override building name")
     p.add_argument("--out-dir", type=Path, help="Output directory")
     p.add_argument("--out", type=Path, help="Alias for --out-dir")
@@ -120,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="REF=TEXT",
         help="Attach field note (BUG-021). Repeatable.",
     )
-    p.add_argument("--notes-file", type=Path, help="JSON object of ref → note (BUG-021)")
+    p.add_argument("--notes-file", type=Path, help="JSON object of ref to note (BUG-021)")
     p.add_argument(
         "--write-inventory",
         action="store_true",
@@ -128,15 +123,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Write FAULT inventory JSON alongside report (default on) (BUG-023)",
     )
     p.add_argument("--no-inventory", action="store_true", help="Skip FAULT inventory export")
-    p.add_argument("--run-rules", action="store_true", help="With --dump, also run cookbook FAULTs")
     args = p.parse_args(argv)
 
-    dump = args.dump or args.package
     out_dir = args.out_dir or args.out
     if out_dir is None:
         p.error("Provide --out-dir / --out")
-    if not args.checklist_json and not dump:
-        p.error("Provide --checklist-json and/or --dump/--package")
+    if not args.checklist_json and not (args.nf or args.csv):
+        p.error("Provide --checklist-json and/or --nf / --csv")
 
     allow_priority = args.allow_priority
     if args.raise_max_findings:
@@ -163,25 +156,20 @@ def main(argv: list[str] | None = None) -> int:
     rule_results = None
     overview_context = None
     building = args.building
-    if dump:
-        try:
-            from open_fdd.analytics.agent_bridge import load_package_path, run_rules
-        except ImportError as exc:  # pragma: no cover - host app provides bridge
-            raise SystemExit(
-                "Dump/run-rules requires a host bridge (open_fdd.analytics.agent_bridge). "
-                f"Import failed: {exc}"
-            ) from exc
+    if args.nf or args.csv:
+        frames, building = _frames_from_source(args, p)
+        if not frames:
+            p.error("no equipment history found for that source/range")
+        from open_fdd.nf.report import build_overview_context
+        from open_fdd.nf.rules import rule_results
 
-        ds = load_package_path(dump)
-        building = building or getattr(ds, "building_id", "") or ""
+        rule_results_list = rule_results(frames)
+        rule_results = [r for _, _, r in rule_results_list]
         try:
-            overview_context = _overview_context_from_dataset(ds)
-        except Exception as exc:  # soft-fail Overview export path
+            overview_context = build_overview_context(frames)
+        except Exception as exc:  # soft-fail the Overview export path
             print(f"overview_context unavailable: {exc}", file=sys.stderr)
             overview_context = None
-        if args.run_rules:
-            run = run_rules(ds)
-            rule_results = run.results
 
     write_inv = bool(args.write_inventory) and not args.no_inventory
     artifacts = build_engineering_findings(

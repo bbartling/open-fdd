@@ -1,0 +1,3202 @@
+{
+ "_generated_by": "scripts/nf/build_rule_catalog.py",
+ "source": [
+  "sql/fdd/registry.yaml",
+  "sql/fdd/role_map.json",
+  "sql/fdd/role_scales.json",
+  "nf-app/rules/role_overrides.json"
+ ],
+ "equipment_kinds": {
+  "ahu": [
+   "ahu",
+   "rtu",
+   "mau",
+   "doas"
+  ],
+  "vav": [
+   "vav"
+  ],
+  "chiller": [
+   "chiller"
+  ],
+  "chwPlant": [
+   "chilledWaterPlant",
+   "chilledWater"
+  ],
+  "cooling_tower": [
+   "coolingTower"
+  ],
+  "boiler": [
+   "boiler"
+  ],
+  "heatpump": [
+   "heatPump"
+  ],
+  "meter": [
+   "meter",
+   "elecMeter"
+  ],
+  "baseboard": [
+   "baseboard",
+   "radiantEquip"
+  ],
+  "zone_other": [
+   "fcu",
+   "unitVent",
+   "zone"
+  ],
+  "weather": [
+   "weatherStation"
+  ],
+  "general": [
+   "equip"
+  ]
+ },
+ "roles": {
+  "ahu_sat": {
+   "name": "ahu-discharge-air-temp",
+   "classes": [
+    "discharge-air-temp-sensor"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "building_ahu_load_satisfied": {
+   "name": "building-ahu-load-satisfied",
+   "classes": [],
+   "markers": [
+    "ahu",
+    "load",
+    "satisfied"
+   ],
+   "scale": "boolean"
+  },
+  "building_zone_load_satisfied": {
+   "name": "building-zone-load-satisfied",
+   "classes": [],
+   "markers": [
+    "zone",
+    "load",
+    "satisfied"
+   ],
+   "scale": "boolean"
+  },
+  "chiller_amps": {
+   "name": "chiller-amps",
+   "classes": [
+    "avg-ac-elec-current-magnitude-sensor"
+   ],
+   "markers": [
+    "elec",
+    "current",
+    "sensor"
+   ],
+   "scale": "si:A"
+  },
+  "chiller_cmd": {
+   "name": "chiller-cmd",
+   "classes": [],
+   "markers": [
+    "chiller",
+    "run",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "chiller_current": {
+   "name": "chiller-current",
+   "classes": [
+    "avg-ac-elec-current-magnitude-sensor"
+   ],
+   "markers": [
+    "elec",
+    "current",
+    "sensor"
+   ],
+   "scale": "si:A"
+  },
+  "chiller_power": {
+   "name": "chiller-power",
+   "classes": [
+    "total-active-ac-elec-power-sensor"
+   ],
+   "markers": [
+    "elec",
+    "power",
+    "sensor"
+   ],
+   "scale": "si:kW"
+  },
+  "chiller_status": {
+   "name": "chiller-status",
+   "classes": [],
+   "markers": [
+    "chiller",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
+  "chw_dp": {
+   "name": "chw-diff-pressure",
+   "classes": [
+    "chilled-water-delta-pressure"
+   ],
+   "markers": [
+    "chilled",
+    "water",
+    "delta",
+    "pressure",
+    "sensor"
+   ],
+   "scale": "si:Pa"
+  },
+  "chw_dp_sp": {
+   "name": "chw-diff-pressure-sp",
+   "classes": [],
+   "markers": [
+    "chilled",
+    "water",
+    "delta",
+    "pressure",
+    "sp"
+   ],
+   "scale": "si:Pa"
+  },
+  "chw_flow": {
+   "name": "chw-flow",
+   "classes": [
+    "chilled-water-delta-flow-sensor"
+   ],
+   "markers": [
+    "chilled",
+    "water",
+    "flow",
+    "sensor"
+   ],
+   "scale": "si:L/s"
+  },
+  "chw_pump_cmd": {
+   "name": "chw-pump-cmd",
+   "classes": [],
+   "markers": [
+    "chilled",
+    "water",
+    "pump",
+    "run",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "chw_pump_status": {
+   "name": "chw-pump-status",
+   "classes": [],
+   "markers": [
+    "chilled",
+    "water",
+    "pump",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
+  "chw_reset_request_sum": {
+   "name": "chilled-water-reset-request-sum",
+   "classes": [],
+   "markers": [
+    "chilled",
+    "water",
+    "request"
+   ],
+   "scale": "si:count"
+  },
+  "chw_return_t": {
+   "name": "chilled-water-return-temp",
+   "classes": [],
+   "markers": [
+    "chilled",
+    "water",
+    "entering",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "chw_supply_sp": {
+   "name": "chilled-water-supply-temp-sp",
+   "classes": [],
+   "markers": [
+    "chilled",
+    "water",
+    "leaving",
+    "temp",
+    "sp"
+   ],
+   "scale": "si:degC"
+  },
+  "chw_supply_t": {
+   "name": "chilled-water-supply-temp",
+   "classes": [],
+   "markers": [
+    "chilled",
+    "water",
+    "leaving",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "clg_available": {
+   "name": "cooling-available",
+   "classes": [],
+   "markers": [
+    "cool",
+    "enable",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
+  "clg_valve_pct": {
+   "name": "cooling-valve",
+   "classes": [
+    "chilled-water-cool-valve-cmd",
+    "discharge-chilled-water-cool-valve-cmd"
+   ],
+   "markers": [
+    "cool",
+    "valve",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "compressor_status": {
+   "name": "compressor-status",
+   "classes": [],
+   "markers": [
+    "compressor",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
+  "cooling_coil_entering_temp": {
+   "name": "cooling-coil-entering-temp",
+   "classes": [],
+   "markers": [
+    "cool",
+    "entering",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "cooling_coil_leaving_temp": {
+   "name": "cooling-coil-leaving-temp",
+   "classes": [],
+   "markers": [
+    "cool",
+    "leaving",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "cooling_sp": {
+   "name": "cooling-sp",
+   "classes": [
+    "zone-air-temp-occ-cooling-sp"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "temp",
+    "cooling",
+    "sp"
+   ],
+   "scale": "si:degC"
+  },
+  "cw_pump_cmd": {
+   "name": "cw-pump-cmd",
+   "classes": [],
+   "markers": [
+    "condenser",
+    "water",
+    "pump",
+    "run",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "cw_return_t": {
+   "name": "condenser-water-return-temp",
+   "classes": [],
+   "markers": [
+    "condenser",
+    "water",
+    "entering",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "cw_supply_t": {
+   "name": "condenser-water-supply-temp",
+   "classes": [],
+   "markers": [
+    "condenser",
+    "water",
+    "leaving",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "damper_cmd": {
+   "name": "damper-cmd",
+   "classes": [
+    "damper-cmd"
+   ],
+   "markers": [
+    "damper",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "damper_pct": {
+   "name": "damper",
+   "classes": [
+    "damper-sensor",
+    "damper-cmd"
+   ],
+   "markers": [
+    "damper",
+    "sensor"
+   ],
+   "scale": "fraction"
+  },
+  "duct_static": {
+   "name": "duct-static-pressure",
+   "classes": [
+    "discharge-air-pressure-sensor"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "pressure",
+    "sensor"
+   ],
+   "scale": "si:Pa"
+  },
+  "duct_static_sp": {
+   "name": "duct-static-pressure-sp",
+   "classes": [
+    "discharge-air-pressure-sp"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "pressure",
+    "sp"
+   ],
+   "scale": "si:Pa"
+  },
+  "electric_kw": {
+   "name": "electric-power",
+   "classes": [
+    "total-active-ac-elec-power-sensor"
+   ],
+   "markers": [
+    "elec",
+    "power",
+    "sensor"
+   ],
+   "scale": "si:kW"
+  },
+  "electric_kwh": {
+   "name": "electric-energy",
+   "classes": [],
+   "markers": [
+    "elec",
+    "energy",
+    "sensor"
+   ],
+   "scale": "si:kWh"
+  },
+  "fan_cmd": {
+   "name": "fan-cmd",
+   "classes": [
+    "discharge-run-cmd",
+    "run-cmd"
+   ],
+   "markers": [
+    "fan",
+    "run",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "fan_status": {
+   "name": "fan-status",
+   "classes": [
+    "discharge-run-sensor",
+    "run-sensor"
+   ],
+   "markers": [
+    "fan",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
+  "heating_coil_entering_temp": {
+   "name": "heating-coil-entering-temp",
+   "classes": [],
+   "markers": [
+    "heat",
+    "entering",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "heating_coil_leaving_temp": {
+   "name": "heating-coil-leaving-temp",
+   "classes": [],
+   "markers": [
+    "heat",
+    "leaving",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "heating_sp": {
+   "name": "heating-sp",
+   "classes": [
+    "zone-air-temp-occ-heating-sp"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "temp",
+    "heating",
+    "sp"
+   ],
+   "scale": "si:degC"
+  },
+  "htg_valve_pct": {
+   "name": "heating-valve",
+   "classes": [
+    "hot-water-heat-valve-cmd",
+    "discharge-hot-water-heat-valve-cmd",
+    "discharge-steam-heat-valve-cmd"
+   ],
+   "markers": [
+    "heat",
+    "valve",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "hw_reset_request_sum": {
+   "name": "hot-water-reset-request-sum",
+   "classes": [],
+   "markers": [
+    "hot",
+    "water",
+    "request"
+   ],
+   "scale": "si:count"
+  },
+  "hw_return_t": {
+   "name": "hot-water-return-temp",
+   "classes": [],
+   "markers": [
+    "hot",
+    "water",
+    "entering",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "hw_supply_t": {
+   "name": "hot-water-supply-temp",
+   "classes": [],
+   "markers": [
+    "hot",
+    "water",
+    "leaving",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "kwh": {
+   "name": "electric-energy",
+   "classes": [],
+   "markers": [
+    "elec",
+    "energy",
+    "sensor"
+   ],
+   "scale": "si:kWh"
+  },
+  "loop_enabled": {
+   "name": "loop-enabled",
+   "classes": [
+    "enable-sensor",
+    "enable-cmd"
+   ],
+   "markers": [
+    "enable"
+   ],
+   "scale": "boolean"
+  },
+  "ma_h": {
+   "name": "mixed-air-humidity",
+   "classes": [
+    "mixed-air-humidity-sensor"
+   ],
+   "markers": [
+    "mixed",
+    "air",
+    "humidity",
+    "sensor"
+   ],
+   "scale": "percent_rh"
+  },
+  "mat": {
+   "name": "mixed-air-temp",
+   "classes": [
+    "mixed-air-temp-sensor"
+   ],
+   "markers": [
+    "mixed",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "min_flow_sp": {
+   "name": "min-flow-sp",
+   "classes": [],
+   "markers": [
+    "min",
+    "air",
+    "flow",
+    "sp"
+   ],
+   "scale": "si:L/s"
+  },
+  "oa_damper_pct": {
+   "name": "outside-air-damper",
+   "classes": [
+    "outside-damper-cmd",
+    "outside-damper-sensor"
+   ],
+   "markers": [
+    "outside",
+    "damper"
+   ],
+   "scale": "fraction"
+  },
+  "oa_h": {
+   "name": "outside-air-humidity",
+   "classes": [
+    "outside-air-humidity-sensor"
+   ],
+   "markers": [
+    "outside",
+    "air",
+    "humidity",
+    "sensor"
+   ],
+   "scale": "percent_rh"
+  },
+  "oa_t": {
+   "name": "outside-air-temp",
+   "classes": [
+    "outside-air-temp-sensor"
+   ],
+   "markers": [
+    "outside",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "occ_mode": {
+   "name": "occupied",
+   "classes": [
+    "occupied-sensor"
+   ],
+   "markers": [
+    "occupied"
+   ],
+   "scale": "text"
+  },
+  "preheat_leave_t": {
+   "name": "preheat-leaving-temp",
+   "classes": [],
+   "markers": [
+    "preheat",
+    "leaving",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "pump_status": {
+   "name": "pump-status",
+   "classes": [],
+   "markers": [
+    "pump",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
+  "ra_h": {
+   "name": "return-air-humidity",
+   "classes": [
+    "return-air-humidity-sensor"
+   ],
+   "markers": [
+    "return",
+    "air",
+    "humidity",
+    "sensor"
+   ],
+   "scale": "percent_rh"
+  },
+  "rat": {
+   "name": "return-air-temp",
+   "classes": [
+    "return-air-temp-sensor"
+   ],
+   "markers": [
+    "return",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "reheat_valve_pct": {
+   "name": "reheat-valve",
+   "classes": [
+    "reheat-cmd"
+   ],
+   "markers": [
+    "reheat",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "return_fan": {
+   "name": "return-fan-cmd",
+   "classes": [
+    "return-run-cmd"
+   ],
+   "markers": [
+    "return",
+    "fan",
+    "run",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "sa_h": {
+   "name": "supply-air-humidity",
+   "classes": [
+    "discharge-air-humidity-sensor"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "humidity",
+    "sensor"
+   ],
+   "scale": "percent_rh"
+  },
+  "sat": {
+   "name": "discharge-air-temp",
+   "classes": [
+    "discharge-air-temp-sensor"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "sat_sp": {
+   "name": "discharge-air-temp-sp",
+   "classes": [
+    "discharge-air-temp-sp"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "temp",
+    "sp"
+   ],
+   "scale": "si:degC"
+  },
+  "static_reset_request": {
+   "name": "vav-pressure-request-sum",
+   "classes": [],
+   "markers": [
+    "pressure",
+    "request"
+   ],
+   "scale": "si:count"
+  },
+  "tower_fan_cmd": {
+   "name": "tower-fan-cmd",
+   "classes": [],
+   "markers": [
+    "coolingTower",
+    "fan",
+    "run",
+    "cmd"
+   ],
+   "scale": "fraction"
+  },
+  "vav_discharge_t": {
+   "name": "vav-discharge-air-temp",
+   "classes": [
+    "discharge-air-temp-sensor"
+   ],
+   "markers": [
+    "discharge",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "vav_inlet_t": {
+   "name": "vav-inlet-air-temp",
+   "classes": [
+    "inlet-air-temp-sensor"
+   ],
+   "markers": [
+    "entering",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  },
+  "vav_total_flow": {
+   "name": "vav-total-airflow",
+   "classes": [],
+   "markers": [
+    "total",
+    "air",
+    "flow",
+    "sensor"
+   ],
+   "scale": "si:L/s"
+  },
+  "web_oa_dp": {
+   "name": "web-outside-air-dewpoint",
+   "classes": [],
+   "markers": [
+    "weather",
+    "outside",
+    "air",
+    "dewPoint"
+   ],
+   "scale": "si:degC"
+  },
+  "web_oa_h": {
+   "name": "web-outside-air-humidity",
+   "classes": [],
+   "markers": [
+    "weather",
+    "outside",
+    "air",
+    "humidity"
+   ],
+   "scale": "percent_rh"
+  },
+  "web_oa_t": {
+   "name": "web-outside-air-temp",
+   "classes": [],
+   "markers": [
+    "weather",
+    "outside",
+    "air",
+    "temp"
+   ],
+   "scale": "si:degC"
+  },
+  "web_wb_t": {
+   "name": "web-outside-air-wetbulb",
+   "classes": [],
+   "markers": [
+    "weather",
+    "outside",
+    "air",
+    "wetBulb"
+   ],
+   "scale": "si:degC"
+  },
+  "zone_air_temp_sp": {
+   "name": "zone-air-temp-sp",
+   "classes": [
+    "zone-air-temp-effective-sp"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "temp",
+    "sp"
+   ],
+   "scale": "si:degC"
+  },
+  "zone_airflow_sp": {
+   "name": "zone-airflow-sp",
+   "classes": [
+    "discharge-air-flow-sp",
+    "air-flow-sp"
+   ],
+   "markers": [
+    "air",
+    "flow",
+    "sp"
+   ],
+   "scale": "si:L/s"
+  },
+  "zone_co2": {
+   "name": "zone-co2",
+   "classes": [
+    "air-co2-concentration-sensor"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "co2",
+    "sensor"
+   ],
+   "scale": "si:ppm"
+  },
+  "zone_flow": {
+   "name": "zone-airflow",
+   "classes": [
+    "discharge-air-flow-sensor",
+    "air-flow-sensor"
+   ],
+   "markers": [
+    "air",
+    "flow",
+    "sensor"
+   ],
+   "scale": "si:L/s"
+  },
+  "zone_rh": {
+   "name": "zone-air-humidity",
+   "classes": [
+    "zone-air-humidity-sensor"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "humidity",
+    "sensor"
+   ],
+   "scale": "percent_rh"
+  },
+  "zone_t": {
+   "name": "zone-air-temp",
+   "classes": [
+    "zone-air-temp-sensor"
+   ],
+   "markers": [
+    "zone",
+    "air",
+    "temp",
+    "sensor"
+   ],
+   "scale": "si:degC"
+  }
+ },
+ "rules": [
+  {
+   "id": "FAN-RUNTIME-HOURS",
+   "description": "Fan running hours where fan_cmd > 5% (normalized 0-1)",
+   "sql_file": "fan_runtime_hours.sql",
+   "priority": "P0",
+   "equipment_kinds": [],
+   "required_roles": [
+    "fan_cmd"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {}
+  },
+  {
+   "id": "VAV-1",
+   "description": "Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2; no occupancy model or schedule → NOT_ASSESSED_NO_OCCUPANCY",
+   "sql_file": "vav1_comfort_fault.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav",
+    "zone_other",
+    "heatpump",
+    "baseboard"
+   ],
+   "required_roles": [
+    "zone_t"
+   ],
+   "optional_roles": [
+    "occ_mode"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "zone_t_lo": 21.111111111,
+    "zone_t_hi": 23.888888889,
+    "require_occupied": 1.0,
+    "confirm_seconds": 900
+   }
+  },
+  {
+   "id": "VAV-2",
+   "description": "Night setback miss — unoccupied zone above heating setback",
+   "sql_file": "vav2_night_setback.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav",
+    "zone_other",
+    "heatpump",
+    "baseboard"
+   ],
+   "required_roles": [
+    "zone_t",
+    "occ_mode"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "setback_hi": 20.0,
+    "confirm_seconds": 900
+   }
+  },
+  {
+   "id": "AVG-ZONE-TEMP",
+   "description": "Average zone temperature per equipment",
+   "sql_file": "avg_zone_temp.sql",
+   "priority": "P0",
+   "equipment_kinds": [],
+   "required_roles": [
+    "zone_t"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "zone_t_lo": 20.0,
+    "zone_t_hi": 24.444444444
+   }
+  },
+  {
+   "id": "ZONE-COMFORT-PCT",
+   "description": "Percent of samples in comfort band",
+   "sql_file": "zone_comfort_pct.sql",
+   "priority": "P0",
+   "equipment_kinds": [],
+   "required_roles": [
+    "zone_t"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "zone_t_lo": 20.0,
+    "zone_t_hi": 24.444444444
+   }
+  },
+  {
+   "id": "FAULT-ELAPSED-HOURS",
+   "description": "Comfort fault sample count → hours",
+   "sql_file": "fault_elapsed_hours.sql",
+   "priority": "P0",
+   "equipment_kinds": [],
+   "required_roles": [
+    "zone_t"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "zone_t_lo": 20.0,
+    "zone_t_hi": 24.444444
+   }
+  },
+  {
+   "id": "OAT-METEO",
+   "description": "Equipment OAT vs weather-staged wx OAT",
+   "sql_file": "oat_meteo_fault.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_t"
+   ],
+   "optional_roles": [
+    "web_oa_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "oat_err": 2.777778,
+    "confirm_seconds": 900,
+    "web_cadence_seconds": 1200,
+    "web_asof_margin_seconds": 300
+   }
+  },
+  {
+   "id": "FC13-SAT-HIGH",
+   "description": "SAT above setpoint at full cooling",
+   "sql_file": "sat_high_fault.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "sat_sp",
+    "clg_valve_pct",
+    "oa_damper_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "eps_sat": 0.638888889,
+    "econ_min_pos": 0.05,
+    "econ_full_open": 0.9,
+    "clg_full_min": 0.9,
+    "oa_damper_econ_low": 0.05,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "ECON-2",
+   "description": "Economizing when outdoor air unfavorable",
+   "sql_file": "economizer_fault.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_t",
+    "oa_damper_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "econ2_oat_hi": 17.222222,
+    "econ2_damper": 0.42,
+    "confirm_seconds": 300
+   }
+  },
+  {
+   "id": "FC1",
+   "description": "Duct static below SP at full fan",
+   "sql_file": "fc1_duct_static_low.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "duct_static",
+    "duct_static_sp",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "eps_dsp": 29.8608,
+    "eps_vfd_spd": 0.13,
+    "confirm_seconds": 300
+   }
+  },
+  {
+   "id": "FC2",
+   "description": "Mixed air below envelope",
+   "sql_file": "fc2_mat_low.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "oa_t",
+    "rat",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "mode_delay_min": 10.0,
+    "fan_on_min": 0.01,
+    "eps_rat": 0.638888889,
+    "eps_oat": 0.638888889,
+    "eps_mat": 0.638888889,
+    "mix_tol": 0.638888889,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "FC3",
+   "description": "Mixed air above envelope",
+   "sql_file": "fc3_mat_high.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "oa_t",
+    "rat",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "mode_delay_min": 10.0,
+    "eps_rat": 0.638888889,
+    "eps_oat": 0.638888889,
+    "eps_mat": 0.638888889,
+    "mix_tol": 0.638888889,
+    "fan_on_min": 0.01,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "FC7",
+   "description": "SAT low while heating at full",
+   "sql_file": "fc7_sat_low_heating.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "sat_sp",
+    "htg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_cmd",
+    "fan_status"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "mode_delay_min": 10.0,
+    "fan_on_min": 0.01,
+    "eps_sat": 0.638888889,
+    "htg_full_min": 0.9,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "FC8",
+   "description": "SAT vs MAT while economizing",
+   "sql_file": "fc8_sat_mat_econ.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "mat",
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "supply_tol": 0.638888889,
+    "eps_sat": 0.638888889,
+    "eps_mat": 0.638888889,
+    "mix_tol": 0.638888889,
+    "delta_supply_fan": 0.305555556,
+    "econ_min_pos": 0.05,
+    "clg_inactive_max": 0.1,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "FC9",
+   "description": "OAT high vs SAT SP while economizing",
+   "sql_file": "fc9_oa_sat_sp_econ.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_t",
+    "sat_sp",
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "eps_sat": 0.638888889,
+    "eps_oat": 0.638888889,
+    "mix_tol": 0.638888889,
+    "delta_supply_fan": 0.305555556,
+    "econ_min_pos": 0.05,
+    "clg_inactive_max": 0.1,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "FC10",
+   "description": "MAT-OAT delta while cooling and economizing",
+   "sql_file": "fc10_mat_oa_clg.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "oa_t",
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "eps_oat": 0.638888889,
+    "eps_mat": 0.638888889,
+    "econ_full_open": 0.9,
+    "mix_tol": 0.638888889,
+    "clg_on_min": 0.01,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "FC11",
+   "description": "OAT low vs SAT SP while cooling and economizing",
+   "sql_file": "fc11_oa_sat_sp_clg.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_t",
+    "sat_sp",
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "eps_sat": 0.638888889,
+    "eps_oat": 0.638888889,
+    "econ_full_open": 0.9,
+    "mix_tol": 0.638888889,
+    "delta_supply_fan": 0.305555556,
+    "clg_on_min": 0.01,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "FC12",
+   "description": "SAT above MAT while cooling",
+   "sql_file": "fc12_sat_mat_clg.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "mat",
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "supply_tol": 0.638888889,
+    "eps_sat": 0.638888889,
+    "eps_mat": 0.638888889,
+    "econ_full_open": 0.9,
+    "mix_tol": 0.638888889,
+    "delta_supply_fan": 0.305555556,
+    "clg_on_min": 0.01,
+    "econ_min_pos": 0.05,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "ECON-1",
+   "description": "Economizer stuck closed when OAT favorable",
+   "sql_file": "econ1_stuck_closed.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "fan_cmd",
+    "oa_damper_pct",
+    "oa_t"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "econ1_oat_min": 12.777778,
+    "econ1_damper_max": 0.05
+   }
+  },
+  {
+   "id": "ECON-4",
+   "description": "Low estimated OA fraction",
+   "sql_file": "econ4_low_oa_frac.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "rat",
+    "oa_t",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "oa_min_pct": 21.0,
+    "oat_rat_delta_min": 1.222222,
+    "confirm_seconds": 600
+   }
+  },
+  {
+   "id": "SV-RANGE",
+   "description": "Sensor out of hard range",
+   "sql_file": "sv_range.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "chiller",
+    "boiler",
+    "weather",
+    "zone_other",
+    "heatpump",
+    "meter"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "oa_t",
+    "mat",
+    "zone_t",
+    "rat",
+    "sat",
+    "chw_supply_t",
+    "chw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "oa_h",
+    "ra_h",
+    "zone_rh",
+    "ma_h",
+    "sa_h",
+    "duct_static",
+    "fan_status",
+    "fan_cmd",
+    "pump_status",
+    "chw_pump_cmd",
+    "chiller_status",
+    "zone_flow",
+    "kwh",
+    "electric_kw",
+    "electric_kwh"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "range_scale_temperature": 1.0,
+    "range_scale_humidity": 1.0,
+    "range_scale_pressure": 1.0
+   }
+  },
+  {
+   "id": "SV-FLATLINE",
+   "description": "Sensor flatline (stuck)",
+   "sql_file": "sv_flatline.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "chiller",
+    "boiler",
+    "weather",
+    "zone_other",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "oa_t",
+    "mat",
+    "zone_t",
+    "rat",
+    "sat",
+    "chw_supply_t",
+    "chw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "oa_h",
+    "ra_h",
+    "zone_rh",
+    "ma_h",
+    "sa_h",
+    "fan_status",
+    "fan_cmd",
+    "pump_status",
+    "chw_pump_cmd",
+    "chiller_status",
+    "zone_flow"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "flatline_tol": 0.055556,
+    "flatline_hours": 1.0
+   }
+  },
+  {
+   "id": "SV-SPIKE",
+   "description": "Sensor rate-of-change spike",
+   "sql_file": "sv_spike.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "chiller",
+    "boiler",
+    "weather",
+    "zone_other",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "oa_t",
+    "mat",
+    "zone_t",
+    "rat",
+    "sat",
+    "chw_supply_t",
+    "chw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "oa_h",
+    "duct_static",
+    "fan_status",
+    "fan_cmd",
+    "pump_status",
+    "chw_pump_cmd",
+    "chiller_status",
+    "zone_flow"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "spike_scale_pressure": 1.0,
+    "spike_scale_humidity": 1.0,
+    "spike_scale_temperature": 1.0,
+    "confirm_seconds": 300.0,
+    "spike_scale": 1.0
+   }
+  },
+  {
+   "id": "SV-STALE",
+   "description": "Stale data (no fresh samples)",
+   "sql_file": "sv_stale.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "chiller",
+    "boiler",
+    "weather",
+    "zone_other",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "oa_t",
+    "mat",
+    "zone_t",
+    "rat",
+    "sat",
+    "chw_supply_t",
+    "chw_return_t",
+    "hw_supply_t",
+    "hw_return_t",
+    "oa_h",
+    "ra_h",
+    "zone_rh",
+    "ma_h",
+    "sa_h"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "confirm_seconds": 300.0,
+    "stale_hours": 2.0,
+    "stale_tol": 0.027778
+   }
+  },
+  {
+   "id": "SV-RATE",
+   "description": "Context-aware sensor rate of change",
+   "sql_file": "sv_rate.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "chiller",
+    "boiler",
+    "weather",
+    "zone_other",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "oa_t",
+    "mat",
+    "zone_t",
+    "rat",
+    "sat"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "sensor_span": 100.0,
+    "max_gap_hours": 1.0,
+    "confirm_seconds": 600.0,
+    "persistence_min": 10.0,
+    "steady_fault_per_hour": 3.333333
+   }
+  },
+  {
+   "id": "PID-HUNT-1",
+   "description": "Suspected control-output hunting",
+   "sql_file": "pid_hunt_1.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "zone_other",
+    "chiller",
+    "boiler",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "oa_damper_pct",
+    "clg_valve_pct",
+    "htg_valve_pct",
+    "damper_pct",
+    "loop_enabled",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 0.0,
+    "window_hours": 1.0,
+    "change_deadband_pct": 1.0,
+    "minimum_span_pct": 20.0,
+    "total_variation_fault_pct": 500.0,
+    "minimum_equivalent_cycles": 2.5,
+    "minimum_reversals": 4.0,
+    "minimum_coverage_pct": 80.0
+   }
+  },
+  {
+   "id": "FC4",
+   "description": "PID hunting (operating-state oscillation)",
+   "sql_file": "fc4_os_hunting.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_damper_pct",
+    "clg_valve_pct",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 3600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "confirm_seconds": 3600.0,
+    "delta_os_max": 5.0
+   }
+  },
+  {
+   "id": "FC5",
+   "description": "SAT cold when heating commanded (GL36 D)",
+   "sql_file": "fc5_sat_cold_heating.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "mat",
+    "htg_valve_pct",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "mode_delay_min": 10.0,
+    "fan_on_min": 0.01,
+    "eps_sat": 0.638888889,
+    "eps_mat": 0.638888889,
+    "confirm_seconds": 600.0,
+    "mix_tol": 0.638888889,
+    "htg_on_min": 0.01,
+    "delta_supply_fan": 0.305555556
+   }
+  },
+  {
+   "id": "FC6",
+   "description": "Estimated OA fraction mismatch",
+   "sql_file": "fc6_oa_frac_mismatch.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "rat",
+    "oa_t",
+    "fan_cmd",
+    "vav_total_flow"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "oat_rat_delta_min": 2.777777778,
+    "mode_delay_min": 10.0,
+    "fan_on_min": 0.01,
+    "eps_airflow": 0.15,
+    "confirm_seconds": 600.0,
+    "min_flow_design": 2359.735
+   }
+  },
+  {
+   "id": "FC14",
+   "description": "CHW coil ΔT when inactive (GL36 L)",
+   "sql_file": "fc14_chw_coil_dt_inactive.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "cooling_coil_entering_temp",
+    "cooling_coil_leaving_temp",
+    "mat",
+    "sat",
+    "oa_damper_pct",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "clg_on_min": 0.01,
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "htg_on_min": 0.01,
+    "eps_cclt": 0.638888889,
+    "eps_ccet": 0.638888889,
+    "econ_min_pos": 0.05,
+    "delta_supply_fan": 0.305555556,
+    "clg_inactive_max": 0.01,
+    "confirm_seconds": 600.0,
+    "mix_tol": 0.638888889
+   }
+  },
+  {
+   "id": "FC15",
+   "description": "HW coil ΔT when inactive (GL36 M)",
+   "sql_file": "fc15_hw_coil_dt_inactive.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "heating_coil_entering_temp",
+    "heating_coil_leaving_temp",
+    "mat",
+    "sat",
+    "htg_valve_pct",
+    "clg_valve_pct",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "htg_on_min": 0.01,
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "fan_on_min": 0.01,
+    "mode_delay_min": 10.0,
+    "eps_hclt": 0.638888889,
+    "eps_hcet": 0.638888889,
+    "econ_min_pos": 0.05,
+    "econ_full_open": 0.9,
+    "delta_supply_fan": 0.305555556,
+    "clg_on_min": 0.01,
+    "clg_inactive_max": 0.01,
+    "confirm_seconds": 600.0,
+    "mix_tol": 0.638888889
+   }
+  },
+  {
+   "id": "AHU-SATDEV",
+   "description": "SAT deviation from setpoint",
+   "sql_file": "ahu_satdev.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "sat_sp"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 600.0,
+    "sat_dev_err": 2.777778
+   }
+  },
+  {
+   "id": "AHU-DUCTHI",
+   "description": "Duct static pressure high",
+   "sql_file": "ahu_ducthi.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "duct_static",
+    "duct_static_sp",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "duct_high_margin": 62.21,
+    "pressure_on_min": 49.768
+   }
+  },
+  {
+   "id": "AHU-SIMUL",
+   "description": "Heating and cooling simultaneous",
+   "sql_file": "ahu_simul.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "htg_valve_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "valve_open_pct": 0.1
+   }
+  },
+  {
+   "id": "ECON-3",
+   "description": "Mech cooling without integrated economizer",
+   "sql_file": "econ3_mech_without_econ.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "web_oa_t",
+    "web_oa_dp",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "econ3_db_min": 15.555556,
+    "econ3_db_max": 22.222222,
+    "econ3_dp_max": 15.555556,
+    "econ3_damper_hi": 0.9,
+    "clg_open_min": 0.01
+   }
+  },
+  {
+   "id": "ECON-5",
+   "description": "Preheat over-conditioning",
+   "sql_file": "econ5_preheat_over.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "preheat_leave_t",
+    "sat_sp",
+    "oa_t",
+    "htg_valve_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 600.0,
+    "preheat_over": 1.222222,
+    "htg_open_min": 0.01
+   }
+  },
+  {
+   "id": "ECON-6",
+   "description": "Economizing in freezing weather",
+   "sql_file": "econ6_econ_freezing.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_damper_pct"
+   ],
+   "optional_roles": [
+    "web_oa_t",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 600.0,
+    "econ6_oat_max": -3.888889,
+    "econ6_damper_max": 0.25
+   }
+  },
+  {
+   "id": "ECON-7",
+   "description": "Economizer OK but not economizing",
+   "sql_file": "econ7_ok_not_economizing.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "web_oa_t",
+    "web_oa_dp",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 600.0,
+    "econ7_db_min": 1.666667,
+    "econ7_db_max": 22.222222,
+    "econ7_dp_max": 15.555556,
+    "econ7_damper_min": 0.5,
+    "clg_open_min": 0.05
+   }
+  },
+  {
+   "id": "MECH-OAT-1",
+   "description": "Mechanical cooling below 15.6 °C web OAT",
+   "sql_file": "mech_oat_1.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "chiller",
+    "heatpump"
+   ],
+   "required_roles": [
+    "web_oa_t"
+   ],
+   "optional_roles": [
+    "clg_valve_pct",
+    "chiller_status"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "confirm_seconds": 600.0,
+    "mech_oat_max": 15.555556
+   }
+  },
+  {
+   "id": "CMD-1",
+   "description": "Fan cmd/status mismatch",
+   "sql_file": "cmd1_fan_mismatch.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "fan_cmd",
+    "fan_status"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "confirm_seconds": 600.0
+   }
+  },
+  {
+   "id": "OA-1",
+   "description": "Low OA fraction",
+   "sql_file": "oa1_low_oa_frac.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "rat",
+    "oa_t",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "min_oa_frac": 0.15,
+    "oat_rat_guard": 1.222222
+   }
+  },
+  {
+   "id": "DMP-1",
+   "description": "OA damper leakage",
+   "sql_file": "dmp1_oa_damper_leak.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "oa_damper_pct",
+    "oa_t",
+    "mat"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "leak_delta": 1.111111
+   }
+  },
+  {
+   "id": "VLV-1",
+   "description": "Cooling valve leakage",
+   "sql_file": "vlv1_clg_valve_leak.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "clg_valve_pct",
+    "sat",
+    "sat_sp",
+    "mat"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "sat_err": 1.111111,
+    "mat_leak_delta": 1.111111
+   }
+  },
+  {
+   "id": "VAV-3",
+   "description": "Excessive reheat during warm weather",
+   "sql_file": "vav3_excessive_reheat.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav"
+   ],
+   "required_roles": [
+    "oa_t",
+    "reheat_valve_pct",
+    "zone_flow"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "reheat_oat": 25.555555556,
+    "reheat_pct": 0.52,
+    "flow_on_min": 11.798675
+   }
+  },
+  {
+   "id": "VAV-4",
+   "description": "Damper stuck at full open",
+   "sql_file": "vav4_damper_full_open.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav"
+   ],
+   "required_roles": [
+    "damper_pct",
+    "zone_flow"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "full_open_pct": 0.975,
+    "flow_on_min": 11.798675,
+    "sustain_hours": 1.5
+   }
+  },
+  {
+   "id": "VAV-5",
+   "description": "Airflow sensor bias",
+   "sql_file": "vav5_airflow_bias.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav"
+   ],
+   "required_roles": [
+    "zone_flow",
+    "damper_pct"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "flow_bias": 23.59735,
+    "damper_closed_max": 0.1
+   }
+  },
+  {
+   "id": "VAV-6",
+   "description": "Reheat when cooling available",
+   "sql_file": "vav6_reheat_free_cool.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav"
+   ],
+   "required_roles": [
+    "oa_t",
+    "reheat_valve_pct"
+   ],
+   "optional_roles": [
+    "clg_available"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "free_cool_oat": 18.333333333,
+    "reheat_pct": 0.25,
+    "confirm_seconds": 900.0
+   }
+  },
+  {
+   "id": "VAV-REHEAT",
+   "description": "Reheat valve stuck / no temp rise",
+   "sql_file": "vav_reheat.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav"
+   ],
+   "required_roles": [
+    "reheat_valve_pct",
+    "vav_discharge_t",
+    "vav_inlet_t",
+    "zone_flow"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "reheat_cmd": 0.3,
+    "min_rise": 1.666666667,
+    "flow_on_min": 11.798675
+   }
+  },
+  {
+   "id": "VAV-AHU-LEAVE",
+   "description": "VAV leave vs parent AHU SAT (fedBy)",
+   "sql_file": "vav_ahu_leave.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav"
+   ],
+   "required_roles": [
+    "vav_discharge_t",
+    "ahu_sat",
+    "zone_flow"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "confirm_seconds": 900.0,
+    "delta": 4.444444444,
+    "flow_on_min": 11.798675
+   }
+  },
+  {
+   "id": "VAV-7",
+   "description": "Min airflow / fixed high flow",
+   "sql_file": "vav7_min_airflow.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "vav"
+   ],
+   "required_roles": [
+    "zone_flow"
+   ],
+   "optional_roles": [
+    "min_flow_sp",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "high_min_flow_sp": 117.98675,
+    "flow_on_min": 11.798675,
+    "fixed_flow_hours": 1.0,
+    "fixed_flow_max_std": 7.079205,
+    "fixed_flow_min_mean": 94.3894
+   }
+  },
+  {
+   "id": "RESET-1",
+   "description": "SAT reset not tracking outdoor air",
+   "sql_file": "reset1_sat_oa_reset.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "sat_sp",
+    "oa_t"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "reset_err": 1.666667,
+    "reset_sat_at_ref": 11.111111,
+    "reset_slope": 0.25,
+    "reset_oat_ref": 18.333333,
+    "confirm_seconds": 900.0
+   }
+  },
+  {
+   "id": "CHW-NOLOAD-1",
+   "description": "Chiller running with no building load",
+   "sql_file": "chw_noload_1.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "chwPlant"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "chiller_status",
+    "chiller_cmd",
+    "chw_pump_status",
+    "chw_pump_cmd",
+    "building_zone_load_satisfied",
+    "building_ahu_load_satisfied"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 1800,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 1800.0,
+    "load_sat_hi": 0.5
+   }
+  },
+  {
+   "id": "CHW-1",
+   "description": "Low chilled-water ΔT",
+   "sql_file": "chw1_low_dt.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "chw_supply_t",
+    "chw_return_t"
+   ],
+   "optional_roles": [
+    "chw_pump_cmd",
+    "pump_status",
+    "chiller_status",
+    "chiller_current",
+    "chiller_amps",
+    "chiller_power",
+    "chw_flow"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "min_dt": 2.222222
+   }
+  },
+  {
+   "id": "CHW-2",
+   "description": "DP below SP at max pump speed",
+   "sql_file": "chw2_dp_low.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "chw_dp",
+    "chw_dp_sp",
+    "chw_pump_cmd"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status",
+    "chw_flow"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "dp_margin": 15168.465,
+    "pump_hi": 0.87
+   }
+  },
+  {
+   "id": "CHW-3",
+   "description": "Plant supply temp outside deadband",
+   "sql_file": "chw3_supply_band.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "chw_supply_t",
+    "chw_supply_sp",
+    "chw_pump_cmd"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status",
+    "chw_flow"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "sp_band": 1.222222
+   }
+  },
+  {
+   "id": "CHW-4",
+   "description": "Flow high at max pump",
+   "sql_file": "chw4_flow_high.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "chw_flow",
+    "chw_pump_cmd"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 300.0,
+    "flow_hi": 69.39922,
+    "pump_hi": 0.87
+   }
+  },
+  {
+   "id": "CW-OPT-1",
+   "description": "Condenser water not optimized vs wet-bulb",
+   "sql_file": "cw_opt_1.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "cooling_tower",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "cw_supply_t",
+    "web_wb_t"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status",
+    "chw_flow",
+    "chw_pump_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "cw_approach": 3.888889,
+    "cw_slack": 1.111111
+   }
+  },
+  {
+   "id": "CW-APR-1",
+   "description": "High CW approach at full tower fan",
+   "sql_file": "cw_apr_1.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "cooling_tower",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "cw_supply_t",
+    "web_wb_t",
+    "tower_fan_cmd"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status",
+    "chw_flow",
+    "chw_pump_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "approach_max": 4.444444,
+    "tower_fan_hi": 0.95
+   }
+  },
+  {
+   "id": "CW-FAN-1",
+   "description": "Excess tower fan energy vs wet-bulb limit",
+   "sql_file": "cw_fan_1.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "cooling_tower",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "cw_supply_t",
+    "web_wb_t",
+    "tower_fan_cmd"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status",
+    "chw_flow",
+    "chw_pump_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 900.0,
+    "cw_approach": 3.888889,
+    "excess_beyond_approach": 2.777778,
+    "tower_fan_hi": 0.95
+   }
+  },
+  {
+   "id": "HP-1",
+   "description": "Discharge cold when heating",
+   "sql_file": "hp1_discharge_cold.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "heatpump"
+   ],
+   "required_roles": [
+    "sat",
+    "zone_t",
+    "fan_cmd"
+   ],
+   "optional_roles": [
+    "compressor_status",
+    "fan_status"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 600,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 600.0,
+    "min_sat": 29.444444,
+    "zone_cold": 20.555556
+   }
+  },
+  {
+   "id": "WX-1",
+   "description": "OA temperature spike",
+   "sql_file": "wx1_oa_spike.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "weather"
+   ],
+   "required_roles": [
+    "oa_t"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 300,
+   "parameters": {
+    "confirm_seconds": 300.0,
+    "spike_limit": 8.888889
+   }
+  },
+  {
+   "id": "TRIM-1",
+   "description": "Duct static trim advisory",
+   "sql_file": "trim1_duct_static.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "duct_static"
+   ],
+   "optional_roles": [
+    "duct_static_sp",
+    "static_reset_request",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 1800,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 1800.0,
+    "duct_hi": 335.934,
+    "request_lo": 1.0
+   }
+  },
+  {
+   "id": "TRIM-3",
+   "description": "HWST trim advisory",
+   "sql_file": "trim3_hwst.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "boiler"
+   ],
+   "required_roles": [
+    "hw_supply_t"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status",
+    "chw_flow",
+    "chw_pump_cmd",
+    "hw_reset_request_sum"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 1800,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 1800.0,
+    "hwst_hi": 71.111111,
+    "request_lo": 1.0
+   }
+  },
+  {
+   "id": "TRIM-4",
+   "description": "CHW plant reset advisory",
+   "sql_file": "trim4_chw_reset.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "chiller",
+    "chwPlant"
+   ],
+   "required_roles": [
+    "chw_supply_t"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "chiller_status",
+    "chw_flow",
+    "chw_pump_cmd",
+    "chw_reset_request_sum"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 1800,
+   "parameters": {
+    "minimum_active_coverage_pct": 5.0,
+    "startup_delay_min": 0.0,
+    "require_operational_gate": 1.0,
+    "confirm_seconds": 1800.0,
+    "chw_lo": 7.222222,
+    "request_lo": 1.0
+   }
+  },
+  {
+   "id": "SCHED-1",
+   "description": "Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_t, falls back to unoccupied + fan_on (pandas sched1 base).",
+   "sql_file": "sched1_unoccupied_runtime.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "zone_other"
+   ],
+   "required_roles": [
+    "occ_mode",
+    "fan_status"
+   ],
+   "optional_roles": [
+    "zone_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 1800,
+   "parameters": {
+    "confirm_seconds": 1800.0,
+    "comfort_low": 21.111111,
+    "comfort_high": 23.888889
+   }
+  },
+  {
+   "id": "SCHED-247",
+   "description": "Always-on fan or pump runtime",
+   "sql_file": "sched247_always_on.sql",
+   "priority": "P0",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "zone_other",
+    "chiller",
+    "boiler",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "fan_status",
+    "pump_status",
+    "chiller_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 3600,
+   "parameters": {
+    "confirm_seconds": 3600.0,
+    "always_on_pct": 0.95
+   }
+  },
+  {
+   "id": "FCU-SENSOR-NULL",
+   "description": "Own zone setpoint present but zone temperature null for at least 90% of window",
+   "sql_file": "fcu_sensor_null.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "zone_air_temp_sp"
+   ],
+   "optional_roles": [
+    "zone_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "null_fraction": 0.9
+   }
+  },
+  {
+   "id": "FCU-HTG-COIL",
+   "description": "Fan-on heating coil under-delivery",
+   "sql_file": "fcu_htg_coil.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "zone_t",
+    "htg_valve_pct"
+   ],
+   "optional_roles": [
+    "clg_valve_pct",
+    "damper_cmd",
+    "damper_pct",
+    "zone_co2",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "valve_open": 0.8,
+    "coil_delta": 3.0
+   }
+  },
+  {
+   "id": "FCU-CLG-COIL",
+   "description": "Fan-on cooling coil under-delivery",
+   "sql_file": "fcu_clg_coil.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "zone_t",
+    "clg_valve_pct",
+    "htg_valve_pct"
+   ],
+   "optional_roles": [
+    "damper_cmd",
+    "damper_pct",
+    "zone_co2",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "valve_open": 0.8
+   }
+  },
+  {
+   "id": "FCU-VALVE-PASS-HTG",
+   "description": "Heating valve passing with both commands shut",
+   "sql_file": "fcu_valve_pass_htg.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "zone_t",
+    "htg_valve_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "damper_cmd",
+    "damper_pct",
+    "zone_co2",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "pass_delta": 3.0
+   }
+  },
+  {
+   "id": "FCU-VALVE-PASS-CLG",
+   "description": "Cooling valve passing with both commands shut",
+   "sql_file": "fcu_valve_pass_clg.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "sat",
+    "zone_t",
+    "htg_valve_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
+    "damper_cmd",
+    "damper_pct",
+    "zone_co2",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "pass_delta": 3.0
+   }
+  },
+  {
+   "id": "FCU-DAMPER-POS",
+   "description": "Damper feedback more than 15 points below command",
+   "sql_file": "fcu_damper_pos.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "damper_cmd",
+    "damper_pct"
+   ],
+   "optional_roles": [
+    "sat",
+    "zone_t",
+    "htg_valve_pct",
+    "clg_valve_pct",
+    "zone_co2",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "command_min": 0.15,
+    "position_error": 0.15
+   }
+  },
+  {
+   "id": "FCU-CO2-DAMPER",
+   "description": "High valid CO2 with low outdoor-air damper command",
+   "sql_file": "fcu_co2_damper.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "zone_co2",
+    "damper_cmd"
+   ],
+   "optional_roles": [
+    "sat",
+    "zone_t",
+    "htg_valve_pct",
+    "clg_valve_pct",
+    "damper_pct",
+    "fan_status",
+    "fan_cmd"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "co2_high_ppm": 1000,
+    "damper_low": 0.1
+   }
+  },
+  {
+   "id": "FCU-DEADBAND",
+   "description": "Heating/cooling pass-through setpoint deadband below 1 C",
+   "sql_file": "fcu_deadband.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "cooling_sp",
+    "heating_sp"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "deadband": 1
+   }
+  },
+  {
+   "id": "FCU-MODE-CYCLE",
+   "description": "Four or more heat/cool valve mode changes in window",
+   "sql_file": "fcu_mode_cycle.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "zone_other",
+    "general",
+    "ahu"
+   ],
+   "required_roles": [
+    "htg_valve_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "mode_valve_min": 0.1,
+    "mode_changes": 4
+   }
+  },
+  {
+   "id": "UTIL-MONTHLY",
+   "description": "BAS monthly kWh vs utility monthly bills (% deviation)",
+   "sql_file": "util_monthly_fault.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "meter",
+    "ahu",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "kwh",
+    "electric_kw"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "util_pct_err": 10.0
+   }
+  },
+  {
+   "id": "UTIL-INTERVAL",
+   "description": "BAS 15m vs utility interval (MAE threshold)",
+   "sql_file": "util_interval_fault.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "meter",
+    "ahu",
+    "heatpump"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "kwh",
+    "electric_kw"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "util_interval_mae": 5.0
+   }
+  }
+ ]
+}

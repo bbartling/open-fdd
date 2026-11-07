@@ -22,6 +22,8 @@ edge box, reads NF's Haystack model and point history directly, and needs no dat
 - **Model export**: Haystack to RDF/Turtle with Brick time-series references, a browser SPARQL panel and a
   SPARQL hook. See [RDF and SPARQL](rdf-sparql.html).
 - **CSV export** for Excel. See [Export](export.html).
+- **Python tools** (`pip install open-fdd`): read a box from pandas, run the 71 reference rules, build reports and
+  ECM workbooks. See [Python tools](python-tools.html).
 
 > Screenshot placeholder: add `assets/screenshot-overview.png` (Overview tab) and `assets/screenshot-fdd.png`
 > (FDD tab with a fault lane), then embed them here.

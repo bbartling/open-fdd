@@ -1,7 +1,7 @@
 """Versioned ECM context envelope (ecm_context_v1).
 
 Extends Stage-1 contracts / provenance — does not fork calculators.
-Python stays on PyPI; never wire this into central/web request paths.
+Python stays on PyPI (agent / offline path); never wire this into a web request path.
 """
 
 from __future__ import annotations

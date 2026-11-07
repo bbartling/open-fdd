@@ -150,6 +150,11 @@ async function queryAll(body) {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+/** Colour the legend dots from data-c (CSSOM; an inline style attribute would break the page CSP). */
+function paintLegend(/** @type {any} */ el) {
+  for (const i of el.querySelectorAll("i[data-c]")) i.style.background = i.dataset.c;
+}
+
 // ---- BACnet helpers -----------------------------------------------------------
 const BAC_UNITS = { 29: "%RH", 53: "Pa", 58: "inH₂O", 62: "°C", 64: "°F", 84: "cfm", 95: "", 96: "ppm", 98: "%" };
 const BAC_SHORT = {
