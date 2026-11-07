@@ -43,7 +43,7 @@ function diffRows(pg, lite) {
 }
 
 let input, pg, lite;
-const results = { pg: {}, lite: {}, errors: {} };
+const results = { pg: {}, lite: {}, errors: {}, tlPg: {}, tlLite: {} };
 
 before(async () => {
   input = buildDataset(pgPack, { equipments: 2, days: 3, stepSeconds: 300 });
@@ -55,6 +55,10 @@ before(async () => {
     try { results.pg[rid] = await pg.query(rid); } catch (e) { results.errors[`pglite ${rid}`] = e.message; }
     if (litePack.rules[rid]) {
       try { results.lite[rid] = await lite.query(rid); } catch (e) { results.errors[`sqlite ${rid}`] = e.message; }
+    }
+    try { results.tlPg[rid] = await pg.timeline(rid); } catch (e) { results.errors[`pglite timeline ${rid}`] = e.message; }
+    if (litePack.rules[rid]) {
+      try { results.tlLite[rid] = await lite.timeline(rid); } catch (e) { results.errors[`sqlite timeline ${rid}`] = e.message; }
     }
   }
 }, { timeout: 120000 });
@@ -100,6 +104,62 @@ test("engines match rule by rule (rows by equipment_id, numerics within 1e-6 rel
     `${nonZero} rules report fault_hours > 0 on the synthetic data`);
   for (const l of lines) console.log("# " + l);
   assert.ok(nonZero >= 30, `only ${nonZero} rules produced fault_hours > 0: the dataset does not exercise the pack`);
+});
+
+// ---- per-timestamp fault timeline (5.0.3): timeline_sql parity + consistency with the rule's own aggregate ----
+const NO_TIMELINE = ["AVG-ZONE-TEMP", "FAN-RUNTIME-HOURS", "FAULT-ELAPSED-HOURS", "FCU-DEADBAND", "FCU-MODE-CYCLE", "FCU-SENSOR-NULL",
+  "UTIL-INTERVAL", "UTIL-MONTHLY", "ZONE-COMFORT-PCT"];
+
+test("timeline_sql: the same rules have one on both packs; the rest say why they have none", () => {
+  const withTl = (pack) => Object.entries(pack.rules).filter(([, r]) => r.timeline_sql).map(([k]) => k);
+  assert.deepEqual(withTl(pgPack), withTl(litePack));
+  assert.equal(withTl(pgPack).length, Object.keys(pgPack.rules).length - NO_TIMELINE.length);
+  for (const rid of NO_TIMELINE) {
+    assert.equal(pgPack.rules[rid].timeline_sql, null, rid);
+    assert.equal(litePack.rules[rid].timeline_sql, null, rid);
+    assert.ok(pgPack.rules[rid].timeline_reason, `${rid} has no timeline_reason`);
+  }
+  for (const rid of withTl(pgPack)) assert.equal(pgPack.rules[rid].timeline_reason, "", rid);
+});
+
+test("timeline_sql: PGlite == SQLite for every rule (rows, timestamps, confirmed, held seconds)", async (t) => {
+  let rules = 0, rowsTotal = 0;
+  for (const rid of Object.keys(pgPack.rules)) {
+    if (!pgPack.rules[rid].timeline_sql) { assert.deepEqual(results.tlPg[rid], [], rid); continue; }
+    rules++;
+    await t.test(rid, () => {
+      const a = results.tlPg[rid], b = results.tlLite[rid];
+      assert.equal(a.length, b.length, `${rid}: row count ${a.length} (pglite) vs ${b.length} (sqlite)`);
+      assert.ok(a.length > 0, `${rid}: timeline is empty`);
+      assert.deepEqual(Object.keys(a[0]), ["equipment_id", "ts_epoch", "confirmed", "held_seconds"]);
+      const key = (r) => `${r.equipment_id}|${Number(r.ts_epoch).toFixed(3)}`;
+      const by = new Map(b.map((r) => [key(r), r]));
+      for (const r of a) {
+        const o = by.get(key(r));
+        assert.ok(o, `${rid}: ${key(r)} missing on sqlite`);
+        assert.equal(Number(r.confirmed), Number(o.confirmed), `${rid} ${key(r)} confirmed`);
+        assert.ok(close(Number(r.held_seconds), Number(o.held_seconds)), `${rid} ${key(r)} held ${r.held_seconds} vs ${o.held_seconds}`);
+      }
+      rowsTotal += a.length;
+    });
+  }
+  console.log(`# timeline parity: ${rules} rules, ${rowsTotal} rows`);
+});
+
+test("timeline_sql: confirmed seconds add up to the rule's fault_hours (the lane and the number are the same fact)", () => {
+  let checked = 0, nonZero = 0;
+  for (const rid of Object.keys(litePack.rules)) {
+    if (!litePack.rules[rid].timeline_sql) continue;
+    for (const row of results.lite[rid] || []) {
+      if (row.fault_hours == null) continue;
+      const mine = results.tlLite[rid].filter((r) => r.equipment_id === row.equipment_id);
+      const hours = mine.reduce((a, r) => a + (Number(r.confirmed) === 1 ? Number(r.held_seconds) : 0), 0) / 3600;
+      assert.ok(close(hours, Number(row.fault_hours)), `${rid} ${row.equipment_id}: timeline ${hours} h vs fault_hours ${row.fault_hours}`);
+      checked++;
+      if (hours > 0) nonZero++;
+    }
+  }
+  assert.ok(checked >= 100 && nonZero >= 20, `checked ${checked}, ${nonZero} with fault time`);
 });
 
 test("output columns match the pack's declared output_columns", () => {

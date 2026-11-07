@@ -3,6 +3,42 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.3 (app) / open-fdd 4.5.1 (PyPI) — 2026-11-07
+
+### Added
+
+- **Fault timeline.** The FDD hook now publishes a per-timestamp series for every fault rule that has one (68 of 77):
+  a second result point per (equip, rule), marker `fault_timeline` (no `fdd`/`fault` marker, so the FDD table does not list
+  it), with the rule's own confirmed flag at each assessed history timestamp: 1 = confirmed fault, 0 = ok, no sample = not
+  assessed (never written as 0). Append-only (watermark attribute `fddTimelineThrough`), no duplicates. The SQL packs carry a
+  `timeline_sql` per rule (`null` + `timeline_reason` for the 9 rules with no per-row flag: ratio, count and window-statistic
+  rules); PGlite and SQLite are tested for parity, and confirmed seconds add up to `fault_hours`.
+- **Read-only agent analytics tools**: on-request hook `analytics` (`nf-app/hooks/analytics.js`, `args.tool`):
+  `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`,
+  `resolve_equipment_roles`, `explain_missing_rcx_view`. They reuse the dashboard math (fine grid, schedule-aware), key every
+  row by `equipUuid` and cannot write (the hook's HTTP client is a GET / read-POST allow-list). CLI:
+  `open-fdd-nf analyze TOOL [--site --equip --rule --days --json]` (StartHook is sent once, never retried). Docs: `docs/python-tools.md`.
+- Result and timeline points carry `equipUuid`; rules that use `occ_mode` carry `fddOccSource` (`point` | `schedule` | `default`).
+
+### Fixed
+
+- **Fault lane showed rolling `fault_pct > 0` as "in fault" and missing data as ok.** `rcxFaultData` now reads the timeline:
+  a fault that cleared reads 0 even while the rolling 24 h percentage is still above 0, and unknown stays a gap (null).
+  Without a timeline point (hook older than 5.0.3, or a rule without one) it falls back to the old `fault_pct` series, labelled
+  approximate (dashed lane). The existing `fault_pct` point, uuid and meaning are unchanged: no migration is needed; the
+  timeline fills in from the first 5.0.3 run (the whole trailing window, 24 h by default).
+- **Two sites that both have an equip `AHU-1` shared one result point / fault lane.** `rcxResultPoint` / `rcxFaultData` now
+  take the equip (record or `OfddEquip`) and match by NF equip uuid, else siteRef + equipRef; a bare equip id string is still
+  accepted but cannot tell sites apart.
+- **VAV-1 (and every rule with an optional `occ_mode`) scored occupied comfort limits around the clock without an `occ_mode`
+  point.** The hook now synthesizes `occ_mode` from the site's NF schedule (holidays included) or the 4.x default calendar
+  (Mon-Fri 07:00-17:00, site timezone) before the SQL runs. VAV-2 still requires a real `occ_mode` point.
+- **RDF subjects collided across sites.** `modelToTurtle` (app and Lite) now uses the NF record uuid for site, equip and
+  device subjects (points already did), else a site-prefixed id (`local:<siteRef>_<id>`); `siteRef` / `equipRef` / `deviceRef`
+  point at those subjects. Anything that queried `local:<haystack id>` directly must switch to joining on `rdfs:label` and
+  `phIoT:siteRef`; the SPARQL example `equips-kinds` now has a `site` column and groups per equip.
+- `mergeFaultLanes` turned null (not assessed) into 0 when OR-ing several equips.
+
 ## 5.0.2 (app) / open-fdd 4.5.0 (PyPI) — 2026-11-07
 
 ### Added

@@ -75,11 +75,12 @@ const CACHE_MS = 60e3;
  * uuid -> [[ms, value], ...] for `list` over the last `hours`, one value per window.
  * One request for all points; repeat calls within a minute reuse the answer.
  */
-async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWindow(hours) } = {}) {
+async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWindow(hours), endMs = null } = {}) {
   const out = new Map(list.map((p) => [p.uuid, []]));
   if (!list.length) return out;
-  // Round the end to the window so repeat views share a cache entry.
-  const end = Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
+  // Round the end to the window so repeat views share a cache entry. endMs (window-aligned) lets a
+  // caller walk a long span back in chunks (rcx.js alignedFine).
+  const end = endMs != null ? endMs : Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
   const from = new Date(end - hours * 3600e3).toISOString(), to = new Date(end).toISOString();
   const uuids = list.map((p) => "uuids=" + encodeURIComponent(p.uuid)).join("&");
   const url = `/api/v1/point/data?${uuids}&from=${from}&to=${to}&window=${windowSec}s&method=${method}`;

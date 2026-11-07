@@ -12,6 +12,16 @@ sites, equipment, devices and points with their markers, refs and labels. Every 
 `ph:marker`, so graphs have no undefined local terms. The tab's checks flag dangling `*Ref` links and
 non-standard tags.
 
+### Subjects (unique across sites)
+
+A Haystack id is only unique inside a site: two sites can both have an `AHU-1`. So every subject is the NF record
+uuid (`local:<uuid>`) for sites, equipment, devices and points alike. A record without a uuid falls back to a
+site-prefixed id (`local:<siteRef>_<id>`; a site is just `local:<id>`). `phIoT:siteRef`, `phIoT:equipRef` and
+`phIct:deviceRef` point at those same subjects, resolved through the model inside the referring record's own site; a
+ref whose target is not in the model keeps `local:<id>` and shows up as a dangling ref in the checker. The
+`rdfs:label` is the display name, so `?e rdfs:label "AHU-1"` can match one equip per site: join through
+`phIoT:siteRef` when you mean one of them.
+
 ### Time-series references
 
 Each point carries exactly one external reference in Brick's `ref:` schema that says where its history lives:

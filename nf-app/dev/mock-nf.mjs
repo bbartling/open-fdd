@@ -4,7 +4,7 @@
 //   node nf-app/dev/mock-nf.mjs [port]          → http://127.0.0.1:8765/api/v1/apps/static/open-fdd/
 //
 // Serves nf-app/static at the NF app URL and answers the NF API calls the app makes
-// (point/query, point/data with server-side resampling, platform/info, bacnet/*, hook runs)
+// (point/query, point/data with server-side resampling, schedules (read-only), platform/info, bacnet/*, hook runs)
 // from a synthetic two-site building: AHUs, VAVs, a chiller plant + tower, a boiler, electric
 // meters, a weather station, and FDD hook result points with some faults. Points are built
 // from fdd-catalog.json roles (NF class + Haystack markers), exactly how a real site is tagged,
@@ -130,6 +130,22 @@ for (const s of sites) {
     signals.set(uuid, (t) => signal(role, 0, t));
   }
 }
+// Site occupancy: an occupancy point on site-north and the NF schedule that targets it (read-only
+// GET /api/v1/schedules in the NF ScheduleManager shape: camelCase Schedule, weeklySchedule.days[0] = Monday,
+// timeValues steps, specialEvents with a date). site-south has no schedule, so it uses the 4.x default calendar.
+const occUuid = uuidOf("site-north/occ");
+records.push({ uuid: occUuid, name: "site-north occupancy", layer: "default", pointType: "POINT", attrs: {
+  dis: "North occupancy", markers: "point,his,occ,cmd", class: "occupied-cmd", siteRef: sites[0].id, unit: "", kind: "Bool" } });
+signals.set(occUuid, (t) => occ(t));
+const holiday = new Date(NOW - 3 * 86400e3);
+const weekdayDay = { timeValues: [{ time: { hour: 7 }, value: { boolean: true } }, { time: { hour: 18 }, value: { boolean: false } }] };
+const schedules = [{
+  uuid: uuidOf("schedule/site-north"), name: "North occupancy", layer: "local", outOfService: false, defaultValue: { boolean: false },
+  weeklySchedule: { days: [weekdayDay, weekdayDay, weekdayDay, weekdayDay, weekdayDay, {}, {}] },
+  specialEvents: [{ name: "Mock holiday", date: { year: holiday.getUTCFullYear(), month: holiday.getUTCMonth() + 1, day: holiday.getUTCDate() },
+    priority: 1, timeValues: [{ time: {}, value: { boolean: false } }] }],
+  targets: [{ pointUuid: occUuid, layer: "default" }],
+}];
 // FDD hook result points (what nf-app/hooks/fdd.js writes): hourly fault % per rule.
 const FAULTS = [
   ["AHU-1", "ECON-1", (t) => (occ(t) && oat(t) > 70 ? 60 : 0)], ["AHU-1", "DMP-1", () => 0],
@@ -242,6 +258,15 @@ const server = http.createServer(async (req, res) => {
     for (const x of b.points) writes.data.push({ uuid: x.uuid, values: x.values || [] });
     note(p, b.points.length);
     return json(res, 200, { success: true });
+  }
+  if (req.method === "GET" && p === "/api/v1/schedules") {   // ScheduleManager.GetSchedules (read-only)
+    const off = parseInt(url.searchParams.get("pageOffset") || "0", 10) || 0, size = parseInt(url.searchParams.get("pageSize") || "100", 10) || 100;
+    return json(res, 200, { schedules: schedules.slice(off, off + size), totalCount: String(schedules.length) });
+  }
+  const sched = p.match(/^\/api\/v1\/schedules\/([^/]+)$/);
+  if (req.method === "GET" && sched) {                         // ScheduleManager.GetScheduleById
+    const one = schedules.find((x) => x.uuid === decodeURIComponent(sched[1]));
+    return one ? json(res, 200, { schedule: one }) : json(res, 404, { error: "schedule not found" });
   }
   if (p === "/api/v1/point/updates/data") { res.writeHead(204); return res.end(); }
   if (p === "/api/v1/sites") return json(res, 200, { sites: sites.map((s) => ({ id: s.id, name: s.dis, latitude: s.lat, longitude: s.lon, timezone: s.tz })) });

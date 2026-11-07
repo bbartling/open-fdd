@@ -130,7 +130,8 @@ test("rule plot: unit-family grids, fault lane is the LAST grid (via rcxWithFaul
   assert.equal(lane.name, "ECON-1");
   assert.equal(lane.xAxisIndex, 2);
   assert.equal(lane.step, "end");
-  assert.deepEqual(lane.lineStyle, { color: "red", width: 1 });
+  assert.deepEqual(lane.lineStyle, { color: "red", width: 1, type: "dashed" }, "result-point only = rolling fault_pct fallback, drawn dashed");
+  assert.equal(lane.approximate, true);
   assert.deepEqual(lane.data, [[0, 0], [H, 1], [2 * H, 0]]);
   assert.deepEqual(o.series.slice(0, 3).map((s) => s.yAxisIndex), [0, 0, 1]);
   assert.match(note, /fault in 1 of 3/);

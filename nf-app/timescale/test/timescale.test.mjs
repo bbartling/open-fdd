@@ -327,7 +327,7 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
     equipment: await q("SELECT * FROM pg_temp.equipment"),
   };
   const eng = await createEngine({ kind: "pglite", pack });
-  let matched = 0, bothError = 0, withFault = 0;
+  let matched = 0, bothError = 0, withFault = 0, timelines = 0;
   const problems = [];
   try {
     await eng.load(input);
@@ -342,12 +342,24 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
       const d = diffRows(ruleRun.results[id], lite);
       if (d.length) problems.push(`${id}: ${d.join("; ")}`); else matched++;
       if (ruleRun.results[id].some((r) => r.fault_pct > 0)) withFault++;
+      // 5.0.3 fault timeline: the same timeline_sql on the real database == pglite (per-timestamp confirmed flags).
+      const tlSql = pack.rules[id] && pack.rules[id].timeline_sql;
+      if (tlSql) {
+        const norm = (rows) => rows.map((r) => `${r.equipment_id}|${Number(r.ts_epoch)}|${Number(r.confirmed)}|${Number(r.held_seconds)}`).sort();
+        let tsTl, tsTlErr;
+        try { tsTl = await q(tlSql); } catch (e) { tsTlErr = e.message; }
+        if (tsTlErr) { problems.push(`${id} timeline: timescale error ${tsTlErr}`); continue; }
+        const a = norm(tsTl), b = norm(await eng.timeline(id));
+        if (a.length !== b.length || a.some((x, i) => x !== b[i])) problems.push(`${id} timeline: ${a.length} rows (timescale) vs ${b.length} (pglite) or values differ`);
+        else timelines++;
+      }
     }
   } finally { await eng.close(); }
   console.log(`# rules compared: ${RULES.length}, matched: ${matched}, both-error: ${bothError}, with fault>0: ${withFault}, timescale run ${tsMs} ms`);
   assert.deepEqual(problems, []);
   assert.ok(matched >= 15, `at least 15 rules must run and match (got ${matched})`);
   assert.ok(withFault >= 1, "the seeded faults are detected");
+  assert.ok(timelines >= 10, `fault timelines must match on at least 10 rules (got ${timelines})`);
   const fc1 = ruleRun.results.FC1[0];
   assert.equal(fc1.equipment_id, EQUIP);
   assert.equal(typeof fc1.fault_pct, "number", "numbers are coerced");

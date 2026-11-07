@@ -13,11 +13,19 @@ Both files have the shape
     "helpers_sql": "<fdd.* helper functions; empty for sqlite, see helper_functions>",
     "helper_functions": [...],              # sqlite only: implemented in JS by engines.js
     "contract": { table: [ {name, type} ] },  # type = double | text | timestamp
-    "rules": { rule_id: { "sql", "output_columns" } },
+    "rules": { rule_id: { "sql", "output_columns", "timeline_sql", "timeline_reason" } },
     "skipped": { rule_id: reason },         # sqlite only: rules we refuse to translate
     "notes": { rule_id: [text] } }          # sqlite only: documented semantic caveats
 
 SQLite storage convention (engines.js): every timestamp column is REAL epoch seconds.
+
+timeline_sql (5.0.3): per rule, a per-timestamp variant of `sql` that returns one row per history sample,
+  (equipment_id, ts_epoch, confirmed, held_seconds)
+ts_epoch = epoch seconds (double), confirmed = 1/0 exactly as the rule's own `confirmed` flag (the CTE the
+fault_hours aggregate sums), held_seconds = the sample's forward interval (0 for the last sample and over a
+gap > MAX_GAP_HOURS, i.e. NOT assessed). It is `null` (with `timeline_reason`) for rules that have no per-row
+confirmed flag (ratio / count / window-statistic rules). Invariant, tested on both engines:
+sum(confirmed * held_seconds) / 3600 == the rule's fault_hours.
 
 Translation = deterministic generic rewrites (below). A rule is never silently
 altered: after rewriting, any Postgres-only construct left in the text, or any
@@ -297,6 +305,99 @@ def to_sqlite(pg_sql):
     return s, notes
 
 
+# --------------------------------------------------------------------------- timeline (per-timestamp confirmed flag)
+
+TIMELINE_COLUMNS = ["equipment_id", "ts_epoch", "confirmed", "held_seconds"]
+
+
+class NoTimeline(Exception):
+    pass
+
+
+def parse_ctes(sql):
+    """`WITH a AS (...), b AS (...) <main>` -> ([(name, open_i, close_i)], index where <main> starts). Comments must be stripped."""
+    m = re.match(r"\s*WITH\s+", sql, re.I)
+    if not m:
+        raise NoTimeline("no per-row confirmed flag (a plain aggregate, no CTE chain)")
+    pos, ctes = m.end(), []
+    head = re.compile(r"\s*(\w+)\s+AS\s*\(", re.I)
+    while True:
+        h = head.match(sql, pos)
+        if not h:
+            raise NoTimeline("cannot parse the CTE list")
+        open_i = h.end() - 1
+        close_i = match_paren(sql, open_i)
+        ctes.append((h.group(1).lower(), open_i, close_i))
+        pos = close_i + 1
+        c = re.compile(r"\s*,").match(sql, pos)
+        if not c:
+            return ctes, pos
+        pos = c.end()
+
+
+_TS = "CAST(EXTRACT(EPOCH FROM {t}) AS DOUBLE PRECISION) AS ts_epoch"
+
+
+def select_list(body):
+    """The top-level select list of `SELECT ... FROM ...` (nested parentheses blanked, so window clauses do not count)."""
+    flat = body
+    while True:
+        nxt = re.sub(r"\([^()]*\)", "()", flat)
+        if nxt == flat:
+            break
+        flat = nxt
+    m = re.search(r"\bFROM\b", flat)
+    return flat[:m.start()] if m else flat
+
+
+def build_timeline_pg(pg_sql):
+    """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason)."""
+    s = strip_comments(pg_sql)
+    try:
+        ctes, main = parse_ctes(s)
+    except (ValueError, Untranslatable) as exc:
+        raise NoTimeline(f"cannot parse the rule: {exc}")
+    names = [c[0] for c in ctes]
+    tail = s[main:]
+    order = "ORDER BY equipment_id, timestamp_utc"
+    if "final" in names:
+        i = names.index("final")
+        _, o, c = ctes[i]
+        body = s[o + 1:c]
+        if not (re.search(r"\bheld_seconds\b", body) and re.search(r"\bconfirmed\b", body)):
+            raise NoTimeline("final CTE has no held_seconds / confirmed")
+        if not re.search(r"\btimestamp_utc\b", select_list(body)):
+            body, n = re.subn(r"\bequipment_id,", "equipment_id,\n    timestamp_utc,", body, count=1)
+            if n != 1:
+                raise NoTimeline("cannot add timestamp_utc to the final CTE")
+        head = s[:o + 1] + body + ")"
+        after = names[i + 1:]
+        if not after:
+            sel = f"SELECT equipment_id, {_TS.format(t='timestamp_utc')}, confirmed, held_seconds FROM final {order}"
+            return head + "\n" + sel + "\n"
+        if after == ["cov"]:
+            gate = re.search(r"WHEN\s+(\S+)\s*<\s*0\.5\s+THEN\s+SUM", tail)
+            thr = re.search(r"MAX\(c\.cov_pct\)\s*<\s*(\S+)\s+THEN\s+0\.0", tail)
+            if not (gate and thr and "FROM final f" in tail and "LEFT JOIN cov c" in tail):
+                raise NoTimeline("coverage-gated rule with an unrecognised final SELECT")
+            tween = s[c + 1:main].rstrip()
+            sel = (f"SELECT f.equipment_id, {_TS.format(t='f.timestamp_utc')},\n"
+                   f"  CASE WHEN {gate.group(1)} < 0.5 THEN f.confirmed WHEN c.cov_pct < {thr.group(1)} THEN 0 ELSE f.confirmed END AS confirmed,\n"
+                   f"  f.held_seconds\n"
+                   f"FROM final f LEFT JOIN cov c ON f.equipment_id = c.equipment_id ORDER BY f.equipment_id, f.timestamp_utc")
+            return head + tween + "\n" + sel + "\n"
+        raise NoTimeline("unexpected CTEs after final: " + ", ".join(after))
+    if names and names[-1] == "ranked" and re.search(r"\bFROM\s+ranked\b", tail):
+        m = re.search(r"raw_fault\s*=\s*1\s+AND\s+streak_elapsed\s*>=\s*(\S+)\s+THEN\s+held_seconds", tail)
+        if m:
+            head = s[:main].rstrip()
+            sel = (f"SELECT equipment_id, {_TS.format(t='timestamp_utc')},\n"
+                   f"  CASE WHEN raw_fault = 1 AND streak_elapsed >= {m.group(1)} THEN 1 ELSE 0 END AS confirmed, held_seconds\n"
+                   f"FROM ranked {order}")
+            return head + "\n" + sel + "\n"
+    raise NoTimeline("no per-row confirmed flag (the rule aggregates a ratio, count or window statistic)")
+
+
 # --------------------------------------------------------------------------- build
 
 def sqlite_prepare_check(sql, contract):
@@ -345,9 +446,26 @@ def build():
         if lite_cols is not None and sorted(lite_cols) != sorted(cols):
             column_fixes[rid] = {"catalog": cols, "actual": lite_cols}
             cols = lite_cols
-        pg_rules[rid] = {"sql": pg, "output_columns": cols}
+        tl_pg, tl_lite, tl_reason = None, None, ""
+        try:
+            tl_pg = build_timeline_pg(pg)
+            if rid not in skipped:
+                try:
+                    tl_lite, _ = to_sqlite(tl_pg)
+                    err, tl_cols = sqlite_prepare_check(tl_lite, contract)
+                    if err:
+                        raise Untranslatable("SQLite cannot prepare the timeline: " + err)
+                    if tl_cols is not None and tl_cols != TIMELINE_COLUMNS:
+                        raise Untranslatable(f"timeline columns {tl_cols}")
+                except Untranslatable as exc:
+                    tl_lite, tl_reason = None, f"sqlite: {exc}"
+        except NoTimeline as exc:
+            tl_reason = str(exc)
+        pg_rules[rid] = {"sql": pg, "output_columns": cols, "timeline_sql": tl_pg,
+                         "timeline_reason": "" if tl_pg else tl_reason}
         if rid not in skipped:
-            lite_rules[rid] = {"sql": lite, "output_columns": cols}
+            lite_rules[rid] = {"sql": lite, "output_columns": cols, "timeline_sql": tl_lite,
+                               "timeline_reason": "" if tl_lite else tl_reason}
     head = {"poll_seconds": POLL_SECONDS}
     pg_pack = {**head, "dialect": "postgres", "helpers_sql": helpers, "contract": contract, "rules": pg_rules}
     lite_pack = {**head, "dialect": "sqlite", "helpers_sql": "", "helper_functions": sorted(HELPER_FUNCTIONS),
@@ -381,6 +499,9 @@ def main():
             print(f"wrote {path.relative_to(ROOT)} ({len(text) // 1024} KB, {len(obj['rules'])} rules)")
     lite = packs["pack-sqlite.json"]
     print(f"sqlite: {len(lite['rules'])} translated, {len(lite['skipped'])} skipped")
+    for nm, pk in packs.items():
+        n = sum(1 for r in pk["rules"].values() if r["timeline_sql"])
+        print(f"{nm}: timeline_sql on {n} of {len(pk['rules'])} rules")
     for rid, why in lite["skipped"].items():
         print(f"  skipped {rid}: {why}")
     if args.check and stale:

@@ -5,6 +5,7 @@
     open-fdd-nf pull --equip AHU-1 --days 7 --out ahu1.csv
     open-fdd-nf rules --days 7 [--rules ECON-1,FC1] [--json]
     open-fdd-nf report --days 7 --out report_dir [--findings]
+    open-fdd-nf analyze weekly-runtime --site S --days 28 [--json]       (read-only tools run on the box)
 
 Connection: ``--url`` or the environment (``NF_URL`` / ``NF_LAN_URL`` / ``NFURL``,
 ``NF_CLIENT_ID`` + ``NF_CLIENT_SECRET`` or ``NF_CONSOLE_USER`` + ``NF_CONSOLE_PASSWORD``,
@@ -21,8 +22,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from open_fdd.nf.analytics import SHORT, TOOLS
 from open_fdd.nf.client import NFClient, NFError
 
+_ANALYZE_HELP = """Run one read-only analytics tool through NF's StartHook (POST /api/v1/apps/open-fdd/hooks/analytics)
+and print the answer. Every row is keyed by equipUuid (with siteRef and equipRef), so two sites that both have an
+AHU-1 never share a row. The tools cannot write points, schedules or BACnet values.
+
+  weekly-runtime  per ISO week: run_hours, schedule_hours, in_schedule_hours, after_hours, partial_week, mean_oat_on_c
+  cooling         hours per SI outdoor-air bin (<10, 10-16, 16-21, 21-27, 27-32, >=32 degC), fine 5-minute grid
+  economizer      n, n_identifiable, median_residual_k, mae_k
+  fault-timeline  confirmed / ok / unknown per assessed timestamp (needs --equip and --rule)
+  roles           the roles bound to one equip (--equip = NF uuid, or an id with --site; ambiguous = error)
+  explain-view    why an RCx view is not available (needs --view)
+"""
 
 def _common() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(add_help=False)
@@ -51,7 +64,7 @@ def _range(p: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="open-fdd-nf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = ap.add_subparsers(dest="cmd", required=True, metavar="{info,model,pull,rules,report}")
+    sub = ap.add_subparsers(dest="cmd", required=True, metavar="{info,model,pull,rules,report,analyze}")
     c = _common()
     sub.add_parser("info", parents=[c], help="platform info and the sites in the model")
     m = sub.add_parser("model", parents=[c], help="equipment with the points bound to each FDD role")
@@ -70,6 +83,18 @@ def build_parser() -> argparse.ArgumentParser:
     rp.add_argument("--findings", action="store_true",
                     help="also build the Engineering Findings report (reporting extra)")
     rp.add_argument("--docx", action="store_true", help="with --findings, also write DOCX")
+    an = sub.add_parser(
+        "analyze", parents=[c], formatter_class=argparse.RawDescriptionHelpFormatter,
+        help="read-only agent analytics tools, run by the NF app's analytics hook (math stays in JS)",
+        description=_ANALYZE_HELP)
+    an.add_argument("tool", choices=sorted(SHORT) + list(TOOLS), metavar="TOOL",
+                    help="; ".join(f"{k} = {v}" for k, v in SHORT.items()) + " (or the full tool name)")
+    an.add_argument("--rule", help="rule id (fault-timeline), e.g. ECON-1")
+    an.add_argument("--days", type=float, help="trailing days (hook defaults: 28 weekly-runtime / cooling, 7 economizer, 1 fault-timeline)")
+    an.add_argument("--view", help="RCx view id (explain-view), e.g. weekly-fan")
+    an.add_argument("--dense", action="store_true", help="fault-timeline: every 5-minute sample, not just state changes")
+    an.add_argument("--wait", type=float, default=120.0, help="seconds to wait for the hook run (default 120)")
+    an.add_argument("--json", action="store_true", help="the hook's full JSON answer instead of a table")
     return ap
 
 
@@ -194,7 +219,58 @@ def cmd_report(a: argparse.Namespace) -> int:
     return 0
 
 
-COMMANDS = {"info": cmd_info, "model": cmd_model, "pull": cmd_pull, "rules": cmd_rules, "report": cmd_report}
+def _analyze_tables(tool: str, out: dict[str, Any]) -> list[str]:
+    """Plain-text view of one tool's answer (the JSON is the contract; this is for people)."""
+    ident = ["siteRef", "equipRef", "equipUuid"]
+    if tool == "analyze_ahu_weekly_runtime":
+        return [_table(out["rows"], ident + ["week", "run_hours", "schedule_hours", "in_schedule_hours", "after_hours",
+                                              "partial_week", "mean_oat_on_c", "schedule_source"])]
+    if tool == "analyze_mechanical_cooling":
+        flat = [{**{k: r.get(k) for k in ident + ["signal_role", "total_hours"]}, **{b["label"]: b["hours"] for b in r.get("bins", [])}}
+                for r in out["rows"]]
+        labels = [b["label"] for b in (out["rows"][0].get("bins", []) if out["rows"] else [])]
+        return [_table(flat, ident + ["signal_role", *labels, "total_hours"])]
+    if tool == "analyze_economizer":
+        return [_table(out["rows"], ident + ["n", "n_identifiable", "median_residual_k", "mae_k"])]
+    if tool == "get_fdd_fault_timeline":
+        s = out["summary"]
+        head = (f"{out['siteRef']}/{out['equipRef']} ({out['equipUuid']}) {out['rule']} source={out['source']}"
+                f"{' (approximate)' if out.get('approximate') else ''}: {s['confirmed']} confirmed, {s['ok']} ok, "
+                f"{s['unknown']} unknown samples; last state {s['last_state']}")
+        return [head, _table(out["timeline"], ["ts", "state"])]
+    if tool == "resolve_equipment_roles":
+        rows = [{"role": role, "points": len(pts), "uuid": pts[0]["uuid"], "dis": pts[0].get("dis"), "units": pts[0].get("units")}
+                for role, pts in sorted(out["roles"].items())]
+        return [f"{out['siteRef']}/{out['equipRef']} ({out['equipUuid']}) kinds: {', '.join(out['kinds']) or '-'}",
+                _table(rows, ["role", "points", "uuid", "dis", "units"]),
+                "runnable rules: " + (", ".join(out["runnable_rules"]) or "(none)")]
+    if tool == "explain_missing_rcx_view":
+        v = out["view"]
+        lines = [f"{v['id']} ({v['title']}): {'available' if out['available'] else 'NOT available'}"]
+        lines += [f"  - {r}" for r in out["reasons"]]
+        lines.append(_table([{**e, "missing_roles": ",".join(e["missing_roles"]), "no_data_roles": ",".join(e["no_data_roles"])}
+                             for e in out["equips"]], ident + ["status", "missing_roles", "no_data_roles"]))
+        return lines
+    return [json.dumps(out, indent=2)]
+
+
+def cmd_analyze(a: argparse.Namespace) -> int:
+    from open_fdd.nf.analytics import analyze
+
+    client = client_from_args(a)
+    out = analyze(client, a.tool, timeout=a.wait, site=a.site, equip=a.equip, rule=a.rule, days=a.days, view=a.view,
+                  dense=a.dense)
+    if a.json:
+        print(json.dumps(out, indent=2))
+        return 0
+    if out.get("truncated"):
+        print("(answer truncated by the hook; narrow with --site / --equip / --days)", file=sys.stderr)
+    print("\n".join(_analyze_tables(out["tool"], out)))
+    return 0
+
+
+COMMANDS = {"info": cmd_info, "model": cmd_model, "pull": cmd_pull, "rules": cmd_rules, "report": cmd_report,
+            "analyze": cmd_analyze}
 
 
 def main(argv: list[str] | None = None) -> int:

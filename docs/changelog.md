@@ -5,6 +5,15 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.3 (app) / open-fdd 4.5.1 (PyPI)
+
+- Weekly runtime on RCx: in-schedule vs after-hours bars and a schedule line read from NF schedules (holidays included); default Mon-Fri 07:00-17:00 in the site timezone; new 28-day range.
+- Fault lanes use a per-timestamp fault timeline: a cleared fault reads 0, missing data stays a gap. Older results fall back to a dashed, approximate lane.
+- Two sites with the same equip name (e.g. `AHU-1`) no longer share fault lanes or RDF subjects; site, equip and device subjects use NF uuids.
+- Runtime and cooling-bin hours are integrated on a 5-minute grid, not the chart's display grid.
+- VAV-1 gets occupancy from the site schedule when there is no `occ_mode` point.
+- New read-only `analytics` hook and `open-fdd-nf analyze`: weekly runtime, mechanical cooling, economizer, fault timeline, role binding and "why is this RCx view missing". See [Python tools](python-tools.html).
+
 ## 5.0.2 (app) / open-fdd 4.5.0 (PyPI)
 
 - New `open-fdd-nf` Python CLI and `open_fdd.nf` API: work with a local NF box or the Normal Online portal from Python. See [Python tools](python-tools.html).

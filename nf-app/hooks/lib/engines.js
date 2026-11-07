@@ -22,6 +22,10 @@
  * }
  * Contract columns (pack.contract) that are not listed exist as typed NULL columns.
  * Rows come back as plain objects with numbers as JS numbers (NaN/NULL -> null).
+ *
+ * eng.timeline(ruleId) -> [{ equipment_id, ts_epoch (s), confirmed 0|1, held_seconds }]: the rule's per-timestamp
+ * confirmed flag (pack rule.timeline_sql; [] when the rule has none). held_seconds 0 = not assessed (last sample /
+ * gap longer than MAX_GAP_HOURS).
  */
 const fs = require("fs");
 const path = require("path");
@@ -136,6 +140,16 @@ const loadSqlJs = () => {
 
 const quoteId = (s) => '"' + String(s).replace(/"/g, '""') + '"';
 
+const rowsOf = (res) => {
+  if (!res.length) return [];
+  const { columns, values } = res[0];
+  return values.map((v) => {
+    const o = {};
+    columns.forEach((c, i) => { o[c] = v[i]; });
+    return o;
+  });
+};
+
 async function createSqlite(pack) {
   const SQL = await loadSqlJs();
   const db = new SQL.Database();
@@ -183,14 +197,14 @@ async function createSqlite(pack) {
         const why = pack.skipped && pack.skipped[ruleId];
         throw new Error(why ? `rule ${ruleId} is skipped on sqlite: ${why}` : `unknown rule ${ruleId}`);
       }
-      const res = db.exec(rule.sql);
-      if (!res.length) return [];
-      const { columns, values } = res[0];
-      return values.map((v) => {
-        const o = {};
-        columns.forEach((c, i) => { o[c] = v[i]; });
-        return o;
-      });
+      return rowsOf(db.exec(rule.sql));
+    },
+    /** Per-timestamp confirmed flag of a rule: [{ equipment_id, ts_epoch, confirmed, held_seconds }] ([] = rule has none). */
+    async timeline(ruleId) {
+      if (!loaded) throw new Error("engine: call load(input) before timeline()");
+      const rule = pack.rules[ruleId];
+      if (!rule || !rule.timeline_sql) return [];
+      return rowsOf(db.exec(rule.timeline_sql));
     },
     // Also drop the cached sql.js module so its WASM memory can be collected between hourly
     // runs: on a 1 GB edge the runtime otherwise keeps ~40 MB resident for nothing.
@@ -210,6 +224,17 @@ const pgLiteral = (c, v) => {
   if (Number.isNaN(v)) return "'NaN'::float8";
   if (!Number.isFinite(v)) return v > 0 ? "'Infinity'::float8" : "'-Infinity'::float8";
   return String(v);
+};
+
+const pgRows = (res) => {
+  const numeric = new Set(res.fields.filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
+  return res.rows.map((r) => {
+    const o = {};
+    for (const [k, v] of Object.entries(r)) {
+      o[k] = numeric.has(k) && v !== null && v !== undefined ? numberOrNull(typeof v === "string" ? Number(v) : v) : v;
+    }
+    return o;
+  });
 };
 
 async function createPglite(pack) {
@@ -240,15 +265,13 @@ async function createPglite(pack) {
       if (!loaded) throw new Error("engine: call load(input) before query()");
       const rule = pack.rules[ruleId];
       if (!rule) throw new Error(`unknown rule ${ruleId}`);
-      const res = await db.query(rule.sql);
-      const numeric = new Set(res.fields.filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
-      return res.rows.map((r) => {
-        const o = {};
-        for (const [k, v] of Object.entries(r)) {
-          o[k] = numeric.has(k) && v !== null && v !== undefined ? numberOrNull(typeof v === "string" ? Number(v) : v) : v;
-        }
-        return o;
-      });
+      return pgRows(await db.query(rule.sql));
+    },
+    async timeline(ruleId) {
+      if (!loaded) throw new Error("engine: call load(input) before timeline()");
+      const rule = pack.rules[ruleId];
+      if (!rule || !rule.timeline_sql) return [];
+      return pgRows(await db.query(rule.timeline_sql));
     },
     async close() { await db.close(); },
   };
@@ -288,6 +311,14 @@ async function createTimescale(pack, opts = {}) {
       const { results, errors } = await ts.runRules(client, pack, [ruleId]);
       if (errors[ruleId]) throw new Error(errors[ruleId]);
       return results[ruleId];
+    },
+    /** Same contract as the other engines; call it after query() of the rule (the helper SQL is installed there). */
+    async timeline(ruleId) {
+      const rule = pack.rules[ruleId];
+      if (!rule || !rule.timeline_sql) return [];
+      const res = await client.query(rule.timeline_sql);
+      const numeric = new Set(res.fields.filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
+      return res.rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, numeric.has(k) && v != null ? Number(v) : v])));
     },
     resultRow: (a) => ts.toResultRow({ engine: "timescale", ...a }),
     writeResults: (rows) => ts.writeResults(client, rows),

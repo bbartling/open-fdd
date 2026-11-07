@@ -112,6 +112,9 @@ function rcxDispSeries(arr, siUnit, delta = false) {
  *                       o = { hours, windowSec, method: "AVERAGE"|"MIN"|"MAX"|… }
  *   ctx.aligned(cols,o) one time grid for several points, values in SI: { t: [ms…], cols: {key: [v|null…]} }
  *                       cols = { key: point } — the shape most RCx math wants
+ *   ctx.alignedFine(cols,o) same shape, but on the FINE grid (300 s window, long spans fetched in chunks):
+ *                       the one to use for run hours, after-hours split and cooling bins. Charts may
+ *                       still draw from aligned() (~360 points); never integrate on that grid.
  *   ctx.chart(el)       themed ECharts instance (theme.js ofddChart)
  *   ctx.siUnit(p)       SI unit of a point (own unit when unknown)
  *   ctx.disp(v, si)     SI value -> { value, unit } in the display system
@@ -123,19 +126,39 @@ function rcxDispSeries(arr, siUnit, delta = false) {
  *   ctx.weather         site weather points (tagged `weather`)
  *   ctx.model, ctx.catalog, ctx.view
  */
+const RCX_FINE_SEC = 300;              // NF resample window for integration (ctx.alignedFine)
+const RCX_FINE_MAX_SAMPLES = 9000;     // per series per request (NF caps at ~10000)
+
 /** @param {RcxViewDef} view @param {OfddEquip[]} equips @param {number} hours @param {OfddModel} model @param {FddCatalog} catalog @returns {RcxContext} */
 function rcxContext(view, equips, hours, model, catalog) {
   const first = (eq, role) => (eq.bound[role] && eq.bound[role][0]) || null;
   const series = async (pts, o = {}) => {
     const list = pts.filter(Boolean);
     const data = await fetchSeries(list, o.hours || hours,
-      { method: o.method || "AVERAGE", ...(o.windowSec ? { windowSec: o.windowSec } : {}) });
+      { method: o.method || "AVERAGE", ...(o.windowSec ? { windowSec: o.windowSec } : {}), ...(o.endMs != null ? { endMs: o.endMs } : {}) });
     return new Map(list.map((p) => [p.uuid, rcxToSI(data.get(p.uuid) || [], p)]));
   };
-  const aligned = async (cols, o = {}) => {
+  // Fine-grid history for integration (run hours, bins): a 300 s window instead of the ~360-point
+  // display grid. NF caps a series at ~10000 samples per request, so a long span is walked back in
+  // chunks of at most RCX_FINE_MAX_SAMPLES (750 h at 300 s) and the chunks are merged by timestamp.
+  const fineSeries = async (pts, o = {}) => {
+    const list = pts.filter(Boolean), span = o.hours || hours, windowSec = o.windowSec || RCX_FINE_SEC;
+    const perChunk = Math.max(1, Math.floor((RCX_FINE_MAX_SAMPLES * windowSec) / 3600));
+    if (span <= perChunk) return series(list, { ...o, hours: span, windowSec });
+    const end = Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
+    const jobs = [];
+    for (let done = 0; done < span; done += perChunk) {
+      jobs.push(series(list, { ...o, hours: Math.min(perChunk, span - done), windowSec, endMs: end - done * 3600e3 }));
+    }
+    const parts = await Promise.all(jobs);
+    return new Map(list.map((p) => {
+      const m = new Map();
+      for (const part of parts) for (const [t, v] of part.get(p.uuid) || []) m.set(t, v);
+      return [p.uuid, [...m].sort((a, b) => a[0] - b[0])];
+    }));
+  };
+  const gridOf = (cols, data, windowSec) => {
     const entries = Object.entries(cols).filter(([, p]) => p);
-    const windowSec = o.windowSec || pickWindow(o.hours || hours);
-    const data = await series(entries.map(([, p]) => p), { ...o, windowSec });
     const step = windowSec * 1e3;
     const ts = new Set();
     const byKey = {};
@@ -149,9 +172,20 @@ function rcxContext(view, equips, hours, model, catalog) {
     for (const key of Object.keys(cols)) out[key] = t.map((x) => (byKey[key] ? byKey[key].get(x) ?? null : null));
     return { t, cols: out };
   };
+  const aligned = async (cols, o = {}) => {
+    const windowSec = o.windowSec || pickWindow(o.hours || hours);
+    const data = await series(Object.values(cols).filter(Boolean), { ...o, windowSec });
+    return gridOf(cols, data, windowSec);
+  };
+  // Same shape as aligned(), but on the fine grid; use it for anything that integrates over time.
+  const alignedFine = async (cols, o = {}) => {
+    const windowSec = o.windowSec || RCX_FINE_SEC;
+    const data = await fineSeries(Object.values(cols).filter(Boolean), { ...o, windowSec });
+    return { ...gridOf(cols, data, windowSec), windowSec, fine: true };
+  };
   const site = equips[0] && equips[0].rec && (equips[0].rec.attrs || {}).siteRef;
   return {
-    view, equips, hours, model, catalog, first, series, aligned,
+    view, equips, hours, model, catalog, first, series, aligned, alignedFine,
     chart: (el) => ofddChart(el),
     siUnit: rcxSiUnit,
     disp: rcxDisp,
@@ -179,21 +213,93 @@ function rcxPlan(equips, model, catalog) {
 // ---- fault lane: the ONE way every plot shows faults ---------------------------------
 // Same as central's FDD plots: a stand-alone 0/1 "confirmed_fault" step lane in its own
 // grid at the bottom of the chart, x axis linked to the signal grids, FAULT_LANE colors.
-// Fault data = the FDD hook's result point for (equip, rule): fault % per run (hourly);
-// any value > 0 counts as "in fault" for that hour.
+// Fault data (5.0.3) = the FDD hook's per-timestamp TIMELINE point for (equip, rule): one sample per assessed
+// history timestamp, 1 = confirmed fault, 0 = ok, and NO sample where the rule could not assess (gap = null in the
+// lane, never 0). Only when no timeline point exists (hook older than 5.0.3, or a rule without a per-row confirmed
+// flag) the lane falls back to the rolling fault_pct result point, hourly MAX, and is marked approximate.
 
-/** The FDD hook's result point for an equip + rule (markers fdd + fault, ruleRef, equipRef), or null. */
-function rcxResultPoint(model, equipId, ruleId) {
-  return model.points.find((p) => has(p, "fdd") && has(p, "fault") && p.equipRef === equipId
-    && ((p.rec.attrs || {}).ruleRef || "") === ruleId) || null;
+/**
+ * Who an equip is, for matching the hook's result points: { id (Haystack id), site (siteRef), uuid (NF equip uuid) }.
+ * `equip` = an OfddEquip ({ rec, id }), an NF equip record, or (legacy) a bare equip id string, which carries no
+ * site and matches on equipRef only, so two sites that both have "AHU-1" are indistinguishable: pass the equip.
+ */
+function rcxEquipIdentity(equip) {
+  if (typeof equip === "string") return { id: equip, site: "", uuid: "" };
+  const rec = (equip && equip.rec) || equip || {};
+  const a = rec.attrs || {};
+  return { id: (equip && equip.id) || idOf(rec), site: a.siteRef || "", uuid: rec.uuid || "" };
 }
 
-/** [[ms, 0|1], …] fault lane for an equip + rule over `hours` (hourly; [] if the rule never ran). */
-async function rcxFaultData(model, equipId, ruleId, hours) {
-  const p = rcxResultPoint(model, equipId, ruleId);
-  if (!p) return [];
+/** How well result point p belongs to the equip: 0 no, 1 equipRef only (legacy), 2 equipRef + siteRef, 3 equip uuid. */
+function rcxMatchRank(p, who, model) {
+  if (p.equipRef !== who.id) return 0;
+  const a = p.rec.attrs || {};
+  if (who.uuid && a.equipUuid) return a.equipUuid === who.uuid ? 3 : 0;
+  if (!who.site) return 1;
+  if (p.siteRef) return p.siteRef === who.site ? 2 : 0;
+  // a 5.0.0 point without any siteRef: only when no other equip in the model shares the id
+  return ((model.equips || []).filter((e) => idOf(e) === who.id).length <= 1) ? 1 : 0;
+}
+
+function rcxBestPoint(model, equip, ruleId, markers) {
+  const who = rcxEquipIdentity(equip);
+  let best = null, bestRank = 0;
+  for (const p of model.points) {
+    if (!markers.every((m) => has(p, m)) || ((p.rec.attrs || {}).ruleRef || "") !== ruleId) continue;
+    const r = rcxMatchRank(p, who, model);
+    if (r > bestRank) { best = p; bestRank = r; }
+  }
+  return best;
+}
+
+/** The FDD hook's fault_pct result point (markers fdd + fault, ruleRef) of an equip + rule, site scoped, or null. */
+function rcxResultPoint(model, equip, ruleId) {
+  return rcxBestPoint(model, equip, ruleId, ["fdd", "fault"]);
+}
+
+/** The hook's per-timestamp confirmed-fault point (marker fault_timeline, ruleRef) of an equip + rule, site scoped, or null. */
+function rcxTimelinePoint(model, equip, ruleId) {
+  return rcxBestPoint(model, equip, ruleId, ["fault_timeline"]);
+}
+
+/**
+ * Raw timeline samples -> lane: [[ms, 1|0|null]]. Values > 0 are 1, other numbers 0, null stays null; where two
+ * neighbouring samples are further apart than 1.5 windows a [ms, null] is inserted so the lane shows a gap.
+ */
+function rcxTimelineLane(samples, windowSec) {
+  const out = [];
+  const arr = [...(samples || [])].sort((a, b) => a[0] - b[0]);
+  const step = (windowSec || 300) * 1e3;
+  for (const [t, v] of arr) {
+    const prev = out.length ? out[out.length - 1] : null;
+    if (prev && prev[1] != null && t - prev[0] > 1.5 * step) out.push([prev[0] + step, null]);
+    out.push([t, v == null ? null : v > 0 ? 1 : 0]);
+  }
+  return out;
+}
+
+const rcxTagLane = (lane, source, approximate) =>
+  Object.defineProperties(lane, { source: { value: source }, approximate: { value: approximate } });
+
+/**
+ * Fault lane [[ms, 1 | 0 | null]] for an equip + rule over `hours` ([] when the rule never ran).
+ *   1 confirmed fault, 0 assessed and ok, null not assessed (a gap: the hook wrote nothing there). Never 0 for unknown.
+ *   equip = OfddEquip / NF equip record (matches by NF equip uuid, else siteRef + equipRef) or a legacy id string.
+ *   opts.windowSec: bucket (default: 300 s = the hook's grid up to 48 h, else 3600 s; MAX per bucket).
+ * The array carries non-enumerable `source` ("timeline" | "fault_pct" | "none") and `approximate` (true for the
+ * fault_pct fallback, whose 1 means "this hour had a run with fault time", not a confirmed timestamp).
+ */
+async function rcxFaultData(model, equip, ruleId, hours, opts = {}) {
+  const tp = rcxTimelinePoint(model, equip, ruleId);
+  if (tp) {
+    const windowSec = opts.windowSec || (hours <= 48 ? 300 : 3600);
+    const data = await fetchSeries([tp], hours, { method: "MAX", windowSec });
+    return rcxTagLane(rcxTimelineLane(data.get(tp.uuid) || [], windowSec), "timeline", false);
+  }
+  const p = rcxResultPoint(model, equip, ruleId);
+  if (!p) return rcxTagLane([], "none", false);
   const data = await fetchSeries([p], hours, { method: "MAX", windowSec: 3600 });
-  return (data.get(p.uuid) || []).map(([t, v]) => [t, v > 0 ? 1 : 0]);
+  return rcxTagLane((data.get(p.uuid) || []).map(([t, v]) => [t, v == null ? null : v > 0 ? 1 : 0]), "fault_pct", true);
 }
 
 /**
@@ -203,6 +309,8 @@ async function rcxFaultData(model, equipId, ruleId, hours) {
  *   lanes = [{ name: "ECON-1", data: [[ms, 0|1], …] }, …]   (several rules → several lanes)
  */
 function rcxWithFaultLane(option, lanes) {
+  // null samples (rcxFaultData: not assessed) stay gaps (connectNulls false); the fault_pct fallback
+  // (data.approximate) is drawn dashed and the series is flagged `approximate`, so it never passes for a confirmed lane
   lanes = (lanes || []).filter((l) => l && l.data && l.data.length);
   if (!lanes.length) return option;
   const LANE_PX = 26, GAP = 8, BOTTOM = 34;
@@ -227,9 +335,11 @@ function rcxWithFaultLane(option, lanes) {
     xAxes.push({ type: "time", gridIndex: gi, axisLabel: { show: i === lanes.length - 1 }, splitLine: { show: false } });
     yAxes.push({ type: "value", gridIndex: gi, min: 0, max: 1, interval: 1, name: lane.name, nameLocation: "middle",
       nameRotate: 0, nameGap: 8, nameTextStyle: { align: "right" }, axisLabel: { show: false }, splitLine: { show: false } });
+    const approx = !!lane.data.approximate;
     series.push({ name: lane.name, type: "line", step: "end", showSymbol: false, connectNulls: false,
       xAxisIndex: xAxes.length - 1, yAxisIndex: yAxes.length - 1,
-      lineStyle: FAULT_LANE.lineStyle, areaStyle: FAULT_LANE.areaStyle, data: lane.data });
+      lineStyle: approx ? { ...FAULT_LANE.lineStyle, type: "dashed" } : FAULT_LANE.lineStyle, areaStyle: FAULT_LANE.areaStyle,
+      ...(approx ? { approximate: true } : {}), data: lane.data });
   });
   const allX = xAxes.map((_, i) => i);
   return {

@@ -25,7 +25,7 @@ function load() {
   ctx.ofddRender = (chart, option, name) => ctx.rendered.push({ option, name });
   ctx.series = new Map();                      // uuid -> [[ms, v]] served by the fetchSeries stub
   ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));
-  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "rcx.js", "rcx-overview.js"]) {
+  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "schedule.js", "rcx.js", "rcx-overview.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.get = (name) => vm.runInContext(name, ctx);
@@ -209,9 +209,17 @@ test("weekly-fan view: runtime bars per equip, fault lane last when the SCHED-24
   ctx.series.set(byName("SCHED").uuid, hourly(48, (i) => (i > 30 ? 1 : 0)));
   const { note, out } = await renderView(ctx, model, "weekly-fan", 48);
   const o = out.option;
-  const bar = o.series.find((s) => s.type === "bar");
-  assert.equal(bar.name, "AHU-1");
-  assert.equal(bar.data.reduce((a, [, h]) => a + h, 0), 24);    // 24 hourly intervals while on
+  // one stack per equip: in-schedule + after-hours bars add up to the 24 hourly intervals while on
+  const bars = o.series.filter((s) => s.type === "bar");
+  assert.deepEqual(arr(bars, (b) => b.name), ["AHU-1 · in schedule", "AHU-1 · after hours"]);
+  const sum = (b) => b.data.reduce((a, [, h]) => a + h, 0);
+  assert.equal(sum(bars[0]) + sum(bars[1]), 24);
+  assert.equal(sum(bars[0]), 10);                                // no NF schedule, no site tz: default Mon-Fri 07-17 (UTC) = 10 h of Monday
+  // the schedule reference is a step line labelled as the default calendar
+  const ref = o.series.find((s) => /^schedule /.test(s.name));
+  assert.equal(ref.name, "schedule 50 h/week (default)");
+  assert.equal(ref.step, "end");
+  assert.deepEqual(arr(ref.data[0]), [T0, 50]);
   assert.ok(o.series.some((s) => /Avg OAT/.test(s.name)));
   // lane = last grid / x axis / y axis / series
   assert.equal(o.series[o.series.length - 1].name, "SCHED-247");

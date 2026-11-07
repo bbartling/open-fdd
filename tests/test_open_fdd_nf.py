@@ -550,3 +550,135 @@ def test_reporting_cli_from_nf_and_csv(mock_url, tmp_path, capsys):
     assert main(["--csv", str(f), "--no-charts", "--out", str(out2)]) == 0
     assert list(out2.glob("*Engineering_Findings.json"))
     capsys.readouterr()
+
+
+# ---------------------------------------------------------------------------- analytics hook (5.0.3)
+HOOK = "/api/v1/apps/open-fdd/hooks/analytics"
+
+
+def _run(pid, result, state="STATE_SUCCESS"):
+    events = [{"message": "noise"}, {"message": json.dumps(result)}] if result is not None else []
+    return {"pid": pid, "state": state, "results": {"hook": {"events": events}}}
+
+
+def _fake_hook(fake, result, *, pid="p-1", pending=0):
+    """POST StartHook -> {pid}; GET runs -> RUNNING `pending` times, then the finished run with `result` logged."""
+    posts: list[dict] = []
+    seq = [(200, {"runs": [_run("older", {"ok": True, "tool": "x"}), _run(pid, None, "STATE_RUNNING")]})] * pending
+    seq.append((200, {"runs": [_run("older", {"ok": True, "tool": "x"}), _run(pid, result)]}))
+
+    def start(body, headers, path):
+        posts.append(body)
+        return 200, {"pid": pid}
+
+    fake.handlers[HOOK] = [start]
+    fake.handlers[HOOK + "/runs"] = seq
+    return posts
+
+
+WEEKLY = {"ok": True, "tool": "analyze_ahu_weekly_runtime", "days": 28, "rows": [
+    {"siteRef": "site-a", "equipRef": "AHU-1", "equipUuid": "u-a", "week": "2026-W42", "run_hours": 50.0, "schedule_hours": 50,
+     "in_schedule_hours": 50.0, "after_hours": 0.0, "partial_week": False, "mean_oat_on_c": 13.1, "schedule_source": "schedule"},
+    {"siteRef": "site-b", "equipRef": "AHU-1", "equipUuid": "u-b", "week": "2026-W42", "run_hours": 50.0, "schedule_hours": 50,
+     "in_schedule_hours": 50.0, "after_hours": 0.0, "partial_week": False, "mean_oat_on_c": 17.0, "schedule_source": "default"}]}
+
+
+def test_analytics_tool_names_match_the_hook():
+    from open_fdd.nf.analytics import SHORT, TOOLS
+
+    js = (ROOT / "nf-app" / "hooks" / "analytics.js").read_text(encoding="utf-8")
+    block = js[js.index("const TOOLS = {"):].split("};", 1)[0]
+    assert set(TOOLS) == {n.strip() for n in block.split("{", 1)[1].replace("\n", " ").split(",") if n.strip()}
+    assert set(SHORT.values()) == set(TOOLS)
+
+
+def test_tool_args_carry_only_what_was_given():
+    from open_fdd.nf.analytics import tool_args
+
+    assert tool_args("weekly-runtime") == {"tool": "analyze_ahu_weekly_runtime"}
+    assert tool_args("get_fdd_fault_timeline", site="s", equip="AHU-1", rule="CMD-1", days=2, dense=True) == {
+        "tool": "get_fdd_fault_timeline", "site": "s", "equip": "AHU-1", "rule": "CMD-1", "days": 2.0, "dense": True}
+    assert tool_args("explain-view", view="weekly-fan")["viewId"] == "weekly-fan"
+    with pytest.raises(NFError, match="unknown tool"):
+        tool_args("drop_tables")
+
+
+def test_run_hook_starts_once_then_polls_runs(fake):
+    posts = _fake_hook(fake, WEEKLY, pending=2)
+    run = quick(fake.url).run_hook("open-fdd", "analytics", {"tool": "analyze_ahu_weekly_runtime", "days": 28}, timeout=5, poll=0)
+    assert run["state"] == "STATE_SUCCESS" and run["pid"] == "p-1"
+    assert posts == [{"args": {"tool": "analyze_ahu_weekly_runtime", "days": 28}}]
+    methods = [m for m, *_ in fake.log]
+    assert methods.count("POST") == 1 and methods.count("GET") == 3, "one StartHook, three polls (2 running + done)"
+    assert "include_results=true" in fake.log[-1][1]
+
+
+def test_start_hook_is_never_retried(fake):
+    fake.handlers[HOOK] = [(503, {"error": "busy"}), (200, {"pid": "p-2"})]
+    with pytest.raises(NFError) as e:
+        quick(fake.url, retries=4).start_hook("open-fdd", "analytics", {"tool": "x"})
+    assert e.value.status == 503
+    assert len(fake.log) == 1, "a lost / failed StartHook must not fire a second run"
+
+
+def test_run_hook_times_out_while_still_running(fake):
+    _fake_hook(fake, WEEKLY, pending=10_000)
+    with pytest.raises(NFError, match="still running"):
+        quick(fake.url).run_hook("open-fdd", "analytics", {}, timeout=0.05, poll=0)
+
+
+def test_analyze_returns_the_logged_result_and_reports_failures(fake):
+    from open_fdd.nf.analytics import analyze
+
+    _fake_hook(fake, WEEKLY)
+    out = analyze(quick(fake.url), "weekly-runtime", site="site-a", days=28)
+    assert [r["equipUuid"] for r in out["rows"]] == ["u-a", "u-b"]
+    fake.handlers.clear()
+    _fake_hook(fake, {"ok": False, "tool": "resolve_equipment_roles", "error": '"AHU-1" matches 2 equips', "candidates": [
+        {"siteRef": "site-a", "equipRef": "AHU-1", "equipUuid": "u-a"}, {"siteRef": "site-b", "equipRef": "AHU-1", "equipUuid": "u-b"}]})
+    with pytest.raises(NFError, match=r"matches 2 equips; candidates: site-a/AHU-1=u-a, site-b/AHU-1=u-b"):
+        analyze(quick(fake.url), "roles", equip="AHU-1")
+    fake.handlers.clear()
+    fake.handlers[HOOK] = [(200, {"pid": "p-1"})]
+    fake.handlers[HOOK + "/runs"] = [(200, {"runs": [_run("p-1", None, "STATE_FAILED")]})]
+    with pytest.raises(NFError, match="STATE_FAILED"):
+        analyze(quick(fake.url), "economizer")
+    fake.handlers[HOOK + "/runs"] = [(200, {"runs": [_run("p-1", None)]})]
+    with pytest.raises(NFError, match="without a result"):
+        analyze(quick(fake.url), "economizer")
+
+
+def test_cli_analyze_json_table_and_args(capsys, fake, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    posts = _fake_hook(fake, WEEKLY)
+    code, out, _ = run_cli(capsys, "analyze", "weekly-runtime", "--url", fake.url, "--site", "site-a", "--days", "28", "--json")
+    assert code == 0 and json.loads(out)["rows"][1]["equipUuid"] == "u-b"
+    assert posts[-1] == {"args": {"tool": "analyze_ahu_weekly_runtime", "site": "site-a", "days": 28.0}}
+    code, out, _ = run_cli(capsys, "analyze", "analyze_ahu_weekly_runtime", "--url", fake.url)
+    assert code == 0 and "u-a" in out and "u-b" in out and "run_hours" in out
+    assert posts[-1] == {"args": {"tool": "analyze_ahu_weekly_runtime"}}
+    # fault timeline: scope + rule + dense go through as args, the table shows the states
+    fake.handlers.clear()
+    posts = _fake_hook(fake, {"ok": True, "tool": "get_fdd_fault_timeline", "siteRef": "site-a", "equipRef": "AHU-1", "equipUuid": "u-a",
+                              "rule": "CMD-1", "source": "timeline", "approximate": False,
+                              "summary": {"confirmed": 1, "ok": 2, "unknown": 1, "last_state": "ok"},
+                              "timeline": [{"ts": "2026-11-06T20:05:00.000Z", "state": "confirmed"}, {"ts": "2026-11-06T21:30:00.000Z", "state": "ok"}]})
+    code, out, _ = run_cli(capsys, "analyze", "fault-timeline", "--url", fake.url, "--site", "site-a", "--equip", "AHU-1",
+                           "--rule", "CMD-1", "--days", "3", "--dense")
+    assert code == 0 and "confirmed" in out and "last state ok" in out
+    assert posts[-1] == {"args": {"tool": "get_fdd_fault_timeline", "site": "site-a", "equip": "AHU-1", "rule": "CMD-1", "days": 3.0, "dense": True}}
+
+
+def test_cli_analyze_errors_and_help(capsys, fake, monkeypatch):
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    _fake_hook(fake, {"ok": False, "tool": "explain_missing_rcx_view", "error": "unknown view \"nope\""})
+    code, _, err = run_cli(capsys, "analyze", "explain-view", "--url", fake.url, "--view", "nope")
+    assert code == 2 and "unknown view" in err
+    with pytest.raises(SystemExit):
+        nfcli.main(["analyze", "drop_tables"])
+    capsys.readouterr()
+    with pytest.raises(SystemExit):
+        nfcli.main(["analyze", "--help"])
+    help_text = capsys.readouterr().out
+    for word in ("weekly-runtime", "--site", "--equip", "--rule", "--days", "--json", "equipUuid"):
+        assert word in help_text

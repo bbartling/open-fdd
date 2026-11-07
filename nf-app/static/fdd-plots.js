@@ -259,17 +259,25 @@
    * Per-rule result plot: the rule's bound input signals grouped by unit family plus a fault
    * lane from the hook's result point. Returns a short note.
    */
-  /** @param {HTMLElement} el @param {{rule?: any, equipRec?: any, bound?: Record<string, any[]>, resultPoint?: any, hours?: number}} [o] */
-  async function fddRulePlot(el, { rule, equipRec, bound = {}, resultPoint = null, hours = 168 } = {}) {
+  /**
+   * With `model`, the lane is rcxFaultData(model, equipRec, rule.id, hours): the hook's per-timestamp confirmed-fault
+   * timeline (1 / 0 / gap), falling back (labelled approximate, drawn dashed) to the rolling fault_pct point.
+   * Without `model` only the caller's `resultPoint` is available, so the lane is that fallback.
+   * @param {HTMLElement} el @param {{rule?: any, equipRec?: any, bound?: Record<string, any[]>, resultPoint?: any, model?: any, hours?: number}} [o]
+   */
+  async function fddRulePlot(el, { rule, equipRec, bound = {}, resultPoint = null, model = null, hours = 168 } = {}) {
     const wanted = [...new Set([...(rule.required_roles || []), ...(rule.optional_roles || [])])];
     const roles = fddPlotExpandRoles(rule.id, wanted, bound).filter((r) => bound[r] && bound[r].length);
     if (!roles.length) return "No bound input points for this rule on this equip.";
     const pts = roles.map((r) => bound[r][0]);
     const windowSec = pickWindow(hours);
-    const [sigRaw, res] = await Promise.all([
+    const [sigRaw, lane] = await Promise.all([
       fetchSeries(pts, hours, { windowSec }),
-      // Same data as rcxFaultData, but from the result point the caller already resolved.
-      resultPoint ? fetchSeries([resultPoint], hours, { method: "MAX", windowSec: 3600 }) : Promise.resolve(null),
+      model ? rcxFaultData(model, equipRec, rule.id, hours)
+        // no model: the fallback lane from the result point the caller already resolved
+        : resultPoint ? fetchSeries([resultPoint], hours, { method: "MAX", windowSec: 3600 })
+          .then((r) => rcxFaultLaneFromResult(r.get(resultPoint.uuid) || []))
+          : Promise.resolve(rcxFaultLaneFromResult(null, true)),
     ]);
     const groups = new Map();
     roles.forEach((role, i) => {
@@ -282,7 +290,6 @@
         data: rcxDispSeries(rcxToSI(sigRaw.get(p.uuid) || [], p), si) });
       groups.set(fam, g);
     });
-    const lane = res ? (res.get(resultPoint.uuid) || []).map(([t, v]) => [t, v > 0 ? 1 : 0]) : [];
     const built = fddPlotRuleOption({
       title: `${rule.id} · ${equipName(equipRec)}`,
       groups: [...groups.values()].sort((a, b) => familyRank(a.family) - familyRank(b.family) || a.family.localeCompare(b.family)),
@@ -291,8 +298,19 @@
     if (!built.option) return "No history for the bound inputs in this range.";
     built.option = rcxWithFaultLane(built.option, [{ name: rule.id, data: lane }]);
     draw(el, built, `fdd_${rule.id}_${equipName(equipRec)}`);
-    if (!resultPoint) return `${roles.length} inputs · no result point yet (the FDD hook has not written ${rule.id} for this equip)`;
-    return `${roles.length} inputs · fault in ${lane.filter(([, f]) => f).length} of ${lane.length} hourly results`;
+    if (lane.source === "none") return `${roles.length} inputs · no result point yet (the FDD hook has not written ${rule.id} for this equip)`;
+    const confirmed = lane.filter(([, f]) => f === 1).length, gaps = lane.filter(([, f]) => f == null).length;
+    if (lane.source === "timeline") {
+      return `${roles.length} inputs · confirmed fault in ${confirmed} of ${lane.length - gaps} assessed samples`
+        + (gaps ? ` · ${gaps} gap${gaps === 1 ? "" : "s"} (not assessed)` : "");
+    }
+    return `${roles.length} inputs · approximate: fault in ${confirmed} of ${lane.length} hourly results (no per-timestamp timeline for ${rule.id} yet)`;
+  }
+
+  /** Fallback lane from a rolling fault_pct series (no timeline point): [[ms, 1|0]], nulls kept, tagged approximate. */
+  function rcxFaultLaneFromResult(arr, none = false) {
+    const lane = (arr || []).map(([t, v]) => [t, v == null ? null : v > 0 ? 1 : 0]);
+    return Object.defineProperties(lane, { source: { value: none ? "none" : "fault_pct" }, approximate: { value: !none } });
   }
 
   // ---- views --------------------------------------------------------------------------------
@@ -302,7 +320,7 @@
     async render(el, ctx) {
       const eq = ctx.equips[0];
       const bas = ctx.first(eq, "oa_t"), web = ctx.first(eq, "web_oa_t");
-      const [sig, lane] = await Promise.all([ctx.series([bas, web]), rcxFaultData(ctx.model, eq.id, "OAT-METEO", ctx.hours)]);
+      const [sig, lane] = await Promise.all([ctx.series([bas, web]), rcxFaultData(ctx.model, eq, "OAT-METEO", ctx.hours)]);
       const built = fddPlotOatOption({
         title: `OAT-METEO · ${eq.name}`,
         bas: { name: `BAS ${bas.dis || bas.name}`, data: ctx.dispSeries(sig.get(bas.uuid) || [], ctx.siUnit(bas)) },
@@ -312,7 +330,7 @@
       if (!(sig.get(bas.uuid) || []).length) return "No history in this range.";
       built.option = rcxWithFaultLane(built.option, [{ name: "OAT-METEO", data: lane }]);
       draw(el, built, `fdd_OAT-METEO_${eq.name}`);
-      return lane.length ? `fault in ${lane.filter(([, f]) => f).length} of ${lane.length} hourly results`
+      return lane.length ? `${lane.approximate ? "approximate: fault" : "confirmed fault"} in ${lane.filter(([, f]) => f === 1).length} of ${lane.filter(([, f]) => f != null).length} ${lane.approximate ? "hourly results" : "assessed samples"}`
         : "no OAT-METEO result point for this equip yet (lane omitted)";
     },
   });
