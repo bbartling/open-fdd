@@ -5,9 +5,13 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.4
+
+- One-command installer (`install`, `doctor`, `uninstall`, `--remove-old`), a new [install guide](install.html) and [FDD data access](fdd-data-access.html) page. Fixes for ten deploy problems: Caddy/NF login mismatch and recovery, portal-key 401 message, the `/` redirect, dependency install on push, weather coordinates from the modeled site, `history` and on-request hooks skipped by a blanket `run`, static routes behind NF auth, orphan hook points, and self-signed HTTPS.
+
 ## open-fdd 4.5.2 (PyPI)
 
-- Python 3.14 and 3.15 are now supported, with CI over 3.10-3.15. No code changes.
+- Python 3.14 and 3.15 are now supported, with CI over 3.10-3.15. Python 3.10 gets an `enum.StrEnum` backport (`open_fdd/_compat.py`).
 
 ## 5.0.3 (app) / open-fdd 4.5.1 (PyPI)
 

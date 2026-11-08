@@ -238,7 +238,15 @@ const pgRows = (res) => {
 };
 
 async function createPglite(pack) {
-  const { PGlite } = await import("@electric-sql/pglite");
+  let PGlite;
+  try {
+    ({ PGlite } = await import("@electric-sql/pglite"));
+  } catch (e) {
+    if (e && (e.code === "ERR_MODULE_NOT_FOUND" || /Cannot find (package|module)/.test(String(e.message)))) {
+      throw new Error('pglite not installed: install the app dependencies (nf_app_sync.py install, or PATCH /api/v1/apps/<app-id>/dependencies then restart), or set the hook config engine to "sqlite"');
+    }
+    throw e;
+  }
   const db = new PGlite();
   await db.waitReady;
   await db.exec(pack.helpers_sql);

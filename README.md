@@ -61,7 +61,8 @@ node nf-app/dev/mock-nf.mjs
 # open http://127.0.0.1:8765/api/v1/apps/static/open-fdd/
 ```
 
-Install on an NF box (NF 3.10+): see the [install guide](https://bbartling.github.io/open-fdd/install.html).
+Install on an NF box (NF 3.10+): see the [install guide](https://bbartling.github.io/open-fdd/install.html) (editions, one-command install, upgrade, troubleshooting).
+How API users read the results: [FDD data access](https://bbartling.github.io/open-fdd/fdd-data-access.html).
 
 Run the tests:
 

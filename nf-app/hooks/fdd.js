@@ -519,30 +519,49 @@ async function flushWrites(http, queue, summary, log, baseMs) {
 }
 
 // ---- run ----------------------------------------------------------------------------
-async function pickEngine(http, wanted, timescaleConfig) {
+/** True when the npm package @electric-sql/pglite is installed for this app (searched up from the hooks dir). */
+function pgliteInstalled() {
+  for (let d = __dirname, prev = ''; d !== prev; prev = d, d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, 'node_modules', '@electric-sql', 'pglite', 'package.json'))) return true;
+  }
+  return false;
+}
+
+/**
+ * Which engine to run. An engine the config names (sqlite | pglite | timescale) is used as is, never swapped.
+ * Only when none was configured ("auto"/unset) is the choice ours: timescale if configured, else pglite on big
+ * boxes, but sqlite (vendored, no npm install) when pglite is not installed. Returns {kind, note}.
+ */
+async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInstalled) {
   // FULL edition: config.timescale set -> run the pack inside NF's TimescaleDB (engine "timescale", or "auto")
-  if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return 'timescale';
-  if (wanted === 'sqlite' || wanted === 'pglite') return wanted;
+  if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return { kind: 'timescale', note: '' };
+  if (wanted === 'sqlite' || wanted === 'pglite') return { kind: wanted, note: '' };
+  let kind = 'sqlite';
   try {
     const { data } = await http.get('/api/v1/platform/info');
     const total = Math.max(0, ...((data && data.resources) || []).map((r) => Number((r.memory || {}).totalBytes) || 0));
-    return total >= PGLITE_MIN_BYTES ? 'pglite' : 'sqlite';
+    if (total >= PGLITE_MIN_BYTES) kind = 'pglite';
   } catch (e) {
-    return 'sqlite';
+    kind = 'sqlite';
   }
+  if (kind === 'pglite' && !hasPglite()) {
+    return { kind: 'sqlite', note: 'engine auto: pglite is not installed (install the app dependencies to use it); using sqlite' };
+  }
+  return { kind, note: '' };
 }
 
 /**
  * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
  *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number }} FddConfig
- * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number }} args
+ * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number, hasPglite?: () => boolean }} args
  */
-async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date.now() }) {
+async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date.now(), hasPglite }) {
   createEngine = createEngine || require('./lib/engines.js').createEngine;
   const http = sdk.http;
   const log = (m) => (sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   const shared = loadShared();
-  const kind = await pickEngine(http, config.engine, config.timescale);
+  const { kind, note: engineNote } = await pickEngine(http, config.engine, config.timescale, hasPglite);
+  if (engineNote) log(engineNote);
   const pack = packIn || loadPack(kind);
   const step = pack.poll_seconds;
   const windowHours = Number(config.windowHours) > 0 ? Number(config.windowHours) : 24;
@@ -554,7 +573,7 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   const model = await loadModel(http, shared);
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
-  const summary = { engine: kind, equips: 0, rules: 0, errors: 0, written: 0, results: [],
+  const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 } };
   const queue = { meta: [], values: [], series: [] };    // writes, flushed in batches after all equips ran
   const occCache = { logged: new Set() };    // NF schedules (read once per run) and which sites were logged
@@ -800,4 +819,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { runFdd, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });

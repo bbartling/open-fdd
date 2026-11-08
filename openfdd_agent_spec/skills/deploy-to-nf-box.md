@@ -18,6 +18,8 @@ Rules: never run builds, npm installs, PGlite or tests on a small box; never wri
 owner's approval; static files are cached 5 minutes (use `?v=N`); `application.id` must equal the slug of `application.name`.
 After NF login is enabled the manifest needs `auth.apiKey.scopes`. See `docs/install.md`.
 
+Installing, upgrading, removing an old version or debugging a 401: use the `install-upgrade-troubleshoot` skill (run `doctor` first).
+
 Before touching a live box read `nf-gotchas.md` (this folder). Related runbooks in `docs/operations/nf/`: `lite-vs-full.md`,
 `front-door-caddy.md` (Caddy; set `APP_ID=open-fdd-lite` on a Lite box so the bare URL opens Lite),
 `nf-upgrade-compose.md`, `bacnet-validate.md` (see the `bacnet-validate` skill). Read-only checks of a deployed box:

@@ -3,9 +3,30 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.4 — 2026-11-08
+
+Deploy tooling and docs for installing Open-FDD on an existing NF site. All items below ship with the installer.
+
+### Added
+
+- **One-command installer** in `scripts/nf/hooks/nf_app_sync.py`: `install` (preflight, push, dependency install, verify), `doctor`, `uninstall`, and `--remove-old` (dry run unless `--yes`, driven by `app.json` `replaces`). New pages: [install guide](docs/install.md) (editions, credentials, reachability, upgrade, uninstall, a 10-bug troubleshooting table) and [FDD data access](docs/fdd-data-access.md) (where results live, how an API client reads status and timelines). New agent skill `install-upgrade-troubleshoot`.
+
+### Fixed
+
+1. **Caddy and NF logins diverging** had no recovery path: documented that both must share one user and password, a "which layer rejected me" table (`realm="restricted"` is Caddy, `nf-` is NF) and the recovery steps (test NF on loopback, `caddy hash-password` with the password on stdin plus a trailing newline, `caddy validate`, restart instead of `caddy reload` when `admin off`). `deploy/nf-caddy/README.md`.
+2. **Portal API-key 401 on deploy** now says to use the console login.
+3. **Caddy `/` redirect** is the `APP_ID` placeholder (`open-fdd` or `open-fdd-lite`), with the update procedure documented. Verified with `caddy adapt`.
+4. **Push did not install npm dependencies** (`fdd` hook: `Cannot find package '@electric-sql/pglite'`): the installer installs them and restarts.
+5. **Weather hook** reads latitude/longitude from the modeled Haystack site when NF's Sites API is empty.
+6. **`history` hook** is skipped by a blanket `run` when Timescale is not configured.
+7. **On-request hooks** (`sparql`, `analytics`) are no longer started by a blanket `run` without args.
+8. **Open static routes vs NF console auth**: documented that opening a path in Caddy does not bypass NF's own login, and the recommended layout (Caddy owns the login). `deploy/nf-caddy/README.md`.
+9. **Orphan hook points** after replacing an app: `--remove-old` lists them; documented the supported deletion (NF MCP `delete_points`, dry run first) and never reusing a point uuid on `POST /api/v1/bacnet/local`.
+10. **Self-signed HTTPS front door**: `--ca-file` / `--pin-server-cert` for the deploy process, never global verification off.
+
 ## open-fdd 4.5.2 (PyPI) — 2026-11-07
 
-- Python 3.14 and 3.15 are now supported (classifiers + a CI matrix over 3.10-3.15, `.github/workflows/python-matrix.yml`). No code changes; the app version is unchanged.
+- Python 3.14 and 3.15 are now supported (classifiers + a CI matrix over 3.10-3.15, `.github/workflows/python-matrix.yml`). Python 3.10 gets an `enum.StrEnum` backport (`open_fdd/_compat.py`); the app version is unchanged.
 
 ## 5.0.3 (app) / open-fdd 4.5.1 (PyPI) — 2026-11-07
 

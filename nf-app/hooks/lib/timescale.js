@@ -32,7 +32,15 @@ const iso = (t) => (t instanceof Date ? t : new Date(t)).toISOString();
 
 /** Connected pg Client. config: { connectionString } or { host, port, database, user, passwordEnv|password, ssl }. */
 async function connect(config = {}) {
-  const { Client } = require("pg");
+  let Client;
+  try {
+    ({ Client } = require("pg"));
+  } catch (e) {
+    if (e && e.code === "MODULE_NOT_FOUND") {
+      throw new Error('pg not installed: install the app dependencies (nf_app_sync.py install, or PATCH /api/v1/apps/<app-id>/dependencies then restart); engine "timescale" needs the pg package');
+    }
+    throw e;
+  }
   const opts = {};
   if (config.connectionString) opts.connectionString = config.connectionString;
   else {
