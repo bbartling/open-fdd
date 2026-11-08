@@ -7,6 +7,8 @@
 // Returns {bucket, from, to, total, truncated, rows: [{point_uuid, bucket, avg, min, max, n}]}, capped at
 // about 200 KB (truncated = true when more rows existed). bucket is optional ("15 minutes", "1 hour",
 // "1 day", ...); without it one is picked so each series has about 1000 buckets.
+// With no config `timescale` and no args the hook returns {ok: true, skipped: true, reason: "timescale not configured"};
+// with args it fails (a query must never be answered from nowhere).
 // Bounds (server side, hook config `history`: maxPoints 200000, maxSpanDays 3660, minBucketSec 60,
 // statementTimeoutMs 20000): too-fine requests are coarsened (coarsened = true) or rejected; the answer also has
 // coverage / truncated / max_points. Needs hook config `timescale` (same as the fdd hook): the NF database that holds the history and
@@ -24,7 +26,16 @@ const argsOf = (ctx) => {
  */
 async function handle({ sdk, args = {}, config = {} }) {
   const log = (m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
-  if (!config.timescale) throw new Error('history hook: config.timescale is not set (full edition only)');
+  if (!config.timescale) {
+    // No Timescale configured. A bare invocation (no args: a blanket `run`, a health check) is a clean skip, not
+    // an error; a real query (any args) still fails loudly, so nothing ever answers from the wrong source.
+    if (!Object.keys(args || {}).length) {
+      const result = { ok: true, skipped: true, reason: 'timescale not configured' };
+      log(JSON.stringify(result));
+      return result;
+    }
+    throw new Error('history hook: config.timescale is not set (full edition only)');
+  }
   const client = await ts.connect(config.timescale);
   try {
     const result = await ts.historyRoute(client, /** @type {any} */ (args), /** @type {any} */ (config.history || {}));

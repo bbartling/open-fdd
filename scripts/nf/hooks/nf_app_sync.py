@@ -3,39 +3,62 @@
 
 The app is described by a manifest next to the hook source, e.g.
 ``nf-app/app.json`` or ``lite/app.json``: the application (id, runtime,
-auth scopes), a map of NF file path -> repo file, and the hook definitions
-(UpdateHook bodies). Talks to the NF *local console* API with HTTP Basic auth
-(the remote portal token is read-only and cannot deploy).
+auth scopes), a map of NF file path -> repo file, the hook definitions
+(UpdateHook bodies) and an optional top-level ``replaces`` list (ids of
+predecessor apps that ``install --remove-old`` may delete). Talks to the NF
+*local console* API with HTTP Basic auth (the remote portal API-key token is
+read-only and cannot deploy).
 
-    # credentials: CONSOLE_USERNAME / CONSOLE_PASSWORD, NF_CONSOLE_URL
+    # credentials: CONSOLE_USERNAME / CONSOLE_PASSWORD, NF_CONSOLE_URL (optional NF_CA_FILE)
     ENV=~/.secrets/nf_site_console.env
     M=nf-app/app.json
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV status $M
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M   # create/update app, files, hooks; restart
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --skip-hooks   # files only
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV push   $M --hook fdd     # files + only the fdd hook
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M   # run every hook once now (StartHook)
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M --hook fdd --wait 900   # custom wait (seconds)
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV run    $M --hook fdd --resume 12345   # wait on a run already started
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV pull   $M   # copy NF files back over the repo files
-    python3 scripts/nf/hooks/nf_app_sync.py --env $ENV diff   $M   # show NF vs repo differences
+    S=scripts/nf/hooks/nf_app_sync.py
+
+    # one command (preflight -> push -> npm dependencies -> verify):
+    python3 $S --env $ENV install $M
+    python3 $S --env $ENV install $M --remove-old          # also LIST the predecessor apps / orphan points
+    python3 $S --env $ENV install $M --remove-old --yes    # ... and delete the predecessor apps
+    python3 $S --env $ENV uninstall $M [--yes]             # dry run unless --yes
+    python3 $S --env $ENV doctor $M                        # read-only pass/fail checks
+
+    # the pieces:
+    python3 $S --env $ENV status $M
+    python3 $S --env $ENV push   $M [--skip-hooks] [--skip-deps] [--hook fdd]
+    python3 $S --env $ENV run    $M                      # scheduled hooks (+ on-request hooks given --arg)
+    python3 $S --env $ENV run    $M --hook sparql --arg query='SELECT * WHERE {?s ?p ?o} LIMIT 1'
+    python3 $S --env $ENV run    $M --hook fdd --wait 900 | --resume 12345
+    python3 $S --env $ENV pull   $M | diff $M
+
+Dependencies: NF installs an app's ``package.json`` with ``PATCH /api/v1/apps/<id>/dependencies`` (then the
+runtimes restart). ``push`` does that after writing ``package.json`` and before the hooks are (re)started;
+``--skip-deps`` leaves it out. sql.js is vendored, so the sqlite engine needs no npm install.
+
+TLS to a self-signed front door: ``--ca-file FILE`` (or NF_CA_FILE) trusts that certificate; ``--pin-server-cert``
+fetches the leaf the server presents, prints its SHA-256 fingerprint and trusts only that one for this process
+(its SAN must match the host). Verification is never turned off.
 
 ``run`` does not touch the schedule. It waits for each run up to the hook's ``invokeTimeout`` + 60 s
 (``--wait SECONDS`` overrides). If the wait runs out the run is reported as still running with its pid
-and the exit status is 3 (1 = a run failed); the hook is never started a second time: use ``--resume PID``. Never prints passwords or the app's API
-client secret (GetApplications returns it; this script drops it).
+and the exit status is 3 (1 = a run failed, including a hook that returns ``ok: false``); the hook is never
+started a second time: use ``--resume PID``. Never prints passwords or the app's API client secret
+(GetApplications returns it; this script drops it).
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
 import difflib
 import hashlib
 import json
+import os
 import re
+import socket
+import ssl
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -43,6 +66,11 @@ import urllib.request
 from pathlib import Path
 
 UA = "openfdd-nf-app-sync/1.0"
+
+ON_REQUEST = "MODE_ON_REQUEST"
+INSTALLED = "STATUS_INSTALLED"
+NEEDS_CONSOLE = ("deploy needs the NF local console: set NF_CONSOLE_URL and CONSOLE_USERNAME / CONSOLE_PASSWORD "
+                 "(the Normal Online portal API key NF_CLIENT_ID / NF_CLIENT_SECRET is read-only and cannot deploy)")
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -55,10 +83,82 @@ def load_env(path: Path) -> dict[str, str]:
     return out
 
 
+def env_problem(env: dict[str, str], where: str = "the env file") -> str | None:
+    """A short message when `env` cannot deploy (no console login), else None. Names variables, never values."""
+    if env.get("CONSOLE_USERNAME") and env.get("CONSOLE_PASSWORD"):
+        if env.get("NF_CONSOLE_URL"):
+            return None
+        return f"NF_CONSOLE_URL missing from {where} (or pass --console)"
+    if env.get("NF_CLIENT_ID") or env.get("NF_CLIENT_SECRET"):
+        return (f"{where} holds a portal API key (NF_CLIENT_ID / NF_CLIENT_SECRET) and no console login; "
+                + NEEDS_CONSOLE)
+    return f"CONSOLE_USERNAME / CONSOLE_PASSWORD missing from {where}; " + NEEDS_CONSOLE
+
+
+def auth_layer(www_authenticate: str | None) -> str:
+    """Which layer sent a 401, from its WWW-Authenticate realm: Caddy's front door or NF itself."""
+    m = re.search(r'realm="([^"]*)"', www_authenticate or "", re.I)
+    realm = m.group(1) if m else None
+    if realm is None:
+        return "an unknown layer (no WWW-Authenticate realm)"
+    if realm.lower() == "restricted":
+        return 'the Caddy front door (realm="restricted"): its basic_auth user/password hash did not accept this login'
+    if realm.lower().startswith("nf-"):
+        return f'NF itself (realm="{realm}"): the console login (CONSOLE_USERNAME / CONSOLE_PASSWORD in NF\'s env) did not accept it'
+    return f'a layer with realm="{realm}"'
+
+
+class ApiError(SystemExit):
+    """A failed console call; the message is the exit text, `status` the HTTP status (0 = not HTTP)."""
+
+    def __init__(self, msg: str, status: int = 0):
+        super().__init__(msg)
+        self.status = status
+
+
+def make_ssl_context(ca_file: str | None = None) -> ssl.SSLContext | None:
+    """Default verification plus (optionally) one extra trusted certificate file. Never disables verification."""
+    if not ca_file:
+        return None
+    p = Path(ca_file).expanduser()
+    if not p.is_file():
+        raise SystemExit(f"CA file not found: {p}")
+    return ssl.create_default_context(cafile=str(p))
+
+
+def pin_server_cert(base: str, timeout: float = 10.0, fetch=ssl.get_server_certificate):
+    """Fetch the leaf certificate `base` presents, trust only it for this process and check that its SAN names the
+    host. Returns (ssl_context, sha256_fingerprint). The PEM lives in a temp file removed at exit."""
+    u = urllib.parse.urlparse(base)
+    if u.scheme != "https" or not u.hostname:
+        raise SystemExit("--pin-server-cert needs an https:// console URL")
+    host, port = u.hostname, u.port or 443
+    try:
+        pem = fetch((host, port), timeout=timeout)
+    except OSError as e:
+        raise SystemExit(f"could not fetch the server certificate from {host}:{port}: {e}") from None
+    fp = hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest()
+    fd, name = tempfile.mkstemp(suffix=".pem", prefix="nf-pin-")
+    with os.fdopen(fd, "w") as f:
+        f.write(pem)
+    atexit.register(lambda: Path(name).unlink(missing_ok=True))
+    ctx = ssl.create_default_context(cafile=name)  # check_hostname stays on: the SAN must name the host
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as s, ctx.wrap_socket(s, server_hostname=host):
+            pass
+    except ssl.SSLCertVerificationError as e:
+        raise SystemExit(f"the certificate {host}:{port} presents does not match the host ({e.verify_message}); "
+                         "not trusting it") from None
+    except OSError as e:
+        raise SystemExit(f"could not verify the pinned certificate at {host}:{port}: {e}") from None
+    return ctx, fp
+
+
 class Console:
-    def __init__(self, base: str, user: str, password: str):
+    def __init__(self, base: str, user: str, password: str, ctx: ssl.SSLContext | None = None):
         self.base = base.rstrip("/")
         self.auth = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
+        self.ctx = ctx
 
     def call(self, method: str, path: str, body=None, ok_404: bool = False):
         data = None if body is None else json.dumps(body).encode()
@@ -69,22 +169,53 @@ class Console:
             headers={"Authorization": self.auth, "User-Agent": UA, "Content-Type": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=120) as r:
+            with urllib.request.urlopen(req, timeout=120, context=self.ctx) as r:
                 text = r.read().decode()
         except urllib.error.HTTPError as e:
             if ok_404 and e.code in (404, 500):
                 return None
-            raise SystemExit(f"{method} {path} -> HTTP {e.code}: {e.read().decode(errors='replace')[:300]}") from None
+            detail = e.read().decode(errors="replace")[:300]
+            if e.code == 401:
+                raise ApiError(f"{method} {path} -> HTTP 401: rejected by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
+                               + NEEDS_CONSOLE + ". Caddy and NF must accept the same user and password.", 401) from None
+            raise ApiError(f"{method} {path} -> HTTP {e.code}: {detail}", e.code) from None
+        except (urllib.error.URLError, ssl.SSLError) as e:
+            reason = getattr(e, "reason", e)
+            if isinstance(reason, ssl.SSLError):
+                raise ApiError(f"{method} {path}: TLS error ({reason}); trust the server certificate with --ca-file / "
+                               "NF_CA_FILE or --pin-server-cert", 0) from None
+            raise ApiError(f"{method} {path}: cannot reach the console ({reason})", 0) from None
         if text.lstrip().startswith("<"):
-            raise SystemExit(f"{method} {path} returned HTML (unknown route on this NF version?)")
+            raise ApiError(f"{method} {path} returned HTML (unknown route on this NF version?)", 0)
         return json.loads(text) if text else {}
 
-    def app(self, app_id: str):
+    def probe(self, path: str) -> tuple[int, dict[str, str]]:
+        """Unauthenticated GET that does not follow redirects: (status, headers). Status 0 = unreachable."""
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *a, **k):
+                return None
+
+        handlers: list = [NoRedirect()]
+        if self.ctx is not None:
+            handlers.append(urllib.request.HTTPSHandler(context=self.ctx))
+        opener = urllib.request.build_opener(*handlers)
+        try:
+            with opener.open(urllib.request.Request(self.base + path, headers={"User-Agent": UA}), timeout=20) as r:
+                return r.status, dict(r.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers)
+        except (OSError, ssl.SSLError):
+            return 0, {}
+
+    def apps(self) -> list[dict]:
+        out = []
         for a in self.call("GET", "/api/v1/apps").get("applications", []):
-            if a.get("id") == app_id:
-                a.pop("auth", None)  # contains the generated client secret
-                return a
-        return None
+            a.pop("auth", None)  # contains the generated client secret
+            out.append(a)
+        return out
+
+    def app(self, app_id: str):
+        return next((a for a in self.apps() if a.get("id") == app_id), None)
 
     def read_file(self, app_id: str, nf_path: str) -> bytes | None:
         r = self.call("GET", f"/api/v1/apps/{app_id}/files{nf_path}", ok_404=True)
@@ -126,13 +257,21 @@ def manifest(path: Path) -> dict:
     return m
 
 
+def option_value(app: dict | None, name: str):
+    """The string value of an app option (e.g. "version"), or None."""
+    for o in (app or {}).get("options", []):
+        if o.get("name") == name:
+            return (o.get("value") or {}).get("string")
+    return None
+
+
 def cmd_status(c: Console, m: dict) -> int:
     app_id = m["application"]["id"]
     a = c.app(app_id)
     if not a:
         print(f"app {app_id}: not installed")
         return 1
-    installed = next(((o.get("value") or {}).get("string") for o in a.get("options", []) if o.get("name") == "version"), None)
+    installed = option_value(a, "version")
     print(f"app {app_id}: {a.get('status')} version={installed or 'unknown'}")
     print(f"  files={[f['path'] for f in a.get('files', [])]}")
     for h in a.get("hooks", []):
@@ -171,7 +310,85 @@ def app_slug(name: str) -> str:
     return "-".join(re.findall(r"[a-z0-9]+", name.lower()))
 
 
-def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str] | None = None) -> int:
+# ---------------------------------------------------------------- npm dependencies
+
+DEPS_SETTLE_SECONDS = 300.0   # wait for the app to be installed again after the dependencies call
+DEPS_PROBE_SECONDS = 30.0     # then wait this long for the packages to show up in the app's files
+
+
+def declared_deps(m: dict) -> list[str]:
+    """Package names in the app's package.json dependencies (the manifest's /package.json file), [] if none."""
+    rel = (m.get("files") or {}).get("/package.json")
+    if not rel or not (m["_dir"] / rel).is_file():
+        return []
+    try:
+        return sorted(json.loads((m["_dir"] / rel).read_text(encoding="utf-8")).get("dependencies") or {})
+    except ValueError:
+        return []
+
+
+def deps_present(c, app_id: str, names: list[str]) -> list[str]:
+    """Which of `names` the app's file API shows as installed (node_modules/<name>/package.json). A box whose
+    file API does not expose node_modules shows none: absence here is "not confirmed", not "missing"."""
+    return [n for n in names if c.read_file(app_id, f"/node_modules/{n}/package.json") is not None]
+
+
+def install_deps(c, m: dict, clock=time.monotonic, sleep=time.sleep,
+                 settle: float = DEPS_SETTLE_SECONDS, probe: float = DEPS_PROBE_SECONDS) -> dict:
+    """Install the app's package.json dependencies (PATCH /api/v1/apps/<id>/dependencies) and wait until the app is
+    installed again. Returns {"requested", "names", "present", "confirmed", "error"}. Never raises: a NF without the
+    route is reported (error) and the caller decides. The hook runtimes are restarted by the caller afterwards."""
+    app_id = m["application"]["id"]
+    names = declared_deps(m)
+    out = {"requested": False, "names": names, "present": [], "confirmed": False, "error": None}
+    if not names:
+        out["confirmed"] = True
+        return out
+    try:
+        c.call("PATCH", f"/api/v1/apps/{app_id}/dependencies", {})
+    except SystemExit as e:
+        out["error"] = str(e)
+        return out
+    out["requested"] = True
+    deadline = clock() + settle
+    while clock() < deadline:   # the install may run asynchronously: wait for the app to settle
+        a = c.app(app_id)
+        if not a or a.get("status") in (None, "", INSTALLED):
+            break
+        sleep(POLL_SECONDS)
+    deadline = clock() + probe
+    while True:
+        out["present"] = deps_present(c, app_id, names)
+        if len(out["present"]) == len(names):
+            out["confirmed"] = True
+            break
+        if clock() >= deadline:
+            break
+        sleep(POLL_SECONDS)
+    return out
+
+
+def manual_deps_hint(app_id: str) -> str:
+    return (f"install them by hand: PATCH /api/v1/apps/{app_id}/dependencies (body {{}}) with the console login, "
+            f"then PATCH /api/v1/apps/{app_id}/restart; or set the fdd hook engine to \"sqlite\"")
+
+
+def report_deps(res: dict, app_id: str) -> None:
+    if not res["names"]:
+        print("dependencies: none declared")
+    elif res["error"]:
+        print(f"dependencies: NOT installed ({res['error']}). {manual_deps_hint(app_id)}")
+    elif res["confirmed"]:
+        print(f"dependencies: installed ({', '.join(res['names'])})")
+    else:
+        print(f"dependencies: install requested; files not visible through the file API "
+              f"(seen {len(res['present'])}/{len(res['names'])}). The first hook run below confirms them")
+
+
+# ---------------------------------------------------------------- push
+
+def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str] | None = None,
+             skip_deps: bool = False, clock=time.monotonic, sleep=time.sleep) -> int:
     spec = m["application"]
     app_id = spec["id"]
     if spec.get("name") and app_slug(spec["name"]) != app_id:
@@ -182,9 +399,9 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
         c.call("POST", "/api/v1/apps", spec)
         for _ in range(30):
             a = c.app(app_id)
-            if a and a.get("status") == "STATUS_INSTALLED":
+            if a and a.get("status") == INSTALLED:
                 break
-            time.sleep(2)
+            sleep(2)
     elif spec.get("auth"):
         c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "auth": spec["auth"], "updateMask": ["auth"]})
     for nf_path, rel in m["files"].items():
@@ -192,6 +409,10 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
         # WriteFile maps the HTTP body to the bytes field: send a JSON string of base64.
         c.call("POST", f"/api/v1/apps/{app_id}/files{nf_path}", base64.b64encode(data).decode())
         print(f"wrote {nf_path} ({len(data)} bytes)")
+    # Dependencies BEFORE the hooks are (re)started: a scheduled hook fires right after the restart, and one that
+    # starts without its packages records a failed run.
+    if not skip_deps:
+        report_deps(install_deps(c, m, clock, sleep), app_id)
     # The version the UI shows (static/version.js): generated from the repo, never committed.
     info = version_info(m["_dir"])
     c.call("POST", f"/api/v1/apps/{app_id}/files/static/version.json",
@@ -217,11 +438,13 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
         # UpdateHook maps the HTTP body to the hook message itself.
         c.call("POST", f"/api/v1/apps/{app_id}/hooks", hook)
         print(f"updated hook {hook['id']}")
-    # The runtime caches the hook module; restart so new code is loaded.
+    # The runtime caches the hook module (and the installed packages); restart so new code is loaded.
     c.call("PATCH", f"/api/v1/apps/{app_id}/restart", {})
     print("restarted app runtimes")
     return 0
 
+
+# ---------------------------------------------------------------- run
 
 ACTIVE_STATES = ("STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED")
 EXIT_FAILED = 1
@@ -268,6 +491,39 @@ def wait_for_run(c, app_id: str, hook_id: str, pid, wait: float, clock=time.mono
     return None
 
 
+def result_failure(run: dict) -> str | None:
+    """The error text when a finished run's hook RETURNED ok:false (NF still calls the run STATE_SUCCESS), else None.
+    Looks at the result objects of the run and at JSON event lines (hooks also log their answer as one line)."""
+    for g in (run.get("results") or {}).values():
+        for key in ("result", "value", "output", "returnValue"):
+            v = g.get(key)
+            if isinstance(v, str):
+                try:
+                    v = json.loads(v)
+                except ValueError:
+                    v = None
+            if isinstance(v, dict) and v.get("ok") is False:
+                return str(v.get("error") or v.get("reason") or "ok: false")
+        for e in g.get("events", []):
+            try:
+                v = json.loads(e.get("message") or "")
+            except ValueError:
+                continue
+            if isinstance(v, dict) and v.get("ok") is False:
+                return str(v.get("error") or v.get("reason") or "ok: false")
+    return None
+
+
+def run_error_text(run: dict) -> str:
+    """All error/event text of a run, for matching known failures (missing packages)."""
+    parts = []
+    for g in (run.get("results") or {}).values():
+        if g.get("error"):
+            parts.append(str(g["error"].get("message")))
+        parts.extend(str(e.get("message")) for e in g.get("events", []))
+    return "\n".join(parts)
+
+
 def report_run(run: dict) -> int:
     print(f"  {run['state']} start={run.get('startTime')}")
     for g in (run.get("results") or {}).values():
@@ -275,18 +531,38 @@ def report_run(run: dict) -> int:
             print(f"  error: {g['error'].get('message')}")
         for e in g.get("events", []):
             print(f"  event {e.get('ts')}: {e.get('message')}")
+    bad = result_failure(run)
+    if bad:
+        print(f"  hook returned ok:false: {bad}")
+        return EXIT_FAILED
     return 0 if run["state"] == "STATE_SUCCESS" else EXIT_FAILED
 
 
+def select_runnable(hooks: list[dict], only_hooks: list[str] | None, args: dict | None):
+    """(to_run, skipped): with no --hook, scheduled hooks run and on-request hooks only when args were given
+    (the rest are skipped: they would only answer "args required"). --hook IDs always run, args or not."""
+    if only_hooks:
+        return [h for h in hooks if h["id"] in only_hooks], []
+    run, skipped = [], []
+    for h in hooks:
+        (skipped if h.get("mode") == ON_REQUEST and not args else run).append(h)
+    return run, skipped
+
+
 def cmd_run(c, m: dict, only_hooks: list[str] | None = None, wait: float | None = None,
-            resume: int | None = None, clock=time.monotonic, sleep=time.sleep) -> int:
-    """Start each selected hook once and wait for it. Exit 0 = all succeeded, 1 = a run failed,
-    3 = a wait ran out with the run still going (check it, or `--resume PID`); 1 wins over 3.
-    --resume PID waits on an existing run of the single selected hook and starts nothing."""
+            resume: int | None = None, clock=time.monotonic, sleep=time.sleep,
+            args: dict | None = None) -> int:
+    """Start each selected hook once and wait for it. Exit 0 = all succeeded, 1 = a run failed (or a hook returned
+    ok:false), 3 = a wait ran out with the run still going (check it, or `--resume PID`); 1 wins over 3.
+    --resume PID waits on an existing run of the single selected hook and starts nothing.
+    Without --hook only scheduled hooks run, plus on-request hooks given --arg values; the others are
+    reported as skipped (needs args), which is not a failure."""
     app_id = m["application"]["id"]
-    hooks = [h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks]
+    hooks, skipped = select_runnable(m["hooks"], only_hooks, args)
     if resume is not None and len(hooks) != 1:
         raise SystemExit("--resume needs exactly one hook: pass --hook ID")
+    for h in skipped:
+        print(f"skipped (needs args): {h['id']} (on-request; pass --arg KEY=VALUE or --hook {h['id']} to run it)")
     rc = 0
     for hook in hooks:
         limit = wait if wait is not None else default_wait(hook)
@@ -294,7 +570,8 @@ def cmd_run(c, m: dict, only_hooks: list[str] | None = None, wait: float | None 
             pid = resume
             print(f"waiting for {hook['id']} pid={pid} (up to {limit:.0f} s)")
         else:
-            pid = c.call("POST", f"/api/v1/apps/{app_id}/hooks/{hook['id']}", {}).get("pid")
+            body = dict(args or {}) if hook.get("mode") == ON_REQUEST else {}
+            pid = c.call("POST", f"/api/v1/apps/{app_id}/hooks/{hook['id']}", body).get("pid")
             print(f"started {hook['id']} pid={pid} (waiting up to {limit:.0f} s)")
         run = wait_for_run(c, app_id, hook["id"], pid, limit, clock, sleep)
         if run is None:
@@ -302,9 +579,12 @@ def cmd_run(c, m: dict, only_hooks: list[str] | None = None, wait: float | None 
                   f"Wait again with: run <manifest> --hook {hook['id']} --resume {pid}")
             rc = rc or EXIT_STILL_RUNNING
         elif report_run(run):
+            print(f"FAILED: hook {hook['id']}")
             rc = EXIT_FAILED
     return rc
 
+
+# ---------------------------------------------------------------- pull / diff
 
 def cmd_pull(c: Console, m: dict, write: bool) -> int:
     app_id = m["application"]["id"]
@@ -331,36 +611,351 @@ def cmd_pull(c: Console, m: dict, write: bool) -> int:
     return 1 if (changed and not write) else 0
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Sync an NF app manifest with an NF console")
-    ap.add_argument("--env", type=Path, default=Path("~/.secrets/nf_site_console.env"))
+# ---------------------------------------------------------------- install / remove-old / uninstall
+
+def replaced_ids(m: dict) -> list[str]:
+    """Predecessor app ids from the manifest's optional top-level `replaces` (never the app's own id)."""
+    own = m["application"]["id"]
+    return [i for i in dict.fromkeys(m.get("replaces") or []) if i != own]
+
+
+def preflight(c, m: dict) -> dict:
+    """Check auth (raises the clear 401 message), then report this app and its predecessors on the box."""
+    apps = {a["id"]: a for a in c.apps()}   # a 401 here carries the which-layer explanation
+    app_id = m["application"]["id"]
+    print("preflight: console login accepted")
+    cur = apps.get(app_id)
+    if cur:
+        print(f"preflight: {app_id} already installed, version {option_value(cur, 'version') or 'unknown'} "
+              f"(status {cur.get('status')})")
+    else:
+        print(f"preflight: {app_id} not installed yet")
+    for old in replaced_ids(m):
+        if old in apps:
+            print(f"preflight: predecessor {old} is installed (version {option_value(apps[old], 'version') or 'unknown'})")
+    return apps
+
+
+def automation_points(c) -> list[dict]:
+    out, token = [], ""
+    while True:
+        r = c.call("POST", "/api/v1/point/query",
+                   {"layer": "automation", "pageSize": 500, **({"pageToken": token} if token else {})}) or {}
+        out.extend(r.get("points") or [])
+        token = r.get("nextPageToken") or ""
+        if not token:
+            return out
+
+
+def orphan_points(points: list[dict], installed: set[str], removing: set[str]) -> list[dict]:
+    """Automation-layer points whose attrs.application_id names an app that is gone or about to be. Points of any
+    app that stays installed, and points with no application_id (not hook-created), are never listed."""
+    live = installed - removing
+    return [p for p in points
+            if (p.get("attrs") or {}).get("application_id") and p["attrs"]["application_id"] not in live]
+
+
+def list_orphans(c, installed: set[str], removing: set[str]) -> list[dict]:
+    try:
+        orphans = orphan_points(automation_points(c), installed, removing)
+    except SystemExit as e:
+        print(f"could not list automation-layer points ({e})")
+        return []
+    if not orphans:
+        print("orphan points: none")
+        return orphans
+    print(f"orphan automation-layer points (application_id is a removed/absent app): {len(orphans)}")
+    for p in orphans:
+        print(f"  {p.get('uuid')}  {p.get('name')}  application_id={p['attrs']['application_id']}")
+    return orphans
+
+
+ORPHAN_HOWTO = ("orphan points are never deleted by this tool. Delete them with the NF MCP delete_points tool "
+                "(dry run first), checking attrs.application_id of each uuid. Never delete points of other apps or "
+                "BACnet/field layers")
+
+
+def remove_apps(c, ids: list[str], yes: bool, installed: dict[str, dict]) -> int:
+    """Dry run unless `yes`: list (or DELETE /api/v1/apps/<id>) each installed app in `ids`, then list orphan points."""
+    present = [i for i in ids if i in installed]
+    if not present:
+        print("no predecessor/target apps installed: nothing to remove")
+    for i in present:
+        v = option_value(installed[i], "version") or "unknown"
+        if yes:
+            c.call("DELETE", f"/api/v1/apps/{i}")
+            print(f"removed app {i} (version {v})")
+        else:
+            print(f"would remove app {i} (version {v})")
+    ids_now = set(installed) - (set(present) if yes else set())
+    orphans = list_orphans(c, ids_now, set(present) if not yes else set())
+    if orphans:
+        print(ORPHAN_HOWTO)
+    if not yes and (present or orphans):
+        print("dry run: nothing was changed; add --yes to act")
+    return 0
+
+
+def cmd_remove_old(c, m: dict, yes: bool) -> int:
+    apps = {a["id"]: a for a in c.apps()}
+    return remove_apps(c, replaced_ids(m), yes, apps)
+
+
+def cmd_uninstall(c, m: dict, yes: bool) -> int:
+    apps = {a["id"]: a for a in c.apps()}
+    app_id = m["application"]["id"]
+    if app_id not in apps:
+        print(f"app {app_id}: not installed")
+    return remove_apps(c, [app_id], yes, apps)
+
+
+def verify_install(c, m: dict, skip_run: bool = False, wait: float | None = None,
+                   clock=time.monotonic, sleep=time.sleep) -> int:
+    """Version matches the repo; every scheduled hook run once AFTER the dependencies are in. 0 = good."""
+    app_id = m["application"]["id"]
+    rc = 0
+    want = version_info(m["_dir"])["version"]
+    a = c.app(app_id)
+    raw = c.read_file(app_id, "/static/version.json")
+    try:
+        got = json.loads(raw.decode()).get("version") if raw else None
+    except ValueError:
+        got = None
+    opt = option_value(a, "version")
+    if got == want:
+        print(f"verify: version.json = {got} (matches the repo)")
+    else:
+        print(f"verify: FAILED version.json = {got!r}, repo = {want!r}")
+        rc = EXIT_FAILED
+    if opt is not None:
+        print(f"verify: app setting version = {opt}")
+    scheduled = [h["id"] for h in m["hooks"] if h.get("mode") != ON_REQUEST]
+    if skip_run or not scheduled:
+        return rc
+    print(f"verify: first run of the scheduled hooks ({', '.join(scheduled)}), after the dependencies:")
+    r = cmd_run(c, m, scheduled, wait, None, clock, sleep)
+    if r:
+        print("verify: FAILED: a scheduled hook did not succeed (output above)")
+        rc = r
+    return rc
+
+
+def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
+    apps = preflight(c, m)
+    rc = cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, clock, sleep)
+    rc = verify_install(c, m, a.skip_verify_run, a.wait, clock, sleep) or rc
+    if a.remove_old:
+        if rc:
+            print("not removing the predecessor apps: the install did not verify")
+            ids = replaced_ids(m)
+            remove_apps(c, ids, False, apps)   # list only
+        else:
+            apps = {x["id"]: x for x in c.apps()}
+            rc = remove_apps(c, replaced_ids(m), a.yes, apps)
+    elif replaced_ids(m) and any(i in apps for i in replaced_ids(m)):
+        print("predecessor apps are still installed; re-run with --remove-old (add --yes to delete them)")
+    print("install: " + ("OK" if rc == 0 else f"finished with problems (exit {rc})"))
+    return rc
+
+
+# ---------------------------------------------------------------- doctor
+
+def coords_ok(rec_attrs: dict) -> bool:
+    try:
+        la, lo = float(rec_attrs.get("latitude")), float(rec_attrs.get("longitude"))
+        return not (la == 0 and lo == 0)
+    except (TypeError, ValueError):
+        return bool(re.search(r"C\(\s*-?\d", str(rec_attrs.get("geoCoord") or "")))
+
+
+def weather_coords_source(c) -> tuple[str, str]:
+    """('pass'|'fail', text): where the weather hook would get its coordinates, in the hook's own order."""
+    try:
+        sites = (c.call("GET", "/api/v1/sites?pageSize=500") or {}).get("sites", [])
+    except SystemExit as e:
+        sites = []
+        note = f" (sites API: {e})"
+    else:
+        note = ""
+    if any(coords_ok(s) for s in sites):
+        return "pass", "NF Sites API has coordinates"
+    for layer in ("model", "site"):
+        try:
+            pts = (c.call("POST", "/api/v1/point/query", {"layer": layer, "pageSize": 500}) or {}).get("points", [])
+        except SystemExit:
+            continue
+        for p in pts:
+            if (layer == "site" or p.get("pointType") == "SITE") and coords_ok(p.get("attrs") or {}):
+                return "pass", f"modeled Haystack site on the {layer} layer has coordinates (NF Sites has none)"
+    return "fail", "no coordinates in NF Sites or on the modeled SITE; the weather hook will fail" + note
+
+
+def cmd_doctor(c, m: dict) -> int:
+    app_id = m["application"]["id"]
+    bad = 0
+
+    def line(level: str, what: str, text: str) -> None:
+        nonlocal bad
+        bad += level == "FAIL"
+        print(f"[{level}] {what}: {text}")
+
+    try:
+        apps = {a["id"]: a for a in c.apps()}
+    except SystemExit as e:
+        line("FAIL", "auth", str(e))
+        return 1
+    line("PASS", "auth", "console login accepted (Caddy and NF both let it through)")
+    a = apps.get(app_id)
+    if not a:
+        line("FAIL", "app", f"{app_id} is not installed")
+        return 1
+    want = version_info(m["_dir"])["version"]
+    raw = None
+    try:
+        raw = c.read_file(app_id, "/static/version.json")
+    except SystemExit:
+        pass
+    try:
+        got = json.loads(raw.decode()).get("version") if raw else None
+    except ValueError:
+        got = None
+    opt = option_value(a, "version")
+    line("PASS" if got == want else "FAIL", "version",
+         f"installed {got or 'unknown'} (setting {opt or 'unset'}), repo {want}")
+    names = declared_deps(m)
+    if names:
+        here = deps_present(c, app_id, names)
+        if len(here) == len(names):
+            line("PASS", "deps", f"present: {', '.join(names)}")
+        elif not here:
+            line("WARN", "deps", f"not visible through the file API ({', '.join(names)}); a hook run shows whether "
+                                 f"they are installed. {manual_deps_hint(app_id)}")
+        else:
+            line("FAIL", "deps", f"missing: {', '.join(n for n in names if n not in here)}. {manual_deps_hint(app_id)}")
+    else:
+        line("PASS", "deps", "none declared")
+    for h in a.get("hooks", []):
+        try:
+            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=1&include_results=true")
+        except SystemExit as e:
+            line("WARN", f"hook {h['id']}", f"could not read runs ({e})")
+            continue
+        last = (runs.get("runs") or [None])[0]
+        if not last:
+            line("PASS" if h.get("mode") == ON_REQUEST else "WARN", f"hook {h['id']}", "never run")
+            continue
+        text = run_error_text(last)
+        if last.get("state") == "STATE_SUCCESS" and not result_failure(last):
+            line("PASS", f"hook {h['id']}", f"last run {last['state']}")
+        elif h.get("mode") == ON_REQUEST and last.get("state") == "STATE_SUCCESS":
+            line("WARN", f"hook {h['id']}", f"last run returned ok:false ({result_failure(last)}), usually missing args")
+        else:
+            line("FAIL", f"hook {h['id']}", f"last run {last.get('state')}: "
+                 f"{(result_failure(last) or text or '')[:160].strip()}")
+    if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
+        lvl, text = weather_coords_source(c)
+        line("PASS" if lvl == "pass" else "FAIL", "weather coords", text)
+    has_ts = option_value(a, "timescale") is not None or any(
+        (h.get("config") or {}).get("timescale") for h in a.get("hooks", []))
+    line("PASS", "timescale", "configured (value not shown)" if has_ts else
+         "not configured (history hook skips with a notice; fdd uses sqlite/pglite)")
+    code, headers = c.probe("/")
+    target = f"/api/v1/apps/static/{app_id}/"
+    if code in (301, 302, 303, 307, 308):
+        loc = urllib.parse.urlparse(headers.get("Location", "")).path
+        line("PASS" if loc.rstrip("/") == target.rstrip("/") else "FAIL", "/ redirect",
+             f"{code} -> {loc or '(none)'}" + ("" if loc.rstrip("/") == target.rstrip("/") else f", expected {target}"))
+    elif code:
+        line("WARN", "/ redirect", f"HTTP {code}, no redirect (fine unless a front door should send / to the app)")
+    else:
+        line("WARN", "/ redirect", "not reachable without login")
+    print("doctor: " + ("all checks passed" if not bad else f"{bad} check(s) failed"))
+    return 1 if bad else 0
+
+
+# ---------------------------------------------------------------- cli
+
+def parse_args(pairs: list[str] | None) -> dict[str, str]:
+    """--arg KEY=VALUE (repeatable) -> StartHook string map."""
+    out: dict[str, str] = {}
+    for p in pairs or []:
+        k, sep, v = p.partition("=")
+        if not sep or not k:
+            raise SystemExit(f"--arg needs KEY=VALUE, got {p!r}")
+        out[k] = v
+    return out
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(
+        description="Sync, install and check an NF app manifest on an NF console (local console login required)")
+    ap.add_argument("--env", type=Path, default=Path("~/.secrets/nf_site_console.env"),
+                    help="env file with CONSOLE_USERNAME, CONSOLE_PASSWORD, NF_CONSOLE_URL (optional NF_CA_FILE)")
     ap.add_argument("--console", help="console base URL (default NF_CONSOLE_URL from --env)")
-    ap.add_argument("action", choices=["status", "push", "run", "pull", "diff"])
+    ap.add_argument("--ca-file", metavar="FILE",
+                    help="PEM file to trust in addition to the system CAs (default NF_CA_FILE); for a self-signed front door")
+    ap.add_argument("--pin-server-cert", action="store_true",
+                    help="fetch the certificate the server presents, print its SHA-256 and trust only it for this run "
+                         "(its SAN must match the host); verification stays on")
+    ap.add_argument("action", choices=["status", "push", "run", "pull", "diff", "install", "uninstall", "remove-old", "doctor"])
     ap.add_argument("manifest", type=Path)
     ap.add_argument("--skip-hooks", action="store_true",
-                    help="push: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
+                    help="push/install: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
+    ap.add_argument("--skip-deps", action="store_true",
+                    help="push/install: do not install package.json dependencies (PATCH /api/v1/apps/<id>/dependencies)")
+    ap.add_argument("--skip-verify-run", action="store_true",
+                    help="install: do not run the scheduled hooks once to verify")
+    ap.add_argument("--remove-old", action="store_true",
+                    help="install: delete the predecessor apps listed under `replaces` in the manifest "
+                         "(dry run: only lists them, plus orphan points, unless --yes)")
+    ap.add_argument("--yes", action="store_true", help="remove-old / uninstall: actually delete (default is a dry run)")
     ap.add_argument("--wait", type=float, metavar="SECONDS",
                     help="run: how long to wait for each run (default: the hook's invokeTimeout + 60 s). "
                          "On timeout the run is reported as still running (exit 3) and is never re-started")
     ap.add_argument("--resume", type=int, metavar="PID",
                     help="run: wait on this existing run of the one --hook instead of starting a new one")
     ap.add_argument("--hook", action="append", dest="hooks", metavar="ID",
-                    help="push/run: only these hook ids (repeatable), e.g. --hook fdd on a box whose weather comes from elsewhere")
-    a = ap.parse_args()
-    env = load_env(a.env)
-    if not env.get("CONSOLE_USERNAME") or not env.get("CONSOLE_PASSWORD"):
-        raise SystemExit(f"CONSOLE_USERNAME / CONSOLE_PASSWORD missing from {a.env}")
-    console = a.console or env.get("NF_CONSOLE_URL")
-    if not console:
-        raise SystemExit(f"NF_CONSOLE_URL missing from {a.env} (or pass --console)")
-    c = Console(console, env["CONSOLE_USERNAME"], env["CONSOLE_PASSWORD"])
+                    help="push/run: only these hook ids (repeatable); run starts them even if on-request")
+    ap.add_argument("--arg", action="append", dest="hook_args", metavar="KEY=VALUE",
+                    help="run: StartHook argument (repeatable); on-request hooks are only started by a blanket run "
+                         "when at least one --arg is given")
+    return ap
+
+
+def main(argv: list[str] | None = None) -> int:
+    a = build_parser().parse_args(argv)
+    if a.env.expanduser().is_file():
+        env = load_env(a.env)
+    else:
+        env = {k: v for k, v in os.environ.items() if k.startswith(("NF_", "CONSOLE_"))}
+        if not env:
+            raise SystemExit(f"env file {a.env} not found (and no NF_/CONSOLE_ variables in the environment)")
+    problem = env_problem({**env, **({"NF_CONSOLE_URL": a.console} if a.console else {})}, str(a.env))
+    if problem:
+        raise SystemExit(problem)
+    console = a.console or env["NF_CONSOLE_URL"]
+    ca = a.ca_file or env.get("NF_CA_FILE")
+    if a.pin_server_cert:
+        ctx, fp = pin_server_cert(console)
+        print(f"pinned server certificate sha256={fp}")
+    else:
+        ctx = make_ssl_context(ca)
+    c = Console(console, env["CONSOLE_USERNAME"], env["CONSOLE_PASSWORD"], ctx)
     m = manifest(a.manifest)
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
-        return cmd_push(c, m, a.skip_hooks, a.hooks)
+        return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps)
     if a.action == "run":
-        return cmd_run(c, m, a.hooks, a.wait, a.resume)
+        return cmd_run(c, m, a.hooks, a.wait, a.resume, args=parse_args(a.hook_args) or None)
+    if a.action == "install":
+        return cmd_install(c, m, a)
+    if a.action == "uninstall":
+        return cmd_uninstall(c, m, a.yes)
+    if a.action == "remove-old":
+        return cmd_remove_old(c, m, a.yes)
+    if a.action == "doctor":
+        return cmd_doctor(c, m)
     return cmd_pull(c, m, write=(a.action == "pull"))
 
 

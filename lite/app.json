@@ -1,4 +1,5 @@
 {
+  "replaces": ["bench-viz", "open-meteo-weather"],
   "application": {
     "id": "open-fdd-lite",
     "name": "Open-FDD Lite",

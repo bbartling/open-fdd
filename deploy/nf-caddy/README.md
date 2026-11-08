@@ -18,7 +18,7 @@ sit behind a login; plain HTTP for a trusted LAN, self-signed HTTPS for producti
 | `POST /api/v1/point/query`, `/api/v1/auth/token` (reads; the token call still needs a client id/secret) | open |
 | `GET /api/v1/point/updates/data` (live push stream) | open, `flush_interval -1`, Envoy's quiet-stream 504 becomes 204 (see "Live stream") |
 | everything else: NF console, `/api/v1/apps*` (app/hook config), config, every write | **basic auth** |
-| `:80` `/` | 302 to `/api/v1/apps/static/<APP_ID>/` (`open-fdd`; set `APP_ID=open-fdd-lite` on a Lite box) |
+| `:80` `/` | 302 to `/api/v1/apps/static/<APP_ID>/` (`APP_ID` placeholder, default `open-fdd`; `open-fdd-lite` on a Lite box, see "The `/` redirect and app ids") |
 
 Rules live in `routes.caddy`, shared by `Caddyfile` (HTTP) and `Caddyfile.tls` (HTTPS).
 
@@ -92,6 +92,77 @@ mkdir -p certs && openssl req -x509 -newkey rsa:2048 -nodes -days 1095 \
 In `docker-compose.yml` mount `./Caddyfile.tls` as `/etc/caddy/Caddyfile` and uncomment the two
 cert volumes; import `certs/server.crt` into client trust stores. `certs/` is gitignored.
 
+## Which layer rejected me
+
+A 401 can come from Caddy or from NF. Read the `WWW-Authenticate` response header:
+
+```bash
+curl -s -i -o /dev/null -D - <front-door-url>/api/v1/apps | grep -i '^www-authenticate'
+```
+
+| Header | Layer | What it means |
+|---|---|---|
+| `Basic realm="restricted"` | **Caddy** | The user or password does not match `auth.caddy`. The request never reached NF. |
+| `Basic realm="nf-"` | **NF** | Caddy let it through (or you called NF directly) and NF's own console auth said no. |
+| 200 on NF loopback, 401 `restricted` on the front door | Caddy only | NF's login is fine; only the hash in `auth.caddy` is wrong. |
+| 401 `nf-` on loopback and on the front door | NF | The password in your env file is not NF's. NF's real login is in NF's own environment (`CONSOLE_USERNAME` / `CONSOLE_PASSWORD`). |
+
+**Caddy and NF must share one user and password** when NF's console auth is on: Caddy checks the login and then
+forwards the `Authorization` header to NF, which checks it again. Change one without the other, or copy an env file
+from another box, and every deploy fails.
+
+## Login recovery
+
+Never print the password or the hash. Do these on the box that runs NF and Caddy.
+
+1. Test NF alone, on loopback, with NF's own login (replace the port):
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' -u "$NF_USER:$NF_PASS" http://127.0.0.1:8090/api/v1/apps
+   ```
+
+   `200` means NF's login is right and only Caddy's hash needs replacing. Anything else: fix NF's login first.
+2. Make a new hash from that password. The password must arrive on stdin **with a trailing newline**; without it
+   `caddy hash-password` exits with `EOF` (verified):
+
+   ```bash
+   printf '%s\n' "$NF_PASS" | docker run --rm -i caddy:2.11.7-alpine caddy hash-password
+   ```
+
+3. Put it in `auth.caddy` as one line `<user> <hash>` (the file is not in git).
+4. Validate (see Operate below).
+5. Restart Caddy. With `admin off`, `caddy reload` fails with `dial tcp 127.0.0.1:2019: connection refused`; use
+   `docker compose restart caddy` (or `docker restart <container>`).
+6. Test `GET /api/v1/apps` through the front door with the same login: `200`.
+
+## The `/` redirect and app ids
+
+The bare URL (`:80`, plain-HTTP profile) redirects to `/api/v1/apps/static/{$APP_ID:open-fdd}/`. `APP_ID` is a
+placeholder read from the environment when Caddy starts, with `open-fdd` as the default. Set `APP_ID=open-fdd` (full
+edition) or `APP_ID=open-fdd-lite` (Lite) in `.env`. After an app rename or an edition swap: back up the `.env`,
+change `APP_ID`, validate, restart Caddy. Never hard-code an app id in a Caddyfile copy. Syntax checked with
+`caddy adapt`: unset gives `.../open-fdd/`, `APP_ID=open-fdd-lite` gives `.../open-fdd-lite/`. The HTTPS profile's
+`:80` block only redirects to HTTPS; the dashboard URL is the same path on the HTTPS port.
+
+## Open pages and NF auth
+
+The `@appStatic` route is "open" **only in Caddy**. If NF's own console auth is also on
+(`CONSOLE_USERNAME` / `CONSOLE_PASSWORD`, `ALLOW_ALL_LOCALHOST=false`), NF still answers 401 with `realm="nf-"` to an
+unauthenticated GET of `/api/v1/apps/static/<app>/...`, so unauthenticated LAN users cannot load the dashboard even
+though Caddy did not ask for a login. NF's login is enforced on every request, so it cannot make just the static
+files public. Pick one:
+
+1. **Recommended: Caddy owns the login, NF's console auth is off.** NF is bound to loopback
+   (`ENVOY_BIND_ADDRESS=127.0.0.1`), so the only way in from the network is Caddy. Leave `CONSOLE_USERNAME` /
+   `CONSOLE_PASSWORD` unset in NF. The open/locked split in `routes.caddy` then does what it says, and the
+   two-password divergence (above) cannot happen. Trade-off: anything with a shell on the NF host can reach NF
+   without a login; hooks and the portal tunnel already do.
+2. **NF auth stays on: do not offer open pages.** Delete the `handle @appStatic`, `@readGet`, `@readPost` and
+   `@liveStream` blocks (see Security posture, "To lock them"). Every request then needs the shared login and the
+   browser sends it with each call.
+3. Relying on the Normal Online login only (the page then uses a Clerk token through the portal) works through the
+   portal, not on the LAN.
+
 ## Operate
 
 - Restart after edits: `docker compose restart caddy` (admin API is off, no live reload).
@@ -99,7 +170,12 @@ cert volumes; import `certs/server.crt` into client trust stores. `certs/` is gi
   (needs an `auth.caddy` and, for the TLS file, certs). Check both `Caddyfile` and `Caddyfile.tls`; the scratch
   setup is a dummy `auth.caddy` line and a self-signed cert pair (the HTTPS section's command). In Git Bash on
   Windows prefix `docker run` and `openssl` with `MSYS_NO_PATHCONV=1`.
-- Lost login: write a new hash to `auth.caddy` and restart.
+- Lost login: see Login recovery above (new hash, validate, restart).
+- Deploying through this front door with a self-signed certificate: give the installer the certificate for that run
+  (`nf_app_sync.py --ca-file <crt>` or `--pin-server-cert`). Never disable verification globally
+  (`PYTHONHTTPSVERIFY=0`). The certificate's SAN must match the host in the URL.
+- `--remove-old` and orphan hook points: see `docs/install.md`. The console has no point-delete route; use the NF MCP
+  `delete_points` (dry run first). Never reuse a point uuid on `POST /api/v1/bacnet/local`.
 - NF's Envoy ends each pushed stream batch without the final chunk, so Caddy may log
   "unexpected EOF"; `nf.js` treats that as a normal end when values arrived.
 

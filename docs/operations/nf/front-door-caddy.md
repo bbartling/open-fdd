@@ -69,6 +69,12 @@ curl -s -m 5 -o /dev/null -w '%{http_code}\n' http://<nf-host>:8090/         # r
 - The portal URL should answer 401 from the gateway when not signed in, not 502.
 - A fresh sample arrives from a BACnet point after the NF restart.
 
+## Login problems
+
+Which layer said 401, recovery (re-hash, validate, restart) and why open static routes can still 401 behind NF's own
+auth: see the [Caddy README](https://github.com/bbartling/open-fdd/tree/master/deploy/nf-caddy) sections "Which layer
+rejected me", "Login recovery" and "Open pages and NF auth".
+
 ## Clients
 
 - **Python tools** in [`scripts/nf/tools/`](https://github.com/bbartling/open-fdd/tree/master/scripts/nf/tools):

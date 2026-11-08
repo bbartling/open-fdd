@@ -52,7 +52,10 @@ test("manifest: the weather hook config defaults to av.1-3 and matches the code"
 test("renamed everywhere: no Bench Viz / bench-viz left in the shipped code, pages (the README keeps it for the migration note)", () => {
   const files = ["app.json", "hooks/open_meteo_weather.js",
     ...readdirSync(path.join(root, "static")).filter((f) => /\.(js|html|css)$/.test(f)).map((f) => `static/${f}`)];
-  for (const f of files) assert.ok(!/bench[ -_]?viz/i.test(read(f)), `${f} still says Bench Viz`);
+  // `replaces` in app.json names the predecessor apps `install --remove-old` deletes: the one allowed mention
+  const shipped = (f) => (f === "app.json" ? JSON.stringify({ ...manifest, replaces: undefined }) : read(f));
+  for (const f of files) assert.ok(!/bench[ -_]?viz/i.test(shipped(f)), `${f} still says Bench Viz`);
+  assert.deepEqual(manifest.replaces, ["bench-viz", "open-meteo-weather"]);
   for (const f of ["index.html", "chart.html", "tree.html"]) assert.match(read(`static/${f}`), /<title>Open-FDD Lite/);
   assert.match(read("hooks/open_meteo_weather.js"), /open-fdd-lite-weather-hook/);
 });

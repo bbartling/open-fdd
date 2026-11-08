@@ -35,17 +35,79 @@ const openMeteoUrl = (lat, lon) =>
 
 const hasCoords = (s) => Number.isFinite(s.latitude) && Number.isFinite(s.longitude) && !(s.latitude === 0 && s.longitude === 0);
 
+const noCoords = (msg) => Object.assign(new Error(msg), { noCoords: true });
+
+const present = (v) => v !== undefined && v !== null && String(v).trim() !== '';
+
+/** {latitude, longitude} from a modeled site's attrs: latitude/longitude, else geoCoord "C(lat,lon)"; null if absent/0,0. */
+function coordsFromAttrs(attrs) {
+  const a = attrs || {};
+  let lat = present(a.latitude) ? Number(a.latitude) : NaN;
+  let lon = present(a.longitude) ? Number(a.longitude) : NaN;
+  if (!(Number.isFinite(lat) && Number.isFinite(lon)) && present(a.geoCoord)) {
+    const m = /^\s*C?\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)\s*$/.exec(String(a.geoCoord));
+    if (m) {
+      lat = Number(m[1]);
+      lon = Number(m[2]);
+    }
+  }
+  const c = { latitude: lat, longitude: lon };
+  return hasCoords(c) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? c : null;
+}
+
+/** Page through POST /api/v1/point/query for one layer; a layer that does not exist (HTTP error) is just empty. */
+async function queryLayer(http, layer) {
+  const out = [];
+  let pageToken = '';
+  try {
+    do {
+      const res = await http.post('/api/v1/point/query', { layer, pageSize: 500, ...(pageToken && { pageToken }) });
+      const data = res && res.data;
+      out.push(...((data && data.points) || []));
+      pageToken = (data && data.nextPageToken) || '';
+    } while (pageToken);
+  } catch (_) {
+    /* layer missing or not readable: nothing from it */
+  }
+  return out;
+}
+
+/**
+ * Fallback when NF's Sites collection has no usable coordinates: the modeled Haystack SITE record(s) on the
+ * model layer (pointType SITE) and any record on the `site` layer that carries coordinates. Never invents
+ * coordinates; returns null when none of them has any.
+ */
+async function siteFromModel(http, wanted) {
+  const found = new Map(); // id -> { id, name, latitude, longitude, source }
+  for (const layer of ['model', 'site']) {
+    for (const r of await queryLayer(http, layer)) {
+      if (layer === 'model' && r.pointType !== 'SITE') continue;
+      const attrs = r.attrs || {};
+      const id = String(attrs.id || r.name || '');
+      const c = coordsFromAttrs(attrs);
+      if (!id || !c || found.has(id)) continue;
+      found.set(id, { id, name: r.name || id, ...c, source: `haystack ${layer} layer` });
+    }
+  }
+  const list = [...found.values()];
+  if (wanted) return list.find((s) => s.id === wanted || s.name === wanted) || null;
+  if (list.length > 1) {
+    throw new Error(`several modeled sites have coordinates (${list.map((x) => x.id).join(', ')}); set the app config value "site"`);
+  }
+  return list[0] || null;
+}
+
 /** The NF site to fetch weather for: config `site` (id) if set, else the only site with coordinates. */
 function pickSite(sites, wanted) {
   if (wanted) {
     const s = sites.find((x) => x.id === wanted);
-    if (!s) throw new Error(`config site "${wanted}" is not an NF site (have: ${sites.map((x) => x.id).join(', ') || 'none'})`);
-    if (!hasCoords(s)) throw new Error(`NF site "${wanted}" has no latitude/longitude; set them in NF (Sites)`);
+    if (!s) throw noCoords(`config site "${wanted}" is not an NF site (have: ${sites.map((x) => x.id).join(', ') || 'none'})`);
+    if (!hasCoords(s)) throw noCoords(`NF site "${wanted}" has no latitude/longitude; set them in NF (Sites) or on the modeled Haystack site`);
     return s;
   }
   const located = sites.filter(hasCoords);
   if (located.length === 1) return located[0];
-  if (!located.length) throw new Error('no NF site has latitude/longitude; set them in NF (Sites)');
+  if (!located.length) throw noCoords('no NF site has latitude/longitude; set them in NF (Sites) or on the modeled Haystack site');
   throw new Error(`several NF sites have coordinates (${located.map((x) => x.id).join(', ')}); set the app config value "site"`);
 }
 
@@ -215,7 +277,18 @@ async function runOnce({ globalVariables, sdk, config }) {
 
   const instances = avInstances(config); // validate config before any network call
   const sitesRes = await nf(sdk.http.get('/api/v1/sites?pageSize=500'), 'GetSites');
-  const site = pickSite((sitesRes && sitesRes.sites) || [], config && config.site);
+  const wanted = config && config.site;
+  let site;
+  try {
+    site = pickSite((sitesRes && sitesRes.sites) || [], wanted);
+    site.source = 'nf sites api';
+  } catch (e) {
+    if (!e || !e.noCoords) throw e;
+    // NF's Sites collection has no usable coordinates: try the modeled Haystack SITE (never invent any)
+    site = await withDeadline(siteFromModel(sdk.http, wanted), WRITE_TIMEOUT_MS, 'model site lookup');
+    if (!site) throw e;
+    log(`weather location from the ${site.source} (site ${site.id}); NF Sites had none`);
+  }
   const siteName = site.name || site.id;
   const wx = await getJsonWithRetry(openMeteoUrl(site.latitude, site.longitude), log);
   const cur = wx && wx.current;
@@ -254,6 +327,7 @@ async function runOnce({ globalVariables, sdk, config }) {
     observed: cur.time,
     oa_dry_bulb_f: round2(tempF),
     oa_rh_pct: round2(rh),
+    coords_source: site.source,
     dewpoint_open_meteo_f: Number.isFinite(apiDewF) ? round2(apiDewF) : null,
     dewpoint_magnus_f: Number.isFinite(calcDewF) ? round2(calcDewF) : null,
     bacnet,
@@ -265,5 +339,5 @@ async function runOnce({ globalVariables, sdk, config }) {
 // The hook is the function; the helpers hang off it for offline tests.
 module.exports = Object.assign(
   async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
-  { magnusDewpointF, openMeteoUrl, pickSite, avInstances, bacnetObjects, withDeadline },
+  { magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, avInstances, bacnetObjects, withDeadline },
 );
