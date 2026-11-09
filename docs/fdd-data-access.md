@@ -26,6 +26,14 @@ result that could not be refreshed gets `fddStatus: stale` and keeps its old sam
 
 The timeline is append-only and grid-aligned to the rule pack's 5-minute grid.
 
+## Checking that results are fresh
+
+A result is only trustworthy if it is recent. From 5.0.5 a run that refreshed nothing fails instead of reporting success, and
+`nf_app_sync.py doctor` has an **fdd freshness** check (FAIL when computed points are older than 2x the fdd schedule while raw
+history is fresh). Stale results say why in `fddReason`: `required roles missing`, `unit unusable (role ...)` or
+`no input data in window (newest sample at <ISO>)`. The `history` hook answers an empty range with `ok: true`, `reason`
+and `newest_source_ts`, and a database failure with `ok: false` and the error.
+
 ## Optional: Timescale `openfdd.fdd_results`
 
 Only on the **full edition with the TimescaleDB engine**: the `fdd` hook also writes one row per (run, equip, rule)

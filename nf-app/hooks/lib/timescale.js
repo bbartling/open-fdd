@@ -186,6 +186,18 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
   return { rows, roles: roles.map(([r]) => r), si };
 }
 
+/**
+ * Newest sample (epoch ms, null = none at all) of the given point uuids in openfdd.nf_samples, whatever the window.
+ * Read-only. Tells "the source stopped receiving rows" from "the window was empty".
+ */
+async function newestSample(client, uuids) {
+  const ids = [...new Set((uuids || []).filter((u) => typeof u === "string" && u))];
+  if (!ids.length) return null;
+  const { rows } = await client.query("SELECT max(ts) AS t FROM openfdd.nf_samples WHERE point_uuid = ANY($1::text[])", [ids]);
+  const t = rows[0] && rows[0].t;
+  return t ? new Date(t).getTime() : null;
+}
+
 // ---------------------------------------------------------------- rules
 
 const helpersDone = new WeakSet();
@@ -410,5 +422,5 @@ async function historyRoute(client, args = {}, limits = {}) {
 
 module.exports = {
   connect, install, schemaVersion, requireConfig, SCHEMA_VERSION, loadHistory, runRules, toResultRow, writeResults,
-  maybeEnforceCap, retentionPreview, historyRoute, siFactors,
+  maybeEnforceCap, retentionPreview, historyRoute, siFactors, newestSample,
 };

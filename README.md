@@ -85,6 +85,19 @@ python3 -m pytest tests -q
 | [`docs/`](docs) | Documentation site |
 | [`openfdd_agent_spec/`](openfdd_agent_spec/README.md) | Guidance for AI coding agents |
 
+### FDD rules in SQL and pandas
+
+The fault rules also work on their own, without NF: as SQL on PostgreSQL / TimescaleDB, or as pandas in Python.
+Every rule runs in SI units. Imperial data (°F, inH₂O, cfm) is converted to SI before the rules run.
+
+| | SQL (PostgreSQL / TimescaleDB) | pandas (Python, used for testing) |
+|---|---|---|
+| Rules | [`sql/fdd/postgres/rules/`](sql/fdd/postgres/rules), one file per rule | [`open_fdd/rules/`](open_fdd/rules), or `pip install open-fdd` |
+| Cookbook | [SQL cookbook](https://bbartling.github.io/open-fdd/rules/sql-cookbook.html): each rule's inputs, SI parameters and full SQL | [pandas cookbook](https://bbartling.github.io/open-fdd/rules/pandas-cookbook.html): source plus a runnable example per rule |
+| Thresholds | [`sql/fdd/tuning_catalog.json`](sql/fdd/tuning_catalog.json): defaults for every rule | SI defaults in each rule; any difference from SQL is listed in the parity report |
+
+The two implementations are checked against each other in CI. The [pandas vs SQL parity report](https://bbartling.github.io/open-fdd/rules/parity.html) shows which rules match and explains each known difference.
+
 ## Python package
 
 ```bash

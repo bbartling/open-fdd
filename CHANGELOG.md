@@ -3,6 +3,20 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.5 — 2026-11-09
+
+Diagnostics patch: the deploy `doctor` names what actually failed, and the `fdd` hook can no longer report success while writing nothing.
+
+### Fixed
+
+1. **`doctor` called a refused connection an auth failure** ([#1549](https://github.com/bbartling/open-fdd/issues/1549)). `nf_app_sync.py` now classifies failures as `connectivity` (refused, DNS, unreachable, connect or read timeout: "credentials were not validated", with the hint to use the front-door URL, not NF's own loopback port), `tls` (certificate trust or host name: use `--ca-file` / `--pin-server-cert`, never a bypass) and `auth` (only real HTTP 401 / 403, distinguished, realm guidance kept). Messages carry scheme, host, port and path only; every failure exits non-zero and stays read-only. See [Troubleshooting](docs/install.md#10-troubleshooting).
+2. **`fdd` hook reported `STATE_SUCCESS` with every output stale** ([#1550](https://github.com/bbartling/open-fdd/issues/1550)). A run with eligible equips but no freshly assessed result now fails (NF records a non-success state). Stale reasons are distinct: `required roles missing`, `unit unusable (role ...)`, `no input data in window (newest sample at <ISO>)`. The run log and summary always carry the engine, data window, newest input sample (engine source and NF latest value) and eligible / evaluated / written / skipped / stale counts with reasons.
+3. **`history` hook** returns `ok: true` with `reason` and `newest_source_ts` for an empty range, and `ok: false` with the error for a connection or query failure. See [FDD data access](docs/fdd-data-access.md#checking-that-results-are-fresh).
+
+### Added
+
+- `doctor` check **fdd freshness**: FAIL when computed FDD points are older than 2x the fdd schedule while raw history is fresh.
+
 ## 5.0.4 — 2026-11-08
 
 Deploy tooling and docs for installing Open-FDD on an existing NF site. All items below ship with the installer.

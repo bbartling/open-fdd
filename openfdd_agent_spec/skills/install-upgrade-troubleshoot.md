@@ -23,6 +23,8 @@ confirm with `nf_app_sync.py --help`.
 7. **Weather**: lat/long come from NF Sites or the modeled Haystack site; if both are missing the hook errors. Do not invent coordinates; ask for them.
 8. **Timescale is optional** (full edition only): `history` needs `config.timescale`, and a blanket `run` should skip it without; never silently switch engines.
 9. **Self-signed front door**: `--ca-file` or `--pin-server-cert`; never `PYTHONHTTPSVERIFY=0`.
-10. After any Caddy change: back up, `caddy validate`, restart; update `APP_ID` on an edition swap or rename.
+10. **Read the `doctor` category**: `connectivity` (refused, DNS, unreachable, timeout) means the URL or port is wrong or unreachable and credentials were never tested; use the front-door URL (e.g. `https://host`), not NF's own port (it may be loopback only), and do not touch credentials. `tls` means trust the certificate (item 9). `auth` is only a real HTTP 401/403 (item 4).
+11. **Frozen FDD** (outputs `stale`, results not updating, `history` empty): run `doctor` and read the **fdd freshness** line. Then read the last `fdd` run (`include_results=true`): the reason is `required roles missing`, `unit unusable` (point has no or unknown unit) or `no input data in window (newest sample at ...)`. Read-only checks: newest sample in the Timescale source (`SELECT max(ts) FROM openfdd.nf_samples`) versus now, and NF latest values of the points. Do not re-tag or restart without a human.
+12. After any Caddy change: back up, `caddy validate`, restart; update `APP_ID` on an edition swap or rename.
 
 Results are NF points; how a client reads them: `docs/fdd-data-access.md`.

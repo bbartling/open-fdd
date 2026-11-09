@@ -330,7 +330,7 @@ test("fdd status: missing roles and no history mark existing results stale (and 
   // history gone
   const nh = await runScripted(none, { existing, noHistory: true });
   assert.deepEqual(nh.summary.status, { ok: 0, fault: 0, "not-assessed": 0, stale: 2 });
-  assert.ok(nh.http.writes.points.every((r) => r.attrs.fddStatus === "stale" && /no history/.test(r.attrs.fddReason)));
+  assert.ok(nh.http.writes.points.every((r) => r.attrs.fddStatus === "stale" && /no input data in window/.test(r.attrs.fddReason)));
   assert.equal(nh.http.writes.data.length, 0);
   // a point never published before is not invented as stale
   const fresh = await runScripted(none, { noHistory: true });

@@ -328,6 +328,8 @@ async function createTimescale(pack, opts = {}) {
       const numeric = new Set(res.fields.filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
       return res.rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, numeric.has(k) && v != null ? Number(v) : v])));
     },
+    /** Newest sample (epoch ms | null) of these points in the source table, any age (read-only). */
+    newestSample: (uuids) => ts.newestSample(client, uuids),
     resultRow: (a) => ts.toResultRow({ engine: "timescale", ...a }),
     writeResults: (rows) => ts.writeResults(client, rows),
     maybeEnforceCap: () => ts.maybeEnforceCap(client),

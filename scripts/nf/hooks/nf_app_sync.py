@@ -49,8 +49,11 @@ from __future__ import annotations
 import argparse
 import atexit
 import base64
+import datetime
 import difflib
+import errno
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -109,11 +112,73 @@ def auth_layer(www_authenticate: str | None) -> str:
 
 
 class ApiError(SystemExit):
-    """A failed console call; the message is the exit text, `status` the HTTP status (0 = not HTTP)."""
+    """A failed console call; the message is the exit text, `status` the HTTP status (0 = not HTTP).
 
-    def __init__(self, msg: str, status: int = 0):
+    `kind` says what failed: "connectivity" (no HTTP response at all), "tls" (certificate trust / hostname),
+    "auth" (a real HTTP 401/403), "http" (any other HTTP error) or "" (not classified)."""
+
+    def __init__(self, msg: str, status: int = 0, kind: str = ""):
         super().__init__(msg)
         self.status = status
+        self.kind = kind
+
+
+FRONT_DOOR_HINT = ("if NF is behind a front door (Caddy), use the front door URL (e.g. https://host), not NF's own "
+                   "port; NF may listen on loopback only")
+
+
+def safe_origin(base: str) -> str:
+    """scheme://host:port only: never userinfo, path, query or fragment."""
+    try:
+        u = urllib.parse.urlparse(base)
+        host = u.hostname or "?"
+        if ":" in host:
+            host = f"[{host}]"
+        port = u.port or {"http": 80, "https": 443}.get(u.scheme)
+    except ValueError:
+        return "(unparseable console URL)"
+    return f"{u.scheme or '?'}://{host}" + (f":{port}" if port else "")
+
+
+def classify_transport(exc: BaseException, connecting: bool = True) -> tuple[str, str]:
+    """(kind, label) for an exception raised with no HTTP response: kind is "tls" or "connectivity".
+
+    The label is a fixed phrase, never the exception text, so URLs or credentials nested in it cannot leak.
+    `connecting` False means the connection was made and the wait for the reply failed (read timeout)."""
+    reason = getattr(exc, "reason", exc) if isinstance(exc, urllib.error.URLError) else exc
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        text = f"{getattr(reason, 'verify_message', '')} {reason}".lower()
+        if getattr(reason, "verify_code", None) in (62, 64) or "hostname" in text or "mismatch" in text \
+                or "doesn't match" in text:
+            return "tls", "TLS certificate does not match the host name"
+        return "tls", "TLS certificate not trusted"
+    if isinstance(reason, ssl.SSLError):
+        return "tls", "TLS handshake failed"
+    if isinstance(reason, TimeoutError):  # socket.timeout is TimeoutError on 3.10+
+        return "connectivity", "connect timed out" if connecting else "read timed out (connected, no reply)"
+    if isinstance(reason, ConnectionRefusedError):
+        return "connectivity", "connection refused"
+    if isinstance(reason, socket.gaierror):
+        return "connectivity", "DNS lookup failed"
+    if isinstance(reason, (ConnectionResetError, ConnectionAbortedError, http.client.HTTPException)):
+        return "connectivity", "connection dropped before a complete reply"
+    if isinstance(reason, OSError) and (reason.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ENETDOWN, 10051, 10065)
+                                        or getattr(reason, "winerror", None) in (10051, 10065)):
+        return "connectivity", "network or host unreachable"
+    return "connectivity", f"transport error ({type(reason).__name__})"
+
+
+def transport_error(method: str, path: str, base: str, exc: BaseException, connecting: bool = True) -> ApiError:
+    """The ApiError for a request that got no HTTP response. Read-only text: scheme/host/port and path only."""
+    kind, label = classify_transport(exc, connecting)
+    where = f"{method} {path.split('?')[0]}"
+    origin = safe_origin(base)
+    if kind == "tls":
+        return ApiError(f"{where}: {label} at {origin}; trust the server certificate with --ca-file / NF_CA_FILE or "
+                        "--pin-server-cert (verification is never disabled)", 0, "tls")
+    return ApiError(f"{where}: {label} at {origin}, before any login was attempted; credentials were not validated. "
+                    f"Check the configured console URL (NF_CONSOLE_URL / --console), the listener and the network path "
+                    f"or VPN/port-forward; {FRONT_DOOR_HINT}.", 0, "connectivity")
 
 
 def make_ssl_context(ca_file: str | None = None) -> ssl.SSLContext | None:
@@ -162,6 +227,7 @@ class Console:
 
     def call(self, method: str, path: str, body=None, ok_404: bool = False):
         data = None if body is None else json.dumps(body).encode()
+        shown = path.split("?")[0]  # messages never carry a query string
         req = urllib.request.Request(
             self.base + path,
             data=data,
@@ -176,17 +242,19 @@ class Console:
                 return None
             detail = e.read().decode(errors="replace")[:300]
             if e.code == 401:
-                raise ApiError(f"{method} {path} -> HTTP 401: rejected by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
-                               + NEEDS_CONSOLE + ". Caddy and NF must accept the same user and password.", 401) from None
-            raise ApiError(f"{method} {path} -> HTTP {e.code}: {detail}", e.code) from None
-        except (urllib.error.URLError, ssl.SSLError) as e:
-            reason = getattr(e, "reason", e)
-            if isinstance(reason, ssl.SSLError):
-                raise ApiError(f"{method} {path}: TLS error ({reason}); trust the server certificate with --ca-file / "
-                               "NF_CA_FILE or --pin-server-cert", 0) from None
-            raise ApiError(f"{method} {path}: cannot reach the console ({reason})", 0) from None
+                raise ApiError(f"{method} {shown} -> HTTP 401: rejected by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
+                               + NEEDS_CONSOLE + ". Caddy and NF must accept the same user and password.",
+                               401, "auth") from None
+            if e.code == 403:
+                raise ApiError(f"{method} {shown} -> HTTP 403: forbidden by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
+                               "The server answered, so the URL is reachable, but this login is not permitted to do this "
+                               "(check the user's role / API scopes). " + NEEDS_CONSOLE, 403, "auth") from None
+            raise ApiError(f"{method} {shown} -> HTTP {e.code}: {detail}", e.code, "http") from None
+        except (OSError, http.client.HTTPException) as e:  # URLError, ssl errors, timeouts, resets
+            connecting = isinstance(e, urllib.error.URLError)  # a bare timeout is raised while reading the reply
+            raise transport_error(method, path, self.base, e, connecting) from None
         if text.lstrip().startswith("<"):
-            raise ApiError(f"{method} {path} returned HTML (unknown route on this NF version?)", 0)
+            raise ApiError(f"{method} {shown} returned HTML (unknown route on this NF version?)", 0)
         return json.loads(text) if text else {}
 
     def probe(self, path: str) -> tuple[int, dict[str, str]]:
@@ -790,7 +858,105 @@ def weather_coords_source(c) -> tuple[str, str]:
     return "fail", "no coordinates in NF Sites or on the modeled SITE; the weather hook will fail" + note
 
 
-def cmd_doctor(c, m: dict) -> int:
+RRULE_SECONDS = {"SECONDLY": 1, "MINUTELY": 60, "HOURLY": 3600, "DAILY": 86400, "WEEKLY": 604800}
+DEFAULT_FDD_INTERVAL = 3600
+
+
+def rrule_interval_seconds(rrule: str | None) -> int | None:
+    """Seconds between runs for a simple FREQ/INTERVAL rule (the app's own schedules), else None."""
+    freq = re.search(r"FREQ=([A-Z]+)", rrule or "")
+    if not freq or freq.group(1) not in RRULE_SECONDS:
+        return None
+    n = re.search(r"INTERVAL=(\d+)", rrule or "")
+    return RRULE_SECONDS[freq.group(1)] * max(1, int(n.group(1)) if n else 1)
+
+
+def parse_ts(value) -> datetime.datetime | None:
+    """ISO 8601 (Z or offset, any fractional digits) -> aware UTC datetime; None when it is not one."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = re.sub(r"(\.\d{6})\d+", r"\1", value.strip().replace("Z", "+00:00"))
+    try:
+        t = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)
+
+
+def query_pages(c, body: dict, max_pages: int = 40) -> list[dict]:
+    """POST /api/v1/point/query, following nextPageToken (read-only; capped so a huge site cannot stall the doctor)."""
+    out: list[dict] = []
+    token = ""
+    for _ in range(max_pages):
+        r = c.call("POST", "/api/v1/point/query", {"pageSize": 500, **body, **({"pageToken": token} if token else {})}) or {}
+        out.extend(r.get("points") or [])
+        token = r.get("nextPageToken") or ""
+        if not token:
+            break
+    return out
+
+
+def human_age(seconds: float) -> str:
+    if seconds < 90:
+        return f"{int(seconds)} s"
+    if seconds < 5400:
+        return f"{seconds / 60:.0f} min"
+    if seconds < 172800:
+        return f"{seconds / 3600:.1f} h"
+    return f"{seconds / 86400:.1f} days"
+
+
+def fdd_freshness(c, interval: int, now: datetime.datetime) -> tuple[str, str]:
+    """('pass'|'warn'|'fail', text): how old the computed FDD points are against the newest raw history sample.
+
+    Computed = the newest of: a result point's latest value, fddLastRun of a result that is not flagged stale, and a
+    fault timeline's fddTimelineThrough (fddLastRun alone is rewritten when a result is only flagged stale, so it
+    would hide a frozen point). Raw = newest latest value of any trended point that is not an FDD result. Read-only."""
+    pts = query_pages(c, {"layer": "default", "structuredQuery": {"field": {"property": "markers", "text": "his"}}})
+    computed: list[datetime.datetime] = []
+    raw: list[datetime.datetime] = []
+    stale_reasons: dict[str, int] = {}
+    results = 0
+    for p in pts:
+        a = p.get("attrs") or {}
+        latest = parse_ts((p.get("latestValue") or {}).get("ts"))
+        if a.get("ruleRef") and (a.get("fddStatus") or a.get("fddKind") or a.get("fddLastRun")):
+            results += 1
+            if latest:
+                computed.append(latest)
+            if a.get("fddStatus") == "stale":
+                why = re.sub(r"\s*\(.*$", "", str(a.get("fddReason") or "no reason recorded"))[:60]
+                stale_reasons[why] = stale_reasons.get(why, 0) + 1
+            elif parse_ts(a.get("fddLastRun")):
+                computed.append(parse_ts(a.get("fddLastRun")))
+            if parse_ts(a.get("fddTimelineThrough")):
+                computed.append(parse_ts(a.get("fddTimelineThrough")))
+        elif latest:
+            raw.append(latest)
+    limit = 2 * interval
+    if not results:
+        return "warn", "no FDD result points yet (the fdd hook has not published; run it once)"
+    if not raw:
+        return "warn", f"{results} FDD result points, but no raw history sample was found to compare with"
+    c_new, r_new = (max(computed) if computed else None), max(raw)
+    r_age = (now - r_new).total_seconds()
+    c_age = (now - c_new).total_seconds() if c_new else None
+    sched = f"fdd runs every {human_age(interval)}"
+    why = "; ".join(f"{k} x{n}" for k, n in sorted(stale_reasons.items(), key=lambda kv: -kv[1]))
+    stale_note = f"; {sum(stale_reasons.values())} results flagged stale ({why})" if stale_reasons else ""
+    if c_age is not None and c_age <= limit:
+        return "pass", (f"computed results {human_age(max(c_age, 0))} old (newest {c_new:%Y-%m-%dT%H:%M:%SZ}), raw history "
+                        f"{human_age(max(r_age, 0))} old; {sched}{stale_note}")
+    if r_age > limit:
+        return "warn", (f"raw history is also stale (newest sample {human_age(r_age)} ago, {r_new:%Y-%m-%dT%H:%M:%SZ}): "
+                        f"the data source is not delivering, not the fdd hook alone; {sched}")
+    got = f"{human_age(c_age)} old (newest {c_new:%Y-%m-%dT%H:%M:%SZ})" if c_new else "never written a value"
+    return "fail", (f"computed results {got}, more than 2x the schedule ({sched}) while raw history is fresh "
+                    f"(newest sample {human_age(max(r_age, 0))} ago){stale_note}. The fdd hook is not producing output: "
+                    "read its last run (include_results=true) for the per-equip skip reasons")
+
+
+def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
     app_id = m["application"]["id"]
     bad = 0
 
@@ -802,7 +968,9 @@ def cmd_doctor(c, m: dict) -> int:
     try:
         apps = {a["id"]: a for a in c.apps()}
     except SystemExit as e:
-        line("FAIL", "auth", str(e))
+        # the failure's own category (connectivity / tls / auth / http); a bare error falls back on its HTTP status
+        status = getattr(e, "status", 0)
+        line("FAIL", getattr(e, "kind", "") or ("auth" if status in (401, 403) else "console"), str(e))
         return 1
     line("PASS", "auth", "console login accepted (Caddy and NF both let it through)")
     a = apps.get(app_id)
@@ -855,6 +1023,16 @@ def cmd_doctor(c, m: dict) -> int:
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
         lvl, text = weather_coords_source(c)
         line("PASS" if lvl == "pass" else "FAIL", "weather coords", text)
+    fdd_def = next((h for h in a.get("hooks", []) if h.get("id") == "fdd"), None)
+    fdd_man = next((h for h in m["hooks"] if h.get("id") == "fdd"), None)
+    if fdd_def or fdd_man:
+        rule = ((fdd_def or {}).get("schedule") or {}).get("rrule") or ((fdd_man or {}).get("schedule") or {}).get("rrule")
+        try:
+            lvl, text = fdd_freshness(c, rrule_interval_seconds(rule) or DEFAULT_FDD_INTERVAL,
+                                      now or datetime.datetime.now(datetime.timezone.utc))
+        except SystemExit as e:
+            lvl, text = "warn", f"could not read the points to compare ages ({e})"
+        line(lvl.upper(), "fdd freshness", text)
     has_ts = option_value(a, "timescale") is not None or any(
         (h.get("config") or {}).get("timescale") for h in a.get("hooks", []))
     line("PASS", "timescale", "configured (value not shown)" if has_ts else

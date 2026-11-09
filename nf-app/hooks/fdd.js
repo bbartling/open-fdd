@@ -50,6 +50,12 @@
 //                  roles missing, rule error): its record gets fddStatus "stale" + fddReason, no new value.
 //   Every model record also carries fddLastRun (ISO). Any rule error makes the hook throw at the very end, after
 //   everything else was written, so NF records the run as failed.
+//   LOUD FAILURE (5.0.5, #1550). A run that had eligible equips (results published before, or rules runnable now) but
+//   freshly assessed none of them (ok + fault = 0) also throws, never STATE_SUCCESS with nothing written. Each equip
+//   that produced nothing says why, and stale results carry the same reason: "required roles missing" | "unit unusable" |
+//   "no input data in window (newest sample at <ISO>)" | "rule error: ...". The log always has the engine, the data
+//   window, the newest input sample (engine source and NF latest value) and eligible / evaluated / written / skipped /
+//   stale counts (summary.eligible, .skipped, .stale_reasons, .source_freshness, .window, .failure).
 //
 // Nothing site-specific: sites, equips, points and units all come from NF.
 // config (hook settings, all optional):
@@ -149,6 +155,21 @@ async function fetchHistory(http, uuids, fromMs, toMs, stepSec) {
     }
   }
   return out;
+}
+
+// ---- input freshness (#1550) ------------------------------------------------------------
+const tsMs = (ts) => { const t = Date.parse(String(ts).replace(/(\.\d{3})\d+/, '$1')); return Number.isFinite(t) ? t : null; };
+const isoOrNull = (ms) => (ms == null ? null : new Date(ms).toISOString());
+const maxOrNull = (list) => list.reduce((a, b) => (b == null ? a : a == null || b > a ? b : a), null);
+
+/** Newest `latest.ts` (ms) over toPoint() records (NF's own latest value of each point); null when none has one. */
+function newestLatest(points) {
+  return maxOrNull((points || []).map((p) => (p && p.latest && p.latest.ts ? tsMs(p.latest.ts) : null)));
+}
+
+/** Newest bucket (ms) over the {uuid: Map(bucketMs -> value)} that fetchHistory returned; null when empty. */
+function newestOfHistory(hist) {
+  return maxOrNull(Object.values(hist).map((m) => maxOrNull([...m.keys()])));
 }
 
 // ---- SI conversion --------------------------------------------------------------------
@@ -574,7 +595,13 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
   const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
-    status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 } };
+    status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 },
+    // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
+    eligible: 0, skipped: [], stale_reasons: {}, failure: null,
+    window: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), hours: windowHours },
+    source_freshness: { engine: kind, newest_sample: null, age_minutes: null, nf_latest: isoOrNull(newestLatest(model.points)), nf_latest_age_minutes: null } };
+  let sourceNewest = null;                               // newest input sample the engine could see (ms)
+  const seenUuids = new Set();                           // every input point of the run (timescale: one freshness query at the end)
   const queue = { meta: [], values: [], series: [] };    // writes, flushed in batches after all equips ran
   const occCache = { logged: new Set() };    // NF schedules (read once per run) and which sites were logged
   const warnedUnits = new Set();
@@ -589,20 +616,45 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
       // result of the equip goes stale with the reason below (per rule) or the equip-level default.
       const touched = new Set();
       const reasons = new Map();
-      let defaultReason = 'required input roles are missing or have no usable unit';
+      let defaultReason = 'rule was not run for this equip (not applicable, or required roles missing)';
+      let eligible = false;       // had results published before, or has a runnable rule now
+      // Why this equip produced nothing: one of the three stale reasons, never a catch-all (#1550).
+      const skip = (kind, detail) => {
+        defaultReason = detail;
+        if (eligible) summary.skipped.push({ site: siteId, equip: equipId, kind, detail });
+      };
       try {
-        let runnable = shared.equipRules(equipRec, model, shared.catalog)
-          .filter((r) => r.runnable && pack.rules[r.rule.id]);
-        if (!runnable.length) continue;
+        const bound = shared.equipRules(equipRec, model, shared.catalog).filter((r) => pack.rules[r.rule.id]);
+        for (const r of bound) {
+          if (!r.runnable) reasons.set(r.rule.id, `required roles missing (${r.missing.length ? r.missing.join(', ') : 'no input role is bound'})`);
+        }
+        let runnable = bound.filter((r) => r.runnable);
+        const hadResults = Object.keys(pack.rules).some((id) => model.results.has(resultUuid(key, id)));
+        eligible = hadResults || runnable.length > 0;
+        if (eligible) summary.eligible++;
+        if (!runnable.length) {
+          skip('roles-missing', 'required roles missing (no rule has all its required roles bound to points of this equip)');
+          continue;
+        }
         let roles = roleInputs(runnable);
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
         if (si.skipped.size) {
+          const bad = [...si.skipped].sort().join(', ');
+          for (const r of runnable) {
+            const hit = r.required.filter((x) => si.skipped.has(x));
+            if (hit.length) reasons.set(r.rule.id, `unit unusable (role ${hit.join(', ')}: unknown or missing unit on the point)`);
+          }
           runnable = runnable.filter((r) => !r.required.some((x) => si.skipped.has(x)));
           roles = roleInputs(runnable);
           for (const x of si.skipped) delete roles[x];
-          if (!runnable.length) continue;
+          if (!runnable.length) {
+            skip('unit-unusable', `unit unusable (role ${bad}: unknown or missing unit on the point)`);
+            continue;
+          }
         }
         const uuids = [...new Set(Object.values(roles).map((p) => p.uuid))];
+        uuids.forEach((u) => seenUuids.add(u));
+        let newestHere = null;        // newest sample of this equip's inputs (ms): from the engine's own source
         let loadedRows;
         let histByTs = null;          // ms -> history row (which required inputs exist at a timestamp); not on timescale
         let occ = null;               // synthesized occupancy: a runnable rule has occ_mode optional and no point is bound
@@ -619,19 +671,26 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
           const roleToUuid = Object.fromEntries(Object.entries(roles).map(([r, p]) => [r, p.uuid]));
           const unitsByUuid = Object.fromEntries(Object.values(roles).map((p) => [p.uuid, p.units || '']));
           loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
+          if (!loadedRows && engine.newestSample) {   // empty window: when did these points last have a sample at all?
+            try { newestHere = await engine.newestSample(uuids); } catch (e) { log(`${equipId}: newest-sample lookup failed: ${errText(e)}`); }
+          }
         } else {
           const hist = await fetchHistory(http, uuids, from, to, step);
+          newestHere = newestOfHistory(hist);
           const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ: occ && occ.at });
           loadedRows = input.history.length;
           histByTs = new Map(input.history.map((row) => [row.ts, row]));
           if (loadedRows) await engine.load(input);
         }
+        if (newestHere != null) sourceNewest = Math.max(sourceNewest == null ? -Infinity : sourceNewest, newestHere);
         if (!loadedRows) {
-          defaultReason = `no history in the last ${windowHours} h`;
-          log(`${equipId}: no history in the last ${windowHours} h, skipped`);
+          if (newestHere == null) newestHere = newestLatest(Object.values(roles));   // history sources gave nothing: NF's latest values
+          const detail = `no input data in window (newest sample at ${newestHere != null ? new Date(newestHere).toISOString() : 'unknown: none found'})`;
+          skip('no-data', detail);
+          log(`${equipId}: ${detail}, skipped (window ${summary.window.from} .. ${summary.window.to}, engine ${kind})`);
           continue;
         }
-        defaultReason = 'rule was not run (required input roles are missing)';
+        defaultReason = 'rule was not run for this equip (not applicable, or required roles missing)';
         summary.equips++;
         const records = [];
         const values = [];
@@ -702,7 +761,10 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
           const uuid = resultUuid(key, ruleId);
           const prev = model.results.get(uuid);
           if (!prev || touched.has(uuid)) continue;
-          stale.push(staleRecord(prev, reasons.get(ruleId) || defaultReason, runIso));
+          const why = reasons.get(ruleId) || defaultReason;
+          stale.push(staleRecord(prev, why, runIso));
+          const bucket = why.replace(/\s*\(.*$/s, '').slice(0, 60);   // group by the reason, not its details
+          summary.stale_reasons[bucket] = (summary.stale_reasons[bucket] || 0) + 1;
         }
         summary.status.stale += stale.length;
         if (stale.length && !config.dryRun) queue.meta.push(...stale);
@@ -711,6 +773,9 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
     if (!config.dryRun) {
       const retryMs = Number(config.writeRetryMs) >= 0 && config.writeRetryMs != null ? Number(config.writeRetryMs) : RETRY_BASE_MS;
       await flushWrites(http, queue, summary, log, retryMs);
+    }
+    if (kind === 'timescale' && engine.newestSample && seenUuids.size) {   // freshness of the source the engine reads
+      try { sourceNewest = maxOrNull([sourceNewest, await engine.newestSample([...seenUuids])]); } catch (e) { log(`newest-sample lookup failed: ${errText(e)}`); }
     }
     if (engine.maybeEnforceCap && !config.dryRun) {   // retention cap (a no-op when the TimescaleDB job exists)
       try { summary.cap = await engine.maybeEnforceCap(); } catch (e) { summary.errors++; log(`size cap: ${errText(e)}`); }
@@ -730,11 +795,39 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
     }
   }
   const st = summary.status;
+  const fresh = summary.source_freshness;
+  fresh.newest_sample = isoOrNull(sourceNewest);
+  fresh.age_minutes = sourceNewest == null ? null : Math.round((now - sourceNewest) / 60e3);
+  fresh.nf_latest_age_minutes = fresh.nf_latest ? Math.round((now - Date.parse(fresh.nf_latest)) / 60e3) : null;
+  // eligible equips (had results, or have runnable rules) but not one output freshly assessed: this run did nothing useful
+  if (!config.dryRun && summary.eligible > 0 && st.ok + st.fault === 0) {
+    summary.failure = `no fresh results were written for any of ${summary.eligible} eligible equips`;
+  }
+  for (const line of runReport(summary, windowHours)) log(line);
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h); `
     + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
     + `requests: ${summary.requests.metadata} metadata, ${summary.requests.data} data`);
   return summary;
+}
+
+/** Always-logged run report: engine and window, input freshness, evaluated / written / skipped / stale with reasons. */
+function runReport(s, windowHours) {
+  const tally = (items, f) => Object.entries(items.reduce((a, x) => ({ ...a, [f(x)]: (a[f(x)] || 0) + 1 }), {}))
+    .map(([k, n]) => `${k} x${n}`).join('; ') || 'none';
+  const fr = s.source_freshness;
+  const age = (m) => (m == null ? '' : ` (${m} min ago)`);
+  const lines = [
+    `open-fdd run: engine ${s.engine}, data window ${s.window.from} .. ${s.window.to} (${windowHours} h); `
+    + `newest input sample in the ${s.engine} source ${fr.newest_sample || 'not read'}${age(fr.age_minutes)}, `
+    + `NF latest value ${fr.nf_latest || 'none'}${age(fr.nf_latest_age_minutes)}`,
+    `open-fdd counts: eligible ${s.eligible}, evaluated ${s.equips}, written ${s.written}, skipped ${s.skipped.length}, stale ${s.status.stale}; `
+    + `skipped by reason: ${tally(s.skipped, (x) => x.kind)}; stale by reason: ${Object.entries(s.stale_reasons).map(([k, n]) => `${k} x${n}`).join('; ') || 'none'}`,
+  ];
+  for (const x of s.skipped.slice(0, 20)) lines.push(`open-fdd skipped ${x.site ? `${x.site}/` : ''}${x.equip}: ${x.detail}`);
+  if (s.skipped.length > 20) lines.push(`open-fdd skipped: ${s.skipped.length - 20} more equips (same format)`);
+  if (s.failure) lines.push(`open-fdd FAILED: ${s.failure}`);
+  return lines;
 }
 
 // ---- optional: fault counts on NF's own BACnet server ----------------------------------
@@ -812,10 +905,19 @@ async function exportToBacnet(http, results, cfg, log) {
  */
 async function hook({ sdk, config, ...rest }) {
   const summary = await runFdd({ sdk, config: config || {}, ...rest });
-  if (summary.errors) {
-    const st = summary.status;
-    throw new Error(`open-fdd: ${summary.errors} error${summary.errors === 1 ? '' : 's'} during the run (see the log); `
-      + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}`);
+  const st = summary.status;
+  if (summary.errors || summary.failure) {
+    const fr = summary.source_freshness;
+    const why = Object.entries(summary.stale_reasons).map(([k, n]) => `${k} x${n}`).join('; ');
+    const skipped = Object.entries(summary.skipped.reduce((a, x) => ({ ...a, [x.kind]: (a[x.kind] || 0) + 1 }), {})).map(([k, n]) => `${k} x${n}`).join('; ');
+    const err = new Error((summary.errors ? `open-fdd: ${summary.errors} error${summary.errors === 1 ? '' : 's'} during the run (see the log); ` : 'open-fdd: ')
+      + (summary.failure ? `${summary.failure}; ` : '')
+      + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
+      + `eligible ${summary.eligible}, evaluated ${summary.equips}, written ${summary.written}, skipped ${summary.skipped.length}${skipped ? ` (${skipped})` : ''}`
+      + `${why ? `; stale reasons: ${why}` : ''}; engine ${summary.engine}, window ${summary.window.from} .. ${summary.window.to}; `
+      + `newest input sample ${fr.newest_sample || 'not read'}, NF latest value ${fr.nf_latest || 'none'}`);
+    /** @type {any} */ (err).summary = summary;
+    throw err;
   }
   return summary;
 }
