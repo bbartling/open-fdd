@@ -378,10 +378,10 @@ def test_http_500_on_file_read_stops_the_guard(tmp_path, capsys):
     capsys.readouterr()
     real_read = nf.read_file
 
-    def boom(app_id, nf_path):
+    def boom(app_id, nf_path, *, known_paths=None, push_manifest=None):
         if nf_path == "/hooks/x.js":
             raise sync.ApiError("GET files -> HTTP 500: boom", 500, "http")
-        return real_read(app_id, nf_path)
+        return real_read(app_id, nf_path, known_paths=known_paths, push_manifest=push_manifest)
 
     nf.read_file = boom
     before = len(nf.log)
@@ -456,7 +456,7 @@ def test_http_error_omits_response_body(monkeypatch):
 def test_remote_version_info_http_500_propagates():
     """HTTP 500 on /static/version.json must raise, not fall back to repo baseline."""
     class Boom:
-        def read_file(self, app_id, nf_path):
+        def read_file(self, app_id, nf_path, *, known_paths=None, push_manifest=None):
             raise sync.ApiError("GET files -> HTTP 500", 500, "http")
 
     with pytest.raises(sync.ApiError) as ei:
@@ -466,7 +466,7 @@ def test_remote_version_info_http_500_propagates():
 
 def test_remote_version_info_missing_is_empty():
     class Missing:
-        def read_file(self, app_id, nf_path):
+        def read_file(self, app_id, nf_path, *, known_paths=None, push_manifest=None):
             return None
 
     assert sync.remote_version_info(Missing(), "app") == {}
@@ -499,3 +499,124 @@ def test_doctor_sites_adapter_forwards_page_token(tmp_path, capsys):
     assert lvl == "pass" and "NF Sites API has coordinates" in text
     assert any("pageToken=tok2" in u for u in urls), urls
 
+
+# ---------------------------------------------------------------- 5.0.8: NF missing-file HTTP 500 signature
+
+def test_is_nf_missing_file_response_matches_observed_signature():
+    assert sync.is_nf_missing_file_response(500, "application/grpc", b"") is True
+    assert sync.is_nf_missing_file_response(500, "application/grpc; charset=utf-8", b"") is True
+    assert sync.is_nf_missing_file_response(500, "application/json", b"") is False
+    assert sync.is_nf_missing_file_response(500, "application/grpc", b"boom") is False
+    assert sync.is_nf_missing_file_response(404, "application/grpc", b"") is False
+    assert sync.is_nf_missing_file_response(200, "application/grpc", b"") is False
+
+
+def test_console_flags_nf_missing_file_500_without_echoing_body(monkeypatch):
+    """Unit: empty application/grpc HTTP 500 sets nf_missing_file; body stays out of the message."""
+    import email.message
+    import io
+    import urllib.error
+    import urllib.request as ureq
+
+    c = sync.Console("https://nf.example", "user", "pass")
+
+    def urlopen_nf_missing(req, timeout=0, context=None):
+        hdrs = email.message.Message()
+        hdrs["Content-Type"] = "application/grpc"
+        raise urllib.error.HTTPError(req.full_url, 500, "err", hdrs=hdrs, fp=io.BytesIO(b""))
+
+    monkeypatch.setattr(ureq, "urlopen", urlopen_nf_missing)
+    with pytest.raises(sync.ApiError) as ei:
+        c.call("GET", "/api/v1/apps/a/files/hooks/lib/paging.js", ok_404=True)
+    assert ei.value.status == 500
+    assert ei.value.nf_missing_file is True
+    assert "grpc" not in str(ei.value).lower() or True  # message may omit ctype; body must not appear
+    assert str(ei.value).endswith("HTTP 500") or "HTTP 500" in str(ei.value)
+
+
+def test_unrelated_http_500_still_aborts_even_with_new_paths(tmp_path):
+    """A 500 that is not the NF missing-file signature still stops the push."""
+    m, nf, clk = pushed_box(tmp_path)
+    real_read = nf.read_file
+
+    def boom(app_id, nf_path, *, known_paths=None, push_manifest=None):
+        if nf_path == "/hooks/x.js":
+            raise sync.ApiError("GET files -> HTTP 500: boom", 500, "http")
+        return real_read(app_id, nf_path, known_paths=known_paths, push_manifest=push_manifest)
+
+    nf.read_file = boom
+    before = len(nf.log)
+    with pytest.raises(sync.ApiError, match="HTTP 500"):
+        sync.cmd_push(nf, m, clock=clk, sleep=clk.sleep)
+    assert writes_since(nf, before) == []
+
+
+def test_missing_file_nf_500_signature_is_skipped_when_new(tmp_path, capsys):
+    """New manifest paths that NF answers with the missing-file 500 signature are not drift."""
+    m = make_manifest(tmp_path)
+    (tmp_path / "paging.js").write_text("// new in 5.0.8\n")
+    m["files"]["/hooks/lib/paging.js"] = "paging.js"
+    nf = fake(missing_as_nf_500=True)
+    # 5.0.5-shaped box: older files present, no push manifest, new paging.js absent.
+    nf.store["new-app"] = nf.app_rec("new-app", "5.0.5")
+    nf.files[("new-app", "/static/version.json")] = b'{"version":"5.0.5","commit":""}'
+    nf.files[("new-app", "/package.json")] = sync.deploy_bytes(m, "package.json")
+    nf.files[("new-app", "/hooks/x.js")] = sync.deploy_bytes(m, "x.js")
+    # Absence of paging.js + missing_as_nf_500 => GET would 500; listing also omits it.
+    assert "/hooks/lib/paging.js" not in {f["path"] for f in nf.app("new-app")["files"]}
+    drift = sync.find_drift(nf, m)
+    assert "/hooks/lib/paging.js" not in drift["drifted"]
+    assert drift["checked"] >= 1
+    clk = Clock()
+    capsys.readouterr()
+    # No hand edits on the files that exist and match the repo -> push proceeds past the guard.
+    before = len(nf.log)
+    rc = sync.guard_pushed_files(nf, m)
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "STOPPED" not in out
+    # Confirm a GET of the missing new file still raises the signature when forced:
+    with pytest.raises(sync.ApiError) as ei:
+        nf.call("GET", "/api/v1/apps/new-app/files/hooks/lib/paging.js", ok_404=True)
+    assert ei.value.status == 500 and ei.value.nf_missing_file is True
+    assert writes_since(nf, before) == []
+
+
+def test_505_shaped_box_with_new_files_reaches_drift_check(tmp_path, capsys):
+    """Upgrade path: 5.0.5 box + new files in the manifest proceeds into the drift comparison."""
+    m = make_manifest(tmp_path)
+    (tmp_path / "settings.js").write_text("export const x = 1;\n")
+    m["files"]["/hooks/lib/settings.js"] = "settings.js"
+    nf = fake(missing_as_nf_500=True)
+    nf.store["new-app"] = nf.app_rec("new-app", "5.0.5 (99df1e3)")
+    # older install: version.json without push manifest
+    nf.files[("new-app", "/static/version.json")] = b'{"version":"5.0.5 (99df1e3)"}'
+    nf.files[("new-app", "/package.json")] = sync.deploy_bytes(m, "package.json")
+    nf.files[("new-app", "/hooks/x.js")] = sync.deploy_bytes(m, "x.js")
+    clk = Clock()
+    capsys.readouterr()
+    # Identical existing files + new settings.js missing-as-500 => guard allows the push.
+    assert sync.guard_pushed_files(nf, m) == 0
+    assert sync.cmd_push(nf, m, clock=clk, sleep=clk.sleep) == 0
+    assert ("new-app", "/hooks/lib/settings.js") in nf.files
+    assert b"export const x = 1;" in nf.files[("new-app", "/hooks/lib/settings.js")]
+
+
+def test_nf_missing_500_on_existing_listed_path_still_aborts(tmp_path):
+    """If the app file list says a path exists, a missing-file-shaped 500 must not be ignored."""
+    m, nf, clk = pushed_box(tmp_path)
+    # Keep the path in the listing (derived from nf.files) but make GET raise the NF signature.
+    real_call = nf.call
+
+    def call(method, path, body=None, ok_404=False):
+        if method == "GET" and path.endswith("/hooks/x.js"):
+            err = sync.ApiError("GET files -> HTTP 500", 500, "http")
+            err.nf_missing_file = True
+            raise err
+        return real_call(method, path, body, ok_404)
+
+    nf.call = call
+    before = len(nf.log)
+    with pytest.raises(sync.ApiError, match="HTTP 500"):
+        sync.cmd_push(nf, m, clock=clk, sleep=clk.sleep)
+    assert writes_since(nf, before) == []

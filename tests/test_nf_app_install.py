@@ -59,7 +59,7 @@ def make_manifest(tmp_path: Path, replaces=("old-a", "old-b")) -> dict:
 class FakeNF:
     """In-memory console. `log` lists (method, path) in call order."""
 
-    def __init__(self, apps=None, deps_route=True, points=None):
+    def __init__(self, apps=None, deps_route=True, points=None, missing_as_nf_500=False):
         self.store = {a["id"]: a for a in (apps or [])}
         self.files: dict[tuple[str, str], bytes] = {}
         self.log: list[tuple[str, str]] = []
@@ -72,6 +72,9 @@ class FakeNF:
         self.sites = []
         self.model: list[dict] = []
         self.probe_result = (0, {})
+        # When True, a missing app file raises ApiError HTTP 500 with nf_missing_file set
+        # (NF 3.10.x application/grpc + empty body signature), instead of returning None/404.
+        self.missing_as_nf_500 = missing_as_nf_500
 
     def app_rec(self, app_id, version=None):
         return {"id": app_id, "status": "STATUS_INSTALLED", "hooks": [], "files": [],
@@ -119,6 +122,10 @@ class FakeNF:
                 else:
                     data = self.files.get(key)
                 if data is None:
+                    if self.missing_as_nf_500:
+                        err = sync.ApiError(f"GET /api/v1/apps/{app_id}/files{key[1]} -> HTTP 500", 500, "http")
+                        err.nf_missing_file = True
+                        raise err
                     if ok_404:
                         return None
                     raise sync.ApiError("404", 404)
@@ -150,10 +157,26 @@ class FakeNF:
         return [dict(a) for a in self.store.values()]
 
     def app(self, app_id):
-        return self.store.get(app_id)
+        a = self.store.get(app_id)
+        if not a:
+            return None
+        # Derive files[].path from the in-memory store so tests that poke nf.files stay consistent
+        # with GET /api/v1/apps listings used by the installer guard.
+        derived = [{"path": p, "size": str(len(d)), "hash": "", "mtime": ""}
+                   for (aid, p), d in self.files.items() if aid == app_id]
+        out = dict(a)
+        out["files"] = derived
+        return out
 
-    def read_file(self, app_id, nf_path):
-        r = self.call("GET", f"/api/v1/apps/{app_id}/files{nf_path}", ok_404=True)
+    def read_file(self, app_id, nf_path, *, known_paths=None, push_manifest=None):
+        if known_paths is not None and nf_path not in known_paths:
+            return None
+        try:
+            r = self.call("GET", f"/api/v1/apps/{app_id}/files{nf_path}", ok_404=True)
+        except sync.ApiError as e:
+            if getattr(e, "nf_missing_file", False) and sync.path_is_new_on_box(nf_path, known_paths, push_manifest):
+                return None
+            raise
         return None if r is None else base64.b64decode(r.get("data", ""))
 
 
