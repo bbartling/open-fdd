@@ -11,6 +11,15 @@ const hook = require("../hooks/sparql.js");
 const lib = require("../static/sparql.js");
 const ox = require("../static/vendor/oxigraph/node.js");
 
+test("SPARQL hook StartHook args coerce maxTriples but preserve string fields", () => {
+  const nfArgs = hook.argsOf({ args: { query: "SELECT * WHERE {}", format: "json", maxTriples: "1200" } });
+  assert.equal(nfArgs.query, "SELECT * WHERE {}");
+  assert.equal(nfArgs.format, "json");
+  assert.equal(nfArgs.maxTriples, 1200);
+  const typed = hook.argsOf({ config: { query: "SELECT * WHERE {}", maxTriples: 800 } });
+  assert.equal(typed.maxTriples, 800);
+});
+
 const fixture = JSON.parse(readFileSync(new URL("../../tools/rdf-check/fixtures/model.json", import.meta.url), "utf8"));
 // The fixture has no fault result point; add one (as the FDD hook writes them).
 const records = [...fixture.records, {

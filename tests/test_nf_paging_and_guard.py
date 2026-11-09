@@ -534,6 +534,58 @@ def test_console_flags_nf_missing_file_500_without_echoing_body(monkeypatch):
     assert str(ei.value).endswith("HTTP 500") or "HTTP 500" in str(ei.value)
 
 
+def test_production_console_read_file_handles_missing_file_signature_by_path_age(monkeypatch):
+    """Exercise Console.read_file itself: a new missing path is allowed; a listed one is not."""
+    import email.message
+    import io
+    import urllib.error
+    import urllib.request as ureq
+
+    c = sync.Console("https://nf.example", "user", "pass")
+    path = "/hooks/lib/new-helper.js"
+    calls = []
+
+    def urlopen_missing(req, timeout=0, context=None):
+        calls.append(req.full_url)
+        hdrs = email.message.Message()
+        hdrs["Content-Type"] = "application/grpc; charset=utf-8"
+        raise urllib.error.HTTPError(req.full_url, 500, "err", hdrs=hdrs, fp=io.BytesIO(b""))
+
+    monkeypatch.setattr(ureq, "urlopen", urlopen_missing)
+    # With no listing, the last push manifest proves this path was not on the box.
+    assert c.read_file("app", path, push_manifest={}) is None
+    assert len(calls) == 1
+
+    # A known/listed path is never classified as new, even if absent from that manifest.
+    with pytest.raises(sync.ApiError) as ei:
+        c.read_file("app", path, known_paths={path}, push_manifest={})
+    assert ei.value.status == 500 and ei.value.nf_missing_file is True
+
+    # When no listing exists, the push manifest is authoritative and an already-pushed path errors.
+    with pytest.raises(sync.ApiError) as ei:
+        c.read_file("app", path, push_manifest={path: "new-helper.js"})
+    assert ei.value.status == 500 and ei.value.nf_missing_file is True
+
+
+def test_production_console_read_file_still_raises_unrelated_500(monkeypatch):
+    import email.message
+    import io
+    import urllib.error
+    import urllib.request as ureq
+
+    c = sync.Console("https://nf.example", "user", "pass")
+
+    def urlopen_error(req, timeout=0, context=None):
+        hdrs = email.message.Message()
+        hdrs["Content-Type"] = "application/json"
+        raise urllib.error.HTTPError(req.full_url, 500, "err", hdrs=hdrs, fp=io.BytesIO(b"failure"))
+
+    monkeypatch.setattr(ureq, "urlopen", urlopen_error)
+    with pytest.raises(sync.ApiError) as ei:
+        c.read_file("app", "/hooks/lib/new-helper.js", push_manifest={})
+    assert ei.value.status == 500 and not getattr(ei.value, "nf_missing_file", False)
+
+
 def test_unrelated_http_500_still_aborts_even_with_new_paths(tmp_path):
     """A 500 that is not the NF missing-file signature still stops the push."""
     m, nf, clk = pushed_box(tmp_path)

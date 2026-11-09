@@ -135,11 +135,14 @@ function redact(text, conn) {
   // Query passwords independently of a full connectionString match (partial URL fragments
   // in error text can still carry ?password=secret after userinfo masking).
   s = s.replace(/([?&]password=)[^&\s]*/gi, '$1***');
-  // Bare password replace needs length >= 3: a 1-char password like "e" would turn
-  // "connection refused" into "conn***ction r***fus***d". Short passwords inside a
-  // connectionString / ?password= are covered by the replaces above (#4/#5).
   const pw = conn && typeof conn === 'object' ? conn.password : null;
-  if (pw != null && String(pw).length >= 3) s = s.split(String(pw)).join('***');
+  if (pw != null && String(pw).length > 0) {
+    const secret = String(pw);
+    // A short bare secret cannot be reliably distinguished from ordinary text.
+    // Omit the driver diagnostic when the redacted message still contains it.
+    if (secret.length < 3 && s.includes(secret)) return 'Timescale connection failed (driver detail redacted)';
+    s = s.split(secret).join('***');
+  }
   return s;
 }
 

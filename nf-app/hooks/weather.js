@@ -152,8 +152,9 @@ function pickSite(sites, wanted) {
 const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo request
 const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
 const WRITE_TIMEOUT_MS = 10000; // per-point AddPointsData deadline
+const SITES_TIMEOUT_MS = 10000; // whole paginated Sites lookup
 const MODEL_LOOKUP_TIMEOUT_MS = 45000; // paginated model/site lookup (many sequential pages)
-const RUN_DEADLINE_MS = 120000; // whole-run: model lookup (45s) + Open-Meteo fetch + point writes must fit
+const RUN_DEADLINE_MS = 180000; // Sites (10s) + model (45s) + fetch (40s) + point writes (30s)
 
 /** Reject if `promise` doesn't settle within `ms`; calls onTimeout (e.g. abort) first. */
 function withDeadline(promise, ms, what, onTimeout) {
@@ -252,7 +253,7 @@ async function runOnce({ globalVariables, sdk, config }) {
   let site = coordsFromConfig(config);
   if (site) log(`weather location from the ${site.source}`);
   else {
-    const sites = await withDeadline(listAll(sdk.http, '/api/v1/sites', 'sites'), WRITE_TIMEOUT_MS, 'GetSites');
+    const sites = await withDeadline(listAll(sdk.http, '/api/v1/sites', 'sites'), SITES_TIMEOUT_MS, 'GetSites');
     try {
       site = pickSite(sites, wanted);
       site.source = 'nf sites api';

@@ -134,6 +134,17 @@ Cloud backup itself works: it uploads about daily; contents are configuration, n
 ## Open-FDD installer / hooks (5.0.8+)
 
 - **Missing app-file GET may be HTTP 500** (`Content-Type: application/grpc`, empty body), not 404. The hand-edit guard treats that signature as missing only for paths that are new relative to the box. Every other 500 still aborts.
-- **StartHook args are a string-to-string map.** Coerce JSON `uuids` and `windowHours` before use (`history.js`; shared helper tracked in #1559).
-- **Windows cp1252:** `nf_app_sync.py` verify printing must tolerate non-cp1252 Unicode in hook events (#1560).
+- **StartHook args are a string-to-string map.** Coerce structured fields before use: JSON `uuids`, numeric
+  `windowHours` / `days` / `maxTriples`, and boolean analytics flags. The shared helper converts declared fields
+  only, leaving text fields such as queries, dates and identifiers unchanged; typed unit-test calls remain valid
+  (#1559).
+- **Windows cp1252:** `nf_app_sync.py` run and verify output must tolerate non-cp1252 Unicode in hook events and
+  extracted `ok:false` error text (#1560). Output replaces unencodable characters while preserving run state and
+  exit status.
+- **Offline coverage:** the browser mock serves synthetic data. Installer tests drive the production console client
+  with the observed gRPC error response and hook tests supply NF-shaped argument maps, stored app option values,
+  and offset pages beyond the first 500 records. The deploy agent verifies the installed app against real NF.
+- **Weather deadlines:** both editions budget 10 seconds for all Sites pages, 45 for the model fallback, 40 for
+  two weather fetch attempts, and 30 for three point writes. Lite can spend another 40 seconds on its local
+  mirror. The hook deadline is 180 seconds and NF allows 190 seconds for the invocation.
 - **Live patching is last resort.** Capture with a read-only file GET first, patch one file, commit on a patch branch (HTML without `?v=` stamps), restart before verify, and do not rewrite push-manifest hashes until the deploying revision contains the fix. See repo-root `AGENTS.md`.

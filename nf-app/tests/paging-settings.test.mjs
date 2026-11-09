@@ -302,7 +302,8 @@ test("settings: redact removes the password and URL credentials from log text", 
   assert.match(settings.redact(`fail ${cs}`, { connectionString: cs }), /postgres:\/\/\*\*\*/);
   // short passwords inside a connectionString are still covered (#5); bare 1-char must not mangle diagnostics
   assert.doesNotMatch(settings.redact("fail " + "postgres://u:x@db/nf", { connectionString: "postgres://u:x@db/nf" }), /u:x@/);
-  assert.equal(settings.redact("connection refused", { password: "e" }), "connection refused");
+  assert.equal(settings.redact("connect failed for x", { password: "x" }), "Timescale connection failed (driver detail redacted)");
+  assert.equal(settings.redact("connection refused", { password: "" }), "connection refused");
   // partial URL after userinfo masking must still lose ?password=
   assert.doesNotMatch(settings.redact("fail postgres://u:***@db/nf?password=secret", { connectionString: "postgres://u:old@db/nf?password=secret" }), /password=secret/);
   assert.match(settings.redact("x?password=secret&y=1", {}), /password=\*\*\*/);
@@ -383,12 +384,13 @@ test("weather: MODEL_LOOKUP_TIMEOUT_MS and RUN_DEADLINE_MS cover lookup + fetch 
   for (const rel of ["../hooks/weather.js", "../../lite/hooks/open_meteo_weather.js"]) {
     const src = readFileSync(join(here, rel), "utf8");
     assert.match(src, /MODEL_LOOKUP_TIMEOUT_MS\s*=\s*45000/);
-    assert.match(src, /RUN_DEADLINE_MS\s*=\s*120000/);
+    assert.match(src, /SITES_TIMEOUT_MS\s*=\s*10000/);
+    assert.match(src, /RUN_DEADLINE_MS\s*=\s*180000/);
     assert.match(src, /withDeadline\(siteFromModel\([^)]*\),\s*MODEL_LOOKUP_TIMEOUT_MS/);
   }
   for (const rel of ["../app.json", "../../lite/app.json"]) {
-    const src = readFileSync(join(here, rel), "utf8");
-    assert.match(src, /"invokeTimeout":\s*"120s"/);
+    const { hooks } = JSON.parse(readFileSync(join(here, rel), "utf8"));
+    assert.equal(hooks.find((hook) => hook.id.endsWith("weather")).invokeTimeout, "190s");
   }
 });
 

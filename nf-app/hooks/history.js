@@ -19,36 +19,18 @@
 // has timescale/install.sql applied. Nothing site-specific here.
 const ts = require('./lib/timescale.js');
 const settings = require('./lib/settings.js');
+const startArgs = require('./lib/start-hook-args.js');
 
 /** Hook arguments: NF passes the StartHook "args" object; accept the common spots (same as sparql.js). */
-const argsOf = (ctx) => {
-  const a = (ctx && (ctx.args || ctx.params || (ctx.sdk && ctx.sdk.args))) || {};
-  return typeof a === 'string' ? JSON.parse(a) : a;
-};
+const argsOf = (ctx) => startArgs.startHookArgs(ctx);
 
 /**
  * NF StartHook args are a string→string map. Coerce JSON-encoded fields (especially `uuids`) and optional
  * `windowHours` into the shape historyRoute expects ({ uuids: string[], from, to, bucket? }).
  * @param {any} args
  */
-const normalizeArgs = (args) => {
-  const a = { ...(args && typeof args === 'object' ? args : {}) };
-  if (typeof a.uuids === 'string') {
-    try {
-      const parsed = JSON.parse(a.uuids);
-      if (Array.isArray(parsed)) a.uuids = parsed;
-    } catch (_) { /* leave as string; historyRoute will reject clearly */ }
-  }
-  if ((a.from == null || a.from === '') && (a.to == null || a.to === '') && a.windowHours != null && a.windowHours !== '') {
-    const hours = Number(a.windowHours);
-    if (Number.isFinite(hours) && hours > 0) {
-      const to = new Date();
-      a.to = to.toISOString();
-      a.from = new Date(to.getTime() - hours * 3600 * 1000).toISOString();
-    }
-  }
-  return a;
-};
+const normalizeArgs = (args) => startArgs.normalizeStartHookArgs(args,
+  { jsonFields: ['uuids'], numberFields: ['windowHours'], expandWindowHours: true });
 
 /**
  * @param {{ sdk: any, args?: { uuids?: string[], from?: string, to?: string, bucket?: string }, config?: { timescale?: object, history?: object } }} p
@@ -110,5 +92,5 @@ async function handle({ sdk, args = {}, config: rawConfig = {} }) {
 }
 
 /** NF hook entry point; helpers exported for tests. */
-const hook = async (ctx) => handle({ sdk: ctx.sdk, args: normalizeArgs(argsOf(ctx)), config: ctx.config || {} });
+const hook = async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx), config: ctx.config || {} });
 module.exports = Object.assign(hook, { handle, argsOf, normalizeArgs });
