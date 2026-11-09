@@ -541,7 +541,7 @@ def test_pin_server_cert_trusts_only_the_presented_leaf_and_prints_its_fingerpri
     try:
         base = f"https://127.0.0.1:{srv.server_port}"
         # without pinning the self-signed cert is rejected: verification is on
-        with pytest.raises(SystemExit, match="TLS error"):
+        with pytest.raises(SystemExit, match="TLS certificate not trusted"):
             sync.Console(base, "u", "p").call("GET", "/x")
         ctx, fp = sync.pin_server_cert(base)
         import hashlib

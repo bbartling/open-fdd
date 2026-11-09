@@ -5,6 +5,11 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.5
+
+- The deploy `doctor` labels failures correctly: `connectivity` (refused, DNS, unreachable, timeouts), `tls` and `auth` (real 401/403 only), fixing [#1549](https://github.com/bbartling/open-fdd/issues/1549). See [Troubleshooting](install.html#10-troubleshooting).
+- The `fdd` hook fails loudly instead of reporting success with every output stale, with distinct reasons (`required roles missing`, `unit unusable`, `no input data in window`) and a run report of engine, window, newest input sample and counts; `doctor` gains an **fdd freshness** check; the `history` hook separates empty results from errors. Fixes [#1550](https://github.com/bbartling/open-fdd/issues/1550). See [FDD data access](fdd-data-access.html#checking-that-results-are-fresh).
+
 ## 5.0.4
 
 - One-command installer (`install`, `doctor`, `uninstall`, `--remove-old`), a new [install guide](install.html) and [FDD data access](fdd-data-access.html) page. Fixes for ten deploy problems: Caddy/NF login mismatch and recovery, portal-key 401 message, the `/` redirect, dependency install on push, weather coordinates from the modeled site, `history` and on-request hooks skipped by a blanket `run`, static routes behind NF auth, orphan hook points, and self-signed HTTPS.

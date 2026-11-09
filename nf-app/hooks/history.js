@@ -7,6 +7,10 @@
 // Returns {bucket, from, to, total, truncated, rows: [{point_uuid, bucket, avg, min, max, n}]}, capped at
 // about 200 KB (truncated = true when more rows existed). bucket is optional ("15 minutes", "1 hour",
 // "1 day", ...); without it one is picked so each series has about 1000 buckets.
+// The answer always has ok. An empty range is {ok: true, row_count: 0, rows: [], reason: "no rows in the requested range",
+// newest_source_ts: <ISO of the newest sample of those points in the source, any age | null>}: a stale source shows up
+// there. A database / connection failure is {ok: false, rows: 0, error, error_code, stage: "connect" | "query"} (5.0.5,
+// #1550); a bad request (arguments) throws.
 // With no config `timescale` and no args the hook returns {ok: true, skipped: true, reason: "timescale not configured"};
 // with args it fails (a query must never be answered from nowhere).
 // Bounds (server side, hook config `history`: maxPoints 200000, maxSpanDays 3660, minBucketSec 60,
@@ -36,12 +40,40 @@ async function handle({ sdk, args = {}, config = {} }) {
     }
     throw new Error('history hook: config.timescale is not set (full edition only)');
   }
-  const client = await ts.connect(config.timescale);
+  // A database or connection failure is ok:false with the error, never an empty answer; a bad request (arguments)
+  // still throws. Database errors carry a string `code` (pg SQLSTATE, ECONNREFUSED, history_timeout ...).
+  const failed = (e, stage) => {
+    const result = { ok: false, rows: 0, error: String((e && e.message) || e), error_code: String(e.code), stage };
+    log(JSON.stringify(result));
+    return result;
+  };
+  const runtimeError = (e) => !!e && typeof e.code === 'string' && !!e.code;
+  let client;
   try {
-    const result = await ts.historyRoute(client, /** @type {any} */ (args), /** @type {any} */ (config.history || {}));
+    client = await ts.connect(config.timescale);
+  } catch (e) {
+    if (runtimeError(e)) return failed(e, 'connect');
+    throw e;
+  }
+  try {
+    const result = /** @type {any} */ (await ts.historyRoute(client, /** @type {any} */ (args), /** @type {any} */ (config.history || {})));
+    result.ok = true;
+    result.row_count = result.rows.length;
+    if (!result.rows.length) {
+      // an empty answer: say so, and when the source last had a sample for these points (any age), so "nothing in
+      // this range" can be told from "the source stopped receiving rows"
+      result.reason = 'no rows in the requested range';
+      try {
+        const newest = await ts.newestSample(client, /** @type {any} */ (args).uuids);
+        result.newest_source_ts = newest == null ? null : new Date(newest).toISOString();
+      } catch (e) { result.newest_source_ts_error = String((e && e.message) || e); }
+    }
     const text = JSON.stringify(result);
     log(text.length > 200000 ? text.slice(0, 200000) : text);
     return result;
+  } catch (e) {
+    if (runtimeError(e)) return failed(e, 'query');
+    throw e;
   } finally {
     await client.end();
   }
