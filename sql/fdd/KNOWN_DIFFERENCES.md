@@ -26,7 +26,7 @@ The operational gate still applies to ordinary flatline/range/spike evidence, bu
 
 - SV-RATE is excluded from the `W4e_si_sensor_util` parity family. It stays unsupported on SI (see the SV-RATE section above) and is not claimed by W4e.
 - Sensor-sweep tolerances (`flatline_tol`, `stale_tol`, `spike_limit`) and `oat_err` are temperature differences (K / delta degC), never absolute temperatures. Humidity roles use declared percent-RH literals (flatline 0.1, stale 0.05), not the temperature tolerance.
-- SV-RANGE, SV-FLATLINE and SV-SPIKE SQL use the operational gate fallback order (fan status, fan command, VAV zone airflow, pump, chiller). The airflow proof is 23.597350 L/s (SI). The SQL checks airflow per row while pandas checks column presence; rows with NULL airflow fall through to the next proof in SQL. Silence remains assessed independent of that gate.
+- SV-RANGE, SV-FLATLINE and SV-SPIKE SQL use the row-wise operational proof fallback order (fan status, fan command, VAV zone airflow, pump status, CHW pump command, chiller status); each row uses the first non-NULL proof, and rows with NULL values fall through to the next available proof. The airflow threshold is 23.597350 L/s (SI). The pandas oracle now uses the same row-wise fallback. Silence remains assessed independent of the gate.
 - `authorized_series` must carry each role's SI unit (the NF app hook fills it from the point unit after converting to SI); without it the sensor sweep masks every value and records zero fault time.
 - SCHED-1 comfort tuners are `comfort_low`/`comfort_high` (degC), matching the SI runner parameters.
 

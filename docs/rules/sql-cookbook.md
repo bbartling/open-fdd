@@ -9656,7 +9656,7 @@ Sensor flatline (stuck)
 **Output columns**: `equipment_id`, `sensor_role`, `fault_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (160 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_flatline.sql">template file</a></summary>
+<summary>SQL at defaults (161 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_flatline.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -9796,7 +9796,8 @@ streak_groups AS (
 streaks AS (
   SELECT streak_groups.*,
     SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
-      PARTITION BY equipment_id, sensor_role, streak_group ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+      PARTITION BY equipment_id, sensor_role, data_segment, streak_group
+      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
     ) AS fault_streak_seconds
   FROM streak_groups
 ),
@@ -9877,7 +9878,7 @@ Sensor out of hard range
 **Output columns**: `equipment_id`, `sensor_role`, `fault_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (138 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_range.sql">template file</a></summary>
+<summary>SQL at defaults (139 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_range.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -9995,7 +9996,8 @@ streak_groups AS (
 streaks AS (
   SELECT streak_groups.*,
     SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
-      PARTITION BY equipment_id, sensor_role, streak_group ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+      PARTITION BY equipment_id, sensor_role, data_segment, streak_group
+      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
     ) AS fault_streak_seconds
   FROM streak_groups
 ),
@@ -10238,7 +10240,7 @@ Sensor rate-of-change spike
 **Output columns**: `equipment_id`, `sensor_role`, `fault_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (130 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_spike.sql">template file</a></summary>
+<summary>SQL at defaults (131 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_spike.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -10348,7 +10350,8 @@ streak_groups AS (
 streaks AS (
   SELECT streak_groups.*,
     SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
-      PARTITION BY equipment_id, sensor_role, streak_group ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+      PARTITION BY equipment_id, sensor_role, data_segment, streak_group
+      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
     ) AS fault_streak_seconds
   FROM streak_groups
 ),
@@ -10413,7 +10416,7 @@ Stale data (no fresh samples)
 **Output columns**: `equipment_id`, `sensor_role`, `fault_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (160 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql">template file</a></summary>
+<summary>SQL at defaults (161 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -10553,7 +10556,8 @@ streak_groups AS (
 streaks AS (
   SELECT streak_groups.*,
     SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
-      PARTITION BY equipment_id, sensor_role, streak_group ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+      PARTITION BY equipment_id, sensor_role, data_segment, streak_group
+      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
     ) AS fault_streak_seconds
   FROM streak_groups
 ),

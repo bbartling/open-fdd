@@ -112,3 +112,17 @@ test("SV-STALE and SV-FLATLINE do not let a changing peer mask a stuck sensor", 
     assert.ok(around(out[rule].rat, 0), `${rule}/rat should remain clear`);
   }
 });
+
+test("SV-RANGE resets confirmation after a gap without losing its silent fault time", async () => {
+  const input = {
+    history: [[0, 12], [7, 75], [60, 12], [62, 75], [64, 12]].map(([minute, sat]) => ({
+      equipment_id: "eq-1", ts: START + minute * 60_000, sat, fan_status: 1,
+    })),
+    authorizedSeries: [{ site_id: "site-1", equipment_id: "eq-1", role: "sat", unit: "°C" }],
+    equipment: [{ building_id: "site-1", equipment_id: "eq-1" }],
+  };
+  const out = await queryBoth(input, ["SV-RANGE"]);
+  // Count the first fault's 30-minute hold and 23-minute silence. The
+  // independent two-minute fault after the gap has not met five-minute confirmation.
+  assert.ok(around(out["SV-RANGE"].sat, 53 / 60), `sat=${out["SV-RANGE"].sat}`);
+});

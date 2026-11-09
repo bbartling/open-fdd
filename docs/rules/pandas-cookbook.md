@@ -4509,11 +4509,9 @@ Flags any modeled sensor reading outside its physical hard range.
 |---|---|---:|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | 1 | min |
 | `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | 0.25 | h |
-| `minimum_active_coverage_pct` | Minimum active coverage | 5 | 0 | 100 | 1 | % |
 | `range_scale_humidity` | Humidity range scale | 1 | 0.5 | 2 | 0.1 | x |
 | `range_scale_pressure` | Pressure range scale | 1 | 0.5 | 2 | 0.1 | x |
 | `range_scale_temperature` | Temp range scale | 1 | 0.5 | 2 | 0.1 | x |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 1 | bool |
 
 <details markdown="1">
 <summary>Source: <code>_sweep_range</code> (29 lines)</summary>

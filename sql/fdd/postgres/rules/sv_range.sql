@@ -113,7 +113,8 @@ streak_groups AS (
 streaks AS (
   SELECT streak_groups.*,
     SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
-      PARTITION BY equipment_id, sensor_role, streak_group ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+      PARTITION BY equipment_id, sensor_role, data_segment, streak_group
+      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
     ) AS fault_streak_seconds
   FROM streak_groups
 ),

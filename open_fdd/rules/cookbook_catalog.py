@@ -1861,8 +1861,6 @@ RULES: list[CookbookRule] = [
         "Any modeled sensor reads outside its physical hard range (e.g. OAT −51–54 °C, SAT −1–66 °C, CHWS −1–27 °C).",
         _sweep_range,
         params=[
-            CookbookParam("require_operational_gate", "Require operational gate", "bool", 0.0, 1.0, 1.0, 1.0),
-            CookbookParam("minimum_active_coverage_pct", "Minimum active coverage", "%", 0.0, 100.0, 1.0, 5.0),
             CookbookParam("range_scale_temperature", "Temp range scale", "x", 0.5, 2.0, 0.1, 1.0, direction="fewer"),
             CookbookParam("range_scale_humidity", "Humidity range scale", "x", 0.5, 2.0, 0.1, 1.0, direction="fewer"),
             CookbookParam("range_scale_pressure", "Pressure range scale", "x", 0.5, 2.0, 0.1, 1.0, direction="fewer"),
