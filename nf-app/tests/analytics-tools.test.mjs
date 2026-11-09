@@ -319,6 +319,11 @@ test("read-only: a tool run never writes, and a write attempt inside the hook's 
 test("the hook function takes args from the NF context, logs one JSON line, rejects an unknown tool, and caps big answers", async () => {
   assert.equal(analytics.argsOf({ args: { tool: "x" } }).tool, "x");
   assert.equal(analytics.argsOf({ args: '{"tool":"y"}' }).tool, "y");
+  const nfArgs = analytics.argsOf({ args: { tool: "get_fdd_fault_timeline", days: "7", dense: "false", checkData: "false" } });
+  assert.equal(nfArgs.days, 7);
+  assert.equal(nfArgs.dense, false);
+  assert.equal(nfArgs.checkData, false);
+  assert.equal(analytics.argsOf({ args: { days: 2, dense: true } }).dense, true, "typed unit-test calls stay typed");
   const bad = (await run({ tool: "drop_tables" })).result;
   assert.equal(bad.ok, false);
   assert.match(bad.error, /args.tool must be one of/);

@@ -3125,6 +3125,7 @@
       ],
       "output_columns": [
         "equipment_id",
+        "sensor_role",
         "fault_hours"
       ],
       "pandas_function": null,
@@ -3232,11 +3233,28 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "step": 1.0,
           "unit": "min"
+        },
+        "max_silence_hours": {
+          "control": "slider",
+          "default": 0.5,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "max_silence_hours",
+          "kind": "dimensionless",
+          "label": "Max sensor silence",
+          "max": 12.0,
+          "min": 0.25,
+          "sql_placeholder": "MAX_SILENCE_HOURS",
+          "step": 0.25,
+          "unit": "h"
         }
       },
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
+        "MAX_SILENCE_HOURS",
+        "MAX_SILENCE_SECONDS",
         "POLL_SECONDS",
         "RANGE_SCALE_HUMIDITY",
         "RANGE_SCALE_PRESSURE",
@@ -3286,6 +3304,7 @@
       ],
       "output_columns": [
         "equipment_id",
+        "sensor_role",
         "fault_hours"
       ],
       "pandas_function": null,
@@ -3378,15 +3397,30 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "step": 1.0,
           "unit": "min"
+        },
+        "max_silence_hours": {
+          "control": "slider",
+          "default": 0.5,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "max_silence_hours",
+          "kind": "dimensionless",
+          "label": "Max sensor silence",
+          "max": 12.0,
+          "min": 0.25,
+          "sql_placeholder": "MAX_SILENCE_HOURS",
+          "step": 0.25,
+          "unit": "h"
         }
       },
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
-        "FLATLINE_ROWS",
-        "FLATLINE_ROWS_PRECEDING",
+        "FLATLINE_SECONDS",
         "FLATLINE_TOL",
-        "POLL_SECONDS"
+        "MAX_SILENCE_HOURS",
+        "MAX_SILENCE_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -3432,6 +3466,7 @@
       ],
       "output_columns": [
         "equipment_id",
+        "sensor_role",
         "fault_hours"
       ],
       "pandas_function": null,
@@ -3554,11 +3589,28 @@
           "sql_placeholder": "STARTUP_DELAY_MIN",
           "step": 1.0,
           "unit": "min"
+        },
+        "max_silence_hours": {
+          "control": "slider",
+          "default": 0.5,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "max_silence_hours",
+          "kind": "dimensionless",
+          "label": "Max sensor silence",
+          "max": 12.0,
+          "min": 0.25,
+          "sql_placeholder": "MAX_SILENCE_HOURS",
+          "step": 0.25,
+          "unit": "h"
         }
       },
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
+        "MAX_SILENCE_HOURS",
+        "MAX_SILENCE_SECONDS",
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "POLL_SECONDS",
         "REQUIRE_OPERATIONAL_GATE",
@@ -3601,6 +3653,7 @@
       ],
       "output_columns": [
         "equipment_id",
+        "sensor_role",
         "fault_hours"
       ],
       "pandas_function": null,
@@ -3629,9 +3682,9 @@
           "kind": "dimensionless",
           "label": "Stale window",
           "max": 12.0,
-          "min": 0.5,
+          "min": 0.25,
           "sql_placeholder": "STALE_HOURS",
-          "step": 0.5,
+          "step": 0.25,
           "unit": "h"
         },
         "stale_tol": {
@@ -3648,14 +3701,29 @@
           "sql_placeholder": "STALE_TOL",
           "step": 0.005556,
           "unit": "degC"
+        },
+        "max_silence_hours": {
+          "control": "slider",
+          "default": 0.5,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "max_silence_hours",
+          "kind": "dimensionless",
+          "label": "Max sensor silence",
+          "max": 12.0,
+          "min": 0.25,
+          "sql_placeholder": "MAX_SILENCE_HOURS",
+          "step": 0.25,
+          "unit": "h"
         }
       },
       "parity_status": "sql_screening",
       "placeholders": [
         "CONFIRM_ROWS",
-        "POLL_SECONDS",
-        "STALE_ROWS",
-        "STALE_ROWS_PRECEDING",
+        "MAX_SILENCE_HOURS",
+        "MAX_SILENCE_SECONDS",
+        "STALE_SECONDS",
         "STALE_TOL"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",

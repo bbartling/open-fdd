@@ -246,12 +246,13 @@ async function runRules(client, pack, ruleIds) {
 
 /**
  * One fdd_results row from a rule's output row: fault_pct / fault_hours / covered_hours when present,
- * every other numeric output column goes to metric.
+ * Other numeric outputs and the sweep's per-role hours go to metric.
  */
 function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale", windowStart, windowEnd }) {
   const known = new Set(["equipment_id", "fault_pct", "fault_hours", "covered_hours"]);
   const metric = {};
   for (const [k, v] of Object.entries(row)) if (!known.has(k) && typeof v === "number" && Number.isFinite(v)) metric[k] = v;
+  if (row.sensor_fault_hours) metric.sensor_fault_hours = row.sensor_fault_hours;
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   return {
     run_ts: iso(runTs), equip, site, rule_id: ruleId,

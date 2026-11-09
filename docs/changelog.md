@@ -5,6 +5,13 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.9
+
+- Hardened NF installer verification, StartHook argument handling and Windows hook reports ([#1557](https://github.com/bbartling/open-fdd/issues/1557), [#1558](https://github.com/bbartling/open-fdd/issues/1558), [#1559](https://github.com/bbartling/open-fdd/issues/1559), [#1560](https://github.com/bbartling/open-fdd/issues/1560)).
+- Generated the scratch SQL schema and NF pack input schema from the same SI contract ([#1547](https://github.com/bbartling/open-fdd/issues/1547)).
+- Attributed sensor sweep fault hours to each role, including time lost to extended reporting gaps. NF and Timescale retain each role's score alongside the equipment result ([#1555](https://github.com/bbartling/open-fdd/issues/1555)).
+- Aligned weather lookup and invoke deadlines in both editions and protected short Timescale passwords in driver errors.
+
 ## 5.0.8
 
 Hand-edit guard: paths absent from the installed app `files` list, or answered with NF's missing-file HTTP 500 signature (`application/grpc`, empty body) when the path is new relative to the box, are treated as not on the box. Unrelated HTTP 500s still abort; response bodies stay out of error messages. History StartHook string-map `uuids` / `windowHours` are coerced; Windows `report_run` tolerates non-cp1252 hook events.

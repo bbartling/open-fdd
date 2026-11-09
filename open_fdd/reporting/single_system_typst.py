@@ -759,7 +759,7 @@ def _faulted_roles(result) -> list[str]:
     return seen
 
 
-def sensor_validation_bullets(results, health: list[dict[str, Any]]) -> list[dict[str, str]]:
+def sensor_validation_bullets(results, health: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Plain pass/fail lines for sensor-validation rules. Findings only, unless clean."""
     checked = [result for result in results if _is_sv_rule(result.rule_id)]
     findings = [result for result in checked if _confirmed_fault(result)]
@@ -782,6 +782,30 @@ def sensor_validation_bullets(results, health: list[dict[str, Any]]) -> list[dic
     for result in findings:
         issue = _SV_PLAIN.get(result.rule_id, "sensor check failed")
         roles = _faulted_roles(result)
+        evidence = (getattr(result, "metrics", None) or {}).get("sv_sweep_evidence") or []
+        silence_only = set()
+        for row in evidence:
+            if not isinstance(row, dict):
+                continue
+            role = row.get("role")
+            hours = row.get("silence_hours") or 0
+            if role not in roles or hours <= 0:
+                continue
+            label = _plain_role(role).capitalize()
+            bullets.append({
+                "outcome": "fail",
+                "rule_id": result.rule_id,
+                "roles": [role],
+                "labels": [label],
+                "silence_hours": hours,
+                "text": f"{label} had {hours:.2f} fault hours from missing samples.",
+            })
+            if (row.get("fault_hours") or 0) <= hours + 1e-9:
+                silence_only.add(role)
+        if silence_only:
+            roles = [role for role in roles if role not in silence_only]
+            if not roles:
+                continue
         if result.rule_id == "SV-RANGE" and roles:
             for role in roles:
                 label = _plain_role(role).capitalize()
@@ -809,7 +833,7 @@ def sensor_validation_bullets(results, health: list[dict[str, Any]]) -> list[dic
                 "rule_id": result.rule_id,
                 "roles": roles,
                 "labels": labels,
-                "text": f"{'; '.join(labels) or 'A mapped sensor'}: {issue}.",
+                "text": f"{', '.join(labels) or 'A mapped sensor'}: {issue}.",
             }
         )
     return bullets

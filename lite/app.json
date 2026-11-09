@@ -85,7 +85,7 @@
         "rrule": "DTSTART:20261101T000000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"
       },
       "mode": "MODE_SCHEDULED",
-      "invokeTimeout": "120s"
+      "invokeTimeout": "190s"
     }
   ]
 }

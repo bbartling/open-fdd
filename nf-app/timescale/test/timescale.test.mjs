@@ -98,7 +98,7 @@ const close = (a, b) => {
   return String(a) === String(b);
 };
 const diffRows = (a, b) => {
-  const key = (r) => String(r.equipment_id);
+  const key = (r) => `${r.equipment_id}|${r.sensor_role ?? ""}`;
   const x = [...a].sort((p, q) => key(p).localeCompare(key(q)));
   const y = [...b].sort((p, q) => key(p).localeCompare(key(q)));
   if (x.length !== y.length) return [`row count ${x.length} vs ${y.length}`];
@@ -345,7 +345,7 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
       // 5.0.3 fault timeline: the same timeline_sql on the real database == pglite (per-timestamp confirmed flags).
       const tlSql = pack.rules[id] && pack.rules[id].timeline_sql;
       if (tlSql) {
-        const norm = (rows) => rows.map((r) => `${r.equipment_id}|${Number(r.ts_epoch)}|${Number(r.confirmed)}|${Number(r.held_seconds)}`).sort();
+        const norm = (rows) => rows.map((r) => `${r.equipment_id}|${r.sensor_role ?? ""}|${Number(r.ts_epoch)}|${Number(r.confirmed)}|${Number(r.held_seconds)}`).sort();
         let tsTl, tsTlErr;
         try { tsTl = await q(tlSql); } catch (e) { tsTlErr = e.message; }
         if (tsTlErr) { problems.push(`${id} timeline: timescale error ${tsTlErr}`); continue; }
@@ -370,7 +370,7 @@ test("writeResults upserts into openfdd.fdd_results", { skip }, async () => {
   const runTs = "2026-10-14T00:00:00Z";
   const rows = [];
   for (const [id, res] of Object.entries(ruleRun.results)) {
-    const row = res.find((r) => r.equipment_id === EQUIP);
+    const row = hook.equipmentResult(pack.rules[id], res, EQUIP);
     if (row) rows.push(ts.toResultRow({ runTs, equip: EQUIP, site: "site-1", ruleId: id, row, windowStart: FROM, windowEnd: TO }));
   }
   assert.ok(rows.length >= 15);
@@ -382,6 +382,11 @@ test("writeResults upserts into openfdd.fdd_results", { skip }, async () => {
   assert.ok(close(back.fault_pct, ruleRun.results.FC1[0].fault_pct));
   assert.equal(back.engine, "timescale");
   assert.equal(back.window_start.toISOString(), "2026-09-20T00:00:00.000Z");
+  const sweep = (await db.query("SELECT fault_hours, metric FROM openfdd.fdd_results WHERE rule_id = 'SV-STALE' AND run_ts = $1", [runTs])).rows[0];
+  const scores = Object.fromEntries(ruleRun.results["SV-STALE"].map((row) => [row.sensor_role, row.fault_hours]));
+  assert.ok(Object.keys(scores).length > 1, "fixture assesses multiple roles");
+  assert.deepEqual(sweep.metric.sensor_fault_hours, scores);
+  assert.equal(Number(sweep.fault_hours), Math.max(...Object.values(scores)));
 });
 
 test("history_buckets and historyRoute (bounds against the real database)", { skip }, async () => {

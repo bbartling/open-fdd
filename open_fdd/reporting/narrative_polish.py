@@ -47,10 +47,16 @@ def polish_sensor_paragraph(checks: list[dict[str, Any]]) -> str:
         return "Sensor checks passed. No stuck sensors, out-of-range readings, or stale data."
 
     by_rule: dict[str, list[dict[str, Any]]] = {}
+    silence = []
     for row in fails:
-        by_rule.setdefault(str(row.get("rule_id") or ""), []).append(row)
+        if row.get("silence_hours"):
+            silence.append(row)
+        else:
+            by_rule.setdefault(str(row.get("rule_id") or ""), []).append(row)
 
     sentences: list[str] = []
+    if silence:
+        sentences.append(f"{_lead(_labels(silence))} had gaps in reporting.")
     for row in by_rule.get("SV-RANGE") or []:
         for label in row.get("labels") or []:
             low = row.get("low")

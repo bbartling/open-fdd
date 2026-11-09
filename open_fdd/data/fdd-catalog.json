@@ -3,7 +3,7 @@
  "source": [
   "sql/fdd/registry.yaml",
   "sql/fdd/role_map.json",
-  "sql/fdd/role_scales.json",
+  "sql/fdd/input_contract.json",
   "nf-app/rules/role_overrides.json"
  ],
  "equipment_kinds": {
@@ -1553,7 +1553,8 @@
     "confirm_seconds": 300.0,
     "range_scale_temperature": 1.0,
     "range_scale_humidity": 1.0,
-    "range_scale_pressure": 1.0
+    "range_scale_pressure": 1.0,
+    "max_silence_hours": 0.5
    }
   },
   {
@@ -1601,7 +1602,8 @@
     "require_operational_gate": 1.0,
     "confirm_seconds": 300.0,
     "flatline_tol": 0.055556,
-    "flatline_hours": 1.0
+    "flatline_hours": 1.0,
+    "max_silence_hours": 0.5
    }
   },
   {
@@ -1648,7 +1650,8 @@
     "spike_scale_humidity": 1.0,
     "spike_scale_temperature": 1.0,
     "confirm_seconds": 300.0,
-    "spike_scale": 1.0
+    "spike_scale": 1.0,
+    "max_silence_hours": 0.5
    }
   },
   {
@@ -1687,6 +1690,7 @@
    "parameters": {
     "confirm_seconds": 300.0,
     "stale_hours": 2.0,
+    "max_silence_hours": 0.5,
     "stale_tol": 0.027778
    }
   },

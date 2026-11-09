@@ -85,8 +85,8 @@ def test_sql_engines_agree(data):
     pg, lite = data["results"]["pglite"], data["results"]["sqlite"]
     bad = []
     for rule in pg:
-        a = sorted(pg[rule], key=lambda r: r["equipment_id"])
-        b = sorted(lite[rule], key=lambda r: r["equipment_id"])
+        a = sorted(pg[rule], key=h.sql_result_key)
+        b = sorted(lite[rule], key=h.sql_result_key)
         if len(a) != len(b):
             bad.append(f"{rule}: {len(a)} vs {len(b)} rows")
             continue
@@ -163,3 +163,21 @@ def test_pandas_defaults_equal_sql_catalog(report):
                 if abs(float(p.default) - float(q["default"])) > 1e-4 * max(1.0, abs(float(q["default"]))):
                     bad.append((rid, p.key, p.default, q["default"]))
     assert not bad, bad[:10]
+
+
+def test_sensor_sweep_parity_keeps_per_role_evidence(report):
+    """Per-role sweep rows must match pandas evidence; equipment totals stay worst-sensor hours."""
+    for rule in ("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE"):
+        per = report["compared"][rule]
+        assert per, rule
+        for equip, result in per.items():
+            sql_roles = result.get("sql_sensor_fault_hours")
+            pandas_roles = result.get("pandas_sensor_fault_hours")
+            silence_hours = result.get("pandas_sensor_silence_hours")
+            assert sql_roles is not None and pandas_roles is not None, (rule, equip, result)
+            assert set(sql_roles) == set(pandas_roles), (rule, equip, sql_roles, pandas_roles)
+            assert silence_hours is not None and set(silence_hours) == set(pandas_roles), (rule, equip, result)
+            assert all(value >= 0 for value in silence_hours.values()), (rule, equip, silence_hours)
+            assert result["sql"] == pytest.approx(max(sql_roles.values(), default=0.0))
+            assert result["pandas"] == pytest.approx(max(pandas_roles.values(), default=0.0))
+            assert h.rule_matches({equip: result}), (rule, equip, result)

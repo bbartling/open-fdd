@@ -90,11 +90,11 @@ async function loadModel(http, shared) {
 }
 
 const errText = (e) => (e && (e.message || (e.response && JSON.stringify(e.response.data)))) || String(e);
+const startArgs = require('./lib/start-hook-args.js');
 
 /** Hook arguments: NF passes the StartHook "args" object; accept the common spots. */
 const argsOf = (ctx) => {
-  const a = (ctx && (ctx.args || ctx.params || (ctx.sdk && ctx.sdk.args) || ctx.config)) || {};
-  return typeof a === 'string' ? JSON.parse(a) : a;
+  return startArgs.startHookArgs(ctx, { configFallback: true, numberFields: ['maxTriples'] });
 };
 
 /** @param {{sdk: any, args?: any, nfBase?: string, now?: () => number}} o */

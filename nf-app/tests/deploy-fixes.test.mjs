@@ -132,3 +132,14 @@ test("history: normalizeArgs coerces StartHook string-map uuids and windowHours"
   assert.deepEqual(history.normalizeArgs({ uuids: ["u-9"], from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z" }).uuids, ["u-9"]);
 });
 
+test("history: StartHook argument context shares typed and string-map normalization", () => {
+  const nfArgs = history.normalizeArgs(history.argsOf({ args: { uuids: '["u-1","u-2"]', windowHours: "2" } }));
+  assert.deepEqual(nfArgs.uuids, ["u-1", "u-2"]);
+  assert.equal(typeof nfArgs.windowHours, "number");
+  assert.ok(Math.abs((Date.parse(nfArgs.to) - Date.parse(nfArgs.from)) - 2 * 3600_000) < 10);
+  const typed = history.normalizeArgs(history.argsOf({ args: { uuids: ["u-3"], windowHours: 1, bucket: "1 day" } }));
+  assert.deepEqual(typed.uuids, ["u-3"]);
+  assert.equal(typed.bucket, "1 day");
+  assert.equal(typeof history.normalizeArgs({ uuids: "not-json" }).uuids, "string", "invalid JSON stays for validation");
+});
+

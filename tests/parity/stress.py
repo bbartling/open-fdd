@@ -49,16 +49,20 @@ def main() -> int:
     if {"pglite", "sqlite"} <= set(data["results"]):
         bad = []
         for rule, rows in data["results"]["pglite"].items():
-            other = {r["equipment_id"]: r for r in data["results"]["sqlite"].get(rule, [])}
-            for r in rows:
-                o = other.get(r["equipment_id"])
+            left = {h.sql_result_key(r): r for r in rows}
+            right = {h.sql_result_key(r): r for r in data["results"]["sqlite"].get(rule, [])}
+            if left.keys() != right.keys():
+                bad.append(f"{rule}: row keys differ (pglite-only={sorted(left.keys() - right.keys())[:3]}, "
+                           f"sqlite-only={sorted(right.keys() - left.keys())[:3]})")
+            for key in sorted(left.keys() & right.keys()):
+                r, o = left[key], right[key]
                 for k, v in r.items():
-                    w = None if o is None else o.get(k)
+                    w = o.get(k)
                     if isinstance(v, (int, float)) and isinstance(w, (int, float)):
                         if abs(v - w) > 1e-9 + 1e-6 * max(abs(v), abs(w)):
-                            bad.append(f"{rule}.{r['equipment_id']}.{k}")
+                            bad.append(f"{rule}.{key}.{k}")
                     elif v != w:
-                        bad.append(f"{rule}.{r['equipment_id']}.{k}")
+                        bad.append(f"{rule}.{key}.{k}")
         rep["pglite_vs_sqlite_mismatches"] = bad
         ok = ok and not bad
 

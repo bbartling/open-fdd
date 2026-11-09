@@ -23,6 +23,7 @@
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
     "/hooks/lib/paging.js": "hooks/lib/paging.js",
     "/hooks/lib/settings.js": "hooks/lib/settings.js",
+    "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
     "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
     "/hooks/sparql.js": "hooks/sparql.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
@@ -107,7 +108,7 @@
         "rrule": "DTSTART:20261101T000000Z\nRRULE:FREQ=MINUTELY;INTERVAL=20"
       },
       "mode": "MODE_SCHEDULED",
-      "invokeTimeout": "120s"
+      "invokeTimeout": "190s"
     },
     {
       "id": "fdd",

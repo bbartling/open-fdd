@@ -3,6 +3,14 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.9 - 2026-11-09
+
+- Documented the installer file-presence checks and tested the production HTTP client against NF's empty gRPC 500 response. Known files still fail on read errors (#1557, #1558).
+- Shared StartHook argument handling across the history, analytics and SPARQL hooks. Installer verification preserves the run outcome when a Windows console cannot encode a hook event (#1559, #1560).
+- Generated the standalone scratch DDL and NF pack schema from one typed SI input contract (#1547).
+- Sensor sweeps now attribute fault hours to individual roles, count extended reporting gaps and use elapsed-time windows. Existing equipment results expose the worst sensor's hours and retain every assessed role's score (#1555).
+- Bounded weather lookups and allowed time for fetch retries and writes in both editions. Redacted Timescale driver diagnostics that could expose short passwords.
+
 ## 5.0.8 - 2026-11-09
 
 Hand-edit guard on NF consoles that answer a missing app-file GET with HTTP 500:

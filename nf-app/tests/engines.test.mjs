@@ -26,7 +26,8 @@ const close = (a, b) => {
   return a === b;
 };
 
-const sortRows = (rows) => [...rows].sort((x, y) => String(x.equipment_id).localeCompare(String(y.equipment_id)));
+const sortRows = (rows) => [...rows].sort((x, y) =>
+  String(x.equipment_id).localeCompare(String(y.equipment_id)) || String(x.sensor_role || "").localeCompare(String(y.sensor_role || "")));
 
 /** Returns a list of difference strings (empty = match). */
 function diffRows(pg, lite) {
@@ -131,8 +132,11 @@ test("timeline_sql: PGlite == SQLite for every rule (rows, timestamps, confirmed
       const a = results.tlPg[rid], b = results.tlLite[rid];
       assert.equal(a.length, b.length, `${rid}: row count ${a.length} (pglite) vs ${b.length} (sqlite)`);
       assert.ok(a.length > 0, `${rid}: timeline is empty`);
-      assert.deepEqual(Object.keys(a[0]), ["equipment_id", "ts_epoch", "confirmed", "held_seconds"]);
-      const key = (r) => `${r.equipment_id}|${Number(r.ts_epoch).toFixed(3)}`;
+      const perRole = pgPack.rules[rid].output_columns.includes("sensor_role");
+      assert.deepEqual(Object.keys(a[0]), perRole
+        ? ["equipment_id", "sensor_role", "ts_epoch", "confirmed", "held_seconds"]
+        : ["equipment_id", "ts_epoch", "confirmed", "held_seconds"]);
+      const key = (r) => `${r.equipment_id}|${r.sensor_role || ""}|${Number(r.ts_epoch).toFixed(3)}`;
       const by = new Map(b.map((r) => [key(r), r]));
       for (const r of a) {
         const o = by.get(key(r));
@@ -152,9 +156,10 @@ test("timeline_sql: confirmed seconds add up to the rule's fault_hours (the lane
     if (!litePack.rules[rid].timeline_sql) continue;
     for (const row of results.lite[rid] || []) {
       if (row.fault_hours == null) continue;
-      const mine = results.tlLite[rid].filter((r) => r.equipment_id === row.equipment_id);
+      const mine = results.tlLite[rid].filter((r) => r.equipment_id === row.equipment_id &&
+        (row.sensor_role == null || r.sensor_role === row.sensor_role));
       const hours = mine.reduce((a, r) => a + (Number(r.confirmed) === 1 ? Number(r.held_seconds) : 0), 0) / 3600;
-      assert.ok(close(hours, Number(row.fault_hours)), `${rid} ${row.equipment_id}: timeline ${hours} h vs fault_hours ${row.fault_hours}`);
+      assert.ok(close(hours, Number(row.fault_hours)), `${rid} ${row.equipment_id}${row.sensor_role ? `/${row.sensor_role}` : ""}: timeline ${hours} h vs fault_hours ${row.fault_hours}`);
       checked++;
       if (hours > 0) nonZero++;
     }

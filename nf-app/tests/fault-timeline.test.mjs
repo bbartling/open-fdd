@@ -299,6 +299,17 @@ test("timelineSamples: held 0, a missing required input and already-written time
   assert.deepEqual(hook.timelineSamples([], {}), []);
 });
 
+test("sensor sweep timeline preserves a silence interval while another role reports healthy samples", () => {
+  const rows = [
+    { equipment_id: "fixture", sensor_role: "sat", ts_epoch: 300, held_seconds: 900, confirmed: 1 },
+    { equipment_id: "fixture", sensor_role: "rat", ts_epoch: 0, held_seconds: 600, confirmed: 0 },
+    { equipment_id: "fixture", sensor_role: "rat", ts_epoch: 900, held_seconds: 600, confirmed: 0 },
+  ];
+  assert.deepEqual(hook.timelineSamples(rows, { equipId: "fixture", after: 300000, assessed: () => false }), [
+    { ms: 600000, value: 1 }, { ms: 900000, value: 1 }, { ms: 1200000, value: 0 },
+  ]);
+});
+
 // ---- 5. VAV-1 occupancy ---------------------------------------------------------------------------------------------
 /** A VAV with one zone temperature point at a constant 25 degC (above the 23.9 occupied band) on `site`; optional occupancy point. */
 function vavSetup(site, { occPoint = false, nowMs }) {

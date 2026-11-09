@@ -143,3 +143,31 @@ def test_explicit_wait_overrides_default():
     assert run(c, clock, only_hooks=["fdd"], wait=100) == 3
     clock2 = FakeClock()
     assert run(FakeConsole(clock2, {"fdd": 200}), clock2, only_hooks=["fdd"], wait=500) == 0
+
+
+def test_report_run_replaces_non_cp1252_event_and_ok_false_text(monkeypatch):
+    class Cp1252Stdout:
+        encoding = "cp1252"
+
+        def __init__(self):
+            self.parts = []
+
+        def write(self, value):
+            value.encode(self.encoding)  # faithfully model a cp1252 terminal's failure
+            self.parts.append(value)
+
+        def flush(self):
+            pass
+
+    out = Cp1252Stdout()
+    monkeypatch.setattr(sync.sys, "stdout", out)
+    run_data = {"state": "STATE_SUCCESS", "startTime": "now", "results": {"g": {
+        "events": [
+            {"ts": "now", "message": "event emoji 💥"},
+            {"ts": "now", "message": '{"ok":false,"error":"failure 💥"}'},
+        ]
+    }}}
+    assert sync.report_run(run_data) == sync.EXIT_FAILED
+    output = "".join(out.parts)
+    assert "event emoji ?" in output
+    assert "hook returned ok:false: failure ?" in output

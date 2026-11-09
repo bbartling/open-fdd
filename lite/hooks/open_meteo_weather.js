@@ -201,8 +201,9 @@ const bacnetObjects = (siteName, instances) =>
 const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo request
 const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
 const WRITE_TIMEOUT_MS = 10000; // per NF API call
+const SITES_TIMEOUT_MS = 10000; // whole paginated Sites lookup
 const MODEL_LOOKUP_TIMEOUT_MS = 45000; // paginated model/site lookup (many sequential pages)
-const RUN_DEADLINE_MS = 120000; // whole-run: model lookup (45s) + Open-Meteo fetch + point writes must fit
+const RUN_DEADLINE_MS = 180000; // Sites (10s) + model (45s) + fetch (40s) + point writes (30s) + mirror (40s)
 
 /** Reject if `promise` doesn't settle within `ms`; calls onTimeout (e.g. abort) first. */
 function withDeadline(promise, ms, what, onTimeout) {
@@ -341,8 +342,8 @@ async function runOnce({ globalVariables, sdk, config }) {
   };
 
   const instances = avInstances(config); // validate config before any network call
-  const sites = await pageAll(async (p) => nf(sdk.http.get(`/api/v1/sites?pageSize=${p.pageSize}${p.pageOffset ? `&pageOffset=${p.pageOffset}` : ''}${p.pageToken ? `&pageToken=${encodeURIComponent(p.pageToken)}` : ''}`), 'GetSites'),
-    { key: 'sites', what: 'sites' });
+  const sites = await withDeadline(pageAll(async (p) => nf(sdk.http.get(`/api/v1/sites?pageSize=${p.pageSize}${p.pageOffset ? `&pageOffset=${p.pageOffset}` : ''}${p.pageToken ? `&pageToken=${encodeURIComponent(p.pageToken)}` : ''}`), 'GetSites'),
+    { key: 'sites', what: 'sites' }), SITES_TIMEOUT_MS, 'GetSites');
   const wanted = config && config.site;
   let site;
   try {

@@ -176,10 +176,17 @@ def remote_file_paths(c, app_id: str) -> set[str] | None:
 
 
 def path_is_new_on_box(nf_path: str, known_paths: set[str] | None, push_manifest: dict | None) -> bool:
-    """True when `nf_path` is not something the box is known to already carry.
+    """Return whether a path is provably new to the installed app.
 
-    "New" means absent from the app file list, or, when that list is unknown, from the last push
-    manifest. With neither source, we cannot prove the path is new, so a 500 must still abort.
+    The app file listing is authoritative when available: an absent path is new, while a listed
+    path is existing even if it is absent from the push manifest. Only when the listing is
+    unavailable is the last-push manifest used. If both sources are unavailable, the path is not
+    considered new, so an ambiguous HTTP 500 remains an error.
+
+    Args:
+        nf_path: Absolute NF app-file path, such as ``/hooks/lib/example.js``.
+        known_paths: Paths returned by NF's app listing, or ``None`` if unavailable.
+        push_manifest: File map from the last push, or ``None`` if unavailable.
     """
     if known_paths is not None and nf_path not in known_paths:
         return True
@@ -366,11 +373,19 @@ class Console:
 
     def read_file(self, app_id: str, nf_path: str, *, known_paths: set[str] | None = None,
                   push_manifest: dict | None = None) -> bytes | None:
-        """Bytes of an app file, or None when it is not on the box.
+        """Read an NF app file as bytes, returning ``None`` only for a confirmed absence.
 
-        Missing is (a) absent from `known_paths` when that listing exists, or (b) HTTP 404, or
-        (c) NF's missing-file HTTP 500 signature when `nf_path` is new relative to the box
-        (`path_is_new_on_box`). Any other HTTP 500 still raises.
+        A path absent from a supplied ``known_paths`` listing is not requested. A successful
+        404 is missing; NF 3.10 may instead return HTTP 500 with ``application/grpc`` and an
+        empty body for a missing file. That signature is accepted only when
+        ``path_is_new_on_box`` can prove the path is new. Listed/existing paths and all other
+        HTTP 500 responses raise ``ApiError`` so callers stop before writing.
+
+        Args:
+            app_id: NF application id.
+            nf_path: Absolute path to the app file on NF.
+            known_paths: App-listing paths, or ``None`` when the listing is unavailable.
+            push_manifest: Last-push file map used only when ``known_paths`` is unavailable.
         """
         if known_paths is not None and nf_path not in known_paths:
             return None
@@ -864,7 +879,7 @@ def report_run(run: dict) -> int:
             _safe_print(f"  event {e.get('ts')}: {e.get('message')}")
     bad = result_failure(run)
     if bad:
-        print(f"  hook returned ok:false: {bad}")
+        _safe_print(f"  hook returned ok:false: {bad}")
         return EXIT_FAILED
     return 0 if run["state"] == "STATE_SUCCESS" else EXIT_FAILED
 

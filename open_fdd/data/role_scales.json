@@ -1,5 +1,5 @@
 {
- "_doc": "One declared scale per history column (issue #1541). fraction = 0-1 (1 is 100 %), boolean = 0/1, percent_rh = relative humidity 0-100 (a physical quantity, not a command), text = categorical string, si:<unit> = physical SI value (degC, Pa, L/s, kW, kWh, A, ppm, count). Read by scripts/nf/build_rule_catalog.py (-> fdd-catalog.json roles.<role>.scale), nf-app/hooks/fdd.js siPlan and hooks/lib/timescale.js. The SQL rules never guess a scale by magnitude.",
+ "_doc": "Generated compatibility view of input_contract.json roles. fraction = 0-1, boolean = 0/1, percent_rh = 0-100, text = categorical string, si:<unit> = physical SI value. Scale definitions live in input_contract.json.",
  "roles": {
   "ahu_sat": "si:degC",
   "building_ahu_load_satisfied": "boolean",

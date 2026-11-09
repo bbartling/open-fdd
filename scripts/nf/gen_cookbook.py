@@ -403,7 +403,7 @@ the reference the SQL is tested against ([parity](parity.html)). The code shown 
 **Conventions**
 
 - Input is a `DataFrame` with a UTC `DatetimeIndex` and one **Haystack-role column per signal** (`duct-static-pressure`,
-  `outside-air-temp`, ...). Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh; commands and positions are fractions (0-1), statuses 0/1, humidity %RH (0-100) (`sql/fdd/role_scales.json`). The rules never convert units or guess a scale; convert at
+  `outside-air-temp`, ...). Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh; commands and positions are fractions (0-1), statuses 0/1, humidity %RH (0-100) (`sql/fdd/input_contract.json`). The rules never convert units or guess a scale; convert at
   ingest.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns a result with `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours`, `confirmed_fault` and `raw_fault` masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]` (`AHU`, `VAV`, `CHILLER`, ...).
@@ -588,7 +588,7 @@ Each rule section answers the same questions:
 
 Everything is SI, with no exceptions: temperature **°C**, temperature differences **Δ°C** (no 32-degree offset), pressure **Pa**, flow **L/s**, power **kW**,
 energy **kWh**, concentration **ppm**. Every command and position (fan, pump and tower commands, valve and damper positions) is a **fraction (0-1)**,
-every status is **0/1**, and humidity is **%RH (0-100)**: one declared scale per column, from `sql/fdd/role_scales.json`. Rules never convert units and never
+every status is **0/1**, and humidity is **%RH (0-100)**: one declared scale per column, from `sql/fdd/input_contract.json`. Rules never convert units and never
 guess a scale by magnitude. Points are converted once at ingest (a `%` point is divided by 100, a command point with no unit is skipped, not guessed), and back
 to the user's display system only in the UI. Sensor-validation rules (`SV-*`) assess a series only when its declared unit is the SI unit of its
 quantity. See [Units](../units.html).

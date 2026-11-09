@@ -375,11 +375,11 @@ const TOOLS = { analyze_ahu_weekly_runtime, analyze_mechanical_cooling, analyze_
 
 // ---- hook ------------------------------------------------------------------------------------------------------------
 const errText = (e) => (e && (e.message || (e.response && JSON.stringify(e.response.data)))) || String(e);
+const startArgs = require('./lib/start-hook-args.js');
 
 /** Hook arguments: NF passes the StartHook "args" object; accept the common spots (same as sparql.js). */
 const argsOf = (ctx) => {
-  const a = (ctx && (ctx.args || ctx.params || (ctx.sdk && ctx.sdk.args) || ctx.config)) || {};
-  return typeof a === 'string' ? JSON.parse(a) : a;
+  return startArgs.startHookArgs(ctx, { configFallback: true, numberFields: ['days'], booleanFields: ['dense', 'checkData'] });
 };
 
 /** Keep the answer under the cap: shorten the longest list (rows / timeline / equips) and say so. */
