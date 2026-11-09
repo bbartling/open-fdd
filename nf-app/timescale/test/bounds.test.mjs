@@ -167,14 +167,14 @@ test("statement timeout: rolled back and reported", async () => {
 });
 
 test("history hook passes config.history limits and still needs config.timescale", async () => {
-  await assert.rejects(history.handle({ sdk: {}, args: good, config: {} }), /config.timescale is not set/);
+  await assert.rejects(history.handle({ sdk: {}, args: good, config: {} }), /Timescale connection settings not found/);
 });
 
 test("engine timescale without config.timescale fails visibly (no silent fallback)", async () => {
-  await assert.rejects(createEngine({ kind: "timescale", pack }), /config\.timescale is missing/);
-  await assert.rejects(createEngine({ kind: "timescale", pack, config: {} }), /config\.timescale is missing/);
-  await assert.rejects(createEngine({ kind: "timescale", pack, config: { database: "x" } }), /config\.timescale is missing/);
-  assert.throws(() => ts.requireConfig(undefined), /config\.timescale/);
+  await assert.rejects(createEngine({ kind: "timescale", pack }), /Timescale connection settings not found/);
+  await assert.rejects(createEngine({ kind: "timescale", pack, config: {} }), /Timescale connection settings not found/);
+  await assert.rejects(createEngine({ kind: "timescale", pack, config: { database: "x" } }), /Timescale connection settings not found/);
+  assert.throws(() => ts.requireConfig(undefined), /Timescale connection settings not found/);
   assert.equal(ts.requireConfig({ host: "h" }).host, "h");
   assert.ok(ts.requireConfig({ connectionString: "postgres://x" }));
 });
