@@ -27,9 +27,34 @@ const argsOf = (ctx) => {
 };
 
 /**
+ * NF StartHook args are a string→string map. Coerce JSON-encoded fields (especially `uuids`) and optional
+ * `windowHours` into the shape historyRoute expects ({ uuids: string[], from, to, bucket? }).
+ * @param {any} args
+ */
+const normalizeArgs = (args) => {
+  const a = { ...(args && typeof args === 'object' ? args : {}) };
+  if (typeof a.uuids === 'string') {
+    try {
+      const parsed = JSON.parse(a.uuids);
+      if (Array.isArray(parsed)) a.uuids = parsed;
+    } catch (_) { /* leave as string; historyRoute will reject clearly */ }
+  }
+  if ((a.from == null || a.from === '') && (a.to == null || a.to === '') && a.windowHours != null && a.windowHours !== '') {
+    const hours = Number(a.windowHours);
+    if (Number.isFinite(hours) && hours > 0) {
+      const to = new Date();
+      a.to = to.toISOString();
+      a.from = new Date(to.getTime() - hours * 3600 * 1000).toISOString();
+    }
+  }
+  return a;
+};
+
+/**
  * @param {{ sdk: any, args?: { uuids?: string[], from?: string, to?: string, bucket?: string }, config?: { timescale?: object, history?: object } }} p
  */
 async function handle({ sdk, args = {}, config: rawConfig = {} }) {
+  args = normalizeArgs(args);
   const log = (m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   // NF stores hook settings as app OPTIONS and passes them as ctx.config; `timescale` is a JSON string there.
   // An unusable value (present but not JSON / URL) throws here, naming the option, never its value.
@@ -85,5 +110,5 @@ async function handle({ sdk, args = {}, config: rawConfig = {} }) {
 }
 
 /** NF hook entry point; helpers exported for tests. */
-const hook = async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx), config: ctx.config || {} });
-module.exports = Object.assign(hook, { handle, argsOf });
+const hook = async (ctx) => handle({ sdk: ctx.sdk, args: normalizeArgs(argsOf(ctx)), config: ctx.config || {} });
+module.exports = Object.assign(hook, { handle, argsOf, normalizeArgs });

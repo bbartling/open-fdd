@@ -69,6 +69,7 @@ import os
 import re
 import socket
 import ssl
+import sys
 import subprocess
 import sys
 import tempfile
@@ -128,13 +129,63 @@ class ApiError(SystemExit):
     """A failed console call; the message is the exit text, `status` the HTTP status (0 = not HTTP).
 
     `kind` says what failed: "connectivity" (no HTTP response at all), "tls" (certificate trust / hostname),
-    "auth" (a real HTTP 401/403), "http" (any other HTTP error) or "" (not classified)."""
+    "auth" (a real HTTP 401/403), "http" (any other HTTP error) or "" (not classified).
+
+    `nf_missing_file` is set when the response matches NF's missing-app-file signature (HTTP 500,
+    Content-Type application/grpc, empty body) observed on NF 3.10.x; the body is never copied into
+    the message. Callers decide whether that signature may be treated as missing for a given path.
+    """
 
     def __init__(self, msg: str, status: int = 0, kind: str = ""):
         super().__init__(msg)
         self.status = status
         self.kind = kind
+        self.nf_missing_file = False
 
+
+
+
+def is_nf_missing_file_response(status: int, content_type: str | None, body: bytes | None) -> bool:
+    """True when an app-file GET looks like NF 3.10.x "not found" rather than a real server fault.
+
+    Observed on a live console: missing paths return HTTP 500, Content-Type application/grpc, and an
+    empty body (no JSON). Existing files return HTTP 200 with application/json. Match on these
+    fields only; never put the body into an error message (it may contain credentials on other 500s).
+    """
+    if status != 500:
+        return False
+    if body:  # any payload is treated as a real error page / fault
+        return False
+    ct = (content_type or "").split(";")[0].strip().lower()
+    return ct == "application/grpc"
+
+
+def remote_file_paths(c, app_id: str) -> set[str] | None:
+    """Paths listed on the installed app (`files[].path` from GET /api/v1/apps), or None if unknown.
+
+    A present `files` list (even empty) is authoritative: a path absent from it is not on the box.
+    When the field is missing, callers must fall back to GET / not-found signature handling.
+    """
+    app = c.app(app_id) if hasattr(c, "app") else None
+    if not isinstance(app, dict) or "files" not in app:
+        return None
+    files = app.get("files")
+    if not isinstance(files, list):
+        return None
+    return {f["path"] for f in files if isinstance(f, dict) and f.get("path")}
+
+
+def path_is_new_on_box(nf_path: str, known_paths: set[str] | None, push_manifest: dict | None) -> bool:
+    """True when `nf_path` is not something the box is known to already carry.
+
+    "New" means absent from the app file list, or, when that list is unknown, from the last push
+    manifest. With neither source, we cannot prove the path is new, so a 500 must still abort.
+    """
+    if known_paths is not None and nf_path not in known_paths:
+        return True
+    if known_paths is None and push_manifest is not None and nf_path not in push_manifest:
+        return True
+    return False
 
 FRONT_DOOR_HINT = ("if NF is behind a front door (Caddy), use the front door URL (e.g. https://host), not NF's own "
                    "port; NF may listen on loopback only")
@@ -251,23 +302,33 @@ class Console:
             with urllib.request.urlopen(req, timeout=120, context=self.ctx) as r:
                 text = r.read().decode()
         except urllib.error.HTTPError as e:
-            if ok_404 and e.code == 404:
-                return None  # only 404 = missing; 500/other must stop the hand-edit guard
-            # Drain the body but never put it in the message: error pages / reverse proxies can echo
-            # Authorization headers or other secrets into the response (#1554 CodeRabbit Major).
+            # Drain the body for signature matching, but never put it in the message: error pages /
+            # reverse proxies can echo Authorization headers or other secrets (#1554 CodeRabbit Major).
+            raw = b""
             try:
-                e.read()
+                raw = e.read() or b""
             except OSError:
-                pass
+                raw = b""
+            hdrs = e.headers if e.headers is not None else {}
+            ctype = ""
+            if hasattr(hdrs, "get"):
+                ctype = hdrs.get("Content-Type") or hdrs.get("content-type") or ""
+            elif isinstance(hdrs, dict):
+                ctype = hdrs.get("Content-Type") or hdrs.get("content-type") or ""
+            if ok_404 and e.code == 404:
+                return None  # classic missing file
             if e.code == 401:
-                raise ApiError(f"{method} {shown} -> HTTP 401: rejected by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
+                raise ApiError(f"{method} {shown} -> HTTP 401: rejected by {auth_layer(hdrs.get('WWW-Authenticate') if hasattr(hdrs, 'get') else None)}. "
                                + NEEDS_CONSOLE + ". Caddy and NF must accept the same user and password.",
                                401, "auth") from None
             if e.code == 403:
-                raise ApiError(f"{method} {shown} -> HTTP 403: forbidden by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
+                raise ApiError(f"{method} {shown} -> HTTP 403: forbidden by {auth_layer(hdrs.get('WWW-Authenticate') if hasattr(hdrs, 'get') else None)}. "
                                "The server answered, so the URL is reachable, but this login is not permitted to do this "
                                "(check the user's role / API scopes). " + NEEDS_CONSOLE, 403, "auth") from None
-            raise ApiError(f"{method} {shown} -> HTTP {e.code}", e.code, "http") from None
+            err = ApiError(f"{method} {shown} -> HTTP {e.code}", e.code, "http")
+            # Flag NF's missing-file 500 signature for callers; do not treat it as missing here.
+            err.nf_missing_file = is_nf_missing_file_response(e.code, ctype, raw)
+            raise err from None
         except (OSError, http.client.HTTPException) as e:  # URLError, ssl errors, timeouts, resets
             connecting = isinstance(e, urllib.error.URLError)  # a bare timeout is raised while reading the reply
             raise transport_error(method, path, self.base, e, connecting) from None
@@ -303,8 +364,22 @@ class Console:
     def app(self, app_id: str):
         return next((a for a in self.apps() if a.get("id") == app_id), None)
 
-    def read_file(self, app_id: str, nf_path: str) -> bytes | None:
-        r = self.call("GET", f"/api/v1/apps/{app_id}/files{nf_path}", ok_404=True)
+    def read_file(self, app_id: str, nf_path: str, *, known_paths: set[str] | None = None,
+                  push_manifest: dict | None = None) -> bytes | None:
+        """Bytes of an app file, or None when it is not on the box.
+
+        Missing is (a) absent from `known_paths` when that listing exists, or (b) HTTP 404, or
+        (c) NF's missing-file HTTP 500 signature when `nf_path` is new relative to the box
+        (`path_is_new_on_box`). Any other HTTP 500 still raises.
+        """
+        if known_paths is not None and nf_path not in known_paths:
+            return None
+        try:
+            r = self.call("GET", f"/api/v1/apps/{app_id}/files{nf_path}", ok_404=True)
+        except ApiError as e:
+            if getattr(e, "nf_missing_file", False) and path_is_new_on_box(nf_path, known_paths, push_manifest):
+                return None
+            raise
         return None if r is None else base64.b64decode(r.get("data", ""))
 
 
@@ -494,14 +569,15 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def remote_version_info(c, app_id: str) -> dict:
+def remote_version_info(c, app_id: str, known_paths: set[str] | None = None) -> dict:
     """The box's static/version.json as a dict ({} when absent).
 
-    HTTP 404 (missing file) -> {}. Other read errors (HTTP 500, etc.) propagate so the
-    push guard stops with the real error instead of falling back to the repo baseline and
-    then reporting unrelated files as hand-edited.
+    Missing (404, absent from the app file list, or NF's missing-file 500 signature for a new
+    path) -> {}. Other read errors (unrelated HTTP 500, etc.) propagate so the push guard stops
+    with the real error instead of falling back to the repo baseline and then reporting unrelated
+    files as hand-edited.
     """
-    raw = c.read_file(app_id, "/static/version.json")  # None on 404; ApiError on 500/other
+    raw = c.read_file(app_id, "/static/version.json", known_paths=known_paths)
     if not raw:
         return {}
     try:
@@ -536,18 +612,24 @@ def find_drift(c, m: dict) -> dict:
                   checkout has it;
       "repo"      neither: this repo's copy of the same file.
     A file the push would write byte for byte is never drift (nothing would be lost). Returns
-    {"baseline", "commit", "drifted": [nf_path], "remote": {nf_path: bytes}, "checked": n}; no app = nothing to lose."""
+    {"baseline", "commit", "drifted": [nf_path], "remote": {nf_path: bytes}, "checked": n}; no app = nothing to lose.
+
+    Files absent from the installed app's `files` list (or answered with NF's missing-file HTTP 500
+    signature when the path is new relative to the box) are skipped: nothing to lose. Unrelated HTTP
+    500 responses still abort the guard.
+    """
     app_id = m["application"]["id"]
     out = {"baseline": "none", "commit": "", "drifted": [], "remote": {}, "checked": 0}
     if not c.app(app_id):
         return out
-    info = remote_version_info(c, app_id)
+    known = remote_file_paths(c, app_id)
+    info = remote_version_info(c, app_id, known_paths=known)
     pushed = info.get(PUSH_MANIFEST_KEY) if isinstance(info.get(PUSH_MANIFEST_KEY), dict) else None
     commit = str(info.get("commit") or "")
     out["baseline"] = "manifest" if pushed is not None else "commit" if commit else "repo"
     out["commit"] = commit
     for nf_path, rel in m["files"].items():
-        remote = c.read_file(app_id, nf_path)
+        remote = c.read_file(app_id, nf_path, known_paths=known, push_manifest=pushed)
         if remote is None:
             continue                       # not on the box yet: nothing to lose
         out["checked"] += 1
@@ -764,13 +846,22 @@ def run_error_text(run: dict) -> str:
     return "\n".join(parts)
 
 
+def _safe_print(text: str) -> None:
+    """Print without crashing on Windows cp1252 consoles when hook events contain Unicode."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(getattr(sys, "stdout", None), "encoding", None) or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
 def report_run(run: dict) -> int:
-    print(f"  {run['state']} start={run.get('startTime')}")
+    _safe_print(f"  {run['state']} start={run.get('startTime')}")
     for g in (run.get("results") or {}).values():
         if g.get("error"):
-            print(f"  error: {g['error'].get('message')}")
+            _safe_print(f"  error: {g['error'].get('message')}")
         for e in g.get("events", []):
-            print(f"  event {e.get('ts')}: {e.get('message')}")
+            _safe_print(f"  event {e.get('ts')}: {e.get('message')}")
     bad = result_failure(run)
     if bad:
         print(f"  hook returned ok:false: {bad}")

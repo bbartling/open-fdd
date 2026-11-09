@@ -3,6 +3,15 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.8 - 2026-11-09
+
+Hand-edit guard on NF consoles that answer a missing app-file GET with HTTP 500:
+
+1. **Missing-file detection:** A path absent from the installed app's `files` list (from `GET /api/v1/apps`) is treated as not on the box. When a GET is still made, NF's observed not-found signature (HTTP 500, `Content-Type: application/grpc`, empty body) is treated as missing **only** for paths that are new relative to the box (not in that file list, or not in the last push manifest). Every other HTTP 500 still aborts the push. Response bodies are still never copied into error messages (#1554).
+2. Unblocks installing releases that add new hook files (for example `/hooks/lib/paging.js` and `/hooks/lib/settings.js`) onto a 5.0.5 box whose console returns 500 instead of 404 for paths that are not there yet.
+3. **History StartHook args:** `history.js` coerces NF's string→string StartHook map so a JSON-array `uuids` string and optional `windowHours` become the array / `from`+`to` that `historyRoute` expects (live console verification).
+4. **Windows console:** `nf_app_sync.py` report_run no longer crashes when a hook event contains non-cp1252 Unicode.
+
 ## 5.0.7 - 2026-11-09
 
 Follow-up to 5.0.6 CodeRabbit review:

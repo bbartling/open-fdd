@@ -5,6 +5,11 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.8
+
+Hand-edit guard: paths absent from the installed app `files` list, or answered with NF's missing-file HTTP 500 signature (`application/grpc`, empty body) when the path is new relative to the box, are treated as not on the box. Unrelated HTTP 500s still abort; response bodies stay out of error messages. History StartHook string-map `uuids` / `windowHours` are coerced; Windows `report_run` tolerates non-cp1252 hook events.
+
+
 ## 5.0.7
 
 Follow-up to 5.0.6 CodeRabbit review: hand-edit guard treats only HTTP 404 as missing (500 stops the push; version.json read errors propagate), credential redaction covers connectionString passwords without mangling short-password diagnostics, weather later-page and non-404 first-page failures propagate with a 45s model lookup and 120s run/invoke budget, and Doctor Sites forwards `pageToken`.
