@@ -296,6 +296,20 @@ test("settings: redact removes the password and URL credentials from log text", 
   assert.doesNotMatch(settings.redact(`connect failed for ${PG.password} at db`, PG), /p4ssw0rd/);
   assert.equal(settings.redact("could not connect to postgres://user:hunter2@db:5432/nf", undefined), "could not connect to postgres://user:***@db:5432/nf");
   assert.doesNotMatch(settings.redact("x postgres://a:b@h/d y", { connectionString: "postgres://a:b@h/d" }), /a:b@/);
+  // connectionString with ?password= must be replaced BEFORE userinfo masking (#4)
+  const cs = "postgres://u:old@db/nf?password=secret";
+  assert.doesNotMatch(settings.redact(`fail ${cs}`, { connectionString: cs }), /secret|password=old/);
+  assert.match(settings.redact(`fail ${cs}`, { connectionString: cs }), /postgres:\/\/\*\*\*/);
+  // short passwords inside a connectionString are still covered (#5); bare 1-char must not mangle diagnostics
+  assert.doesNotMatch(settings.redact("fail " + "postgres://u:x@db/nf", { connectionString: "postgres://u:x@db/nf" }), /u:x@/);
+  assert.equal(settings.redact("connection refused", { password: "e" }), "connection refused");
+  // partial URL after userinfo masking must still lose ?password=
+  assert.doesNotMatch(settings.redact("fail postgres://u:***@db/nf?password=secret", { connectionString: "postgres://u:old@db/nf?password=secret" }), /password=secret/);
+  assert.match(settings.redact("x?password=secret&y=1", {}), /password=\*\*\*/);
+  assert.equal(settings.redact("pw=abc in err", { password: "abc" }), "pw=*** in err"); // length >= 3
+  // two copies of the connection string are both replaced
+  const cs2 = "postgres://u:old@db/nf?password=secret";
+  assert.doesNotMatch(settings.redact(`fail ${cs2} and ${cs2}`, { connectionString: cs2 }), /secret|password=old/);
 });
 
 test("history: reads the string option, and a connection error never carries the password", async () => {
@@ -323,6 +337,59 @@ test("fdd: engine timescale with only a string option reaches the engine as an o
   // the real engine factory with the engine selected and nothing set: the one clear message
   await assert.rejects(fdd.runFdd({ sdk: { http: nfOver(MODEL_994), logEvent() {} }, config: { engine: "timescale" }, pack: PACK, now: NOW }),
     /Timescale connection settings not found.*app option "timescale"/);
+});
+
+
+test("weather queryLayer: missing layer -> []; service failures and later-page failures propagate (Lite + full)", async () => {
+  const missing = { post: async () => { throw Object.assign(new Error("HTTP 404"), { status: 404 }); } };
+  // siteFromModel uses queryLayer; a missing model+site layer yields null (not a throw)
+  assert.equal(await liteWeather.siteFromModel(missing), null);
+  assert.equal(await weather.siteFromModel(missing), null);
+
+  // first-request 503 is a service failure, not "missing layer" / missing coords
+  const first503 = { post: async () => { throw Object.assign(new Error("HTTP 503 down"), { status: 503 }); } };
+  await assert.rejects(liteWeather.siteFromModel(first503), /HTTP 503 down/);
+  await assert.rejects(weather.siteFromModel(first503), /HTTP 503 down/);
+
+  // first page OK, second page throws: must NOT look like "no site"
+  const laterFail = {
+    post: async (_path, body) => {
+      if ((body.pageOffset || 0) === 0) {
+        return { data: { points: filler("p", 500), totalCount: "600" } };
+      }
+      throw Object.assign(new Error("HTTP 503 page 2"), { status: 503 });
+    },
+  };
+  await assert.rejects(liteWeather.siteFromModel(laterFail), /HTTP 503 page 2/);
+  await assert.rejects(weather.siteFromModel(laterFail), /HTTP 503 page 2/);
+
+  // later-page 404 also propagates (not treated as empty layer)
+  const later404 = {
+    post: async (_path, body) => {
+      if ((body.pageOffset || 0) === 0) {
+        return { data: { points: filler("p", 500), totalCount: "600" } };
+      }
+      throw Object.assign(new Error("HTTP 404 page 2"), { status: 404 });
+    },
+  };
+  await assert.rejects(liteWeather.siteFromModel(later404), /HTTP 404 page 2/);
+  await assert.rejects(weather.siteFromModel(later404), /HTTP 404 page 2/);
+});
+
+test("weather: MODEL_LOOKUP_TIMEOUT_MS and RUN_DEADLINE_MS cover lookup + fetch + writes", () => {
+  const { fileURLToPath } = require("node:url");
+  const { dirname, join } = require("node:path");
+  const here = dirname(fileURLToPath(import.meta.url));
+  for (const rel of ["../hooks/weather.js", "../../lite/hooks/open_meteo_weather.js"]) {
+    const src = readFileSync(join(here, rel), "utf8");
+    assert.match(src, /MODEL_LOOKUP_TIMEOUT_MS\s*=\s*45000/);
+    assert.match(src, /RUN_DEADLINE_MS\s*=\s*120000/);
+    assert.match(src, /withDeadline\(siteFromModel\([^)]*\),\s*MODEL_LOOKUP_TIMEOUT_MS/);
+  }
+  for (const rel of ["../app.json", "../../lite/app.json"]) {
+    const src = readFileSync(join(here, rel), "utf8");
+    assert.match(src, /"invokeTimeout":\s*"120s"/);
+  }
 });
 
 // ---- 5. weather coordinates: config -> (app setting) -> NF Sites -> modeled site ----------------------------------
@@ -391,3 +458,73 @@ test("weather: more than one page of sites is read (the located site is on page 
     assert.equal(out.site, "late");
     assert.match(urls[0], /latitude=12&longitude=34/);
   }));
+
+test("weather: SITE beyond 500 with stubbed Open-Meteo (paging + app-option fallback)",
+  withOpenMeteo(async (urls) => {
+    // NF Sites empty; model has SITE at index 900 of 994 — exercises offset paging + Open-Meteo write path
+    const model = [...filler("a", 900), { pointType: "SITE", name: "late-site", attrs: { id: "late-site", latitude: 41.8, longitude: -87.6 } }, ...filler("z", 93)];
+    let offs = [];
+    const http = {
+      async get() { return { data: { sites: [] } }; },
+      async post(p, body) {
+        if (p === "/api/v1/point/query") {
+          offs.push(body.pageOffset || 0);
+          const all = body.layer === "model" ? model : [];
+          const size = body.pageSize || 500;
+          const off = body.pageOffset || 0;
+          return { data: { points: all.slice(off, off + size), totalCount: String(all.length) } };
+        }
+        if (p === "/api/v1/point/data") return { data: { success: true } };
+        throw new Error("unexpected " + p);
+      },
+    };
+    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: {} });
+    assert.equal(out.site, "late-site");
+    assert.match(out.coords_source, /haystack model/);
+    assert.match(urls[0], /latitude=41\.8&longitude=-87\.6/);
+    assert.ok(offs.includes(500), "must request pageOffset 500 to reach SITE: " + JSON.stringify(offs));
+  }));
+
+test("weather: failing page 2 of model during run fails loudly (not missing coords)",
+  withOpenMeteo(async () => {
+    let n = 0;
+    const http = {
+      async get() { return { data: { sites: [] } }; },
+      async post(p, body) {
+        if (p === "/api/v1/point/query") {
+          n += 1;
+          if ((body.pageOffset || 0) === 0) return { data: { points: filler("p", 500), totalCount: "600" } };
+          throw Object.assign(new Error("HTTP 503 model page 2"), { status: 503 });
+        }
+        throw new Error("unexpected " + p);
+      },
+    };
+    await assert.rejects(
+      weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: {} }),
+      /HTTP 503 model page 2/,
+    );
+  }));
+
+test("weather: slow model page under MODEL_LOOKUP budget still succeeds with stubbed Open-Meteo",
+  withOpenMeteo(async (urls) => {
+    const model = [...filler("a", 500), { pointType: "SITE", name: "slow", attrs: { id: "slow", latitude: 33.7, longitude: -84.4 } }];
+    const http = {
+      async get() { return { data: { sites: [] } }; },
+      async post(p, body) {
+        if (p === "/api/v1/point/query") {
+          await new Promise((r) => setTimeout(r, 80)); // slow but well under 45s
+          const all = body.layer === "model" ? model : [];
+          const off = body.pageOffset || 0;
+          const size = body.pageSize || 500;
+          return { data: { points: all.slice(off, off + size), totalCount: String(all.length) } };
+        }
+        if (p === "/api/v1/point/data") return { data: { success: true } };
+        throw new Error("unexpected " + p);
+      },
+    };
+    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: {} });
+    assert.equal(out.site, "slow");
+    assert.match(urls[0], /latitude=33\.7&longitude=-84\.4/);
+  }));
+
+

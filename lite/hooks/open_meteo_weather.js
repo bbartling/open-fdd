@@ -114,11 +114,25 @@ async function pageAll(fetchPage, o) {
 
 /** All pages of POST /api/v1/point/query for one layer; a layer that does not exist (HTTP error) is just empty. */
 async function queryLayer(http, layer) {
+  // First-request failure (missing/unreadable layer) -> []; a later-page failure must propagate
+  // so a truncated model is never mistaken for "no site found" (#1553 CodeRabbit).
+  let pages = 0;
   try {
-    return await pageAll(async (p) => (await http.post('/api/v1/point/query', { layer, ...p })).data, { key: 'points', what: 'point/query' });
+    return await pageAll(async (p) => {
+      const data = (await http.post('/api/v1/point/query', { layer, ...p })).data;
+      pages += 1;
+      return data;
+    }, { key: 'points', what: 'point/query' });
   } catch (e) {
-    if (e && e.paging) throw e;   // a truncated model must not look like "no site found"
-    return []; /* layer missing or not readable: nothing from it */
+    if (e && e.paging) throw e;
+    if (pages > 0) throw e;
+    // First request: only a missing layer (404) is empty; service failures (5xx, etc.) must propagate
+    // so siteFromModel does not report "no coordinates" when the model API is down.
+    // Status may live on the error object or only in the message (NF SDK / test stubs).
+    const status = e && (e.status ?? e.code ?? e.statusCode);
+    const msg = e ? String(e.message || e) : '';
+    if (status === 404 || /\bHTTP\s*404\b/i.test(msg)) return [];
+    throw e;
   }
 }
 
@@ -187,7 +201,8 @@ const bacnetObjects = (siteName, instances) =>
 const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo request
 const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
 const WRITE_TIMEOUT_MS = 10000; // per NF API call
-const RUN_DEADLINE_MS = 60000; // whole-run cap so a hung run fails instead of blocking the schedule
+const MODEL_LOOKUP_TIMEOUT_MS = 45000; // paginated model/site lookup (many sequential pages)
+const RUN_DEADLINE_MS = 120000; // whole-run: model lookup (45s) + Open-Meteo fetch + point writes must fit
 
 /** Reject if `promise` doesn't settle within `ms`; calls onTimeout (e.g. abort) first. */
 function withDeadline(promise, ms, what, onTimeout) {
@@ -336,7 +351,7 @@ async function runOnce({ globalVariables, sdk, config }) {
   } catch (e) {
     if (!e || !e.noCoords) throw e;
     // NF's Sites collection has no usable coordinates: try the modeled Haystack SITE (never invent any)
-    site = await withDeadline(siteFromModel(sdk.http, wanted), WRITE_TIMEOUT_MS, 'model site lookup');
+    site = await withDeadline(siteFromModel(sdk.http, wanted), MODEL_LOOKUP_TIMEOUT_MS, 'model site lookup');
     if (!site) throw e;
     log(`weather location from the ${site.source} (site ${site.id}); NF Sites had none`);
   }
