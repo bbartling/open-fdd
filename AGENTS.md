@@ -84,14 +84,15 @@ Prefer **halt-and-issue**: reproduce locally, fix on a `patch/5.0.x-...` branch,
 
 When a live hotfix is unavoidable (for example a StartHook type error that blocks verification after an otherwise good install):
 
-1. **Capture first.** `nf_app_sync.py ... push ... --save-remote DIR` (or download the file) so the box copy is on disk. Never pass `--force` without the owner's explicit yes.
-2. **Patch one file** through the NF app file API (or a single-path push), then **immediately** commit the identical bytes in the repo on a patch branch. The box and `master` must not diverge.
-3. **Refresh the push manifest** on the box (`static/version.json` `files` hashes) so the next install does not treat the hotfix as a hand edit.
-4. **Verify** with `doctor` and a targeted hook `run` (history/weather/fdd as relevant). Record CT timestamps; redact secrets.
-5. **Port-back check** after merge: `--save-remote` the installed app and diff against the release commit (strip cache stamps). Manifest sha mismatches of 0 and raw/strip equality on hooks mean parity is clean.
+1. **Capture first (read-only).** Download the installed file through the NF app file API (GET) or an equivalent read-only export into a local DIR **before** any write or restart. Do **not** rely on `nf_app_sync.py push --save-remote` for this step: that flag only saves copies when the hand-edit guard already found drift, and it may save nothing when the box still matches the last push. Never pass `--force` without the owner's explicit yes.
+2. **Patch one file**, then commit. Write through the NF app file API (or a single-path push). For non-HTML files, commit the **identical bytes** on a patch branch immediately. For HTML, commit the repo source **without** generated `?v=` cache stamps; the deploy path may stamp for cache-busting. The box and the patch branch must not diverge on hook/logic content.
+3. **Do not fake the push manifest.** Leave `static/version.json` `files` hashes alone for a box-only hotfix while `master` (or the revision you will deploy next) still lacks the fix. Expect `doctor` to list a hand edit until that revision is deployed and writes a truthful manifest. Refreshing hashes early hides drift and breaks the next upgrade.
+4. **Restart, then verify.** Restart the NF app runtime (or otherwise reload hooks) after the file write so the next hook `run` loads the updated module. Then `doctor` and a targeted hook `run` (history/weather/fdd as relevant). Record CT timestamps; redact secrets.
+5. **Port-back check** after the fix is on the deployed revision: download the installed app (read-only) and diff against that commit (strip cache stamps on HTML). Manifest sha mismatches of 0 and raw/strip equality on hooks mean parity is clean. `--save-remote` is appropriate here only when a push/install guard already reported drift.
 6. **Document** the trap in `openfdd_agent_spec/skills/nf-gotchas.md` / `docs/operations/nf/nf-gotchas.md` in the same PR when it is a new NF console quirk.
 
 Grok Bot (or the designated deploy agent) owns NF site deploys. Coding agents open the PR; they do not push to a live console unless the owner explicitly assigned that deploy.
+
 
 ## Security and reporting
 

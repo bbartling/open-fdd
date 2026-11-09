@@ -133,8 +133,7 @@ Cloud backup itself works: it uploads about daily; contents are configuration, n
 
 ## Open-FDD installer / hooks (5.0.8+)
 
-- **Missing app-file GET may be HTTP 500** (Content-Type: application/grpc, empty body), not 404. The hand-edit guard treats that signature as missing only for paths that are new relative to the box. Every other 500 still aborts.
-- **StartHook args are string?string.** Coerce JSON uuids and windowHours before use (history.js; shared helper tracked in #1559).
-- **Windows cp1252:** 
-f_app_sync verify printing must tolerate non-cp1252 Unicode in hook events (#1560).
-- **Live patching is last resort.** Save remote, patch one file, commit identical bytes in git, refresh push-manifest hashes; see repo-root AGENTS.md.
+- **Missing app-file GET may be HTTP 500** (`Content-Type: application/grpc`, empty body), not 404. The hand-edit guard treats that signature as missing only for paths that are new relative to the box. Every other 500 still aborts.
+- **StartHook args are a string-to-string map.** Coerce JSON `uuids` and `windowHours` before use (`history.js`; shared helper tracked in #1559).
+- **Windows cp1252:** `nf_app_sync.py` verify printing must tolerate non-cp1252 Unicode in hook events (#1560).
+- **Live patching is last resort.** Capture with a read-only file GET first, patch one file, commit on a patch branch (HTML without `?v=` stamps), restart before verify, and do not rewrite push-manifest hashes until the deploying revision contains the fix. See repo-root `AGENTS.md`.

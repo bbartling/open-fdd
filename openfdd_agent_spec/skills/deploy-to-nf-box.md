@@ -27,5 +27,4 @@ Before touching a live box read `nf-gotchas.md` (this folder). Related runbooks 
 
 ## Live patching (last resort)
 
-Do not hand-edit the box as the normal fix path. If a hotfix is required to unblock verification, follow the **Live patching a box** section in repo-root `AGENTS.md`: save remote copies, patch one path, commit identical bytes in git the same hour, refresh the push manifest, doctor, then open the PR. Coding agents do not deploy releases to NF sites; Grok Bot handles deploys after merge.
-
+Do not hand-edit the box as the normal fix path. If a hotfix is required to unblock verification, follow the **Live patching a box** section in repo-root `AGENTS.md`: read-only capture first, patch one path, commit on a patch branch (HTML without `?v=` stamps), restart before verify, do not rewrite push-manifest hashes early. Coding agents do not deploy releases to NF sites; Grok Bot handles deploys after merge.
