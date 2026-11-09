@@ -415,6 +415,44 @@ def test_console_ok_404_only_swallows_404_not_500(monkeypatch):
 
 
 
+
+def test_http_error_omits_response_body(monkeypatch):
+    """HTTP 500 response bodies must not appear in ApiError (may contain credentials)."""
+    import io
+    import urllib.error
+
+    class FakeHTTPError(urllib.error.HTTPError):
+        def __init__(self):
+            # bypass HTTPError.__init__ complexity
+            self.code = 500
+            self.msg = "Internal Server Error"
+            self.hdrs = {}
+            self.fp = io.BytesIO(b"Basic examplecredential leaked in proxy error page")
+            self.filename = "https://nf.example/api/v1/apps/x/files/static/version.json"
+
+        def read(self, n=-1):
+            return self.fp.read(n)
+
+    class BoomConsole(sync.Console):
+        def __init__(self):
+            # skip real Console init
+            self.base = "https://nf.example"
+            self.auth = "Basic dXNlcjpwYXNz"
+            self.ctx = None
+
+    c = BoomConsole()
+
+    def fake_urlopen(req, timeout=120, context=None):
+        raise FakeHTTPError()
+
+    monkeypatch.setattr(sync.urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(sync.ApiError) as ei:
+        c.call("GET", "/api/v1/apps/x/files/static/version.json")
+    assert ei.value.status == 500
+    assert "examplecredential" not in str(ei.value)
+    assert "HTTP 500" in str(ei.value)
+
+
 def test_remote_version_info_http_500_propagates():
     """HTTP 500 on /static/version.json must raise, not fall back to repo baseline."""
     class Boom:

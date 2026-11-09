@@ -253,7 +253,12 @@ class Console:
         except urllib.error.HTTPError as e:
             if ok_404 and e.code == 404:
                 return None  # only 404 = missing; 500/other must stop the hand-edit guard
-            detail = e.read().decode(errors="replace")[:300]
+            # Drain the body but never put it in the message: error pages / reverse proxies can echo
+            # Authorization headers or other secrets into the response (#1554 CodeRabbit Major).
+            try:
+                e.read()
+            except OSError:
+                pass
             if e.code == 401:
                 raise ApiError(f"{method} {shown} -> HTTP 401: rejected by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
                                + NEEDS_CONSOLE + ". Caddy and NF must accept the same user and password.",
@@ -262,7 +267,7 @@ class Console:
                 raise ApiError(f"{method} {shown} -> HTTP 403: forbidden by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
                                "The server answered, so the URL is reachable, but this login is not permitted to do this "
                                "(check the user's role / API scopes). " + NEEDS_CONSOLE, 403, "auth") from None
-            raise ApiError(f"{method} {shown} -> HTTP {e.code}: {detail}", e.code, "http") from None
+            raise ApiError(f"{method} {shown} -> HTTP {e.code}", e.code, "http") from None
         except (OSError, http.client.HTTPException) as e:  # URLError, ssl errors, timeouts, resets
             connecting = isinstance(e, urllib.error.URLError)  # a bare timeout is raised while reading the reply
             raise transport_error(method, path, self.base, e, connecting) from None

@@ -303,6 +303,9 @@ test("settings: redact removes the password and URL credentials from log text", 
   // short passwords inside a connectionString are still covered (#5); bare 1-char must not mangle diagnostics
   assert.doesNotMatch(settings.redact("fail " + "postgres://u:x@db/nf", { connectionString: "postgres://u:x@db/nf" }), /u:x@/);
   assert.equal(settings.redact("connection refused", { password: "e" }), "connection refused");
+  // partial URL after userinfo masking must still lose ?password=
+  assert.doesNotMatch(settings.redact("fail postgres://u:***@db/nf?password=secret", { connectionString: "postgres://u:old@db/nf?password=secret" }), /password=secret/);
+  assert.match(settings.redact("x?password=secret&y=1", {}), /password=\*\*\*/);
   assert.equal(settings.redact("pw=abc in err", { password: "abc" }), "pw=*** in err"); // length >= 3
   // two copies of the connection string are both replaced
   const cs2 = "postgres://u:old@db/nf?password=secret";
