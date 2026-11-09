@@ -58,8 +58,10 @@
 //   stale counts (summary.eligible, .skipped, .stale_reasons, .source_freshness, .window, .failure).
 //
 // Nothing site-specific: sites, equips, points and units all come from NF.
-// config (hook settings, all optional):
-//   engine        "auto" | "sqlite" | "pglite"   (auto: pglite when NF reports ≥ 3.5 GiB RAM)
+// config (hook settings, all optional). NF stores these as app OPTIONS and passes them as ctx.config (scalars only:
+// see lib/settings.js; a string value such as "24" or a JSON string for timescale is converted):
+//   engine        "auto" | "sqlite" | "pglite" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
+//   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
 //   equips        list of equip ids to limit a run to (default: every equip)
 //   dryRun        true → compute and log, write nothing
@@ -75,7 +77,8 @@ const ofddUnits = require('../static/units.js');
 const APP_ID = 'open-fdd';
 const STATIC = path.join(__dirname, '..', 'static');
 const RULES = path.join(__dirname, '..', 'rules');
-const PAGE = 500;
+const { queryPoints } = require('./lib/paging.js');
+const settings = require('./lib/settings.js');
 const PGLITE_MIN_BYTES = 3.5 * 1024 ** 3;
 
 // ---- shared code with the UI ------------------------------------------------------
@@ -100,21 +103,15 @@ const loadPack = (kind) => JSON.parse(fs.readFileSync(path.join(RULES, PACK_FILE
 // ---- NF reads -----------------------------------------------------------------------
 const errText = (e) => (e && (e.message || (e.response && JSON.stringify(e.response.data)))) || String(e);
 
-async function queryAll(http, body) {
-  const out = [];
-  let pageToken = '';
-  do {
-    const { data } = await http.post('/api/v1/point/query', { pageSize: PAGE, ...body, ...(pageToken && { pageToken }) });
-    out.push(...((data && data.points) || []));
-    pageToken = (data && data.nextPageToken) || '';
-  } while (pageToken);
-  return out;
-}
+// Every point/query goes through the shared pager (lib/paging.js): NF pages by pageOffset + totalCount, not only by a
+// next-page token (#1550). It throws a PagingError rather than ever returning a truncated list.
+const queryAll = (http, body) => queryPoints(http, body);
 
 async function loadModel(http, shared) {
   const recs = await queryAll(http, { layer: 'model' });
   const of = (t) => recs.filter((r) => r.pointType === t);
-  const model = { sites: of('SITE'), equips: of('EQUIPMENT'), devices: of('DEVICE'), points: [], results: new Map(), timelines: new Map() };
+  const model = { sites: of('SITE'), equips: of('EQUIPMENT'), devices: of('DEVICE'), points: [], results: new Map(), timelines: new Map(),
+    read: { records: recs.length, total: /** @type {any} */ (recs).totalCount, sitePointQueries: 0 } };
   // result points published by earlier runs (model-layer records), by uuid; used to mark them stale
   for (const r of recs) {
     const a = r.attrs || {};
@@ -123,6 +120,7 @@ async function loadModel(http, shared) {
   }
   for (const s of model.sites) {
     const pts = await queryAll(http, { layer: 'default', structuredQuery: { field: { property: 'siteRef', text: shared.idOf(s) } } });
+    model.read.sitePointQueries++;
     model.points.push(...pts.filter((r) => !shared.ENTITY_TYPES.includes(r.pointType)).map(shared.toPoint));
   }
   return model;
@@ -576,8 +574,10 @@ async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInsta
  *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number }} FddConfig
  * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number, hasPglite?: () => boolean }} args
  */
-async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date.now(), hasPglite }) {
+async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn, now = Date.now(), hasPglite }) {
   createEngine = createEngine || require('./lib/engines.js').createEngine;
+  // NF hands the app options over as ctx.config: strings for numbers and JSON (lib/settings.js converts them)
+  const config = /** @type {FddConfig} */ (settings.normalizeConfig(rawConfig));
   const http = sdk.http;
   const log = (m) => (sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   const shared = loadShared();
@@ -592,6 +592,7 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   for (let t = from; t < to; t += step * 1e3) grid.push(t);
 
   const model = await loadModel(http, shared);
+  const modelProblem = modelProblemOf(model);
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
   const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
@@ -633,7 +634,8 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
         eligible = hadResults || runnable.length > 0;
         if (eligible) summary.eligible++;
         if (!runnable.length) {
-          skip('roles-missing', 'required roles missing (no rule has all its required roles bound to points of this equip)');
+          if (!model.points.length) skip('model-incomplete', 'model incomplete: no points were loaded for any site (not a missing role)');
+          else skip('roles-missing', 'required roles missing (no rule has all its required roles bound to points of this equip)');
           continue;
         }
         let roles = roleInputs(runnable);
@@ -803,12 +805,38 @@ async function runFdd({ sdk, config = {}, createEngine, pack: packIn, now = Date
   if (!config.dryRun && summary.eligible > 0 && st.ok + st.fault === 0) {
     summary.failure = `no fresh results were written for any of ${summary.eligible} eligible equips`;
   }
+  // An empty / incomplete MODEL is its own failure with its own reason: never "required roles missing" (#1550)
+  if (modelProblem) summary.failure = modelProblem;
   for (const line of runReport(summary, windowHours)) log(line);
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h); `
     + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
     + `requests: ${summary.requests.metadata} metadata, ${summary.requests.data} data`);
   return summary;
+}
+
+/**
+ * Why the model cannot be evaluated at all, or null when it can. "0 equipment" is NOT "required roles missing": it
+ * means the model layer was not read completely (paging, #1550), was emptied, or was never built. The text says how
+ * many records were read of how many NF reported, and whether results published earlier prove equipment existed.
+ * @param {{ sites: any[], equips: any[], points: any[], results: Map<any, any>, read?: { records: number, total: any } }} model
+ */
+function modelProblemOf(model) {
+  const r = model.read || { records: 0, total: null };
+  const read = `${r.records} model records read${r.total != null ? ` of totalCount ${r.total}` : ''}`;
+  const counts = `${model.sites.length} sites, ${model.equips.length} equipment, ${model.points.length} points`;
+  if (!model.equips.length) {
+    const had = model.results.size;
+    return had
+      ? `model incomplete: 0 equipment resolved from the model layer (${counts}; ${read}) although ${had} published results exist; `
+        + 'the model layer was not read completely or its equipment records are gone'
+      : `model empty: 0 equipment resolved from the model layer (${counts}; ${read}); model the site's equipment in NF (Haystack) first`;
+  }
+  if (!model.points.length) {
+    return `model incomplete: ${model.equips.length} equipment but 0 points loaded (${counts}; ${read}); `
+      + `${model.sites.length ? 'the per-site point query returned nothing' : 'no SITE record was found, so no points were queried'}`;
+  }
+  return null;
 }
 
 /** Always-logged run report: engine and window, input freshness, evaluated / written / skipped / stale with reasons. */
@@ -921,4 +949,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });

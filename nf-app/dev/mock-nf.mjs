@@ -173,7 +173,11 @@ function query(body) {
   const f = textOf(body.structuredQuery);
   const out = records.filter((r) => (layer === "model" ? r.layer === "model" : true)
     && (!f || String((r.attrs || {})[f[0]] ?? "") === f[1])).map(withLatest);
-  return { points: out, totalCount: String(out.length) };
+  // Like NF 3.10.x: pages by pageOffset + pageSize and reports totalCount, with NO nextPageToken (#1550).
+  // No pageSize in the request = everything (older callers).
+  const size = Number(body.pageSize) > 0 ? Number(body.pageSize) : out.length;
+  const off = Number(body.pageOffset) > 0 ? Number(body.pageOffset) : 0;
+  return { points: out.slice(off, off + size), totalCount: String(out.length) };
 }
 
 const AGG = {

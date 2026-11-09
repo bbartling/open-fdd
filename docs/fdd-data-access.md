@@ -41,7 +41,7 @@ Only on the **full edition with the TimescaleDB engine**: the `fdd` hook also wr
 (`nf-app/timescale/install.sql`). It is a convenience copy for SQL users, not the source of truth; the NF points
 above exist either way. It has no per-timestamp timeline (that lives in the NF timeline points). The `history` hook
 reads NF's own sample table (long-range min/avg/max per bucket) and needs Timescale too; without it the hook fails with
-`config.timescale is not set`.
+`Timescale connection settings not found` (set the app option `timescale`, see [Install](install.html#optional-the-timescaledb-engine)).
 
 ## Recipes for an API client
 

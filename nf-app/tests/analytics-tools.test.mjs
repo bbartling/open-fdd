@@ -331,7 +331,8 @@ test("the hook function takes args from the NF context, logs one JSON line, reje
     const r = await post(p, body);
     if (p === "/api/v1/point/query" && body.layer === "model") {
       const extra = Array.from({ length: 1500 }, (_, i) => ({ uuid: `eq-${i}`, name: `AHU-${i}`, layer: "model", pointType: "EQUIPMENT", attrs: { id: `AHU-${i}`, dis: `AHU-${i} ${"x".repeat(60)}`, markers: "equip,ahu", siteRef: "site-a" } }));
-      return { data: { points: [...r.data.points, ...extra] } };
+      const points = [...r.data.points, ...extra];
+      return { data: { points, totalCount: String(points.length) } };
     }
     return r;
   };

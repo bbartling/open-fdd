@@ -22,6 +22,7 @@ const path = require("path");
 
 const SQL_DIR = path.join(__dirname, "..", "..", "timescale");
 const ofddUnits = require("../../static/units.js");
+const settings = require("./settings");
 
 const NUMERIC_OIDS = new Set([20, 21, 23, 700, 701, 1700]);
 const IDENT = /^[a-z_][a-z0-9_]*$/;
@@ -41,10 +42,10 @@ async function connect(config = {}) {
     }
     throw e;
   }
+  config = requireConfig(config);   // a JSON string option (how NF stores it) or an object; one message when absent
   const opts = {};
   if (config.connectionString) opts.connectionString = config.connectionString;
   else {
-    if (!config.host) throw new Error("timescale config needs connectionString or host");
     Object.assign(opts, { host: config.host, port: config.port || 5432, database: config.database || "postgres", user: config.user });
   }
   const pw = config.passwordEnv ? process.env[config.passwordEnv] : config.password;
@@ -52,7 +53,14 @@ async function connect(config = {}) {
   if (config.ssl) opts.ssl = config.ssl;
   opts.application_name = "open-fdd";
   const client = new Client(opts);
-  await client.connect();
+  try {
+    await client.connect();
+  } catch (e) {
+    // never let the password (or a URL with credentials) reach a log or a run record
+    const err = new Error(settings.redact(e && e.message, { ...config, password: pw }));
+    /** @type {any} */ (err).code = e && e.code;
+    throw err;
+  }
   return client;
 }
 
@@ -80,12 +88,12 @@ async function install(client) {
   return { jobRegistered: cfg.job_registered === true || cfg.job_registered === "true", maxBytes: Number(cfg.max_bytes), schemaVersion: Number(cfg.schema_version) };
 }
 
-/** Throws a clear error when the engine "timescale" is selected but hook config.timescale is missing (never a silent fallback). */
+/**
+ * The connection settings as an object, or a clear error naming where they are expected (never a silent fallback).
+ * Accepts the object form and the string form NF stores (app option "timescale": JSON text or a postgres:// URL).
+ */
 function requireConfig(config) {
-  if (!config || typeof config !== "object" || !(config.connectionString || config.host)) {
-    throw new Error('engine "timescale" is selected but config.timescale is missing or has no connectionString/host; set the hook config "timescale" (see docs/install.md) or choose another engine');
-  }
-  return config;
+  return settings.requireTimescale(config);
 }
 
 // ---------------------------------------------------------------- history -> session TEMP tables

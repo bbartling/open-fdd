@@ -184,9 +184,13 @@
    * @returns {Promise<any[]>}
    */
   async function loadSchedules(api) {
-    const size = 100, raw = [];
+    // Offset paging (pageOffset + totalCount; ScheduleManager has no page token). Same rules as nf.js pageAll: stop at
+    // totalCount or a short/empty page; a hard cap is an error, never a silently truncated list (#1550).
+    const size = 100, maxPages = 500, raw = [];
+    let capped = false;
     try {
-      for (let offset = 0; ; offset += size) {
+      for (let offset = 0, pages = 0; ; offset += size, pages++) {
+        if (pages >= maxPages) { capped = true; break; }
         const page = await api(`/api/v1/schedules?pageOffset=${offset}&pageSize=${size}`);
         const items = (page && page.schedules) || [];
         raw.push(...items);
@@ -194,6 +198,7 @@
         if (items.length < size || (total > 0 && raw.length >= total)) break;
       }
     } catch (e) { return []; }
+    if (capped) throw new Error(`schedules: paging cap reached after ${raw.length} schedules (${maxPages} pages); refusing to continue with a partial list`);
     const full = await Promise.all(raw.map(async (r) => {
       const has = pick(r, "weeklySchedule", "weekly_schedule") || (pick(r, "specialEvents", "special_events") || []).length;
       if (has || !r.uuid) return r;

@@ -36,7 +36,8 @@ BATCH = 40  # uuids per point/data request (keeps the URL short)
 CHUNK_DAYS = 7  # NF caps samples per request; history is fetched in pieces of at most 7 days
 PAGE_SIZE = 500
 PENDING_STATES = ("STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED", "STATE_UNSPECIFIED", None)
-MAX_PAGES = 10_000
+MAX_PAGES = 1000
+MAX_RECORDS = 200_000
 
 
 class NFError(RuntimeError):
@@ -45,6 +46,77 @@ class NFError(RuntimeError):
     def __init__(self, message: str, status: int | None = None):
         super().__init__(message)
         self.status = status
+
+
+def page_all(fetch: Callable[[dict], dict], key: str = "points", *, page_size: int = PAGE_SIZE,
+             max_records: int = MAX_RECORDS, max_pages: int = MAX_PAGES, what: str = "NF list") -> list[dict]:
+    """Every record of a paged NF list route. ``fetch(params)`` does one request (``params`` has ``pageSize`` and,
+    after the first page, ``pageOffset`` or ``pageToken``) and returns the response body; ``key`` is its array field.
+
+    NF 3.10.x ``POST /api/v1/point/query`` returns ``totalCount`` but NO ``nextPageToken``: it pages with
+    ``pageOffset`` (#1550). A loop that only follows a token reads the first 500 records and stops silently. So:
+    a ``nextPageToken`` is followed when present (a repeated one is an error); otherwise ``pageOffset`` advances by
+    the records received until ``totalCount`` (or an empty page; with no ``totalCount`` a short page ends it too).
+    A page that adds nothing new (the server ignored ``pageOffset``), a short read and the hard cap raise
+    ``NFError``: the list is never silently truncated. Same algorithm as nf-app/hooks/lib/paging.js.
+    """
+    out: list[dict] = []
+    seen: set[str] = set()
+    tokens: set[str] = set()
+    token = ""
+    offset = 0
+    total: int | None = None
+    pages = 0
+    while True:
+        if pages >= max_pages or offset >= max_records:
+            raise NFError(f"{what}: paging cap reached after {offset} records in {pages} pages "
+                          f"(totalCount {'unknown' if total is None else total}); refusing to continue with a partial result")
+        params: dict[str, Any] = {"pageSize": page_size}
+        if token:
+            params["pageToken"] = token
+        elif offset > 0:
+            params["pageOffset"] = offset
+        page = fetch(params) or {}
+        pages += 1
+        recs = page.get(key) or []
+        raw_total = page.get("totalCount")
+        try:
+            if raw_total not in (None, "") and int(float(raw_total)) >= 0:
+                total = int(float(raw_total))
+        except (TypeError, ValueError):
+            pass
+        added = 0
+        for r in recs:
+            ident = str((r.get("uuid") or r.get("id")) if isinstance(r, dict) and (r.get("uuid") or r.get("id"))
+                        else json.dumps(r, sort_keys=True, default=str))
+            if ident in seen:
+                continue
+            seen.add(ident)
+            out.append(r)
+            added += 1
+        if recs and not added:
+            raise NFError(f"{what}: page {pages} repeated records already read (the server ignored "
+                          f"{'pageToken' if token else f'pageOffset {offset}'}); refusing to loop")
+        offset += len(recs)
+        nxt = page.get("nextPageToken") or ""
+        if nxt:
+            if nxt in tokens:
+                raise NFError(f"{what}: nextPageToken repeated; refusing to loop")
+            tokens.add(nxt)
+            token = nxt
+            continue
+        token = ""
+        if not recs:
+            break
+        if total is not None:
+            if offset >= total:
+                break
+        elif len(recs) < page_size:
+            break
+    if total is not None and offset < total:
+        raise NFError(f"{what}: read {offset} of totalCount {total} records, then the server returned an empty page; "
+                      "refusing to continue with a partial result")
+    return out
 
 
 def _utc(ts: datetime) -> datetime:
@@ -277,30 +349,25 @@ class NFClient:
         return self.get("/api/v1/platform/info")
 
     def sites(self) -> list[dict]:
-        return list(self.get("/api/v1/sites").get("sites") or [])
+        def fetch(p: dict) -> dict:
+            qs = f"pageSize={p['pageSize']}" + (f"&pageOffset={p['pageOffset']}" if p.get("pageOffset") else "") \
+                + (f"&pageToken={urllib.parse.quote(p['pageToken'], safe='')}" if p.get("pageToken") else "")
+            return self.get(f"/api/v1/sites?{qs}")
+
+        return page_all(fetch, "sites", what="sites")
 
     def query_all(self, layer: str = "default", structured_query: dict | None = None,
                   page_size: int = PAGE_SIZE) -> list[dict]:
-        """Every record of ``/api/v1/point/query`` on one layer (all pages).
+        """Every record of ``/api/v1/point/query`` on one layer (all pages, see ``page_all``).
 
-        A repeated ``nextPageToken`` is an error (a paging loop would otherwise never end).
+        NF pages by ``pageOffset`` + ``totalCount`` and sends no next-page token (#1550); a token is still followed
+        when one comes. A paging loop, a short read and the hard cap raise ``NFError``; the list is never truncated.
         """
-        body: dict[str, Any] = {"pageSize": page_size, "layer": layer}
+        body: dict[str, Any] = {"layer": layer}
         if structured_query:
             body["structuredQuery"] = structured_query
-        out: list[dict] = []
-        seen: set[str] = set()
-        for _ in range(MAX_PAGES):
-            page = self.post("/api/v1/point/query", body)
-            out.extend(page.get("points") or [])
-            token = page.get("nextPageToken") or ""
-            if not token:
-                return out
-            if token in seen:
-                raise NFError("point/query returned a repeated pageToken; refusing to loop")
-            seen.add(token)
-            body["pageToken"] = token
-        raise NFError("point/query: too many pages")
+        return page_all(lambda p: self.post("/api/v1/point/query", {**body, **p}), "points",
+                        page_size=page_size, what="point/query")
 
     def point_data(
         self,

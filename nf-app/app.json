@@ -21,6 +21,8 @@
     "/hooks/fdd.js": "hooks/fdd.js",
     "/hooks/history.js": "hooks/history.js",
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
+    "/hooks/lib/paging.js": "hooks/lib/paging.js",
+    "/hooks/lib/settings.js": "hooks/lib/settings.js",
     "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
     "/hooks/sparql.js": "hooks/sparql.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",

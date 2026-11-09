@@ -55,21 +55,71 @@ function coordsFromAttrs(attrs) {
   return hasCoords(c) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? c : null;
 }
 
-/** Page through POST /api/v1/point/query for one layer; a layer that does not exist (HTTP error) is just empty. */
-async function queryLayer(http, layer) {
+/**
+ * The Lite edition's one pager (the full edition shares nf-app/hooks/lib/paging.js; Lite is a single-file app, so this
+ * is the same algorithm inline, #1550). NF pages by pageOffset + totalCount, not only by a next-page token:
+ * a nextPageToken is followed when present, else pageOffset advances until totalCount (or an empty / short page when
+ * there is no totalCount). A page that repeats, a short read and a hard cap are errors (err.paging), never a
+ * silently truncated list.
+ * @param {(p: { pageSize: number, pageOffset?: number, pageToken?: string }) => Promise<any>} fetchPage
+ * @param {{ key: string, what: string, pageSize?: number, maxRecords?: number, maxPages?: number }} o
+ */
+async function pageAll(fetchPage, o) {
+  const pageSize = o.pageSize || 500;
+  const maxRecords = o.maxRecords || 200000;
+  const maxPages = o.maxPages || 1000;
+  const fail = (m) => Object.assign(new Error(`${o.what}: ${m}`), { paging: true });
   const out = [];
-  let pageToken = '';
-  try {
-    do {
-      const res = await http.post('/api/v1/point/query', { layer, pageSize: 500, ...(pageToken && { pageToken }) });
-      const data = res && res.data;
-      out.push(...((data && data.points) || []));
-      pageToken = (data && data.nextPageToken) || '';
-    } while (pageToken);
-  } catch (_) {
-    /* layer missing or not readable: nothing from it */
+  const seen = new Set();
+  const tokens = new Set();
+  let token = '';
+  let offset = 0;
+  let total = null;
+  for (let pages = 0; ; pages += 1) {
+    if (pages >= maxPages || offset >= maxRecords) {
+      throw fail(`paging cap reached after ${offset} records in ${pages} pages (totalCount ${total === null ? 'unknown' : total}); refusing to continue with a partial result`);
+    }
+    const params = { pageSize };
+    if (token) params.pageToken = token;
+    else if (offset > 0) params.pageOffset = offset;
+    const page = (await fetchPage(params)) || {};
+    const recs = Array.isArray(page[o.key]) ? page[o.key] : [];
+    const t = page.totalCount === undefined || page.totalCount === null || page.totalCount === '' ? NaN : Number(page.totalCount);
+    if (Number.isFinite(t) && t >= 0) total = t;
+    let added = 0;
+    for (const r of recs) {
+      const id = (r && (r.uuid || r.id)) || JSON.stringify(r);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(r);
+      added += 1;
+    }
+    if (recs.length && !added) throw fail(`page ${pages + 1} repeated records already read (the server ignored the paging parameters); refusing to loop`);
+    offset += recs.length;
+    if (page.nextPageToken) {
+      if (tokens.has(page.nextPageToken)) throw fail('nextPageToken repeated; refusing to loop');
+      tokens.add(page.nextPageToken);
+      token = page.nextPageToken;
+      continue;
+    }
+    token = '';
+    if (!recs.length) break;
+    if (total !== null) {
+      if (offset >= total) break;
+    } else if (recs.length < pageSize) break;
   }
+  if (total !== null && offset < total) throw fail(`read ${offset} of totalCount ${total} records, then the server returned an empty page; refusing to continue with a partial result`);
   return out;
+}
+
+/** All pages of POST /api/v1/point/query for one layer; a layer that does not exist (HTTP error) is just empty. */
+async function queryLayer(http, layer) {
+  try {
+    return await pageAll(async (p) => (await http.post('/api/v1/point/query', { layer, ...p })).data, { key: 'points', what: 'point/query' });
+  } catch (e) {
+    if (e && e.paging) throw e;   // a truncated model must not look like "no site found"
+    return []; /* layer missing or not readable: nothing from it */
+  }
 }
 
 /**
@@ -276,11 +326,12 @@ async function runOnce({ globalVariables, sdk, config }) {
   };
 
   const instances = avInstances(config); // validate config before any network call
-  const sitesRes = await nf(sdk.http.get('/api/v1/sites?pageSize=500'), 'GetSites');
+  const sites = await pageAll(async (p) => nf(sdk.http.get(`/api/v1/sites?pageSize=${p.pageSize}${p.pageOffset ? `&pageOffset=${p.pageOffset}` : ''}${p.pageToken ? `&pageToken=${encodeURIComponent(p.pageToken)}` : ''}`), 'GetSites'),
+    { key: 'sites', what: 'sites' });
   const wanted = config && config.site;
   let site;
   try {
-    site = pickSite((sitesRes && sitesRes.sites) || [], wanted);
+    site = pickSite(sites, wanted);
     site.source = 'nf sites api';
   } catch (e) {
     if (!e || !e.noCoords) throw e;
@@ -339,5 +390,5 @@ async function runOnce({ globalVariables, sdk, config }) {
 // The hook is the function; the helpers hang off it for offline tests.
 module.exports = Object.assign(
   async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
-  { magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, avInstances, bacnetObjects, withDeadline },
+  { magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, avInstances, bacnetObjects, withDeadline, pageAll },
 );

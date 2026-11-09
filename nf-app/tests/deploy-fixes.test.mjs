@@ -105,7 +105,7 @@ test("history: no config.timescale and no args is a structured skip (success)", 
 
 test("history: no config.timescale but args that ask for a query still fails", async () => {
   await assert.rejects(history({ sdk: {}, args: { uuids: ["u1"], from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z" }, config: {} }),
-    /config\.timescale is not set/);
+    /Timescale connection settings not found.*app option \"timescale\"/);
 });
 
 const bigBox = { async get() { return { data: { resources: [{ memory: { totalBytes: String(16 * 1024 ** 3) } }] } }; } };
