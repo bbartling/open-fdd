@@ -1,6 +1,6 @@
 # Open-FDD SQL rules for PostgreSQL
 
-This standalone adaptation contains all 77 registry SQL files from the local Open-FDD checkout, plus their tuning metadata. It targets PostgreSQL 14+ syntax, subject to execution qualification on your actual PostgreSQL version. Original equations and per-rule normalization were retained except for the documented dialect changes. Fault duration and confirmation use the forward timestamp delta. A gap longer than `MAX_GAP_HOURS` (default 1) is unknown: it is not fault time, not covered time, and it breaks the confirmation streak. The last sample does not add a trailing interval. No PostgreSQL server was available here. This is an implementation starting point, not a deployed FDD service or completed UI.
+This standalone adaptation contains all 77 registry SQL files from the local Open-FDD checkout, plus their tuning metadata. It targets PostgreSQL 14+ syntax, subject to execution qualification on your actual PostgreSQL version. Original equations and per-rule normalization were retained except for the documented dialect changes. Most rules use forward timestamp deltas; a gap longer than `MAX_GAP_HOURS` (default 1) is unknown, not fault or covered time, and breaks confirmation. The four sensor sweeps (`SV-STALE`, `SV-FLATLINE`, `SV-RANGE`, `SV-SPIKE`) instead attribute silence beyond `max_silence_hours` (default 0.5 h) to the affected sensor. The last sample adds no trailing interval except for those sweeps when another history row establishes the equipment observation end. This is an implementation starting point, not a deployed FDD service or completed UI.
 
 ## Start here
 
@@ -9,7 +9,8 @@ This standalone adaptation contains all 77 registry SQL files from the local Ope
 - `registry.yaml`: original metadata, including source parity status.
 - `render_rule.py`: standalone Python standard-library parameter renderer.
 - `postgres/postgres_helpers.sql`: the `fdd.*` helpers (safe numeric conversion for occupancy rules; SI-only sensor-sweep unit gate).
-- `input_contract.sql`: scratch wide input tables showing required column names and types; build views over your warehouse instead of copying this into production blindly.
+- `input_contract.json`: canonical engine-independent scratch contract for role scales, relation columns and SI types.
+- `input_contract.sql`: generated standalone scratch DDL for every relation used by the rendered rules, including sensor-validation metadata. Build views over your warehouse instead of copying this into production blindly.
 - `tuning_storage.sql`: starter schema for configuration revisions and result provenance.
 - `port_manifest.json`: source hashes, changed files and controls without SQL effects.
 
@@ -31,9 +32,15 @@ The script prints SQL; it does not connect to your database. In an application i
 
 ## Input contract matters as much as dialect
 
-Rules read wide relations named `history`, `weather`, `utility_interval`, and `utility_monthly`. Supply a consistently sampled grid with exactly one row per equipment per UTC timestamp. Timestamp is `timestamp with time zone`; analogs and status/command inputs are numeric, not PostgreSQL booleans; `occ_mode` is text. Missing optional columns need typed NULL projections. Missing required roles must produce a skipped/not-applicable result, not fabricated data.
+`input_contract.json` is the one source for declared role scales and the complete scratch schema. Generate the standalone DDL and the legacy `role_scales.json` compatibility view with `python scripts/nf/build_input_contract.py`; use `--check` in CI. The NF SQL pack builder reads the same source. The DDL includes `history`, `weather`, both utility relations, and the scoped `authorized_series` / `equipment` metadata relations used by sensor-validation rules. Supply a consistently sampled grid with exactly one row per equipment per UTC timestamp. Timestamp is `timestamp with time zone`; analogs and status/command inputs are numeric, not PostgreSQL booleans; `occ_mode` is text. Missing required roles must produce a skipped/not-applicable result, not fabricated data.
 
 Execute against **one authorized tenant and building at a time**. These SQL files partition by `equipment_id` alone and weather joins partition by timestamp. An unscoped warehouse view would mix sites that reuse equipment IDs and could attach another site's weather. Scope all four inputs before the rule query. Use transaction-local temporary views/tables or a validated CTE adapter with bound scope values. Select equipment by explicit metadata kind and mapped roles; IDs are exact keys, never prefix heuristics. Mixed equipment cadences need separate runs/resampling, not a single invented poll interval.
+
+## Sensor sweep result grain and silence
+
+`SV-STALE`, `SV-FLATLINE`, `SV-RANGE`, and `SV-SPIKE` return one result per `(equipment_id, sensor_role)`: `equipment_id`, `sensor_role`, and `fault_hours`. A separate role result prevents a healthy sensor from masking a faulty peer and lets callers name the affected channel. The SQL templates unpivot only the applicable analog roles, then bind each role to exactly one authorized series unit; missing or duplicate role bindings are not assessed.
+
+`max_silence_hours` is available on all four sweeps (minimum and step 0.25 h). Gaps at or below the threshold use sample-and-hold. When a role has a next observation after a longer gap, the interval after the threshold is fault time on that role. If that role stops reporting while other rows continue, its final gap is measured through the equipment's last timestamp. A role with no valid observation is unknown. `SV-STALE` and `SV-FLATLINE` use elapsed-time trailing windows; their minimum window is 0.25 h. Numeric `RANGE` frames and the cutoff-crossing held sample keep the window tied to elapsed time on PostgreSQL, SQLite and DataFusion instead of a row count.
 
 ## Units: SI only
 
@@ -77,7 +84,7 @@ The `history` columns are bare `DOUBLE PRECISION`, so a stored `1` could mean 1 
 | `text` | `occ_mode` | categorical string |
 | `si:<unit>` | every other role: temperatures `si:degC`, `duct_static`/`chw_dp` `si:Pa`, flows `si:L/s`, `electric_kw`/`chiller_power` `si:kW`, `kwh` `si:kWh`, `chiller_amps`/`chiller_current` `si:A`, `zone_co2` `si:ppm`, `*_request_sum` `si:count` | physical SI, unchanged |
 
-The table lives in `role_scales.json` (role -> scale; `input_contract.sql` repeats it as comments). `scripts/nf/build_rule_catalog.py` copies it into `nf-app/static/fdd-catalog.json` as `roles.<role>.scale` and fails when a role has none, so the hook, the docs and the Timescale path read one source.
+The role scales live in `input_contract.json`; `role_scales.json` is a generated compatibility view for existing tooling, and `input_contract.sql` is generated from the same declarations. `scripts/nf/build_rule_catalog.py` copies each scale into `nf-app/static/fdd-catalog.json` as `roles.<role>.scale` and fails when a role has none, so the hook, the docs and the Timescale path use the canonical declaration.
 
 **Ingest rule** (`siPlan` in `nf-app/hooks/fdd.js`; `hooks/lib/timescale.js` applies exactly its decisions, it never decides itself). Decided per role from the point's declared unit and kind:
 

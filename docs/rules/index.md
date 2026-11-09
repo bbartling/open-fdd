@@ -35,7 +35,7 @@ Each rule section answers the same questions:
 
 Everything is SI, with no exceptions: temperature **°C**, temperature differences **Δ°C** (no 32-degree offset), pressure **Pa**, flow **L/s**, power **kW**,
 energy **kWh**, concentration **ppm**. Every command and position (fan, pump and tower commands, valve and damper positions) is a **fraction (0-1)**,
-every status is **0/1**, and humidity is **%RH (0-100)**: one declared scale per column, from `sql/fdd/role_scales.json`. Rules never convert units and never
+every status is **0/1**, and humidity is **%RH (0-100)**: one declared scale per column, from `sql/fdd/input_contract.json`. Rules never convert units and never
 guess a scale by magnitude. Points are converted once at ingest (a `%` point is divided by 100, a command point with no unit is skipped, not guessed), and back
 to the user's display system only in the UI. Sensor-validation rules (`SV-*`) assess a series only when its declared unit is the SI unit of its
 quantity. See [Units](../units.html).

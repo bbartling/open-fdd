@@ -39,9 +39,11 @@ class GateSpec:
 # samples: SCHED-1 (unoccupied fan runtime), CMD-1 (cmd/status mismatch),
 # OAT-METEO / WX-1 (weather, not equipment-energized faults).
 RULE_GATES: dict[str, GateSpec] = {
-    "SV-RANGE": GateSpec("equipment_energized", startup_delay_seconds=0),
-    "SV-FLATLINE": GateSpec("conditional", startup_delay_seconds=0),
-    "SV-SPIKE": GateSpec("equipment_energized", startup_delay_seconds=0),
+    # SQL sensor sweeps have their own elapsed semantics; only flatline applies
+    # the optional point-priority energized condition inside its raw signal.
+    "SV-RANGE": GateSpec("always"),
+    "SV-FLATLINE": GateSpec("always"),
+    "SV-SPIKE": GateSpec("always"),
     "SV-STALE": GateSpec("always"),  # dead feed must be visible even when motors are off
     "SV-RATE": GateSpec("always"),  # state is classified inside the rule; need off/transient samples
     "PID-HUNT-1": GateSpec("control_loop", startup_delay_seconds=300),

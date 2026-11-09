@@ -255,6 +255,19 @@
 
   const hourly = (arr) => new Map((arr || []).map(([t, v]) => [hourFloor(t), v]));
 
+  /** Latest persisted sweep result, in fault hours per assessed sensor role. */
+  function fddPlotSensorFaultHours(point) {
+    const attrs = point?.rec?.attrs || {};
+    if (!attrs.fddSensorFaultHours || attrs.fddStatus === "stale" || attrs.fddStatus === "not-assessed") return "";
+    try {
+      return Object.entries(JSON.parse(attrs.fddSensorFaultHours))
+        .filter(([, hours]) => typeof hours === "number" && Number.isFinite(hours) && hours >= 0)
+        .map(([role, hours]) => `${role} ${Number(hours.toFixed(3))} h`).join(", ");
+    } catch (_) {
+      return "";
+    }
+  }
+
   /**
    * Per-rule result plot: the rule's bound input signals grouped by unit family plus a fault
    * lane from the hook's result point. Returns a short note.
@@ -298,13 +311,15 @@
     if (!built.option) return "No history for the bound inputs in this range.";
     built.option = rcxWithFaultLane(built.option, [{ name: rule.id, data: lane }]);
     draw(el, built, `fdd_${rule.id}_${equipName(equipRec)}`);
+    const scores = fddPlotSensorFaultHours(resultPoint || (model && rcxResultPoint(model, equipRec, rule.id)));
+    const sensorNote = scores ? ` · latest sensor fault hours: ${scores}` : "";
     if (lane.source === "none") return `${roles.length} inputs · no result point yet (the FDD hook has not written ${rule.id} for this equip)`;
     const confirmed = lane.filter(([, f]) => f === 1).length, gaps = lane.filter(([, f]) => f == null).length;
     if (lane.source === "timeline") {
       return `${roles.length} inputs · confirmed fault in ${confirmed} of ${lane.length - gaps} assessed samples`
-        + (gaps ? ` · ${gaps} gap${gaps === 1 ? "" : "s"} (not assessed)` : "");
+        + (gaps ? ` · ${gaps} gap${gaps === 1 ? "" : "s"} (not assessed)` : "") + sensorNote;
     }
-    return `${roles.length} inputs · approximate: fault in ${confirmed} of ${lane.length} hourly results (no per-timestamp timeline for ${rule.id} yet)`;
+    return `${roles.length} inputs · approximate: fault in ${confirmed} of ${lane.length} hourly results (no per-timestamp timeline for ${rule.id} yet)` + sensorNote;
   }
 
   /** Fallback lane from a rolling fault_pct series (no timeline point): [[ms, 1|0]], nulls kept, tagged approximate. */

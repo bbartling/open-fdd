@@ -1859,9 +1859,6 @@ def sensor_fault_summary(
             # Prefer evidence (even PASS); fall back to plot_series only for FAULT legacy
             if evidence:
                 for ev in evidence:
-                    if not ev.get("faulted") and getattr(r, "status", "") != "FAULT":
-                        # Still list checked sensors with 0 hours when rule FAULTed for others
-                        pass
                     role = str(ev.get("role") or "")
                     if not role:
                         continue
@@ -1881,6 +1878,7 @@ def sensor_fault_summary(
                             "sensor": role,
                             "sensor_type": ev.get("sensor_type") or sensor_type_for_role(role),
                             "fault_hours": ev.get("fault_hours"),
+                            "silence_hours": ev.get("silence_hours"),
                             "n": int(num.notna().sum()) if len(num) else 0,
                             "n_fault_samples": int(ev.get("fault_samples") or 0),
                             "mean": round(float(num.mean()), 3) if num.notna().any() else None,
@@ -1936,6 +1934,7 @@ def sensor_fault_summary(
         "sensor",
         "sensor_type",
         "fault_hours",
+        "silence_hours",
         "n",
         "n_fault_samples",
         "mean",

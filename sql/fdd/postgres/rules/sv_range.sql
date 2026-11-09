@@ -1,169 +1,138 @@
--- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
--- Inputs must be scoped to one tenant/site and cadence; see README.md.
--- sv_range.sql — Sensor out of hard range (pandas SENSOR_LIMITS catalog)
--- Do not force everything through oa_t. Humidity/pressure are not temperature-scaled.
--- Points without a declared binding unit are masked (not assessed), matching pandas sweep_assessable_role.
-WITH bind AS (
-  SELECT
-    MAX(a.unit) FILTER (WHERE a.role = 'oa_t') AS u_oa_t,
-    MAX(a.unit) FILTER (WHERE a.role = 'mat') AS u_mat,
-    MAX(a.unit) FILTER (WHERE a.role = 'zone_t') AS u_zone_t,
-    MAX(a.unit) FILTER (WHERE a.role = 'rat') AS u_rat,
-    MAX(a.unit) FILTER (WHERE a.role = 'sat') AS u_sat,
-    MAX(a.unit) FILTER (WHERE a.role = 'chw_supply_t') AS u_chw_supply_t,
-    MAX(a.unit) FILTER (WHERE a.role = 'chw_return_t') AS u_chw_return_t,
-    MAX(a.unit) FILTER (WHERE a.role = 'hw_supply_t') AS u_hw_supply_t,
-    MAX(a.unit) FILTER (WHERE a.role = 'hw_return_t') AS u_hw_return_t,
-    MAX(a.unit) FILTER (WHERE a.role = 'oa_h') AS u_oa_h,
-    MAX(a.unit) FILTER (WHERE a.role = 'ra_h') AS u_ra_h,
-    MAX(a.unit) FILTER (WHERE a.role = 'zone_rh') AS u_zone_rh,
-    MAX(a.unit) FILTER (WHERE a.role = 'ma_h') AS u_ma_h,
-    MAX(a.unit) FILTER (WHERE a.role = 'sa_h') AS u_sa_h,
-    MAX(a.unit) FILTER (WHERE a.role = 'duct_static') AS u_duct_static
-  FROM authorized_series a
-  JOIN equipment e ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
-  WHERE e.equipment_id = (SELECT MIN(equipment_id) FROM history)
-    AND (SELECT count(*)::int FROM authorized_series c
-         WHERE c.site_id = a.site_id AND c.equipment_id = a.equipment_id AND c.role = a.role) = 1
-),
-gated AS (
-  SELECT
-    h.equipment_id,
-    h.timestamp_utc,
-    fdd.mask_sweep_val('oa_t', b.u_oa_t, h.oa_t) AS oa_t,
-    fdd.mask_sweep_val('mat', b.u_mat, h.mat) AS mat,
-    fdd.mask_sweep_val('zone_t', b.u_zone_t, h.zone_t) AS zone_t,
-    fdd.mask_sweep_val('rat', b.u_rat, h.rat) AS rat,
-    fdd.mask_sweep_val('sat', b.u_sat, h.sat) AS sat,
-    fdd.mask_sweep_val('chw_supply_t', b.u_chw_supply_t, h.chw_supply_t) AS chw_supply_t,
-    fdd.mask_sweep_val('chw_return_t', b.u_chw_return_t, h.chw_return_t) AS chw_return_t,
-    fdd.mask_sweep_val('hw_supply_t', b.u_hw_supply_t, h.hw_supply_t) AS hw_supply_t,
-    fdd.mask_sweep_val('hw_return_t', b.u_hw_return_t, h.hw_return_t) AS hw_return_t,
-    fdd.mask_sweep_val('oa_h', b.u_oa_h, h.oa_h) AS oa_h,
-    fdd.mask_sweep_val('ra_h', b.u_ra_h, h.ra_h) AS ra_h,
-    fdd.mask_sweep_val('zone_rh', b.u_zone_rh, h.zone_rh) AS zone_rh,
-    fdd.mask_sweep_val('ma_h', b.u_ma_h, h.ma_h) AS ma_h,
-    fdd.mask_sweep_val('sa_h', b.u_sa_h, h.sa_h) AS sa_h,
-    fdd.mask_sweep_val('duct_static', b.u_duct_static, h.duct_static) AS duct_static,
-    h.fan_cmd,
-    h.zone_flow,
-    h.fan_status,
-    h.pump_status,
-    h.chw_pump_cmd,
-    h.chiller_status
+WITH base_proof AS (
+  SELECT h.*,
+    CASE
+      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END
+      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END
+      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END
+      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
+      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END
+      ELSE 1 END AS energized
   FROM history h
-  CROSS JOIN bind b
 ),
-h AS (
-  SELECT
-    equipment_id,
-    timestamp_utc,
-    oa_t, mat, zone_t, rat, sat,
-    chw_supply_t, chw_return_t, hw_supply_t, hw_return_t,
-    oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static,
-    fan_cmd, fan_status, pump_status, chw_pump_cmd, chiller_status, zone_flow,
-    CASE
-      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
-      -- VAV airflow proxy (operational_gate.resolve_fan_running): 50 cfm = 23.597350 L/s SI.
-      WHEN zone_flow IS NOT NULL THEN CASE WHEN zone_flow > 23.597350 THEN 1 ELSE 0 END
-      WHEN pump_status IS NOT NULL THEN CASE WHEN pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
-      WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
-      ELSE 1
-    END AS energized
-  FROM gated
+base_history AS (
+  SELECT base_proof.*,
+    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,
+    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct
+  FROM base_proof
 ),
-base AS (
-  SELECT
-    equipment_id,
-    timestamp_utc,
-    CAST(CASE
-      WHEN COALESCE(energized, 0) = 0 THEN 0
-      WHEN oa_t IS NOT NULL AND (oa_t = CAST('NaN' AS DOUBLE PRECISION) OR oa_t < (1.666667 - 52.777778 * {{RANGE_SCALE_TEMPERATURE}}) OR oa_t > (1.666667 + 52.777778 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN mat IS NOT NULL AND (mat = CAST('NaN' AS DOUBLE PRECISION) OR mat < (7.222222 - 36.111111 * {{RANGE_SCALE_TEMPERATURE}}) OR mat > (7.222222 + 36.111111 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN zone_t IS NOT NULL AND (zone_t = CAST('NaN' AS DOUBLE PRECISION) OR zone_t < (21.111111 - 16.666667 * {{RANGE_SCALE_TEMPERATURE}}) OR zone_t > (21.111111 + 16.666667 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN rat IS NOT NULL AND (rat = CAST('NaN' AS DOUBLE PRECISION) OR rat < (21.111111 - 16.666667 * {{RANGE_SCALE_TEMPERATURE}}) OR rat > (21.111111 + 16.666667 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN sat IS NOT NULL AND (sat = CAST('NaN' AS DOUBLE PRECISION) OR sat < (32.222222 - 33.333333 * {{RANGE_SCALE_TEMPERATURE}}) OR sat > (32.222222 + 33.333333 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN chw_supply_t IS NOT NULL AND (chw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR chw_supply_t < (12.777778 - 13.888889 * {{RANGE_SCALE_TEMPERATURE}}) OR chw_supply_t > (12.777778 + 13.888889 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN chw_return_t IS NOT NULL AND (chw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR chw_return_t < (15.555556 - 16.666667 * {{RANGE_SCALE_TEMPERATURE}}) OR chw_return_t > (15.555556 + 16.666667 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN hw_supply_t IS NOT NULL AND (hw_supply_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_supply_t < (54.444444 - 50.0 * {{RANGE_SCALE_TEMPERATURE}}) OR hw_supply_t > (54.444444 + 50.0 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN hw_return_t IS NOT NULL AND (hw_return_t = CAST('NaN' AS DOUBLE PRECISION) OR hw_return_t < (54.444444 - 50.0 * {{RANGE_SCALE_TEMPERATURE}}) OR hw_return_t > (54.444444 + 50.0 * {{RANGE_SCALE_TEMPERATURE}})) THEN 1
-      WHEN oa_h IS NOT NULL AND (oa_h = CAST('NaN' AS DOUBLE PRECISION) OR oa_h < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR oa_h > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}})) THEN 1
-      WHEN ra_h IS NOT NULL AND (ra_h = CAST('NaN' AS DOUBLE PRECISION) OR ra_h < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR ra_h > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}})) THEN 1
-      WHEN zone_rh IS NOT NULL AND (zone_rh = CAST('NaN' AS DOUBLE PRECISION) OR zone_rh < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR zone_rh > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}})) THEN 1
-      WHEN ma_h IS NOT NULL AND (ma_h = CAST('NaN' AS DOUBLE PRECISION) OR ma_h < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR ma_h > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}})) THEN 1
-      WHEN sa_h IS NOT NULL AND (sa_h = CAST('NaN' AS DOUBLE PRECISION) OR sa_h < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR sa_h > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}})) THEN 1
-      WHEN duct_static IS NOT NULL AND (duct_static = CAST('NaN' AS DOUBLE PRECISION) OR duct_static < (870.94 - 1119.78 * {{RANGE_SCALE_PRESSURE}}) OR duct_static > (870.94 + 1119.78 * {{RANGE_SCALE_PRESSURE}})) THEN 1
-      ELSE 0
-    END AS INT) AS raw_fault
-  FROM h
+sensor_rows_raw AS (
+  SELECT equipment_id, 'oa_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, oa_t AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'mat' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, mat AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'zone_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, zone_t AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'rat' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, rat AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'sat' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, sat AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'chw_supply_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, chw_supply_t AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'chw_return_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, chw_return_t AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'hw_supply_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, hw_supply_t AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'hw_return_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, hw_return_t AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'oa_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, oa_h AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'ra_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, ra_h AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'zone_rh' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, zone_rh AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'ma_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, ma_h AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'sa_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, sa_h AS value FROM base_history
+  UNION ALL
+  SELECT equipment_id, 'duct_static' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, duct_static AS value FROM base_history
 ),
-elapsed_hold AS (
-  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
-  -- it is not fault time, not covered time, and it breaks confirmation.
-  -- The last sample has no forward interval.
-  SELECT
-    stepped.*,
-    CASE
-      WHEN stepped.dt_seconds IS NULL
-        OR stepped.dt_seconds <= 0.0
-        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)
-      THEN 0.0
-      ELSE stepped.dt_seconds
-    END AS held_seconds,
-    CASE
-      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1
-      ELSE 0
-    END AS gap_after
-  FROM (
-    SELECT
-      src.*,
-      EXTRACT(EPOCH FROM (
-        LEAD(src.timestamp_utc) OVER (
-          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc
-        ) - src.timestamp_utc
-      )) AS dt_seconds
-    FROM base src
-  ) stepped
+authorized AS (
+  SELECT a.equipment_id, a.role, MAX(a.unit) AS unit, COUNT(*) AS binding_count
+  FROM authorized_series a JOIN equipment e
+    ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
+  GROUP BY a.equipment_id, a.role
+),
+sensor_rows AS (
+  SELECT r.equipment_id, r.sensor_role, r.timestamp_utc, r.observed_end_epoch, r.energized, r.coverage_pct,
+    fdd.mask_sweep_val(r.sensor_role, a.unit, r.value) AS value
+  FROM sensor_rows_raw r
+  LEFT JOIN authorized a ON a.equipment_id = r.equipment_id AND a.role = r.sensor_role AND a.binding_count = 1
+),
+valid AS (
+  SELECT equipment_id, sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct,
+    EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds, value
+  FROM sensor_rows WHERE value IS NOT NULL
+),
+prior AS (
+  SELECT valid.*,
+    LAG(value) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds) AS previous_value,
+    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,
+    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds) AS previous_epoch
+  FROM valid
+),
+prior_groups AS (
+  SELECT prior.*,
+    SUM(CASE WHEN previous_epoch IS NULL OR epoch_seconds - previous_epoch > {{MAX_SILENCE_SECONDS}} THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment
+  FROM prior
+),
+windowed AS (
+  SELECT prior_groups.*
+  FROM prior_groups
+),
+signals AS (
+  SELECT windowed.*,
+    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0
+         ELSE next_epoch - epoch_seconds END AS dt_seconds,
+    CAST(CASE WHEN ((energized = 1 AND ((sensor_role = 'oa_t' AND (value < (1.666667 - 52.777778 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (1.666667 + 52.777778 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'mat' AND (value < (7.222222 - 36.111111 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (7.222222 + 36.111111 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'zone_t' AND (value < (21.111111 - 16.666667 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (21.111111 + 16.666667 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'rat' AND (value < (21.111111 - 16.666667 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (21.111111 + 16.666667 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'sat' AND (value < (32.222222 - 33.333333 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (32.222222 + 33.333333 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'chw_supply_t' AND (value < (12.777778 - 13.888889 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (12.777778 + 13.888889 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'chw_return_t' AND (value < (15.555556 - 16.666667 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (15.555556 + 16.666667 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'hw_supply_t' AND (value < (54.444444 - 50.0 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (54.444444 + 50.0 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'hw_return_t' AND (value < (54.444444 - 50.0 * {{RANGE_SCALE_TEMPERATURE}}) OR value > (54.444444 + 50.0 * {{RANGE_SCALE_TEMPERATURE}}))) OR (sensor_role = 'oa_h' AND (value < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR value > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}}))) OR (sensor_role = 'ra_h' AND (value < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR value > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}}))) OR (sensor_role = 'zone_rh' AND (value < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR value > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}}))) OR (sensor_role = 'ma_h' AND (value < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR value > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}}))) OR (sensor_role = 'sa_h' AND (value < (50.0 - 50.0 * {{RANGE_SCALE_HUMIDITY}}) OR value > (50.0 + 50.0 * {{RANGE_SCALE_HUMIDITY}}))) OR (sensor_role = 'duct_static' AND (value < (870.94 - 1119.78 * {{RANGE_SCALE_PRESSURE}}) OR value > (870.94 + 1119.78 * {{RANGE_SCALE_PRESSURE}})))))) THEN 1 ELSE 0 END AS INT) AS raw_fault
+  FROM windowed
+),
+segments AS (
+  SELECT signals.*,
+    CASE WHEN dt_seconds <= 0 THEN 0.0
+         WHEN dt_seconds < {{MAX_SILENCE_SECONDS}} THEN dt_seconds
+         ELSE {{MAX_SILENCE_SECONDS}} END AS normal_seconds,
+    CASE WHEN dt_seconds > {{MAX_SILENCE_SECONDS}}
+         THEN dt_seconds - {{MAX_SILENCE_SECONDS}} ELSE 0.0 END AS silence_seconds
+  FROM signals
 ),
 lagged AS (
-  SELECT
-    *,
-    CASE
-      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)
-       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0
-      THEN 0 ELSE 1
-    END AS is_new_streak
-  FROM elapsed_hold
+  SELECT segments.*,
+    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds), 0) AS previous_raw_fault
+  FROM segments
 ),
-grp AS (
-  SELECT
-    *,
-    SUM(is_new_streak)
-      OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id
-  FROM lagged
+streak_groups AS (
+  SELECT segments.*,
+    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0
+             THEN 1 ELSE 0 END) OVER (
+      PARTITION BY equipment_id, sensor_role, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+    ) AS streak_group
+  FROM lagged segments
 ),
-ranked AS (
-  SELECT
-    *,
-    SUM(held_seconds) OVER (
-      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc
-      ROWS UNBOUNDED PRECEDING
-    ) AS streak_elapsed
-  FROM grp
+streaks AS (
+  SELECT streak_groups.*,
+    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
+      PARTITION BY equipment_id, sensor_role, streak_group ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+    ) AS fault_streak_seconds
+  FROM streak_groups
+),
+confirmed_rows AS (
+  SELECT streaks.*,
+    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS normal_confirmed
+  FROM streaks
 ),
 final AS (
-  SELECT
-    equipment_id,
-    held_seconds,
-    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
-  FROM ranked
+  SELECT equipment_id, sensor_role, epoch_seconds AS segment_epoch,
+    normal_confirmed AS confirmed, normal_seconds AS held_seconds
+  FROM confirmed_rows WHERE normal_seconds > 0
+  UNION ALL
+  SELECT equipment_id, sensor_role,
+    epoch_seconds + {{MAX_SILENCE_SECONDS}} AS segment_epoch,
+    1 AS confirmed, silence_seconds AS held_seconds
+  FROM confirmed_rows WHERE silence_seconds > 0
 )
-SELECT
-  equipment_id,
-  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
-  SUM(held_seconds) / 3600.0 AS covered_hours,
-  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
-FROM final
-GROUP BY equipment_id;
+
+SELECT equipment_id, sensor_role,
+  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours
+FROM final GROUP BY equipment_id, sensor_role;

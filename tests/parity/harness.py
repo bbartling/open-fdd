@@ -33,6 +33,7 @@ CATALOG = {r["rule_id"]: r for r in json.loads((ROOT / "sql/fdd/tuning_catalog.j
 # SQL history column -> pandas Haystack role. Columns the role map does not name keep their SQL name.
 SQL_TO_HS = {**ROLE_MAP, "web_oa_t": "web-outside-air-temp", "web_oa_dp": "web-outside-air-dewpoint",
              "web_wb_t": "web-outside-air-wetbulb"}
+HS_TO_SQL = {v: k for k, v in SQL_TO_HS.items()}
 
 # SQL rule id -> pandas rule id where they differ
 PANDAS_ID = {"FC13-SAT-HIGH": "FC13"}
@@ -98,10 +99,31 @@ def weather_frame(data: dict) -> pd.DataFrame | None:
 
 
 def sql_rows(data: dict, engine: str, rule: str) -> dict[str, dict]:
-    return {r["equipment_id"]: r for r in (data["results"].get(engine, {}).get(rule) or [])}
+    """Rows by equipment, retaining per-role sweep scores and the legacy max aggregate."""
+    rows = data["results"].get(engine, {}).get(rule) or []
+    if not any("sensor_role" in row for row in rows):
+        return {r["equipment_id"]: r for r in rows}
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(row["equipment_id"], []).append(row)
+    out = {}
+    for equip, group in grouped.items():
+        by_role = {}
+        for row in group:
+            role = row.get("sensor_role")
+            if role is not None and row.get("fault_hours") is not None:
+                by_role[role] = max(float(row["fault_hours"]), by_role.get(role, float("-inf")))
+        out[equip] = {"equipment_id": equip, "fault_hours": max(by_role.values(), default=None),
+                      "sensor_fault_hours": by_role}
+    return out
 
 
-def pandas_fault_hours(rule_id: str, df: pd.DataFrame, weather) -> tuple[float | None, str]:
+def sql_result_key(row: dict) -> tuple[str, str]:
+    """Stable ordering for equipment-level rules and newly per-role sensor sweeps."""
+    return (row.get("equipment_id", ""), row.get("sensor_role", ""))
+
+
+def pandas_rule_result(rule_id: str, df: pd.DataFrame, weather):
     rule = RULES_BY_ID[PANDAS_ID.get(rule_id, rule_id)]
     kind = rule.equipment_kinds[0] if rule.equipment_kinds else "ahu"
     df.attrs["equipment_type"] = kind.upper()  # type-dispatched proofs (mechanical cooling, ...) need it
@@ -111,11 +133,17 @@ def pandas_fault_hours(rule_id: str, df: pd.DataFrame, weather) -> tuple[float |
                             poll_seconds=300.0, params_by_rule={rule.id: params}, weather=None if weather is None else weather.copy(),
                             require_operational_gates=True)
     if res.status == "PASS":
-        return 0.0, "PASS"
+        return 0.0, "PASS", res
     if res.confirmed_fault is not None and res.status == "FAULT":
         # full precision: RuleResult.fault_hours is rounded to 2 decimals for display
-        return hours_true(res.confirmed_fault, 300.0), "FAULT"
-    return res.fault_hours, str(res.status)
+        return hours_true(res.confirmed_fault, 300.0), "FAULT", res
+    return res.fault_hours, str(res.status), res
+
+
+def pandas_fault_hours(rule_id: str, df: pd.DataFrame, weather) -> tuple[float | None, str]:
+    """Compatibility wrapper used by debug_rule.py and older parity helpers."""
+    hours, status, _ = pandas_rule_result(rule_id, df, weather)
+    return hours, status
 
 
 def compare(data: dict, only: set[str] | None = None) -> dict:
@@ -136,10 +164,32 @@ def compare(data: dict, only: set[str] | None = None) -> dict:
                 continue
             try:
                 # fresh frame per run: rules stash evidence/units in df.attrs and must not leak into each other
-                ph, status = pandas_fault_hours(rule, equip_frame(data, e), weather)
+                ph, status, pandas_result = pandas_rule_result(rule, equip_frame(data, e), weather)
             except Exception as exc:  # noqa: BLE001 - reported, not hidden
-                ph, status = None, f"ERROR {type(exc).__name__}: {exc}"
-            per[e] = {"sql": float(row["fault_hours"]), "pandas": None if ph is None else float(ph), "status": status}
+                ph, status, pandas_result = None, f"ERROR {type(exc).__name__}: {exc}", None
+            item = {"sql": float(row["fault_hours"]), "pandas": None if ph is None else float(ph), "status": status}
+            if "sensor_fault_hours" in row:
+                evidence = (pandas_result.metrics.get("sv_sweep_evidence") or []) if pandas_result else []
+                oracle_roles = {
+                    HS_TO_SQL.get(r["role"], r["role"]): float(r["fault_hours"])
+                    for r in evidence
+                    if r.get("role") is not None and r.get("fault_hours") is not None
+                }
+                oracle_silence = {
+                    HS_TO_SQL.get(r["role"], r["role"]): float(r["silence_hours"])
+                    for r in evidence
+                    if r.get("role") is not None and r.get("silence_hours") is not None
+                }
+                sql_roles = row["sensor_fault_hours"]
+                item["sql_sensor_fault_hours"] = sql_roles
+                item["pandas_sensor_fault_hours"] = oracle_roles
+                item["pandas_sensor_silence_hours"] = oracle_silence
+                # Existing equipment-level convention is the worst sensor, not the union of faulted time.
+                if oracle_roles:
+                    item["pandas"] = max(oracle_roles.values())
+                else:
+                    item["pandas"] = 0.0
+            per[e] = item
         if per:
             report["compared"][rule] = per
     return report
@@ -147,12 +197,22 @@ def compare(data: dict, only: set[str] | None = None) -> dict:
 
 def rule_matches(per: dict) -> bool:
     for v in per.values():
+        sql_roles = v.get("sql_sensor_fault_hours")
+        pandas_roles = v.get("pandas_sensor_fault_hours")
+        if sql_roles is not None or pandas_roles is not None:
+            if sql_roles is None or pandas_roles is None or set(sql_roles) != set(pandas_roles):
+                return False
+            # Oracle evidence is intentionally rounded to 0.001 hours for reporting.
+            if any(abs(float(sql_roles[r]) - float(pandas_roles[r])) > 0.0005 + 1e-6 * abs(float(sql_roles[r]))
+                   for r in sql_roles):
+                return False
         p = v["pandas"]
         if p is None:
             if v["sql"] > ABS_TOL_H:
                 return False
             continue
-        if abs(p - v["sql"]) > ABS_TOL_H:
+        role_tol = 0.0005 + 1e-6 * abs(float(v["sql"])) if "sql_sensor_fault_hours" in v else ABS_TOL_H
+        if abs(p - v["sql"]) > role_tol:
             return False
     return True
 

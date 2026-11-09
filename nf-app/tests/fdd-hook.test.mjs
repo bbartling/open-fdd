@@ -346,6 +346,45 @@ test("fdd status: a rule returning no row is not-assessed", async () => {
   assert.equal(r.dataFor("CMD-1").length, 0);
 });
 
+test("sweep result keeps all role scores without summing overlapping fault hours", () => {
+  const rule = { output_columns: ["equipment_id", "sensor_role", "fault_hours"] };
+  const rows = [
+    { equipment_id: "fixture", sensor_role: "sat", fault_hours: 2 },
+    { equipment_id: "fixture", sensor_role: "rat", fault_hours: 3 },
+    { equipment_id: "other", sensor_role: "sat", fault_hours: 4 },
+    { equipment_id: "fixture", sensor_role: "mat", fault_hours: 0 },
+  ];
+  assert.deepEqual(hook.equipmentResult(rule, rows, "fixture"), {
+    equipment_id: "fixture", fault_hours: 3, sensor_fault_hours: { sat: 2, rat: 3, mat: 0 },
+  });
+  assert.equal(hook.equipmentResult(rule, rows, "missing"), undefined);
+});
+
+test("the FDD hook publishes the sweep role scores on the existing equipment point", async () => {
+  const http = fakeHttp();
+  const pack = {
+    ...PACK,
+    rules: { "SV-STALE": { sql: "-", output_columns: ["equipment_id", "sensor_role", "fault_hours"] } },
+  };
+  const createEngine = async ({ kind }) => ({
+    kind,
+    async load() {},
+    async query() {
+      return [
+        { equipment_id: "AHU-1", sensor_role: "sat", fault_hours: 0 },
+        { equipment_id: "AHU-1", sensor_role: "oa_t", fault_hours: 2 },
+      ];
+    },
+    async close() {},
+  });
+  const summary = await hook.runFdd({ sdk: { http }, pack, createEngine, now: NOW });
+  const uuid = hook.resultUuid(hook.resultKey(MODEL[1], "site-a", "AHU-1"), "SV-STALE");
+  assert.deepEqual(summary.results[0].sensor_fault_hours, { sat: 0, oa_t: 2 });
+  const point = http.writes.points.find((row) => row.uuid === uuid && row.layer === "model");
+  assert.deepEqual(JSON.parse(point.attrs.fddSensorFaultHours), { sat: 0, oa_t: 2 });
+  assert.equal(http.writes.data.find((row) => row.uuid === uuid).values[0].real, 2);
+});
+
 test("fdd status: resultValue contract", () => {
   const f = { output_columns: F_COLS };
   assert.equal(hook.resultValue(f, { fault_pct: null, fault_hours: null, covered_hours: 0 }).status, "not-assessed");

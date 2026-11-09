@@ -23,7 +23,7 @@
  * Contract columns (pack.contract) that are not listed exist as typed NULL columns.
  * Rows come back as plain objects with numbers as JS numbers (NaN/NULL -> null).
  *
- * eng.timeline(ruleId) -> [{ equipment_id, ts_epoch (s), confirmed 0|1, held_seconds }]: the rule's per-timestamp
+ * eng.timeline(ruleId) -> [{ equipment_id, sensor_role?, ts_epoch (s), confirmed 0|1, held_seconds }]: the rule's per-timestamp
  * confirmed flag (pack rule.timeline_sql; [] when the rule has none). held_seconds 0 = not assessed (last sample /
  * gap longer than MAX_GAP_HOURS).
  */
@@ -199,7 +199,7 @@ async function createSqlite(pack) {
       }
       return rowsOf(db.exec(rule.sql));
     },
-    /** Per-timestamp confirmed flag of a rule: [{ equipment_id, ts_epoch, confirmed, held_seconds }] ([] = rule has none). */
+    /** Per-timestamp confirmed flags. Sensor sweeps also return sensor_role. Empty when the rule has no timeline. */
     async timeline(ruleId) {
       if (!loaded) throw new Error("engine: call load(input) before timeline()");
       const rule = pack.rules[ruleId];

@@ -16,7 +16,7 @@ the reference the SQL is tested against ([parity](parity.html)). The code shown 
 **Conventions**
 
 - Input is a `DataFrame` with a UTC `DatetimeIndex` and one **Haystack-role column per signal** (`duct-static-pressure`,
-  `outside-air-temp`, ...). Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh; commands and positions are fractions (0-1), statuses 0/1, humidity %RH (0-100) (`sql/fdd/role_scales.json`). The rules never convert units or guess a scale; convert at
+  `outside-air-temp`, ...). Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh; commands and positions are fractions (0-1), statuses 0/1, humidity %RH (0-100) (`sql/fdd/input_contract.json`). The rules never convert units or guess a scale; convert at
   ingest.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns a result with `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours`, `confirmed_fault` and `raw_fault` masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]` (`AHU`, `VAV`, `CHILLER`, ...).
@@ -4418,21 +4418,25 @@ Flags a sensor that stays stuck within a tiny band for too long.
 | Parameter | Label | Default | Min | Max | Step | Unit |
 |---|---|---:|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | 1 | min |
-| `flatline_hours` | Flatline window | 1 | 0.5 | 8 | 0.5 | h |
+| `flatline_hours` | Flatline window | 1 | 0.25 | 8 | 0.25 | h |
 | `flatline_tol` | Flatline tolerance | 0.055556 | 0.011111 | 0.555556 | 0.011111 | °C |
+| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | 0.25 | h |
+| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 1 | bool |
 
 <details markdown="1">
-<summary>Source: <code>_sweep_flatline</code> (21 lines)</summary>
+<summary>Source: <code>_sweep_flatline</code> (33 lines)</summary>
 
 ```python
 def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    idx = d.index
     from open_fdd.rules.sensor_sweep_catalog import flatline_tolerance_for_role
 
     tol = _f(p, "flatline_tol", 0.055556)
     hours = _f(p, "flatline_hours", 1.0)
-    window = max(2, int(round(hours * 3600 / max(poll, 1))))
-    mask = _false(idx)
+    max_silence = _f(p, "max_silence_hours", 0.5)
+    # SV-FLATLINE SQL always requires an energized proof for ordinary samples;
+    # preserve the legacy pandas-only knob in the catalog, but do not let it
+    # diverge from SQL. Silence intervals are still accounted independently.
+    gate = _flatline_energized(d)
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
     for role in FLATLINE_SENSOR_ROLES:
@@ -4441,11 +4445,21 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
-        role_mask = flatline_mask(s, tol=flatline_tolerance_for_role(role, tol), window=window)
+        if not s.notna().any():
+            continue
+        role_gate = gate
+        if role_gate is not None:
+            role_gate = role_gate.reindex(s.index).fillna(False)
+        role_mask = _window_flatline_mask(
+            s,
+            hours=hours,
+            tolerance=flatline_tolerance_for_role(role, tol),
+            max_silence_hours=max_silence,
+            poll=poll,
+            gate=role_gate,
+        )
         per_role[role] = role_mask
-        mask = mask | role_mask
-    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-FLATLINE")
-    return mask
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-FLATLINE")
 ```
 
 </details>
@@ -4494,25 +4508,31 @@ Flags any modeled sensor reading outside its physical hard range.
 | Parameter | Label | Default | Min | Max | Step | Unit |
 |---|---|---:|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | 1 | min |
+| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | 0.25 | h |
+| `minimum_active_coverage_pct` | Minimum active coverage | 5 | 0 | 100 | 1 | % |
 | `range_scale_humidity` | Humidity range scale | 1 | 0.5 | 2 | 0.1 | x |
 | `range_scale_pressure` | Pressure range scale | 1 | 0.5 | 2 | 0.1 | x |
 | `range_scale_temperature` | Temp range scale | 1 | 0.5 | 2 | 0.1 | x |
+| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 1 | bool |
 
 <details markdown="1">
-<summary>Source: <code>_sweep_range</code> (28 lines)</summary>
+<summary>Source: <code>_sweep_range</code> (29 lines)</summary>
 
 ```python
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    idx = d.index
-    mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
+    # SQL's range query gates each ordinary sample on the point-priority
+    # energized signal. Long-silence tails are added later and remain ungated.
+    energized = _flatline_energized(d)
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
             continue
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
+        if not s.notna().any():
+            continue
         lim = SENSOR_LIMITS[role]
         if lim is None:
             raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
@@ -4525,11 +4545,9 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         # BACnet sensor failures commonly arrive as IEEE +/-Inf. Treat any
         # present non-finite number as a hard range fault before JSON/Parquet
         # quality handling converts it to a NaN marker.
-        role_mask = s.notna() & (~np.isfinite(s) | (s < lo) | (s > hi))
+        role_mask = s.notna() & (~np.isfinite(s) | (s < lo) | (s > hi)) & energized.reindex(s.index).fillna(False)
         per_role[role] = role_mask
-        mask = mask | role_mask
-    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-RANGE")
-    return mask
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-RANGE")
 ```
 
 </details>
@@ -4641,37 +4659,57 @@ Flags an implausible sample-to-sample jump for the sensor type.
 | Parameter | Label | Default | Min | Max | Step | Unit |
 |---|---|---:|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | 1 | min |
+| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | 0.25 | h |
+| `minimum_active_coverage_pct` | Minimum active coverage | 5 | 0 | 100 | 1 | % |
+| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 1 | bool |
 | `spike_scale` | Spike limit scale (global) | 1 | 0.25 | 3 | 0.25 | x |
 | `spike_scale_humidity` | Humidity spike scale | 1 | 0.25 | 3 | 0.25 | x |
 | `spike_scale_pressure` | Pressure spike scale | 1 | 0.25 | 3 | 0.25 | x |
 | `spike_scale_temperature` | Temp spike scale | 1 | 0.25 | 3 | 0.25 | x |
 
 <details markdown="1">
-<summary>Source: <code>_sweep_spike</code> (22 lines)</summary>
+<summary>Source: <code>_sweep_spike</code> (39 lines)</summary>
 
 ```python
 def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    idx = d.index
-    scale = _f(p, "spike_scale", 1.0)
-    mask = _false(idx)
+    max_silence = _f(p, "max_silence_hours", 0.5)
+    max_silence_seconds = max_silence * 3600.0
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
-    for role in SWEEP_SENSOR_ROLES:
+    require_gate = _f(p, "require_operational_gate", 1.0) >= 0.5
+    energized = _flatline_energized(d)
+    coverage_pct = 100.0 * float(energized.mean()) if len(energized) else 0.0
+    gate_ok = (not require_gate) or coverage_pct >= _f(p, "minimum_active_coverage_pct", 5.0)
+    for role in SPIKE_SENSOR_ROLES:
         if role not in d.columns:
             continue
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
+        if not s.notna().any():
+            continue
         type_scale = _role_type_scale(p, role, kind="spike")
         lim = SENSOR_LIMITS[role]
         if lim is None:
             raise ValueError(f"SV-SPIKE role {role!r} has no SI limit")
-        limit = lim["spike"] * scale * type_scale
-        role_mask = s.notna() & (s.diff().abs() > limit)
+        limit = lim["spike"] * type_scale
+        valid = s.dropna().sort_index(kind="mergesort")
+        role_mask = _false(s.index)
+        if len(valid) > 1:
+            jumps = valid.diff().abs()
+            if isinstance(valid.index, pd.DatetimeIndex):
+                gaps = valid.index.to_series().diff().dt.total_seconds()
+                jumps = jumps.where(gaps <= max_silence_seconds, np.nan)
+            else:
+                jumps = jumps.where(float(poll) <= max_silence_seconds, np.nan)
+            jumped = jumps.gt(limit).fillna(False)
+            if require_gate:
+                jumped &= energized.reindex(valid.index).fillna(False)
+                if not gate_ok:
+                    jumped[:] = False
+            role_mask.loc[valid.index] = jumped.to_numpy()
         per_role[role] = role_mask
-        mask = mask | role_mask
-    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-SPIKE")
-    return mask
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-SPIKE")
 ```
 
 </details>
@@ -4720,37 +4758,39 @@ Flags when all modeled sensors stop updating — likely a dead data feed.
 | Parameter | Label | Default | Min | Max | Step | Unit |
 |---|---|---:|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | 1 | min |
-| `stale_hours` | Stale window | 2 | 0.5 | 12 | 0.5 | h |
+| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | 0.25 | h |
+| `stale_hours` | Stale window | 2 | 0.25 | 12 | 0.25 | h |
+| `stale_tol` | Stale tolerance | 0.027778 | 0 | 0.555556 | 0.005556 | Δ°C |
 
 <details markdown="1">
 <summary>Source: <code>_sweep_stale</code> (25 lines)</summary>
 
 ```python
 def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Flag runs where all sweep sensors are unchanged (no fresh data)."""
-    idx = d.index
+    """Measure stable periods and long silent tails independently per sensor."""
     hours = _f(p, "stale_hours", 2.0)
-    window = max(2, int(round(hours * 3600 / max(poll, 1))))
+    tolerance = _f(p, "stale_tol", 0.027778)
+    max_silence = _f(p, "max_silence_hours", 0.5)
     units_map = _units_map(d)
     present = [
         r
         for r in FLATLINE_SENSOR_ROLES
         if r in d.columns and sweep_assessable_role(r, None, units_map)
     ]
-    if not present:
-        _stash_sweep_evidence(d, {}, poll=poll, rule_tag="SV-STALE")
-        return _false(idx)
-    stale = pd.Series(True, index=idx)
     per_role: dict[str, pd.Series] = {}
     for role in present:
         s = pd.to_numeric(d[role], errors="coerce")
-        role_flat = flatline_mask(s, tol=1e-9, window=window)
-        per_role[role] = role_flat  # each role's stuck mask; equipment fault is AND
-        stale = stale & role_flat
-    # For stale, the firing evidence is the AND mask applied to each present role
-    and_masks = {role: stale.copy() for role in present}
-    _stash_sweep_evidence(d, and_masks, poll=poll, rule_tag="SV-STALE")
-    return stale
+        if not s.notna().any():
+            continue
+        role_tol = 0.05 if sensor_type_for_role(role).lower() == "humidity" else tolerance
+        per_role[role] = _window_flatline_mask(
+            s,
+            hours=hours,
+            tolerance=role_tol,
+            max_silence_hours=max_silence,
+            poll=poll,
+        )
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-STALE")
 ```
 
 </details>

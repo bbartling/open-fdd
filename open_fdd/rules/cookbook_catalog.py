@@ -241,6 +241,14 @@ FLATLINE_SENSOR_ROLES = [
     if quantity_for_haystack_role(r) and flatline_quantity_allowed(quantity_for_haystack_role(r) or "")
 ]
 
+# SV-SPIKE's established SQL contract includes 9 temperature roles, outdoor
+# humidity, and duct static. Other humidity roles are checked by SV-RANGE.
+SPIKE_SENSOR_ROLES = [
+    "outside-air-temp", "mixed-air-temp", "zone-air-temp", "return-air-temp", "discharge-air-temp",
+    "chilled-water-supply-temp", "chilled-water-return-temp", "hot-water-supply-temp",
+    "hot-water-return-temp", "outside-air-humidity", "duct-static-pressure",
+]
+
 
 def sensor_type_for_role(role: str) -> str:
     """HVAC quantity bucket for UI grouping (Temperature / Humidity / Pressure / Flow)."""
@@ -275,6 +283,7 @@ def _evidence_row(
     *,
     poll: float,
     series: pd.Series | None = None,
+    silence_hours: float = 0.0,
 ) -> dict:
     from open_fdd.rules.base import hours_true
 
@@ -291,6 +300,7 @@ def _evidence_row(
         "sensor_type": sensor_type_for_role(role),
         "fault_samples": n_fault,
         "fault_hours": hours,
+        "silence_hours": float(silence_hours),
         "first_fault_timestamp": first_ts,
         "last_fault_timestamp": last_ts,
         "faulted": n_fault > 0,
@@ -311,6 +321,7 @@ def _stash_sweep_evidence(
     *,
     poll: float,
     rule_tag: str,
+    segments: dict[str, list[dict]] | None = None,
 ) -> None:
     """Store per-role evidence + masks on the frame for the runner/UI."""
     evidence = []
@@ -322,6 +333,231 @@ def _stash_sweep_evidence(
     d.attrs["sv_sweep_evidence"] = evidence
     d.attrs["sv_sweep_masks"] = masks
     d.attrs["sv_sweep_rule"] = rule_tag
+    d.attrs["sv_sweep_segments"] = segments or {}
+
+
+def _observed_end_seconds(d: pd.DataFrame) -> float | None:
+    if isinstance(d.index, pd.DatetimeIndex) and len(d.index):
+        return float(_index_epoch_seconds(pd.DatetimeIndex([d.index.max()]))[0])
+    return None
+
+
+def _index_epoch_seconds(index: pd.DatetimeIndex) -> np.ndarray:
+    """Convert any pandas datetime resolution to epoch seconds consistently."""
+    try:
+        normalized = index.as_unit("ns")
+    except AttributeError:  # pandas < 2.0 compatibility
+        normalized = index.astype("datetime64[ns]")
+    return normalized.asi8.astype("float64") / 1e9
+
+
+def _valid_series_times(series: pd.Series, poll: float) -> tuple[pd.Series, np.ndarray]:
+    """Return non-null values with elapsed timestamps, retaining missing-row gaps."""
+    values = pd.to_numeric(series, errors="coerce")
+    if isinstance(values.index, pd.DatetimeIndex):
+        valid = values.dropna().sort_index(kind="mergesort")
+        return valid, _index_epoch_seconds(valid.index)
+    present = values.notna().to_numpy()
+    positions = np.flatnonzero(present)
+    valid = values.iloc[positions]
+    return valid, positions.astype("float64") * max(float(poll), 1.0)
+
+
+def _elapsed_segments(
+    d: pd.DataFrame,
+    series: pd.Series,
+    raw_fault: pd.Series,
+    *,
+    poll: float,
+    max_silence_hours: float,
+) -> list[dict]:
+    """Build sample-and-hold intervals, split into normal and silent time."""
+    valid, epochs = _valid_series_times(series, poll)
+    if not len(valid):
+        return []
+    raw = raw_fault.reindex(valid.index).fillna(False).astype(bool)
+    observed_end = _observed_end_seconds(d)
+    if isinstance(valid.index, pd.DatetimeIndex):
+        end_epoch = observed_end if observed_end is not None else float(epochs[-1])
+    else:
+        end_epoch = max(0, len(d.index) - 1) * max(float(poll), 1.0)
+    cap = max(0.0, float(max_silence_hours)) * 3600.0
+    out = []
+    for i, timestamp in enumerate(valid.index):
+        next_epoch = float(epochs[i + 1]) if i + 1 < len(epochs) else end_epoch
+        dt = max(0.0, next_epoch - float(epochs[i]))
+        normal = min(dt, cap)
+        silent = max(0.0, dt - cap)
+        out.append({
+            "timestamp": timestamp,
+            "raw_fault": bool(raw.iloc[i]),
+            "normal_seconds": normal,
+            "silence_seconds": silent,
+            "break_before": bool(i > 0 and float(epochs[i]) - float(epochs[i - 1]) > cap),
+        })
+    return out
+
+
+def _window_flatline_mask(
+    series: pd.Series,
+    *,
+    hours: float,
+    tolerance: float,
+    max_silence_hours: float,
+    poll: float = 300.0,
+    gate: pd.Series | None = None,
+) -> pd.Series:
+    """Detect stable values over elapsed sample-hold windows without crossing gaps."""
+    s = pd.to_numeric(series, errors="coerce")
+    result = _false(s.index)
+    valid, times = _valid_series_times(s, poll)
+    if not len(valid):
+        return result
+    values = valid.to_numpy(dtype="float64")
+    cutoff_width = max(0.0, float(hours)) * 3600.0
+    max_silence = max(0.0, float(max_silence_hours)) * 3600.0
+    gate_values = gate.reindex(valid.index).fillna(False).to_numpy(dtype=bool) if gate is not None else None
+    segment_start = 0
+    left = 0
+    flags = np.zeros(len(valid), dtype=bool)
+    for i, current in enumerate(times):
+        if i and current - times[i - 1] > max_silence:
+            segment_start = i
+            left = i
+        cutoff = current - cutoff_width
+        while left < i and times[left] < cutoff:
+            left += 1
+        # A window is eligible only when the current continuous data segment
+        # reaches all the way back to the cutoff.
+        if times[segment_start] > cutoff:
+            continue
+        lo = left
+        window_values = values[lo:i + 1]
+        first_epoch = times[lo]
+        # Include the prior sample when its held interval crosses the cutoff;
+        # this is the elapsed-time equivalent of RANGE ... PRECEDING.
+        if lo > segment_start and first_epoch > cutoff and times[lo - 1] <= cutoff:
+            window_values = np.concatenate(([values[lo - 1]], window_values))
+        span = float(np.max(window_values) - np.min(window_values))
+        if span <= tolerance and (gate_values is None or bool(gate_values[i])):
+            flags[i] = True
+    result.loc[valid.index] = flags
+    return result
+
+
+def _flatline_energized(d: pd.DataFrame) -> pd.Series:
+    """Mirror SQL's row-wise first-non-null energized proof selection."""
+    idx = d.index
+    tests = (
+        ("fan-status", 0.05),
+        ("fan-cmd", 0.01),
+        ("zone-airflow", 23.597350),
+        ("pump-status", 0.05),
+        ("chw-pump-cmd", 0.05),
+        ("chiller-status", 0.05),
+    )
+    energized = pd.Series(True, index=idx, dtype=bool)
+    unresolved = pd.Series(True, index=idx, dtype=bool)
+    for role, threshold in tests:
+        if role not in d.columns or not unresolved.any():
+            continue
+        values = pd.to_numeric(d[role], errors="coerce")
+        present = unresolved & values.notna()
+        energized.loc[present] = values.loc[present].gt(threshold)
+        unresolved.loc[present] = False
+    return energized
+
+
+def _sweep_segments(d: pd.DataFrame, masks: dict[str, pd.Series], poll: float, p: dict) -> dict[str, list[dict]]:
+    max_silence = _f(p, "max_silence_hours", 0.5)
+    return {
+        role: _elapsed_segments(d, pd.to_numeric(d[role], errors="coerce"), mask,
+                                poll=poll, max_silence_hours=max_silence)
+        for role, mask in masks.items() if role in d.columns
+    }
+
+
+def _publish_elapsed_sweep(d: pd.DataFrame, masks: dict[str, pd.Series], *, poll: float, p: dict, rule_tag: str) -> pd.Series:
+    segments = _sweep_segments(d, masks, poll, p)
+    event_masks = {role: _false(d.index) for role in segments}
+    for role, rows in segments.items():
+        for row in rows:
+            if (row["raw_fault"] and row["normal_seconds"] > 0) or row["silence_seconds"] > 0:
+                event_masks[role].loc[row["timestamp"]] = True
+    _stash_sweep_evidence(d, event_masks, poll=poll, rule_tag=rule_tag, segments=segments)
+    combined = _false(d.index)
+    for event_mask in event_masks.values():
+        combined |= event_mask
+    return combined
+
+
+def confirm_sensor_sweep_segments(
+    d: pd.DataFrame,
+    *,
+    confirm_seconds: float,
+) -> dict:
+    """Confirm raw sweep intervals and return per-role elapsed fault evidence."""
+    segments = d.attrs.get("sv_sweep_segments") or {}
+    index = d.index
+    raw_union = _false(index)
+    confirmed_union = _false(index)
+    evidence = []
+    confirmed_roles: dict[str, pd.Series] = {}
+    role_hours = []
+    for role, rows in segments.items():
+        raw_mask = _false(index)
+        confirmed_mask = _false(index)
+        streak_seconds = 0.0
+        previous_raw = False
+        fault_hours = silence_hours = 0.0
+        confirmed_count = 0
+        first_ts = last_ts = None
+        for row in rows:
+            raw = bool(row["raw_fault"])
+            normal = float(row["normal_seconds"])
+            silent = float(row["silence_seconds"])
+            timestamp = row["timestamp"]
+            if (raw and not previous_raw) or not raw or row.get("break_before", False):
+                streak_seconds = 0.0
+            if raw:
+                streak_seconds += normal
+            normal_confirmed = raw and (float(confirm_seconds) <= 0 or streak_seconds >= float(confirm_seconds))
+            if normal_confirmed:
+                fault_hours += normal / 3600.0
+            silence_hours += silent / 3600.0
+            has_fault_interval = (raw and normal > 0) or silent > 0
+            has_confirmed_interval = (normal_confirmed and normal > 0) or silent > 0
+            if has_fault_interval:
+                raw_mask.loc[timestamp] = True
+            if has_confirmed_interval:
+                confirmed_mask.loc[timestamp] = True
+                confirmed_count += 1
+                if first_ts is None:
+                    first_ts = str(timestamp)
+                last_ts = str(timestamp)
+            previous_raw = raw
+        combined_hours = fault_hours + silence_hours
+        role_hours.append(combined_hours)
+        raw_union |= raw_mask
+        confirmed_union |= confirmed_mask
+        confirmed_roles[role] = confirmed_mask.astype(int)
+        series = pd.to_numeric(d[role], errors="coerce") if role in d.columns else None
+        ev = _evidence_row(role, confirmed_mask, poll=0, series=series, silence_hours=silence_hours)
+        ev.update({
+            "fault_hours": combined_hours,
+            "faulted": combined_hours > 0.0,
+            "fault_samples": confirmed_count,
+            "first_fault_timestamp": first_ts,
+            "last_fault_timestamp": last_ts,
+        })
+        evidence.append(ev)
+    return {
+        "raw_mask": raw_union,
+        "confirmed_mask": confirmed_union,
+        "evidence": evidence,
+        "confirmed_roles": confirmed_roles,
+        "fault_hours": max(role_hours, default=0.0),
+    }
 
 # Analog 0–100% (or 0–1) control outputs swept by PID-HUNT-1.
 # Map by *role* (valve / damper / speed cmd) — never by a BAS point named "Loop".
@@ -488,16 +724,19 @@ def _units_map(d: pd.DataFrame) -> dict[str, str]:
 
 
 def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    idx = d.index
-    mask = _false(idx)
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
+    # SQL's range query gates each ordinary sample on the point-priority
+    # energized signal. Long-silence tails are added later and remain ungated.
+    energized = _flatline_energized(d)
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
             continue
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
+        if not s.notna().any():
+            continue
         lim = SENSOR_LIMITS[role]
         if lim is None:
             raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
@@ -510,21 +749,21 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         # BACnet sensor failures commonly arrive as IEEE +/-Inf. Treat any
         # present non-finite number as a hard range fault before JSON/Parquet
         # quality handling converts it to a NaN marker.
-        role_mask = s.notna() & (~np.isfinite(s) | (s < lo) | (s > hi))
+        role_mask = s.notna() & (~np.isfinite(s) | (s < lo) | (s > hi)) & energized.reindex(s.index).fillna(False)
         per_role[role] = role_mask
-        mask = mask | role_mask
-    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-RANGE")
-    return mask
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-RANGE")
 
 
 def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    idx = d.index
     from open_fdd.rules.sensor_sweep_catalog import flatline_tolerance_for_role
 
     tol = _f(p, "flatline_tol", 0.055556)
     hours = _f(p, "flatline_hours", 1.0)
-    window = max(2, int(round(hours * 3600 / max(poll, 1))))
-    mask = _false(idx)
+    max_silence = _f(p, "max_silence_hours", 0.5)
+    # SV-FLATLINE SQL always requires an energized proof for ordinary samples;
+    # preserve the legacy pandas-only knob in the catalog, but do not let it
+    # diverge from SQL. Silence intervals are still accounted independently.
+    gate = _flatline_energized(d)
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
     for role in FLATLINE_SENSOR_ROLES:
@@ -533,62 +772,89 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
-        role_mask = flatline_mask(s, tol=flatline_tolerance_for_role(role, tol), window=window)
+        if not s.notna().any():
+            continue
+        role_gate = gate
+        if role_gate is not None:
+            role_gate = role_gate.reindex(s.index).fillna(False)
+        role_mask = _window_flatline_mask(
+            s,
+            hours=hours,
+            tolerance=flatline_tolerance_for_role(role, tol),
+            max_silence_hours=max_silence,
+            poll=poll,
+            gate=role_gate,
+        )
         per_role[role] = role_mask
-        mask = mask | role_mask
-    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-FLATLINE")
-    return mask
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-FLATLINE")
 
 
 def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    idx = d.index
-    scale = _f(p, "spike_scale", 1.0)
-    mask = _false(idx)
+    max_silence = _f(p, "max_silence_hours", 0.5)
+    max_silence_seconds = max_silence * 3600.0
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
-    for role in SWEEP_SENSOR_ROLES:
+    require_gate = _f(p, "require_operational_gate", 1.0) >= 0.5
+    energized = _flatline_energized(d)
+    coverage_pct = 100.0 * float(energized.mean()) if len(energized) else 0.0
+    gate_ok = (not require_gate) or coverage_pct >= _f(p, "minimum_active_coverage_pct", 5.0)
+    for role in SPIKE_SENSOR_ROLES:
         if role not in d.columns:
             continue
         if not sweep_assessable_role(role, None, units_map):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
+        if not s.notna().any():
+            continue
         type_scale = _role_type_scale(p, role, kind="spike")
         lim = SENSOR_LIMITS[role]
         if lim is None:
             raise ValueError(f"SV-SPIKE role {role!r} has no SI limit")
-        limit = lim["spike"] * scale * type_scale
-        role_mask = s.notna() & (s.diff().abs() > limit)
+        limit = lim["spike"] * type_scale
+        valid = s.dropna().sort_index(kind="mergesort")
+        role_mask = _false(s.index)
+        if len(valid) > 1:
+            jumps = valid.diff().abs()
+            if isinstance(valid.index, pd.DatetimeIndex):
+                gaps = valid.index.to_series().diff().dt.total_seconds()
+                jumps = jumps.where(gaps <= max_silence_seconds, np.nan)
+            else:
+                jumps = jumps.where(float(poll) <= max_silence_seconds, np.nan)
+            jumped = jumps.gt(limit).fillna(False)
+            if require_gate:
+                jumped &= energized.reindex(valid.index).fillna(False)
+                if not gate_ok:
+                    jumped[:] = False
+            role_mask.loc[valid.index] = jumped.to_numpy()
         per_role[role] = role_mask
-        mask = mask | role_mask
-    _stash_sweep_evidence(d, per_role, poll=poll, rule_tag="SV-SPIKE")
-    return mask
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-SPIKE")
 
 
 def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Flag runs where all sweep sensors are unchanged (no fresh data)."""
-    idx = d.index
+    """Measure stable periods and long silent tails independently per sensor."""
     hours = _f(p, "stale_hours", 2.0)
-    window = max(2, int(round(hours * 3600 / max(poll, 1))))
+    tolerance = _f(p, "stale_tol", 0.027778)
+    max_silence = _f(p, "max_silence_hours", 0.5)
     units_map = _units_map(d)
     present = [
         r
         for r in FLATLINE_SENSOR_ROLES
         if r in d.columns and sweep_assessable_role(r, None, units_map)
     ]
-    if not present:
-        _stash_sweep_evidence(d, {}, poll=poll, rule_tag="SV-STALE")
-        return _false(idx)
-    stale = pd.Series(True, index=idx)
     per_role: dict[str, pd.Series] = {}
     for role in present:
         s = pd.to_numeric(d[role], errors="coerce")
-        role_flat = flatline_mask(s, tol=1e-9, window=window)
-        per_role[role] = role_flat  # each role's stuck mask; equipment fault is AND
-        stale = stale & role_flat
-    # For stale, the firing evidence is the AND mask applied to each present role
-    and_masks = {role: stale.copy() for role in present}
-    _stash_sweep_evidence(d, and_masks, poll=poll, rule_tag="SV-STALE")
-    return stale
+        if not s.notna().any():
+            continue
+        role_tol = 0.05 if sensor_type_for_role(role).lower() == "humidity" else tolerance
+        per_role[role] = _window_flatline_mask(
+            s,
+            hours=hours,
+            tolerance=role_tol,
+            max_silence_hours=max_silence,
+            poll=poll,
+        )
+    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-STALE")
 
 
 def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
@@ -1595,10 +1861,13 @@ RULES: list[CookbookRule] = [
         "Any modeled sensor reads outside its physical hard range (e.g. OAT −51–54 °C, SAT −1–66 °C, CHWS −1–27 °C).",
         _sweep_range,
         params=[
+            CookbookParam("require_operational_gate", "Require operational gate", "bool", 0.0, 1.0, 1.0, 1.0),
+            CookbookParam("minimum_active_coverage_pct", "Minimum active coverage", "%", 0.0, 100.0, 1.0, 5.0),
             CookbookParam("range_scale_temperature", "Temp range scale", "x", 0.5, 2.0, 0.1, 1.0, direction="fewer"),
             CookbookParam("range_scale_humidity", "Humidity range scale", "x", 0.5, 2.0, 0.1, 1.0, direction="fewer"),
             CookbookParam("range_scale_pressure", "Pressure range scale", "x", 0.5, 2.0, 0.1, 1.0, direction="fewer"),
             CONFIRM_PARAM(),
+            CookbookParam("max_silence_hours", "Max sensor silence", "h", 0.25, 12.0, 0.25, 0.5),
         ],
         sensor_sweep=True,
         confirm_seconds=300,
@@ -1610,7 +1879,9 @@ RULES: list[CookbookRule] = [
         _sweep_flatline,
         params=[
             CookbookParam("flatline_tol", "Flatline tolerance", "°C", 0.011111, 0.555556, 0.011111, 0.055556, direction="stricter"),
-            CookbookParam("flatline_hours", "Flatline window", "h", 0.5, 8.0, 0.5, 1.0, direction="fewer"),
+            CookbookParam("flatline_hours", "Flatline window", "h", 0.25, 8.0, 0.25, 1.0, direction="fewer"),
+            CookbookParam("max_silence_hours", "Max sensor silence", "h", 0.25, 12.0, 0.25, 0.5),
+            CookbookParam("require_operational_gate", "Require operational gate", "bool", 0.0, 1.0, 1.0, 1.0),
             CONFIRM_PARAM(),
         ], sensor_sweep=True, confirm_seconds=300,
     ),
@@ -1619,11 +1890,14 @@ RULES: list[CookbookRule] = [
         ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
         "Sample-to-sample jump exceeds the physical spike limit for the sensor type.",
         _sweep_spike, params=[
+            CookbookParam("minimum_active_coverage_pct", "Minimum active coverage", "%", 0.0, 100.0, 1.0, 5.0),
+            CookbookParam("require_operational_gate", "Require operational gate", "bool", 0.0, 1.0, 1.0, 1.0),
             CookbookParam("spike_scale", "Spike limit scale (global)", "x", 0.25, 3.0, 0.25, 1.0, direction="fewer"),
             CookbookParam("spike_scale_temperature", "Temp spike scale", "x", 0.25, 3.0, 0.25, 1.0, direction="fewer"),
             CookbookParam("spike_scale_humidity", "Humidity spike scale", "x", 0.25, 3.0, 0.25, 1.0, direction="fewer"),
             CookbookParam("spike_scale_pressure", "Pressure spike scale", "x", 0.25, 3.0, 0.25, 1.0, direction="fewer"),
             CONFIRM_PARAM(),
+            CookbookParam("max_silence_hours", "Max sensor silence", "h", 0.25, 12.0, 0.25, 0.5),
         ], sensor_sweep=True, confirm_seconds=300,
     ),
     CookbookRule(
@@ -1631,7 +1905,9 @@ RULES: list[CookbookRule] = [
         ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
         "All modeled sensors unchanged over the stale window — data feed likely dropped.",
         _sweep_stale, params=[
-            CookbookParam("stale_hours", "Stale window", "h", 0.5, 12.0, 0.5, 2.0),
+            CookbookParam("stale_hours", "Stale window", "h", 0.25, 12.0, 0.25, 2.0),
+            CookbookParam("stale_tol", "Stale tolerance", "Δ°C", 0.0, 0.555556, 0.005556, 0.027778),
+            CookbookParam("max_silence_hours", "Max sensor silence", "h", 0.25, 12.0, 0.25, 0.5),
             CONFIRM_PARAM(),
         ], sensor_sweep=True, confirm_seconds=300,
     ),

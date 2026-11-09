@@ -29,7 +29,7 @@ const T0 = Date.UTC(2026, 0, 5, 0, 0, 0); // Monday 00:00 UTC
 const STATUS = new Set(["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "clg_available",
   "loop_enabled", "building_ahu_load_satisfied", "building_zone_load_satisfied"]);
 const PERCENT = new Set(["fan_cmd", "damper_cmd", "damper_pct", "oa_damper_pct", "clg_valve_pct", "htg_valve_pct",
-  "reheat_valve_pct", "chw_pump_cmd", "chiller_cmd", "tower_fan_cmd"]);
+  "reheat_valve_pct", "chw_pump_cmd", "cw_pump_cmd", "return_fan", "chiller_cmd", "tower_fan_cmd"]);
 const HUMIDITY = new Set(["oa_h", "ra_h", "zone_rh", "ma_h", "sa_h"]);
 
 const wave = (i, period, phase = 0) => Math.sin((2 * Math.PI * i) / period + phase);

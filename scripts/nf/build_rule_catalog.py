@@ -6,7 +6,7 @@ Inputs (all in git, no NF needed):
   sql/fdd/role_map.json            role -> Haystack-style name (sat -> discharge-air-temp)
   nf-app/rules/nf_classes.json     NF ontology class names (from /api/v1/equipment/classes)
   nf-app/rules/role_overrides.json hand mapping for roles NF names differently
-  sql/fdd/role_scales.json         role -> declared scale (fraction | boolean | percent_rh | text | si:<unit>)
+  sql/fdd/input_contract.json     role scales and typed scratch relations
 
 For every role it records the NF classes that fill it and a Haystack marker set used when a
 point has no class. The app (static/fdd.js) and the FDD hook match points with exactly this file.
@@ -26,6 +26,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "nf-app/static/fdd-catalog.json"
+sys.path.insert(0, str(ROOT / "scripts/nf"))
+from input_contract import load_source  # noqa: E402
 
 
 def derived_markers(name: str) -> list[str]:
@@ -52,7 +54,7 @@ def build() -> dict:
     if unnamed:
         raise SystemExit(f"role_overrides.json roles not in role_map.json need a \"name\": {unnamed}")
 
-    scales = json.loads((ROOT / "sql/fdd/role_scales.json").read_text(encoding="utf-8"))["roles"]
+    scales = {role: spec["scale"] for role, spec in load_source()["roles"].items()}
     roles = {}
     for role, name in sorted({**role_map, **{r: o["name"] for r, o in overrides.items() if r not in role_map}}.items()):
         if role in overrides:
@@ -64,10 +66,10 @@ def build() -> dict:
     no_scale = sorted(set(roles) - set(scales))
     extra = sorted(set(scales) - set(roles))
     if no_scale or extra:
-        raise SystemExit(f"sql/fdd/role_scales.json must declare exactly the catalog roles: missing {no_scale}, unknown {extra}")
+        raise SystemExit(f"sql/fdd/input_contract.json must declare exactly the catalog roles: missing {no_scale}, unknown {extra}")
     for role, scale in scales.items():
         if not (scale in ("fraction", "boolean", "percent_rh", "text") or scale.startswith("si:")):
-            raise SystemExit(f"role_scales.json: {role} has an invalid scale {scale!r}")
+            raise SystemExit(f"input_contract.json: {role} has an invalid scale {scale!r}")
         roles[role]["scale"] = scale
 
     rules = []
@@ -91,7 +93,7 @@ def build() -> dict:
         })
     return {
         "_generated_by": "scripts/nf/build_rule_catalog.py",
-        "source": ["sql/fdd/registry.yaml", "sql/fdd/role_map.json", "sql/fdd/role_scales.json", "nf-app/rules/role_overrides.json"],
+        "source": ["sql/fdd/registry.yaml", "sql/fdd/role_map.json", "sql/fdd/input_contract.json", "nf-app/rules/role_overrides.json"],
         "equipment_kinds": kinds,
         "roles": roles,
         "rules": rules,

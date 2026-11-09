@@ -579,6 +579,7 @@ def run_cookbook_rule(
             raw = rule.compute(d, params, poll_seconds)
         raw = raw.reindex(d.index).fillna(False).astype(bool)
         metrics: dict[str, Any] = {**dict(gate_meta), **weather_source_metrics(d)}
+        sweep_result = None
         metrics["quality"] = quality.summary()
         metrics["quality_confidence"] = quality.quality_confidence
         if worst_req < min_cov:
@@ -607,37 +608,12 @@ def run_cookbook_rule(
             metrics["sv_rate_state_meta"] = dict(d.attrs.get("sv_rate_state_meta") or {})
         elif rule.sensor_sweep:
             metrics["sensors_checked"] = [r for r in cb.SWEEP_SENSOR_ROLES if r in d.columns]
-            # Confirm each per-role raw mask so UI itemization matches confirmed faults
-            raw_masks = d.attrs.get("sv_sweep_masks") or {}
-            active_for_roles = active if use_active else None
-            confirmed_evidence = []
-            role_confirmed: dict[str, pd.Series] = {}
-            for role, role_raw in raw_masks.items():
-                rr = role_raw.reindex(d.index).fillna(False).astype(bool)
-                if active_for_roles is not None:
-                    rr = rr & active_for_roles.reindex(d.index).fillna(False).astype(bool)
-                role_conf = confirm_fault(rr, poll_seconds=poll_seconds, confirm_seconds=confirm_s)
-                role_confirmed[role] = role_conf
-                n_fault = int(role_conf.sum())
-                first_ts = last_ts = None
-                if n_fault and isinstance(role_conf.index, pd.DatetimeIndex):
-                    idx = role_conf.index[role_conf]
-                    first_ts, last_ts = str(idx[0]), str(idx[-1])
-                confirmed_evidence.append(
-                    {
-                        "role": role,
-                        "sensor_type": cb.sensor_type_for_role(role),
-                        "fault_samples": n_fault,
-                        "fault_hours": round(hours_true(role_conf, poll_seconds), 3) if n_fault else 0.0,
-                        "first_fault_timestamp": first_ts,
-                        "last_fault_timestamp": last_ts,
-                        "faulted": n_fault > 0,
-                    }
-                )
-            metrics["sv_sweep_evidence"] = confirmed_evidence
-            metrics["sv_sweep_confirmed_roles"] = {
-                role: role_confirmed[role].astype(int) for role in role_confirmed
-            }
+            # SQL sweeps count elapsed sample-hold intervals, cap normal holds,
+            # and add long-silence tails. Confirm and itemize by role, not the
+            # generic row-count helper used by ordinary rules.
+            sweep_result = cb.confirm_sensor_sweep_segments(d, confirm_seconds=confirm_s)
+            metrics["sv_sweep_evidence"] = sweep_result["evidence"]
+            metrics["sv_sweep_confirmed_roles"] = sweep_result["confirmed_roles"]
         if rule.control_output_sweep:
             metrics["outputs_checked"] = [r for r in cb.CONTROL_OUTPUT_ROLES if r in d.columns]
         if d.attrs.get("oa_t_injected_from"):
@@ -650,7 +626,7 @@ def run_cookbook_rule(
         ):
             if d.attrs.get(attr_key):
                 metrics[metric_key] = d.attrs[attr_key]
-        return finalize_result(
+        result = finalize_result(
             rule.id,
             equipment_id,
             raw,
@@ -664,6 +640,14 @@ def run_cookbook_rule(
             active_mask=active if use_active else None,
             params_fingerprint=fp,
         )
+        if sweep_result is not None:
+            result.raw_fault = sweep_result["raw_mask"]
+            result.confirmed_fault = sweep_result["confirmed_mask"]
+            result.fault_sample_count = int(result.confirmed_fault.sum())
+            result.fault_hours = float(sweep_result["fault_hours"])
+            result.status = "FAULT" if result.fault_sample_count else "PASS"
+            result.notes = f"{result.fault_hours:.1f}h fault" if result.fault_sample_count else "No confirmed faults"
+        return result
     except Exception as exc:
         return error_result(
             rule.id,

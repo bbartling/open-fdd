@@ -19,13 +19,13 @@ Both files have the shape
 
 SQLite storage convention (engines.js): every timestamp column is REAL epoch seconds.
 
-timeline_sql (5.0.3): per rule, a per-timestamp variant of `sql` that returns one row per history sample,
-  (equipment_id, ts_epoch, confirmed, held_seconds)
-ts_epoch = epoch seconds (double), confirmed = 1/0 exactly as the rule's own `confirmed` flag (the CTE the
-fault_hours aggregate sums), held_seconds = the sample's forward interval (0 for the last sample and over a
-gap > MAX_GAP_HOURS, i.e. NOT assessed). It is `null` (with `timeline_reason`) for rules that have no per-row
-confirmed flag (ratio / count / window-statistic rules). Invariant, tested on both engines:
-sum(confirmed * held_seconds) / 3600 == the rule's fault_hours.
+timeline_sql (5.0.3): per rule, a per-timestamp variant of `sql` that returns assessed intervals.
+  Most rules use (equipment_id, ts_epoch, confirmed, held_seconds); the four SV sweeps add
+  sensor_role between equipment_id and ts_epoch. ts_epoch is epoch seconds (double), confirmed is 1/0
+  exactly as the rule's own confirmed flag, and held_seconds is the credited forward interval. SV gap
+  segments start when max_silence_hours expires and hold exactly the remaining gap duration. It is `null`
+  (with timeline_reason) for rules that have no per-row confirmed flag. Summing confirmed * held_seconds /
+  3600 by the rule's output grain equals fault_hours.
 
 Translation = deterministic generic rewrites (below). A rule is never silently
 altered: after rewriting, any Postgres-only construct left in the text, or any
@@ -50,6 +50,7 @@ POLL_SECONDS = 300
 
 sys.path.insert(0, str(SQL_DIR))
 from render_rule import render  # noqa: E402  (shared renderer, not copied)
+from input_contract import load_contract  # noqa: E402
 
 # fdd.* helpers implemented in JS (nf-app/hooks/lib/engines.js) for sqlite: name -> arity.
 HELPER_FUNCTIONS = {
@@ -62,48 +63,15 @@ HELPER_FUNCTIONS = {
     "fdd_mask_sweep_val": 3,
 }
 
-# Relations the rules read that input_contract.sql does not define (SV-* rules).
-EXTRA_TABLES = {
-    "authorized_series": [("site_id", "text"), ("equipment_id", "text"), ("role", "text"), ("unit", "text")],
-    "equipment": [("building_id", "text"), ("equipment_id", "text")],
-}
-
-# history columns the SV-* rules read (h.ra_h ...) but input_contract.sql does not declare:
-# a gap in the shipped SQL pack, added here so those rules can run (typed NULL unless supplied).
-EXTRA_HISTORY_COLUMNS = ["ra_h", "zone_rh", "ma_h", "sa_h"]
-
-
 class Untranslatable(Exception):
     pass
 
 
 # --------------------------------------------------------------------------- contract
 
-def _col_type(sql_type):
-    t = sql_type.strip().lower()
-    if t.startswith("timestamp"):
-        return "timestamp"
-    if t.startswith("double") or t in ("float", "real", "numeric"):
-        return "double"
-    if t.startswith("varchar") or t == "text":
-        return "text"
-    raise ValueError(f"unmapped contract type {sql_type!r}")
-
-
 def parse_contract():
-    text = (SQL_DIR / "input_contract.sql").read_text(encoding="utf-8")
-    tables = {}
-    for m in re.finditer(r"CREATE TEMP TABLE (\w+)\((.*?)\);", text, re.S | re.I):
-        cols = []
-        for part in m.group(2).split(","):
-            name, _, typ = part.strip().partition(" ")
-            cols.append({"name": name.strip('"'), "type": _col_type(typ)})
-        tables[m.group(1)] = cols
-    have = {c["name"] for c in tables["history"]}
-    tables["history"] += [{"name": n, "type": "double"} for n in EXTRA_HISTORY_COLUMNS if n not in have]
-    for name, cols in EXTRA_TABLES.items():
-        tables[name] = [{"name": n, "type": t} for n, t in cols]
-    return tables
+    """Return the scratch contract for the NF pack from its canonical source."""
+    return load_contract()
 
 
 # --------------------------------------------------------------------------- text helpers
@@ -305,9 +273,10 @@ def to_sqlite(pg_sql):
     return s, notes
 
 
-# --------------------------------------------------------------------------- timeline (per-timestamp confirmed flag)
+# --------------------------------------------------------------------------- timeline (per-timestamp confirmed flag; SV adds sensor_role)
 
 TIMELINE_COLUMNS = ["equipment_id", "ts_epoch", "confirmed", "held_seconds"]
+ROLE_TIMELINE_COLUMNS = ["equipment_id", "sensor_role", "ts_epoch", "confirmed", "held_seconds"]
 
 
 class NoTimeline(Exception):
@@ -351,7 +320,10 @@ def select_list(body):
 
 
 def build_timeline_pg(pg_sql):
-    """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason)."""
+    """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
+
+    Role-grain SV rules expose sensor_role and preserve silence-tail intervals exactly.
+    """
     s = strip_comments(pg_sql)
     try:
         ctes, main = parse_ctes(s)
@@ -366,6 +338,15 @@ def build_timeline_pg(pg_sql):
         body = s[o + 1:c]
         if not (re.search(r"\bheld_seconds\b", body) and re.search(r"\bconfirmed\b", body)):
             raise NoTimeline("final CTE has no held_seconds / confirmed")
+        if re.search(r"\bsensor_role\b", select_list(body)) and re.search(r"\bsegment_epoch\b", select_list(body)):
+            head = s[:o + 1] + body + ")"
+            after = names[i + 1:]
+            if after:
+                raise NoTimeline("unexpected CTEs after role final: " + ", ".join(after))
+            sel = ("SELECT equipment_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, "
+                   "confirmed, held_seconds FROM final WHERE held_seconds > 0 "
+                   "ORDER BY equipment_id, sensor_role, segment_epoch")
+            return head + "\n" + sel + "\n"
         if not re.search(r"\btimestamp_utc\b", select_list(body)):
             body, n = re.subn(r"\bequipment_id,", "equipment_id,\n    timestamp_utc,", body, count=1)
             if n != 1:
@@ -455,7 +436,8 @@ def build():
                     err, tl_cols = sqlite_prepare_check(tl_lite, contract)
                     if err:
                         raise Untranslatable("SQLite cannot prepare the timeline: " + err)
-                    if tl_cols is not None and tl_cols != TIMELINE_COLUMNS:
+                    want_tl_cols = ROLE_TIMELINE_COLUMNS if "sensor_role" in cols else TIMELINE_COLUMNS
+                    if tl_cols is not None and tl_cols != want_tl_cols:
                         raise Untranslatable(f"timeline columns {tl_cols}")
                 except Untranslatable as exc:
                     tl_lite, tl_reason = None, f"sqlite: {exc}"

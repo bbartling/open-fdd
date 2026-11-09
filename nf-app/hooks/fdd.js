@@ -359,9 +359,25 @@ function resultValue(packRule, row) {
   return { ...base, value, status: 'ok', reason: '' };
 }
 
+/** Keep the existing equipment result as worst-sensor hours and retain every assessed role. */
+function equipmentResult(packRule, rows, equipId) {
+  if (!packRule.output_columns?.includes('sensor_role')) {
+    return rows.find((row) => row.equipment_id === equipId) || rows[0];
+  }
+  const scores = rows
+    .filter((row) => row.equipment_id === equipId && typeof row.sensor_role === 'string' && Number.isFinite(row.fault_hours))
+    .map((row) => [row.sensor_role, row.fault_hours]);
+  if (!scores.length) return undefined;
+  return {
+    equipment_id: equipId,
+    fault_hours: Math.max(...scores.map(([, hours]) => hours)),
+    sensor_fault_hours: Object.fromEntries(scores),
+  };
+}
+
 const siteEquipLabel = (siteId, equipId) => (siteId ? `${siteId}/${equipId}` : equipId);
 
-function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, runIso, occSource }) {
+function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, runIso, occSource, sensorFaultHours = undefined }) {
   const equipId = shared.idOf(equipRec);
   const uuid = resultUuid(key, rule.id);
   const dis = `${(equipRec.attrs || {}).dis || equipRec.name} ${rule.id}`;
@@ -373,6 +389,7 @@ function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, 
     fddWindowHours: String(windowHours), fddOutput: out.column,
     fddStatus: out.status, fddReason: out.reason || '', fddLastRun: runIso };
   if (out.coverage != null) attrs.fddCoverageHours = String(out.coverage);
+  if (sensorFaultHours) attrs.fddSensorFaultHours = JSON.stringify(sensorFaultHours);
   if (equipRec.uuid) attrs.equipUuid = equipRec.uuid;     // lets the UI match this point to its equip without guessing from names
   if (occSource) attrs.fddOccSource = occSource;
   return [
@@ -390,9 +407,13 @@ const timelineUuid = (key, ruleId) => nameUuid(`${key}:${ruleId}:timeline`);
  * Timeline rows (engine.timeline) -> the samples to publish: [{ ms, value: 1 | 0 }], oldest first.
  * Skipped (= not assessed, nothing written): held_seconds 0 (last sample, gap over MAX_GAP_HOURS), a null flag,
  * a timestamp for which assessed(ms) is false (a required input missing), and anything at or before `after` (already written).
- * @param {any[]} rows @param {{ assessed?: ((ms: number) => boolean) | null, after?: number, equipId?: string }} [o]
+ * Sensor sweeps use SQL's assessed intervals, including silence, and combine their overlap on the pack grid.
+ * @param {any[]} rows @param {{ assessed?: ((ms: number) => boolean) | null, after?: number, equipId?: string, stepSec?: number }} [o]
  */
-function timelineSamples(rows, { assessed, after = -Infinity, equipId } = {}) {
+function timelineSamples(rows, { assessed, after = -Infinity, equipId, stepSec = 300 } = {}) {
+  if (rows?.some((row) => typeof row.sensor_role === 'string')) {
+    return sweepTimelineSamples(rows, equipId, after, stepSec);
+  }
   const out = [];
   for (const r of rows || []) {
     if (equipId != null && r.equipment_id !== equipId) continue;
@@ -403,6 +424,43 @@ function timelineSamples(rows, { assessed, after = -Infinity, equipId } = {}) {
     out.push({ ms, value: Number(r.confirmed) === 1 ? 1 : 0 });
   }
   return out.sort((a, b) => a.ms - b.ms);
+}
+
+/** Collapse overlapping sensor intervals into one equipment lane on the pack grid. */
+function sweepTimelineSamples(rows, equipId, after, stepSec) {
+  const events = new Map();
+  const add = (ms, assessed, faults) => {
+    const event = events.get(ms) || { assessed: 0, faults: 0 };
+    event.assessed += assessed;
+    event.faults += faults;
+    events.set(ms, event);
+  };
+  for (const row of rows) {
+    if (equipId != null && row.equipment_id !== equipId) continue;
+    const start = Math.round(Number(row.ts_epoch) * 1000);
+    const end = start + Math.round(Number(row.held_seconds) * 1000);
+    if (!Number.isFinite(end) || end <= start || end <= after || row.confirmed == null) continue;
+    const fault = Number(row.confirmed) === 1 ? 1 : 0;
+    add(start, 1, fault);
+    add(end, -1, -fault);
+  }
+  const step = Math.max(1, Math.round(stepSec * 1000));
+  const times = [...events.keys()].sort((a, b) => a - b);
+  const samples = [];
+  let assessed = 0, faults = 0;
+  for (let i = 0; i + 1 < times.length; i++) {
+    const start = times[i], next = times[i + 1];
+    const event = events.get(start);
+    assessed += event.assessed;
+    faults += event.faults;
+    if (assessed <= 0) continue;
+    const value = faults > 0 ? 1 : 0;
+    if (start > after) samples.push({ ms: start, value });
+    for (let ms = Math.floor(Math.max(start, after) / step) * step + step; ms < next; ms += step) {
+      samples.push({ ms, value });
+    }
+  }
+  return samples;
 }
 
 /** The two records (automation + model) of an equip + rule's timeline point; `through` (ms) = newest sample written so far. */
@@ -709,18 +767,21 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             continue;
           }
           summary.rules++;
-          const row = rows.find((x) => x.equipment_id === equipId) || rows[0];
-          const out = resultValue(pack.rules[r.rule.id], row);
+          const packRule = pack.rules[r.rule.id];
+          const row = equipmentResult(packRule, rows, equipId);
+          const out = resultValue(packRule, row);
+          const sensorFaultHours = row && row.sensor_fault_hours;
           summary.status[out.status]++;
           if (out.status !== 'not-assessed') {
-            summary.results.push({ site: siteId, equip: equipId, rule: r.rule.id, value: out.value, unit: out.unit, fault: out.fault, status: out.status });
+            summary.results.push({ site: siteId, equip: equipId, rule: r.rule.id, value: out.value, unit: out.unit, fault: out.fault, status: out.status,
+              ...(sensorFaultHours ? { sensor_fault_hours: sensorFaultHours } : {}) });
             if (engine.resultRow) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to }));
           }
           const uuid = resultUuid(key, r.rule.id);
           touched.add(uuid);
           const usesOcc = r.required.includes('occ_mode') || r.optional.includes('occ_mode');
           const occSource = usesOcc ? (roles.occ_mode ? 'point' : occ ? occ.source : undefined) : undefined;
-          records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso, occSource }));
+          records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso, occSource, sensorFaultHours }));
           if (out.status !== 'not-assessed') values.push({ uuid, value: out.value });
           if (out.kind === 'fault' && !config.dryRun && engine.timeline && pack.rules[r.rule.id].timeline_sql) {
             try {
@@ -730,7 +791,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
               // a timestamp is assessed only when every REQUIRED input of the rule has a value there (unknown is not ok)
               const assessed = histByTs ? (ms) => { const row = histByTs.get(ms); return !!row && r.required.every((role) => row[role] != null); } : null;
               const samples = timelineSamples(await engine.timeline(r.rule.id),
-                { assessed, equipId, after: Number.isFinite(prevThrough) ? prevThrough : -Infinity });
+                { assessed, equipId, after: Number.isFinite(prevThrough) ? prevThrough : -Infinity, stepSec: pack.poll_seconds });
               const [auto, model2] = timelineRecords({ equipRec, siteId, rule: r.rule, shared, windowHours, key, runIso, through: prevThrough });
               const t = { records: [auto, model2], series: null };
               if (samples.length) {
@@ -949,4 +1010,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, equipmentResult, bacnetPlan, chunkBySize });

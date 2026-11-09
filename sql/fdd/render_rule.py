@@ -43,6 +43,7 @@ def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None):
     for key,value in list(values.items()):
         if key.endswith('_HOURS') and value > 0:
             prefix = key[:-6]
+            values[prefix+'_SECONDS'] = round(value * 3600)
             rows = max(6 if prefix == 'FIXED_FLOW' else 1,math.ceil(value*3600/poll_seconds))
             values[prefix+'_ROWS'] = rows
             values[prefix+'_ROWS_PRECEDING'] = rows-1

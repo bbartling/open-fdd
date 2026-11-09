@@ -1,0 +1,677 @@
+{
+  "_doc": "Canonical engine-independent scratch input contract for every rendered FDD rule. SI values are supplied directly; only the NF ingest layer converts. This is scratch DDL, not an operational migration.",
+  "version": 1,
+  "roles": {
+    "ahu_sat": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "building_ahu_load_satisfied": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "building_zone_load_satisfied": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "chiller_amps": {
+      "scale": "si:A",
+      "type": "double"
+    },
+    "chiller_cmd": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "chiller_current": {
+      "scale": "si:A",
+      "type": "double"
+    },
+    "chiller_power": {
+      "scale": "si:kW",
+      "type": "double"
+    },
+    "chiller_status": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "chw_dp": {
+      "scale": "si:Pa",
+      "type": "double"
+    },
+    "chw_dp_sp": {
+      "scale": "si:Pa",
+      "type": "double"
+    },
+    "chw_flow": {
+      "scale": "si:L/s",
+      "type": "double"
+    },
+    "chw_pump_cmd": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "chw_pump_status": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "chw_reset_request_sum": {
+      "scale": "si:count",
+      "type": "double"
+    },
+    "chw_return_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "chw_supply_sp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "chw_supply_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "clg_available": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "clg_valve_pct": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "compressor_status": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "cooling_coil_entering_temp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "cooling_coil_leaving_temp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "cooling_sp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "cw_pump_cmd": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "cw_return_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "cw_supply_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "damper_cmd": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "damper_pct": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "duct_static": {
+      "scale": "si:Pa",
+      "type": "double"
+    },
+    "duct_static_sp": {
+      "scale": "si:Pa",
+      "type": "double"
+    },
+    "electric_kw": {
+      "scale": "si:kW",
+      "type": "double"
+    },
+    "electric_kwh": {
+      "scale": "si:kWh",
+      "type": "double"
+    },
+    "fan_cmd": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "fan_status": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "heating_coil_entering_temp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "heating_coil_leaving_temp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "heating_sp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "htg_valve_pct": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "hw_reset_request_sum": {
+      "scale": "si:count",
+      "type": "double"
+    },
+    "hw_return_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "hw_supply_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "kwh": {
+      "scale": "si:kWh",
+      "type": "double"
+    },
+    "loop_enabled": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "ma_h": {
+      "scale": "percent_rh",
+      "type": "double"
+    },
+    "mat": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "min_flow_sp": {
+      "scale": "si:L/s",
+      "type": "double"
+    },
+    "oa_damper_pct": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "oa_h": {
+      "scale": "percent_rh",
+      "type": "double"
+    },
+    "oa_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "occ_mode": {
+      "scale": "text",
+      "type": "text"
+    },
+    "preheat_leave_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "pump_status": {
+      "scale": "boolean",
+      "type": "double"
+    },
+    "ra_h": {
+      "scale": "percent_rh",
+      "type": "double"
+    },
+    "rat": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "reheat_valve_pct": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "return_fan": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "sa_h": {
+      "scale": "percent_rh",
+      "type": "double"
+    },
+    "sat": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "sat_sp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "static_reset_request": {
+      "scale": "si:count",
+      "type": "double"
+    },
+    "tower_fan_cmd": {
+      "scale": "fraction",
+      "type": "double"
+    },
+    "vav_discharge_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "vav_inlet_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "vav_total_flow": {
+      "scale": "si:L/s",
+      "type": "double"
+    },
+    "web_oa_dp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "web_oa_h": {
+      "scale": "percent_rh",
+      "type": "double"
+    },
+    "web_oa_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "web_wb_t": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "zone_air_temp_sp": {
+      "scale": "si:degC",
+      "type": "double"
+    },
+    "zone_airflow_sp": {
+      "scale": "si:L/s",
+      "type": "double"
+    },
+    "zone_co2": {
+      "scale": "si:ppm",
+      "type": "double"
+    },
+    "zone_flow": {
+      "scale": "si:L/s",
+      "type": "double"
+    },
+    "zone_rh": {
+      "scale": "percent_rh",
+      "type": "double"
+    },
+    "zone_t": {
+      "scale": "si:degC",
+      "type": "double"
+    }
+  },
+  "tables": {
+    "history": {
+      "columns": {
+        "equipment_id": {
+          "type": "text"
+        },
+        "timestamp_utc": {
+          "type": "timestamp"
+        },
+        "ahu_sat": {
+          "type": "double",
+          "role": "ahu_sat"
+        },
+        "building_ahu_load_satisfied": {
+          "type": "double",
+          "role": "building_ahu_load_satisfied"
+        },
+        "building_zone_load_satisfied": {
+          "type": "double",
+          "role": "building_zone_load_satisfied"
+        },
+        "chiller_amps": {
+          "type": "double",
+          "role": "chiller_amps"
+        },
+        "chiller_cmd": {
+          "type": "double",
+          "role": "chiller_cmd"
+        },
+        "chiller_current": {
+          "type": "double",
+          "role": "chiller_current"
+        },
+        "chiller_power": {
+          "type": "double",
+          "role": "chiller_power"
+        },
+        "chiller_status": {
+          "type": "double",
+          "role": "chiller_status"
+        },
+        "chw_dp": {
+          "type": "double",
+          "role": "chw_dp"
+        },
+        "chw_dp_sp": {
+          "type": "double",
+          "role": "chw_dp_sp"
+        },
+        "chw_flow": {
+          "type": "double",
+          "role": "chw_flow"
+        },
+        "chw_pump_cmd": {
+          "type": "double",
+          "role": "chw_pump_cmd"
+        },
+        "chw_pump_status": {
+          "type": "double",
+          "role": "chw_pump_status"
+        },
+        "chw_reset_request_sum": {
+          "type": "double",
+          "role": "chw_reset_request_sum"
+        },
+        "chw_return_t": {
+          "type": "double",
+          "role": "chw_return_t"
+        },
+        "chw_supply_sp": {
+          "type": "double",
+          "role": "chw_supply_sp"
+        },
+        "chw_supply_t": {
+          "type": "double",
+          "role": "chw_supply_t"
+        },
+        "clg_available": {
+          "type": "double",
+          "role": "clg_available"
+        },
+        "clg_valve_pct": {
+          "type": "double",
+          "role": "clg_valve_pct"
+        },
+        "compressor_status": {
+          "type": "double",
+          "role": "compressor_status"
+        },
+        "cooling_coil_entering_temp": {
+          "type": "double",
+          "role": "cooling_coil_entering_temp"
+        },
+        "cooling_coil_leaving_temp": {
+          "type": "double",
+          "role": "cooling_coil_leaving_temp"
+        },
+        "cooling_sp": {
+          "type": "double",
+          "role": "cooling_sp"
+        },
+        "cw_pump_cmd": {
+          "type": "double",
+          "role": "cw_pump_cmd"
+        },
+        "cw_return_t": {
+          "type": "double",
+          "role": "cw_return_t"
+        },
+        "cw_supply_t": {
+          "type": "double",
+          "role": "cw_supply_t"
+        },
+        "damper_cmd": {
+          "type": "double",
+          "role": "damper_cmd"
+        },
+        "damper_pct": {
+          "type": "double",
+          "role": "damper_pct"
+        },
+        "duct_static": {
+          "type": "double",
+          "role": "duct_static"
+        },
+        "duct_static_sp": {
+          "type": "double",
+          "role": "duct_static_sp"
+        },
+        "electric_kw": {
+          "type": "double",
+          "role": "electric_kw"
+        },
+        "electric_kwh": {
+          "type": "double",
+          "role": "electric_kwh"
+        },
+        "fan_cmd": {
+          "type": "double",
+          "role": "fan_cmd"
+        },
+        "fan_status": {
+          "type": "double",
+          "role": "fan_status"
+        },
+        "heating_coil_entering_temp": {
+          "type": "double",
+          "role": "heating_coil_entering_temp"
+        },
+        "heating_coil_leaving_temp": {
+          "type": "double",
+          "role": "heating_coil_leaving_temp"
+        },
+        "heating_sp": {
+          "type": "double",
+          "role": "heating_sp"
+        },
+        "htg_valve_pct": {
+          "type": "double",
+          "role": "htg_valve_pct"
+        },
+        "hw_reset_request_sum": {
+          "type": "double",
+          "role": "hw_reset_request_sum"
+        },
+        "hw_return_t": {
+          "type": "double",
+          "role": "hw_return_t"
+        },
+        "hw_supply_t": {
+          "type": "double",
+          "role": "hw_supply_t"
+        },
+        "kwh": {
+          "type": "double",
+          "role": "kwh"
+        },
+        "loop_enabled": {
+          "type": "double",
+          "role": "loop_enabled"
+        },
+        "ma_h": {
+          "type": "double",
+          "role": "ma_h"
+        },
+        "mat": {
+          "type": "double",
+          "role": "mat"
+        },
+        "min_flow_sp": {
+          "type": "double",
+          "role": "min_flow_sp"
+        },
+        "oa_damper_pct": {
+          "type": "double",
+          "role": "oa_damper_pct"
+        },
+        "oa_h": {
+          "type": "double",
+          "role": "oa_h"
+        },
+        "oa_t": {
+          "type": "double",
+          "role": "oa_t"
+        },
+        "occ_mode": {
+          "type": "text",
+          "role": "occ_mode"
+        },
+        "preheat_leave_t": {
+          "type": "double",
+          "role": "preheat_leave_t"
+        },
+        "pump_status": {
+          "type": "double",
+          "role": "pump_status"
+        },
+        "ra_h": {
+          "type": "double",
+          "role": "ra_h"
+        },
+        "rat": {
+          "type": "double",
+          "role": "rat"
+        },
+        "reheat_valve_pct": {
+          "type": "double",
+          "role": "reheat_valve_pct"
+        },
+        "return_fan": {
+          "type": "double",
+          "role": "return_fan"
+        },
+        "sa_h": {
+          "type": "double",
+          "role": "sa_h"
+        },
+        "sat": {
+          "type": "double",
+          "role": "sat"
+        },
+        "sat_sp": {
+          "type": "double",
+          "role": "sat_sp"
+        },
+        "static_reset_request": {
+          "type": "double",
+          "role": "static_reset_request"
+        },
+        "tower_fan_cmd": {
+          "type": "double",
+          "role": "tower_fan_cmd"
+        },
+        "vav_discharge_t": {
+          "type": "double",
+          "role": "vav_discharge_t"
+        },
+        "vav_inlet_t": {
+          "type": "double",
+          "role": "vav_inlet_t"
+        },
+        "vav_total_flow": {
+          "type": "double",
+          "role": "vav_total_flow"
+        },
+        "web_oa_dp": {
+          "type": "double",
+          "role": "web_oa_dp"
+        },
+        "web_oa_h": {
+          "type": "double",
+          "role": "web_oa_h"
+        },
+        "web_oa_t": {
+          "type": "double",
+          "role": "web_oa_t"
+        },
+        "web_wb_t": {
+          "type": "double",
+          "role": "web_wb_t"
+        },
+        "zone_air_temp_sp": {
+          "type": "double",
+          "role": "zone_air_temp_sp"
+        },
+        "zone_airflow_sp": {
+          "type": "double",
+          "role": "zone_airflow_sp"
+        },
+        "zone_co2": {
+          "type": "double",
+          "role": "zone_co2"
+        },
+        "zone_flow": {
+          "type": "double",
+          "role": "zone_flow"
+        },
+        "zone_rh": {
+          "type": "double",
+          "role": "zone_rh"
+        },
+        "zone_t": {
+          "type": "double",
+          "role": "zone_t"
+        }
+      }
+    },
+    "weather": {
+      "columns": {
+        "timestamp_utc": {
+          "type": "timestamp"
+        },
+        "oa_t": {
+          "type": "double",
+          "role": "oa_t"
+        },
+        "web_oa_t": {
+          "type": "double",
+          "role": "web_oa_t"
+        },
+        "web_oa_dp": {
+          "type": "double",
+          "role": "web_oa_dp"
+        }
+      }
+    },
+    "utility_interval": {
+      "columns": {
+        "timestamp_utc": {
+          "type": "timestamp"
+        },
+        "kwh": {
+          "type": "double",
+          "role": "kwh"
+        }
+      }
+    },
+    "utility_monthly": {
+      "columns": {
+        "billing_period": {
+          "type": "text"
+        },
+        "kwh": {
+          "type": "double",
+          "role": "kwh"
+        }
+      }
+    },
+    "authorized_series": {
+      "columns": {
+        "site_id": {
+          "type": "text"
+        },
+        "equipment_id": {
+          "type": "text"
+        },
+        "role": {
+          "type": "text"
+        },
+        "unit": {
+          "type": "text"
+        }
+      }
+    },
+    "equipment": {
+      "columns": {
+        "building_id": {
+          "type": "text"
+        },
+        "equipment_id": {
+          "type": "text"
+        }
+      }
+    }
+  }
+}

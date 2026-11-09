@@ -18,13 +18,18 @@ the equip's NF uuid plus the rule id, so it is stable across renames), then one 
 
 | Point | Markers | Value | Attributes worth reading |
 |---|---|---|---|
-| Result point | `point,his,fault,fdd` (rules with a fault output) or `point,his,metric,fdd` | one sample per run: `fault_pct` in `%` (else `fault_hours` in `h`); metric rules: their first output | `fddStatus` (`ok`, `fault`, `not-assessed`, `stale`), `fddReason`, `fddCoverageHours`, `fddLastRun`, `fddWindowHours`, `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddOccSource` |
+| Result point | `point,his,fault,fdd` (rules with a fault output) or `point,his,metric,fdd` | one sample per run: `fault_pct` in `%` (else `fault_hours` in `h`); metric rules: their first output | `fddStatus` (`ok`, `fault`, `not-assessed`, `stale`), `fddReason`, `fddCoverageHours`, `fddLastRun`, `fddWindowHours`, `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddOccSource`, `fddSensorFaultHours` (sensor sweeps) |
 | Fault timeline point (5.0.3, 68 of 77 rules) | `point,his,fault_timeline` (no `fdd`, no `fault`) | one sample per assessed history timestamp: `1` confirmed fault, `0` ok; **no sample** = not assessed (never written as 0) | `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddKind=fault-timeline`, `fddTimelineOf` (uuid of the result point), `fddTimelineThrough` (newest sample written) |
+
+SV-STALE, SV-FLATLINE, SV-RANGE and SV-SPIKE produce one SQL result per assessed sensor role. The existing NF result point
+and Timescale result row report the highest fault-hour total among those roles. The NF point's `fddSensorFaultHours` is a JSON
+object with each role's hours from the latest run. Timescale keeps the same object for each run in `metric.sensor_fault_hours`.
+The equipment timeline is flagged while any assessed role is faulting.
 
 Not assessed is never healthy: a result with no coverage gets `fddStatus: not-assessed` and no numeric value; a
 result that could not be refreshed gets `fddStatus: stale` and keeps its old samples.
 
-The timeline is append-only and grid-aligned to the rule pack's 5-minute grid.
+The timeline is append-only and uses the rule pack's 5-minute grid. Sensor sweeps also emit the starts of assessed intervals.
 
 ## Checking that results are fresh
 
