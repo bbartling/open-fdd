@@ -4,6 +4,6 @@
   "files": [
     "types/globals.d.ts", "types/shapes.d.ts", "types/hooks.d.ts",
     "hooks/sparql.js", "hooks/weather.js", "hooks/lib/synthetic_dataset.js",
-    "hooks/fdd.js", "hooks/analytics.js", "hooks/history.js", "hooks/lib/engines.js", "hooks/lib/timescale.js"
+    "hooks/fdd.js", "hooks/analytics.js", "hooks/history.js", "hooks/lib/engines.js", "hooks/lib/timescale.js", "hooks/lib/paging.js", "hooks/lib/settings.js"
   ]
 }

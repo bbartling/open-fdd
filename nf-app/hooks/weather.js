@@ -16,15 +16,20 @@
  * here with the Magnus formula from temperature and RH and used as a
  * fallback. Both values are logged on every run.
  *
- * Site location comes from NF itself (GET /api/v1/sites: latitude/longitude),
- * so nothing site-specific lives in this file. With one site that has
- * coordinates it is used; with several, set the app config value `site` to the
- * site id. Otherwise the run fails with a clear message.
+ * Site location comes from NF itself, so nothing site-specific lives in this
+ * file. Order: the hook settings `latitude` + `longitude` (NF passes the app
+ * options as ctx.config; set them in the NF console app settings), then the NF
+ * Sites collection (GET /api/v1/sites), then the modeled Haystack SITE. With
+ * one site that has coordinates it is used; with several, set the app option
+ * `site` to the site id. Otherwise the run fails naming where to set them.
+ * The answer's coords_source says which one was used.
  *
  * Uses Node's built-in https module only (no npm dependencies), so the app can
  * be created through the console API without a git repository or npm install.
  */
 const https = require('https');
+const { queryPoints, listAll } = require('./lib/paging.js');
+const settings = require('./lib/settings.js');
 
 const openMeteoUrl = (lat, lon) =>
   'https://api.open-meteo.com/v1/forecast' +
@@ -54,21 +59,41 @@ function coordsFromAttrs(attrs) {
   return hasCoords(c) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? c : null;
 }
 
-/** Page through POST /api/v1/point/query for one layer; a layer that does not exist (HTTP error) is just empty. */
+/**
+ * All pages of POST /api/v1/point/query for one layer (shared pager: pageOffset + totalCount, #1550); a layer that
+ * does not exist (HTTP error) is just empty. A paging failure (cap, short read) is NOT swallowed: a truncated model
+ * would hide the SITE record the same way it did for the fdd hook.
+ */
 async function queryLayer(http, layer) {
-  const out = [];
-  let pageToken = '';
   try {
-    do {
-      const res = await http.post('/api/v1/point/query', { layer, pageSize: 500, ...(pageToken && { pageToken }) });
-      const data = res && res.data;
-      out.push(...((data && data.points) || []));
-      pageToken = (data && data.nextPageToken) || '';
-    } while (pageToken);
-  } catch (_) {
-    /* layer missing or not readable: nothing from it */
+    return await queryPoints(http, { layer });
+  } catch (e) {
+    if (e && e.paging) throw e;
+    return []; /* layer missing or not readable: nothing from it */
   }
-  return out;
+}
+
+const APP_OPTIONS_HINT = 'set the app options "latitude" and "longitude" (NF console > app settings: the hook reads them first)';
+
+/**
+ * Coordinates from the hook settings (NF passes the app options as ctx.config): latitude + longitude, as numbers or
+ * numeric strings. Blank or 0,0 = not set (null). Set but unusable (one of the pair, not a number, out of range)
+ * throws, naming the options: a typo must not silently fall through to some other site.
+ * @param {any} config
+ * @returns {{ id: string, name: string, latitude: number, longitude: number, source: string } | null}
+ */
+function coordsFromConfig(config) {
+  const c = config || {};
+  if (!present(c.latitude) && !present(c.longitude)) return null;
+  const c2 = { latitude: present(c.latitude) ? Number(c.latitude) : NaN, longitude: present(c.longitude) ? Number(c.longitude) : NaN };
+  // 0 and 0 is what an option shows when nobody filled it in (and is never a real site): unset, not an error
+  if (c2.latitude === 0 && c2.longitude === 0) return null;
+  if (!hasCoords(c2) || Math.abs(c2.latitude) > 90 || Math.abs(c2.longitude) > 180) {
+    throw new Error('app options "latitude" and "longitude" must both be set to valid, non-zero coordinates '
+      + `(got latitude=${JSON.stringify(c.latitude)}, longitude=${JSON.stringify(c.longitude)})`);
+  }
+  const id = present(c.site) ? String(c.site) : 'app-settings';
+  return { id, name: id, ...c2, source: 'app setting (latitude/longitude)' };
 }
 
 /**
@@ -205,18 +230,24 @@ async function runOnce({ globalVariables, sdk, config }) {
     }
   };
 
-  const sitesRes = await withDeadline(sdk.http.get('/api/v1/sites?pageSize=500'), WRITE_TIMEOUT_MS, 'GetSites');
-  const wanted = config && config.site;
-  let site;
-  try {
-    site = pickSite((sitesRes && sitesRes.data && sitesRes.data.sites) || [], wanted);
-    site.source = 'nf sites api';
-  } catch (e) {
-    if (!e || !e.noCoords) throw e;
-    // NF's Sites collection has no usable coordinates: try the modeled Haystack SITE (never invent any)
-    site = await withDeadline(siteFromModel(sdk.http, wanted), WRITE_TIMEOUT_MS, 'model site lookup');
-    if (!site) throw e;
-    log(`weather location from the ${site.source} (site ${site.id}); NF Sites had none`);
+  // NF passes the app options as ctx.config (numbers can arrive as strings; blank options are "not set")
+  config = settings.normalizeConfig(config);
+  const wanted = config.site;
+  // 1) the hook settings / app options latitude + longitude (an explicit override), 2) NF Sites, 3) the modeled SITE
+  let site = coordsFromConfig(config);
+  if (site) log(`weather location from the ${site.source}`);
+  else {
+    const sites = await withDeadline(listAll(sdk.http, '/api/v1/sites', 'sites'), WRITE_TIMEOUT_MS, 'GetSites');
+    try {
+      site = pickSite(sites, wanted);
+      site.source = 'nf sites api';
+    } catch (e) {
+      if (!e || !e.noCoords) throw e;
+      // NF's Sites collection has no usable coordinates: try the modeled Haystack SITE (never invent any)
+      site = await withDeadline(siteFromModel(sdk.http, wanted), WRITE_TIMEOUT_MS, 'model site lookup');
+      if (!site) throw new Error(`${e.message}; or ${APP_OPTIONS_HINT}`);
+      log(`weather location from the ${site.source} (site ${site.id}); NF Sites had none`);
+    }
   }
   const wx = await getJsonWithRetry(openMeteoUrl(site.latitude, site.longitude), log);
   const cur = wx && wx.current;
@@ -297,5 +328,5 @@ async function runOnce({ globalVariables, sdk, config }) {
 // (node -e "require('./open_meteo_weather.js').magnusDewpointF(70,50)").
 module.exports = Object.assign(
   async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
-  { magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, withDeadline },
+  { magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, withDeadline },
 );

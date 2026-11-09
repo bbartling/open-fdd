@@ -15,9 +15,10 @@
 // with args it fails (a query must never be answered from nowhere).
 // Bounds (server side, hook config `history`: maxPoints 200000, maxSpanDays 3660, minBucketSec 60,
 // statementTimeoutMs 20000): too-fine requests are coarsened (coarsened = true) or rejected; the answer also has
-// coverage / truncated / max_points. Needs hook config `timescale` (same as the fdd hook): the NF database that holds the history and
+// coverage / truncated / max_points. Needs the Timescale connection (app option `timescale`, a JSON string; same as the fdd hook; see lib/settings.js): the NF database that holds the history and
 // has timescale/install.sql applied. Nothing site-specific here.
 const ts = require('./lib/timescale.js');
+const settings = require('./lib/settings.js');
 
 /** Hook arguments: NF passes the StartHook "args" object; accept the common spots (same as sparql.js). */
 const argsOf = (ctx) => {
@@ -28,8 +29,12 @@ const argsOf = (ctx) => {
 /**
  * @param {{ sdk: any, args?: { uuids?: string[], from?: string, to?: string, bucket?: string }, config?: { timescale?: object, history?: object } }} p
  */
-async function handle({ sdk, args = {}, config = {} }) {
+async function handle({ sdk, args = {}, config: rawConfig = {} }) {
   const log = (m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
+  // NF stores hook settings as app OPTIONS and passes them as ctx.config; `timescale` is a JSON string there.
+  // An unusable value (present but not JSON / URL) throws here, naming the option, never its value.
+  const config = settings.normalizeConfig(rawConfig);
+  config.timescale = settings.parseTimescale(config.timescale) || undefined;
   if (!config.timescale) {
     // No Timescale configured. A bare invocation (no args: a blanket `run`, a health check) is a clean skip, not
     // an error; a real query (any args) still fails loudly, so nothing ever answers from the wrong source.
@@ -38,7 +43,7 @@ async function handle({ sdk, args = {}, config = {} }) {
       log(JSON.stringify(result));
       return result;
     }
-    throw new Error('history hook: config.timescale is not set (full edition only)');
+    throw new Error('history hook: Timescale connection settings not found (full edition only): ' + settings.TIMESCALE_WHERE);
   }
   // A database or connection failure is ok:false with the error, never an empty answer; a bad request (arguments)
   // still throws. Database errors carry a string `code` (pg SQLSTATE, ECONNREFUSED, history_timeout ...).

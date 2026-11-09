@@ -83,6 +83,13 @@ control waiting on runs). When the `auto` engine finds no pglite it falls back t
 explicit engine is never swapped. `doctor` is read-only: it re-checks the box at any time and says which layer
 rejected you if auth fails. Neither prints passwords or hashes.
 
+**Hand-edited files on the box (5.0.6).** Every push records the sha256 of each file it wrote in `static/version.json`
+(`files`). The next `push` / `install` compares the box with that record **before writing anything** and stops (exit 4)
+when a file was edited by hand, listing the files. `--save-remote DIR` first downloads the edited box copies to `DIR` for
+review; `--force` overwrites them. An older install has no record: the box is compared with the commit its
+`version.json` names (else with this repo's copy) and a warning says so. `doctor` lists hand-edited files too
+(read-only, a warning). Land a hotfix in the repo instead of leaving it on the box, so the next release carries it.
+
 Lite: use `lite/app.json`. Then open `http://<nf-host>:<port>/api/v1/apps/static/open-fdd/` (or `open-fdd-lite`).
 NF derives the app id from the **name**, so `application.id` in `app.json` must equal the slug of
 `application.name` (CI checks it).
@@ -91,9 +98,10 @@ The lower-level commands stay available: `status`, `diff`, `push` (`--skip-hooks
 (`--hook ID`, `--arg KEY=VALUE`), `pull`, `uninstall`, `remove-old`. A plain `run` skips on-request hooks (`sparql`,
 `analytics`) unless you pass `--arg`, and `history` skips when TimescaleDB is not configured and no args are given.
 
-**Weather coordinates.** The `weather` hook takes latitude and longitude from NF Sites, then, when those are
-empty, from the modeled Haystack site. If neither has them it stops with a clear error; it never
-invents coordinates. Set them on the modeled site in NF.
+**Weather coordinates.** The `weather` hook takes latitude and longitude from the app options `latitude` and
+`longitude` (NF console > the app's settings; an unset or 0/0 option does not count), then NF Sites, then the modeled
+Haystack site. The run's `coords_source` says which. If none has them it stops with an error naming every place; it never
+invents coordinates.
 
 ## 7. Upgrade
 
@@ -151,14 +159,16 @@ Which layer said no? Read the `WWW-Authenticate` header of the 401: `realm="rest
 | 2 | Generic 401 with a portal key env (`NF_CLIENT_ID`) | The portal API key is read-only and cannot deploy | Use `NF_CONSOLE_URL` + `CONSOLE_USERNAME` / `CONSOLE_PASSWORD`. The installer says so. |
 | 3 | `/` opens an old dashboard | The Caddy `/` redirect names a previous app id | Set `APP_ID=open-fdd` (or `open-fdd-lite`) in Caddy's `.env`, restart Caddy. |
 | 4 | `fdd` hook: `Cannot find package '@electric-sql/pglite'` | Push wrote `package.json` but did not install dependencies; the first scheduled run failed | `install` runs the dependency install and restart. By hand: MCP `manage_app install_deps`, then `restart`. |
-| 5 | Weather hook: `no NF site has latitude/longitude` | Coordinates only on the modeled site, Sites API empty | The hook reads the modeled site too. Otherwise set lat/long on the modeled site. |
-| 6 | `history` hook: `config.timescale is not set` | Timescale not configured (optional, full edition) | Expected without Timescale; a blanket `run` skips it. To enable it see "Optional: the TimescaleDB engine". |
+| 5 | Weather hook: `no NF site has latitude/longitude` | No coordinates in the app options, NF Sites or on the modeled site | Set the app options `latitude` / `longitude` (NF console > app settings), or lat/long on the NF site or the modeled site. `doctor` (**weather coords**) says which source it found. |
+| 6 | `history` / `fdd` hook: `Timescale connection settings not found` | The app option `timescale` is not set (NF stores app options, not a hook config) | Expected without Timescale (a blanket `run` skips `history`). To enable it see "Optional: the TimescaleDB engine". |
 | 7 | `sparql` / `analytics` return success with `ok: false` | Started with no args | Give args, or let `run` skip them. |
 | 8 | Dashboard static files 401 with `realm="nf-"` although Caddy lets them through | Opening a path in Caddy skips only Caddy's login; NF's own console auth still applies | Caddy README, "Open pages and NF auth". Recommended: NF console auth off on the loopback listener, Caddy owns the login. |
 | 9 | Orphan weather points after replacing an older app | Deleting an app keeps its hook-created points; no console delete route (405) | `--remove-old` lists them; delete with MCP `delete_points` (dry run first). |
 | 10 | `CERTIFICATE_VERIFY_FAILED` to a self-signed front door | The process does not trust the certificate | `--ca-file <cert.pem>` or `--pin-server-cert`. Never `PYTHONHTTPSVERIFY=0`. |
 | 11 | `doctor`: `[FAIL] connectivity: ... connection refused` | Wrong URL or port. Nothing answered, so the login was never tested. NF may listen on loopback only (`ENVOY_BIND_ADDRESS=127.0.0.1`) | Use the front-door URL (e.g. `https://host`) in `NF_CONSOLE_URL`, not NF's own port; check the listener and any VPN or port-forward. Do not rotate credentials for this. `tls` = trust the certificate (row 10); `auth` = a real 401/403 (rows 1, 2, 8). |
 | 12 | FDD results frozen: `fdd` hook shows success (5.0.3) or fails (5.0.5+), outputs `fddStatus: stale`, history empty | Inputs do not resolve: `required roles missing`, `unit unusable`, or `no input data in window` (the source has no recent rows) | `doctor` (**fdd freshness**). Read the last `fdd` run with `include_results=true` for per-equip reasons. Compare the newest sample in the Timescale source (`SELECT max(ts) FROM openfdd.nf_samples`) with now, and NF's latest values. See [FDD data access](fdd-data-access.html#checking-that-results-are-fresh). |
+| 13 | `install` / `push` stops: `STOPPED: N file(s) on the box differ from what was last pushed (hand-edited on the box)`, exit 4 | A file was edited on the box (a console hotfix) after the last push; overwriting it would lose that edit (5.0.5 did, silently, and broke `fdd`, `history` and `weather`) | Nothing was written. Review the edits: `--save-remote DIR` downloads the box copies. Land the change in the repo, then push; or `--force` to overwrite. `doctor` (**hand edits**) lists them without changing anything. |
+| 14 | `fdd` fails `model empty: 0 equipment resolved from the model layer` / `model incomplete`, or a dashboard or script sees fewer sites or points than exist | NF `point/query` pages by `pageOffset` + `totalCount`, **not** by a next-page token. A reader that only follows a token sees the first 500 records; once published results grew the model layer past 500, the SITE fell off page 1 ([#1550](https://github.com/bbartling/open-fdd/issues/1550)) | Fixed in 5.0.6: every reader uses one pager and fails loudly (`paging cap reached`, `read N of totalCount M`, `repeated records already read`) instead of truncating. Upgrade, then `doctor`. |
 | - | Old page after a deploy | NF caches app static files for 5 minutes | Asset URLs are stamped by `nf_app_sync.py`; otherwise reload with `?v=N`. |
 | - | Hooks return 401 after NF login is enabled | The app needs `auth.apiKey.scopes` in `app.json` | Already in the shipped manifests; keep it when editing. |
 | - | Intermittent empty 403 from `/api/v1/auth/token` | Known NF quirk | Retry. |
@@ -194,30 +204,33 @@ portal. Through the portal, `/api/v1/bacnet/*` is not readable with API-key toke
 ## Optional: the TimescaleDB engine
 
 Full edition only. Enabling NF's Timescale/Postgres connector **alone does not switch Open-FDD to the Timescale
-engine**. The engine is chosen by hook configuration: the `fdd` hook uses it when its `config` has
-`"engine": "timescale"`, or when `engine` is unset or `"auto"` and a `timescale` block is present.
-`"engine": "timescale"` without a `timescale` block fails with a clear error; it never falls back to another engine.
+engine**. The engine is chosen by the app settings: the `fdd` hook uses it when the option `engine` is `timescale`,
+or when `engine` is unset or `auto` and the option `timescale` is set. `engine = timescale` without a usable
+`timescale` setting fails with `Timescale connection settings not found: set the app option "timescale" ...`; it never
+falls back to another engine.
 
-Hooks read the connection settings from their own **hook config** (the `config` object of the hook in
-`nf-app/app.json` / the hook settings in NF, not from the repo). Both the `fdd` and the `history` hook need the same
-`timescale` block. Secrets come from an environment variable named by `passwordEnv`, never from git:
+**Where the settings live (NF 3.10.x).** NF does **not** store a hook-definition `config` (the stored hook shows
+`config: null`) and hands a hook no app environment. What persists is the app's **options** (the app's settings in the
+NF console, or `PATCH /api/v1/apps/<id>`); the hook runtime passes their values to the hook as `ctx.config`, scalars
+only. So both the `fdd` and the `history` hook read the same options:
 
-`fdd` hook config:
+| Option | Type | Meaning |
+|---|---|---|
+| `engine` | string | `auto`, `sqlite`, `pglite` or `timescale` |
+| `windowHours` | number | trailing window per `fdd` run (default 24) |
+| `timescale` | string, secret | the connection as JSON `{"host","port","database","user","password"}`, or a `postgres://` URL |
+| `latitude`, `longitude` | number | weather location (before NF Sites and the modeled site) |
+| `site` | string | which NF site the weather hook uses when several have coordinates |
 
-```json
-{ "engine": "timescale", "windowHours": 24,
-  "timescale": { "host": "127.0.0.1", "port": 5432, "database": "nf", "user": "openfdd_rt", "passwordEnv": "OPENFDD_PG_PASSWORD" } }
-```
-
-`history` hook config:
-
-```json
-{ "timescale": { "host": "127.0.0.1", "port": 5432, "database": "nf", "user": "openfdd_rt", "passwordEnv": "OPENFDD_PG_PASSWORD" },
-  "history": { "maxPoints": 200000, "statementTimeoutMs": 20000 } }
-```
-
-(`history` limits are optional; the values above are the defaults.) Set `OPENFDD_PG_PASSWORD` in the NF app's
-environment, not in `app.json`.
+Nested objects are not an option type, so `timescale` is a JSON **string**, for example
+`{"host":"127.0.0.1","port":5432,"database":"nf","user":"openfdd_rt","password":"..."}`; the hooks parse it
+(`hooks/lib/settings.js`). A value that is set but not valid JSON fails naming the option and never echoes the value (it
+holds a password); the password and any URL credentials are removed from every log line and error. A hook-definition
+`config` object (a NF that stores one, or a test) is still read. `passwordEnv` inside the connection works only if you
+can put that variable into the hook's process environment, which NF 3.10.x does not document; use `password` in the
+secret option. `doctor` (**timescale**) parses the option the way the hooks do, so a value the hooks cannot read fails
+there too. Options are never written from git: set them on the box. The `history` limits (`maxPoints`, `maxSpanDays`,
+`minBucketSec`, `statementTimeoutMs`) are an optional JSON-string option `history`.
 
 Run `nf-app/timescale/install.sql` once as an installer role (it also upgrades an older install), then give the hooks a
 runtime role that can only read NF's tables and write schema `openfdd`. Retention only trims Open-FDD's own tables; trimming

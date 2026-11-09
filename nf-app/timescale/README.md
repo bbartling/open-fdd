@@ -47,14 +47,16 @@ Stop and delete the container: `docker compose -f nf-app/timescale/test/docker-c
    (or let the hook call `install()` on first run, which needs the same rights). Safe to re-run. If the role cannot
    `add_job`, install prints a NOTICE and the fdd hook enforces the cap once a day instead
    (`openfdd.config.job_registered` says which).
-5. Hook config (secrets from env, never the repo), for both the `fdd` and `history` hooks:
+5. App options (set on the box, never in the repo), read by both the `fdd` and `history` hooks. NF 3.10.x stores app
+   options, not a hook-definition config, and passes them to the hook as `ctx.config` (scalars only), so the connection
+   is one JSON **string** option named `timescale`:
    ```json
-   "timescale": { "host": "127.0.0.1", "port": 5432, "database": "nf", "user": "openfdd_rt", "passwordEnv": "OPENFDD_PG_PASSWORD" }
+   {"host":"127.0.0.1","port":5432,"database":"nf","user":"openfdd_rt","password":"..."}
    ```
-   (or `{ "connectionString": "postgres://..." }`). Set `"engine": "timescale"` (or leave `engine` unset / `"auto"`)
-   in the `fdd` hook config; the connector alone does not switch Open-FDD to this engine, the config does. With
-   `engine: "timescale"` and no `timescale` config the hook fails with a clear error instead of falling back.
-
+   (or a `postgres://...` URL). Set the option `engine` to `timescale` (or leave it unset / `auto`); the connector
+   alone does not switch Open-FDD to this engine, the options do. With `engine = timescale` and no usable
+   `timescale` option the hook fails with `Timescale connection settings not found` instead of falling back. The
+   value is never logged. See [Install](../../docs/install.md#optional-the-timescaledb-engine).
 ## Installer role vs runtime role
 
 | | Installer (run `install.sql`, owns the job) | Runtime (the hooks connect as this role) |
@@ -148,8 +150,8 @@ before it queries: positive finite times with `from < to`, span at most 3660 day
 (buckets per series) x (uuids) at most `maxPoints` (200000). A request that is too fine is **coarsened** to a larger
 bucket (`coarsened: true`, `requested_bucket` kept) or rejected (`"coarsen": false`). The query runs in a transaction
 with `SET LOCAL statement_timeout` (20 s) and `LIMIT maxPoints + 1`; the answer carries `coverage` (per-uuid buckets /
-samples / first / last, uuids without data), `truncated` and `max_points`. Limits are server side, in hook config
-`history` (`maxPoints`, `maxSpanDays`, `minBucketSec`, `statementTimeoutMs`, `maxBytes`, `maxUuids`), never from the request.
+samples / first / last, uuids without data), `truncated` and `max_points`. Limits are server side, in the option
+`history` (a JSON string) (`maxPoints`, `maxSpanDays`, `minBucketSec`, `statementTimeoutMs`, `maxBytes`, `maxUuids`), never from the request.
 
 Scales (issue #1541): `loadHistory` never decides a scale itself. The `fdd` hook's `siPlan` (driven by `sql/fdd/role_scales.json`)
 decides per role and passes `fractionRoles` (roles divided by 100: declared-% fraction or boolean roles) and `booleanRoles`

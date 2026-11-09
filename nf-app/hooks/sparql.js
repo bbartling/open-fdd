@@ -25,7 +25,7 @@ const path = require('path');
 const vm = require('vm');
 
 const STATIC = path.join(__dirname, '..', 'static');
-const PAGE = 500;
+const { queryPoints } = require('./lib/paging.js');
 const MAX_QUERY_CHARS = 20000;
 // Refuse models bigger than this before evaluating. Ceiling from env OPENFDD_SPARQL_MAX_TRIPLES (default
 // 500000); a caller's args.maxTriples may only lower it.
@@ -75,16 +75,8 @@ function loadShared() {
   return { toPoint: get('toPoint'), idOf: get('idOf'), ENTITY_TYPES: get('ENTITY_TYPES'), modelToTurtle: get('modelToTurtle') };
 }
 
-async function queryAll(http, body) {
-  const out = [];
-  let pageToken = '';
-  do {
-    const { data } = await http.post('/api/v1/point/query', { pageSize: PAGE, ...body, ...(pageToken && { pageToken }) });
-    out.push(...((data && data.points) || []));
-    pageToken = (data && data.nextPageToken) || '';
-  } while (pageToken);
-  return out;
-}
+// the shared pager (lib/paging.js): pageOffset + totalCount or a token, loud on a cap or short read (#1550)
+const queryAll = (http, body) => queryPoints(http, body);
 
 async function loadModel(http, shared) {
   const recs = await queryAll(http, { layer: 'model' });

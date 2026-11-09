@@ -5,6 +5,10 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.6
+
+- Fixes the frozen `fdd` results and the failed `fdd` / `history` / `weather` runs of [#1550](https://github.com/bbartling/open-fdd/issues/1550): NF pages `point/query` by `pageOffset` (every reader now pages correctly and fails loudly instead of truncating), the hooks read the Timescale connection and the weather coordinates from the app options NF actually stores, an empty model gets its own failure reason, and `install` stops instead of overwriting files edited on the box (`--save-remote`, `--force`). See [Troubleshooting](install.html#10-troubleshooting).
+
 ## 5.0.5
 
 - The deploy `doctor` labels failures correctly: `connectivity` (refused, DNS, unreachable, timeouts), `tls` and `auth` (real 401/403 only), fixing [#1549](https://github.com/bbartling/open-fdd/issues/1549). See [Troubleshooting](install.html#10-troubleshooting).

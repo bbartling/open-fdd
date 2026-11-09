@@ -3,6 +3,18 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.6 — 2026-11-09 (app) / open-fdd 4.5.3 (PyPI)
+
+Patch for a live site where `fdd`, `history` and `weather` all failed every run after installing 5.0.5 ([#1550](https://github.com/bbartling/open-fdd/issues/1550)).
+
+### Fixed
+
+1. **Point-query paging** (the real cause of the frozen `fdd` results). NF `POST /api/v1/point/query` returns `totalCount` and **no next-page token**; it pages with `pageOffset`. Every reader followed only a token, so it read the first 500 records. Once results published by the `fdd` hook grew the model layer past 500 records the SITE fell off page 1, every run saw `0 equips` and wrote nothing. One pager per runtime now follows a token when there is one, else `pageOffset` until `totalCount` (or an empty / short page), and ends loudly on a repeated page, a short read or a hard cap (200000 records / 1000 pages); it never returns a truncated list. Hooks (`fdd`, `analytics`, `sparql`, `weather`: `nf-app/hooks/lib/paging.js`; the Lite weather hook inline), the static pages (`static/nf.js` `pageAll`, full and Lite; `schedule.js` gets a cap), `nf_app_sync.py` (`doctor` freshness and weather checks, the orphan scan), `scripts/nf/tools`, and `open_fdd.nf.NFClient.query_all` / `sites` (`page_all`). The dev mock NF now pages like NF.
+2. **Hooks could not read the Timescale connection or the site coordinates.** NF stores app **options**, not a hook-definition `config`, and passes the option values to the hook as `ctx.config` (scalars only). `fdd`, `history` and `weather` now read them that way: `timescale` is a JSON string (or a `postgres://` URL), `windowHours` / `latitude` / `longitude` may be strings, blank options are "not set". Weather coordinates: the `latitude` / `longitude` options, then NF Sites, then the modeled site. A missing or unusable setting fails with one message naming where to set it (`Timescale connection settings not found: set the app option "timescale" ...`); the password and URL credentials never reach a log or error. `docs/install.md` documents the real mechanism (the old hook-config + `OPENFDD_PG_PASSWORD` instructions did not work on NF 3.10.x).
+3. **"0 equipment" was reported as "required roles missing".** The `fdd` hook now fails with its own reason: `model empty: 0 equipment resolved from the model layer (...; N model records read of totalCount M)`, `model incomplete: ... although N published results exist`, or `model incomplete: N equipment but 0 points loaded`.
+4. **`install` silently overwrote files edited on the box.** Every push records a manifest (sha256 per file) in `static/version.json`. The next `push` / `install` compares the box with it first and stops (exit 4, nothing written) when a file was hand-edited, listing the files; `--save-remote DIR` downloads the edited copies, `--force` overwrites. An older install without a manifest is compared with its installed commit (else the repo copy) with a warning. `doctor` lists hand-edited files (read-only). Text files are now uploaded with LF line endings whatever `core.autocrlf` is.
+5. **`doctor` said `timescale: configured` when the hooks could not read it.** It now parses the `timescale` option the way the hooks do and fails on an unreadable value (never printing it); `weather coords` also reads the app options.
+
 ## 5.0.5 — 2026-11-09
 
 Diagnostics patch: the deploy `doctor` names what actually failed, and the `fdd` hook can no longer report success while writing nothing.

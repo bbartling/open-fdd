@@ -434,7 +434,7 @@ def doctor_nf(tmp_path, *, deps=True, hook_state="STATE_SUCCESS", sites=None, mo
     app = nf.app_rec("new-app", "9.9.9 (abc1234)")
     app["hooks"] = [dict(h) for h in m["hooks"]]
     if timescale:
-        app["options"].append({"name": "timescale", "value": {"string": "{}"}})
+        app["options"].append({"name": "timescale", "value": {"string": '{"host": "db.example"}'}})
     nf.store["new-app"] = app
     nf.files[("new-app", "/static/version.json")] = json.dumps({"version": "9.9.9"}).encode()
     nf.deps_installed = deps
@@ -453,7 +453,7 @@ def test_doctor_all_green(tmp_path, capsys):
     assert sync.cmd_doctor(nf, m) == 0
     out = capsys.readouterr().out
     for want in ("[PASS] auth", "[PASS] version", "[PASS] deps", "[PASS] hook fdd", "[PASS] weather coords: NF Sites API",
-                 "[PASS] timescale: configured", "[PASS] / redirect", "all checks passed"):
+                 '[PASS] timescale: app option "timescale" parses', "[PASS] / redirect", "all checks passed"):
         assert want in out, out
 
 

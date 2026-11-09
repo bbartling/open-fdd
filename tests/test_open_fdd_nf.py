@@ -129,7 +129,7 @@ def test_query_all_pages(fake):
 
 def test_query_all_rejects_repeated_page_token(fake):
     fake.handlers["/api/v1/point/query"] = [(200, {"points": [{"uuid": "a"}], "nextPageToken": "same"})]
-    with pytest.raises(NFError, match="repeated pageToken"):
+    with pytest.raises(NFError, match="repeated"):
         quick(fake.url).query_all("default")
 
 

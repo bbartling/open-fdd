@@ -27,6 +27,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # scripts/nf: the shared pager
+from nf_paging import page_all  # noqa: E402
+
 UA = "open-fdd-nf-tools/1.0"
 # Transient errors worth retrying. NF's Envoy front occasionally answers the token call with an
 # empty-body 403 that succeeds moments later (seen on LAN and portal alike).
@@ -138,16 +141,11 @@ def field(prop: str, text: str) -> dict:
 
 def query(base: str, token: str, layer: str, *clauses: dict) -> list[dict]:
     """point/query on one layer, AND of the given field clauses (one marker per clause), all pages."""
-    body: dict = {"pageSize": 500, "layer": layer}
+    body: dict = {"layer": layer}
     if clauses:
         body["structuredQuery"] = clauses[0] if len(clauses) == 1 else {"and": list(clauses)}
-    out: list[dict] = []
-    while True:
-        page = request(f"{base}/api/v1/point/query", body, token)
-        out.extend(page.get("points") or [])
-        body["pageToken"] = page.get("nextPageToken") or ""
-        if not body["pageToken"]:
-            return out
+    # NF pages by pageOffset + totalCount (no next-page token, #1550): the shared pager handles both
+    return page_all(lambda p: request(f"{base}/api/v1/point/query", {**body, **p}, token), "points", what="point/query")
 
 
 def markers(rec: dict) -> list[str]:

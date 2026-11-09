@@ -29,6 +29,10 @@ read-only and cannot deploy).
     python3 $S --env $ENV run    $M --hook fdd --wait 900 | --resume 12345
     python3 $S --env $ENV pull   $M | diff $M
 
+    # hand-edited files on the box: push/install STOP and list them (exit 4, nothing written) unless
+    python3 $S --env $ENV install $M --save-remote ./box-copies   # download the edited box copies first (then it still stops)
+    python3 $S --env $ENV install $M --force                      # overwrite them
+
 Dependencies: NF installs an app's ``package.json`` with ``PATCH /api/v1/apps/<id>/dependencies`` (then the
 runtimes restart). ``push`` does that after writing ``package.json`` and before the hooks are (re)started;
 ``--skip-deps`` leaves it out. sql.js is vendored, so the sqlite engine needs no npm install.
@@ -40,7 +44,13 @@ fetches the leaf the server presents, prints its SHA-256 fingerprint and trusts 
 ``run`` does not touch the schedule. It waits for each run up to the hook's ``invokeTimeout`` + 60 s
 (``--wait SECONDS`` overrides). If the wait runs out the run is reported as still running with its pid
 and the exit status is 3 (1 = a run failed, including a hook that returns ``ok: false``); the hook is never
-started a second time: use ``--resume PID``. Never prints passwords or the app's API client secret
+started a second time: use ``--resume PID``. Installer guard: every push records the sha256 of each file it wrote in ``static/version.json`` (``files``). The next
+push / install compares the box with that manifest first and STOPS (exit 4, nothing written) when a file was edited by
+hand on the box; an older install without a manifest is compared with the installed commit's copy (or this repo's).
+``--save-remote DIR`` downloads the edited box copies for review, ``--force`` overwrites them, ``doctor`` lists them
+(read-only). Text files are uploaded with LF line endings whatever core.autocrlf is.
+
+Never prints passwords or the app's API client secret
 (GetApplications returns it; this script drops it).
 """
 
@@ -67,6 +77,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # scripts/nf: the shared point/query pager
+from nf_paging import PagingError, page_all  # noqa: E402
 
 UA = "openfdd-nf-app-sync/1.0"
 
@@ -295,12 +308,25 @@ ASSET_REF = re.compile(r'(?<![\w-])(src|href)="(?![a-z][a-z0-9+.-]*:|/|#)([^"?#]
 STAMP = re.compile(r'(\.(?:js|mjs|css))\?v=[0-9a-f]{10}"')
 
 
+TEXT_SUFFIXES = (".js", ".mjs", ".json", ".css", ".html", ".sql", ".md", ".txt", ".svg")
+
+
+def lf_bytes(rel: str, data: bytes) -> bytes:
+    """Text files go to the box with LF line endings whatever the checkout's core.autocrlf (a Windows checkout would
+    otherwise upload CRLF files, +1 byte per line, and every box copy would differ from the git blob). Binary
+    files (.wasm, ...) are untouched."""
+    name = rel.rsplit("/", 1)[-1].lower()
+    if name.endswith(TEXT_SUFFIXES) or name.startswith("license"):
+        return data.replace(b"\r\n", b"\n")
+    return data
+
+
 def deploy_bytes(m: dict, rel: str) -> bytes:
-    """File bytes as deployed. HTML gets each local asset reference stamped with the asset's
-    content hash (app.js -> app.js?v=<sha256[:10]>): NF serves app files with a 5-minute cache,
+    """File bytes as deployed (LF line endings for text files). HTML gets each local asset reference stamped with
+    the asset's content hash (app.js -> app.js?v=<sha256[:10]>): NF serves app files with a 5-minute cache,
     so a changed file needs a new URL or browsers mix old and new files after a deploy."""
     path = m["_dir"] / rel
-    data = path.read_bytes()
+    data = lf_bytes(rel, path.read_bytes())
     if not rel.endswith(".html"):
         return data
 
@@ -308,7 +334,7 @@ def deploy_bytes(m: dict, rel: str) -> bytes:
         asset = path.parent / mo.group(2)
         if not asset.is_file():
             return mo.group(0)
-        digest = hashlib.sha256(asset.read_bytes()).hexdigest()[:10]
+        digest = hashlib.sha256(lf_bytes(mo.group(2), asset.read_bytes())).hexdigest()[:10]
         return f'{mo.group(1)}="{mo.group(2)}?v={digest}"'
 
     return ASSET_REF.sub(stamp, data.decode("utf-8")).encode("utf-8")
@@ -453,15 +479,146 @@ def report_deps(res: dict, app_id: str) -> None:
               f"(seen {len(res['present'])}/{len(res['names'])}). The first hook run below confirms them")
 
 
+# ---------------------------------------------------------------- installer guard: hand-edited files on the box
+
+EXIT_DRIFT = 4          # push/install stopped: files on the box were edited by hand (nothing was written)
+PUSH_MANIFEST_KEY = "files"   # static/version.json -> {"files": {"/hooks/x.js": sha256, ...}}: what the last push wrote
+
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def remote_version_info(c, app_id: str) -> dict:
+    """The box's static/version.json as a dict ({} when absent or unreadable)."""
+    try:
+        raw = c.read_file(app_id, "/static/version.json")
+        info = json.loads(raw.decode()) if raw else {}
+    except (SystemExit, ValueError, UnicodeDecodeError):
+        return {}
+    return info if isinstance(info, dict) else {}
+
+
+def commit_blob(m: dict, rel: str, commit: str) -> bytes | None:
+    """The repo file `rel` as it was in `commit` (git show), LF-normalized; None when git or the commit is not available."""
+    if not re.fullmatch(r"[0-9a-f]{7,40}", commit or ""):
+        return None
+    try:
+        path = (m["_dir"] / rel).resolve()
+        root = next((d for d in [path.parent, *path.parents] if (d / "VERSION").is_file()), None)
+        if root is None:
+            return None
+        out = subprocess.run(["git", "show", f"{commit}:{path.relative_to(root).as_posix()}"], cwd=root,
+                             capture_output=True, timeout=30, check=True).stdout
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return lf_bytes(rel, out)
+
+
+def find_drift(c, m: dict) -> dict:
+    """Which files on the box were edited by hand since the last push. Read-only.
+
+    Baseline, best first:
+      "manifest"  the sha256 of every file the last push wrote (static/version.json "files"): the exact answer;
+      "commit"    no manifest (an older install): the same file in the git commit version.json names, when this
+                  checkout has it;
+      "repo"      neither: this repo's copy of the same file.
+    A file the push would write byte for byte is never drift (nothing would be lost). Returns
+    {"baseline", "commit", "drifted": [nf_path], "remote": {nf_path: bytes}, "checked": n}; no app = nothing to lose."""
+    app_id = m["application"]["id"]
+    out = {"baseline": "none", "commit": "", "drifted": [], "remote": {}, "checked": 0}
+    if not c.app(app_id):
+        return out
+    info = remote_version_info(c, app_id)
+    pushed = info.get(PUSH_MANIFEST_KEY) if isinstance(info.get(PUSH_MANIFEST_KEY), dict) else None
+    commit = str(info.get("commit") or "")
+    out["baseline"] = "manifest" if pushed is not None else "commit" if commit else "repo"
+    out["commit"] = commit
+    for nf_path, rel in m["files"].items():
+        remote = c.read_file(app_id, nf_path)
+        if remote is None:
+            continue                       # not on the box yet: nothing to lose
+        out["checked"] += 1
+        local = deploy_bytes(m, rel) if (m["_dir"] / rel).is_file() else b""
+        if remote == local:
+            continue
+        if pushed is not None:
+            edited = pushed.get(nf_path) != sha256_hex(remote)   # also: a file the last push did not write
+        else:
+            blob = commit_blob(m, rel, commit) if commit else None
+            if blob is None:               # no usable commit: compare with this repo's copy
+                out["baseline"] = "repo"
+                edited = True
+            else:
+                seen = strip_stamps(remote) if rel.endswith(".html") else remote
+                edited = lf_bytes(rel, seen) != blob
+        if edited:
+            out["drifted"].append(nf_path)
+            out["remote"][nf_path] = remote
+    return out
+
+
+def baseline_text(drift: dict) -> str:
+    return {"manifest": "what was last pushed", "commit": f"the copy in the installed commit {drift['commit'][:7]}",
+            "repo": "this repo's copy"}.get(drift["baseline"], "the repo")
+
+
+def save_remote_files(drift: dict, folder: Path) -> list[Path]:
+    """Download (already read) hand-edited box files under `folder`, keeping their NF paths. Returns the files."""
+    root = folder.expanduser().resolve()
+    saved = []
+    for nf_path, data in drift["remote"].items():
+        target = (root / nf_path.lstrip("/")).resolve()
+        if root not in target.parents:
+            raise SystemExit(f"refusing to save {nf_path!r} outside {root}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        saved.append(target)
+    return saved
+
+
+def guard_pushed_files(c, m: dict, force: bool = False, save_remote: Path | None = None) -> int:
+    """Run before a push writes anything. 0 = go ahead; EXIT_DRIFT = stop (nothing was written)."""
+    drift = find_drift(c, m)
+    if drift["baseline"] == "none" or not drift["checked"]:
+        return 0
+    if drift["baseline"] != "manifest":
+        print("push: WARNING: the box has no push manifest (it was installed by an older release), so a hand edit cannot "
+              f"be told from an older version; comparing each file on the box with {baseline_text(drift)}")
+    names = drift["drifted"]
+    if not names:
+        print(f"push: no hand-edited files on the box ({drift['checked']} files match {baseline_text(drift)})")
+        return 0
+    if save_remote:
+        saved = save_remote_files(drift, save_remote)
+        print(f"push: saved {len(saved)} box copies of the files below to {save_remote} (for review)")
+    if force:
+        print(f"push: --force: overwriting {len(names)} file(s) on the box that differ from {baseline_text(drift)}:")
+        for n in names:
+            print(f"  {n}")
+        return 0
+    print(f"push: STOPPED: {len(names)} file(s) on the box differ from {baseline_text(drift)} (hand-edited on the box):")
+    for n in names:
+        print(f"  {n}")
+    print("Pushing would overwrite them; nothing was written. To keep their changes: re-run with --save-remote DIR "
+          "(downloads the box copies to DIR for review), land the edits in the repo, then push. "
+          "To overwrite them anyway: re-run with --force.")
+    return EXIT_DRIFT
+
+
 # ---------------------------------------------------------------- push
 
 def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str] | None = None,
-             skip_deps: bool = False, clock=time.monotonic, sleep=time.sleep) -> int:
+             skip_deps: bool = False, clock=time.monotonic, sleep=time.sleep,
+             force: bool = False, save_remote: Path | None = None) -> int:
     spec = m["application"]
     app_id = spec["id"]
     if spec.get("name") and app_slug(spec["name"]) != app_id:
         raise SystemExit(f"manifest id {app_id!r} != NF's id for name {spec['name']!r} ({app_slug(spec['name'])!r}); "
                          "NF ignores the id on create, so make them match")
+    rc = guard_pushed_files(c, m, force, save_remote)   # before anything is written
+    if rc:
+        return rc
     if not c.app(app_id):
         print(f"creating app {app_id}")
         c.call("POST", "/api/v1/apps", spec)
@@ -472,10 +629,12 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
             sleep(2)
     elif spec.get("auth"):
         c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "auth": spec["auth"], "updateMask": ["auth"]})
+    pushed: dict[str, str] = {}      # sha256 of every file this push wrote: the baseline of the next push's guard
     for nf_path, rel in m["files"].items():
         data = deploy_bytes(m, rel)
         # WriteFile maps the HTTP body to the bytes field: send a JSON string of base64.
         c.call("POST", f"/api/v1/apps/{app_id}/files{nf_path}", base64.b64encode(data).decode())
+        pushed[nf_path] = sha256_hex(data)
         print(f"wrote {nf_path} ({len(data)} bytes)")
     # Dependencies BEFORE the hooks are (re)started: a scheduled hook fires right after the restart, and one that
     # starts without its packages records a failed run.
@@ -483,6 +642,7 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
         report_deps(install_deps(c, m, clock, sleep), app_id)
     # The version the UI shows (static/version.js): generated from the repo, never committed.
     info = version_info(m["_dir"])
+    info[PUSH_MANIFEST_KEY] = pushed     # the push manifest: what a later push / doctor compares the box against
     c.call("POST", f"/api/v1/apps/{app_id}/files/static/version.json",
            base64.b64encode(json.dumps(info).encode()).decode())
     print(f"wrote /static/version.json (v{info['version']} {info['commit'][:7]}{'+dirty' if info['dirty'] else ''})")
@@ -704,15 +864,15 @@ def preflight(c, m: dict) -> dict:
     return apps
 
 
+def query_pages(c, body: dict) -> list[dict]:
+    """POST /api/v1/point/query, every page (read-only). NF pages by pageOffset + totalCount, not only by a
+    next-page token (#1550): the shared pager (scripts/nf/nf_paging.py) follows either and never returns a truncated
+    list: a cap, a paging loop or a short read stops with a PagingError message."""
+    return page_all(lambda p: c.call("POST", "/api/v1/point/query", {**body, **p}) or {}, "points", what="point/query")
+
+
 def automation_points(c) -> list[dict]:
-    out, token = [], ""
-    while True:
-        r = c.call("POST", "/api/v1/point/query",
-                   {"layer": "automation", "pageSize": 500, **({"pageToken": token} if token else {})}) or {}
-        out.extend(r.get("points") or [])
-        token = r.get("nextPageToken") or ""
-        if not token:
-            return out
+    return query_pages(c, {"layer": "automation"})
 
 
 def orphan_points(points: list[dict], installed: set[str], removing: set[str]) -> list[dict]:
@@ -810,7 +970,11 @@ def verify_install(c, m: dict, skip_run: bool = False, wait: float | None = None
 
 def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
     apps = preflight(c, m)
-    rc = cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, clock, sleep)
+    rc = cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, clock, sleep,
+                  getattr(a, "force", False), getattr(a, "save_remote", None))
+    if rc == EXIT_DRIFT:      # hand-edited files on the box: nothing was written, nothing to verify
+        print(f"install: STOPPED (exit {rc}): hand-edited files on the box (see above); the box was not changed")
+        return rc
     rc = verify_install(c, m, a.skip_verify_run, a.wait, clock, sleep) or rc
     if a.remove_old:
         if rc:
@@ -836,10 +1000,39 @@ def coords_ok(rec_attrs: dict) -> bool:
         return bool(re.search(r"C\(\s*-?\d", str(rec_attrs.get("geoCoord") or "")))
 
 
-def weather_coords_source(c) -> tuple[str, str]:
-    """('pass'|'fail', text): where the weather hook would get its coordinates, in the hook's own order."""
+def option_scalar(app: dict | None, name: str):
+    """The value of an app option as a Python scalar (string / number / bool), or None when the option is not defined
+    or its value is empty. NF shows a value as {"string": ..} / {"double": ..} / {"signed": ..} / {"boolean": ..}."""
+    for o in (app or {}).get("options", []):
+        if o.get("name") != name:
+            continue
+        for v in ((o.get("value") or {}).values()):
+            if v is not None and str(v).strip() != "":
+                return v
+    return None
+
+
+def option_defined(app: dict | None, name: str) -> bool:
+    return any(o.get("name") == name for o in (app or {}).get("options", []))
+
+
+def option_coords(app: dict | None) -> tuple[float, float] | None:
+    """(latitude, longitude) from the app options the weather hook reads first; None when unset (both 0 = unset)."""
     try:
-        sites = (c.call("GET", "/api/v1/sites?pageSize=500") or {}).get("sites", [])
+        la, lo = float(option_scalar(app, "latitude")), float(option_scalar(app, "longitude"))
+    except (TypeError, ValueError):
+        return None
+    return None if (la == 0 and lo == 0) or abs(la) > 90 or abs(lo) > 180 else (la, lo)
+
+
+def weather_coords_source(c, app: dict | None = None) -> tuple[str, str]:
+    """('pass'|'fail', text): where the weather hook would get its coordinates, in the hook's own order:
+    the app options latitude + longitude, NF Sites, then the modeled Haystack site."""
+    if option_coords(app):
+        return "pass", "app options latitude/longitude are set (the weather hook reads them first)"
+    try:
+        sites = page_all(lambda p: c.call("GET", "/api/v1/sites?pageSize=%d%s" % (
+            p["pageSize"], f"&pageOffset={p['pageOffset']}" if p.get("pageOffset") else "")) or {}, "sites", what="sites")
     except SystemExit as e:
         sites = []
         note = f" (sites API: {e})"
@@ -849,13 +1042,17 @@ def weather_coords_source(c) -> tuple[str, str]:
         return "pass", "NF Sites API has coordinates"
     for layer in ("model", "site"):
         try:
-            pts = (c.call("POST", "/api/v1/point/query", {"layer": layer, "pageSize": 500}) or {}).get("points", [])
-        except SystemExit:
+            pts = query_pages(c, {"layer": layer})
+        except SystemExit as e:
+            if isinstance(e, PagingError):    # a truncated model must not read as "no coordinates"
+                return "fail", f"could not read the {layer} layer completely: {e}"
             continue
         for p in pts:
             if (layer == "site" or p.get("pointType") == "SITE") and coords_ok(p.get("attrs") or {}):
                 return "pass", f"modeled Haystack site on the {layer} layer has coordinates (NF Sites has none)"
-    return "fail", "no coordinates in NF Sites or on the modeled SITE; the weather hook will fail" + note
+    return "fail", ("no coordinates in the app options, NF Sites or on the modeled SITE; the weather hook will fail. "
+                    'Set the app options "latitude" and "longitude" (NF console > app settings), or latitude/longitude '
+                    "on the NF site or the modeled site" + note)
 
 
 RRULE_SECONDS = {"SECONDLY": 1, "MINUTELY": 60, "HOURLY": 3600, "DAILY": 86400, "WEEKLY": 604800}
@@ -881,19 +1078,6 @@ def parse_ts(value) -> datetime.datetime | None:
     except ValueError:
         return None
     return t if t.tzinfo else t.replace(tzinfo=datetime.timezone.utc)
-
-
-def query_pages(c, body: dict, max_pages: int = 40) -> list[dict]:
-    """POST /api/v1/point/query, following nextPageToken (read-only; capped so a huge site cannot stall the doctor)."""
-    out: list[dict] = []
-    token = ""
-    for _ in range(max_pages):
-        r = c.call("POST", "/api/v1/point/query", {"pageSize": 500, **body, **({"pageToken": token} if token else {})}) or {}
-        out.extend(r.get("points") or [])
-        token = r.get("nextPageToken") or ""
-        if not token:
-            break
-    return out
 
 
 def human_age(seconds: float) -> str:
@@ -954,6 +1138,55 @@ def fdd_freshness(c, interval: int, now: datetime.datetime) -> tuple[str, str]:
     return "fail", (f"computed results {got}, more than 2x the schedule ({sched}) while raw history is fresh "
                     f"(newest sample {human_age(max(r_age, 0))} ago){stale_note}. The fdd hook is not producing output: "
                     "read its last run (include_results=true) for the per-equip skip reasons")
+
+
+def timescale_check(app: dict) -> tuple[str, str]:
+    """('PASS'|'WARN'|'FAIL', text): can the hooks read a Timescale connection? Judged the way the hooks read it
+    (hooks/lib/settings.js): the app option "timescale" is a JSON string with host / connectionString (or a postgres://
+    URL); NF stores no hook-definition config. The value is never printed."""
+    engine = str(option_scalar(app, "engine") or "").lower()
+    raw = option_scalar(app, "timescale")
+    if raw is None:
+        if option_defined(app, "timescale"):
+            return "WARN", ('app option "timescale" is defined but has no value (or NF does not show it here); the hooks '
+                            "read it as ctx.config: run the history hook once to confirm")
+        if any((h.get("config") or {}).get("timescale") for h in app.get("hooks", [])):
+            return "WARN", ("a hook-definition config \"timescale\" is set, but NF 3.10.x does not store hook config "
+                            'for hooks to read: set the app option "timescale" instead (docs/install.md)')
+        if engine == "timescale":
+            return "FAIL", ('engine option is "timescale" but no Timescale connection setting was found: set the app '
+                            'option "timescale" (JSON string {"host","port","database","user","password"} or a postgres:// URL)')
+        return "PASS", "not configured (history hook skips with a notice; fdd uses sqlite/pglite)"
+    text = str(raw).strip()
+    if re.match(r"postgres(ql)?://", text, re.I):
+        return "PASS", 'app option "timescale" is a postgres:// URL (value not shown)'
+    try:
+        obj = json.loads(text) if text.startswith("{") else None
+    except ValueError:
+        obj = None
+    if not isinstance(obj, dict):
+        return "FAIL", ('app option "timescale" is set but is not valid JSON (an object with host) or a postgres:// URL, '
+                        "so the hooks cannot read it (value not shown)")
+    if not (obj.get("host") or obj.get("connectionString")):
+        return "FAIL", 'app option "timescale" parses but has no "host" or "connectionString" (value not shown)'
+    return "PASS", 'app option "timescale" parses and names a host (value not shown)'
+
+
+def hand_edit_line(drift: dict) -> tuple[str, str, str]:
+    """(level, what, text) for doctor: files on the box that differ from the last push (read-only)."""
+    if drift["baseline"] == "none":
+        return "PASS", "hand edits", "nothing installed to compare"
+    names = drift["drifted"]
+    shown = ", ".join(names[:10]) + (f", ... (+{len(names) - 10} more)" if len(names) > 10 else "")
+    if not names:
+        return "PASS", "hand edits", f"none ({drift['checked']} files match {baseline_text(drift)})"
+    if drift["baseline"] == "manifest":
+        return "WARN", "hand edits", (f"{len(names)} file(s) on the box differ from what was last pushed (edited by hand): "
+                                      f"{shown}. The next push/install stops until you pass --force "
+                                      "(--save-remote DIR keeps the box copies first)")
+    return "WARN", "hand edits", (f"no push manifest on the box (older release): {len(names)} file(s) differ from "
+                                  f"{baseline_text(drift)}: {shown}. The next push/install stops until you pass --force "
+                                  "(--save-remote DIR keeps the box copies first)")
 
 
 def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
@@ -1021,7 +1254,7 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
             line("FAIL", f"hook {h['id']}", f"last run {last.get('state')}: "
                  f"{(result_failure(last) or text or '')[:160].strip()}")
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
-        lvl, text = weather_coords_source(c)
+        lvl, text = weather_coords_source(c, a)
         line("PASS" if lvl == "pass" else "FAIL", "weather coords", text)
     fdd_def = next((h for h in a.get("hooks", []) if h.get("id") == "fdd"), None)
     fdd_man = next((h for h in m["hooks"] if h.get("id") == "fdd"), None)
@@ -1033,10 +1266,14 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
         except SystemExit as e:
             lvl, text = "warn", f"could not read the points to compare ages ({e})"
         line(lvl.upper(), "fdd freshness", text)
-    has_ts = option_value(a, "timescale") is not None or any(
-        (h.get("config") or {}).get("timescale") for h in a.get("hooks", []))
-    line("PASS", "timescale", "configured (value not shown)" if has_ts else
-         "not configured (history hook skips with a notice; fdd uses sqlite/pglite)")
+    lvl, text = timescale_check(a)
+    line(lvl, "timescale", text)
+    try:
+        drift = find_drift(c, m)
+    except SystemExit as e:
+        line("WARN", "hand edits", f"could not compare the files on the box ({e})")
+    else:
+        line(*hand_edit_line(drift))
     code, headers = c.probe("/")
     target = f"/api/v1/apps/static/{app_id}/"
     if code in (301, 302, 303, 307, 308):
@@ -1081,6 +1318,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="push/install: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
     ap.add_argument("--skip-deps", action="store_true",
                     help="push/install: do not install package.json dependencies (PATCH /api/v1/apps/<id>/dependencies)")
+    ap.add_argument("--force", action="store_true",
+                    help="push/install: overwrite files on the box that were edited by hand (default: stop and list them)")
+    ap.add_argument("--save-remote", type=Path, metavar="DIR",
+                    help="push/install: first download the hand-edited box copies to DIR (same folder layout) for review")
     ap.add_argument("--skip-verify-run", action="store_true",
                     help="install: do not run the scheduled hooks once to verify")
     ap.add_argument("--remove-old", action="store_true",
@@ -1123,7 +1364,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
-        return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps)
+        return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, force=a.force, save_remote=a.save_remote)
     if a.action == "run":
         return cmd_run(c, m, a.hooks, a.wait, a.resume, args=parse_args(a.hook_args) or None)
     if a.action == "install":
