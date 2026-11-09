@@ -130,3 +130,11 @@ Cloud backup itself works: it uploads about daily; contents are configuration, n
   docker exec <nf-container> grep -n -A3 '/api/v1/apps' /etc/envoy/envoy.yaml.template
   docker exec <nf-container> sh -c 'cd /usr/share/nginx/html/assets && grep -o -h -E "\{name:\"[A-Za-z]+\",options:\{\"google.api.http\":\{[a-z]+:\"/api/v1/bacnet[^\"]*\"" *.js | sort -u'
   ```
+
+## Open-FDD installer / hooks (5.0.8+)
+
+- **Missing app-file GET may be HTTP 500** (Content-Type: application/grpc, empty body), not 404. The hand-edit guard treats that signature as missing only for paths that are new relative to the box. Every other 500 still aborts.
+- **StartHook args are string?string.** Coerce JSON uuids and windowHours before use (history.js; shared helper tracked in #1559).
+- **Windows cp1252:** 
+f_app_sync verify printing must tolerate non-cp1252 Unicode in hook events (#1560).
+- **Live patching is last resort.** Save remote, patch one file, commit identical bytes in git, refresh push-manifest hashes; see repo-root AGENTS.md.

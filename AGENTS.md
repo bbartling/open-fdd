@@ -78,6 +78,21 @@ minutes, so reload with `?v=N` after a deploy.
 - Never reintroduce Rust, GHCR images, a second historian or a second auth system; NF owns those.
 - Never edit generated files by hand (`fdd-catalog.json`, `rules/pack-*.json`, `docs/fdd-rules.md`).
 
+## Live patching a box (last resort)
+
+Prefer **halt-and-issue**: reproduce locally, fix on a `patch/5.0.x-...` branch, open a PR, and let the deploy agent push a release. Do not leave box-only edits that the next `install` / `push` will overwrite or that the hand-edit guard will block.
+
+When a live hotfix is unavoidable (for example a StartHook type error that blocks verification after an otherwise good install):
+
+1. **Capture first.** `nf_app_sync.py ... push ... --save-remote DIR` (or download the file) so the box copy is on disk. Never pass `--force` without the owner's explicit yes.
+2. **Patch one file** through the NF app file API (or a single-path push), then **immediately** commit the identical bytes in the repo on a patch branch. The box and `master` must not diverge.
+3. **Refresh the push manifest** on the box (`static/version.json` `files` hashes) so the next install does not treat the hotfix as a hand edit.
+4. **Verify** with `doctor` and a targeted hook `run` (history/weather/fdd as relevant). Record CT timestamps; redact secrets.
+5. **Port-back check** after merge: `--save-remote` the installed app and diff against the release commit (strip cache stamps). Manifest sha mismatches of 0 and raw/strip equality on hooks mean parity is clean.
+6. **Document** the trap in `openfdd_agent_spec/skills/nf-gotchas.md` / `docs/operations/nf/nf-gotchas.md` in the same PR when it is a new NF console quirk.
+
+Grok Bot (or the designated deploy agent) owns NF site deploys. Coding agents open the PR; they do not push to a live console unless the owner explicitly assigned that deploy.
+
 ## Security and reporting
 
 See [SECURITY.md](SECURITY.md). CI runs ZAP against the mock NF, `npm audit` and gitleaks.

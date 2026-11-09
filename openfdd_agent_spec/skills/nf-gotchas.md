@@ -19,3 +19,12 @@ Full list with workarounds: `docs/operations/nf/nf-gotchas.md`. The ones that bi
 9. Static app files are cached 5 minutes: reload with `?v=N`.
 
 When a new trap shows up, add it to `docs/operations/nf/nf-gotchas.md` in the same PR.
+
+10. **Missing app-file GET may be HTTP 500** (`Content-Type: application/grpc`, empty body), not 404. The hand-edit
+    guard treats that signature as missing **only** for paths that are new relative to the box (not in the app
+    `files` list, or not in the last push manifest when that list is unavailable). Every other 500 still aborts.
+11. **StartHook args are string→string.** JSON arrays (e.g. `uuids`) and numeric-looking fields (`windowHours`)
+    arrive as strings. Coerce before use (`history.js` `normalizeArgs`; see #1559 for a shared helper).
+12. **Windows cp1252 consoles.** Hook event text can contain non-cp1252 Unicode; `report_run` must use the safe
+    print path or verify aborts after a successful install (#1560).
+
