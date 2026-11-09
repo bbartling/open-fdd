@@ -620,3 +620,37 @@ def test_nf_missing_500_on_existing_listed_path_still_aborts(tmp_path):
     with pytest.raises(sync.ApiError, match="HTTP 500"):
         sync.cmd_push(nf, m, clock=clk, sleep=clk.sleep)
     assert writes_since(nf, before) == []
+
+
+def test_path_is_new_on_box_ignores_push_manifest_when_file_list_exists():
+    """CodeRabbit Major: listed files are never 'new' just because they are absent from the push manifest."""
+    known = {"/hooks/x.js", "/package.json"}
+    pushed = {"/hooks/x.js"}  # package.json listed on box but not in last push manifest
+    assert sync.path_is_new_on_box("/hooks/lib/paging.js", known, pushed) is True
+    assert sync.path_is_new_on_box("/package.json", known, pushed) is False
+    assert sync.path_is_new_on_box("/hooks/lib/paging.js", None, pushed) is True
+    assert sync.path_is_new_on_box("/hooks/x.js", None, pushed) is False
+    assert sync.path_is_new_on_box("/hooks/x.js", None, None) is False
+
+
+def test_listed_path_absent_from_push_manifest_500_still_aborts(tmp_path):
+    """A listed file that is not in the push manifest must not be skipped on NF's missing-file 500."""
+    m, nf, clk = pushed_box(tmp_path)
+    # Drop package.json from the push manifest while keeping it in the app file list / file store.
+    info = json.loads(nf.files[("new-app", "/static/version.json")])
+    del info["files"]["/package.json"]
+    nf.files[("new-app", "/static/version.json")] = json.dumps(info).encode()
+    real_call = nf.call
+
+    def call(method, path, body=None, ok_404=False):
+        if method == "GET" and path.endswith("/package.json"):
+            err = sync.ApiError("GET files -> HTTP 500", 500, "http")
+            err.nf_missing_file = True
+            raise err
+        return real_call(method, path, body, ok_404)
+
+    nf.call = call
+    before = len(nf.log)
+    with pytest.raises(sync.ApiError, match="HTTP 500"):
+        sync.cmd_push(nf, m, clock=clk, sleep=clk.sleep)
+    assert writes_since(nf, before) == []

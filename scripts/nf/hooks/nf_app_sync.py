@@ -177,12 +177,12 @@ def remote_file_paths(c, app_id: str) -> set[str] | None:
 def path_is_new_on_box(nf_path: str, known_paths: set[str] | None, push_manifest: dict | None) -> bool:
     """True when `nf_path` is not something the box is known to already carry.
 
-    "New" means absent from the previous app file list and/or absent from the last push manifest.
-    With neither source, we cannot prove the path is new, so a 500 must still abort.
+    "New" means absent from the app file list, or, when that list is unknown, from the last push
+    manifest. With neither source, we cannot prove the path is new, so a 500 must still abort.
     """
     if known_paths is not None and nf_path not in known_paths:
         return True
-    if push_manifest is not None and nf_path not in push_manifest:
+    if known_paths is None and push_manifest is not None and nf_path not in push_manifest:
         return True
     return False
 
