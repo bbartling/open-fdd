@@ -370,3 +370,74 @@ def test_timescale_check(options, hooks, level, phrase):
     lvl, text = sync.timescale_check({"options": options, "hooks": hooks})
     assert lvl == level and phrase in text, text
     assert "pw-secret" not in text, "the value is never printed"
+
+
+def test_http_500_on_file_read_stops_the_guard(tmp_path, capsys):
+    """#7: only 404 means missing. A 500 must stop the push, not look like an absent file."""
+    m, nf, clk = pushed_box(tmp_path)
+    capsys.readouterr()
+    real_read = nf.read_file
+
+    def boom(app_id, nf_path):
+        if nf_path == "/hooks/x.js":
+            raise sync.ApiError("GET files -> HTTP 500: boom", 500, "http")
+        return real_read(app_id, nf_path)
+
+    nf.read_file = boom
+    before = len(nf.log)
+    with pytest.raises(sync.ApiError, match="HTTP 500"):
+        sync.cmd_push(nf, m, clock=clk, sleep=clk.sleep)
+    assert writes_since(nf, before) == [], "no write when a file read failed"
+
+
+def test_console_ok_404_only_swallows_404_not_500(monkeypatch):
+    """Unit: Console.call with ok_404=True returns None on 404 and raises on 500."""
+    import email.message
+    import io
+    import urllib.error
+    import urllib.request as ureq
+
+    c = sync.Console("https://nf.example", "user", "pass")
+
+    def urlopen404(req, timeout=0, context=None):
+        raise urllib.error.HTTPError(req.full_url, 404, "no", hdrs=email.message.Message(), fp=io.BytesIO(b"missing"))
+
+    monkeypatch.setattr(ureq, "urlopen", urlopen404)
+    assert c.call("GET", "/api/v1/apps/a/files/hooks/x.js", ok_404=True) is None
+
+    def urlopen500(req, timeout=0, context=None):
+        raise urllib.error.HTTPError(req.full_url, 500, "err", hdrs=email.message.Message(), fp=io.BytesIO(b"boom"))
+
+    monkeypatch.setattr(ureq, "urlopen", urlopen500)
+    with pytest.raises(sync.ApiError) as ei:
+        c.call("GET", "/api/v1/apps/a/files/hooks/x.js", ok_404=True)
+    assert ei.value.status == 500
+
+
+def test_doctor_sites_adapter_forwards_page_token(tmp_path, capsys):
+    """#10: weather_coords Sites fetch must forward pageToken when the server uses tokens."""
+    m, nf = doctor_nf(tmp_path)
+    urls = []
+    pages = [
+        {"sites": [{"id": "a", "latitude": 0, "longitude": 0}], "nextPageToken": "tok2"},
+        {"sites": [{"id": "b", "latitude": 43.07, "longitude": -89.4}], "nextPageToken": ""},
+    ]
+
+    real = nf.call
+
+    def call(method, path, body=None, ok_404=False):
+        if path.startswith("/api/v1/sites"):
+            urls.append(path)
+            idx = 0 if "pageToken=" not in path else 1
+            # first call has no token; second must carry pageToken=tok2
+            if "pageToken=" in path:
+                assert "pageToken=tok2" in path
+                return pages[1]
+            return pages[0]
+        return real(method, path, body, ok_404)
+
+    nf.call = call
+    lvl, text = sync.weather_coords_source(nf, nf.store.get("new-app"))
+    assert lvl == "pass" and "NF Sites API has coordinates" in text
+    assert any("pageToken=tok2" in u for u in urls), urls
+

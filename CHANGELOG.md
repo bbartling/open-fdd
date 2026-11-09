@@ -3,6 +3,15 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.7 - 2026-11-09
+
+Follow-up to 5.0.6 CodeRabbit review:
+
+1. **Hand-edit guard:** HTTP 500 on a remote file read no longer looks like a missing file; only 404 means missing. A read failure stops the push before overwriting.
+2. **Credential redaction:** `redact` replaces the known `connectionString` before userinfo masking, and redacts passwords of any length (including 1–2 characters).
+3. **Weather model lookup:** later-page point/query failures propagate (not an empty layer); the paginated model-site lookup uses a 45s deadline instead of the 10s write timeout (Lite and full edition).
+4. **Doctor Sites paging:** the Sites adapter forwards `pageToken` as well as `pageOffset`.
+
 ## 5.0.6 — 2026-11-09 (app) / open-fdd 4.5.3 (PyPI)
 
 Patch for a live site where `fdd`, `history` and `weather` all failed every run after installing 5.0.5 ([#1550](https://github.com/bbartling/open-fdd/issues/1550)).

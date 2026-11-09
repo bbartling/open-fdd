@@ -126,12 +126,14 @@ function normalizeConfig(raw) {
  */
 function redact(text, conn) {
   let s = String(text);
-  s = s.replace(/(postgres(?:ql)?:\/\/[^:/@\s]*:)[^@\s]*@/gi, '$1***@');
-  const pw = conn && typeof conn === 'object' ? conn.password : null;
-  if (pw && String(pw).length >= 3) s = s.split(String(pw)).join('***');
+  // Replace the known connection string BEFORE userinfo masking, otherwise masking
+  // changes the string and leaves query credentials such as ?password=secret exposed.
   if (conn && typeof conn === 'object' && conn.connectionString) {
     s = s.split(String(conn.connectionString)).join('postgres://***');
   }
+  s = s.replace(/(postgres(?:ql)?:\/\/[^:/@\s]*:)[^@\s]*@/gi, '$1***@');
+  const pw = conn && typeof conn === 'object' ? conn.password : null;
+  if (pw != null && String(pw).length > 0) s = s.split(String(pw)).join('***');
   return s;
 }
 

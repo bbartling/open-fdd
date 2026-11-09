@@ -251,8 +251,8 @@ class Console:
             with urllib.request.urlopen(req, timeout=120, context=self.ctx) as r:
                 text = r.read().decode()
         except urllib.error.HTTPError as e:
-            if ok_404 and e.code in (404, 500):
-                return None
+            if ok_404 and e.code == 404:
+                return None  # only 404 = missing; 500/other must stop the hand-edit guard
             detail = e.read().decode(errors="replace")[:300]
             if e.code == 401:
                 raise ApiError(f"{method} {shown} -> HTTP 401: rejected by {auth_layer(e.headers.get('WWW-Authenticate'))}. "
@@ -1031,8 +1031,15 @@ def weather_coords_source(c, app: dict | None = None) -> tuple[str, str]:
     if option_coords(app):
         return "pass", "app options latitude/longitude are set (the weather hook reads them first)"
     try:
-        sites = page_all(lambda p: c.call("GET", "/api/v1/sites?pageSize=%d%s" % (
-            p["pageSize"], f"&pageOffset={p['pageOffset']}" if p.get("pageOffset") else "")) or {}, "sites", what="sites")
+        def _sites_page(p):
+            q = [f"pageSize={p['pageSize']}"]
+            if p.get("pageOffset"):
+                q.append(f"pageOffset={p['pageOffset']}")
+            if p.get("pageToken"):
+                from urllib.parse import quote
+                q.append(f"pageToken={quote(str(p['pageToken']), safe='')}")
+            return c.call("GET", "/api/v1/sites?" + "&".join(q)) or {}
+        sites = page_all(_sites_page, "sites", what="sites")
     except SystemExit as e:
         sites = []
         note = f" (sites API: {e})"

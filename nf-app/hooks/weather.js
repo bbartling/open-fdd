@@ -28,7 +28,7 @@
  * be created through the console API without a git repository or npm install.
  */
 const https = require('https');
-const { queryPoints, listAll } = require('./lib/paging.js');
+const { pageAll, listAll } = require('./lib/paging.js');
 const settings = require('./lib/settings.js');
 
 const openMeteoUrl = (lat, lon) =>
@@ -65,11 +65,19 @@ function coordsFromAttrs(attrs) {
  * would hide the SITE record the same way it did for the fdd hook.
  */
 async function queryLayer(http, layer) {
+  // First-request failure (missing/unreadable layer) -> []; a later-page failure must propagate
+  // so a truncated model is never mistaken for "no site found" (#1553 CodeRabbit).
+  let pages = 0;
   try {
-    return await queryPoints(http, { layer });
+    return await pageAll(async (p) => {
+      const res = await http.post('/api/v1/point/query', { layer, ...p });
+      pages += 1;
+      return res && res.data;
+    }, { key: 'points', what: 'point/query' });
   } catch (e) {
     if (e && e.paging) throw e;
-    return []; /* layer missing or not readable: nothing from it */
+    if (pages > 0) throw e;
+    return [];
   }
 }
 
@@ -138,6 +146,7 @@ function pickSite(sites, wanted) {
 const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo request
 const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
 const WRITE_TIMEOUT_MS = 10000; // per-point AddPointsData deadline
+const MODEL_LOOKUP_TIMEOUT_MS = 45000; // paginated model/site lookup (many sequential pages)
 const RUN_DEADLINE_MS = 60000; // whole-run cap so a hung run fails instead of blocking the schedule
 
 /** Reject if `promise` doesn't settle within `ms`; calls onTimeout (e.g. abort) first. */
@@ -244,7 +253,7 @@ async function runOnce({ globalVariables, sdk, config }) {
     } catch (e) {
       if (!e || !e.noCoords) throw e;
       // NF's Sites collection has no usable coordinates: try the modeled Haystack SITE (never invent any)
-      site = await withDeadline(siteFromModel(sdk.http, wanted), WRITE_TIMEOUT_MS, 'model site lookup');
+      site = await withDeadline(siteFromModel(sdk.http, wanted), MODEL_LOOKUP_TIMEOUT_MS, 'model site lookup');
       if (!site) throw new Error(`${e.message}; or ${APP_OPTIONS_HINT}`);
       log(`weather location from the ${site.source} (site ${site.id}); NF Sites had none`);
     }

@@ -5,6 +5,10 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.7
+
+Follow-up to 5.0.6 CodeRabbit review: hand-edit guard treats only HTTP 404 as missing (500 stops the push), credential redaction replaces the known connection string first and covers short passwords, weather model lookup uses a 45s deadline and propagates later-page failures, doctor Sites paging forwards pageToken.
+
 ## 5.0.6
 
 - Fixes the frozen `fdd` results and the failed `fdd` / `history` / `weather` runs of [#1550](https://github.com/bbartling/open-fdd/issues/1550): NF pages `point/query` by `pageOffset` (every reader now pages correctly and fails loudly instead of truncating), the hooks read the Timescale connection and the weather coordinates from the app options NF actually stores, an empty model gets its own failure reason, and `install` stops instead of overwriting files edited on the box (`--save-remote`, `--force`). See [Troubleshooting](install.html#10-troubleshooting).

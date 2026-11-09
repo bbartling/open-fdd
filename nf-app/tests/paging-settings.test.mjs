@@ -296,6 +296,13 @@ test("settings: redact removes the password and URL credentials from log text", 
   assert.doesNotMatch(settings.redact(`connect failed for ${PG.password} at db`, PG), /p4ssw0rd/);
   assert.equal(settings.redact("could not connect to postgres://user:hunter2@db:5432/nf", undefined), "could not connect to postgres://user:***@db:5432/nf");
   assert.doesNotMatch(settings.redact("x postgres://a:b@h/d y", { connectionString: "postgres://a:b@h/d" }), /a:b@/);
+  // connectionString with ?password= must be replaced BEFORE userinfo masking (#4)
+  const cs = "postgres://u:old@db/nf?password=secret";
+  assert.doesNotMatch(settings.redact(`fail ${cs}`, { connectionString: cs }), /secret|password=old/);
+  assert.match(settings.redact(`fail ${cs}`, { connectionString: cs }), /postgres:\/\/\*\*\*/);
+  // short passwords (1-2 chars) are also redacted (#5)
+  assert.equal(settings.redact("pw=ab in err", { password: "ab" }), "pw=*** in err");
+  assert.equal(settings.redact("pw=x in err", { password: "x" }), "pw=*** in err");
 });
 
 test("history: reads the string option, and a connection error never carries the password", async () => {
@@ -323,6 +330,40 @@ test("fdd: engine timescale with only a string option reaches the engine as an o
   // the real engine factory with the engine selected and nothing set: the one clear message
   await assert.rejects(fdd.runFdd({ sdk: { http: nfOver(MODEL_994), logEvent() {} }, config: { engine: "timescale" }, pack: PACK, now: NOW }),
     /Timescale connection settings not found.*app option "timescale"/);
+});
+
+
+test("weather queryLayer: missing layer -> []; later-page failure propagates (Lite + full)", async () => {
+  const missing = { post: async () => { throw Object.assign(new Error("HTTP 404"), { status: 404 }); } };
+  // siteFromModel uses queryLayer; a missing model+site layer yields null (not a throw)
+  assert.equal(await liteWeather.siteFromModel(missing), null);
+  assert.equal(await weather.siteFromModel(missing), null);
+
+  // first page OK, second page throws: must NOT look like "no site"
+  let n = 0;
+  const laterFail = {
+    post: async (_path, body) => {
+      n += 1;
+      if ((body.pageOffset || 0) === 0) {
+        return { data: { points: filler("p", 500), totalCount: "600" } };
+      }
+      throw Object.assign(new Error("HTTP 503 page 2"), { status: 503 });
+    },
+  };
+  await assert.rejects(liteWeather.siteFromModel(laterFail), /HTTP 503 page 2/);
+  n = 0;
+  await assert.rejects(weather.siteFromModel(laterFail), /HTTP 503 page 2/);
+});
+
+test("weather: MODEL_LOOKUP_TIMEOUT_MS is longer than WRITE_TIMEOUT_MS (paginated model)", () => {
+  const { fileURLToPath } = require("node:url");
+  const { dirname, join } = require("node:path");
+  const here = dirname(fileURLToPath(import.meta.url));
+  for (const rel of ["../hooks/weather.js", "../../lite/hooks/open_meteo_weather.js"]) {
+    const src = readFileSync(join(here, rel), "utf8");
+    assert.match(src, /MODEL_LOOKUP_TIMEOUT_MS\s*=\s*45000/);
+    assert.match(src, /withDeadline\(siteFromModel\([^)]*\),\s*MODEL_LOOKUP_TIMEOUT_MS/);
+  }
 });
 
 // ---- 5. weather coordinates: config -> (app setting) -> NF Sites -> modeled site ----------------------------------
