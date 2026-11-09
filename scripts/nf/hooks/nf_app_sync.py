@@ -69,6 +69,7 @@ import os
 import re
 import socket
 import ssl
+import sys
 import subprocess
 import sys
 import tempfile
@@ -845,13 +846,22 @@ def run_error_text(run: dict) -> str:
     return "\n".join(parts)
 
 
+def _safe_print(text: str) -> None:
+    """Print without crashing on Windows cp1252 consoles when hook events contain Unicode."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        enc = getattr(getattr(sys, "stdout", None), "encoding", None) or "utf-8"
+        print(text.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
 def report_run(run: dict) -> int:
-    print(f"  {run['state']} start={run.get('startTime')}")
+    _safe_print(f"  {run['state']} start={run.get('startTime')}")
     for g in (run.get("results") or {}).values():
         if g.get("error"):
-            print(f"  error: {g['error'].get('message')}")
+            _safe_print(f"  error: {g['error'].get('message')}")
         for e in g.get("events", []):
-            print(f"  event {e.get('ts')}: {e.get('message')}")
+            _safe_print(f"  event {e.get('ts')}: {e.get('message')}")
     bad = result_failure(run)
     if bad:
         print(f"  hook returned ok:false: {bad}")
