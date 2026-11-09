@@ -24,3 +24,7 @@ Before touching a live box read `nf-gotchas.md` (this folder). Related runbooks 
 `front-door-caddy.md` (Caddy; set `APP_ID=open-fdd-lite` on a Lite box so the bare URL opens Lite),
 `nf-upgrade-compose.md`, `bacnet-validate.md` (see the `bacnet-validate` skill). Read-only checks of a deployed box:
 `scripts/nf/tools/` (`nf_portal_sensors.py`, `nf_sensor_history.py`).
+
+## Live patching (last resort)
+
+Do not hand-edit the box as the normal fix path. If a hotfix is required to unblock verification, follow the **Live patching a box** section in repo-root `AGENTS.md`: read-only capture first, patch one path, commit on a patch branch (HTML without `?v=` stamps), restart before verify, do not rewrite push-manifest hashes early. Coding agents do not deploy releases to NF sites; Grok Bot handles deploys after merge.
