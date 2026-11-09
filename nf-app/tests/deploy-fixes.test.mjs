@@ -129,6 +129,6 @@ test("history: normalizeArgs coerces StartHook string-map uuids and windowHours"
   assert.ok(typeof a.from === "string" && typeof a.to === "string");
   const spanMs = Date.parse(a.to) - Date.parse(a.from);
   assert.ok(Math.abs(spanMs - 3600_000) < 5000, `window ~1h, got ${spanMs}`);
-  assert.deepEqual(normalizeArgs({ uuids: ["u-9"], from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z" }).uuids, ["u-9"]);
+  assert.deepEqual(history.normalizeArgs({ uuids: ["u-9"], from: "2026-01-01T00:00:00Z", to: "2026-01-02T00:00:00Z" }).uuids, ["u-9"]);
 });
 
