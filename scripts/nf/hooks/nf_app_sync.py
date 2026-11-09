@@ -490,11 +490,18 @@ def sha256_hex(data: bytes) -> str:
 
 
 def remote_version_info(c, app_id: str) -> dict:
-    """The box's static/version.json as a dict ({} when absent or unreadable)."""
+    """The box's static/version.json as a dict ({} when absent).
+
+    HTTP 404 (missing file) -> {}. Other read errors (HTTP 500, etc.) propagate so the
+    push guard stops with the real error instead of falling back to the repo baseline and
+    then reporting unrelated files as hand-edited.
+    """
+    raw = c.read_file(app_id, "/static/version.json")  # None on 404; ApiError on 500/other
+    if not raw:
+        return {}
     try:
-        raw = c.read_file(app_id, "/static/version.json")
-        info = json.loads(raw.decode()) if raw else {}
-    except (SystemExit, ValueError, UnicodeDecodeError):
+        info = json.loads(raw.decode())
+    except (ValueError, UnicodeDecodeError):
         return {}
     return info if isinstance(info, dict) else {}
 

@@ -7,7 +7,8 @@ nav_order: 14
 
 ## 5.0.7
 
-Follow-up to 5.0.6 CodeRabbit review: hand-edit guard treats only HTTP 404 as missing (500 stops the push), credential redaction replaces the known connection string first and covers short passwords, weather model lookup uses a 45s deadline and propagates later-page failures, doctor Sites paging forwards pageToken.
+Follow-up to 5.0.6 CodeRabbit review: hand-edit guard treats only HTTP 404 as missing (500 stops the push; version.json read errors propagate), credential redaction covers connectionString passwords without mangling short-password diagnostics, weather later-page and non-404 first-page failures propagate with a 45s model lookup and 120s run/invoke budget, and Doctor Sites forwards `pageToken`.
+
 
 ## 5.0.6
 

@@ -414,6 +414,26 @@ def test_console_ok_404_only_swallows_404_not_500(monkeypatch):
     assert ei.value.status == 500
 
 
+
+def test_remote_version_info_http_500_propagates():
+    """HTTP 500 on /static/version.json must raise, not fall back to repo baseline."""
+    class Boom:
+        def read_file(self, app_id, nf_path):
+            raise sync.ApiError("GET files -> HTTP 500", 500, "http")
+
+    with pytest.raises(sync.ApiError) as ei:
+        sync.remote_version_info(Boom(), "app")
+    assert ei.value.status == 500
+
+
+def test_remote_version_info_missing_is_empty():
+    class Missing:
+        def read_file(self, app_id, nf_path):
+            return None
+
+    assert sync.remote_version_info(Missing(), "app") == {}
+
+
 def test_doctor_sites_adapter_forwards_page_token(tmp_path, capsys):
     """#10: weather_coords Sites fetch must forward pageToken when the server uses tokens."""
     m, nf = doctor_nf(tmp_path)

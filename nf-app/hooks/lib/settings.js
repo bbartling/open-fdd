@@ -132,8 +132,11 @@ function redact(text, conn) {
     s = s.split(String(conn.connectionString)).join('postgres://***');
   }
   s = s.replace(/(postgres(?:ql)?:\/\/[^:/@\s]*:)[^@\s]*@/gi, '$1***@');
+  // Bare password replace needs length >= 3: a 1-char password like "e" would turn
+  // "connection refused" into "conn***ction r***fus***d". Short passwords inside a
+  // connectionString are already covered by the replace above (#4/#5).
   const pw = conn && typeof conn === 'object' ? conn.password : null;
-  if (pw != null && String(pw).length > 0) s = s.split(String(pw)).join('***');
+  if (pw != null && String(pw).length >= 3) s = s.split(String(pw)).join('***');
   return s;
 }
 

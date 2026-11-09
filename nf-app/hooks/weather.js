@@ -77,7 +77,13 @@ async function queryLayer(http, layer) {
   } catch (e) {
     if (e && e.paging) throw e;
     if (pages > 0) throw e;
-    return [];
+    // First request: only a missing layer (404) is empty; service failures (5xx, etc.) must propagate
+    // so siteFromModel does not report "no coordinates" when the model API is down.
+    // Status may live on the error object or only in the message (NF SDK / test stubs).
+    const status = e && (e.status ?? e.code ?? e.statusCode);
+    const msg = e ? String(e.message || e) : '';
+    if (status === 404 || /\bHTTP\s*404\b/i.test(msg)) return [];
+    throw e;
   }
 }
 
@@ -147,7 +153,7 @@ const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo reques
 const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
 const WRITE_TIMEOUT_MS = 10000; // per-point AddPointsData deadline
 const MODEL_LOOKUP_TIMEOUT_MS = 45000; // paginated model/site lookup (many sequential pages)
-const RUN_DEADLINE_MS = 60000; // whole-run cap so a hung run fails instead of blocking the schedule
+const RUN_DEADLINE_MS = 120000; // whole-run: model lookup (45s) + Open-Meteo fetch + point writes must fit
 
 /** Reject if `promise` doesn't settle within `ms`; calls onTimeout (e.g. abort) first. */
 function withDeadline(promise, ms, what, onTimeout) {
