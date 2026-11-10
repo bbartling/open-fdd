@@ -206,7 +206,10 @@ function data(params) {
   }) };
 }
 
-const json = (res, code, body) => { res.writeHead(code, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)); };
+const json = (res, code, body) => {
+  res.writeHead(code, { "Content-Type": "application/json", "X-Content-Type-Options": "nosniff" });
+  res.end(JSON.stringify(body));
+};
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json" };
 let runs = [];
 // In-memory store of what a client WROTE (the synthetic building itself stays read-only).
@@ -224,6 +227,7 @@ const installApp = { id: "open-fdd", name: "Open-FDD", status: "APP_STATUS_INSTA
   options: [], configuration: {}, hooks: [] };
 const installFiles = new Map();
 let failVersionRead = false;
+let failVersionReadOnNextWrite = false;
 
 // Let the fixture's front-door guard respond before Node rejects a large request line.
 const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) => {
@@ -246,10 +250,16 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
     installFiles.clear();
     for (const [name, value] of Object.entries(b.contents || {})) installFiles.set(name, Buffer.from(value, "base64"));
     failVersionRead = false;
+    failVersionReadOnNextWrite = b.failVersionRead === true;
     return json(res, 200, { success: true });
   }
   if (p === "/api/v1/apps") return json(res, 200, { applications: [installApp] });
   const appFile = p.match(/^\/api\/v1\/apps\/open-fdd\/files(\/.*)$/);
+  if (appFile && req.method === "DELETE") {
+    installFiles.delete(appFile[1]);
+    installApp.files = installApp.files.filter((x) => x.path !== appFile[1]);
+    return json(res, 200, { success: true });
+  }
   if (appFile && req.method === "GET") {
     if (appFile[1] === "/static/version.json" && failVersionRead) return json(res, 503, { error: "forced verify failure" });
     const data = installFiles.get(appFile[1]);
@@ -260,7 +270,8 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
     const data = Buffer.from(b, "base64");
     installFiles.set(appFile[1], data);
     if (appFile[1] === "/static/version.json") {
-      try { failVersionRead = JSON.parse(data.toString("utf8")).version === "5.0.11"; } catch { failVersionRead = false; }
+      failVersionRead = failVersionReadOnNextWrite;
+      failVersionReadOnNextWrite = false;
     }
     if (!installApp.files.some((x) => x.path === appFile[1])) installApp.files.push({ path: appFile[1] });
     return json(res, 200, { success: true });
@@ -272,6 +283,12 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
   if (p === "/api/v1/apps/open-fdd/hooks" && req.method === "POST") {
     const i = installApp.hooks.findIndex((h) => h.id === b.id);
     if (i < 0) installApp.hooks.push(b); else installApp.hooks[i] = b;
+    return json(res, 200, { success: true });
+  }
+  const appHook = p.match(/^\/api\/v1\/apps\/open-fdd\/hooks\/([^/]+)$/);
+  if (appHook && req.method === "DELETE") {
+    const id = decodeURIComponent(appHook[1]);
+    installApp.hooks = installApp.hooks.filter((h) => h.id !== id);
     return json(res, 200, { success: true });
   }
   if (p === "/api/v1/apps/open-fdd/dependencies" && req.method === "PATCH") return json(res, 200, { success: true });

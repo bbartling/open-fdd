@@ -167,7 +167,11 @@ def test_timescale_schema_preflight_exact_version(stdout, expected, monkeypatch)
     assert "-w" in seen["args"]
     assert seen["env"]["PGPASSWORD"] == "password"
     assert "CONSOLE_PASSWORD" not in seen["env"]
-    assert "BEGIN TRANSACTION READ ONLY" in seen["args"][-1]
+    args = seen["args"]
+    first_c = args.index("-c")
+    assert args[first_c + 1] == "BEGIN TRANSACTION READ ONLY"
+    assert args[first_c + 2] == "-c" and args[first_c + 4:] == ["-c", "ROLLBACK"]
+    assert "SELECT value" in args[first_c + 3]
     assert seen["timeout"] == 10
 
 
@@ -181,6 +185,52 @@ def test_timescale_schema_preflight_uses_password_env_without_logging(monkeypatc
     level, message = sync.timescale_schema_check(_app("timescale", raw), {"DB_SECRET": "top-secret"}, runner=run)
     assert level == "PASS" and "top-secret" not in message
     assert seen["env"]["PGPASSWORD"] == "top-secret"
+
+
+@pytest.mark.parametrize("config", [
+    {"host": "db.example", "user": "fdd", "password": "secret", "ssl": True},
+    {"connectionString": "postgresql://fdd@db.example/fdd", "password": "secret", "ssl": True},
+    {"host": "db.example", "ssl": {}},
+])
+def test_timescale_schema_preflight_matches_structured_connection_defaults_and_tls(config, monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    seen = {}
+    def run(args, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="3\n", stderr="")
+    level, _ = sync.timescale_schema_check(_app("timescale", json.dumps(config)), {}, runner=run)
+    assert level == "PASS"
+    assert seen["env"]["PGDATABASE"] == ("fdd" if config.get("connectionString") else "postgres")
+    if config.get("password"):
+        assert seen["env"]["PGPASSWORD"] == "secret"
+    assert seen["env"]["PGSSLMODE"] == "verify-full"
+
+
+def test_timescale_schema_preflight_fails_closed_for_custom_tls_material(monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    raw = json.dumps({"host": "db.example", "ssl": {"ca": "private certificate material"}})
+    level, message = sync.timescale_schema_check(_app("timescale", raw), {})
+    assert level == "FAIL"
+    assert "custom certificate material" in message
+    assert "private certificate material" not in message
+
+
+def test_timescale_dsn_override_replaces_hook_credentials_and_accepts_protected_cert_paths(monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    seen = {}
+    def run(args, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="3\n", stderr="")
+    raw = json.dumps({"host": "hook-db", "passwordEnv": "HOOK_PASSWORD", "ssl": {"ca": "embedded-cert"}})
+    env = {"NF_TIMESCALE_PREFLIGHT_DSN": "host=cli-db dbname=fdd sslmode=verify-full sslrootcert=C:/secure/ca.pem",
+           "HOOK_PASSWORD": "must-not-be-used"}
+    level, message = sync.timescale_schema_check(_app("timescale", raw), env, runner=run)
+    assert level == "PASS", message
+    assert seen["env"]["PGHOST"] == "cli-db"
+    assert seen["env"]["PGSSLROOTCERT"] == "C:/secure/ca.pem"
+    assert seen["env"]["PGSSLMODE"] == "verify-full"
+    assert "PGPASSWORD" not in seen["env"]
+    assert "must-not-be-used" not in repr(seen)
 
 
 def test_timescale_schema_preflight_env_override_wins_and_failures_are_redacted(monkeypatch):
@@ -297,7 +347,7 @@ def test_install_mock_nf_forced_verify_failure_restores_previous_app(tmp_path, m
                 time.sleep(0.05)
         old_version = b'{"version":"5.0.10","files":{}}'
         old_hook = {"id": "fdd", "entryPoint": "/hooks/fdd.js", "mode": "MODE_ON_REQUEST", "config": {"old": True}}
-        initial = {"files": ["/hooks/fdd.js", "/static/version.json"],
+        initial = {"failVersionRead": True, "files": ["/hooks/fdd.js", "/static/version.json"],
                    "contents": {"/hooks/fdd.js": base64.b64encode(b"old-hook").decode(),
                                 "/static/version.json": base64.b64encode(old_version).decode()},
                    "options": [{"name": "version", "value": {"string": "5.0.10"}}],
@@ -307,9 +357,11 @@ def test_install_mock_nf_forced_verify_failure_restores_previous_app(tmp_path, m
         sync.urllib.request.urlopen(req, timeout=2).read()
         c = sync.Console(base, "mock", "mock")
         (tmp_path / "fdd.js").write_bytes(b"new-hook")
+        (tmp_path / "extra.js").write_bytes(b"new-module")
         m = {"application": {"id": "open-fdd", "auth": {"mock": True}}, "_dir": tmp_path,
-             "files": {"/hooks/fdd.js": "fdd.js"},
-             "hooks": [{"id": "fdd", "entryPoint": "/hooks/fdd.js", "mode": "MODE_ON_REQUEST", "config": {"new": True}}]}
+             "files": {"/hooks/fdd.js": "fdd.js", "/hooks/lib/extra.js": "extra.js"},
+             "hooks": [{"id": "fdd", "entryPoint": "/hooks/fdd.js", "mode": "MODE_ON_REQUEST", "config": {"new": True}},
+                       {"id": "new-hook", "entryPoint": "/hooks/lib/extra.js", "mode": "MODE_ON_REQUEST"}]}
         monkeypatch.setattr(sync, "version_info", lambda *_: {"version": "5.0.11", "commit": "new", "dirty": False})
         args = SimpleNamespace(skip_hooks=False, hooks=None, skip_deps=True, force=True, save_remote=None,
                                skip_verify_run=True, wait=None, remove_old=False, yes=False,
@@ -317,10 +369,12 @@ def test_install_mock_nf_forced_verify_failure_restores_previous_app(tmp_path, m
         assert sync.cmd_install(c, m, args) == sync.EXIT_FAILED
         assert c.read_file("open-fdd", "/hooks/fdd.js") == b"old-hook"
         assert c.read_file("open-fdd", "/static/version.json") == old_version
+        assert c.read_file("open-fdd", "/hooks/lib/extra.js") is None
         app = c.app("open-fdd")
         assert app["options"][0]["value"]["string"] == "5.0.10"
         assert app["configuration"]["version"]["string"] == "5.0.10"
         assert app["hooks"][0]["config"] == {"old": True}
+        assert all(h["id"] != "new-hook" for h in app["hooks"])
         assert "auth" not in app, "guarded install leaves the app auth scopes untouched"
     finally:
         proc.terminate()

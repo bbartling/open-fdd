@@ -38,7 +38,9 @@ Keep connection settings in the client's protected configuration or environment.
 Run `doctor` and the app installer after the schema is ready. They use `psql` on the machine running the CLI
 for a read-only probe. If that machine needs a different read-only connection from the hook, set
 `NF_TIMESCALE_PREFLIGHT_DSN` through the protected environment. The connection must reach the same database as the
-hook. If post-install verification reports a terminal failure, the installer restores the previous app files,
+hook. For TLS connections, include `sslmode=verify-full` and protected `sslrootcert`, `sslcert`, or `sslkey` paths
+in that URI or keyword DSN; this override supplies the CLI connection and its credentials independently of the
+hook's settings. If post-install verification reports a terminal failure, the installer restores the previous app files,
 options, and hooks and restarts the app. If a hook is still running when the wait expires, the installer reports
 the pending run and preserves predecessor apps. It preserves existing app auth throughout the upgrade.
 The app rollback leaves database migrations in place. Lite and Full with an embedded engine skip the Timescale

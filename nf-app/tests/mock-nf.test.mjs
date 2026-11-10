@@ -72,6 +72,13 @@ test("mock NF: the GET history route still works next to the POST data route", a
   assert.deepEqual((await r.json()).data, [{ uuid: "nope", values: [] }]);
 });
 
+test("mock NF: app metadata is served as JSON without content sniffing", async () => {
+  const r = await fetch(base + "/api/v1/apps");
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("content-type"), "application/json");
+  assert.equal(r.headers.get("x-content-type-options"), "nosniff");
+});
+
 test("mock NF: UpdatePoints merges attrs within a layer, including explicit empty values", async () => {
   const basePoint = { uuid: "fixture-merge", name: "fixture", layer: "model" };
   assert.equal((await post("/api/v1/point/points", { points: [

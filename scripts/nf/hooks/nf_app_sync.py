@@ -1135,16 +1135,20 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
         print(f"install: STOPPED (exit {rc}): hand-edited files on the box (see above); the box was not changed")
         return rc
     if prior:
-        # A failed verify must be reversible. Refuse to mutate when NF cannot prove that every
-        # overwritten file and hook has a restorable predecessor; there is no guessed DELETE API.
-        known = {x.get("path") for x in prior.get("files", []) if isinstance(x, dict)}
-        paths = set(m["files"]) | {"/static/version.json"}
-        if not known or not paths.issubset(known):
-            print("install: STOPPED: NF did not list every target file; cannot snapshot a rollback image")
+        # NF 3.10's DELETE file/hook routes are documented. Snapshot existing targets; track new ones
+        # separately so a failed verification can remove them without touching older app content.
+        listed_files = prior.get("files")
+        listed_hooks = prior.get("hooks")
+        if not isinstance(listed_files, list) or not isinstance(listed_hooks, list):
+            print("install: STOPPED: NF did not provide a complete files/hooks listing; cannot snapshot a rollback image")
             return EXIT_FAILED
+        known = {x.get("path") for x in listed_files if isinstance(x, dict) and x.get("path")}
+        paths = set(m["files"]) | {"/static/version.json"}
+        new_paths = paths - known
+        old_paths = paths & known
         old_files = {}
         try:
-            for path in paths:
+            for path in old_paths:
                 data = c.read_file(app_id, path, known_paths=known)
                 if data is None:
                     raise SystemExit(f"{path} is missing")
@@ -1154,18 +1158,53 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
             return EXIT_FAILED
         old_hooks = {h.get("id"): h for h in prior.get("hooks", []) if h.get("id")}
         intended_hooks = {h["id"] for h in m["hooks"] if not a.hooks or h["id"] in a.hooks} if not a.skip_hooks else set()
-        if not intended_hooks.issubset(old_hooks):
-            print("install: STOPPED: NF did not list every target hook; cannot snapshot a rollback image")
-            return EXIT_FAILED
+        new_hooks = intended_hooks - set(old_hooks)
         old_options = prior.get("options", [])
         old_configuration = prior.get("configuration", {})
     else:
         old_files = old_hooks = old_options = old_configuration = None
+        new_paths = new_hooks = set()
+        intended_hooks = set()
 
     def rollback() -> bool:
         if not prior or old_files is None:
             return False
         print("install: restoring the previous app snapshot")
+        cleanup_failures = []
+        if new_paths or new_hooks:
+            current = None
+            try:
+                current = c.app(app_id) or {}
+                if not isinstance(current.get("files"), list) or not isinstance(current.get("hooks"), list):
+                    current = None
+                    cleanup_failures.append("NF app listing omitted files/hooks; cannot identify new assets")
+            except SystemExit:
+                cleanup_failures.append("NF app listing unavailable; cannot identify new assets")
+            if current is not None:
+                present_hooks = {h.get("id") for h in current["hooks"] if h.get("id")}
+                present_paths = {x.get("path") for x in current["files"] if isinstance(x, dict) and x.get("path")}
+                for hook_id in new_hooks & present_hooks:
+                    # Normal Framework DeleteHook removes its definition/runtime and leaves hook source files.
+                    try:
+                        c.call("DELETE", f"/api/v1/apps/{app_id}/hooks/{urllib.parse.quote(hook_id, safe='')}")
+                    except SystemExit:
+                        cleanup_failures.append(f"new hook {hook_id} could not be deleted")
+                for path in new_paths & present_paths:
+                    try:
+                        c.call("DELETE", f"/api/v1/apps/{app_id}/files{path}")
+                    except SystemExit:
+                        cleanup_failures.append(f"new file {path} could not be deleted")
+                try:
+                    after = c.app(app_id) or {}
+                    if not isinstance(after.get("files"), list) or not isinstance(after.get("hooks"), list):
+                        cleanup_failures.append("NF app listing omitted files/hooks after cleanup")
+                    else:
+                        remaining_hooks = {h.get("id") for h in after["hooks"] if h.get("id")}
+                        remaining_paths = {x.get("path") for x in after["files"] if isinstance(x, dict) and x.get("path")}
+                        cleanup_failures.extend(f"new hook {h} remains" for h in new_hooks & remaining_hooks)
+                        cleanup_failures.extend(f"new file {p} remains" for p in new_paths & remaining_paths)
+                except SystemExit:
+                    cleanup_failures.append("NF app listing unavailable after cleanup")
         try:
             for path, data in old_files.items():
                 c.call("POST", f"/api/v1/apps/{app_id}/files{path}", base64.b64encode(data).decode())
@@ -1173,10 +1212,16 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
             c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "updateMask": ["configuration"],
                                                            "configuration": old_configuration})
             if not a.skip_hooks:
-                for hook_id in intended_hooks:
+                for hook_id in intended_hooks & set(old_hooks):
                     c.call("POST", f"/api/v1/apps/{app_id}/hooks", old_hooks[hook_id])
             c.call("PATCH", f"/api/v1/apps/{app_id}/restart", {})
-            print("install: previous files, settings and hooks restored")
+            if cleanup_failures:
+                print("install: ROLLBACK INCOMPLETE: " + ", ".join(cleanup_failures) + " remain after cleanup")
+                return False
+            if new_paths or new_hooks:
+                print("install: removed newly added files and hooks; previous files, settings and hooks restored")
+            else:
+                print("install: previous files, settings and hooks restored")
             return True
         except SystemExit as e:
             print(f"install: ROLLBACK INCOMPLETE: {e}")
@@ -1422,25 +1467,31 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
     configured = raw is not None and str(raw).strip() != ""
     if engine in {"sqlite", "pglite"} or (not explicit and not configured):
         return "SKIP", ""
-    conn = env.get("NF_TIMESCALE_PREFLIGHT_DSN") or raw
+    dsn_override = env.get("NF_TIMESCALE_PREFLIGHT_DSN")
+    conn = dsn_override or raw
     if not conn:
         return "FAIL", ('Timescale is selected but no connection is available; set NF_TIMESCALE_PREFLIGHT_DSN '
                          'for a read-only schema check')
     password_env = None
+    configured_password = None
+    ssl_config = None
     if isinstance(conn, str) and conn.lstrip().startswith("{"):
         try:
             obj = json.loads(conn)
         except ValueError:
             obj = None
         password_env = obj.get("passwordEnv") if isinstance(obj, dict) else None
+        configured_password = obj.get("password") if isinstance(obj, dict) else None
+        ssl_config = obj.get("ssl") if isinstance(obj, dict) else None
         conn = obj.get("connectionString") if isinstance(obj, dict) else None
         if not conn and isinstance(obj, dict) and obj.get("host"):
             # Use libpq environment variables so passwords never appear in process arguments.
             pg = {"PGHOST": str(obj["host"])}
-            for key, var in (("port", "PGPORT"), ("database", "PGDATABASE"), ("user", "PGUSER"),
+            for key, var in (("port", "PGPORT"), ("user", "PGUSER"),
                              ("password", "PGPASSWORD"), ("sslmode", "PGSSLMODE")):
                 if obj.get(key) is not None:
                     pg[var] = str(obj[key])
+            pg["PGDATABASE"] = str(obj.get("database") or "postgres")
             conn = pg
     if isinstance(conn, str):
         try:
@@ -1453,12 +1504,15 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
                 if u.password: pg["PGPASSWORD"] = urllib.parse.unquote(u.password)
                 q = urllib.parse.parse_qs(u.query)
                 if q.get("sslmode"): pg["PGSSLMODE"] = q["sslmode"][0]
+                for key, var in (("sslrootcert", "PGSSLROOTCERT"), ("sslcert", "PGSSLCERT"), ("sslkey", "PGSSLKEY")):
+                    if q.get(key): pg[var] = q[key][0]
                 conn = pg
             elif "=" in conn:
                 import shlex
                 pg = {}
                 keys = {"host": "PGHOST", "port": "PGPORT", "dbname": "PGDATABASE", "database": "PGDATABASE",
-                        "user": "PGUSER", "password": "PGPASSWORD", "sslmode": "PGSSLMODE"}
+                        "user": "PGUSER", "password": "PGPASSWORD", "sslmode": "PGSSLMODE",
+                        "sslrootcert": "PGSSLROOTCERT", "sslcert": "PGSSLCERT", "sslkey": "PGSSLKEY"}
                 for item in shlex.split(conn):
                     key, sep, value = item.partition("=")
                     if not sep or key not in keys:
@@ -1478,14 +1532,26 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
         return "FAIL", "psql is unavailable; install PostgreSQL client tools to verify Timescale schema version"
     child_env = {k: env[k] for k in ("PATH", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP") if k in env}
     child_env.update(pg)
+    ssl_enabled = isinstance(ssl_config, (dict, list)) or bool(ssl_config)
+    if (not dsn_override and isinstance(ssl_config, dict)
+            and any(ssl_config.get(k) for k in ("ca", "cert", "key"))):
+        return "FAIL", ("Timescale hook TLS uses custom certificate material that this preflight cannot mirror; "
+                         "use the protected DSN/certificate procedure documented for the installer")
+    if ssl_enabled:
+        # The hook explicitly asks for TLS; never let libpq silently probe with plaintext.
+        child_env["PGSSLMODE"] = ("require" if isinstance(ssl_config, dict)
+                                  and ssl_config.get("rejectUnauthorized") is False else "verify-full")
+    if configured_password:
+        child_env["PGPASSWORD"] = str(configured_password)
     if password_env:
         password = env.get(str(password_env))
         if not password:
             return "FAIL", "configured Timescale password environment variable is unavailable; set NF_TIMESCALE_PREFLIGHT_DSN instead"
         child_env["PGPASSWORD"] = password
-    sql = "BEGIN TRANSACTION READ ONLY; SELECT value #>> '{}' FROM openfdd.config WHERE key='schema_version'; ROLLBACK;"
+    sql = "SELECT value #>> '{}' FROM openfdd.config WHERE key='schema_version'"
     try:
-        proc = runner([psql, "-X", "-w", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-c", sql],
+        proc = runner([psql, "-X", "-w", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1",
+                       "-c", "BEGIN TRANSACTION READ ONLY", "-c", sql, "-c", "ROLLBACK"],
                       env=child_env, capture_output=True, text=True, timeout=10)
     except Exception:
         return "FAIL", "could not connect to Timescale for a read-only schema check (connection details redacted)"
@@ -1678,6 +1744,8 @@ def main(argv: list[str] | None = None) -> int:
     a = build_parser().parse_args(argv)
     if a.env.expanduser().is_file():
         env = load_env(a.env)
+        if not env.get("NF_TIMESCALE_PREFLIGHT_DSN") and os.environ.get("NF_TIMESCALE_PREFLIGHT_DSN"):
+            env["NF_TIMESCALE_PREFLIGHT_DSN"] = os.environ["NF_TIMESCALE_PREFLIGHT_DSN"]
     else:
         env = {k: v for k, v in os.environ.items() if k.startswith(("NF_", "CONSOLE_"))}
         if not env:
