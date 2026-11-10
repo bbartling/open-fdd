@@ -1,7 +1,6 @@
 ---
 title: SQL cookbook
-parent: Rule Cookbook
-nav_order: 1
+nav_order: 8
 ---
 
 # SQL cookbook

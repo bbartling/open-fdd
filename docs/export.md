@@ -1,24 +1,16 @@
 ---
 title: Export
-nav_order: 10
+nav_order: 13
 ---
 
 # CSV export
 
-The **Export** tab downloads point history as one Excel-friendly CSV (UTF-8 with a byte-order mark, so `°F` and
-`₂` read correctly).
+The Export tab downloads selected point history as CSV. Choose points, a date range, a resolution, and either display
+units or stored units. The output is UTF-8 with a byte-order mark for spreadsheet compatibility.
 
-1. Pick the points (the list follows the site / equipment scope selected above).
-2. Pick a date-time range.
-3. Pick a resolution: raw (the box's 300 s trend grid), 5 min, 15 min, 1 hour, or 1 day (UTC days).
-4. Pick units: **display** (imperial or SI, as the header toggle) or **stored** (as NF holds them).
-5. Click **Export CSV**.
+Resolutions include the raw trend interval and coarser buckets. NF performs the resampling; long ranges are fetched
+in bounded time and point chunks, then assembled in the browser. Export has a cell limit; reduce the range or point
+selection if it is exceeded. Range controls follow the site's timezone. See [Charts](charts.html).
 
-How it works: history is resampled by NF on the box (`GET /api/v1/point/data?...&window=Ns&method=AVERAGE|MAX`),
-fetched in chunks of 7 days or less and 40 points per request, and assembled in the browser. A single export is
-capped at 200,000 cells; narrow the range or the point list when you hit it.
-
-The CSV builder, range chunking, column naming and unit conversion are pure functions in
-`nf-app/static/export.js`, tested in node (`nf-app/tests/export.test.mjs`).
-
-For machine access use the NF API directly, or [SPARQL](rdf-sparql.html) for model queries.
+For automation, use the NF point-data API described in the [API reference](fdd-data-access.html). The CSV builder,
+unit conversion, and chunk handling live in nf-app/static/export.js.

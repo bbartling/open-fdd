@@ -11,6 +11,7 @@ on:
       - "nf-app/static/fdd-catalog.json"
       - "scripts/nf/gen_rule_docs.py"
       - "scripts/nf/gen_cookbook.py"
+      - "scripts/check_pages.py"
       - "sql/fdd/**"
       - "nf-app/rules/**"
       - "open_fdd/rules/**"
@@ -23,6 +24,7 @@ on:
       - "nf-app/static/fdd-catalog.json"
       - "scripts/nf/gen_rule_docs.py"
       - "scripts/nf/gen_cookbook.py"
+      - "scripts/check_pages.py"
       - "sql/fdd/**"
       - "nf-app/rules/**"
       - "open_fdd/rules/**"
@@ -74,6 +76,12 @@ jobs:
       - name: Verify site output
         run: test -f _site/index.html && test -f _site/install.html && test -f _site/fdd-rules.html && test -f _site/rules/sql-cookbook.html && test -f _site/rules/pandas-cookbook.html && test -f _site/rules/parity.html
         working-directory: docs
+
+      - name: Check published-site links and navigation
+        run: python3 scripts/check_pages.py docs/_site
+
+      - name: Check source Markdown links
+        run: python3 scripts/check_links.py
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -29,6 +29,59 @@ test("manifest: every shipped file is listed (static/ and hooks/)", () => {
   for (const f of [...walk("static"), ...walk("hooks")]) assert.ok(listed.has(f), `${f} is not in app.json`);
 });
 
+test("Lite history views use shared range controls and keep overview samples bounded", () => {
+  const charts = read("static/charts.js"), app = read("static/app.js"), page = read("static/chart-page.js");
+  for (const key of ["lite.overview", "lite.chart", "lite.points"]) assert.ok(charts.includes(`key: "${key}"`) || app.includes(`"${key}"`));
+  assert.match(app, /fetchRange\(list, range, \{ target: 72/);
+  assert.match(app, /fetchRange\(\[p\], range/);
+  assert.match(app, /read !== sparkRangeRead/);
+  assert.match(app, /read !== pointHistoryRead/);
+  assert.match(app, /renderRangeControl\(\$\("chartRange"\)/);
+  assert.match(page, /renderRangeControl\(\$\("range"\)/);
+  assert.doesNotMatch(app, /SPARK_HOURS/);
+  assert.match(read("static/index.html"), /id="sparkRange"/);
+  assert.match(read("static/index.html"), /id="histRange"/);
+  assert.match(read("static/chart.html"), /id="range"/);
+});
+
+test("Lite chart range helpers encode URL state, resolve presets and chunk bounded NF history reads", async () => {
+  const { createContext, runInContext } = await import("node:vm");
+  const calls = [];
+  const location = { href: "https://nf.example.test/chart.html?c=temps" };
+  Object.defineProperty(location, "search", { get() { return new URL(this.href).search; } });
+  const context = createContext({
+    LT: { palette: [], axisLine: "", label: "", split: "", tipBg: "", tipText: "", legend: "", panel: "", filler: "", dark: false },
+    URL, URLSearchParams, Intl, Date, Math, Object, Map, Set, Promise, Number, String, encodeURIComponent,
+    location,
+    history: { pushState(_s, _t, url) { location.href = String(url); }, replaceState(_s, _t, url) { location.href = String(url); } },
+    esc: (s) => String(s),
+    async api(url) {
+      calls.push(url);
+      return { data: [...new URL(url, "https://nf.example.test").searchParams.getAll("uuids")].map((uuid) => ({ uuid, values: [] })) };
+    },
+  });
+  const api = runInContext(`${read("static/charts.js")}\n;({ getChartRangeState, setChartRangeState, resolveChartRange, dateTimeInputValue, dateTimeInputMs, chartTimeParts, chartTimeLabel, timeAxis, fetchRange })`, context);
+  api.setChartRangeState("lite.chart", { preset: "custom", fromMs: 1000, toMs: 9000 });
+  assert.deepEqual({
+    preset: api.getChartRangeState("lite.chart").preset,
+    fromMs: api.getChartRangeState("lite.chart").fromMs,
+    toMs: api.getChartRangeState("lite.chart").toMs,
+  }, { preset: "custom", fromMs: 1000, toMs: 9000 });
+  assert.deepEqual(JSON.parse(JSON.stringify(api.resolveChartRange({ preset: "24h" }, { nowMs: 100000 }))), { fromMs: 100000 - 86400000, toMs: 100000 });
+  assert.equal(api.dateTimeInputValue(Date.parse("2026-01-01T12:00:00Z"), "America/Chicago"), "2026-01-01T06:00");
+  assert.ok(Number.isNaN(api.dateTimeInputMs("2026-03-08T02:30", "America/Chicago")), "reject nonexistent site wall time at DST spring transition");
+  assert.equal(api.chartTimeParts(Date.parse("2026-01-01T12:00:00Z"), "America/Chicago").h, 6);
+  assert.equal(api.timeAxis("America/Chicago").axisLabel.formatter(Date.parse("2026-01-01T12:00:00Z")), api.chartTimeLabel(Date.parse("2026-01-01T12:00:00Z"), "America/Chicago"));
+  location.href = "https://nf.example.test/chart.html?range.lite.chart=custom&from.lite.chart=bad&to.lite.chart=9000";
+  assert.equal(api.getChartRangeState("lite.chart").preset, "all", "malformed custom URL state normalizes to All");
+  const points = Array.from({ length: 81 }, (_, i) => ({ uuid: `point-${i}` }));
+  const range = await api.fetchRange(points, { preset: "custom", fromMs: Date.now() - 3600000, toMs: Date.now() }, { windowSec: 300 });
+  assert.equal(range.series.size, 81);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every((url) => new URL(url, "https://nf.example.test").searchParams.getAll("uuids").length <= 40));
+  assert.ok(calls.every((url) => /count=10000/.test(url) && /reverse=false/.test(url)));
+});
+
 test("manifest: the app id is the slug of the name (NF derives the id from the name)", () => {
   const { id, name } = manifest.application;
   assert.equal(name, "Open-FDD Lite");

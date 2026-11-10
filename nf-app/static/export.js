@@ -48,7 +48,11 @@
   // ---- time -----------------------------------------------------------------------------
   const p2 = (n) => String(n).padStart(2, "0");
   /** Local wall-clock ISO without zone: 2026-11-05T13:05:00 */
-  function localIso(ms) {
+  function localIso(ms, tz) {
+    if (tz && root.ofddSchedule) {
+      const p = root.ofddSchedule.localParts(ms, tz);
+      return `${p.y}-${p2(p.m)}-${p2(p.d)}T${p2(p.h)}:${p2(p.mi)}:${p2(p.s)}`;
+    }
     const d = new Date(ms);
     return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
   }
@@ -101,8 +105,8 @@
   }
 
   /** Date-stamped file name: open-fdd_<site>_<start>_<end>.csv (local times). */
-  function fileName(site, startMs, endMs) {
-    const stamp = (ms) => localIso(ms).slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
+  function fileName(site, startMs, endMs, tz) {
+    const stamp = (ms) => localIso(ms, tz).slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
     const s = String(site || "site").replace(/[^\w.-]+/g, "_").slice(0, 60);
     return `open-fdd_${s}_${stamp(startMs)}_${stamp(endMs)}.csv`;
   }
@@ -110,7 +114,7 @@
   /** /api/v1/point/data URL for one chunk and one method. */
   function dataUrl({ uuids, fromMs, toMs, windowSec, method }) {
     const ids = uuids.map((u) => "uuids=" + encodeURIComponent(u)).join("&");
-    return `/api/v1/point/data?${ids}&from=${utcIso(fromMs)}&to=${utcIso(toMs)}&window=${windowSec}s&method=${method}`;
+    return `/api/v1/point/data?${ids}&from=${utcIso(fromMs)}&to=${utcIso(toMs)}&window=${windowSec}s&method=${method}&count=10000&reverse=false`;
   }
 
   const sampleValue = (s) => {
@@ -162,14 +166,17 @@
    * mode "display" converts to `system`, "stored" keeps NF's unit. Rows are the union of
    * timestamps; a point with no sample at a timestamp leaves the cell empty.
    */
-  function toCsv({ columns, data, mode = "display", system = "imperial", startMs = -Infinity, endMs = Infinity }) {
+  function toCsv({ columns, data, mode = "display", system = "imperial", startMs = -Infinity, endMs = Infinity, timezone = null, windowSec = 0 }) {
     const conv = columns.map((c) => unitFor(c.unit, mode, system));
     const header = ["timestamp", "timestamp_utc",
       ...uniqueHeaders(columns.map((c, i) => columnName(c.equip, c.dis, conv[i].unit)))];
-    const times = [...new Set(columns.flatMap((c) => [...(data.get(c.uuid) || new Map()).keys()]))]
-      .filter((t) => t >= startMs && t < endMs).sort((a, b) => a - b);
-    const rows = times.map((t) => [localIso(t), utcIso(t),
-      ...columns.map((c, i) => { const v = (data.get(c.uuid) || new Map()).get(t); return v == null ? null : conv[i].convert(v); })]);
+    const actualTimes = [...new Set(columns.flatMap((c) => [...(data.get(c.uuid) || new Map()).keys()]))]
+      .filter((t) => t < endMs && (t >= startMs || (windowSec > 0 && t + windowSec * 1000 > startMs))).sort((a, b) => a - b);
+    const rows = actualTimes.map((bucket) => {
+      const t = Math.max(bucket, startMs);
+      return [localIso(t, timezone), utcIso(t),
+        ...columns.map((c, i) => { const v = (data.get(c.uuid) || new Map()).get(bucket); return v == null ? null : conv[i].convert(v); })];
+    });
     return { csv: buildCsv(header, rows), rows: rows.length };
   }
 
@@ -194,7 +201,32 @@
   // ---- DOM (browser only) ----------------------------------------------------------------
     /** @param {string} id @returns {AnyEl} */
   const $ = (id) => /** @type {AnyEl} */ (root.document.getElementById(id));
-  const st = { key: "", selected: new Set(), mounted: false, busy: false, cur: null };
+  const st = { key: "", selected: new Set(), mounted: false, busy: false, cur: null, bounds: null, rangeTicket: 0, revision: 0 };
+
+  function siteTimeZone() {
+    const { model, scope } = st.cur || {};
+    const site = model?.sites?.find((s) => (((s.attrs || {}).id) || s.name) === scope?.site);
+    return root.chartTimeZone ? root.chartTimeZone(site?.attrs?.tz || site?.attrs?.timezone) : (site?.attrs?.tz || site?.attrs?.timezone || "UTC");
+  }
+  async function refreshRange(state = root.getChartRangeState("export")) {
+    if (!st.cur || !root.resolveChartSelection) return;
+    const ticket = ++st.rangeTicket;
+    st.revision++;
+    const selected = st.rows.filter((r) => st.selected.has(r.p.uuid)).map((r) => r.p);
+    const status = $("exRangeStatus");
+    if (status) status.textContent = selected.length ? "Resolving history range…" : "Select points to estimate this range.";
+    try {
+      const resolved = await root.resolveChartSelection(selected, state, { siteTz: siteTimeZone() });
+      if (ticket !== st.rangeTicket) return;
+      st.bounds = resolved.resolvedBounds;
+      if (status) status.textContent = "";
+      refreshSummary();
+    } catch (e) {
+      if (ticket !== st.rangeTicket) return;
+      if (status) status.textContent = `Could not resolve history range: ${e.message}`;
+      refreshSummary();
+    }
+  }
 
   const equipName = (model, p) => {
     if (p.equipRef) {
@@ -236,7 +268,8 @@
   }
 
   function readRange() {
-    return { startMs: new Date($("exStart").value).getTime(), endMs: new Date($("exEnd").value).getTime() };
+    return st.bounds ? { startMs: st.bounds.fromMs, endMs: st.bounds.toMs }
+      : { startMs: Date.now() - DAY_MS, endMs: Date.now() };
   }
 
   function refreshSummary() {
@@ -262,6 +295,11 @@
 
   async function run() {
     const { model, scope } = st.cur;
+    const revision = st.revision;
+    const selected = st.rows.filter((r) => st.selected.has(r.p.uuid));
+    const resolved = await root.resolveChartSelection(selected.map((r) => r.p), root.getChartRangeState("export"), { siteTz: siteTimeZone() });
+    if (revision !== st.revision) { $("exStatus").textContent = "Export cancelled because its range or selection changed."; return; }
+    st.bounds = resolved.resolvedBounds;
     const { startMs, endMs } = readRange();
     const windowSec = windowFor($("exRes").value);
     const sel = st.rows.filter((r) => st.selected.has(r.p.uuid));
@@ -270,18 +308,20 @@
     st.busy = true;
     $("exGo").disabled = true;
     try {
-      // Align the start to the window so every chunk shares NF's window grid.
-      const from = Math.floor(startMs / (windowSec * 1e3)) * windowSec * 1e3;
+      // NF clips source samples to the requested exact start and end; edge buckets retain only those samples.
+      const from = startMs;
       const data = await collect({
         points: sel.map((r) => r.p), startMs: from, endMs, windowSec, apiFn: (u) => api(u),
+        isCancelled: () => revision !== st.revision,
         onProgress: (i, n) => { $("exStatus").textContent = `loading ${Math.min(i + 1, n)} of ${n} request${n === 1 ? "" : "s"}…`; },
       });
+      if (revision !== st.revision) throw new Error("cancelled because the range or selection changed");
       const { csv, rows } = toCsv({
         columns: sel.map((r) => ({ uuid: r.p.uuid, equip: r.equip, dis: r.p.dis, unit: r.p.units })),
-        data, mode: mode(), system: system(), startMs: from, endMs,
+        data, mode: mode(), system: system(), startMs: startMs, endMs, timezone: siteTimeZone(), windowSec,
       });
       const site = (model.sites.find((s) => (((s.attrs || {}).id) || s.name) === scope.site) || {}).name || scope.site;
-      const name = fileName(site, startMs, endMs);
+      const name = fileName(site, startMs, endMs, siteTimeZone());
       if (!rows) { $("exStatus").textContent = "NF returned no samples for that range."; return; }
       download(name, csv);
       $("exStatus").textContent = `saved ${name} · ${rows.toLocaleString()} rows x ${sel.length} points`;
@@ -297,20 +337,17 @@
     st.mounted = true;
     $("exRes").innerHTML = RESOLUTIONS.map((r) => `<option value="${r.id}">${r.label}</option>`).join("");
     $("exRes").value = "15m";
-    const now = Date.now();
-    $("exStart").value = inputValue(now - DAY_MS);
-    $("exEnd").value = inputValue(now);
-    for (const id of ["exStart", "exEnd", "exRes"]) $(id).addEventListener("input", refreshSummary);
-    $("exUnits").addEventListener("input", drawList);
+    $("exRes").addEventListener("input", () => { st.revision++; refreshSummary(); });
+    $("exUnits").addEventListener("input", () => { st.revision++; drawList(); });
     $("exFilter").addEventListener("input", drawList);
-    $("exAll").addEventListener("click", () => { for (const r of visibleRows()) st.selected.add(r.p.uuid); drawList(); });
-    $("exNone").addEventListener("click", () => { for (const r of visibleRows()) st.selected.delete(r.p.uuid); drawList(); });
+    $("exAll").addEventListener("click", () => { for (const r of visibleRows()) st.selected.add(r.p.uuid); drawList(); refreshRange(); });
+    $("exNone").addEventListener("click", () => { for (const r of visibleRows()) st.selected.delete(r.p.uuid); drawList(); refreshRange(); });
     $("exList").addEventListener("change", (ev) => {
       const t = /** @type {HTMLInputElement} */ (ev.target);
       const id = t.dataset && t.dataset.uuid;
       if (!id) return;
       if (t.checked) st.selected.add(id); else st.selected.delete(id);
-      refreshSummary();
+      refreshRange();
     });
     $("exGo").addEventListener("click", () => run());
   }
@@ -328,9 +365,12 @@
       const have = new Set(st.rows.map((r) => r.p.uuid));
       for (const id of [...st.selected]) if (!have.has(id)) st.selected.delete(id);
     }
+    root.renderRangeControl($("exRangeControl"), { key: "export", state: root.getChartRangeState("export"), siteTz: siteTimeZone(),
+      onChange: (state) => refreshRange(state) });
     const sys = system();
     $("exUnits").options[0].textContent = `As displayed (${sys === "si" ? "SI" : "imperial"})`;
     drawList();
+    refreshRange();
   }
 
   const exported = { ...pure, render };   // not named `api`: the DOM code calls nf.js api()

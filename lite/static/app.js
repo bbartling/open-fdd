@@ -6,7 +6,6 @@
 
 const LIVE_MS = 15000;            // polling while the push stream is down
 const RESYNC_MS = 5 * 60e3;       // full refresh while it is up (untagged points, BACnet tab)
-const SPARK_HOURS = 6;            // Overview sparklines: 6 h of 5-min averages
 const CHART_REFRESH_MS = 5 * 60e3;
 
 /** @param {string} id @returns {AnyEl} */
@@ -23,7 +22,13 @@ let points = [];          // numeric sensor/sp points on the scoped equips (card
 let variables = [];       // `weather` points on the site, charted against the equip's outside air
 let statusPts = [];       // kind Bool points on the scoped equips (status chips)
 let sparkHist = new Map();  // uuid -> [[ms, value], ...] for the sparklines (+ live samples)
-let histHours = 24;
+let sparkRange = getChartRangeState("lite.overview");
+let pointRange = getChartRangeState("lite.points");
+let chartRange = getChartRangeState("lite.chart");
+let sparkBounds = null;
+let sparkWindowSec = 300;
+let sparkRangeRead = 0;
+let pointHistoryRead = 0;
 const chartSel = { id: "", hours: 0, point: "" };  // Charts tab: the one chart on screen
 let selectedPoint = null; // Points tab
 let activeTab = "overview";
@@ -72,7 +77,42 @@ async function applyScope() {
 
 // ---- sparkline history ---------------------------------------------------------------
 async function loadSparks() {
-  sparkHist = await fetchSeries(points, SPARK_HOURS, { windowSec: 300 });
+  const read = ++sparkRangeRead, range = sparkRange, list = points, siteRef = scope.site, equipRef = scope.equip;
+  const site = model.sites.find((s) => idOf(s) === scope.site);
+  let result;
+  try { result = await fetchRange(list, range, { target: 72, siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC" }); }
+  catch (e) { if (read === sparkRangeRead) throw e; return; }
+  if (read !== sparkRangeRead || siteRef !== scope.site || equipRef !== scope.equip || range !== sparkRange) return;
+  sparkHist = result.series;
+  sparkBounds = { fromMs: result.fromMs, toMs: result.toMs };
+  sparkWindowSec = result.windowSec;
+  renderSparkRange(site);
+  if (activeTab === "overview") points.forEach((p, i) => updateCard(i, false));
+}
+
+function appendSpark(uuid, ts, value) {
+  const t = parseTs(ts);
+  if (sparkBounds && t < sparkBounds.fromMs) return;
+  if (sparkBounds && t >= sparkBounds.toMs) {
+    if (sparkRange.preset === "custom") return;
+    const span = sparkBounds.toMs - sparkBounds.fromMs;
+    sparkBounds.toMs = t + 1;
+    if (sparkRange.preset !== "all") sparkBounds.fromMs = sparkBounds.toMs - span;
+  }
+  const arr = sparkHist.get(uuid) || [];
+  const bucket = Math.floor(t / (sparkWindowSec * 1000)) * sparkWindowSec * 1000;
+  const i = arr.findIndex(([at]) => Math.floor(at / (sparkWindowSec * 1000)) * sparkWindowSec * 1000 === bucket);
+  if (i >= 0) arr[i] = [bucket, value];
+  else arr.push([bucket, value]);
+  arr.sort((a, b) => a[0] - b[0]);
+  if (arr.length > 74) arr.splice(0, arr.length - 74);
+  sparkHist.set(uuid, arr);
+}
+
+function renderSparkRange(site = model?.sites.find((s) => idOf(s) === scope.site)) {
+  renderRangeControl($("sparkRange"), { key: "lite.overview", state: sparkRange,
+    siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC",
+    onChange: (next) => { sparkRange = next; loadSparks().catch(showErr); } });
 }
 
 const since = (arr, hours) => {
@@ -126,7 +166,7 @@ function updateCard(i, flash) {
     grid: { left: 0, right: 0, top: 4, bottom: 0 },
     xAxis: { type: "time", show: false }, yAxis: { type: "value", show: false, scale: true },
     series: [{
-      type: "line", data: since(sparkHist.get(p.uuid) || [], 6), showSymbol: false, smooth: true,
+      type: "line", data: (sparkHist.get(p.uuid) || []).filter(([t]) => !sparkBounds || (t >= sparkBounds.fromMs && t < sparkBounds.toMs)), showSymbol: false, smooth: true,
       lineStyle: { width: 1.5, color },
       areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
         { offset: 0, color: color + "66" }, { offset: 1, color: color + "00" }]) },
@@ -149,7 +189,11 @@ function renderChips() {
 // ---- Charts tab -----------------------------------------------------------------------
 // A gallery of the catalog (charts.js) and ONE chart below it. Picking a chart fetches
 // just that chart's points, resampled by NF; "open in new window" = chart.html.
-const chartCtx = () => ({ cards: points, status: statusPts, weather: variables });
+const siteTimeZone = () => {
+  const attrs = model?.sites.find((s) => idOf(s) === scope.site)?.attrs || {};
+  return attrs.tz || attrs.timezone || "UTC";
+};
+const chartCtx = () => ({ cards: points, status: statusPts, weather: variables, siteTz: siteTimeZone() });
 const PREF_KEY = "openfddlite.chart";
 
 function loadChartPref() {
@@ -161,6 +205,8 @@ function saveChartPref() {
 
 function chartUrl(def) {
   const q = new URLSearchParams({ c: def.id, site: scope.site, h: String(chartSel.hours) });
+  for (const key of ["range.lite.chart", "from.lite.chart", "to.lite.chart"])
+    if (new URLSearchParams(location.search).has(key)) q.set(key, new URLSearchParams(location.search).get(key));
   if (scope.equip) q.set("equip", scope.equip);
   if (def.pick && chartSel.point) q.set("point", chartSel.point);
   return `chart.html?${q}`;
@@ -182,18 +228,19 @@ async function renderCharts() {
   const def = defs.find((d) => d.id === chartSel.id);
   if (!def) return;
   const ctx = chartCtx();
-  if (!def.ranges.includes(chartSel.hours)) chartSel.hours = def.range;
+  if (!chartSel.hours) chartSel.hours = def.range;
   const opts = def.pick ? def.pick(ctx) : [];
   if (def.pick && !opts.some((p) => p.uuid === chartSel.point)) chartSel.point = def.defaultPick(ctx);
   $("chartTitle").textContent = def.title;
   $("chartPick").hidden = !def.pick;
   $("chartPick").innerHTML = opts.map((p) => `<option value="${p.uuid}">${esc(p.name)}</option>`).join("");
   $("chartPick").value = chartSel.point || "";
-  $("chartRange").innerHTML = def.ranges.map((h) =>
-    `<button data-h="${h}" class="${h === chartSel.hours ? "on" : ""}">${rangeLabel(h)}</button>`).join("");
+  renderRangeControl($("chartRange"), { key: "lite.chart", state: chartRange,
+    siteTz: siteTimeZone(),
+    onChange: (next) => { chartRange = next; renderCharts().catch((e) => ($("chartHint").textContent = `could not load: ${e.message}`)); } });
   $("chartOpen").href = chartUrl(def);
   saveChartPref();
-  const hint = await drawChart(mk("chartHost"), def, ctx, chartSel.hours, { point: chartSel.point });
+  const hint = await drawChart(mk("chartHost"), def, ctx, chartRange, { point: chartSel.point });
   if (hint != null) $("chartHint").textContent = hint;
 }
 
@@ -230,13 +277,23 @@ function renderPoints() {
 }
 
 async function renderPointHistory() {
+  const read = ++pointHistoryRead;
   const p = model.points.find((x) => x.uuid === selectedPoint);
   if (!p) return;
+  const pointUuid = p.uuid, range = pointRange;
   $("histHint").textContent = `${p.dis} · ${p.tags.filter((t) => !GENERIC.has(t)).join(" ")}`;
-  const data = (await fetchSeries([p], histHours)).get(p.uuid) || [];
+  const site = model.sites.find((s) => idOf(s) === scope.site);
+  renderRangeControl($("histRange"), { key: "lite.points", state: pointRange,
+    siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC",
+    onChange: (next) => { pointRange = next; renderPointHistory().catch((e) => setLive(false, e.message)); } });
+  let fetched;
+  try { fetched = await fetchRange([p], range, { siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC" }); }
+  catch (e) { if (read === pointHistoryRead) throw e; return; }
+  if (read !== pointHistoryRead || selectedPoint !== pointUuid || range !== pointRange) return;
+  const data = fetched.series.get(p.uuid) || [];
   mk("histChart").setOption({
-    tooltip, grid: { left: 50, right: 20, top: 20, bottom: 50 },
-    xAxis: { type: "time", ...axisStyle },
+    tooltip: rangeTooltip((site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC"), grid: { left: 50, right: 20, top: 20, bottom: 50 },
+    xAxis: { ...timeAxis((site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC"), min: fetched.fromMs, max: fetched.toMs },
     yAxis: { type: "value", scale: true, name: p.kind === "Bool" ? "on / off" : unitLabel(p.units), nameTextStyle: { color: LT.label }, ...axisStyle },
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 6, borderColor: LT.axisLine, fillerColor: LT.filler, textStyle: { color: LT.label } }],
     series: [{
@@ -517,7 +574,7 @@ function onUpdate(u) {
   if (i >= 0) {
     changed.add(i);
     if (!sparkHist.has(u.uuid)) sparkHist.set(u.uuid, []);
-    sparkHist.get(u.uuid).push([parseTs(v.ts), num]);
+    appendSpark(u.uuid, v.ts, num);
   }
   // NF pushes one batch per poll; coalesce the redraw.
   clearTimeout(uiTimer);
@@ -551,7 +608,7 @@ async function refreshLive() {
       const v = latestOf(f);
       if (v == null) continue;
       if (!sparkHist.has(p.uuid)) sparkHist.set(p.uuid, []);
-      sparkHist.get(p.uuid).push([parseTs(f.latest.ts), v]);
+      appendSpark(p.uuid, f.latest.ts, v);
       const i = points.indexOf(p);
       if (i >= 0) updateCard(i, activeTab === "overview");
     }
@@ -579,6 +636,16 @@ function showErr(e) {
 }
 
 function wireControls() {
+  window.addEventListener("popstate", () => {
+    const nextSpark = getChartRangeState("lite.overview"), nextPoint = getChartRangeState("lite.points"), nextChart = getChartRangeState("lite.chart");
+    const sparkChanged = JSON.stringify(nextSpark) !== JSON.stringify(sparkRange);
+    const pointChanged = JSON.stringify(nextPoint) !== JSON.stringify(pointRange);
+    const chartChanged = JSON.stringify(nextChart) !== JSON.stringify(chartRange);
+    sparkRange = nextSpark; pointRange = nextPoint; chartRange = nextChart;
+    if (sparkChanged) loadSparks().catch(showErr);
+    if (activeTab === "charts" && chartChanged) renderCharts().catch((e) => ($("chartHint").textContent = `could not load: ${e.message}`));
+    if (activeTab === "points" && selectedPoint && pointChanged) renderPointHistory().catch(showErr);
+  });
   $("tabs").onclick = (ev) => { const b = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("button")); if (b) showTab(b.dataset.tab); };
   $("sitePick").onchange = () => { scope.site = $("sitePick").value; scope.equip = ""; fillPickers(); applyScope().catch(showErr); };
   $("equipPick").onchange = () => { scope.equip = $("equipPick").value; applyScope().catch(showErr); };
@@ -590,20 +657,7 @@ function wireControls() {
     chartSel.hours = 0;
     renderCharts().catch(chartErr);
   };
-  $("chartRange").onclick = (ev) => {
-    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
-    if (!h || h === chartSel.hours) return;
-    chartSel.hours = h;
-    renderCharts().catch(chartErr);
-  };
   $("chartPick").onchange = () => { chartSel.point = $("chartPick").value; renderCharts().catch(chartErr); };
-  $("histRange").onclick = (ev) => {
-    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
-    if (!h) return;
-    histHours = h;
-    document.querySelectorAll("#histRange button").forEach((b) => b.classList.toggle("on", b === ev.target));
-    renderPointHistory().catch((e) => setLive(false, e.message));
-  };
   $("pointFilter").oninput = renderPoints;
   $("showUntagged").onchange = renderPoints;
   $("pointRows").onclick = (ev) => {

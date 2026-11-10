@@ -5,21 +5,13 @@
  *
  *   buildDataset(pack, { equipments: 2, days: 3, stepSeconds: 300, gaps: true, duplicateRole: true })
  *
- * ALL VALUES ARE SI (degC, delta-degC, Pa, L/s, percent): the rules never convert units. The F/inwc/cfm numbers below
- * are written through the C(), D(), PA and LPS helpers so each physical operating point is easy to read.
+ * Physical inputs use SI values directly (degrees Celsius, temperature differences in kelvin, Pa, L/s).
+ * Fraction and relative humidity scales follow the input contract below.
  *
  * Every contract history column gets a signal (sine / step patterns) so rules have something to chew on;
  * equipment index 1 is the "sick" one (fan cmd vs status mismatch, stuck damper, low duct static, web OAT
  * disagreement, a data gap, ...), index 0 is mostly healthy with a few null columns.
  */
-
-// imperial operating points -> SI (the dataset itself is SI only)
-const C = (f) => ((f - 32) * 5) / 9;     // absolute degF -> degC
-const D = (df) => (df * 5) / 9;          // delta degF -> delta degC
-const PA = 248.84;                       // Pa per in.w.c.
-const LPS = 0.471947;                    // L/s per cfm
-const GPM = 0.0630902;                   // L/s per gpm
-const PSI = 6894.757;                    // Pa per psi
 
 const T0 = Date.UTC(2026, 0, 5, 0, 0, 0); // Monday 00:00 UTC
 
@@ -46,22 +38,22 @@ function signal(col, e, i, h, occ, step) {
   if (d >= 100 && d < 180) {
     switch (col) {
       case "fan_cmd": return 1;
-      case "mat": return v - D(15);
+      case "mat": return v - 8.333333333333;
       case "htg_valve_pct": return 1;
-      case "sat": return v - D(12);
-      case "chw_return_t": return baseSignal("chw_supply_t", e, i, h, occ, step) + D(1);
+      case "sat": return v - 6.666666666667;
+      case "chw_return_t": return baseSignal("chw_supply_t", e, i, h, occ, step) + 0.555555555556;
       case "chw_pump_status": case "pump_status": case "chw_pump_cmd": return 1;
-      case "duct_static": return 0.5 * PA;
+      case "duct_static": return 124.42;
       default:
     }
   }
   if (d >= 200 && d < 260) {
     switch (col) {
       case "oa_damper_pct": case "damper_pct": case "damper_cmd": return 0;
-      case "mat": return baseSignal("oa_t", e, i, h, occ, step) + D(0.2);
+      case "mat": return baseSignal("oa_t", e, i, h, occ, step) + 0.111111111111;
       case "fan_cmd": return 0.8;
-      case "sat": return C(70);
-      case "sat_sp": return C(55);
+      case "sat": return 21.111111111111;
+      case "sat_sp": return 12.777777777778;
       default:
     }
   }
@@ -76,23 +68,23 @@ function baseSignal(col, e, i, h, occ, step) {
 function percentSignal(col, e, i, h, occ, step) {
   const sick = e === 1;
   const seed = hashCode(col);
-  const oa = C(48) + D(24) * wave(h, 24, -2.2) + D(2) * wave(i, 17);
+  const oa = 8.888888888889 + 13.333333333333 * wave(h, 24, -2.2) + 1.111111111111 * wave(i, 17);
   switch (col) {
     case "oa_t": return oa;
-    case "web_oa_t": return e === 0 ? null : oa + (i % 288 > 120 && i % 288 < 200 ? D(9) : D(0.4)); // OAT-METEO disagreement
-    case "web_oa_dp": return e === 0 ? null : oa - D(12);
-    case "web_wb_t": return oa - D(5);
+    case "web_oa_t": return e === 0 ? null : oa + (i % 288 > 120 && i % 288 < 200 ? 5 : 0.222222222222); // OAT-METEO disagreement
+    case "web_oa_dp": return e === 0 ? null : oa - 6.666666666667;
+    case "web_wb_t": return oa - 2.777777777778;
     case "oa_h": return 55 + 30 * wave(h, 24, 1);
-    case "rat": return C(72) + D(0.8) * wave(i, 40);
-    case "zone_t": return sick ? C(72) + D(7) * wave(i, 150) + (occ ? 0 : -D(6)) : C(72) + D(1.5) * wave(i, 60);
-    case "zone_air_temp_sp": return occ ? C(72) : C(66);
-    case "cooling_sp": return C(75);
-    case "heating_sp": return C(69);
-    case "mat": return 0.3 * oa + 0.7 * (C(72) + D(0.8) * wave(i, 40)) + (sick ? D(6) * square(i, 90, 0.3) : 0);
-    case "sat": return sick ? C(55) + D(10) * wave(i, 70) + D(4) * wave(i, 7) : C(55) + D(1.2) * wave(i, 50);
-    case "sat_sp": return occ ? C(55) : C(60);
-    case "ahu_sat": return C(55) + D(1) * wave(i, 55);
-    case "preheat_leave_t": return C(50) + D(5) * wave(i, 90);
+    case "rat": return 22.222222222222 + 0.444444444444 * wave(i, 40);
+    case "zone_t": return sick ? 22.222222222222 + 3.888888888889 * wave(i, 150) + (occ ? 0 : -3.333333333333) : 22.222222222222 + 0.833333333333 * wave(i, 60);
+    case "zone_air_temp_sp": return occ ? 22.222222222222 : 18.888888888889;
+    case "cooling_sp": return 23.888888888889;
+    case "heating_sp": return 20.555555555556;
+    case "mat": return 0.3 * oa + 0.7 * (22.222222222222 + 0.444444444444 * wave(i, 40)) + (sick ? 3.333333333333 * square(i, 90, 0.3) : 0);
+    case "sat": return sick ? 12.777777777778 + 5.555555555556 * wave(i, 70) + 2.222222222222 * wave(i, 7) : 12.777777777778 + 0.666666666667 * wave(i, 50);
+    case "sat_sp": return occ ? 12.777777777778 : 15.555555555556;
+    case "ahu_sat": return 12.777777777778 + 0.555555555556 * wave(i, 55);
+    case "preheat_leave_t": return 10 + 2.777777777778 * wave(i, 90);
     case "fan_cmd": return occ ? (sick ? 80 : 65 + 20 * wave(i, 120)) : 0;
     case "fan_status": {
       if (!occ) return sick && i % 288 > 40 && i % 288 < 70 ? 1 : 0; // running while the schedule says off
@@ -101,33 +93,33 @@ function percentSignal(col, e, i, h, occ, step) {
     case "damper_cmd": return occ ? (sick ? 10 : 20 + 70 * Math.abs(wave(i, 180))) : 0;
     case "damper_pct": return occ ? (sick ? 10 : 20 + 68 * Math.abs(wave(i, 180))) : 0;
     case "oa_damper_pct": return occ ? (sick ? 10 : 15 + 80 * Math.abs(wave(i, 200))) : 0;
-    case "duct_static": return PA * (sick ? 0.6 + 0.2 * wave(i, 30) : 1.5 + 0.1 * wave(i, 45));
-    case "duct_static_sp": return 1.5 * PA;
+    case "duct_static": return sick ? 149.304 + 49.768 * wave(i, 30) : 373.26 + 24.884 * wave(i, 45);
+    case "duct_static_sp": return 373.26;
     case "static_reset_request": return Math.round(3 * Math.abs(wave(i, 160)));
     case "clg_valve_pct": return sick ? 30 + 60 * Math.abs(wave(i, 110)) : (occ ? 40 * Math.abs(wave(i, 220)) : 0);
     case "htg_valve_pct": return occ ? 30 * Math.max(0, wave(i, 260, 3)) : (sick ? 25 : 0);
     case "reheat_valve_pct": return sick ? 70 * square(i, 96, 0.5) : 20 * Math.max(0, wave(i, 150));
-    case "vav_discharge_t": return C(58) + D(12) * square(i, 80, 0.35);
-    case "vav_inlet_t": return C(55) + D(2) * wave(i, 70);
-    case "vav_total_flow": return LPS * (900 + 400 * wave(i, 100));
-    case "zone_flow": return LPS * (sick ? 120 + 30 * wave(i, 90) : 250 + 80 * wave(i, 130));
-    case "min_flow_sp": return LPS * 150;
+    case "vav_discharge_t": return 14.444444444444 + 6.666666666667 * square(i, 80, 0.35);
+    case "vav_inlet_t": return 12.777777777778 + 1.111111111111 * wave(i, 70);
+    case "vav_total_flow": return 424.7523 + 188.7788 * wave(i, 100);
+    case "zone_flow": return sick ? 56.63364 + 14.15841 * wave(i, 90) : 117.98675 + 37.75576 * wave(i, 130);
+    case "min_flow_sp": return 70.79205;
     case "zone_co2": return 600 + 400 * Math.abs(wave(i, 140)) + (occ ? 150 : 0);
-    case "cooling_coil_entering_temp": return C(60) + D(3) * wave(i, 50);
-    case "cooling_coil_leaving_temp": return C(55) + D(2) * wave(i, 50) + (sick ? D(4) : 0);
-    case "heating_coil_entering_temp": return C(55) + D(3) * wave(i, 66);
-    case "heating_coil_leaving_temp": return C(75) + D(4) * wave(i, 66);
-    case "chw_supply_t": return C(44) + D(2) * wave(i, 95);
-    case "chw_return_t": return C(52) + D(3) * wave(i, 95, 0.4);
-    case "chw_supply_sp": return C(44);
-    case "chw_dp": return PSI * (10 + 3 * wave(i, 85));
-    case "chw_dp_sp": return PSI * 11;
-    case "chw_flow": return GPM * (300 + 120 * wave(i, 120));
+    case "cooling_coil_entering_temp": return 15.555555555556 + 1.666666666667 * wave(i, 50);
+    case "cooling_coil_leaving_temp": return 12.777777777778 + 1.111111111111 * wave(i, 50) + (sick ? 2.222222222222 : 0);
+    case "heating_coil_entering_temp": return 12.777777777778 + 1.666666666667 * wave(i, 66);
+    case "heating_coil_leaving_temp": return 23.888888888889 + 2.222222222222 * wave(i, 66);
+    case "chw_supply_t": return 6.666666666667 + 1.111111111111 * wave(i, 95);
+    case "chw_return_t": return 11.111111111111 + 1.666666666667 * wave(i, 95, 0.4);
+    case "chw_supply_sp": return 6.666666666667;
+    case "chw_dp": return 68947.57 + 20684.271 * wave(i, 85);
+    case "chw_dp_sp": return 75842.327;
+    case "chw_flow": return 18.92706 + 7.570824 * wave(i, 120);
     case "chw_reset_request_sum": return Math.round(4 * Math.abs(wave(i, 210)));
-    case "hw_supply_t": return C(150) + D(12) * wave(i, 130);
-    case "hw_return_t": return C(130) + D(8) * wave(i, 130, 0.3);
+    case "hw_supply_t": return 65.555555555556 + 6.666666666667 * wave(i, 130);
+    case "hw_return_t": return 54.444444444444 + 4.444444444444 * wave(i, 130, 0.3);
     case "hw_reset_request_sum": return Math.round(3 * Math.abs(wave(i, 190)));
-    case "cw_supply_t": return e === 0 ? null : C(80) + D(4) * wave(i, 100);
+    case "cw_supply_t": return e === 0 ? null : 26.666666666667 + 2.222222222222 * wave(i, 100);
     case "electric_kw": return 40 + 15 * wave(i, 288, 0.5);
     case "kwh": return (40 + 15 * wave(i, 288, 0.5)) * step / 3600;
     case "electric_kwh": return null;
@@ -176,20 +168,20 @@ function buildDataset(pack, { equipments = 2, days = 3, stepSeconds = 300, gaps 
   for (let i = 0; i < steps; i += 4) { // every 20 min at 5 min history
     const ts = T0 + i * stepSeconds * 1000;
     const h = ((i * stepSeconds) / 3600) % 24;
-    const oa = C(48) + D(24) * wave(h, 24, -2.2);
-    weather.push({ ts, oa_t: oa, web_oa_t: oa + D(0.6), web_oa_dp: oa - D(11) });
+    const oa = 8.888888888889 + 13.333333333333 * wave(h, 24, -2.2);
+    weather.push({ ts, oa_t: oa, web_oa_t: oa + 0.333333333333, web_oa_dp: oa - 6.111111111111 });
   }
-  // SI units as the hook declares them after toSI(); one imperial and one missing unit prove the SV-* gate masks, never converts.
-  const mixed = [["oa_t", "°C"], ["mat", "°C"], ["zone_t", "°C"], ["rat", "°C"], ["sat", "°C"],
-    ["chw_supply_t", "°C"], ["chw_return_t", "°C"], ["hw_supply_t", null], ["hw_return_t", "°F"],
+  // The stress fixture uses the same canonical units declared by the hook after ingest.
+  const sensorUnits = [["oa_t", "°C"], ["mat", "°C"], ["zone_t", "°C"], ["rat", "°C"], ["sat", "°C"],
+    ["chw_supply_t", "°C"], ["chw_return_t", "°C"], ["hw_supply_t", "°C"], ["hw_return_t", "°C"],
     ["oa_h", "%"], ["ra_h", "%"], ["zone_rh", "%"], ["ma_h", "%"], ["sa_h", "%"], ["duct_static", "Pa"]];
   const authorizedSeries = [];
   const sensorHistory = [];
   const equipment = [];
   for (const id of equipmentIds) {
     equipment.push({ building_id: "site-1", equipment_id: id });
-    for (const [role, unit] of mixed) authorizedSeries.push({ site_id: "site-1", equipment_id: id, role, unit });
-    const series = mixed.map(([role, unit]) => ({ series_id: `series-${id}-${role}`, role, unit }));
+    for (const [role, unit] of sensorUnits) authorizedSeries.push({ site_id: "site-1", equipment_id: id, role, unit });
+    const series = sensorUnits.map(([role, unit]) => ({ series_id: `series-${id}-${role}`, role, unit }));
     if (duplicateRole) series.push({ series_id: `series-${id}-sat-duplicate`, role: "sat", unit: "°C" });
     for (const sensor of series) {
       for (const row of history) {

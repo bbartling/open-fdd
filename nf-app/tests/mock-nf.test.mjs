@@ -112,10 +112,18 @@ test("mock NF: omitted page size is empty, offsets are ordered, and tokens are i
   assert.equal((await post("/api/v1/point/query", { pageSize: 2, pageOffset: -1 })).status, 400);
 });
 
-test("real mock rejects unchunked history for 161 and 709 UUIDs and the browser merges bounded reads", async () => {
+test("real mock rejects unchunked history and merges bounded All and custom ranges", async () => {
   const seed = await (await post("/api/v1/point/query", { pageSize: 500 })).json();
   const known = [...new Set(seed.points.filter((p) => p.latestValue).map((p) => p.uuid))];
   assert.ok(known.length >= 2);
+  const firstTwo = known.slice(0, 2).map((uuid) => "uuids=" + encodeURIComponent(uuid)).join("&");
+  const oldest = await (await fetch(base + `/api/v1/point/data?${firstTwo}&count=1&reverse=false`)).json();
+  const newest = await (await fetch(base + `/api/v1/point/data?${firstTwo}&count=1&reverse=true`)).json();
+  assert.equal(oldest.data.length, 2);
+  assert.ok(oldest.data.every((s) => s.values.length === 1), "raw count applies separately to each UUID");
+  assert.ok(newest.data.every((s, i) => Date.parse(s.values[0].ts) > Date.parse(oldest.data[i].values[0].ts)));
+  const oldestMs = Math.min(...oldest.data.map((s) => Date.parse(s.values[0].ts)));
+  assert.ok(Date.now() - oldestMs > 7 * 86400e3, "fixture retains history beyond the former seven-day view");
   const requests = [];
   const ctx = createContext({
     parseTs: Date.parse,
@@ -138,11 +146,15 @@ test("real mock rejects unchunked history for 161 and 709 UUIDs and the browser 
       new Date(end).toISOString(), 3600, "AVERAGE");
     assert.equal((await fetch(base + url)).status, 431, `${count} UUIDs exceed the mock front door`);
     const before = requests.length;
-    const merged = await ctx.fetchSeries(points, 24, { windowSec: 3600 });
+    const range = count === 161 ? { preset: "all" } : { preset: "custom", fromMs: oldestMs, toMs: end };
+    const { series: merged, fromMs } = await ctx.fetchRange(points, range, { endMs: end });
+    assert.equal(fromMs, oldestMs);
     assert.equal(merged.size, count);
     assert.ok(merged.get(known[0]).length && merged.get(known[1]).length, "first and last chunks both contribute samples");
     const used = requests.slice(before);
     assert.ok(used.length > 1 && used.every((path) => Buffer.byteLength(path) < 6500));
+    const discovery = used.filter((url) => new URLSearchParams(url.split("?")[1]).get("count") === "1");
+    if (range.preset === "all") assert.ok(discovery.length > 1 && discovery.length < count, "oldest lookups are chunked as well");
   }
   assert.equal((await fetch(base + "/api/v1/platform/info", { headers: { "x-test-padding": "x".repeat(8300) } })).status, 431);
 });

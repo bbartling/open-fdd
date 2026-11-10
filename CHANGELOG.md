@@ -3,6 +3,17 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.12 - 2026-11-10
+
+- Open chart history on All and add 1 h, 24 h, 1 week, and custom ranges (#1577).
+- Collapse empty stale Faults lanes and keep assessed-zero results visible (#1578).
+- Round coverage and fault duration labels for display (#1579).
+- Explain how to preflight a loopback-published Timescale database from a separate deploy machine (#1576).
+- Publish concise SQL, pandas, API, and NF install guides and remove internal episode notes from GitHub Pages (#1580).
+- Run native SI pandas and SQL parity stress before the mock NF ZAP scan on every patch.
+
+See the [NF install and upgrade guide](docs/install.md).
+
 ## 5.0.11 - 2026-11-10
 
 - Split large history requests so Faults lanes can render through NF's front door. Show a visible history error in the panel and retain the unit scales and mixed-history cutover (#1571, #1566).

@@ -118,6 +118,18 @@ test("byDay groups samples by local calendar day, in time order", () => {
   const days = ctx.byDay([[t0, 1], [t0 + 3600e3, 2], [t0 + 7200e3, 3]]);
   assert.equal(days.size, 2);
   assert.deepEqual(Array.from(days.values(), (v) => v.length), [1, 2]);
+  const beforeMidnight = Date.UTC(2026, 0, 2, 5, 30);
+  const afterMidnight = Date.UTC(2026, 0, 2, 6, 30);
+  const samples = [[beforeMidnight, 1], [afterMidnight, 2]];
+  assert.equal(ctx.byDay(samples, "UTC").size, 1);
+  assert.equal(ctx.byDay(samples, "America/Chicago").size, 2);
+  const localHour = ctx.hourOfDayFormatter("America/Chicago");
+  assert.equal(localHour(beforeMidnight), 23.5);
+  assert.equal(localHour(afterMidnight), 0.5);
+  const chart = ctx.chartOptionSiteTime({ xAxis: { type: "time" }, tooltip: { trigger: "axis" } }, "America/Chicago");
+  assert.match(chart.xAxis.axisLabel.formatter(beforeMidnight), /11:30/);
+  assert.match(chart.xAxis.axisPointer.label.formatter({ value: beforeMidnight }), /11:30/);
+  assert.match(chart.tooltip.formatter([{ axisValue: beforeMidnight, value: [beforeMidnight, 1], seriesName: "series" }]), /11:30/);
 });
 
 test("weather hook: site comes from NF, never hard-coded", () => {
@@ -180,7 +192,12 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   const els = new Map();
   const el = (id) => { if (!els.has(id)) els.set(id, { hidden: false, checked: false, style: {}, innerHTML: "", textContent: "", attrs: {}, classes: new Set(),
     setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; }, classList: { add: (x) => el(id).classes.add(x), remove: (x) => el(id).classes.delete(x), contains: (x) => el(id).classes.has(x) } }); return els.get(id); };
-  let chartOption = null, disposedCharts = 0;
+  let chartOption = null, disposedCharts = 0, rangeControl, lastRange;
+  let chosenRange = { preset: "all" };
+  const readRange = async (points, state, opts) => {
+    lastRange = { state, opts };
+    return { series: new Map(points.map((p) => [p.uuid, p.history || []])), windowSec: 3600 };
+  };
   const ctx = vm.createContext({
     console,
     document: { getElementById: (id) => el(id) },
@@ -199,8 +216,12 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
       return Array.from(samples || []).filter(([t]) => t >= first);
     },
     FAULT_LANE: { lineStyle: { color: "#e11d48" } },
+    fddCatalog: { sensor_sweep_roles: { "SV-STALE": ["sat", "mat", "oa_t", "rat"] } },
     echarts: { getInstanceByDom: () => ({ dispose: () => { disposedCharts++; } }) },
-    fetchDisplay: async (points) => new Map(points.map((p) => [p.uuid, p.history || []])),
+    chartTimeZone: (tz) => tz || "UTC",
+    getChartRangeState: () => chosenRange,
+    renderRangeControl: (_el, options) => { rangeControl = options; },
+    fetchRange: readRange,
     ofddChart: () => ({ setOption: (o) => { chartOption = o; } }),
   });
   vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
@@ -224,12 +245,13 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
       const role = sensorRoles[input.uuid];
       let status = faultRole[rule] === input.uuid || faultRole[rule] === role ? "fault" : "ok";
       if (rule === "SV-STALE" && input.uuid === "sensor-sat-1") status = "stale";
+      if (rule === "SV-STALE" && role === "duct_static") status = "not-assessed";
       if (rule === "SV-RATE" && input.uuid === "sensor-rat-1") status = "not-assessed";
       const value = status === "fault" ? 2 : status === "ok" ? 0 : null;
       return point(`${rule}-${input.uuid}`, `${input.name} ${rule}`, "AHU-A", ["fdd", "fault"], {
         ruleRef: rule, fddSummary: "sensor", sensorRef: input.uuid, roleRef: role,
         unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
-        fddStatus: status, fddWindowHours: "24", fddCoverageHours: "24",
+        fddStatus: status, fddWindowHours: "24", fddCoverageHours: status === "ok" ? "23.916666666666668" : "24",
       }, value, [[0, 95], [h, 80], [2 * h, value]]);
     });
     results.push(point(`${rule}-summary`, `AHU-A ${rule}`, "AHU-A", ["fdd", "fault"], {
@@ -247,19 +269,37 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   const vavResult = point("vav-result", "VAV-only result", "VAV-A", ["fdd", "fault"], {
     ruleRef: "FC1", siteRef: "site-fixture", unit: "%", fddOutput: "fault_pct", fddStatus: "fault",
   }, 5);
-  ctx.testModel = { equips: [
+  ctx.testModel = { sites: [{ id: "site-fixture", attrs: { tz: "America/Chicago" } }], equips: [
     { id: "AHU-A", name: "AHU-A", attrs: { siteRef: "site-fixture" } },
     { id: "VAV-A", name: "VAV-A", attrs: { siteRef: "site-fixture" } },
     { id: "AHU-A", name: "Other AHU-A", attrs: { siteRef: "site-other" } },
   ], points: [...results, percentResult, mixedResult, otherSiteResult, vavResult, ...inputs] };
   vm.runInContext("model = testModel", ctx);
   vm.runInContext('scope.site = "site-fixture"', ctx);
-  await vm.runInContext("renderScopedFddResults()", ctx);
+  const initial = vm.runInContext("renderScopedFddResults()", ctx);
+  assert.match(el("fddRangeStatus").textContent, /Loading fault history/);
+  assert.equal(el("fddLanes").attrs["aria-busy"], "true");
+  await initial;
+  assert.equal(el("fddRangeStatus").textContent, "");
+  assert.equal(el("fddLanes").attrs["aria-busy"], undefined);
+  assert.equal(rangeControl.key, "faults");
+  assert.equal(lastRange.state.preset, "all");
+  assert.equal(lastRange.opts.siteTz, "America/Chicago");
+  chosenRange = { preset: "custom", fromMs: 0, toMs: 3 * h };
+  await rangeControl.onChange();
+  assert.deepEqual(lastRange.state, chosenRange, "range control refreshes the Faults request");
+  chosenRange = { preset: "all" };
   let html = el("fddResultRows").innerHTML;
   assert.match(html, /equipment summary/);
   assert.match(html, /data-expand=/);
   assert.match(html, /not-assessed/);
   assert.match(html, /stale/);
+  assert.match(html, /23\.92 h covered/);
+  assert.doesNotMatch(html, /23\.916666666666668/);
+  assert.equal(vm.runInContext("formatFaultNumber(23.916666666666668)", ctx), "23.92");
+  assert.equal(vm.runInContext("formatFaultNumber(0)", ctx), "0");
+  assert.equal(vm.runInContext("formatFaultNumber(null)", ctx), "–");
+  assert.equal(vm.runInContext("formatFaultNumber('')", ctx), "–");
   assert.doesNotMatch(html, /other-sensor/);
   assert.match(html, /sensor-1/);
   assert.match(html, /sensor-2/);
@@ -270,6 +310,11 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   const hSeries = chartOption.series.find((s) => s.name === "h");
   const hCells = Array.from(hSeries.data, (x) => Array.from(x));
   assert.ok(hCells.some((x) => x[2] === 2.25), "current h value remains from the shared mixed-history fixture");
+  assert.ok(hCells.some((x) => x[2] === 0), "assessed-zero cells remain visible");
+  assert.ok(hCells.every((x) => x[2] != null), "missing samples are not displayed as zeros");
+  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-1")), "empty stale sensor lane is collapsed");
+  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.includes("duct_static")), "empty excluded-role lane is collapsed");
+  assert.ok(chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-2")), "assessed-zero peer stays visible");
   assert.ok(hCells.every((x) => x[2] !== 18 && x[2] !== 95 && x[2] !== 80), "pre-boundary % history is excluded");
   const hRow = chartOption.yAxis.data.findIndex((x) => x.includes("SV-RANGE") && x.includes("sensor-5"));
   assert.match(chartOption.tooltip.formatter({ value: [1, hRow, 2] }), /2 h/);
@@ -297,20 +342,20 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   await vm.runInContext("renderFddResults(model.equips)", ctx);
   assert.equal(el("fddLanes").textContent, "echarts canvas marker", "normal rerenders preserve chart DOM");
   assert.equal(disposedCharts, 0, "normal rerenders reuse the live chart instance");
-  ctx.fetchDisplay = async () => { throw new Error("history unavailable"); };
+  ctx.fetchRange = async () => { throw new Error("history unavailable"); };
   await vm.runInContext("renderFddResults(model.equips)", ctx);
   assert.equal(el("fddLanes").hidden, false);
   assert.equal(el("fddLanes").attrs.role, "alert");
   assert.match(el("fddLanes").textContent, /history unavailable/);
   assert.equal(disposedCharts, 1, "replace chart DOM only after disposing its instance");
-  ctx.fetchDisplay = async (points) => new Map(points.map((p) => [p.uuid, p.history || []]));
+  ctx.fetchRange = readRange;
   await vm.runInContext("renderFddResults(model.equips)", ctx);
   assert.equal(el("fddLanes").textContent, "", "successful recovery clears only the prior error text");
   assert.equal(el("fddLanes").attrs.role, undefined);
   assert.equal(el("fddLanes").classes.has("history-error"), false);
 });
 
-test("161 fault lanes render an option using the real chunked fetchDisplay path", async () => {
+test("161 fault lanes render an option using the real chunked All history path", async () => {
   const elements = new Map();
   const el = (id) => {
     if (!elements.has(id)) elements.set(id, { hidden: false, checked: false, style: {}, innerHTML: "", textContent: "", attrs: {}, classes: new Set(),
@@ -321,7 +366,7 @@ test("161 fault lanes render an option using the real chunked fetchDisplay path"
   const requests = [];
   let option = null;
   const ctx = vm.createContext({
-    console, URLSearchParams, TextDecoder,
+    console, URL, URLSearchParams, TextDecoder,
     document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" },
     has: (p, tag) => p.tags.includes(tag), idOf: (e) => e.id,
     latestOf: (p) => p.latest?.double, esc: (s) => String(s ?? "").replace(/[&<>\"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]),
@@ -342,6 +387,8 @@ test("161 fault lanes render an option using the real chunked fetchDisplay path"
   for (const file of ["nf.js", "model.js", "charts.js", "app.js"]) {
     vm.runInContext(readFileSync(new URL(`../static/${file}`, import.meta.url), "utf8"), ctx, { filename: file });
   }
+  ctx.renderRangeControl = () => {};
+  ctx.getChartRangeState = () => ({ preset: "all" });
   const points = Array.from({ length: 161 }, (_, i) => {
     const uuid = `00000000-0000-4000-8000-${i.toString(16).padStart(12, "0")}`;
     return { uuid, name: `sensor-${i}`, dis: `sensor-${i}`, units: "h", equipRef: "equip-1", siteRef: "site-1", tags: ["fdd", "fault"], latest: { double: 1, ts: "2026-01-01T00:00:00Z" },
@@ -363,11 +410,15 @@ test("point history honors the same mixed-output boundary as FDD plots", async (
   let plotted = null, requestedWindow = null;
   const ctx = vm.createContext({
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
-    GENERIC: new Set(), tooltip: {}, unitLabel: (u) => u, dispUnit: (p) => p.rec.attrs.unit,
+    GENERIC: new Set(), tooltip: {}, unitLabel: (u) => u, dispUnit: (p) => p.rec.attrs.unit, dispSeries: (_p, arr) => arr,
     pickWindow: () => 3600,
-    fetchDisplay: async (points, _hours, options) => {
+    getChartRangeState: () => ({ preset: "24h" }), renderRangeControl: () => {}, chartTimeZone: (tz) => tz || "UTC",
+    chartOptionSiteTime: (option) => option,
+    resolveChartSelection: async (_points, state) => ({ ...state, resolvedBounds: { fromMs: 0, toMs: 24 * 3600e3 } }),
+    fetchRange: async (points, _state, options) => {
       requestedWindow = options.windowSec;
-      return new Map(points.map((p) => [p.uuid, [[0, 95], [3600e3, 80], [7200e3, 2], [10800e3, 0]]]));
+      return { windowSec: options.windowSec, fromMs: 0, toMs: 24 * 3600e3,
+        series: new Map(points.map((p) => [p.uuid, [[0, 95], [3600e3, 80], [7200e3, 2], [10800e3, 0]]])) };
     },
     rcxCurrentOutputSeries: (_p, samples, width) => {
       const boundary = Date.parse(_p.rec.attrs.fddOutputSince || ""), first = Math.ceil(boundary / (width * 1e3)) * width * 1e3;

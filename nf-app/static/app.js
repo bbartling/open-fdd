@@ -6,7 +6,6 @@
 
 const LIVE_MS = 15000;            // polling while the push stream is down
 const RESYNC_MS = 5 * 60e3;       // full refresh while it is up (untagged points, BACnet tab)
-const SPARK_HOURS = 6;            // Overview sparklines: 6 h of 5-min averages
 const CHART_REFRESH_MS = 5 * 60e3;
 
 /** @param {string} id @returns {AnyEl} */
@@ -23,9 +22,12 @@ let points = [];          // numeric sensor/sp points on the scoped equips (card
 let variables = [];       // `weather` points on the site, charted against the equip's outside air
 let statusPts = [];       // kind Bool points on the scoped equips (status chips)
 let sparkHist = new Map();  // uuid -> [[ms, value], ...] for the sparklines (+ live samples)
+let sparkRangeRead = 0;
+let sparkCustomEnd = Infinity;
 let histHours = 24;
 const chartSel = { id: "", hours: 0, point: "" };  // Charts tab: the one chart on screen
 let selectedPoint = null; // Points tab
+let pointHistoryRead = 0;
 let activeTab = "overview";
 const fddExpandedGroups = new Set();
 // Chart instances live in theme.js (one per element, rebuilt on a theme switch).
@@ -59,17 +61,28 @@ async function applyScope() {
   renderCards();
   renderChips();
   renderTab(activeTab);
-  // Only the sparklines need history up front: one small resampled request.
   startStream();
-  setLive(true, "loading sparklines…");
-  await loadSparks();
-  if (activeTab === "overview") points.forEach((p, i) => updateCard(i, false));
   setLive(true, `live · ${new Date().toLocaleTimeString()}`);
 }
 
 // ---- sparkline history ---------------------------------------------------------------
-async function loadSparks() {
-  sparkHist = await fetchSeries(points, SPARK_HOURS, { windowSec: 300 });
+async function refreshOverviewSparks() {
+  const read = ++sparkRangeRead;
+  const state = getChartRangeState("overview");
+  const siteTz = siteTimeZone();
+  const status = $("overviewRangeStatus");
+  renderRangeControl($("overviewRangeControl"), { key: "overview", state, siteTz, onChange: refreshOverviewSparks });
+  status.textContent = "Loading overview history…";
+  try {
+    const { series, toMs } = await fetchRange(points, state, { target: 72, minWindowSec: 300, siteTz });
+    if (read !== sparkRangeRead) return;
+    sparkHist = series;
+    sparkCustomEnd = state.preset === "custom" ? toMs : Infinity;
+    status.textContent = "";
+    if (activeTab === "overview") points.forEach((_p, i) => updateCard(i, false));
+  } catch (e) {
+    if (read === sparkRangeRead) status.textContent = `Overview history unavailable: ${e.message}`;
+  }
 }
 
 const since = (arr, hours) => {
@@ -107,13 +120,15 @@ function renderCards() {
 function updateCard(i, flash) {
   const p = points[i];
   const v = dispVal(p, latestOf(p));
-  const shown = dispSeries(p, sparkHist.get(p.uuid) || []);   // history is kept as NF stores it
+  const shown = dispSeries(p, (sparkHist.get(p.uuid) || []).filter(([t]) => t <= sparkCustomEnd));
   $(`val-${i}`).textContent = fmt(v, isRH(p) || isTemp(p) ? 1 : 2);
   const hour = since(shown, 1);
   if (hour.length > 1 && v != null) {
     const d = v - hour[0][1];
     const arrow = Math.abs(d) < 0.05 ? "→" : d > 0 ? "▲" : "▼";
     $(`delta-${i}`).textContent = `${arrow} ${d >= 0 ? "+" : ""}${fmt(d, 2)} in the last hour`;
+  } else {
+    $(`delta-${i}`).textContent = "";
   }
   const pal = palette();
   const color = pal[i % pal.length];
@@ -122,7 +137,7 @@ function updateCard(i, flash) {
     grid: { left: 0, right: 0, top: 4, bottom: 0 },
     xAxis: { type: "time", show: false }, yAxis: { type: "value", show: false, scale: true },
     series: [{
-      type: "line", data: since(shown, 6), showSymbol: false, smooth: true,
+      type: "line", data: shown, showSymbol: false, smooth: true,
       lineStyle: { width: 1.5, color },
       areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
         { offset: 0, color: color + "66" }, { offset: 1, color: color + "00" }]) },
@@ -146,7 +161,12 @@ function renderChips() {
 // A gallery of the catalog (charts.js) and ONE chart below it. Picking a chart fetches
 // just that chart's points, resampled by NF; "open in new window" = chart.html.
 const chartCtx = () => ({ cards: points, status: statusPts, weather: variables });
+const siteTimeZone = () => {
+  const site = model?.sites?.find((s) => idOf(s) === scope.site) || (model?.sites?.length === 1 ? model.sites[0] : null);
+  return chartTimeZone(site?.attrs?.tz || site?.attrs?.timezone);
+};
 const PREF_KEY = "benchviz.chart";
+let chartRangeRead = 0;
 
 function loadChartPref() {
   try { Object.assign(chartSel, JSON.parse(localStorage.getItem(PREF_KEY) || "{}")); } catch { /* private mode */ }
@@ -159,6 +179,9 @@ function chartUrl(def) {
   const q = new URLSearchParams({ c: def.id, site: scope.site, h: String(chartSel.hours) });
   if (scope.equip) q.set("equip", scope.equip);
   if (def.pick && chartSel.point) q.set("point", chartSel.point);
+  const range = getChartRangeState("charts");
+  q.set("range.charts", range.preset);
+  if (range.preset === "custom") { q.set("from.charts", String(range.fromMs)); q.set("to.charts", String(range.toMs)); }
   return `chart.html?${q}`;
 }
 
@@ -174,29 +197,43 @@ function renderGallery() {
 }
 
 async function renderCharts() {
+  const read = ++chartRangeRead;
   const defs = renderGallery();
   const def = defs.find((d) => d.id === chartSel.id);
   if (!def) return;
-  const ctx = chartCtx();
-  if (!def.ranges.includes(chartSel.hours)) chartSel.hours = def.range;
-  const opts = def.pick ? def.pick(ctx) : [];
-  if (def.pick && !opts.some((p) => p.uuid === chartSel.point)) chartSel.point = def.defaultPick(ctx);
+  const baseCtx = chartCtx();
+  const opts = def.pick ? def.pick(baseCtx) : [];
+  if (def.pick && !opts.some((p) => p.uuid === chartSel.point)) chartSel.point = def.defaultPick(baseCtx);
+  const rangeState = getChartRangeState("charts"), siteTz = siteTimeZone();
+  renderRangeControl($("chartRangeControl"), { key: "charts", state: rangeState, siteTz,
+    onChange: () => renderCharts().catch((e) => ($("chartRangeStatus").textContent = `Could not load this range: ${e.message}`)) });
+  $("chartRangeStatus").textContent = "Resolving available history…";
+  const candidates = (def.pick ? opts : [...baseCtx.cards, ...baseCtx.status, ...baseCtx.weather]).filter((p) => p && p.uuid);
+  let range;
+  try { range = await resolveChartSelection(candidates, rangeState, { siteTz }); }
+  catch (e) { $("chartRangeStatus").textContent = `Could not load this range: ${e.message}`; throw e; }
+  if (read !== chartRangeRead) return;
+  const ctx = { ...baseCtx, range, siteTz };
+  const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
+  chartSel.hours = hours;
   $("chartTitle").textContent = def.title;
   $("chartPick").style.display = def.pick ? "" : "none";
   $("chartPick").innerHTML = opts.map((p) => `<option value="${p.uuid}">${esc(p.name)}</option>`).join("");
   $("chartPick").value = chartSel.point || "";
-  $("chartRange").innerHTML = def.ranges.map((h) =>
-    `<button data-h="${h}" class="${h === chartSel.hours ? "on" : ""}">${rangeLabel(h)}</button>`).join("");
   $("chartOpen").href = chartUrl(def);
   saveChartPref();
-  const hint = await drawChart(mk("chartHost"), def, ctx, chartSel.hours, { point: chartSel.point });
+  $("chartRangeStatus").textContent = "Loading history…";
+  let hint;
+  try { hint = await drawChart(mk("chartHost"), def, ctx, hours, { point: chartSel.point, range, siteTz }); }
+  catch (e) { $("chartRangeStatus").textContent = `Could not load this range: ${e.message}`; throw e; }
+  $("chartRangeStatus").textContent = "";
   if (hint != null) $("chartHint").textContent = hint;
 }
 
 // ---- FDD tab --------------------------------------------------------------------------
 // Which rules from the catalog each equip in scope can run (fdd.js binds inputs by tags).
 const fddEquipsInScope = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
-const renderScopedFddResults = () => renderFddResults(fddEquipsInScope());
+const renderScopedFddResults = () => renderFddResults(fddEquipsInScope(), fddCatalog?.sensor_sweep_roles);
 async function renderFdd() {
   const catalog = await loadCatalog();
   const equips = fddEquipsInScope();
@@ -254,42 +291,78 @@ async function runFddNow() {
 }
 
 async function showRulePlot(ruleId, equipId) {
+  const read = ++fddPlotRead;
   const catalog = await loadCatalog();
   const equipRec = model.equips.find((e) => idOf(e) === equipId && (e.attrs || {}).siteRef === scope.site)
     || model.equips.find((e) => idOf(e) === equipId);
   const row = equipRec && equipRules(equipRec, model, catalog).find((r) => r.rule.id === ruleId);
   if (!row) return;
+  const siteTz = siteTimeZone(), rangeState = getChartRangeState("rulePlot");
+  const historyPoints = model.points.filter((p) => p.siteRef === scope.site && p.equipRef === equipId && has(p, "his"));
+  renderRangeControl($("fddPlotRangeControl"), { key: "rulePlot", state: rangeState, siteTz,
+    onChange: () => showRulePlot(ruleId, equipId).catch((e) => ($("fddPlotRangeStatus").textContent = `Could not load this range: ${e.message}`)) });
+  const range = await resolveChartSelection(historyPoints, rangeState, { siteTz });
+  if (read !== fddPlotRead) return;
+  const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
   $("fddPlotPanel").hidden = false;
   $("fddPlotTitle").textContent = `${ruleId} · ${equipLabel(equipRec)}`;
   $("fddPlotNote").textContent = row.rule.description || "";
   $("fddPlotPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  $("fddPlotRangeStatus").textContent = "Loading history…";
   const note = await fddRulePlot($("fddPlot"), { rule: row.rule, equipRec, bound: row.bound,
-    resultPoint: rcxResultPoint(model, equipRec, ruleId), model, hours: 168 });
+    resultPoint: rcxResultPoint(model, equipRec, ruleId), model, hours, range, siteTz });
+  if (read !== fddPlotRead) return;
   $("fddPlot").classList.add("rendered");
+  $("fddPlotRangeStatus").textContent = "";
   if (note) $("fddPlotNote").textContent = note;
 }
 
 // Result points the FDD hook writes: markers fdd + fault|metric, ruleRef, equipRef.
 const ruleRefOf = (p) => (p.rec.attrs || {}).ruleRef || "";
+function formatFaultNumber(value) {
+  const numeric = value == null || String(value).trim() === "" ? NaN : Number(value);
+  return Number.isFinite(numeric) ? String(Number(numeric.toFixed(2))) : "–";
+}
 const fddResults = (equipIds) => model.points
   .filter((p) => has(p, "fdd") && ruleRefOf(p) && equipIds.includes(p.equipRef)
     && (!scope.site || p.siteRef === scope.site || (!p.siteRef && model.equips.filter((e) => idOf(e) === p.equipRef).length === 1)))
   .sort((a, b) => (latestOf(b) ?? 0) - (latestOf(a) ?? 0) || ruleRefOf(a).localeCompare(ruleRefOf(b)));
 
-/** Faults panel: latest value per rule/equip + a lane per fault rule (hourly max, 7 days). */
-async function renderFddResults(equips) {
+let faultHistoryRead = 0;
+let fddPlotRead = 0;
+
+/** Faults panel: latest result rows and the selected range of each fault lane. */
+async function renderFddResults(equips, sweepRoles = {}) {
+  const read = ++faultHistoryRead;
+  const rangeStatus = $("fddRangeStatus");
+  const el = $("fddLanes");
+  rangeStatus.textContent = "";
+  el.removeAttribute("aria-busy");
   const results = fddResults(equips.map(idOf));
   $("fddResultsPanel").hidden = !results.length;
   if (!results.length) return;
+  const siteTz = siteTimeZone();
+  const state = getChartRangeState("faults");
+  renderRangeControl($("fddRangeControl"), {
+    key: "faults", state, siteTz, onChange: () => renderScopedFddResults().catch(showErr),
+  });
   const equipName = (id) => {
     const e = model.equips.find((x) => idOf(x) === id && (x.attrs || {}).siteRef === scope.site)
       || model.equips.find((x) => idOf(x) === id);
     return (e && ((e.attrs || {}).dis || e.name)) || id;
   };
   const attrsOf = (p) => p.rec.attrs || {};
+  const covered = (p) => {
+    const hours = formatFaultNumber(attrsOf(p).fddCoverageHours);
+    return hours === "–" ? "" : ` · ${esc(hours)} h covered`;
+  };
+  const resultValue = (p, value) => {
+    const unit = dispUnit(p), display = dispVal(p, value);
+    return `${unit === "h" || unit === "%" ? formatFaultNumber(display) : fmt(display)} ${esc(unit)}`;
+  };
   const when = (p) => {
     const ts = attrsOf(p).fddLastRun || (p.latest && p.latest.ts);
-    return ts ? new Date(parseTs(ts)).toLocaleString() : "–";
+    return ts ? new Date(parseTs(ts)).toLocaleString(undefined, { timeZone: siteTz }) : "–";
   };
   const sensorNameOf = (p) => {
     const ref = attrsOf(p).sensorRef;
@@ -316,8 +389,8 @@ async function renderFddResults(equips) {
         const v = latestOf(summary), status = statusOf(summary), hot = faulted(summary);
         rows.push(`<tr class="clickable fdd-summary-row" data-rule="${esc(ruleId)}" data-equip="${esc(equipId)}">
           <td>${sensors.length ? `<button class="fdd-expand" type="button" data-expand="${esc(groupId)}" aria-expanded="${fddExpandedGroups.has(groupId)}" title="Show sensor results">${fddExpandedGroups.has(groupId) ? "▾" : "▸"}</button> ` : ""}<span class="rule-id">${esc(ruleId)}</span><div class="sub">equipment summary</div></td>
-          <td class="sub">${esc(equipName(equipId))}</td><td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${v == null ? `– ${esc(dispUnit(summary))}` : `${fmt(dispVal(summary, v))} ${esc(dispUnit(summary))}`}</td>
-          <td class="sub">${esc(when(summary))}${attrsOf(summary).fddCoverageHours !== "" && attrsOf(summary).fddCoverageHours != null ? ` · ${esc(attrsOf(summary).fddCoverageHours)} h covered` : ""}</td></tr>`);
+          <td class="sub">${esc(equipName(equipId))}</td><td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${resultValue(summary, v)}</td>
+          <td class="sub">${esc(when(summary))}${covered(summary)}</td></tr>`);
       }
       const faultedOnly = $("fddFaultedOnly")?.checked;
       for (const p of sensors.sort((a, b) => Number(faulted(b)) - Number(faulted(a)) || String(attrsOf(a).roleRef || "").localeCompare(String(attrsOf(b).roleRef || "")))) {
@@ -327,8 +400,8 @@ async function renderFddResults(equips) {
         const hidden = !fddExpandedGroups.has(groupId);
         rows.push(`<tr class="clickable fdd-sensor-row" data-rule="${esc(ruleId)}" data-equip="${esc(equipId)}" data-sensor="${esc(attrsOf(p).sensorRef || "")}"${hidden ? " hidden" : ""}>
           <td><span class="rule-id">${esc(ruleId)}</span><div class="sub">${esc(role)}</div></td><td class="sub">${esc(sensorNameOf(p))}<div class="sub">${esc(equipName(equipId))}</div></td>
-          <td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${v == null ? `– ${esc(dispUnit(p))}` : `${fmt(dispVal(p, v))} ${esc(dispUnit(p))}`}</td>
-          <td class="sub">${esc(when(p))}${attrsOf(p).fddCoverageHours !== "" && attrsOf(p).fddCoverageHours != null ? ` · ${esc(attrsOf(p).fddCoverageHours)} h covered` : ""}</td></tr>`);
+          <td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${resultValue(p, v)}</td>
+          <td class="sub">${esc(when(p))}${covered(p)}</td></tr>`);
       }
     }
   }
@@ -336,41 +409,63 @@ async function renderFddResults(equips) {
     const v = latestOf(p);
     const hot = has(p, "fault") && v > 0;
     rows.push(`<tr class="clickable" data-rule="${esc(ruleRefOf(p))}" data-equip="${esc(p.equipRef)}" title="plot this rule"><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
-      <td class="${hot ? "warn" : "ok"}">${fmt(dispVal(p, v))} ${esc(dispUnit(p))}</td><td class="sub">${esc(when(p))}</td></tr>`);
+      <td class="${hot ? "warn" : "ok"}">${resultValue(p, v)}</td><td class="sub">${esc(when(p))}</td></tr>`);
   }
   $("fddResultRows").innerHTML = rows.join("");
   const sweepSensorPoints = results.filter((p) => /^SV-/.test(ruleRefOf(p)) && (attrsOf(p).fddSummary === "sensor" || attrsOf(p).sensorRef));
   const heatmapRows = results.filter((p) => has(p, "fault") && !sweepSensorPoints.some((s) => s.equipRef === p.equipRef && ruleRefOf(s) === ruleRefOf(p) && (attrsOf(p).fddSummary === "equip" || !attrsOf(p).fddSummary)));
-  const faults = heatmapRows;
-  const el = $("fddLanes");
-  el.hidden = !faults.length;
+  el.hidden = !heatmapRows.length;
   const showingHistoryError = el.classList.contains("history-error");
   if (showingHistoryError) {
     el.textContent = "";
     el.removeAttribute("role");
     el.classList.remove("history-error");
   }
-  if (!faults.length) return;
-  let series;
+  if (!heatmapRows.length) return;
+  rangeStatus.textContent = "Loading fault history…";
+  el.setAttribute("aria-busy", "true");
+  let history;
   try {
-    series = await fetchDisplay(faults, 24 * 7, { method: "MAX", windowSec: 3600 });
+    history = await fetchRange(heatmapRows, state, { method: "MAX", minWindowSec: 300, siteTz });
   } catch (e) {
+    if (read !== faultHistoryRead) return;
     echarts.getInstanceByDom(el)?.dispose();
     el.style.height = "";
     el.textContent = `Fault history unavailable: ${e?.message || e}`;
     el.setAttribute("role", "alert");
     el.classList.add("history-error");
     return;
+  } finally {
+    if (read === faultHistoryRead) {
+      el.removeAttribute("aria-busy");
+      rangeStatus.textContent = "";
+    }
+  }
+  if (read !== faultHistoryRead) return;
+  const { series, windowSec } = history;
+  const filtered = new Map(heatmapRows.map((p) => [p.uuid,
+    rcxCurrentOutputSeries(p, series.get(p.uuid) || [], windowSec).filter(([, value]) => Number.isFinite(value))]));
+  const faults = heatmapRows.filter((p) => {
+    const { sensorRef, roleRef } = attrsOf(p);
+    const assessable = sweepRoles[ruleRefOf(p)];
+    const excluded = sensorRef && roleRef && assessable && !assessable.includes(roleRef);
+    return filtered.get(p.uuid).length > 0 || (statusOf(p) !== "stale" && !excluded);
+  });
+  const buckets = [...new Set(faults.flatMap((p) => filtered.get(p.uuid).map(([t]) => t)))].sort((a, b) => a - b);
+  el.hidden = !buckets.length;
+  if (!buckets.length) {
+    rangeStatus.textContent = "No fault history in this range.";
+    return;
   }
   // On normal rerenders keep the chart's DOM intact so ofddChart() can reuse its instance.
   const label = (p) => `${ruleRefOf(p)} · ${attrsOf(p).roleRef ? `${attrsOf(p).roleRef} · ${sensorNameOf(p)}` : equipName(p.equipRef)}`;
   el.style.height = `${Math.max(160, 26 * faults.length + 70)}px`;
-  // Heatmaps need category axes: one column per hour.
+  // Heatmaps need category axes: one column per history bucket.
   const units = (p) => dispUnit(p) || (attrsOf(p).fddOutput === "fault_hours" ? "h" : "%");
-  const filtered = new Map(faults.map((p) => [p.uuid, rcxCurrentOutputSeries(p, series.get(p.uuid) || [], 3600)]));
-  const hours = [...new Set(faults.flatMap((p) => (filtered.get(p.uuid) || []).map(([t]) => Math.floor(t / 3600e3) * 3600e3)))].sort((a, b) => a - b);
-  const col = new Map(hours.map((t, i) => [t, i]));
-  const hourLabel = (t) => new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric" });
+  const col = new Map(buckets.map((t, i) => [t, i]));
+  const row = new Map(faults.map((p, i) => [p.uuid, i]));
+  const axisTime = new Intl.DateTimeFormat(undefined, { timeZone: siteTz, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const detailTime = new Intl.DateTimeFormat(undefined, { timeZone: siteTz, year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
   const unitGroups = new Map();
   for (const p of faults) {
     const unit = units(p);
@@ -379,16 +474,16 @@ async function renderFddResults(equips) {
   }
   const unitEntries = [...unitGroups];
   const heatSeries = unitEntries.map(([unit, points]) => ({ type: "heatmap", name: unit, data: points.flatMap((p) =>
-    (filtered.get(p.uuid) || []).map(([t, v]) => [col.get(Math.floor(t / 3600e3) * 3600e3), faults.indexOf(p), v])) }));
+    filtered.get(p.uuid).map(([t, v]) => [col.get(t), row.get(p.uuid), v])) }));
   const visualMaps = unitEntries.map(([unit, points], seriesIndex) => {
     const max = unit === "h" ? Math.max(1, ...points.map((p) => Number(attrsOf(p).fddWindowHours) || 24)) : 100;
     return { min: 0, max, seriesIndex, dimension: 2, orient: "horizontal", left: `${Math.round((seriesIndex + 1) * 100 / (unitEntries.length + 1))}%`, bottom: 0, itemHeight: 100,
-      text: [`${max} ${unit}`, `0 ${unit}`], inRange: { color: ["rgba(239,68,68,0.05)", FAULT_LANE.lineStyle.color] } };
+      text: [`${formatFaultNumber(max)} ${unit}`, `0 ${unit}`], inRange: { color: ["rgba(239,68,68,0.05)", FAULT_LANE.lineStyle.color] } };
   });
   ofddChart(el).setOption({
-    tooltip: { formatter: (x) => { const p = faults[x.value[1]], unit = units(p); return `${esc(label(p))}<br>${esc(hourLabel(hours[x.value[0]]))}: ${fmt(x.value[2])} ${esc(unit)}`; } },
+    tooltip: { formatter: (x) => { const p = faults[x.value[1]], unit = units(p); return `${esc(label(p))}<br>${esc(detailTime.format(buckets[x.value[0]]))}: ${formatFaultNumber(x.value[2])} ${esc(unit)}`; } },
     grid: { left: 200, right: 20, top: 10, bottom: 70 },
-    xAxis: { type: "category", data: hours.map(hourLabel), splitArea: { show: false } },
+    xAxis: { type: "category", data: buckets.map((t) => axisTime.format(t)), splitArea: { show: false } },
     yAxis: { type: "category", data: faults.map(label), inverse: true },
     visualMap: visualMaps,
     series: heatSeries,
@@ -428,22 +523,38 @@ function renderPoints() {
 }
 
 async function renderPointHistory() {
+  const read = ++pointHistoryRead;
   const p = model.points.find((x) => x.uuid === selectedPoint);
-  if (!p) return;
+  const state = getChartRangeState("points"), siteTz = siteTimeZone();
+  renderRangeControl($("histRangeControl"), { key: "points", state, siteTz,
+    onChange: () => renderPointHistory().catch(() => {}) });
+  if (!p) { $("histRangeStatus").textContent = "Select a point to load its history."; return; }
   $("histHint").textContent = `${p.dis} · ${p.tags.filter((t) => !GENERIC.has(t)).join(" ")}`;
-  const windowSec = pickWindow(histHours);
-  const history = (await fetchDisplay([p], histHours, { windowSec })).get(p.uuid) || [];
-  const data = rcxCurrentOutputSeries(p, history, windowSec);
-  ofddRender(mk("histChart"), {
+  $("histRangeStatus").textContent = "Loading history…";
+  let range;
+  try { range = await resolveChartSelection([p], state, { siteTz }); }
+  catch (e) { if (read === pointHistoryRead) $("histRangeStatus").textContent = `Could not load this range: ${e.message}`; throw e; }
+  if (read !== pointHistoryRead) return;
+  const spanHours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
+  const windowSec = pickWindow(spanHours);
+  let fetched;
+  try { fetched = await fetchRange([p], range, { windowSec, minWindowSec: windowSec, preserveWindow: true, siteTz }); }
+  catch (e) { if (read === pointHistoryRead) $("histRangeStatus").textContent = `Could not load this range: ${e.message}`; throw e; }
+  if (read !== pointHistoryRead) return;
+  const effectiveWindowSec = fetched.windowSec;
+  const history = dispSeries(p, fetched.series.get(p.uuid) || []);
+  const data = rcxCurrentOutputSeries(p, history, effectiveWindowSec);
+  ofddRender(mk("histChart"), chartOptionSiteTime({
     tooltip, grid: { left: 50, right: 20, top: 30, bottom: 50 },
-    xAxis: { type: "time" },
+    xAxis: { type: "time", min: fetched.fromMs, max: fetched.toMs },
     yAxis: { type: "value", scale: true, name: p.kind === "Bool" ? "on / off" : unitLabel(dispUnit(p)) },
     series: [{
       name: p.name, type: "line", showSymbol: false, step: p.kind === "Bool" ? "end" : false,
       lineStyle: { width: 1.6 }, areaStyle: { opacity: 0.08 },
       data,
     }],
-  }, p.name);
+  }, siteTz), p.name);
+  $("histRangeStatus").textContent = data.length ? "" : "No history in this range.";
 }
 
 // ---- BACnet Server tab --------------------------------------------------------------
@@ -670,14 +781,21 @@ function download(name, text, type) {
 // (scope "equip") or one per site (scope "site"); each card renders on its own so one
 // failing view never blanks the tab.
 let rcxRun = 0;
-let rcxRangeChosen = false;          // set once the user touches #rcxRange
 async function renderRcx() {
   const run = ++rcxRun;
   const catalog = await loadCatalog();
   const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
-  const hours = Number($("rcxRange").value) || 168;
-  // Weekly views want a month of history; until the user picks a range themselves they get their own 672 h.
-  const hoursFor = (view) => (!rcxRangeChosen && /^weekly-/.test(view.id) ? view.hours || hours : hours);
+  const rangeState = getChartRangeState("rcx"), siteTz = siteTimeZone();
+  renderRangeControl($("rcxRangeControl"), { key: "rcx", state: rangeState, siteTz,
+    onChange: () => renderRcx().catch((e) => ($("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`)) });
+  const rangePoints = model.points.filter((p) => p.siteRef === scope.site && has(p, "his")
+    && (!scope.equip || p.equipRef === scope.equip || p.weatherStationRef));
+  let range;
+  try { range = await resolveChartSelection(rangePoints, rangeState, { siteTz }); }
+  catch (e) { $("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`; throw e; }
+  const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
+  const hoursFor = (_view) => hours;
+  $("rcxRangeStatus").textContent = "Loading history…";
   const { ready, missing } = rcxPlan(equips, model, catalog);
   const cards = ready.flatMap(({ view, equips: eqs }) => (view.scope === "site" ? [{ view, eqs }] : eqs.map((eq) => ({ view, eqs: [eq] }))));
   $("nRcx").textContent = String(cards.length);
@@ -694,7 +812,8 @@ async function renderRcx() {
     if (run !== rcxRun) return;                      // a newer render (range/scope change) took over
     const el = $(`rcx-${i}`);
     try {
-      const note = await c.view.render(el, rcxContext(c.view, c.eqs, hoursFor(c.view), model, catalog));
+      const note = await c.view.render(el, rcxContext(c.view, c.eqs, hoursFor(c.view), model, catalog, range, siteTz));
+      if (run !== rcxRun) return;
       el.classList.add("rendered");
       if (note) $(`rcx-note-${i}`).textContent = note;
       // Fault lanes (rcxWithFaultLane) add grids under the signals: give each lane its own room
@@ -716,6 +835,7 @@ async function renderRcx() {
       $(`rcx-note-${i}`).textContent = `could not draw: ${e.message}`;
     }
   }
+  $("rcxRangeStatus").textContent = "";
 }
 
 // ---- display units: imperial | si (units.js, localStorage "openfdd-units") -------------------
@@ -736,7 +856,7 @@ function setUnits(sys) {
 
 function renderTab(name) {
   const errs = (e) => setLive(false, e.message);
-  if (name === "overview") points.forEach((p, i) => updateCard(i, false));
+  if (name === "overview") refreshOverviewSparks();
   if (name === "charts") renderCharts().catch(errs);
   if (name === "fdd") renderFdd().catch(errs);
   if (name === "rcx") renderRcx().catch(errs);
@@ -858,23 +978,9 @@ function wireControls() {
     chartSel.hours = 0;
     renderCharts().catch(chartErr);
   };
-  $("chartRange").onclick = (ev) => {
-    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
-    if (!h || h === chartSel.hours) return;
-    chartSel.hours = h;
-    renderCharts().catch(chartErr);
-  };
   $("chartPick").onchange = () => { chartSel.point = $("chartPick").value; renderCharts().catch(chartErr); };
-  $("histRange").onclick = (ev) => {
-    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
-    if (!h) return;
-    histHours = h;
-    document.querySelectorAll("#histRange button").forEach((b) => b.classList.toggle("on", b === ev.target));
-    renderPointHistory().catch((e) => setLive(false, e.message));
-  };
   $("fddRunnableOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
   $("fddFaultedOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
-  $("rcxRange").onchange = () => { rcxRangeChosen = true; renderRcx().catch((e) => setLive(false, e.message)); };
 
   // Click a rule (Faults or Rule inputs) → stacked signal plot + bottom fault lane (fdd-plots.js).
   const plotErr = (e) => ($("fddPlotNote").textContent = `could not draw: ${e.message}`);
@@ -909,6 +1015,10 @@ function wireControls() {
     sites: model.sites, equips: model.equips, devices: model.devices,
     points: model.points.filter((p) => p.tags.length).map((p) => p.rec),
   }, null, 2), "application/json");
+  window.addEventListener("popstate", () => {
+    const restoredTab = (location.hash || `#${activeTab}`).slice(1);
+    showTab(restoredTab);
+  });
   // Theme switch: theme.js disposed every chart; draw the visible ones again.
   onThemeChange(() => { points.forEach((p, i) => updateCard(i, false)); renderTab(activeTab); });
 }
@@ -928,11 +1038,8 @@ async function main() {
   await applyScope();
   api("/api/v1/bacnet/local").then((l) => ($("nBacnet").textContent = (l.objects || []).length)).catch(() => {});
   setTimeout(liveLoop, LIVE_MS);
-  // Re-sync sparklines every 10 min; redraw the open chart every 5 (both small requests).
-  setInterval(async () => {
-    await loadSparks().catch(() => {});
-    if (activeTab === "overview") points.forEach((p, i) => updateCard(i, false));
-  }, 10 * 60e3);
+  // Re-sync the visible sparklines every 10 min and redraw the open chart every 5.
+  setInterval(() => { if (activeTab === "overview" && !document.hidden) refreshOverviewSparks(); }, 10 * 60e3);
   setInterval(() => { if (activeTab === "charts" && !document.hidden) renderCharts().catch(() => {}); }, CHART_REFRESH_MS);
 }
 

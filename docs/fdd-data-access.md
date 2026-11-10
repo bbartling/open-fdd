@@ -1,121 +1,102 @@
 ---
-title: FDD data access
-nav_order: 5
+title: API reference
+nav_order: 11
 ---
 
-# Where FDD results live and how API users get them
+# NF API reference
 
-Open-FDD results are **ordinary NF points**. The `fdd` hook writes them through NF's own point API, so NF stores
-them and serves them like any other point: `point/query` for the current state, `point/data` for history. No
-Open-FDD service, database or export job is needed to read them. (Everything below was checked in
-`nf-app/hooks/fdd.js`, `history.js`, `lib/timescale.js` and `analytics.js`.)
+Open-FDD uses the Normal Framework API. Results are ordinary NF points. This page describes generic read routes and
+the Open-FDD result shape; use the NF documentation for routes not listed here.
 
-## What is written
+Set the base URL and credentials in your local environment. Do not place credentials in a URL or commit them:
 
-Per (site, equip, rule), the hook writes records to the `automation` layer and the `model` layer (uuid derived from
-the equip's NF uuid plus the rule id, so it is stable across renames), then one batched `AddData` per chunk
-(`POST /api/v1/points/data`).
-
-| Point | Markers | Value | Attributes worth reading |
-|---|---|---|---|
-| Result point | `point,his,fault,fdd` (rules with a fault output) or `point,his,metric,fdd` | one sample per run: `fault_pct` in `%` (else `fault_hours` in `h`); metric rules: their first output | `fddStatus` (`ok`, `fault`, `not-assessed`, `stale`), `fddReason`, `fddCoverageHours`, `fddLastRun`, `fddWindowHours`, `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddOccSource`, `fddSensorFaultHours` (sensor sweeps) |
-| Fault timeline point (5.0.3, 68 of 77 rules) | `point,his,fault_timeline` (no `fdd`, no `fault`) | one sample per assessed history timestamp: `1` confirmed fault, `0` ok; **no sample** = not assessed (never written as 0) | `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddKind=fault-timeline`, `fddTimelineOf` (uuid of the result point), `fddTimelineThrough` (newest sample written) |
-
-All five SV sweeps produce one SQL result per sensor UUID. In addition to the equipment summary, NF publishes a result
-and timeline with `sensorRef` and `roleRef`. The result also has `fddSummary=sensor`. The summary's value is the highest sensor fault hours
-and its timeline flags intervals with any faulting sensor. Its `fddSensorFaultHours` maps sensor UUIDs to
-`{role, name, hours, status}`. Timescale keeps this object for each run in `metric.sensor_fault_hours`.
-See the [5.0.10 migration note](operations/nf/migrate-5.0.10.html) for the output history boundary and schema upgrade.
-
-Not assessed is never healthy: a result with no coverage gets `fddStatus: not-assessed` and no numeric value; a
-result that could not be refreshed gets `fddStatus: stale` and keeps its old samples.
-
-The timeline is append-only and uses the rule pack's 5-minute grid. Sensor sweeps also emit the starts of assessed intervals.
-
-## Checking that results are fresh
-
-A result is only trustworthy if it is recent. From 5.0.5 a run that refreshed nothing fails instead of reporting success, and
-`nf_app_sync.py doctor` has an **fdd freshness** check (FAIL when computed points are older than 2x the fdd schedule while raw
-history is fresh). Stale results say why in `fddReason`: `required roles missing`, `unit unusable (role ...)` or
-`no input data in window (newest sample at <ISO>)`. The `history` hook answers an empty range with `ok: true`, `reason`
-and `newest_source_ts`, and a database failure with `ok: false` and the error.
-
-## Optional: Timescale `openfdd.fdd_results`
-
-Only on the **full edition with the TimescaleDB engine**: the `fdd` hook also writes rows keyed by (run, equip, rule, sensor_ref)
-(`fault_pct`, `fault_hours`, `covered_hours`, `metric`, `engine`, window) into the hypertable `openfdd.fdd_results`
-(`nf-app/timescale/install.sql`). It is a convenience copy for SQL users, not the source of truth; the NF points
-above exist either way. Equipment summaries use an empty `sensor_ref`. The per-timestamp timeline lives in NF. The `history` hook
-reads NF's own sample table (long-range min/avg/max per bucket) and needs Timescale too; without it the hook fails with
-`Timescale connection settings not found` (set the app option `timescale`, see [Install](install.html#optional-the-timescaledb-engine)).
-
-## Recipes for an API client
-
-All reads work with a read-only NF API key (LAN, or through the Normal Online portal with a bearer token). Base
-paths are the same on both.
-
-### 1. Current status of every fault, in one query
-
-```
-POST /api/v1/point/query
-{ "layer": "default", "pageSize": 500,
-  "structuredQuery": { "and": [ { "field": { "property": "markers", "text": "fdd" } },
-                                { "field": { "property": "markers", "text": "fault" } } ] } }
+```bash
+export NF_BASE_URL=<reachable-console-base-url>
+export NF_USER=<read-only-user>
+export NF_PASSWORD=<secret>
 ```
 
-(One marker per clause.) The `default` layer merges every layer, so each record carries the attributes above plus
-`latestValue`. Follow `nextPageToken` until empty. A fault is `attrs.fddStatus == "fault"`; `latestValue` is the
-percentage of covered time in the trailing window (default 24 h). Group by `siteRef` / `equipUuid` and `ruleRef`.
-Treat `not-assessed` and `stale` as **unknown**, not healthy.
+Use Basic auth for a local console, or the bearer token issued by the Normal Online portal. Portal API keys are
+read-only. Hook invocation and app deployment may require console authentication. Always use TLS for remote access.
 
-### 2. A daily bulk download of when faults happened
+## Point metadata
 
-1. Query the timeline points once: same body with `"text": "fault_timeline"`. Cache the uuid list; it only changes
-   when equipment or rules change.
-2. `GET /api/v1/point/data?uuids=<u1>&uuids=<u2>&from=<ISO>&to=<ISO>&window=300s&method=MAX`. `MAX` over the 5-minute
-   grid keeps a confirmed `1` visible; `FIRST`, `LAST`, `AVERAGE`, `MIN`, `SUM`, `COUNT` also exist. Practical limits
-   (the shipped client uses them): batches of about 40 uuids per request, time pieces of at most 7 days, and NF caps a
-   series at about 10 000 samples per request (a day at 5 minutes is 288 per point, so a 24 h pull is far under it).
-3. Missing timestamps in the answer are **not assessed**; do not fill them with 0.
+### POST /api/v1/point/query
 
-The `open-fdd-nf` CLI and `open_fdd.nf.client.NFClient.query_all` / `point_data` do the paging and batching
-([Python tools](python-tools.html)).
+Query point metadata and current values. A query body selects a layer and uses structured query clauses:
 
-### 3. The analytics hook
+```json
+{
+  "layer": "default",
+  "pageSize": 500,
+  "structuredQuery": {
+    "and": [
+      {"field": {"property": "markers", "text": "point"}},
+      {"field": {"property": "markers", "text": "example-role"}}
+    ]
+  }
+}
+```
 
-`POST /api/v1/apps/open-fdd/hooks/analytics` with `{"args": {"tool": "get_fdd_fault_timeline", "equip": "...", "rule": "...", "days": 1}}`,
-then read the answer from `GET /api/v1/apps/open-fdd/hooks/analytics/runs?include_results=true`, or run
-`open-fdd-nf analyze fault-timeline ...`. It also offers weekly runtime, mechanical cooling hours, economizer
-residuals and role binding, each keyed by `equipUuid`. It is read-only and the answer is capped at about 200 KB
-(`truncated: true` when cut). Starting a hook is a POST that a read-only key may be refused (use the console login), so for an
-unattended integrator prefer recipes 1 and 2.
+One marker is used per clause. Use the model layer for site, equipment, and device records; default combines layers
+and exposes current values. The supported pager uses `pageOffset` with `totalCount`; it does not use a
+`nextPageToken`. Open-FDD reads every page and rejects repeated records.
 
-### 4. Live
+### GET /api/v1/equipment/classes
 
-`GET /api/v1/point/updates/data?uuids=...&wait=true` pushes new samples (chunked). Useful for a dashboard, not for
-a once-a-day pull.
+Returns the NF class vocabulary. The result can be paged; query parameters accepted by the installed NF version are
+authoritative. Open-FDD uses classes and Haystack markers to bind points to named roles. See [Modeling](modeling.html).
 
-## Recommended pattern for an integrator that pulls once a day
+## Point history
 
-1. Once (and weekly): `point/query` for `fdd` + `fault` points and for `fault_timeline` points; store
-   `uuid`, `siteRef`, `equipUuid`, `equipRef`, `ruleRef`, `unit`.
-2. Daily, after the hourly hook has run: `point/query` again for status (recipe 1, one paged call).
-3. Daily: `point/data` for the timeline uuids with `from` = your last watermark, `to` = now, `window=300s`,
-   `method=MAX`, batched as above. Use `fddTimelineThrough` on each timeline point to know how far NF has written
-   before you advance your own watermark; re-pulling an overlap is harmless.
-4. Keep "no sample" as unknown.
-5. Use a read-only API key; the hook-start routes are not needed.
+### GET /api/v1/point/data
 
-## Gaps and recommendations (written down, not implemented)
+Read resampled point history. Common query fields include repeated `uuids`, `from`, `to`, `window`, and
+`method`. The response contains timestamps and values keyed by point id. Supported aggregation methods depend on
+NF; Open-FDD uses averages for signals and maxima for fault timelines.
 
-- **No single "all faults, with timeline, as one file" endpoint.** The client has to do the two-step query plus
-  batched `point/data`. Recommendation: an on-request `export` hook (or an `open-fdd-nf` command) that returns
-  status plus timeline for a date range as CSV/JSON, paged, with the equip and site names already joined.
-- **The analytics hook cannot be used with a read-only key and caps at about 200 KB**, so it is not a bulk channel.
-- **No change feed for results.** A client must poll and track its own watermark (`fddTimelineThrough` helps).
-  Recommendation: also expose a `fddRunSeq` or a last-run summary point so a client can tell "a new run finished".
-- **9 of 77 rules have no timeline** (ratio, count and window-statistic rules): only their per-run result sample
-  exists. A client wanting daily history for those uses the result point's samples (`point/data`, one per run).
-- **Retention is NF's.** How long result and timeline samples stay depends on NF's history retention for the
-  point's layer; we did not find an Open-FDD setting for it. Pull daily and keep your own copy if you need more.
-- **Fault state in the Timescale table is run-level only** (see above); do not treat it as the timeline.
+Use bounded requests: batch point ids and split long ranges into time chunks. The app limits request URL size and
+pages range reads where supported. A missing timestamp means no sample; it is not a zero. The NF API and the
+[Python client](python-tools.html) provide the response envelopes for your NF release.
+
+## Open-FDD result points
+
+The hourly Full FDD hook writes one equipment summary per rule and, for sensor sweeps, one row per assessed sensor.
+Result points use fault or metric markers and carry attributes such as:
+
+| Attribute | Meaning |
+|---|---|
+| `ruleRef`, `equipRef`, `siteRef` | Rule and modeled equipment/site ids |
+| `fddStatus` | `fault`, `ok`, `not-assessed`, or `stale` |
+| `fddReason` | Why a result is unknown or stale, when applicable |
+| `fddCoverageHours` | Assessed time in the current window |
+| `sensorRef`, `roleRef` | Sensor UUID and role on a per-sensor result |
+| `fddSensorFaultHours` | Per-sensor hours included on the equipment summary |
+
+No coverage is not healthy: status is not-assessed and there is no numeric fault value. Stale means the current run
+could not refresh the point; it does not erase earlier history.
+
+### Query current fault status
+
+Use point/query with clauses for the fault result markers. Read `attrs.fddStatus`, `attrs.ruleRef`,
+`attrs.siteRef`, and `attrs.equipRef`. Treat `not-assessed` and `stale` as unknown, not healthy. The numeric
+latest value is expressed in the point's declared unit; fault percentage uses the 0–100 scale.
+
+### Read fault timelines
+
+Timeline points use the fault_timeline marker. Read them with point/query, then call point/data in bounded chunks.
+The series records 1 when a fault is confirmed and 0 when assessed healthy. A missing timestamp is unknown. Use
+`fddTimelineThrough` as a watermark when advancing a client-side cursor.
+
+## Hook routes
+
+NF exposes app hooks under `/api/v1/apps/{app-id}/hooks/{hook-name}`. POST to a hook route to start a run; read
+results from its `/runs?include_results=true` route. The browser/app uses the scheduled Full hooks for FDD and
+weather; the SPARQL hook is on request. A successful HTTP response means NF accepted the run; inspect run status and
+results before treating it as complete.
+
+## Timescale copy
+
+Full installations using Timescale may also store a run-level copy in `openfdd.fdd_results`. It is optional and
+not the source of truth. NF result points and their histories remain the normal API surface. See the
+[Timescale setup guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).

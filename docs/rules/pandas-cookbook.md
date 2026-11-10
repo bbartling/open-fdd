@@ -1,7 +1,6 @@
 ---
 title: Pandas cookbook
-parent: Rule Cookbook
-nav_order: 2
+nav_order: 9
 ---
 
 # Pandas cookbook
@@ -110,7 +109,7 @@ df = pd.DataFrame({
     "duct-static-pressure": 250 + 40 * wave,
     "duct-static-pressure-sp": 250 + 40 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("AHU-DUCTHI", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -164,7 +163,7 @@ df = pd.DataFrame({
     "discharge-air-temp": 21 + 2 * wave,
     "discharge-air-temp-sp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("AHU-SATDEV", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -220,7 +219,7 @@ df = pd.DataFrame({
     "heating-valve": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("AHU-SIMUL", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -273,7 +272,7 @@ df = pd.DataFrame({
     "fan-cmd": 50 + 20 * wave,
     "fan-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("CMD-1", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -329,7 +328,7 @@ df = pd.DataFrame({
     "mixed-air-temp": 21 + 2 * wave,
     "outside-air-damper": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("DMP-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -381,7 +380,7 @@ from open_fdd.rules import run_rule
 # one day on a 5-minute grid, UTC timestamps, every value SI (degC, Pa, L/s, kW, %, 0-1)
 idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC", name="timestamp_utc")
 df = pd.DataFrame({"fan-cmd": 100.0, "outside-air-damper": 0.0, "outside-air-temp": 16.0}, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("ECON-1", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -438,7 +437,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "outside-air-damper": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("ECON-2", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -501,7 +500,7 @@ df = pd.DataFrame({
     "web-outside-air-temp": 21 + 2 * wave,
     "web-outside-air-humidity": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("ECON-3", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -563,7 +562,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "fan-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("ECON-4", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -626,7 +625,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "heating-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("ECON-5", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -693,7 +692,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "web-outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("ECON-6", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -791,7 +790,7 @@ df = pd.DataFrame({
     "web-outside-air-humidity": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("ECON-7", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -861,7 +860,7 @@ from open_fdd.rules import run_rule
 # one day on a 5-minute grid, UTC timestamps, every value SI (degC, Pa, L/s, kW, %, 0-1)
 idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC", name="timestamp_utc")
 df = pd.DataFrame({"duct-static-pressure": 150.0, "duct-static-pressure-sp": 250.0, "fan-cmd": 100.0}, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC1", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -930,7 +929,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC10", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1002,7 +1001,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC11", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1079,7 +1078,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC12", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1149,7 +1148,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC13", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1228,7 +1227,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC14", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1307,7 +1306,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC15", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1385,7 +1384,7 @@ df = pd.DataFrame({
     "return-air-temp": 21 + 2 * wave,
     "fan-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC2", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1457,7 +1456,7 @@ df = pd.DataFrame({
     "return-air-temp": 21 + 2 * wave,
     "fan-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC3", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1537,7 +1536,7 @@ df = pd.DataFrame({
     "cooling-valve": 50 + 20 * wave,
     "fan-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC4", df, params={"confirm_min": 60})
 print(result.status, result.fault_hours)
@@ -1611,7 +1610,7 @@ df = pd.DataFrame({
     "fan-cmd": 50 + 20 * wave,
     "heating-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC5", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1685,7 +1684,7 @@ df = pd.DataFrame({
     "return-air-temp": 21 + 2 * wave,
     "vav-total-airflow": 100 + 25 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC6", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1753,7 +1752,7 @@ df = pd.DataFrame({
     "fan-cmd": 50 + 20 * wave,
     "heating-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC7", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1828,7 +1827,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC8", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1901,7 +1900,7 @@ df = pd.DataFrame({
     "outside-air-damper": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC9", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -1967,7 +1966,7 @@ df = pd.DataFrame({
     "web-outside-air-temp": 21 + 2 * wave,
     "chiller-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("MECH-OAT-1", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -2030,7 +2029,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "fan-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("OA-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2101,7 +2100,7 @@ df = pd.DataFrame({
     "discharge-air-temp-sp": 21 + 2 * wave,
     "outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("RESET-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2180,7 +2179,7 @@ df = pd.DataFrame({
     "occupied": 1,
     "fan-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("SCHED-1", df, params={"confirm_min": 30})
 print(result.status, result.fault_hours)
@@ -2298,7 +2297,7 @@ wave = np.sin(np.linspace(0, 2 * np.pi, len(idx)))
 df = pd.DataFrame({
     "fan-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("SCHED-247", df, params={"confirm_min": 60})
 print(result.status, result.fault_hours)
@@ -2357,7 +2356,7 @@ df = pd.DataFrame({
     "duct-static-pressure": 250 + 40 * wave,
     "vav-pressure-request-sum": 1 + 1 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("TRIM-1", df, params={"confirm_min": 30})
 print(result.status, result.fault_hours)
@@ -2429,7 +2428,7 @@ df = pd.DataFrame({
     "discharge-air-temp-sp": 21 + 2 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("VLV-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2496,7 +2495,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "occ-mode": 1,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2554,7 +2553,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "occupied": 1,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-2", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2613,7 +2612,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "reheat-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-3", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -2675,7 +2674,7 @@ wave = np.sin(np.linspace(0, 2 * np.pi, len(idx)))
 df = pd.DataFrame({
     "damper": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-4", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2729,7 +2728,7 @@ df = pd.DataFrame({
     "zone-airflow": 100 + 25 * wave,
     "damper": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-5", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2793,7 +2792,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "reheat-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-6", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2874,7 +2873,7 @@ wave = np.sin(np.linspace(0, 2 * np.pi, len(idx)))
 df = pd.DataFrame({
     "zone-airflow": 100 + 25 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-7", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -2944,7 +2943,7 @@ df = pd.DataFrame({
     "vav-discharge-air-temp": 21 + 2 * wave,
     "ahu-discharge-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-AHU-LEAVE", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3019,7 +3018,7 @@ df = pd.DataFrame({
     "vav-discharge-air-temp": 21 + 2 * wave,
     "vav-inlet-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="VAV-1", equipment_type="VAV")
+df.attrs.update(equipment_id="equip-1", equipment_type="VAV")
 
 result = run_rule("VAV-REHEAT", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3084,7 +3083,7 @@ df = pd.DataFrame({
     "cooling-valve": 50 + 20 * wave,
     "heating-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-CLG-COIL", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3140,7 +3139,7 @@ df = pd.DataFrame({
     "zone-co2": 600 + 150 * wave,
     "damper-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-CO2-DAMPER", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3196,7 +3195,7 @@ df = pd.DataFrame({
     "damper-cmd": 50 + 20 * wave,
     "damper": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-DAMPER-POS", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3252,7 +3251,7 @@ df = pd.DataFrame({
     "cooling-sp": 21 + 2 * wave,
     "heating-sp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-DEADBAND", df, params={"confirm_min": 0})
 print(result.status, result.fault_hours)
@@ -3314,7 +3313,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "heating-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-HTG-COIL", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3377,7 +3376,7 @@ df = pd.DataFrame({
     "heating-valve": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-MODE-CYCLE", df, params={"confirm_min": 0})
 print(result.status, result.fault_hours)
@@ -3435,7 +3434,7 @@ wave = np.sin(np.linspace(0, 2 * np.pi, len(idx)))
 df = pd.DataFrame({
     "zone-air-temp-sp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-SENSOR-NULL", df, params={"confirm_min": 0})
 print(result.status, result.fault_hours)
@@ -3498,7 +3497,7 @@ df = pd.DataFrame({
     "heating-valve": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-VALVE-PASS-CLG", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3561,7 +3560,7 @@ df = pd.DataFrame({
     "heating-valve": 50 + 20 * wave,
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="ZONE_OTHER-1", equipment_type="ZONE_OTHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="ZONE_OTHER")
 
 result = run_rule("FCU-VALVE-PASS-HTG", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3621,7 +3620,7 @@ from open_fdd.rules import run_rule
 # one day on a 5-minute grid, UTC timestamps, every value SI (degC, Pa, L/s, kW, %, 0-1)
 idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC", name="timestamp_utc")
 df = pd.DataFrame({"chilled-water-supply-temp": 6.5, "chilled-water-return-temp": 7.5, "chiller-status": 1.0}, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CHW-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -3682,7 +3681,7 @@ df = pd.DataFrame({
     "chw-diff-pressure-sp": 250 + 40 * wave,
     "chw-pump-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CHW-2", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -3741,7 +3740,7 @@ df = pd.DataFrame({
     "chilled-water-supply-temp-sp": 21 + 2 * wave,
     "chw-pump-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CHW-3", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -3798,7 +3797,7 @@ df = pd.DataFrame({
     "chw-flow": 100 + 25 * wave,
     "chw-pump-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CHW-4", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
@@ -3881,7 +3880,7 @@ df = pd.DataFrame({
     "chiller-status": 1,
     "building-zone-load-satisfied": 1,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CHW-NOLOAD-1", df, params={"confirm_min": 30})
 print(result.status, result.fault_hours)
@@ -3953,7 +3952,7 @@ df = pd.DataFrame({
     "tower-fan-cmd": 50 + 20 * wave,
     "chiller-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CW-APR-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -4027,7 +4026,7 @@ df = pd.DataFrame({
     "tower-fan-cmd": 50 + 20 * wave,
     "chiller-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CW-FAN-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -4097,7 +4096,7 @@ df = pd.DataFrame({
     "web-outside-air-wetbulb": 21 + 2 * wave,
     "chiller-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("CW-OPT-1", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -4157,7 +4156,7 @@ df = pd.DataFrame({
     "chw-reset-request-sum": 1 + 1 * wave,
     "pump-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="CHILLER-1", equipment_type="CHILLER")
+df.attrs.update(equipment_id="equip-1", equipment_type="CHILLER")
 
 result = run_rule("TRIM-4", df, params={"confirm_min": 30})
 print(result.status, result.fault_hours)
@@ -4222,7 +4221,7 @@ df = pd.DataFrame({
     "hw-reset-request-sum": 1 + 1 * wave,
     "pump-status": 1,
 }, index=idx)
-df.attrs.update(equipment_id="BOILER-1", equipment_type="BOILER")
+df.attrs.update(equipment_id="equip-1", equipment_type="BOILER")
 
 result = run_rule("TRIM-3", df, params={"confirm_min": 30})
 print(result.status, result.fault_hours)
@@ -4288,7 +4287,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "fan-cmd": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="HEATPUMP-1", equipment_type="HEATPUMP")
+df.attrs.update(equipment_id="equip-1", equipment_type="HEATPUMP")
 
 result = run_rule("HP-1", df, params={"confirm_min": 10})
 print(result.status, result.fault_hours)
@@ -4393,7 +4392,7 @@ wave = np.sin(np.linspace(0, 2 * np.pi, len(idx)))
 df = pd.DataFrame({
     "cooling-valve": 50 + 20 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("PID-HUNT-1", df, params={"confirm_min": 0})
 print(result.status, result.fault_hours)
@@ -4482,7 +4481,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 df.attrs["role_units"] = {c: "°C" if "temp" in c else "Pa" for c in df.columns}  # sensor sweeps assess a series only when its declared unit is SI
 
 result = run_rule("SV-FLATLINE", df, params={"confirm_min": 5})
@@ -4569,7 +4568,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "duct-static-pressure": 250 + 40 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 df.attrs["role_units"] = {c: "°C" if "temp" in c else "Pa" for c in df.columns}  # sensor sweeps assess a series only when its declared unit is SI
 
 result = run_rule("SV-RANGE", df, params={"confirm_min": 5})
@@ -4631,7 +4630,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 df.attrs["role_units"] = {c: "°C" if "temp" in c else "Pa" for c in df.columns}  # sensor sweeps assess a series only when its declared unit is SI
 
 result = run_rule("SV-RATE", df, params={"confirm_min": 10})
@@ -4730,7 +4729,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 df.attrs["role_units"] = {c: "°C" if "temp" in c else "Pa" for c in df.columns}  # sensor sweeps assess a series only when its declared unit is SI
 
 result = run_rule("SV-SPIKE", df, params={"confirm_min": 5})
@@ -4811,7 +4810,7 @@ df = pd.DataFrame({
     "zone-air-temp": 21 + 2 * wave,
     "outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 df.attrs["role_units"] = {c: "°C" if "temp" in c else "Pa" for c in df.columns}  # sensor sweeps assess a series only when its declared unit is SI
 
 result = run_rule("SV-STALE", df, params={"confirm_min": 5})
@@ -4903,7 +4902,7 @@ df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
     "web-outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="AHU-1", equipment_type="AHU")
+df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("OAT-METEO", df, params={"confirm_min": 15})
 print(result.status, result.fault_hours)
@@ -4963,7 +4962,7 @@ wave = np.sin(np.linspace(0, 2 * np.pi, len(idx)))
 df = pd.DataFrame({
     "outside-air-temp": 21 + 2 * wave,
 }, index=idx)
-df.attrs.update(equipment_id="WEATHER-1", equipment_type="WEATHER")
+df.attrs.update(equipment_id="equip-1", equipment_type="WEATHER")
 
 result = run_rule("WX-1", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)

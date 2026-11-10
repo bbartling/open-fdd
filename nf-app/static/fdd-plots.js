@@ -26,7 +26,7 @@
   const finite = (v) => v != null && Number.isFinite(v);
   const equipName = (rec) => ((rec && rec.attrs) || {}).dis || (rec && rec.name) || "";
   const hourFloor = (ms) => Math.floor(ms / HOUR) * HOUR;
-  const hourLabel = (ms) => new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "numeric" });
+  const hourLabel = (ms, siteTz) => new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "numeric", timeZone: siteTz || "UTC" });
   const hiddenX = (gridIndex, show) => ({ type: "time", gridIndex, show, axisPointer: { show: true } });
 
   // ---- unit families: one stacked grid per family, like the old role-units grouping ---
@@ -163,7 +163,7 @@
   }
 
   /** Heatmap: one row per sensor, one column per hour, categorical health state. */
-  function fddPlotHealthOption({ title, rows, hours }) {
+  function fddPlotHealthOption({ title, rows, hours, siteTz }) {
     if (!rows.length || !hours.length) return null;
     const pal = typeof palette === "function" ? palette() : [];
     const colors = [pal[3] || "#16a34a", pal[1] || "#ea580c", pal[5] || "#2563eb", FAULT_LANE.lineStyle.color];
@@ -173,10 +173,10 @@
       title: { text: title, left: 8, top: 4 },
       tooltip: {
         position: "top",
-        formatter: (x) => `${esc(rows[x.value[1]].label)}<br>${esc(hourLabel(hours[x.value[0]]))}: <b>${esc(HEALTH_LABELS[x.value[2]])}</b>`,
+        formatter: (x) => `${esc(rows[x.value[1]].label)}<br>${esc(hourLabel(hours[x.value[0]], siteTz))}: <b>${esc(HEALTH_LABELS[x.value[2]])}</b>`,
       },
       grid: { left: 150, right: 20, top: 44, bottom: 86 },
-      xAxis: { type: "category", data: hours.map(hourLabel), splitArea: { show: false } },
+      xAxis: { type: "category", data: hours.map((t) => hourLabel(t, siteTz)), splitArea: { show: false } },
       yAxis: { type: "category", data: rows.map((r) => r.label), inverse: true },
       visualMap: {
         type: "piecewise", dimension: 2, orient: "horizontal", left: "center", bottom: 28,
@@ -277,9 +277,9 @@
    * With `model`, the lane is rcxFaultData(model, equipRec, rule.id, hours): the hook's per-timestamp confirmed-fault
    * timeline (1 / 0 / gap), falling back (labelled approximate, drawn dashed) to the rolling fault_pct point.
    * Without `model` only the caller's `resultPoint` is available, so the lane is that fallback.
-   * @param {HTMLElement} el @param {{rule?: any, equipRec?: any, bound?: Record<string, any[]>, resultPoint?: any, model?: any, hours?: number}} [o]
+   * @param {HTMLElement} el @param {{rule?: any, equipRec?: any, bound?: Record<string, any[]>, resultPoint?: any, model?: any, hours?: number, range?: any, siteTz?: string}} [o]
    */
-  async function fddRulePlot(el, { rule, equipRec, bound = {}, resultPoint = null, model = null, hours = 168 } = {}) {
+  async function fddRulePlot(el, { rule, equipRec, bound = {}, resultPoint = null, model = null, hours = 168, range = null, siteTz = "UTC" } = {}) {
     const wanted = [...new Set([...(rule.required_roles || []), ...(rule.optional_roles || [])])];
     const roles = fddPlotExpandRoles(rule.id, wanted, bound).filter((r) => bound[r] && bound[r].length);
     const sensorSweep = /^SV-(RATE|RANGE|FLATLINE|SPIKE|STALE)$/.test(String(rule.id || ""));
@@ -301,24 +301,26 @@
     const pts = sensorSweep ? [...new Map(boundPoints.map((p) => [p.uuid, p])).values()] : boundPoints;
     const sensorResultByRef = new Map(sensorResults.map((p) => [String((p.rec.attrs || {}).sensorRef || ""), p]));
     const windowSec = pickWindow(hours);
-    const sigRaw = await fetchSeries(pts, hours, { windowSec });
+    const sigRaw = range ? (await fetchRange(pts, range, { windowSec, minWindowSec: windowSec, siteTz, preserveWindow: true })).series
+      : await fetchSeries(pts, hours, { windowSec });
     let lane, sensorLanes = [];
     if (sensorResults.length) {
       sensorLanes = await Promise.all(pts.map(async (p) => {
         const attrs = p.rec?.attrs || {}, ref = String(p.uuid), res = sensorResultByRef.get(ref);
         const label = `${pointRoles.get(ref) || attrs.roleRef || "sensor"} · ${p.dis || p.name}`;
-        const data = await rcxFaultData(model, equipRec, rule.id, hours, { sensorRef: ref });
+        const data = await rcxFaultData(model, equipRec, rule.id, hours, { sensorRef: ref, range, siteTz });
         const samples = data.map((x) => [...x]);
         Object.defineProperties(samples, { source: { value: data.source }, approximate: { value: !!data.approximate } });
         return { point: p, result: res, label, data: samples };
       }));
       lane = [];
     } else {
-      lane = model ? await rcxFaultData(model, equipRec, rule.id, hours)
-        // no model: the fallback lane from the result point the caller already resolved
-        : resultPoint ? await fetchSeries([resultPoint], hours, { method: "MAX", windowSec: 3600 })
-          .then((r) => rcxFaultLaneFromResult(rcxCurrentOutputSeries(resultPoint, r.get(resultPoint.uuid) || [], 3600)))
-          : rcxFaultLaneFromResult(null, true);
+      if (model) lane = await rcxFaultData(model, equipRec, rule.id, hours, { range, siteTz });
+      else if (resultPoint) {
+        const data = range ? (await fetchRange([resultPoint], range, { method: "MAX", windowSec: 3600, minWindowSec: 3600, siteTz, preserveWindow: true })).series
+          : await fetchSeries([resultPoint], hours, { method: "MAX", windowSec: 3600 });
+        lane = rcxFaultLaneFromResult(rcxCurrentOutputSeries(resultPoint, data.get(resultPoint.uuid) || [], 3600));
+      } else lane = rcxFaultLaneFromResult(null, true);
     }
     const groups = new Map();
     pts.forEach((p) => {
@@ -346,6 +348,13 @@
     built.option = rcxWithFaultLane(built.option, sensorLanes.length
       ? sensorLanes.map((x) => ({ name: `${rule.id} · ${x.label}`, data: x.data }))
       : [{ name: rule.id, data: lane }]);
+    const axisLabel = (ms) => new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: siteTz || "UTC" });
+    for (const axis of (Array.isArray(built.option.xAxis) ? built.option.xAxis : [built.option.xAxis])) {
+      if (axis?.type === "time") {
+        axis.axisLabel = { ...(axis.axisLabel || {}), formatter: axisLabel };
+        if (range?.resolvedBounds) { axis.min = range.resolvedBounds.fromMs; axis.max = range.resolvedBounds.toMs; }
+      }
+    }
     draw(el, built, `fdd_${rule.id}_${equipName(equipRec)}`);
     const scores = fddPlotSensorFaultHours(resultPoint || (model && rcxResultPoint(model, equipRec, rule.id)));
     const sensorNote = scores && !sensorResults.length ? ` · latest sensor fault hours: ${scores}` : "";
@@ -422,7 +431,7 @@
           max: hourly(max.get(p.uuid)), count: hourly(count.get(p.uuid)) },
         { family: unitFamily(p), staleHours: stale, flatTol: tol }),
       }));
-      const option = fddPlotHealthOption({ title: `Sensor health · ${eq.name}`, rows, hours: grid });
+      const option = fddPlotHealthOption({ title: `Sensor health · ${eq.name}`, rows, hours: grid, siteTz: ctx.siteTz });
       draw(el, { option, heightPx: Math.max(220, 44 + 86 + rows.length * 26) }, `sensor_health_${eq.name}`);
       const flags = rows.flatMap((r) => r.states).filter((s) => s != null && s > 0).length;
       return `${rows.length} sensors · ${flags} flagged sensor-hours of ${rows.flatMap((r) => r.states).filter((s) => s != null).length}`;

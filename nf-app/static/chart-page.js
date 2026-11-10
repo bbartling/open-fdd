@@ -17,18 +17,29 @@ function syncUrl() {
   const u = new URLSearchParams({ c: def.id, site: sel.site, h: String(sel.hours) });
   if (sel.equip) u.set("equip", sel.equip);
   if (def.pick && sel.point) u.set("point", sel.point);
+  const range = getChartRangeState("charts");
+  u.set("range.charts", range.preset);
+  if (range.preset === "custom") { u.set("from.charts", String(range.fromMs)); u.set("to.charts", String(range.toMs)); }
   history.replaceState(null, "", `?${u}`);
 }
 
 async function draw() {
-  $("range").innerHTML = def.ranges.map((h) =>
-    `<button data-h="${h}" class="${h === sel.hours ? "on" : ""}">${rangeLabel(h)}</button>`).join("");
+  const state = getChartRangeState("charts"), site = model.sites.find((s) => idOf(s) === sel.site);
+  const siteTz = chartTimeZone(site?.attrs?.tz || site?.attrs?.timezone);
+  renderRangeControl($("range"), { key: "charts", state, siteTz, onChange: () => draw() });
+  const baseCtx = pointSets(model, sel.site, sel.equip);
+  const candidate = def.pick ? def.pick(baseCtx) : [...baseCtx.cards, ...baseCtx.status, ...baseCtx.weather];
+  setLive(true, "loading history range…");
   syncUrl();
   try {
-    const hint = await drawChart(ofddChart($("chart")), def, ctx, sel.hours, { point: sel.point });
+    const range = await resolveChartSelection(candidate, state, { siteTz });
+    const ctx = { ...baseCtx, range, siteTz };
+    const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
+    const hint = await drawChart(ofddChart($("chart")), def, ctx, hours, { point: sel.point, range, siteTz });
     if (hint != null) $("hint").textContent = hint;
     setLive(true, `updated ${new Date().toLocaleTimeString()}`);
   } catch (e) {
+    $("hint").textContent = `Could not load this range: ${e.message}`;
     setLive(false, e.message);
   }
 }
@@ -43,7 +54,7 @@ async function main() {
   ctx = pointSets(model, sel.site, sel.equip);
   def = chartDef(sel.id);
   if (!def || !def.applies(ctx)) throw new Error(`chart "${sel.id}" has no matching tagged points here`);
-  if (!def.ranges.includes(sel.hours)) sel.hours = def.range;
+  if (!sel.hours) sel.hours = def.range;
   const site = model.sites.find((s) => idOf(s) === sel.site);
   const equip = model.equips.find((e) => idOf(e) === sel.equip);
   document.title = `${def.title} · Open-FDD`;
@@ -57,10 +68,7 @@ async function main() {
     $("pick").classList.remove("hidden");
     $("pick").onchange = () => { sel.point = $("pick").value; draw(); };
   }
-  $("range").onclick = (ev) => {
-    const h = Number(/** @type {HTMLElement} */ (ev.target).dataset.h);
-    if (h && h !== sel.hours) { sel.hours = h; draw(); }
-  };
+  window.addEventListener("popstate", () => draw());
   onThemeChange(draw);
   await draw();
   setInterval(() => { if (!document.hidden) draw(); }, 5 * 60e3);

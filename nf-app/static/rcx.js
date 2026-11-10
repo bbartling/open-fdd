@@ -128,14 +128,34 @@ function rcxDispSeries(arr, siUnit, delta = false) {
  */
 const RCX_FINE_SEC = 300;              // NF resample window for integration (ctx.alignedFine)
 const RCX_FINE_MAX_SAMPLES = 9000;     // per series per request (NF caps at ~10000)
+const rcxChartConfig = new WeakMap();
+const rcxChartOriginalSetOption = new WeakMap();
+
+function rcxSiteChart(el, siteTz, range) {
+  const chart = ofddChart(el);
+  if (!chart || typeof chart.setOption !== "function") return chart;
+  rcxChartConfig.set(chart, { siteTz: chartTimeZone(siteTz), range });
+  if (!rcxChartOriginalSetOption.has(chart)) {
+    const original = chart.setOption.bind(chart);
+    rcxChartOriginalSetOption.set(chart, original);
+    chart.setOption = (option, ...args) => {
+      const cfg = rcxChartConfig.get(chart);
+      const styled = typeof chartOptionSiteTime === "function"
+        ? chartOptionSiteTime(option, cfg.siteTz, cfg.range?.resolvedBounds) : option;
+      return original(styled, ...args);
+    };
+  }
+  return chart;
+}
 
 /** @param {RcxViewDef} view @param {OfddEquip[]} equips @param {number} hours @param {OfddModel} model @param {FddCatalog} catalog @returns {RcxContext} */
-function rcxContext(view, equips, hours, model, catalog) {
+function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = "UTC") {
   const first = (eq, role) => (eq.bound[role] && eq.bound[role][0]) || null;
   const series = async (pts, o = {}) => {
     const list = pts.filter(Boolean);
-    const data = await fetchSeries(list, o.hours || hours,
-      { method: o.method || "AVERAGE", ...(o.windowSec ? { windowSec: o.windowSec } : {}), ...(o.endMs != null ? { endMs: o.endMs } : {}) });
+    const opts = { method: o.method || "AVERAGE", ...(o.windowSec ? { windowSec: o.windowSec, minWindowSec: o.windowSec } : {}),
+      ...(o.endMs != null ? { endMs: o.endMs } : {}), siteTz, preserveWindow: true };
+    const data = range ? (await fetchRange(list, range, opts)).series : await fetchSeries(list, o.hours || hours, opts);
     return new Map(list.map((p) => [p.uuid, rcxToSI(data.get(p.uuid) || [], p)]));
   };
   // Fine-grid history for integration (run hours, bins): a 300 s window instead of the ~360-point
@@ -143,6 +163,7 @@ function rcxContext(view, equips, hours, model, catalog) {
   // chunks of at most RCX_FINE_MAX_SAMPLES (750 h at 300 s) and the chunks are merged by timestamp.
   const fineSeries = async (pts, o = {}) => {
     const list = pts.filter(Boolean), span = o.hours || hours, windowSec = o.windowSec || RCX_FINE_SEC;
+    if (range) return series(list, { ...o, hours: span, windowSec });
     const perChunk = Math.max(1, Math.floor((RCX_FINE_MAX_SAMPLES * windowSec) / 3600));
     if (span <= perChunk) return series(list, { ...o, hours: span, windowSec });
     const end = Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
@@ -185,8 +206,8 @@ function rcxContext(view, equips, hours, model, catalog) {
   };
   const site = equips[0] && equips[0].rec && (equips[0].rec.attrs || {}).siteRef;
   return {
-    view, equips, hours, model, catalog, first, series, aligned, alignedFine,
-    chart: (el) => ofddChart(el),
+    view, equips, hours, model, catalog, first, series, aligned, alignedFine, range, siteTz,
+    chart: (el) => rcxSiteChart(el, siteTz, range),
     siUnit: rcxSiUnit,
     disp: rcxDisp,
     dispDelta: rcxDispDelta,
@@ -322,12 +343,14 @@ async function rcxFaultData(model, equip, ruleId, hours, opts = {}) {
   const tp = rcxTimelinePoint(model, equip, ruleId, sensorRef);
   if (tp) {
     const windowSec = opts.windowSec || (hours <= 48 ? 300 : 3600);
-    const data = await fetchSeries([tp], hours, { method: "MAX", windowSec });
+    const data = opts.range ? (await fetchRange([tp], opts.range, { method: "MAX", windowSec, minWindowSec: windowSec,
+      siteTz: opts.siteTz || "UTC", preserveWindow: true })).series : await fetchSeries([tp], hours, { method: "MAX", windowSec });
     return rcxTagLane(rcxTimelineLane(data.get(tp.uuid) || [], windowSec), "timeline", false);
   }
   const p = sensorRef == null ? rcxResultPoint(model, equip, ruleId) : rcxResultPoint(model, equip, ruleId, sensorRef);
   if (!p) return rcxTagLane([], "none", false);
-  const data = await fetchSeries([p], hours, { method: "MAX", windowSec: 3600 });
+  const data = opts.range ? (await fetchRange([p], opts.range, { method: "MAX", windowSec: 3600, minWindowSec: 3600,
+    siteTz: opts.siteTz || "UTC", preserveWindow: true })).series : await fetchSeries([p], hours, { method: "MAX", windowSec: 3600 });
   const samples = rcxCurrentOutputSeries(p, data.get(p.uuid) || [], 3600);
   return rcxTagLane(samples.map(([t, v]) => [t, v == null ? null : v > 0 ? 1 : 0]), "fault_pct", true);
 }
