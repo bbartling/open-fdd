@@ -277,6 +277,26 @@ test("fdd status: fault rule with zero coverage is not-assessed, never a healthy
   }
 });
 
+test("stale cleanup only matches results derived from the current site's equipment key", async () => {
+  const siteBEquip = { uuid: "e-site-b", name: "AHU-1", pointType: "EQUIPMENT",
+    attrs: { id: "AHU-1", siteRef: "site-b", markers: "equip,ahu" } };
+  const siteBKey = hook.resultKey(siteBEquip, "site-b", "AHU-1");
+  const siteBResult = { uuid: hook.resultUuid(siteBKey, "CMD-1"), name: "site-b/AHU-1/CMD-1", layer: "model",
+    attrs: { markers: "point,his,fault,fdd", siteRef: "site-b", equipRef: "AHU-1", ruleRef: "CMD-1", fddStatus: "fault" } };
+  const retiredSensor = { uuid: hook.sensorResultUuid(hook.resultKey(MODEL[1], "site-a", "AHU-1"), "CMD-1", "fixture-retired"),
+    name: "fixture-retired result", layer: "model",
+    attrs: { ...siteBResult.attrs, siteRef: "site-a", sensorRef: "fixture-retired" } };
+  // The foreign result is present in the model layer, but the current run resolves only site-a equipment.
+  const http = fakeHttp([], {}, { model: [...MODEL, siteBResult, retiredSensor] });
+  const summary = await hook.runFdd({ sdk: { http }, pack: statusPack, createEngine: stubEngine({ queries: [] }), now: NOW });
+  assert.equal(http.writes.points.some((point) => point.uuid === siteBResult.uuid), false,
+    "matching equipRef alone must not stale another site's result");
+  assert.equal(http.writes.data.some((point) => point.uuid === siteBResult.uuid), false);
+  assert.equal(http.writes.points.find((point) => point.uuid === retiredSensor.uuid)?.attrs.fddStatus, "stale");
+  assert.equal(summary.sensor_results.stale, 1);
+  assert.equal(summary.status.stale, 0, "sensor results do not count as equipment summaries");
+});
+
 test("fdd status: covered fault rule is ok at 0 and fault above 0, with coverage hours", async () => {
   const ok = await runScripted({ "CMD-1": [{ equipment_id: "AHU-1", fault_pct: 0, fault_hours: 0, covered_hours: 23.5 }], "FAN-RUNTIME-HOURS": FAN_OK });
   assert.equal(ok.model("CMD-1").attrs.fddStatus, "ok");
@@ -394,6 +414,7 @@ test("the FDD hook writes stable per-sensor results, timelines identity attrs, a
   const summary = await hook.runFdd({ sdk: { http }, pack, createEngine, now: NOW });
   assert.equal(summary.results.length, 1, "NF run summary retains one equipment result per rule");
   assert.equal(summary.sensor_results.total, 6, "sensor result counts are reported separately");
+  assert.deepEqual(summary.status, { ok: 0, fault: 1, "not-assessed": 0, stale: 0 });
   const equipKey = hook.resultKey(multiSensorEquip.equips[0], "site-fixture", "AHU-A");
   const uuid = hook.resultUuid(equipKey, "SV-STALE");
   const summaryPoint = http.writes.points.find((row) => row.uuid === uuid && row.layer === "model");
@@ -447,6 +468,7 @@ test("every sweep publishes all physical bound sensors; unsupported sensor roles
   const summary = await hook.runFdd({ sdk: { http }, pack, createEngine, now: NOW });
   assert.equal(summary.results.length, 5);
   assert.equal(summary.sensor_results.total, 30);
+  assert.deepEqual(summary.status, { ok: 5, fault: 0, "not-assessed": 0, stale: 0 });
   for (const ruleId of sweepIds) {
     const rows = http.writes.points.filter((p) => p.layer === "model" && p.attrs.ruleRef === ruleId && p.attrs.fddSummary === "sensor");
     assert.equal(rows.length, 6, `${ruleId} should include all six sensor points`);

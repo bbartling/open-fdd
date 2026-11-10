@@ -195,9 +195,11 @@ async function renderCharts() {
 
 // ---- FDD tab --------------------------------------------------------------------------
 // Which rules from the catalog each equip in scope can run (fdd.js binds inputs by tags).
+const fddEquipsInScope = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
+const renderScopedFddResults = () => renderFddResults(fddEquipsInScope());
 async function renderFdd() {
   const catalog = await loadCatalog();
-  const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
+  const equips = fddEquipsInScope();
   const rows = equips.flatMap((e) => equipRules(e, model, catalog).map((r) => ({ ...r, equip: e })));
   const runnable = rows.filter((r) => r.runnable);
   $("nRules").textContent = runnable.length;
@@ -222,7 +224,7 @@ async function renderFdd() {
         : !r.pointInputs ? `<span class="sub">uses utility/meter data, not points</span>`
         : `<span class="warn">needs ${esc(r.missing.join(", "))}</span>`}</td>
     </tr>`).join("") || `<tr><td colspan="4" class="sub">No rules apply to the equips in scope.</td></tr>`;
-  await renderFddResults(equips);
+  await renderScopedFddResults();
 }
 
 // "Run FDD now": start the hook through NF (StartHook = on-request run), wait for it, reload.
@@ -863,7 +865,7 @@ function wireControls() {
       if (toggle) {
         const groupId = toggle.dataset.expand;
         fddExpandedGroups.has(groupId) ? fddExpandedGroups.delete(groupId) : fddExpandedGroups.add(groupId);
-        renderFddResults(model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site)).catch(showErr);
+        renderScopedFddResults().catch(showErr);
         ev.stopPropagation(); return;
       }
       const tr = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("tr[data-rule]"));

@@ -207,13 +207,17 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   const otherSiteResult = point("other-site-result", "other site", "AHU-A", ["fdd", "fault"], {
     ruleRef: "SV-RANGE", fddSummary: "sensor", sensorRef: "other-sensor", roleRef: "rat", siteRef: "site-other", unit: "h", fddOutput: "fault_hours", fddStatus: "fault",
   }, 99);
+  const vavResult = point("vav-result", "VAV-only result", "VAV-A", ["fdd", "fault"], {
+    ruleRef: "FC1", siteRef: "site-fixture", unit: "%", fddOutput: "fault_pct", fddStatus: "fault",
+  }, 5);
   ctx.testModel = { equips: [
     { id: "AHU-A", name: "AHU-A", attrs: { siteRef: "site-fixture" } },
+    { id: "VAV-A", name: "VAV-A", attrs: { siteRef: "site-fixture" } },
     { id: "AHU-A", name: "Other AHU-A", attrs: { siteRef: "site-other" } },
-  ], points: [...results, percentResult, mixedResult, otherSiteResult, ...inputs] };
+  ], points: [...results, percentResult, mixedResult, otherSiteResult, vavResult, ...inputs] };
   vm.runInContext("model = testModel", ctx);
   vm.runInContext('scope.site = "site-fixture"', ctx);
-  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  await vm.runInContext("renderScopedFddResults()", ctx);
   let html = el("fddResultRows").innerHTML;
   assert.match(html, /equipment summary/);
   assert.match(html, /data-expand=/);
@@ -245,4 +249,11 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   html = el("fddResultRows").innerHTML;
   assert.match(html, /stale/);
   assert.match(html, /not-assessed/);
+  vm.runInContext('scope.equip = "VAV-A"', ctx);
+  await vm.runInContext("renderScopedFddResults()", ctx);
+  assert.match(el("fddResultRows").innerHTML, /data-equip="VAV-A"/);
+  assert.doesNotMatch(el("fddResultRows").innerHTML, /SV-RANGE/);
+  vm.runInContext('scope.equip = "AHU-A"', ctx);
+  await vm.runInContext("renderScopedFddResults()", ctx);
+  assert.match(el("fddResultRows").innerHTML, /SV-RANGE/);
 });

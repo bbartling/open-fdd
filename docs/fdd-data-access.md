@@ -22,7 +22,7 @@ the equip's NF uuid plus the rule id, so it is stable across renames), then one 
 | Fault timeline point (5.0.3, 68 of 77 rules) | `point,his,fault_timeline` (no `fdd`, no `fault`) | one sample per assessed history timestamp: `1` confirmed fault, `0` ok; **no sample** = not assessed (never written as 0) | `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddKind=fault-timeline`, `fddTimelineOf` (uuid of the result point), `fddTimelineThrough` (newest sample written) |
 
 All five SV sweeps produce one SQL result per sensor UUID. In addition to the equipment summary, NF publishes a result
-and timeline with `sensorRef`, `roleRef`, and `fddSummary=sensor`. The summary's value is the highest sensor fault hours
+and timeline with `sensorRef` and `roleRef`. The result also has `fddSummary=sensor`. The summary's value is the highest sensor fault hours
 and its timeline flags intervals with any faulting sensor. Its `fddSensorFaultHours` maps sensor UUIDs to
 `{role, name, hours, status}`. Timescale keeps this object for each run in `metric.sensor_fault_hours`.
 See the [5.0.10 migration note](operations/nf/migrate-5.0.10.html) for the output history boundary and schema upgrade.

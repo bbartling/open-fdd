@@ -18,8 +18,10 @@ with current values or an empty value when an attribute does not apply.
 
 SV-RATE now publishes fault hours. Existing sweep summary point histories can contain both percentages and hours
 from earlier upgrades. The current output boundary is recorded in `fddOutputSince`. If an older result has no
-recorded boundary, the first 5.0.10 sample is the earliest displayed result. The upgrade keeps the original NF history.
-New sensor result points start with hour-valued history.
+recorded boundary, the first 5.0.10 sample sets it. The UI and analytics readers omit any resampling bucket that starts
+before the boundary, including a bucket that spans it. A chart may therefore start after the first new sample.
+Bucketed API readers should apply the same filter. The upgrade keeps the original NF history, and new sensor result
+points start with hour-valued history.
 
 Timescale schema v3 adds `sensor_ref` and `role` to `openfdd.fdd_results` and uses the primary key
 `(run_ts, equip, rule_id, sensor_ref)`. Existing rows and new equipment summaries use an empty sensor reference.

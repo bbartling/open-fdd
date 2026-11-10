@@ -717,7 +717,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
   const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
-    sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0 },
+    sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 },
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
     eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {},
@@ -878,7 +878,6 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
               const sensorOut = resultValue(packRule, sensorRow);
               summary.sensor_results.total++;
               summary.sensor_results[sensorOut.status]++;
-              summary.status[sensorOut.status]++;
               const sensorUuid = sensorResultUuid(key, r.rule.id, sensor.series_id);
               touched.add(sensorUuid);
               const prevSensor = model.results.get(sensorUuid);
@@ -983,17 +982,24 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         for (const [uuid, prev] of model.results) {
           const attrs = prev.attrs || {};
           const ruleId = attrs.ruleRef;
-          if (attrs.equipRef !== equipId || !pack.rules[ruleId] || touched.has(uuid)) continue;
+          if (!pack.rules[ruleId] || touched.has(uuid)) continue;
+          const expectedUuid = attrs.sensorRef
+            ? sensorResultUuid(key, ruleId, attrs.sensorRef)
+            : resultUuid(key, ruleId);
+          if (uuid !== expectedUuid) continue;
           const why = reasons.get(ruleId) || defaultReason;
           stale.push(staleRecord(prev, why, runIso));
-          if (attrs.sensorRef) for (const timeline of model.timelines.values()) {
-            const ta = timeline.attrs || {};
-            if (ta.ruleRef === ruleId && ta.sensorRef === attrs.sensorRef) stale.push(staleRecord(timeline, why, runIso));
+          if (attrs.sensorRef) {
+            summary.sensor_results.total++;
+            summary.sensor_results.stale++;
+            const timeline = model.timelines.get(timelineUuid(key, ruleId, attrs.sensorRef));
+            if (timeline) stale.push(staleRecord(timeline, why, runIso));
+          } else {
+            summary.status.stale++;
+            const bucket = why.replace(/\s*\(.*$/s, '').slice(0, 60);   // group by the reason, not its details
+            summary.stale_reasons[bucket] = (summary.stale_reasons[bucket] || 0) + 1;
           }
-          const bucket = why.replace(/\s*\(.*$/s, '').slice(0, 60);   // group by the reason, not its details
-          summary.stale_reasons[bucket] = (summary.stale_reasons[bucket] || 0) + 1;
         }
-        summary.status.stale += stale.length;
         if (stale.length && !config.dryRun) queue.meta.push(...stale);
       }
     }
