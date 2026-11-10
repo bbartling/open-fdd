@@ -187,6 +187,25 @@ def test_timescale_schema_preflight_uses_password_env_without_logging(monkeypatc
     assert seen["env"]["PGPASSWORD"] == "top-secret"
 
 
+def test_timescale_schema_preflight_uses_only_allowlisted_process_env_and_explicit_password_override(monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    monkeypatch.setenv("DB_SECRET", "process-db-password")
+    monkeypatch.setenv("CONSOLE_PASSWORD", "must-not-inherit")
+    monkeypatch.setenv("PATH", "process-path")
+    raw = json.dumps({"host": "db.example", "passwordEnv": "DB_SECRET"})
+    for supplied, expected in (({}, "process-db-password"), ({"DB_SECRET": "env-file-db-password"}, "env-file-db-password")):
+        seen = {}
+        def run(args, **kwargs):
+            seen.update(kwargs)
+            return SimpleNamespace(returncode=0, stdout="3\n", stderr="")
+        level, _ = sync.timescale_schema_check(_app("timescale", raw), supplied, runner=run)
+        assert level == "PASS"
+        assert seen["env"]["PATH"] == "process-path"
+        assert seen["env"]["PGPASSWORD"] == expected
+        assert "CONSOLE_PASSWORD" not in seen["env"]
+        assert "DB_SECRET" not in seen["env"]
+
+
 @pytest.mark.parametrize("config", [
     {"host": "db.example", "user": "fdd", "password": "secret", "ssl": True},
     {"connectionString": "postgresql://fdd@db.example/fdd", "password": "secret", "ssl": True},

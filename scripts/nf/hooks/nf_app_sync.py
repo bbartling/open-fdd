@@ -1530,7 +1530,9 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
     psql = shutil.which("psql")
     if not psql:
         return "FAIL", "psql is unavailable; install PostgreSQL client tools to verify Timescale schema version"
-    child_env = {k: env[k] for k in ("PATH", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP") if k in env}
+    inherited_allowlist = ("PATH", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP")
+    child_env = {k: os.environ[k] for k in inherited_allowlist if k in os.environ}
+    child_env.update({k: env[k] for k in inherited_allowlist if k in env})
     child_env.update(pg)
     ssl_enabled = isinstance(ssl_config, (dict, list)) or bool(ssl_config)
     if (not dsn_override and isinstance(ssl_config, dict)
@@ -1544,7 +1546,8 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
     if configured_password:
         child_env["PGPASSWORD"] = str(configured_password)
     if password_env:
-        password = env.get(str(password_env))
+        password_name = str(password_env)
+        password = env[password_name] if password_name in env else os.environ.get(password_name)
         if not password:
             return "FAIL", "configured Timescale password environment variable is unavailable; set NF_TIMESCALE_PREFLIGHT_DSN instead"
         child_env["PGPASSWORD"] = password
