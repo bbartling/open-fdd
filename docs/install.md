@@ -105,6 +105,9 @@ invents coordinates.
 
 ## 7. Upgrade
 
+For Full with the Timescale engine, apply any required schema migration as the installer role before
+running the app installer. See the [5.0.11 schema preflight and DBA steps](operations/nf/migrate-5.0.11.html#check-timescale-before-installing-full).
+
 Run the same command. `install` replaces the app in place (same id, same hook ids). For a new release:
 `git pull`, then `install`, then `doctor`.
 

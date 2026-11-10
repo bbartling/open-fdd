@@ -5,6 +5,14 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.11
+
+- Split Full Faults history requests and show a visible error if history cannot load ([#1571](https://github.com/bbartling/open-fdd/issues/1571), [#1566](https://github.com/bbartling/open-fdd/issues/1566)).
+- Publish results for each sweep's assessable roles and persist null hours when there is no coverage ([#1572](https://github.com/bbartling/open-fdd/issues/1572)).
+- Check the Timescale schema before install and restore the previous app if verification fails ([#1570](https://github.com/bbartling/open-fdd/issues/1570)).
+
+See the [5.0.11 NF migration note](operations/nf/migrate-5.0.11.html).
+
 ## 5.0.10
 
 - Recognize explicit NF and BACnet unit aliases and warn about rejected units ([#1564](https://github.com/bbartling/open-fdd/issues/1564)).

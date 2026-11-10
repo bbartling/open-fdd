@@ -1,0 +1,71 @@
+{
+  "SV-RANGE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "return-air-humidity",
+    "zone-air-humidity",
+    "mixed-air-humidity",
+    "supply-air-humidity",
+    "duct-static-pressure"
+  ],
+  "SV-FLATLINE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "return-air-humidity",
+    "zone-air-humidity",
+    "mixed-air-humidity",
+    "supply-air-humidity"
+  ],
+  "SV-SPIKE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "duct-static-pressure"
+  ],
+  "SV-STALE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "return-air-humidity",
+    "zone-air-humidity",
+    "mixed-air-humidity",
+    "supply-air-humidity"
+  ],
+  "SV-RATE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp"
+  ]
+}

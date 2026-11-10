@@ -283,9 +283,11 @@ function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale
   for (const [k, v] of Object.entries(row)) if (!known.has(k) && typeof v === "number" && Number.isFinite(v)) metric[k] = v;
   if (row.sensor_fault_hours) metric.sensor_fault_hours = row.sensor_fault_hours;
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const sensorNotAssessed = typeof row.series_id === "string" && !(num(row.covered_hours) > 0);
   return {
     run_ts: iso(runTs), equip, site, rule_id: ruleId, sensor_ref: row.series_id || "", role: row.sensor_role || null,
-    fault_pct: num(row.fault_pct), fault_hours: num(row.fault_hours), covered_hours: num(row.covered_hours),
+    fault_pct: num(row.fault_pct), fault_hours: sensorNotAssessed ? null : num(row.fault_hours),
+    covered_hours: num(row.covered_hours),
     metric: Object.keys(metric).length ? metric : null, engine,
     window_start: windowStart == null ? null : iso(windowStart), window_end: windowEnd == null ? null : iso(windowEnd),
   };

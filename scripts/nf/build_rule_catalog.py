@@ -40,6 +40,15 @@ def derived_markers(name: str) -> list[str]:
 
 def build() -> dict:
     role_map = json.loads((ROOT / "sql/fdd/role_map.json").read_text(encoding="utf-8"))
+    sweep_roles = json.loads((ROOT / "open_fdd/data/sensor_sweep_roles.json").read_text(encoding="utf-8"))
+    sql_role_by_name = {name: role for role, name in role_map.items()}
+    unknown_sweep_roles = sorted({name for names in sweep_roles.values() for name in names} - set(sql_role_by_name))
+    if unknown_sweep_roles:
+        raise SystemExit(f"sensor_sweep_roles.json contains roles absent from sql/fdd/role_map.json: {unknown_sweep_roles}")
+    sensor_sweep_roles = {
+        rule_id: [sql_role_by_name[name] for name in names]
+        for rule_id, names in sweep_roles.items()
+    }
     classes = set(json.loads((ROOT / "nf-app/rules/nf_classes.json").read_text(encoding="utf-8"))["classes"])
     overrides = json.loads((ROOT / "nf-app/rules/role_overrides.json").read_text(encoding="utf-8"))
     overrides.pop("_doc", None)
@@ -93,9 +102,11 @@ def build() -> dict:
         })
     return {
         "_generated_by": "scripts/nf/build_rule_catalog.py",
-        "source": ["sql/fdd/registry.yaml", "sql/fdd/role_map.json", "sql/fdd/input_contract.json", "nf-app/rules/role_overrides.json"],
+        "source": ["sql/fdd/registry.yaml", "sql/fdd/role_map.json", "sql/fdd/input_contract.json",
+                   "open_fdd/data/sensor_sweep_roles.json", "nf-app/rules/role_overrides.json"],
         "equipment_kinds": kinds,
         "roles": roles,
+        "sensor_sweep_roles": sensor_sweep_roles,
         "rules": rules,
     }
 

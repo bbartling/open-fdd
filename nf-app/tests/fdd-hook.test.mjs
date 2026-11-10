@@ -413,18 +413,19 @@ test("the FDD hook writes stable per-sensor results, timelines identity attrs, a
   });
   const summary = await hook.runFdd({ sdk: { http }, pack, createEngine, now: NOW });
   assert.equal(summary.results.length, 1, "NF run summary retains one equipment result per rule");
-  assert.equal(summary.sensor_results.total, 6, "sensor result counts are reported separately");
+  assert.equal(summary.sensor_results.total, 5, "only stale-assessable sensors get result points");
   assert.deepEqual(summary.status, { ok: 0, fault: 1, "not-assessed": 0, stale: 0 });
   const equipKey = hook.resultKey(multiSensorEquip.equips[0], "site-fixture", "AHU-A");
   const uuid = hook.resultUuid(equipKey, "SV-STALE");
   const summaryPoint = http.writes.points.find((row) => row.uuid === uuid && row.layer === "model");
   const mapping = JSON.parse(summaryPoint.attrs.fddSensorFaultHours);
-  assert.deepEqual(Object.keys(mapping).sort(), multiSensorEquip.points.slice(0, 6).map((p) => p.uuid).sort());
+  assert.deepEqual(Object.keys(mapping).sort(), multiSensorEquip.points.slice(0, 5).map((p) => p.uuid).sort());
   assert.equal(summaryPoint.attrs.fddSummary, "equip");
   assert.equal(summaryPoint.attrs.fddOutputSince, new Date(Math.floor(NOW / (STEP * 1000)) * STEP * 1000).toISOString());
   assert.equal(http.writes.data.find((row) => row.uuid === uuid).values[0].real, 2);
   const sensorPoints = http.writes.points.filter((row) => row.layer === "model" && row.attrs.ruleRef === "SV-STALE" && row.attrs.fddSummary === "sensor");
-  assert.equal(sensorPoints.length, 6);
+  assert.equal(sensorPoints.length, 5);
+  assert.ok(sensorPoints.every((p) => p.attrs.roleRef !== "duct_static" && p.attrs.roleRef !== "zone_flow"));
   assert.ok(sensorPoints.every((p) => p.attrs.sensorRef && p.attrs.roleRef
     && p.attrs.fddCoverageHours === (p.attrs.fddStatus === "not-assessed" ? "0" : "24")));
   assert.ok(sensorPoints.every((p) => hook.OFDD_RESULT_ATTRS.every((key) => Object.hasOwn(p.attrs, key))));
@@ -433,7 +434,7 @@ test("the FDD hook writes stable per-sensor results, timelines identity attrs, a
   assert.ok(http.writes.data.some((row) => sensorPoints.some((p) => p.uuid === row.uuid)));
   const timelines = http.writes.points.filter((p) => p.layer === "model" && /(^|,)fault_timeline(,|$)/.test(p.attrs.markers));
   const timelinesByUuid = new Map(timelines.map((p) => [p.uuid, p]));
-  assert.equal([...timelinesByUuid.values()].filter((p) => p.attrs.sensorRef).length, 6);
+  assert.equal([...timelinesByUuid.values()].filter((p) => p.attrs.sensorRef).length, 5);
   assert.equal([...timelinesByUuid.values()].filter((p) => !p.attrs.sensorRef).length, 1, "equipment timeline remains the any-sensor summary");
   assert.ok([...timelinesByUuid.values()].filter((p) => p.attrs.sensorRef).every((p) => p.attrs.fddTimelineOf === sensorPoints.find((s) => s.attrs.sensorRef === p.attrs.sensorRef).uuid));
   const missing = sensorPoints.find((p) => p.attrs.sensorRef === missingSeries);
@@ -446,7 +447,7 @@ test("the FDD hook writes stable per-sensor results, timelines identity attrs, a
   assert.deepEqual(nextUuids, sensorPoints.map((p) => p.uuid).sort());
 });
 
-test("every sweep publishes all physical bound sensors; unsupported sensor roles are not-assessed", async () => {
+test("every sweep publishes only its canonical assessable sensor roles", async () => {
   const http = fakeHttp([], {}, { model: [...multiSensorEquip.sites, multiSensorEquip.equips[0]],
     points: multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A") });
   const sweepIds = ["SV-RATE", "SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE"];
@@ -467,17 +468,15 @@ test("every sweep publishes all physical bound sensors; unsupported sensor roles
   });
   const summary = await hook.runFdd({ sdk: { http }, pack, createEngine, now: NOW });
   assert.equal(summary.results.length, 5);
-  assert.equal(summary.sensor_results.total, 30);
+  assert.equal(summary.sensor_results.total, 27);
   assert.deepEqual(summary.status, { ok: 5, fault: 0, "not-assessed": 0, stale: 0 });
   for (const ruleId of sweepIds) {
     const rows = http.writes.points.filter((p) => p.layer === "model" && p.attrs.ruleRef === ruleId && p.attrs.fddSummary === "sensor");
-    assert.equal(rows.length, 6, `${ruleId} should include all six sensor points`);
+    const ductExpected = ruleId === "SV-RANGE" || ruleId === "SV-SPIKE";
+    assert.equal(rows.length, ductExpected ? 6 : 5, `${ruleId} should include its assessable sensor points`);
     const duct = rows.find((p) => p.attrs.sensorRef === "sensor-static-1");
-    assert.ok(duct);
-    if (ruleId !== "SV-RANGE") {
-      assert.equal(duct.attrs.fddStatus, "not-assessed");
-      assert.equal(duct.attrs.fddCoverageHours, "0");
-    }
+    assert.equal(Boolean(duct), ductExpected);
+    assert.ok(rows.every((p) => p.attrs.roleRef !== "zone_flow"));
   }
 });
 

@@ -197,18 +197,6 @@ function roleScale(role, catalog) {
   return typeof s === 'string' ? s : null;
 }
 
-/** Sweep series are physical sensors; command/status/setpoint inputs only prove operation. */
-function isSweepSensorRole(role, catalog) {
-  const def = (catalog && catalog.roles && catalog.roles[role]) || {};
-  const name = String(def.name || role).toLowerCase();
-  const key = String(role).toLowerCase();
-  if (/(^|[-_])(cmd|command|status|sp|setpoint|request|count|occupied|occupancy)([-_]|$)/.test(key)
-      || /request|count|setpoint|status|command/.test(name)) return false;
-  const scale = roleScale(role, catalog);
-  if (scale === 'fraction' || scale === 'boolean' || scale === 'text') return false;
-  return !!roleQuantity(role, catalog) || scale === 'percent_rh' || (typeof scale === 'string' && scale.startsWith('si:'));
-}
-
 /**
  * Per bound role: how to bring the point's values to the role's declared scale and which unit to declare.
  *   convert[role](v) -> value (null = reject this value); unit[role] -> unit string;
@@ -765,12 +753,14 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         const sweepSensors = [];
         for (const r of runnable) {
           if (!pack.rules[r.rule.id].output_columns?.includes('series_id')) continue;
+          const assessableRoles = shared.catalog.sensor_sweep_roles?.[r.rule.id];
+          if (!Array.isArray(assessableRoles)) throw new Error(`fdd catalog has no assessable-role list for ${r.rule.id}`);
           for (const [role, points] of Object.entries(r.bound || {})) {
-            if (!isSweepSensorRole(role, shared.catalog)) continue;
+            if (!assessableRoles.includes(role)) continue;
             for (const point of points || []) {
               let sensor = sweepSensors.find((s) => s.point.uuid === point.uuid);
               if (!sensor) { sensor = { role, point, ruleIds: new Set() }; sweepSensors.push(sensor); }
-              sensor.ruleIds.add(r.rule.id);
+              if (sensor.role === role) sensor.ruleIds.add(r.rule.id);
             }
           }
         }
@@ -853,8 +843,11 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }
           summary.rules++;
           const packRule = pack.rules[r.rule.id];
-          const ruleSensors = packRule.output_columns?.includes('series_id') ? sweepSensors : [];
-          const ruleRows = [...(rows || [])];
+          const ruleSensors = packRule.output_columns?.includes('series_id')
+            ? sweepSensors.filter((sensor) => sensor.ruleIds.has(r.rule.id)) : [];
+          const assessableSeries = new Map(ruleSensors.map((sensor) => [sensor.point.uuid, sensor.role]));
+          const ruleRows = packRule.output_columns?.includes('series_id')
+            ? (rows || []).filter((x) => assessableSeries.get(x.series_id) === x.sensor_role) : [...(rows || [])];
           for (const sensor of ruleSensors) if (!ruleRows.some((x) => x.equipment_id === equipId && x.series_id === sensor.point.uuid)) {
             ruleRows.push({ equipment_id: equipId, series_id: sensor.point.uuid, sensor_role: sensor.role, fault_hours: null, covered_hours: 0 });
           }

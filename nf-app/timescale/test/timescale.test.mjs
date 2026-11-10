@@ -182,15 +182,17 @@ test("install upgrades a populated v2 hypertable to the v3 per-sensor key idempo
     result({ fault_hours: 1, covered_hours: 2, sensor_fault_hours: details }),
     result({ series_id: "first", sensor_role: "sat", fault_hours: 1, covered_hours: 2 }),
     result({ series_id: "second", sensor_role: "sat", fault_hours: 0, covered_hours: 2 }),
+    result({ series_id: "unassessed", sensor_role: "sat", fault_hours: 0, covered_hours: 0 }),
   ];
-  assert.equal(await ts.writeResults(db, rows), 3);
-  assert.equal(await ts.writeResults(db, rows), 3);
-  const saved = (await db.query(`SELECT sensor_ref, role, metric
+  assert.equal(await ts.writeResults(db, rows), 4);
+  assert.equal(await ts.writeResults(db, rows), 4);
+  const saved = (await db.query(`SELECT sensor_ref, role, fault_hours, covered_hours, metric
     FROM openfdd.fdd_results WHERE equip = 'fixture' AND run_ts = '2026-10-13T00:00:00Z' ORDER BY sensor_ref`)).rows;
   assert.deepEqual(saved, [
-    { sensor_ref: "", role: null, metric: { sensor_fault_hours: details } },
-    { sensor_ref: "first", role: "sat", metric: null },
-    { sensor_ref: "second", role: "sat", metric: null },
+    { sensor_ref: "", role: null, fault_hours: 1, covered_hours: 2, metric: { sensor_fault_hours: details } },
+    { sensor_ref: "first", role: "sat", fault_hours: 1, covered_hours: 2, metric: null },
+    { sensor_ref: "second", role: "sat", fault_hours: 0, covered_hours: 2, metric: null },
+    { sensor_ref: "unassessed", role: "sat", fault_hours: null, covered_hours: 0, metric: null },
   ]);
   await db.query("DELETE FROM openfdd.fdd_results WHERE equip = 'fixture'");
 });
@@ -410,7 +412,9 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
   assert.equal(fc1.equipment_id, EQUIP);
   assert.equal(typeof fc1.fault_pct, "number", "numbers are coerced");
   for (const id of RULES.filter((id) => id.startsWith("SV-"))) {
-    assert.equal(ruleRun.results[id]?.length, 6, `${id} scores all six physical sensors`);
+    const expectedSeries = sensorSeries.filter((series) => catalog.sensor_sweep_roles[id]?.includes(series.role));
+    assert.equal(ruleRun.results[id]?.length, expectedSeries.length, `${id} scores its assessable physical sensors`);
+    assert.deepEqual(new Set(ruleRun.results[id].map((row) => row.series_id)), new Set(expectedSeries.map((series) => series.uuid)));
     const sat = ruleRun.results[id].filter((row) => row.sensor_role === "sat");
     assert.equal(sat.length, 2, `${id} preserves both supply-air sensors`);
     assert.ok(sat.every((row) => row.covered_hours > 0), `${id} reports real coverage`);
@@ -439,7 +443,7 @@ test("writeResults upserts into openfdd.fdd_results", { skip }, async () => {
   assert.equal(back.window_start.toISOString(), "2026-09-20T00:00:00.000Z");
   const sweep = (await db.query(`SELECT sensor_ref, role, fault_hours, covered_hours, metric
     FROM openfdd.fdd_results WHERE rule_id = 'SV-STALE' AND run_ts = $1 ORDER BY sensor_ref`, [runTs])).rows;
-  assert.equal(sweep.length, 7);
+  assert.equal(sweep.length, 6, "equipment summary plus five stale-assessable sensors");
   const [summary, ...sensors] = sweep;
   assert.equal(summary.sensor_ref, "");
   assert.deepEqual(summary.metric.sensor_fault_hours,

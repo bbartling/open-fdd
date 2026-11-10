@@ -185,6 +185,24 @@ test("collect: batches many points and can be cancelled", async () => {
   await assert.rejects(X.collect({ points, startMs: 0, endMs: 3600e3, windowSec: 300, apiFn: async () => ({ data: [] }), isCancelled: () => true }), /cancelled/);
 });
 
+test("collect exports 161 and 709 points through request-safe UUID batches", async () => {
+  for (const count of [161, 709]) {
+    const calls = [];
+    const points = Array.from({ length: count }, (_, i) => ({ uuid: `export-${count}-${i}`, units: "", kind: "Number" }));
+    const out = await X.collect({ points, startMs: 0, endMs: 3600e3, windowSec: 3600,
+      apiFn: async (url) => {
+        calls.push(url);
+        const ids = new URL(url, "http://mock").searchParams.getAll("uuids");
+        return { data: ids.map((uuid) => ({ uuid, values: [{ ts: "2026-01-01T00:00:00Z", double: 2 }] })) };
+      } });
+    assert.ok(calls.length > 1);
+    assert.ok(calls.every((url) => Buffer.byteLength(url) < 8192));
+    assert.ok(calls.every((url) => new URL(url, "http://mock").searchParams.getAll("uuids").length <= 40));
+    assert.equal(out.size, count);
+    assert.ok(points.every((p) => out.get(p.uuid)?.size === 1));
+  }
+});
+
 // ---- CSV formula injection ----------------------------------------------------------------
 test("csvCell neutralises formula-looking text with a leading apostrophe", () => {
   for (const bad of ["=1+1", "+cmd", "-2+3", "@SUM(A1)", "\tTAB", "\rCR", "  =HYPERLINK(\"x\")", "\t =x", " @x", "-cmd|' /C calc'!A0"]) {

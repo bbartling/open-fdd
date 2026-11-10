@@ -84,9 +84,14 @@ async function api(path, body, opts = {}) {
  * @returns {() => void}
  */
 function streamUpdates(uuids, onValue, onState = () => {}) {
+  const q = uuids.map((u) => "uuids=" + encodeURIComponent(u)).join("&");
+  if (q.length > 6000) {
+    // Leave the complete point set to polling when one stream URL exceeds the front-door budget.
+    onState(false, new Error("live stream list exceeds the safe request limit"));
+    return () => {};
+  }
   let stopped = false, ctrl = null, delay = 2000;
   const pause = (ms) => new Promise((ok) => setTimeout(ok, ms));
-  const q = uuids.map((u) => "uuids=" + encodeURIComponent(u)).join("&");
   async function run() {
     while (!stopped) {
       let got = 0;  // values received on this connection

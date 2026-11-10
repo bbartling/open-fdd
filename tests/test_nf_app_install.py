@@ -470,7 +470,8 @@ def doctor_nf(tmp_path, *, deps=True, hook_state="STATE_SUCCESS", sites=None, mo
     return m, nf
 
 
-def test_doctor_all_green(tmp_path, capsys):
+def test_doctor_all_green(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(sync, "timescale_schema_check", lambda *_args, **_kwargs: ("PASS", "Timescale schema version 3"))
     m, nf = doctor_nf(tmp_path, sites=[{"id": "s", "latitude": 43.0, "longitude": -89.0}],
                       redirect=(302, {"Location": "https://h/api/v1/apps/static/new-app/"}), timescale=True)
     assert sync.cmd_doctor(nf, m) == 0

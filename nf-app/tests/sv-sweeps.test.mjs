@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
 const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
+const catalog = JSON.parse(readFileSync(new URL("../static/fdd-catalog.json", import.meta.url), "utf8"));
 const SILENCE_SWEEPS = ["SV-STALE", "SV-FLATLINE", "SV-RANGE", "SV-SPIKE"];
 const ALL_SWEEPS = ["SV-RATE", ...SILENCE_SWEEPS];
 const START = Date.UTC(2026, 0, 1);
@@ -199,6 +200,44 @@ test("all five sweeps return separate rows and timelines for same-role sensors",
   } finally {
     await pg.close();
     await lite.close();
+  }
+});
+
+test("sweeps emit only their canonical assessable roles", async () => {
+  const history = [0, 5, 10].map((minute) => ({
+    equipment_id: "eq-1", ts: START + minute * 60_000, sat: 20, duct_static: 250, zone_flow: 50, fan_status: 1,
+  }));
+  const sensorHistory = [];
+  for (const [series_id, sensor_role, unit, value] of [
+    ["sat-id", "sat", "°C", 20],
+    ["static-id", "duct_static", "Pa", 250],
+    ["flow-id", "zone_flow", "L/s", 50],
+  ]) {
+    for (const row of history) sensorHistory.push({
+      equipment_id: row.equipment_id, series_id, sensor_role, unit, ts: row.ts, value,
+    });
+  }
+  const out = await queryBoth({ history, sensorHistory }, ALL_SWEEPS);
+  for (const rule of ALL_SWEEPS) {
+    const expected = new Set(catalog.sensor_sweep_roles[rule]);
+    const actual = new Set(out[rule].map((row) => row.sensor_role));
+    assert.deepEqual(actual, new Set([...actual].filter((role) => expected.has(role))), `${rule} rows stay in its allowlist`);
+    assert.ok(!actual.has("zone_flow"), `${rule} must not publish occupancy flow as a sensor result`);
+    assert.equal(actual.has("duct_static"), ["SV-RANGE", "SV-SPIKE"].includes(rule), `${rule} duct static inclusion`);
+    assert.ok(out[rule].every((row) => row.fault_hours != null || Number(row.covered_hours) === 0), `${rule} null hours mean no coverage`);
+  }
+});
+
+test("a never-covered assessable sensor returns NULL fault hours, not zero", async () => {
+  const history = [{ equipment_id: "eq-1", ts: START, sat: 20, fan_status: 1 }];
+  const sensorHistory = [{
+    equipment_id: "eq-1", series_id: "sat-never-covered", sensor_role: "sat", unit: "°C", ts: START, value: 20,
+  }];
+  const out = await queryBoth({ history, sensorHistory }, ALL_SWEEPS);
+  for (const rule of ALL_SWEEPS) {
+    assert.equal(out[rule].length, 1, `${rule} may report the assessable sensor as not-assessed`);
+    assert.equal(out[rule][0].covered_hours, 0, `${rule} has no interval to assess`);
+    assert.equal(out[rule][0].fault_hours, null, `${rule} must preserve not-assessed as NULL`);
   }
 });
 

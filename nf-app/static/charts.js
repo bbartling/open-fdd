@@ -70,10 +70,36 @@ const pickWindow = (hours, target = 360) => WINDOWS.find((w) => (hours * 3600) /
 
 const seriesCache = new Map();  // url -> { at, promise }
 const CACHE_MS = 60e3;
+// Leave room for fixed query parameters and request headers under NF's ~8 KB front-door limit.
+const HISTORY_URL_BUDGET = 6000;
+const HISTORY_UUID_BATCH = 40;
+
+function historyUrl(points, from, to, windowSec, method) {
+  const ids = points.map((p) => "uuids=" + encodeURIComponent(p.uuid)).join("&");
+  return `/api/v1/point/data?${ids}&from=${from}&to=${to}&window=${windowSec}s&method=${method}`;
+}
+
+function historyChunks(list, from, to, windowSec, method) {
+  const chunks = [];
+  let chunk = [];
+  for (const point of list) {
+    const candidate = [...chunk, point];
+    if (chunk.length && (candidate.length > HISTORY_UUID_BATCH
+      || historyUrl(candidate, from, to, windowSec, method).length > HISTORY_URL_BUDGET)) {
+      chunks.push(chunk);
+      chunk = [point];
+    } else chunk = candidate;
+    if (historyUrl(chunk, from, to, windowSec, method).length > HISTORY_URL_BUDGET) {
+      throw new Error("point history request exceeds the safe URL limit");
+    }
+  }
+  if (chunk.length) chunks.push(chunk);
+  return chunks;
+}
 
 /**
  * uuid -> [[ms, value], ...] for `list` over the last `hours`, one value per window.
- * One request for all points; repeat calls within a minute reuse the answer.
+ * UUIDs are grouped into bounded requests; repeat calls within a minute reuse each chunk answer.
  */
 async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWindow(hours), endMs = null } = {}) {
   const out = new Map(list.map((p) => [p.uuid, []]));
@@ -82,24 +108,30 @@ async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWi
   // caller walk a long span back in chunks (rcx.js alignedFine).
   const end = endMs != null ? endMs : Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
   const from = new Date(end - hours * 3600e3).toISOString(), to = new Date(end).toISOString();
-  const uuids = list.map((p) => "uuids=" + encodeURIComponent(p.uuid)).join("&");
-  const url = `/api/v1/point/data?${uuids}&from=${from}&to=${to}&window=${windowSec}s&method=${method}`;
-  let hit = seriesCache.get(url);
-  if (!hit || Date.now() - hit.at > CACHE_MS) {
-    hit = { at: Date.now(), promise: api(url) };
-    seriesCache.set(url, hit);
-    hit.promise.catch(() => seriesCache.delete(url));
-    for (const [k, v] of seriesCache) if (Date.now() - v.at > CACHE_MS) seriesCache.delete(k);
-  }
-  for (const series of (await hit.promise).data || []) {
-    const arr = out.get(series.uuid);
-    if (!arr) continue;
-    for (const s of series.values || []) {
-      const v = s.double ?? s.real;
-      if (v != null && s.ts) arr.push([parseTs(s.ts), v]);
+  const chunks = historyChunks(list, from, to, windowSec, method);
+  // A small fixed concurrency bounds load while keeping 709-sensor views practical.
+  for (let base = 0; base < chunks.length; base += 4) {
+    const responses = await Promise.all(chunks.slice(base, base + 4).map((chunk) => {
+      const url = historyUrl(chunk, from, to, windowSec, method);
+      let hit = seriesCache.get(url);
+      if (!hit || Date.now() - hit.at > CACHE_MS) {
+        hit = { at: Date.now(), promise: api(url) };
+        seriesCache.set(url, hit);
+        hit.promise.catch(() => seriesCache.delete(url));
+        for (const [k, v] of seriesCache) if (Date.now() - v.at > CACHE_MS) seriesCache.delete(k);
+      }
+      return hit.promise;
+    }));
+    for (const response of responses) for (const series of response.data || []) {
+      const arr = out.get(series.uuid);
+      if (!arr) continue;
+      for (const s of series.values || []) {
+        const v = s.double ?? s.real;
+        if (v != null && s.ts) arr.push([parseTs(s.ts), v]);
+      }
     }
-    arr.sort((a, b) => a[0] - b[0]);
   }
+  for (const arr of out.values()) arr.sort((a, b) => a[0] - b[0]);
   return out;
 }
 

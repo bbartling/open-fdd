@@ -150,5 +150,12 @@ Cloud backup itself works: it uploads about daily; contents are configuration, n
 - **13. UpdatePoints merges point attributes.** On a real NF 3.10.9-1 Full target, omitted result attributes
   survived a new run. Open-FDD writes its result attributes on each update and sends an empty string when a value
   does not apply. Readers treat empty and missing values alike. The mock models a shallow merge per point and layer.
-  Whether real NF removes the key or stores the empty string is unconfirmed (#1563).
+  A disposable NF 3.10.9-1 lab stored empty strings and normalized null attribute values to empty strings (#1563).
+- **Large history URLs can fail at the front door.** Keep point history UUID lists bounded. The HTTP mock now
+  rejects oversized GET requests so browser and API client regressions can exercise this limit (#1571).
+- **Offset paging has no snapshot on NF 3.10.9-1.** A concurrent insert or delete can shift later pages. Send
+  an explicit positive page size. An omitted size returns zero rows, and page tokens are ignored on that version.
+- **Timescale schema upgrades need the installer role.** Run the
+  [schema preflight and migration steps](migrate-5.0.11.html#check-timescale-before-installing-full) before
+  uploading a release with a newer schema requirement (#1570).
 - **Live patching is last resort.** Capture with a read-only file GET first, patch one file, commit on a patch branch (HTML without `?v=` stamps), restart before verify, and do not rewrite push-manifest hashes until the deploying revision contains the fix. See repo-root `AGENTS.md`.

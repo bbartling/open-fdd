@@ -344,8 +344,25 @@ async function renderFddResults(equips) {
   const faults = heatmapRows;
   const el = $("fddLanes");
   el.hidden = !faults.length;
+  const showingHistoryError = el.classList.contains("history-error");
+  if (showingHistoryError) {
+    el.textContent = "";
+    el.removeAttribute("role");
+    el.classList.remove("history-error");
+  }
   if (!faults.length) return;
-  const series = await fetchDisplay(faults, 24 * 7, { method: "MAX", windowSec: 3600 });
+  let series;
+  try {
+    series = await fetchDisplay(faults, 24 * 7, { method: "MAX", windowSec: 3600 });
+  } catch (e) {
+    echarts.getInstanceByDom(el)?.dispose();
+    el.style.height = "";
+    el.textContent = `Fault history unavailable: ${e?.message || e}`;
+    el.setAttribute("role", "alert");
+    el.classList.add("history-error");
+    return;
+  }
+  // On normal rerenders keep the chart's DOM intact so ofddChart() can reuse its instance.
   const label = (p) => `${ruleRefOf(p)} · ${attrsOf(p).roleRef ? `${attrsOf(p).roleRef} · ${sensorNameOf(p)}` : equipName(p.equipRef)}`;
   el.style.height = `${Math.max(160, 26 * faults.length + 70)}px`;
   // Heatmaps need category axes: one column per hour.

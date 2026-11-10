@@ -64,7 +64,7 @@ jobs:
         run: |
           node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
           python3 -m pip install --quiet pytest
-          python3 -m pytest -q tests/test_nf_app_sync.py tests/test_nf_paging_and_guard.py tests/test_input_contract.py
+          python3 -m pytest -q tests/test_nf_app_install.py tests/test_nf_app_sync.py tests/test_nf_paging_and_guard.py tests/test_input_contract.py
           node --test nf-app/timescale/test/bounds.test.mjs
           python3 - <<'EOF'
           import json, pathlib, re

@@ -67,6 +67,8 @@ import http.client
 import json
 import os
 import re
+import shutil
+import subprocess
 import socket
 import ssl
 import sys
@@ -719,7 +721,8 @@ def guard_pushed_files(c, m: dict, force: bool = False, save_remote: Path | None
 
 def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str] | None = None,
              skip_deps: bool = False, clock=time.monotonic, sleep=time.sleep,
-             force: bool = False, save_remote: Path | None = None) -> int:
+             force: bool = False, save_remote: Path | None = None, skip_auth: bool = False,
+             on_mutation=None) -> int:
     spec = m["application"]
     app_id = spec["id"]
     if spec.get("name") and app_slug(spec["name"]) != app_id:
@@ -729,6 +732,8 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
     if rc:
         return rc
     if not c.app(app_id):
+        if on_mutation:
+            on_mutation()
         print(f"creating app {app_id}")
         c.call("POST", "/api/v1/apps", spec)
         for _ in range(30):
@@ -736,8 +741,12 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
             if a and a.get("status") == INSTALLED:
                 break
             sleep(2)
-    elif spec.get("auth"):
+    elif spec.get("auth") and not skip_auth:
+        if on_mutation:
+            on_mutation()
         c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "auth": spec["auth"], "updateMask": ["auth"]})
+    elif on_mutation:
+        on_mutation()
     pushed: dict[str, str] = {}      # sha256 of every file this push wrote: the baseline of the next push's guard
     for nf_path, rel in m["files"].items():
         data = deploy_bytes(m, rel)
@@ -1096,6 +1105,9 @@ def verify_install(c, m: dict, skip_run: bool = False, wait: float | None = None
         rc = EXIT_FAILED
     if opt is not None:
         print(f"verify: app setting version = {opt}")
+    if rc:
+        # A broken version is a terminal verification failure; do not launch hooks from the bad release.
+        return rc
     scheduled = [h["id"] for h in m["hooks"] if h.get("mode") != ON_REQUEST]
     if skip_run or not scheduled:
         return rc
@@ -1109,12 +1121,140 @@ def verify_install(c, m: dict, skip_run: bool = False, wait: float | None = None
 
 def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
     apps = preflight(c, m)
-    rc = cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, clock, sleep,
-                  getattr(a, "force", False), getattr(a, "save_remote", None))
+    app_id = m["application"]["id"]
+    prior = (c.app(app_id) if apps.get(app_id) else None) or apps.get(app_id)
+    # Schema preflight precedes even the remote-file snapshot reads, then all reads precede mutation.
+    lvl, message = timescale_schema_check(prior or {}, getattr(a, "_environ", os.environ))
+    if lvl == "FAIL":
+        print(f"install: STOPPED: Timescale schema preflight failed: {message}")
+        return EXIT_FAILED
+    if lvl == "PASS" and message:
+        print(f"install: Timescale schema preflight: {message}")
+    rc = guard_pushed_files(c, m, getattr(a, "force", False), getattr(a, "save_remote", None))
+    if rc == EXIT_DRIFT:
+        print(f"install: STOPPED (exit {rc}): hand-edited files on the box (see above); the box was not changed")
+        return rc
+    if prior:
+        # NF 3.10's DELETE file/hook routes are documented. Snapshot existing targets; track new ones
+        # separately so a failed verification can remove them without touching older app content.
+        listed_files = prior.get("files")
+        listed_hooks = prior.get("hooks")
+        if not isinstance(listed_files, list) or not isinstance(listed_hooks, list):
+            print("install: STOPPED: NF did not provide a complete files/hooks listing; cannot snapshot a rollback image")
+            return EXIT_FAILED
+        known = {x.get("path") for x in listed_files if isinstance(x, dict) and x.get("path")}
+        paths = set(m["files"]) | {"/static/version.json"}
+        new_paths = paths - known
+        old_paths = paths & known
+        old_files = {}
+        try:
+            for path in old_paths:
+                data = c.read_file(app_id, path, known_paths=known)
+                if data is None:
+                    raise SystemExit(f"{path} is missing")
+                old_files[path] = data
+        except SystemExit as e:
+            print(f"install: STOPPED: could not snapshot rollback image ({e}); nothing was written")
+            return EXIT_FAILED
+        old_hooks = {h.get("id"): h for h in prior.get("hooks", []) if h.get("id")}
+        intended_hooks = {h["id"] for h in m["hooks"] if not a.hooks or h["id"] in a.hooks} if not a.skip_hooks else set()
+        new_hooks = intended_hooks - set(old_hooks)
+        old_options = prior.get("options", [])
+        old_configuration = prior.get("configuration", {})
+    else:
+        old_files = old_hooks = old_options = old_configuration = None
+        new_paths = new_hooks = set()
+        intended_hooks = set()
+
+    def rollback() -> bool:
+        if not prior or old_files is None:
+            return False
+        print("install: restoring the previous app snapshot")
+        cleanup_failures = []
+        if new_paths or new_hooks:
+            current = None
+            try:
+                current = c.app(app_id) or {}
+                if not isinstance(current.get("files"), list) or not isinstance(current.get("hooks"), list):
+                    current = None
+                    cleanup_failures.append("NF app listing omitted files/hooks; cannot identify new assets")
+            except SystemExit:
+                cleanup_failures.append("NF app listing unavailable; cannot identify new assets")
+            if current is not None:
+                present_hooks = {h.get("id") for h in current["hooks"] if h.get("id")}
+                present_paths = {x.get("path") for x in current["files"] if isinstance(x, dict) and x.get("path")}
+                for hook_id in new_hooks & present_hooks:
+                    # Normal Framework DeleteHook removes its definition/runtime and leaves hook source files.
+                    try:
+                        c.call("DELETE", f"/api/v1/apps/{app_id}/hooks/{urllib.parse.quote(hook_id, safe='')}")
+                    except SystemExit:
+                        cleanup_failures.append(f"new hook {hook_id} could not be deleted")
+                for path in new_paths & present_paths:
+                    try:
+                        c.call("DELETE", f"/api/v1/apps/{app_id}/files{path}")
+                    except SystemExit:
+                        cleanup_failures.append(f"new file {path} could not be deleted")
+                try:
+                    after = c.app(app_id) or {}
+                    if not isinstance(after.get("files"), list) or not isinstance(after.get("hooks"), list):
+                        cleanup_failures.append("NF app listing omitted files/hooks after cleanup")
+                    else:
+                        remaining_hooks = {h.get("id") for h in after["hooks"] if h.get("id")}
+                        remaining_paths = {x.get("path") for x in after["files"] if isinstance(x, dict) and x.get("path")}
+                        cleanup_failures.extend(f"new hook {h} remains" for h in new_hooks & remaining_hooks)
+                        cleanup_failures.extend(f"new file {p} remains" for p in new_paths & remaining_paths)
+                except SystemExit:
+                    cleanup_failures.append("NF app listing unavailable after cleanup")
+        try:
+            for path, data in old_files.items():
+                c.call("POST", f"/api/v1/apps/{app_id}/files{path}", base64.b64encode(data).decode())
+            c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "updateMask": ["options"], "options": old_options})
+            c.call("PATCH", f"/api/v1/apps/{app_id}", {"id": app_id, "updateMask": ["configuration"],
+                                                           "configuration": old_configuration})
+            if not a.skip_hooks:
+                for hook_id in intended_hooks & set(old_hooks):
+                    c.call("POST", f"/api/v1/apps/{app_id}/hooks", old_hooks[hook_id])
+            c.call("PATCH", f"/api/v1/apps/{app_id}/restart", {})
+            if cleanup_failures:
+                print("install: ROLLBACK INCOMPLETE: " + ", ".join(cleanup_failures) + " remain after cleanup")
+                return False
+            if new_paths or new_hooks:
+                print("install: removed newly added files and hooks; previous files, settings and hooks restored")
+            else:
+                print("install: previous files, settings and hooks restored")
+            return True
+        except SystemExit as e:
+            print(f"install: ROLLBACK INCOMPLETE: {e}")
+            return False
+
+    mutation_started = False
+    def mark_mutation():
+        nonlocal mutation_started
+        mutation_started = True
+    try:
+        rc = cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, clock, sleep,
+                      getattr(a, "force", False), getattr(a, "save_remote", None), skip_auth=True,
+                      on_mutation=mark_mutation)
+    except SystemExit as e:
+        print(f"install: push failed ({e})")
+        if mutation_started:
+            rollback()
+        return EXIT_FAILED
     if rc == EXIT_DRIFT:      # hand-edited files on the box: nothing was written, nothing to verify
         print(f"install: STOPPED (exit {rc}): hand-edited files on the box (see above); the box was not changed")
         return rc
-    rc = verify_install(c, m, a.skip_verify_run, a.wait, clock, sleep) or rc
+    try:
+        rc = verify_install(c, m, a.skip_verify_run, a.wait, clock, sleep) or rc
+    except SystemExit as e:
+        print(f"install: verification could not complete: {e}")
+        rc = EXIT_FAILED
+    if rc and prior and old_files is not None:
+        if rc == EXIT_STILL_RUNNING:
+            print("install: verification is still running; no rollback or predecessor removal was attempted. Resume the reported pid after it finishes")
+            return rc
+        print("install: verification failed")
+        rollback()
+        return rc
     if a.remove_old:
         if rc:
             print("not removing the predecessor apps: the install did not verify")
@@ -1318,6 +1458,118 @@ def timescale_check(app: dict) -> tuple[str, str]:
     return "PASS", 'app option "timescale" parses and names a host (value not shown)'
 
 
+def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tuple[str, str]:
+    """Read-only preflight against the configured Timescale database, with no credentials in argv/output."""
+    env = os.environ if environ is None else environ
+    engine = str(option_scalar(app, "engine") or "auto").strip().lower()
+    raw = option_scalar(app, "timescale")
+    explicit = engine == "timescale"
+    configured = raw is not None and str(raw).strip() != ""
+    if engine in {"sqlite", "pglite"} or (not explicit and not configured):
+        return "SKIP", ""
+    dsn_override = env.get("NF_TIMESCALE_PREFLIGHT_DSN")
+    conn = dsn_override or raw
+    if not conn:
+        return "FAIL", ('Timescale is selected but no connection is available; set NF_TIMESCALE_PREFLIGHT_DSN '
+                         'for a read-only schema check')
+    password_env = None
+    configured_password = None
+    ssl_config = None
+    if isinstance(conn, str) and conn.lstrip().startswith("{"):
+        try:
+            obj = json.loads(conn)
+        except ValueError:
+            obj = None
+        password_env = obj.get("passwordEnv") if isinstance(obj, dict) else None
+        configured_password = obj.get("password") if isinstance(obj, dict) else None
+        ssl_config = obj.get("ssl") if isinstance(obj, dict) else None
+        conn = obj.get("connectionString") if isinstance(obj, dict) else None
+        if not conn and isinstance(obj, dict) and obj.get("host"):
+            # Use libpq environment variables so passwords never appear in process arguments.
+            pg = {"PGHOST": str(obj["host"])}
+            for key, var in (("port", "PGPORT"), ("user", "PGUSER"),
+                             ("password", "PGPASSWORD"), ("sslmode", "PGSSLMODE")):
+                if obj.get(key) is not None:
+                    pg[var] = str(obj[key])
+            pg["PGDATABASE"] = str(obj.get("database") or "postgres")
+            conn = pg
+    if isinstance(conn, str):
+        try:
+            u = urllib.parse.urlparse(conn)
+            if u.scheme.lower() in ("postgres", "postgresql") and u.hostname:
+                pg = {"PGHOST": u.hostname}
+                if u.port: pg["PGPORT"] = str(u.port)
+                if u.path and u.path != "/": pg["PGDATABASE"] = urllib.parse.unquote(u.path[1:])
+                if u.username: pg["PGUSER"] = urllib.parse.unquote(u.username)
+                if u.password: pg["PGPASSWORD"] = urllib.parse.unquote(u.password)
+                q = urllib.parse.parse_qs(u.query)
+                if q.get("sslmode"): pg["PGSSLMODE"] = q["sslmode"][0]
+                for key, var in (("sslrootcert", "PGSSLROOTCERT"), ("sslcert", "PGSSLCERT"), ("sslkey", "PGSSLKEY")):
+                    if q.get(key): pg[var] = q[key][0]
+                conn = pg
+            elif "=" in conn:
+                import shlex
+                pg = {}
+                keys = {"host": "PGHOST", "port": "PGPORT", "dbname": "PGDATABASE", "database": "PGDATABASE",
+                        "user": "PGUSER", "password": "PGPASSWORD", "sslmode": "PGSSLMODE",
+                        "sslrootcert": "PGSSLROOTCERT", "sslcert": "PGSSLCERT", "sslkey": "PGSSLKEY"}
+                for item in shlex.split(conn):
+                    key, sep, value = item.partition("=")
+                    if not sep or key not in keys:
+                        return "FAIL", "Timescale connection setting is not a supported PostgreSQL DSN (value not shown)"
+                    pg[keys[key]] = value
+                conn = pg
+            else:
+                return "FAIL", "Timescale connection setting is not a supported PostgreSQL URL (value not shown)"
+        except ValueError:
+            return "FAIL", "Timescale connection setting is malformed (value not shown)"
+    if isinstance(conn, dict):
+        pg = conn
+    else:
+        return "FAIL", "Timescale connection setting is not usable for the read-only schema check (value not shown)"
+    psql = shutil.which("psql")
+    if not psql:
+        return "FAIL", "psql is unavailable; install PostgreSQL client tools to verify Timescale schema version"
+    inherited_allowlist = ("PATH", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP")
+    child_env = {k: os.environ[k] for k in inherited_allowlist if k in os.environ}
+    child_env.update({k: env[k] for k in inherited_allowlist if k in env})
+    child_env.update(pg)
+    ssl_enabled = isinstance(ssl_config, (dict, list)) or bool(ssl_config)
+    if (not dsn_override and isinstance(ssl_config, dict)
+            and any(ssl_config.get(k) for k in ("ca", "cert", "key"))):
+        return "FAIL", ("Timescale hook TLS uses custom certificate material that this preflight cannot mirror; "
+                         "use the protected DSN/certificate procedure documented for the installer")
+    if ssl_enabled:
+        # The hook explicitly asks for TLS; never let libpq silently probe with plaintext.
+        child_env["PGSSLMODE"] = ("require" if isinstance(ssl_config, dict)
+                                  and ssl_config.get("rejectUnauthorized") is False else "verify-full")
+    if configured_password:
+        child_env["PGPASSWORD"] = str(configured_password)
+    if password_env:
+        password_name = str(password_env)
+        password = env[password_name] if password_name in env else os.environ.get(password_name)
+        if not password:
+            return "FAIL", "configured Timescale password environment variable is unavailable; set NF_TIMESCALE_PREFLIGHT_DSN instead"
+        child_env["PGPASSWORD"] = password
+    sql = "SELECT value #>> '{}' FROM openfdd.config WHERE key='schema_version'"
+    try:
+        proc = runner([psql, "-X", "-w", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1",
+                       "-c", "BEGIN TRANSACTION READ ONLY", "-c", sql, "-c", "ROLLBACK"],
+                      env=child_env, capture_output=True, text=True, timeout=10)
+    except Exception:
+        return "FAIL", "could not connect to Timescale for a read-only schema check (connection details redacted)"
+    if proc.returncode:
+        return "FAIL", "Timescale schema is missing or unreachable (connection details redacted); run nf-app/timescale/install.sql as installer/owner"
+    vals = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    try:
+        got = int(vals[-1]) if vals else 0
+    except ValueError:
+        got = 0
+    if got != 3:
+        return "FAIL", f"Timescale schema version {got}; this release requires 3. Run nf-app/timescale/install.sql as installer/owner"
+    return "PASS", "Timescale schema version 3"
+
+
 def hand_edit_line(drift: dict) -> tuple[str, str, str]:
     """(level, what, text) for doctor: files on the box that differ from the last push (read-only)."""
     if drift["baseline"] == "none":
@@ -1335,7 +1587,7 @@ def hand_edit_line(drift: dict) -> tuple[str, str, str]:
                                   "(--save-remote DIR keeps the box copies first)")
 
 
-def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
+def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -> int:
     app_id = m["application"]["id"]
     bad = 0
 
@@ -1416,6 +1668,8 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
         line(lvl.upper(), "fdd freshness", text)
     lvl, text = timescale_check(a)
     line(lvl, "timescale", text)
+    schema_lvl, schema_text = timescale_schema_check(a, environ)
+    line(schema_lvl, "timescale schema", schema_text or "not selected (Lite/sqlite/pglite)")
     try:
         drift = find_drift(c, m)
     except SystemExit as e:
@@ -1493,6 +1747,8 @@ def main(argv: list[str] | None = None) -> int:
     a = build_parser().parse_args(argv)
     if a.env.expanduser().is_file():
         env = load_env(a.env)
+        if not env.get("NF_TIMESCALE_PREFLIGHT_DSN") and os.environ.get("NF_TIMESCALE_PREFLIGHT_DSN"):
+            env["NF_TIMESCALE_PREFLIGHT_DSN"] = os.environ["NF_TIMESCALE_PREFLIGHT_DSN"]
     else:
         env = {k: v for k, v in os.environ.items() if k.startswith(("NF_", "CONSOLE_"))}
         if not env:
@@ -1509,6 +1765,7 @@ def main(argv: list[str] | None = None) -> int:
         ctx = make_ssl_context(ca)
     c = Console(console, env["CONSOLE_USERNAME"], env["CONSOLE_PASSWORD"], ctx)
     m = manifest(a.manifest)
+    a._environ = env
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
@@ -1522,7 +1779,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.action == "remove-old":
         return cmd_remove_old(c, m, a.yes)
     if a.action == "doctor":
-        return cmd_doctor(c, m)
+        return cmd_doctor(c, m, environ=env)
     return cmd_pull(c, m, write=(a.action == "pull"))
 
 
