@@ -20,8 +20,8 @@ Both files have the shape
 SQLite storage convention (engines.js): every timestamp column is REAL epoch seconds.
 
 timeline_sql (5.0.3): per rule, a per-timestamp variant of `sql` that returns assessed intervals.
-  Most rules use (equipment_id, ts_epoch, confirmed, held_seconds); the four SV sweeps add
-  sensor_role between equipment_id and ts_epoch. ts_epoch is epoch seconds (double), confirmed is 1/0
+  Most rules use (equipment_id, ts_epoch, confirmed, held_seconds); sensor sweeps add
+  series_id and sensor_role between equipment_id and ts_epoch. ts_epoch is epoch seconds (double), confirmed is 1/0
   exactly as the rule's own confirmed flag, and held_seconds is the credited forward interval. SV gap
   segments start when max_silence_hours expires and hold exactly the remaining gap duration. It is `null`
   (with timeline_reason) for rules that have no per-row confirmed flag. Summing confirmed * held_seconds /
@@ -276,7 +276,7 @@ def to_sqlite(pg_sql):
 # --------------------------------------------------------------------------- timeline (per-timestamp confirmed flag; SV adds sensor_role)
 
 TIMELINE_COLUMNS = ["equipment_id", "ts_epoch", "confirmed", "held_seconds"]
-ROLE_TIMELINE_COLUMNS = ["equipment_id", "sensor_role", "ts_epoch", "confirmed", "held_seconds"]
+ROLE_TIMELINE_COLUMNS = ["equipment_id", "series_id", "sensor_role", "ts_epoch", "confirmed", "held_seconds"]
 
 
 class NoTimeline(Exception):
@@ -322,7 +322,7 @@ def select_list(body):
 def build_timeline_pg(pg_sql):
     """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
 
-    Role-grain SV rules expose sensor_role and preserve silence-tail intervals exactly.
+    Per-sensor SV rules expose series_id and sensor_role, and preserve silence-tail intervals exactly.
     """
     s = strip_comments(pg_sql)
     try:
@@ -341,11 +341,15 @@ def build_timeline_pg(pg_sql):
         if re.search(r"\bsensor_role\b", select_list(body)) and re.search(r"\bsegment_epoch\b", select_list(body)):
             head = s[:o + 1] + body + ")"
             after = names[i + 1:]
-            if after:
+            if after and after != ["scored"]:
                 raise NoTimeline("unexpected CTEs after role final: " + ", ".join(after))
-            sel = ("SELECT equipment_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, "
+            final_fields = select_list(body)
+            has_series = bool(re.search(r"\bseries_id\b", final_fields))
+            series = "series_id, " if has_series else ""
+            series_order = "series_id, " if has_series else ""
+            sel = (f"SELECT equipment_id, {series}sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, "
                    "confirmed, held_seconds FROM final WHERE held_seconds > 0 "
-                   "ORDER BY equipment_id, sensor_role, segment_epoch")
+                   f"ORDER BY equipment_id, {series_order}sensor_role, segment_epoch")
             return head + "\n" + sel + "\n"
         if not re.search(r"\btimestamp_utc\b", select_list(body)):
             body, n = re.subn(r"\bequipment_id,", "equipment_id,\n    timestamp_utc,", body, count=1)
@@ -436,7 +440,7 @@ def build():
                     err, tl_cols = sqlite_prepare_check(tl_lite, contract)
                     if err:
                         raise Untranslatable("SQLite cannot prepare the timeline: " + err)
-                    want_tl_cols = ROLE_TIMELINE_COLUMNS if "sensor_role" in cols else TIMELINE_COLUMNS
+                    want_tl_cols = ROLE_TIMELINE_COLUMNS if "series_id" in cols else TIMELINE_COLUMNS
                     if tl_cols is not None and tl_cols != want_tl_cols:
                         raise Untranslatable(f"timeline columns {tl_cols}")
                 except Untranslatable as exc:

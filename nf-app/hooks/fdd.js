@@ -197,6 +197,18 @@ function roleScale(role, catalog) {
   return typeof s === 'string' ? s : null;
 }
 
+/** Sweep series are physical sensors; command/status/setpoint inputs only prove operation. */
+function isSweepSensorRole(role, catalog) {
+  const def = (catalog && catalog.roles && catalog.roles[role]) || {};
+  const name = String(def.name || role).toLowerCase();
+  const key = String(role).toLowerCase();
+  if (/(^|[-_])(cmd|command|status|sp|setpoint|request|count|occupied|occupancy)([-_]|$)/.test(key)
+      || /request|count|setpoint|status|command/.test(name)) return false;
+  const scale = roleScale(role, catalog);
+  if (scale === 'fraction' || scale === 'boolean' || scale === 'text') return false;
+  return !!roleQuantity(role, catalog) || scale === 'percent_rh' || (typeof scale === 'string' && scale.startsWith('si:'));
+}
+
 /**
  * Per bound role: how to bring the point's values to the role's declared scale and which unit to declare.
  *   convert[role](v) -> value (null = reject this value); unit[role] -> unit string;
@@ -311,6 +323,31 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ }) {
   };
 }
 
+/** Long-form sweep input. Each physical point keeps its own identity and SI conversion. */
+function buildSensorInput({ equipId, sensors, hist, grid, catalog, log, warned }) {
+  const sensorSeries = [];
+  const sensorHistory = [];
+  const skipped = {};
+  for (const sensor of sensors) {
+    const role = sensor.role;
+    const point = sensor.point;
+    const si = siPlan({ [role]: point }, catalog, log, warned);
+    if (si.skipped.has(role)) { skipped[role] = (skipped[role] || 0) + 1; continue; }
+    const unit = si.unit[role] != null ? si.unit[role] : point.units || '';
+    sensorSeries.push({ uuid: point.uuid, role, unit });
+    const samples = hist[point.uuid];
+    if (!samples) continue;
+    for (const ts of grid) {
+      const raw = samples.get(ts);
+      if (raw == null) continue;
+      const value = si.convert[role] ? si.convert[role](raw) : raw;
+      if (value == null || !Number.isFinite(value)) continue;
+      sensorHistory.push({ equipment_id: equipId, series_id: point.uuid, sensor_role: role, unit, ts, value });
+    }
+  }
+  return { sensorSeries, sensorHistory, skipped };
+}
+
 // ---- outputs ------------------------------------------------------------------------
 /** Deterministic RFC 4122 v5-style uuid from a name (stable across runs and restarts). */
 function nameUuid(name) {
@@ -326,6 +363,14 @@ function resultKey(equipRec, siteId, equipId) {
   return equipRec && equipRec.uuid ? `equip:${equipRec.uuid}` : `site:${siteId || ''}:${equipId}`;
 }
 const resultUuid = (key, ruleId) => nameUuid(`${key}:${ruleId}`);
+const sensorResultUuid = (key, ruleId, seriesId) => nameUuid(`${key}:${ruleId}:${seriesId}`);
+
+// NF merges attrs in UpdatePoints, so every Open-FDD-owned key is written on every update.
+const OFDD_RESULT_ATTRS = Object.freeze([
+  'fddStatus', 'fddOutput', 'unit', 'fddLastRun', 'fddCoverageHours', 'fddSensorFaultHours',
+  'fddOccSource', 'fddReason', 'fddWindowHours', 'equipUuid', 'sensorRef', 'roleRef', 'fddSummary',
+  'fddOutputSince',
+]);
 
 const FAULT_COLS = ['fault_pct', 'fault_hours'];
 
@@ -359,39 +404,52 @@ function resultValue(packRule, row) {
   return { ...base, value, status: 'ok', reason: '' };
 }
 
-/** Keep the existing equipment result as worst-sensor hours and retain every assessed role. */
-function equipmentResult(packRule, rows, equipId) {
+/** Equipment summary is the max per-series hours; retain rows for per-series result records. */
+function equipmentResult(packRule, rows, equipId, sensorNames = {}) {
   if (!packRule.output_columns?.includes('sensor_role')) {
     return rows.find((row) => row.equipment_id === equipId) || rows[0];
   }
-  const scores = rows
-    .filter((row) => row.equipment_id === equipId && typeof row.sensor_role === 'string' && Number.isFinite(row.fault_hours))
-    .map((row) => [row.sensor_role, row.fault_hours]);
+  const scores = rows.filter((row) => row.equipment_id === equipId && typeof row.series_id === 'string'
+    && typeof row.sensor_role === 'string');
   if (!scores.length) return undefined;
+  const sensorValues = scores.map((row) => ({ row, out: resultValue(packRule, row) }));
+  const assessed = sensorValues.filter(({ out }) => out.status !== 'not-assessed');
   return {
     equipment_id: equipId,
-    fault_hours: Math.max(...scores.map(([, hours]) => hours)),
-    sensor_fault_hours: Object.fromEntries(scores),
+    fault_hours: assessed.length ? Math.max(...assessed.map(({ out }) => out.value)) : null,
+    covered_hours: Math.max(...sensorValues.map(({ out }) => Number(out.coverage) || 0)),
+    sensor_rows: scores,
+    sensor_fault_hours: Object.fromEntries(sensorValues.map(({ row, out }) => [row.series_id, {
+      role: row.sensor_role, name: sensorNames[row.series_id] || row.series_id,
+      hours: out.status === 'not-assessed' ? null : out.value, status: out.status,
+    }])),
   };
 }
 
 const siteEquipLabel = (siteId, equipId) => (siteId ? `${siteId}/${equipId}` : equipId);
 
-function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, runIso, occSource, sensorFaultHours = undefined }) {
+function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, runIso, occSource = undefined,
+  sensorFaultHours = undefined, sensor = null, previous = null, outputSince = runIso }) {
   const equipId = shared.idOf(equipRec);
-  const uuid = resultUuid(key, rule.id);
+  const uuid = sensor ? sensorResultUuid(key, rule.id, sensor.series_id) : resultUuid(key, rule.id);
   const dis = `${(equipRec.attrs || {}).dis || equipRec.name} ${rule.id}`;
-  const name = `${siteEquipLabel(siteId, equipId)}/${rule.id}`;
+  const name = `${siteEquipLabel(siteId, equipId)}/${rule.id}${sensor ? `/${sensor.name || sensor.series_id}` : ''}`;
   const markers = ['point', 'his', out.kind === 'fault' ? 'fault' : 'metric', 'fdd'];
-  const attrs = {
+  const oldAttrs = previous && previous.attrs || {};
+  const boundary = oldAttrs.fddOutput === out.column && oldAttrs.fddOutputSince
+    ? oldAttrs.fddOutputSince : outputSince;
+  const attrs = Object.fromEntries(OFDD_RESULT_ATTRS.map((k) => [k, '']));
+  Object.assign(attrs, {
     dis, markers: markers.join(','), kind: 'Number', unit: out.unit,
     siteRef: siteId, equipRef: equipId, ruleRef: rule.id,
     fddWindowHours: String(windowHours), fddOutput: out.column,
-    fddStatus: out.status, fddReason: out.reason || '', fddLastRun: runIso };
-  if (out.coverage != null) attrs.fddCoverageHours = String(out.coverage);
-  if (sensorFaultHours) attrs.fddSensorFaultHours = JSON.stringify(sensorFaultHours);
-  if (equipRec.uuid) attrs.equipUuid = equipRec.uuid;     // lets the UI match this point to its equip without guessing from names
-  if (occSource) attrs.fddOccSource = occSource;
+    fddStatus: out.status, fddReason: out.reason || '', fddLastRun: runIso, fddOutputSince: boundary,
+    fddCoverageHours: out.coverage == null ? '' : String(out.coverage),
+    fddSensorFaultHours: sensorFaultHours ? JSON.stringify(sensorFaultHours) : '',
+    fddOccSource: occSource || '', equipUuid: equipRec.uuid || '',
+    sensorRef: sensor ? sensor.series_id : '', roleRef: sensor ? sensor.sensor_role : '',
+    fddSummary: sensor ? 'sensor' : 'equip',
+  });
   return [
     { uuid, name, layer: 'automation', pointType: 'POINT', attrs: {
       application_id: APP_ID, type: 'fdd-result', label: rule.id, group_key: siteEquipLabel(siteId, equipId),
@@ -401,18 +459,18 @@ function resultRecords({ equipRec, siteId, rule, out, shared, windowHours, key, 
 }
 
 // ---- fault timeline (see the header) ---------------------------------------------------------
-const timelineUuid = (key, ruleId) => nameUuid(`${key}:${ruleId}:timeline`);
+const timelineUuid = (key, ruleId, seriesId = '') => nameUuid(`${key}:${ruleId}${seriesId ? `:${seriesId}` : ''}:timeline`);
 
 /**
  * Timeline rows (engine.timeline) -> the samples to publish: [{ ms, value: 1 | 0 }], oldest first.
  * Skipped (= not assessed, nothing written): held_seconds 0 (last sample, gap over MAX_GAP_HOURS), a null flag,
  * a timestamp for which assessed(ms) is false (a required input missing), and anything at or before `after` (already written).
  * Sensor sweeps use SQL's assessed intervals, including silence, and combine their overlap on the pack grid.
- * @param {any[]} rows @param {{ assessed?: ((ms: number) => boolean) | null, after?: number, equipId?: string, stepSec?: number }} [o]
+ * @param {any[]} rows @param {{ assessed?: ((ms: number) => boolean) | null, after?: number, equipId?: string, stepSec?: number, seriesId?: string | null }} [o]
  */
-function timelineSamples(rows, { assessed, after = -Infinity, equipId, stepSec = 300 } = {}) {
+function timelineSamples(rows, { assessed, after = -Infinity, equipId, stepSec = 300, seriesId = null } = {}) {
   if (rows?.some((row) => typeof row.sensor_role === 'string')) {
-    return sweepTimelineSamples(rows, equipId, after, stepSec);
+    return sweepTimelineSamples(rows, equipId, after, stepSec, seriesId);
   }
   const out = [];
   for (const r of rows || []) {
@@ -427,7 +485,7 @@ function timelineSamples(rows, { assessed, after = -Infinity, equipId, stepSec =
 }
 
 /** Collapse overlapping sensor intervals into one equipment lane on the pack grid. */
-function sweepTimelineSamples(rows, equipId, after, stepSec) {
+function sweepTimelineSamples(rows, equipId, after, stepSec, seriesId = null) {
   const events = new Map();
   const add = (ms, assessed, faults) => {
     const event = events.get(ms) || { assessed: 0, faults: 0 };
@@ -436,7 +494,7 @@ function sweepTimelineSamples(rows, equipId, after, stepSec) {
     events.set(ms, event);
   };
   for (const row of rows) {
-    if (equipId != null && row.equipment_id !== equipId) continue;
+    if ((equipId != null && row.equipment_id !== equipId) || (seriesId != null && row.series_id !== seriesId)) continue;
     const start = Math.round(Number(row.ts_epoch) * 1000);
     const end = start + Math.round(Number(row.held_seconds) * 1000);
     if (!Number.isFinite(end) || end <= start || end <= after || row.confirmed == null) continue;
@@ -464,15 +522,17 @@ function sweepTimelineSamples(rows, equipId, after, stepSec) {
 }
 
 /** The two records (automation + model) of an equip + rule's timeline point; `through` (ms) = newest sample written so far. */
-function timelineRecords({ equipRec, siteId, rule, shared, windowHours, key, runIso, through }) {
+function timelineRecords({ equipRec, siteId, rule, shared, windowHours, key, runIso, through, sensor = null }) {
   const equipId = shared.idOf(equipRec);
-  const uuid = timelineUuid(key, rule.id);
+  const uuid = timelineUuid(key, rule.id, sensor && sensor.series_id);
   const dis = `${(equipRec.attrs || {}).dis || equipRec.name} ${rule.id} fault timeline`;
-  const name = `${siteEquipLabel(siteId, equipId)}/${rule.id}/timeline`;
+  const name = `${siteEquipLabel(siteId, equipId)}/${rule.id}${sensor ? `/${sensor.name || sensor.series_id}` : ''}/timeline`;
   const attrs = { dis, markers: ['point', 'his', 'fault_timeline'].join(','), kind: 'Number', unit: '',
-    siteRef: siteId, equipRef: equipId, ruleRef: rule.id, fddKind: 'fault-timeline', fddTimelineOf: resultUuid(key, rule.id),
+    siteRef: siteId, equipRef: equipId, ruleRef: rule.id, fddKind: 'fault-timeline', fddTimelineOf: sensor
+      ? sensorResultUuid(key, rule.id, sensor.series_id) : resultUuid(key, rule.id),
     fddWindowHours: String(windowHours), fddLastRun: runIso };
   if (equipRec.uuid) attrs.equipUuid = equipRec.uuid;
+  if (sensor) { attrs.sensorRef = sensor.series_id; attrs.roleRef = sensor.sensor_role; }
   if (Number.isFinite(through)) attrs.fddTimelineThrough = new Date(through).toISOString();
   return [
     { uuid, name, layer: 'automation', pointType: 'POINT', attrs: {
@@ -503,8 +563,11 @@ async function siteOccupancy({ http, model, shared, siteId, cache }) {
 
 /** Model record of a previously published result, flagged stale: nothing else about it changes. */
 function staleRecord(rec, reason, runIso) {
-  return { uuid: rec.uuid, name: rec.name, layer: 'model',
-    attrs: { ...(rec.attrs || {}), fddStatus: 'stale', fddReason: reason, fddLastRun: runIso } };
+  const attrs = { ...Object.fromEntries(OFDD_RESULT_ATTRS.map((k) => [k, ''])), ...(rec.attrs || {}) };
+  attrs.fddCoverageHours = '';
+  attrs.fddSensorFaultHours = '';
+  attrs.fddStatus = 'stale'; attrs.fddReason = reason; attrs.fddLastRun = runIso;
+  return { uuid: rec.uuid, name: rec.name, layer: 'model', attrs };
 }
 
 // ---- NF writes (batched) ------------------------------------------------------------------
@@ -654,9 +717,10 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
   const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
+    sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 },
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
-    eligible: 0, skipped: [], stale_reasons: {}, failure: null,
+    eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {},
     window: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), hours: windowHours },
     source_freshness: { engine: kind, newest_sample: null, age_minutes: null, nf_latest: isoOrNull(newestLatest(model.points)), nf_latest_age_minutes: null } };
   let sourceNewest = null;                               // newest input sample the engine could see (ms)
@@ -698,8 +762,22 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         }
         let roles = roleInputs(runnable);
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
+        const sweepSensors = [];
+        for (const r of runnable) {
+          if (!pack.rules[r.rule.id].output_columns?.includes('series_id')) continue;
+          for (const [role, points] of Object.entries(r.bound || {})) {
+            if (!isSweepSensorRole(role, shared.catalog)) continue;
+            for (const point of points || []) {
+              let sensor = sweepSensors.find((s) => s.point.uuid === point.uuid);
+              if (!sensor) { sensor = { role, point, ruleIds: new Set() }; sweepSensors.push(sensor); }
+              sensor.ruleIds.add(r.rule.id);
+            }
+          }
+        }
         if (si.skipped.size) {
           const bad = [...si.skipped].sort().join(', ');
+          for (const role of si.skipped) if (!sweepSensors.some((sensor) => sensor.role === role))
+            summary.roles_skipped_by_unit[role] = (summary.roles_skipped_by_unit[role] || 0) + 1;
           for (const r of runnable) {
             const hit = r.required.filter((x) => si.skipped.has(x));
             if (hit.length) reasons.set(r.rule.id, `unit unusable (role ${hit.join(', ')}: unknown or missing unit on the point)`);
@@ -712,7 +790,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             continue;
           }
         }
-        const uuids = [...new Set(Object.values(roles).map((p) => p.uuid))];
+        const uuids = [...new Set([...Object.values(roles).map((p) => p.uuid), ...sweepSensors.map((s) => s.point.uuid)])];
         uuids.forEach((u) => seenUuids.add(u));
         let newestHere = null;        // newest sample of this equip's inputs (ms): from the engine's own source
         let loadedRows;
@@ -727,10 +805,13 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             }
           } catch (e) { log(`${equipId}: occupancy schedule unavailable (${errText(e)}); occ_mode not synthesized`); }
         }
-        if (kind === 'timescale') {   // history stays in the database: SQL builds the wide table (SI conversion included)
+        if (kind === 'timescale') {   // SQL builds the wide and per-series sweep inputs from stored SI data
           const roleToUuid = Object.fromEntries(Object.entries(roles).map(([r, p]) => [r, p.uuid]));
-          const unitsByUuid = Object.fromEntries(Object.values(roles).map((p) => [p.uuid, p.units || '']));
-          loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
+          const unitsByUuid = Object.fromEntries([...Object.values(roles), ...sweepSensors.map((s) => s.point)].map((p) => [p.uuid, p.units || '']));
+          const sensorPlan = buildSensorInput({ equipId, sensors: sweepSensors, hist: {}, grid: [], catalog: shared.catalog, log, warned: warnedUnits });
+          for (const [role, count] of Object.entries(sensorPlan.skipped)) summary.roles_skipped_by_unit[role] = (summary.roles_skipped_by_unit[role] || 0) + count;
+          loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid,
+            sensorSeries: sensorPlan.sensorSeries, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
           if (!loadedRows && engine.newestSample) {   // empty window: when did these points last have a sample at all?
             try { newestHere = await engine.newestSample(uuids); } catch (e) { log(`${equipId}: newest-sample lookup failed: ${errText(e)}`); }
           }
@@ -738,7 +819,11 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const hist = await fetchHistory(http, uuids, from, to, step);
           newestHere = newestOfHistory(hist);
           const input = buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ: occ && occ.at });
-          loadedRows = input.history.length;
+          const long = buildSensorInput({ equipId, sensors: sweepSensors, hist, grid, catalog: shared.catalog, log, warned: warnedUnits });
+          for (const [role, count] of Object.entries(long.skipped)) summary.roles_skipped_by_unit[role] = (summary.roles_skipped_by_unit[role] || 0) + count;
+          input.sensorSeries = long.sensorSeries;
+          input.sensorHistory = long.sensorHistory;
+          loadedRows = input.history.length + input.sensorHistory.length;
           histByTs = new Map(input.history.map((row) => [row.ts, row]));
           if (loadedRows) await engine.load(input);
         }
@@ -768,29 +853,102 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }
           summary.rules++;
           const packRule = pack.rules[r.rule.id];
-          const row = equipmentResult(packRule, rows, equipId);
+          const ruleSensors = packRule.output_columns?.includes('series_id') ? sweepSensors : [];
+          const ruleRows = [...(rows || [])];
+          for (const sensor of ruleSensors) if (!ruleRows.some((x) => x.equipment_id === equipId && x.series_id === sensor.point.uuid)) {
+            ruleRows.push({ equipment_id: equipId, series_id: sensor.point.uuid, sensor_role: sensor.role, fault_hours: null, covered_hours: 0 });
+          }
+          const row = equipmentResult(packRule, ruleRows, equipId,
+            Object.fromEntries(ruleSensors.map((sensor) => [sensor.point.uuid, sensor.point.dis || sensor.point.name || sensor.point.uuid])));
           const out = resultValue(packRule, row);
           const sensorFaultHours = row && row.sensor_fault_hours;
+          const perSensor = row && row.sensor_rows || [];
+          const sensorById = new Map(ruleSensors.map((sensor) => [sensor.point.uuid, {
+            series_id: sensor.point.uuid, sensor_role: sensor.role, name: sensor.point.dis || sensor.point.name,
+          }]));
+          if (engine.resultRow && perSensor.length) {
+            for (const sensorRow of perSensor) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId,
+              ruleId: r.rule.id, row: sensorRow, windowStart: from, windowEnd: to }));
+            if (row) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id,
+              row, windowStart: from, windowEnd: to }));
+          }
+          if (perSensor.length) {
+            for (const sensorRow of perSensor) {
+              const sensor = sensorById.get(sensorRow.series_id) || { series_id: sensorRow.series_id, sensor_role: sensorRow.sensor_role, name: sensorRow.series_id };
+              const sensorOut = resultValue(packRule, sensorRow);
+              summary.sensor_results.total++;
+              summary.sensor_results[sensorOut.status]++;
+              const sensorUuid = sensorResultUuid(key, r.rule.id, sensor.series_id);
+              touched.add(sensorUuid);
+              const prevSensor = model.results.get(sensorUuid);
+              records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out: sensorOut, shared, windowHours, key, runIso,
+                sensor, previous: prevSensor, outputSince: new Date(to).toISOString() }));
+              if (sensorOut.status !== 'not-assessed') values.push({ uuid: sensorUuid, value: sensorOut.value });
+            }
+          }
           summary.status[out.status]++;
           if (out.status !== 'not-assessed') {
             summary.results.push({ site: siteId, equip: equipId, rule: r.rule.id, value: out.value, unit: out.unit, fault: out.fault, status: out.status,
               ...(sensorFaultHours ? { sensor_fault_hours: sensorFaultHours } : {}) });
-            if (engine.resultRow) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to }));
+            if (engine.resultRow && !perSensor.length) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to }));
           }
           const uuid = resultUuid(key, r.rule.id);
           touched.add(uuid);
           const usesOcc = r.required.includes('occ_mode') || r.optional.includes('occ_mode');
           const occSource = usesOcc ? (roles.occ_mode ? 'point' : occ ? occ.source : undefined) : undefined;
-          records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso, occSource, sensorFaultHours }));
+          records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso, occSource,
+            sensorFaultHours, previous: model.results.get(uuid), outputSince: new Date(to).toISOString() }));
           if (out.status !== 'not-assessed') values.push({ uuid, value: out.value });
           if (out.kind === 'fault' && !config.dryRun && engine.timeline && pack.rules[r.rule.id].timeline_sql) {
             try {
+              const timelineRows = await engine.timeline(r.rule.id);
+              const sensorTimelineRows = timelineRows?.some((x) => x.series_id) ? timelineRows : null;
+              if (sensorTimelineRows) {
+                const timelineBySeries = new Map();
+                for (const event of sensorTimelineRows) {
+                  if (!event.series_id) continue;
+                  if (!timelineBySeries.has(event.series_id)) timelineBySeries.set(event.series_id, []);
+                  timelineBySeries.get(event.series_id).push(event);
+                }
+                for (const sensorRow of perSensor) {
+                  const sensor = sensorById.get(sensorRow.series_id) || { series_id: sensorRow.series_id, sensor_role: sensorRow.sensor_role, name: sensorRow.series_id };
+                  const tuuid = timelineUuid(key, r.rule.id, sensor.series_id);
+                  const prev = model.timelines.get(tuuid);
+                  const prevThrough = prev ? Date.parse((prev.attrs || {}).fddTimelineThrough || '') : NaN;
+                  const samples = timelineSamples(timelineBySeries.get(sensor.series_id) || [], { equipId, seriesId: sensor.series_id,
+                    after: Number.isFinite(prevThrough) ? prevThrough : -Infinity, stepSec: pack.poll_seconds });
+                  const [auto, model2] = timelineRecords({ equipRec, siteId, rule: r.rule, shared, windowHours, key, runIso,
+                    through: prevThrough, sensor });
+                  const t = { records: [auto, model2], series: null };
+                  if (samples.length) {
+                    const through = samples[samples.length - 1].ms;
+                    t.series = { uuid: tuuid, values: samples.map((x) => ({ ts: new Date(x.ms).toISOString(), real: x.value })),
+                      record: { ...model2, attrs: { ...model2.attrs, fddTimelineThrough: new Date(through).toISOString() } } };
+                  }
+                  timelines.push(t);
+                }
+                // Keep the documented equipment timeline as "any sensor faulting" for older readers.
+                const equipTimelineUuid = timelineUuid(key, r.rule.id);
+                const equipPrev = model.timelines.get(equipTimelineUuid);
+                const equipThrough = equipPrev ? Date.parse((equipPrev.attrs || {}).fddTimelineThrough || '') : NaN;
+                const equipSamples = timelineSamples(sensorTimelineRows, { equipId,
+                  after: Number.isFinite(equipThrough) ? equipThrough : -Infinity, stepSec: pack.poll_seconds });
+                const [equipAuto, equipModel] = timelineRecords({ equipRec, siteId, rule: r.rule, shared, windowHours, key,
+                  runIso, through: equipThrough });
+                const equipT = { records: [equipAuto, equipModel], series: null };
+                if (equipSamples.length) {
+                  const through = equipSamples[equipSamples.length - 1].ms;
+                  equipT.series = { uuid: equipTimelineUuid, values: equipSamples.map((x) => ({ ts: new Date(x.ms).toISOString(), real: x.value })),
+                    record: { ...equipModel, attrs: { ...equipModel.attrs, fddTimelineThrough: new Date(through).toISOString() } } };
+                }
+                timelines.push(equipT);
+              } else {
               const tuuid = timelineUuid(key, r.rule.id);
               const prev = model.timelines.get(tuuid);
               const prevThrough = prev ? Date.parse((prev.attrs || {}).fddTimelineThrough || '') : NaN;
               // a timestamp is assessed only when every REQUIRED input of the rule has a value there (unknown is not ok)
               const assessed = histByTs ? (ms) => { const row = histByTs.get(ms); return !!row && r.required.every((role) => row[role] != null); } : null;
-              const samples = timelineSamples(await engine.timeline(r.rule.id),
+              const samples = timelineSamples(timelineRows,
                 { assessed, equipId, after: Number.isFinite(prevThrough) ? prevThrough : -Infinity, stepSec: pack.poll_seconds });
               const [auto, model2] = timelineRecords({ equipRec, siteId, rule: r.rule, shared, windowHours, key, runIso, through: prevThrough });
               const t = { records: [auto, model2], series: null };
@@ -800,6 +958,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
                   record: { ...model2, attrs: { ...model2.attrs, fddTimelineThrough: new Date(through).toISOString() } } };
               }
               timelines.push(t);
+              }
             } catch (e) {
               summary.errors++;
               log(`${equipId} ${r.rule.id} timeline: ${errText(e)}`);
@@ -820,16 +979,27 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
       } finally {
         // previously published results this run did not refresh: flag, never overwrite with a number
         const stale = [];
-        for (const ruleId of Object.keys(pack.rules)) {
-          const uuid = resultUuid(key, ruleId);
-          const prev = model.results.get(uuid);
-          if (!prev || touched.has(uuid)) continue;
+        for (const [uuid, prev] of model.results) {
+          const attrs = prev.attrs || {};
+          const ruleId = attrs.ruleRef;
+          if (!pack.rules[ruleId] || touched.has(uuid)) continue;
+          const expectedUuid = attrs.sensorRef
+            ? sensorResultUuid(key, ruleId, attrs.sensorRef)
+            : resultUuid(key, ruleId);
+          if (uuid !== expectedUuid) continue;
           const why = reasons.get(ruleId) || defaultReason;
           stale.push(staleRecord(prev, why, runIso));
-          const bucket = why.replace(/\s*\(.*$/s, '').slice(0, 60);   // group by the reason, not its details
-          summary.stale_reasons[bucket] = (summary.stale_reasons[bucket] || 0) + 1;
+          if (attrs.sensorRef) {
+            summary.sensor_results.total++;
+            summary.sensor_results.stale++;
+            const timeline = model.timelines.get(timelineUuid(key, ruleId, attrs.sensorRef));
+            if (timeline) stale.push(staleRecord(timeline, why, runIso));
+          } else {
+            summary.status.stale++;
+            const bucket = why.replace(/\s*\(.*$/s, '').slice(0, 60);   // group by the reason, not its details
+            summary.stale_reasons[bucket] = (summary.stale_reasons[bucket] || 0) + 1;
+          }
         }
-        summary.status.stale += stale.length;
         if (stale.length && !config.dryRun) queue.meta.push(...stale);
       }
     }
@@ -858,6 +1028,10 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
     }
   }
   const st = summary.status;
+  const skippedRoles = Object.entries(summary.roles_skipped_by_unit).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
+  const skippedRoleCount = skippedRoles.reduce((n, [, count]) => n + count, 0);
+  const unitSkipText = `roles skipped by unit: ${skippedRoleCount} (${skippedRoles.length ? skippedRoles.map(([role, count]) => `${role} ${count}`).join(', ') : 'none'})`;
+  summary.roles_skipped_by_unit_total = skippedRoleCount;
   const fresh = summary.source_freshness;
   fresh.newest_sample = isoOrNull(sourceNewest);
   fresh.age_minutes = sourceNewest == null ? null : Math.round((now - sourceNewest) / 60e3);
@@ -872,7 +1046,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h); `
     + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
-    + `requests: ${summary.requests.metadata} metadata, ${summary.requests.data} data`);
+    + `requests: ${summary.requests.metadata} metadata, ${summary.requests.data} data; ${unitSkipText}`);
   return summary;
 }
 
@@ -938,7 +1112,7 @@ function bacnetPlan(results, existing, firstInstance) {
     if (!r.fault) continue;
     const k = `${r.site || ''}\0${r.equip}`;
     if (!byEquip.has(k)) byEquip.set(k, { site: r.site || '', equip: r.equip, rules: [] });
-    if (r.value > 0) byEquip.get(k).rules.push(r.rule);
+    if (r.value > 0 && !byEquip.get(k).rules.includes(r.rule)) byEquip.get(k).rules.push(r.rule);
   }
   const used = new Set(existing.map((o) => o.instance));
   const byName = new Map(existing.map((o) => [o.name, o.instance]));
@@ -1010,4 +1184,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, timelineUuid, timelineSamples, buildInput, siPlan, resultValue, equipmentResult, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });

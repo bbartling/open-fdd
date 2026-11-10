@@ -67,7 +67,7 @@ def load_source() -> dict:
     for role, spec in roles.items():
         if history[role].get("role") != role:
             raise ValueError(f"history.{role} must point to its declared role")
-    required_tables = {"history", "weather", "utility_interval", "utility_monthly", "authorized_series", "equipment"}
+    required_tables = {"history", "weather", "utility_interval", "utility_monthly", "authorized_series", "equipment", "sensor_history"}
     if missing_tables := sorted(required_tables - set(normalized)):
         raise ValueError(f"input contract is missing required tables: {missing_tables}")
     return {**contract, "_normalized_tables": normalized}

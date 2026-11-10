@@ -67,10 +67,30 @@ CREATE TABLE IF NOT EXISTS openfdd.fdd_results (
   engine          text,
   window_start    timestamptz,
   window_end      timestamptz,
-  PRIMARY KEY (run_ts, equip, rule_id)
+  sensor_ref      text             NOT NULL DEFAULT '',
+  role            text,
+  PRIMARY KEY (run_ts, equip, rule_id, sensor_ref)
 );
 SELECT create_hypertable('openfdd.fdd_results', 'run_ts',
                          chunk_time_interval => interval '30 days', if_not_exists => true);
+-- v2 rows keep their equipment-level identity through the empty sensor_ref default.
+ALTER TABLE openfdd.fdd_results ADD COLUMN IF NOT EXISTS sensor_ref text NOT NULL DEFAULT '';
+ALTER TABLE openfdd.fdd_results ADD COLUMN IF NOT EXISTS role text;
+DO $do$
+DECLARE
+  v_name text;
+  v_definition text;
+BEGIN
+  LOCK TABLE openfdd.fdd_results IN ACCESS EXCLUSIVE MODE;
+  SELECT conname, pg_get_constraintdef(oid) INTO v_name, v_definition
+  FROM pg_constraint WHERE conrelid = 'openfdd.fdd_results'::regclass AND contype = 'p';
+  IF v_definition = 'PRIMARY KEY (run_ts, equip, rule_id)' THEN
+    EXECUTE format('ALTER TABLE openfdd.fdd_results DROP CONSTRAINT %I, ADD PRIMARY KEY (run_ts, equip, rule_id, sensor_ref)', v_name);
+  ELSIF v_definition IS DISTINCT FROM 'PRIMARY KEY (run_ts, equip, rule_id, sensor_ref)' THEN
+    RAISE EXCEPTION 'Unexpected openfdd.fdd_results primary key: %', v_definition;
+  END IF;
+END
+$do$;
 CREATE INDEX IF NOT EXISTS fdd_results_equip_rule_ts ON openfdd.fdd_results (equip, rule_id, run_ts DESC);
 
 CREATE TABLE IF NOT EXISTS openfdd.retention_log (
@@ -291,7 +311,7 @@ $$;
 DO $do$
 DECLARE
   v_keep int;
-  v_cfg  jsonb := '{"scope": "openfdd+allowlist", "schema_version": 2}'::jsonb;
+  v_cfg  jsonb := '{"scope": "openfdd+allowlist", "schema_version": 3}'::jsonb;
 BEGIN
   SELECT min(job_id) INTO v_keep FROM timescaledb_information.jobs
   WHERE proc_schema = 'openfdd' AND proc_name = 'size_cap_job';
@@ -327,6 +347,6 @@ LANGUAGE sql STABLE AS $$
   ORDER BY 1, 2
 $$;
 
--- Last statement: marks this schema as the scoped-retention release (the hooks check it).
-INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(2))
+-- Last statement: mark the per-sensor results schema after the migration succeeds.
+INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(3))
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

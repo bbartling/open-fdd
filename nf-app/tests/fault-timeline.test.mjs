@@ -230,9 +230,22 @@ test("rcxFaultData falls back to fault_pct (approximate, nulls kept) only when n
 test("a missing fault_pct sample is null in the fallback lane, not 0", async () => {
   const { ctx, model } = rcx(w1, NOW_A, { onlyResult: true });
   const p = ctx.rcxResultPoint(model, A.equipRec, "CMD-1");
+  p.rec.attrs.fddOutputSince = "";
   ctx.fetchSeries = async () => new Map([[p.uuid, [[0, 0], [3600e3, null], [7200e3, 12]]]]);
   const lane = lanePlain(await ctx.rcxFaultData(model, A.equipRec, "CMD-1", 24));
   assert.deepEqual(lane, [[0, 0], [3600e3, null], [7200e3, 1]]);
+});
+
+test("mixed % to h result history starts at the first full bucket after fddOutputSince", async () => {
+  const { ctx, model } = rcx(w1, NOW_A, { onlyResult: true });
+  const p = ctx.rcxResultPoint(model, A.equipRec, "CMD-1");
+  p.rec.attrs.fddOutput = "fault_hours";
+  p.rec.attrs.unit = "h";
+  p.rec.attrs.fddOutputSince = new Date(90 * 60e3).toISOString();
+  ctx.fetchSeries = async () => new Map([[p.uuid, [[0, 15], [3600e3, 8], [7200e3, 2], [10800e3, 0]]]]);
+  const lane = lanePlain(await ctx.rcxFaultData(model, A.equipRec, "CMD-1", 24));
+  assert.deepEqual(lane, [[7200e3, 1], [10800e3, 0]], "old percent buckets and the bucket containing the switch are dropped");
+  assert.deepEqual(lanePlain(ctx.rcxCurrentOutputSeries(p, [[0, 15], [3600e3, 8], [7200e3, 2]], 3600)), [[7200e3, 2]]);
 });
 
 // ---- 4. hook writes: batching, no 0 for unknown, append-only ---------------------------------------------------------

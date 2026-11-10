@@ -27,6 +27,7 @@ const out = arg("out", "parity_sql.json");
 const engines = arg("engines", "pglite,sqlite").split(",");
 const only = arg("rules", "") ? new Set(arg("rules").split(",")) : null;
 const noGaps = !process.argv.includes("--gaps");
+const duplicateRole = arg("duplicate-role", "false") === "true";
 
 const readPack = (n) => JSON.parse(readFileSync(path.join(root, "nf-app/rules", n), "utf8"));
 const PACK = { pglite: readPack("pack-postgres.json"), sqlite: readPack("pack-sqlite.json") };
@@ -35,7 +36,7 @@ let peak = mb();
 const sample = () => { peak = Math.max(peak, mb()); };
 
 const t0 = Date.now();
-const input = buildDataset(PACK.pglite, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole: false });
+const input = buildDataset(PACK.pglite, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole });
 const tGen = Date.now() - t0;
 sample();
 

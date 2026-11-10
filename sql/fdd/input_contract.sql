@@ -9,3 +9,4 @@ CREATE TEMP TABLE utility_interval ("timestamp_utc" timestamp with time zone, "k
 CREATE TEMP TABLE utility_monthly ("billing_period" VARCHAR, "kwh" DOUBLE PRECISION);
 CREATE TEMP TABLE authorized_series ("site_id" VARCHAR, "equipment_id" VARCHAR, "role" VARCHAR, "unit" VARCHAR);
 CREATE TEMP TABLE equipment ("building_id" VARCHAR, "equipment_id" VARCHAR);
+CREATE TEMP TABLE sensor_history ("equipment_id" VARCHAR, "series_id" VARCHAR, "sensor_role" VARCHAR, "unit" VARCHAR, "timestamp_utc" timestamp with time zone, "value" DOUBLE PRECISION);

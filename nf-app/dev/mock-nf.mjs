@@ -165,13 +165,16 @@ for (const [eq, rule, fn] of FAULTS) {
   signals.set(uuid, (t) => fn(Math.floor(t / 3600e3) * 3600e3));
 }
 const withLatest = (r) => (signals.has(r.uuid) ? { ...r, latestValue: { ts: new Date(NOW).toISOString(), double: signals.get(r.uuid)(NOW) } } : r);
+const pointKey = (record) => JSON.stringify([record.layer || "default", record.uuid]);
+const seedPoints = new Map(records.map((record) => [pointKey(record), record]));
+const updatedPoints = new Map();
 
 // ---- API ----------------------------------------------------------------------------------
 function textOf(q) { return q && q.field ? [q.field.property, q.field.text] : null; }
 function query(body) {
   const layer = body.layer || "default";
   const f = textOf(body.structuredQuery);
-  const out = records.filter((r) => (layer === "model" ? r.layer === "model" : true)
+  const out = [...new Map([...seedPoints, ...updatedPoints]).values()].filter((r) => (layer === "default" || r.layer === layer)
     && (!f || String((r.attrs || {})[f[0]] ?? "") === f[1])).map(withLatest);
   // Like NF 3.10.x: pages by pageOffset + pageSize and reports totalCount, with NO nextPageToken (#1550).
   // No pageSize in the request = everything (older callers).
@@ -244,11 +247,24 @@ const server = http.createServer(async (req, res) => {
   if (p === "/api/v1/point/query") return json(res, 200, query(b));
   if (p === "/api/v1/point/data" && req.method !== "POST") return json(res, 200, data(url.searchParams));
   if (p === "/api/v1/_mock/writes") {
-    if (req.method === "DELETE") { writes.points.length = 0; writes.data.length = 0; writes.calls.length = 0; return json(res, 200, {}); }
+    if (req.method === "DELETE") {
+      writes.points.length = 0;
+      writes.data.length = 0;
+      writes.calls.length = 0;
+      updatedPoints.clear();
+      return json(res, 200, {});
+    }
     return json(res, 200, writes);
   }
   if (req.method === "POST" && p === "/api/v1/point/points") {
-    if (!Array.isArray(b.points)) return json(res, 400, { error: "points must be an array" });
+    if (!Array.isArray(b.points) || b.points.some((point) => !point || typeof point.uuid !== "string" || !point.uuid)) {
+      return json(res, 400, { error: "points must be an array of records with UUIDs" });
+    }
+    for (const point of b.points) {
+      const key = pointKey(point);
+      const prior = updatedPoints.get(key) || seedPoints.get(key);
+      updatedPoints.set(key, { ...prior, ...point, attrs: { ...prior?.attrs, ...point.attrs } });
+    }
     writes.points.push(...b.points); note(p, b.points.length);
     return json(res, 200, { results: b.points.map((r) => ({ uuid: r.uuid, success: true, newVersion: "1" })) });
   }

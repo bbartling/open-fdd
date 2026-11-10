@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const hook = require("../hooks/fdd.js");
+import { multiSensorEquip } from "./fixtures/multi_sensor_equip.mjs";
 
 const STEP = 300;
 const NOW = Date.parse("2026-11-05T12:02:00Z");
@@ -276,6 +277,26 @@ test("fdd status: fault rule with zero coverage is not-assessed, never a healthy
   }
 });
 
+test("stale cleanup only matches results derived from the current site's equipment key", async () => {
+  const siteBEquip = { uuid: "e-site-b", name: "AHU-1", pointType: "EQUIPMENT",
+    attrs: { id: "AHU-1", siteRef: "site-b", markers: "equip,ahu" } };
+  const siteBKey = hook.resultKey(siteBEquip, "site-b", "AHU-1");
+  const siteBResult = { uuid: hook.resultUuid(siteBKey, "CMD-1"), name: "site-b/AHU-1/CMD-1", layer: "model",
+    attrs: { markers: "point,his,fault,fdd", siteRef: "site-b", equipRef: "AHU-1", ruleRef: "CMD-1", fddStatus: "fault" } };
+  const retiredSensor = { uuid: hook.sensorResultUuid(hook.resultKey(MODEL[1], "site-a", "AHU-1"), "CMD-1", "fixture-retired"),
+    name: "fixture-retired result", layer: "model",
+    attrs: { ...siteBResult.attrs, siteRef: "site-a", sensorRef: "fixture-retired" } };
+  // The foreign result is present in the model layer, but the current run resolves only site-a equipment.
+  const http = fakeHttp([], {}, { model: [...MODEL, siteBResult, retiredSensor] });
+  const summary = await hook.runFdd({ sdk: { http }, pack: statusPack, createEngine: stubEngine({ queries: [] }), now: NOW });
+  assert.equal(http.writes.points.some((point) => point.uuid === siteBResult.uuid), false,
+    "matching equipRef alone must not stale another site's result");
+  assert.equal(http.writes.data.some((point) => point.uuid === siteBResult.uuid), false);
+  assert.equal(http.writes.points.find((point) => point.uuid === retiredSensor.uuid)?.attrs.fddStatus, "stale");
+  assert.equal(summary.sensor_results.stale, 1);
+  assert.equal(summary.status.stale, 0, "sensor results do not count as equipment summaries");
+});
+
 test("fdd status: covered fault rule is ok at 0 and fault above 0, with coverage hours", async () => {
   const ok = await runScripted({ "CMD-1": [{ equipment_id: "AHU-1", fault_pct: 0, fault_hours: 0, covered_hours: 23.5 }], "FAN-RUNTIME-HOURS": FAN_OK });
   assert.equal(ok.model("CMD-1").attrs.fddStatus, "ok");
@@ -346,43 +367,138 @@ test("fdd status: a rule returning no row is not-assessed", async () => {
   assert.equal(r.dataFor("CMD-1").length, 0);
 });
 
-test("sweep result keeps all role scores without summing overlapping fault hours", () => {
-  const rule = { output_columns: ["equipment_id", "sensor_role", "fault_hours"] };
+test("sweep result keeps per-series rows and summarizes by maximum hours", () => {
+  const rule = { output_columns: ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"] };
   const rows = [
-    { equipment_id: "fixture", sensor_role: "sat", fault_hours: 2 },
-    { equipment_id: "fixture", sensor_role: "rat", fault_hours: 3 },
-    { equipment_id: "other", sensor_role: "sat", fault_hours: 4 },
-    { equipment_id: "fixture", sensor_role: "mat", fault_hours: 0 },
+    { equipment_id: "fixture", series_id: "sat-a", sensor_role: "sat", fault_hours: 2, covered_hours: 22 },
+    { equipment_id: "fixture", series_id: "rat-a", sensor_role: "rat", fault_hours: 3, covered_hours: 20 },
+    { equipment_id: "other", series_id: "sat-x", sensor_role: "sat", fault_hours: 4, covered_hours: 24 },
+    { equipment_id: "fixture", series_id: "mat-a", sensor_role: "mat", fault_hours: 0, covered_hours: 23 },
   ];
-  assert.deepEqual(hook.equipmentResult(rule, rows, "fixture"), {
-    equipment_id: "fixture", fault_hours: 3, sensor_fault_hours: { sat: 2, rat: 3, mat: 0 },
+  const summary = hook.equipmentResult(rule, rows, "fixture");
+  assert.equal(summary.fault_hours, 3);
+  assert.equal(summary.covered_hours, 23);
+  assert.deepEqual(summary.sensor_fault_hours, {
+    "sat-a": { role: "sat", name: "sat-a", hours: 2, status: "fault" },
+    "rat-a": { role: "rat", name: "rat-a", hours: 3, status: "fault" },
+    "mat-a": { role: "mat", name: "mat-a", hours: 0, status: "ok" },
   });
   assert.equal(hook.equipmentResult(rule, rows, "missing"), undefined);
 });
 
-test("the FDD hook publishes the sweep role scores on the existing equipment point", async () => {
-  const http = fakeHttp();
+test("the FDD hook writes stable per-sensor results, timelines identity attrs, and the equipment max summary", async () => {
+  const http = fakeHttp([], {}, { model: [...multiSensorEquip.sites, ...multiSensorEquip.equips], points: multiSensorEquip.points });
   const pack = {
     ...PACK,
-    rules: { "SV-STALE": { sql: "-", output_columns: ["equipment_id", "sensor_role", "fault_hours"] } },
+    rules: { "SV-STALE": { sql: "-", timeline_sql: "-", output_columns: ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"] } },
   };
+  let missingSeries;
   const createEngine = async ({ kind }) => ({
     kind,
-    async load() {},
+    async load(input) { assert.ok(input.sensorSeries.length >= 5); assert.ok(input.sensorHistory.length > 0); missingSeries = input.sensorSeries[0].uuid; },
     async query() {
       return [
-        { equipment_id: "AHU-1", sensor_role: "sat", fault_hours: 0 },
-        { equipment_id: "AHU-1", sensor_role: "oa_t", fault_hours: 2 },
+        ...multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A").map((p, i) => ({
+          equipment_id: "AHU-A", series_id: p.uuid,
+          sensor_role: p.attrs.class === "discharge-air-temp-sensor" ? "sat" : p.attrs.class === "mixed-air-temp-sensor" ? "mat" : p.attrs.class === "outside-air-temp-sensor" ? "oa_t" : p.attrs.class === "return-air-temp-sensor" ? "rat" : "duct_static",
+          fault_hours: i === 1 ? 2 : 0, covered_hours: 24,
+        })).filter((row) => row.series_id !== missingSeries),
       ];
     },
+    async timeline() { return multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A").map((p, i) => ({
+      equipment_id: "AHU-A", series_id: p.uuid, sensor_role: i < 2 ? "sat" : "mat", ts_epoch: NOW / 1000,
+      confirmed: i === 1 ? 1 : 0, held_seconds: 300,
+    })); },
     async close() {},
   });
   const summary = await hook.runFdd({ sdk: { http }, pack, createEngine, now: NOW });
-  const uuid = hook.resultUuid(hook.resultKey(MODEL[1], "site-a", "AHU-1"), "SV-STALE");
-  assert.deepEqual(summary.results[0].sensor_fault_hours, { sat: 0, oa_t: 2 });
-  const point = http.writes.points.find((row) => row.uuid === uuid && row.layer === "model");
-  assert.deepEqual(JSON.parse(point.attrs.fddSensorFaultHours), { sat: 0, oa_t: 2 });
+  assert.equal(summary.results.length, 1, "NF run summary retains one equipment result per rule");
+  assert.equal(summary.sensor_results.total, 6, "sensor result counts are reported separately");
+  assert.deepEqual(summary.status, { ok: 0, fault: 1, "not-assessed": 0, stale: 0 });
+  const equipKey = hook.resultKey(multiSensorEquip.equips[0], "site-fixture", "AHU-A");
+  const uuid = hook.resultUuid(equipKey, "SV-STALE");
+  const summaryPoint = http.writes.points.find((row) => row.uuid === uuid && row.layer === "model");
+  const mapping = JSON.parse(summaryPoint.attrs.fddSensorFaultHours);
+  assert.deepEqual(Object.keys(mapping).sort(), multiSensorEquip.points.slice(0, 6).map((p) => p.uuid).sort());
+  assert.equal(summaryPoint.attrs.fddSummary, "equip");
+  assert.equal(summaryPoint.attrs.fddOutputSince, new Date(Math.floor(NOW / (STEP * 1000)) * STEP * 1000).toISOString());
   assert.equal(http.writes.data.find((row) => row.uuid === uuid).values[0].real, 2);
+  const sensorPoints = http.writes.points.filter((row) => row.layer === "model" && row.attrs.ruleRef === "SV-STALE" && row.attrs.fddSummary === "sensor");
+  assert.equal(sensorPoints.length, 6);
+  assert.ok(sensorPoints.every((p) => p.attrs.sensorRef && p.attrs.roleRef
+    && p.attrs.fddCoverageHours === (p.attrs.fddStatus === "not-assessed" ? "0" : "24")));
+  assert.ok(sensorPoints.every((p) => hook.OFDD_RESULT_ATTRS.every((key) => Object.hasOwn(p.attrs, key))));
+  assert.equal(summary.roles_skipped_by_unit_total, 0);
+  assert.ok(JSON.parse(summaryPoint.attrs.fddSensorFaultHours)["sensor-sat-1"].name);
+  assert.ok(http.writes.data.some((row) => sensorPoints.some((p) => p.uuid === row.uuid)));
+  const timelines = http.writes.points.filter((p) => p.layer === "model" && /(^|,)fault_timeline(,|$)/.test(p.attrs.markers));
+  const timelinesByUuid = new Map(timelines.map((p) => [p.uuid, p]));
+  assert.equal([...timelinesByUuid.values()].filter((p) => p.attrs.sensorRef).length, 6);
+  assert.equal([...timelinesByUuid.values()].filter((p) => !p.attrs.sensorRef).length, 1, "equipment timeline remains the any-sensor summary");
+  assert.ok([...timelinesByUuid.values()].filter((p) => p.attrs.sensorRef).every((p) => p.attrs.fddTimelineOf === sensorPoints.find((s) => s.attrs.sensorRef === p.attrs.sensorRef).uuid));
+  const missing = sensorPoints.find((p) => p.attrs.sensorRef === missingSeries);
+  assert.equal(missing.attrs.fddStatus, "not-assessed");
+  assert.equal(missing.attrs.fddCoverageHours, "0");
+  assert.equal(http.writes.data.some((row) => row.uuid === missing.uuid), false);
+  const nextHttp = fakeHttp([], {}, { model: [...multiSensorEquip.sites, ...multiSensorEquip.equips, ...http.writes.points.filter((p) => p.layer === "model")], points: multiSensorEquip.points });
+  await hook.runFdd({ sdk: { http: nextHttp }, pack, createEngine, now: NOW + STEP * 1000 });
+  const nextUuids = nextHttp.writes.points.filter((p) => p.layer === "model" && p.attrs.fddSummary === "sensor").map((p) => p.uuid).sort();
+  assert.deepEqual(nextUuids, sensorPoints.map((p) => p.uuid).sort());
+});
+
+test("every sweep publishes all physical bound sensors; unsupported sensor roles are not-assessed", async () => {
+  const http = fakeHttp([], {}, { model: [...multiSensorEquip.sites, multiSensorEquip.equips[0]],
+    points: multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A") });
+  const sweepIds = ["SV-RATE", "SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE"];
+  const pack = { ...PACK, rules: Object.fromEntries(sweepIds.map((id) => [id, {
+    sql: "-", output_columns: ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"],
+  }])) };
+  const role = (p) => ({
+    "discharge-air-temp-sensor": "sat", "mixed-air-temp-sensor": "mat", "outside-air-temp-sensor": "oa_t",
+    "return-air-temp-sensor": "rat", "discharge-air-pressure-sensor": "duct_static",
+  })[p.attrs.class];
+  const createEngine = async () => ({
+    kind: "sqlite", async load(input) { assert.equal(input.sensorSeries.length, 6); }, async close() {},
+    async query(ruleId) {
+      const all = multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A");
+      const supported = ruleId === "SV-RANGE" ? all : all.filter((p) => p.attrs.class !== "discharge-air-pressure-sensor");
+      return supported.map((p) => ({ equipment_id: "AHU-A", series_id: p.uuid, sensor_role: role(p), fault_hours: 0, covered_hours: 24 }));
+    },
+  });
+  const summary = await hook.runFdd({ sdk: { http }, pack, createEngine, now: NOW });
+  assert.equal(summary.results.length, 5);
+  assert.equal(summary.sensor_results.total, 30);
+  assert.deepEqual(summary.status, { ok: 5, fault: 0, "not-assessed": 0, stale: 0 });
+  for (const ruleId of sweepIds) {
+    const rows = http.writes.points.filter((p) => p.layer === "model" && p.attrs.ruleRef === ruleId && p.attrs.fddSummary === "sensor");
+    assert.equal(rows.length, 6, `${ruleId} should include all six sensor points`);
+    const duct = rows.find((p) => p.attrs.sensorRef === "sensor-static-1");
+    assert.ok(duct);
+    if (ruleId !== "SV-RANGE") {
+      assert.equal(duct.attrs.fddStatus, "not-assessed");
+      assert.equal(duct.attrs.fddCoverageHours, "0");
+    }
+  }
+});
+
+test("result attrs always clear inapplicable coverage and keep or reset the mixed-unit boundary", async () => {
+  const key = hook.resultKey(MODEL[1], "site-a", "AHU-1");
+  const sameOutput = resultRec("CMD-1", { fddOutput: "fault_pct", fddOutputSince: "2026-11-04T12:00:00.000Z", fddCoverageHours: "24" });
+  const kept = await runScripted({ "CMD-1": [{ equipment_id: "AHU-1", fault_pct: null, fault_hours: null, covered_hours: 0 }], "FAN-RUNTIME-HOURS": FAN_OK }, { existing: [sameOutput] });
+  const record = kept.model("CMD-1");
+  assert.equal(record.attrs.fddCoverageHours, "0");
+  assert.equal(record.attrs.fddOutputSince, "2026-11-04T12:00:00.000Z");
+  assert.ok(hook.OFDD_RESULT_ATTRS.every((name) => Object.hasOwn(record.attrs, name)));
+  assert.equal(record.attrs.sensorRef, "");
+  assert.equal(record.attrs.fddSensorFaultHours, "");
+  assert.equal(hook.resultUuid(key, "CMD-1"), record.uuid);
+  const metricOld = resultRec("FAN-RUNTIME-HOURS", { markers: "point,his,metric,fdd", unit: "", fddOutput: "fan_runtime_hours",
+    fddCoverageHours: "24", fddSensorFaultHours: "{\"obsolete\":1}" });
+  const metricRun = await runScripted({ "CMD-1": FAN_OK, "FAN-RUNTIME-HOURS": FAN_OK }, { existing: [metricOld] });
+  const metric = metricRun.model("FAN-RUNTIME-HOURS");
+  assert.equal(metric.attrs.fddCoverageHours, "");
+  assert.equal(metric.attrs.fddSensorFaultHours, "");
+  assert.ok(hook.OFDD_RESULT_ATTRS.every((name) => Object.hasOwn(metric.attrs, name)));
 });
 
 test("fdd status: resultValue contract", () => {
@@ -412,8 +528,10 @@ test("fdd hook: a UNITLESS command point is skipped and logged; rules that need 
   const http = fakeHttp([], {}, { points });
   const seen = { queries: [] };
   const logs = [];
-  await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { dryRun: true }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
+  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: { dryRun: true }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
   assert.ok(logs.some((l) => /fan_cmd.*no unit/.test(l)), logs.join(" / "));
+  assert.deepEqual(summary.roles_skipped_by_unit, { fan_cmd: 1 });
+  assert.ok(logs.some((l) => /roles skipped by unit: 1 \(fan_cmd 1\)/.test(l)), logs.join(" / "));
   assert.deepEqual(seen.queries, [], "CMD-1 and FAN-RUNTIME-HOURS require fan_cmd: not run, so not assessed (no result written)");
   assert.ok(!seen.input || !seen.input.history.some((r) => "fan_cmd" in r), "no fan_cmd value reaches the engine");
 });

@@ -64,8 +64,8 @@ async function connect(config = {}) {
   return client;
 }
 
-/** schema_version of install.sql this release needs (scoped retention = 2). */
-const SCHEMA_VERSION = 2;
+/** schema_version of install.sql this release needs (per-sensor results = 3). */
+const SCHEMA_VERSION = 3;
 
 /** Installed openfdd schema_version, 0 when the schema / config table / key is absent (pre-scoped release = 0). */
 async function schemaVersion(client) {
@@ -125,9 +125,11 @@ async function createTempTables(client, pack) {
  * The scale decisions (fraction / boolean / unitless-skipped) are made ONLY by siPlan; this function applies them and
  * does not look at role names or units to guess one. Roles siPlan skipped are not passed in. Without the two arrays
  * the roles are plain SI conversions by unit.
- * Returns { rows, roles, si: {role: unit}, bytes: 0 }. rows = history rows written (0 = no data in the window).
+ * sensorSeries is the validated sweep binding list with a canonical SI unit per UUID.
+ * Returns counts of wide history rows and long sensor rows, plus wide roles and SI units.
  */
-async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, unitsByUuid = {}, fractionRoles = [], booleanRoles = [], from, to, stepSec }) {
+async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, unitsByUuid = {}, fractionRoles = [], booleanRoles = [],
+  sensorSeries = [], from, to, stepSec }) {
   if (!pack || !pack.contract) throw new Error("loadHistory: pack is required");
   const step = Number(stepSec || pack.poll_seconds);
   if (!(step > 0)) throw new Error("loadHistory: stepSec must be > 0");
@@ -177,6 +179,33 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
   }
   await client.query("CREATE INDEX history_eq_ts ON pg_temp.history (equipment_id, timestamp_utc)");
 
+  let sensorRows = 0;
+  if (sensorSeries.length && pack.contract.sensor_history) {
+    const bindings = sensorSeries.map(({ uuid, role, unit }) => {
+      const factors = siFactors(unitsByUuid[uuid]);
+      return { uuid, role, unit, offset_value: factors.a, multiplier: factors.b };
+    });
+    const res = await client.query(
+      `INSERT INTO pg_temp.sensor_history (equipment_id, series_id, sensor_role, unit, timestamp_utc, value)
+       WITH samples AS (
+         SELECT point_uuid,
+                time_bucket(make_interval(secs => $1::double precision), ts, timestamptz '1970-01-01 00:00:00+00') AS bucket,
+                avg(value) AS value
+         FROM openfdd.nf_samples
+         WHERE point_uuid = ANY($4::text[]) AND ts >= $2::timestamptz AND ts < $3::timestamptz
+         GROUP BY 1, 2
+       )
+       SELECT $5::text, b.uuid, b.role, b.unit, s.bucket, s.value * b.multiplier + b.offset_value
+       FROM samples s
+       JOIN jsonb_to_recordset($6::jsonb)
+         AS b(uuid text, role text, unit text, offset_value double precision, multiplier double precision)
+         ON b.uuid = s.point_uuid
+       WHERE s.value IS NOT NULL`,
+      [step, iso(from), iso(to), [...new Set(bindings.map(({ uuid }) => uuid))], equipId, JSON.stringify(bindings)],
+    );
+    sensorRows = res.rowCount;
+  }
+
   // weather = the outdoor-air roles of the same grid (same as fdd.js buildInput)
   const wcols = pack.contract.weather.map((c) => c.name).filter((n) => n !== "timestamp_utc" && histCols.has(n));
   if (wcols.length) {
@@ -191,7 +220,7 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
     await client.query("INSERT INTO pg_temp.authorized_series (site_id, equipment_id, role, unit) VALUES ($1, $2, $3, $4)", [siteId, equipId, role, unit]);
   }
   await client.query("INSERT INTO pg_temp.equipment (building_id, equipment_id) VALUES ($1, $2)", [siteId, equipId]);
-  return { rows, roles: roles.map(([r]) => r), si };
+  return { rows, sensorRows, roles: roles.map(([r]) => r), si };
 }
 
 /**
@@ -249,13 +278,13 @@ async function runRules(client, pack, ruleIds) {
  * Other numeric outputs and the sweep's per-role hours go to metric.
  */
 function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale", windowStart, windowEnd }) {
-  const known = new Set(["equipment_id", "fault_pct", "fault_hours", "covered_hours"]);
+  const known = new Set(["equipment_id", "series_id", "sensor_role", "fault_pct", "fault_hours", "covered_hours"]);
   const metric = {};
   for (const [k, v] of Object.entries(row)) if (!known.has(k) && typeof v === "number" && Number.isFinite(v)) metric[k] = v;
   if (row.sensor_fault_hours) metric.sensor_fault_hours = row.sensor_fault_hours;
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   return {
-    run_ts: iso(runTs), equip, site, rule_id: ruleId,
+    run_ts: iso(runTs), equip, site, rule_id: ruleId, sensor_ref: row.series_id || "", role: row.sensor_role || null,
     fault_pct: num(row.fault_pct), fault_hours: num(row.fault_hours), covered_hours: num(row.covered_hours),
     metric: Object.keys(metric).length ? metric : null, engine,
     window_start: windowStart == null ? null : iso(windowStart), window_end: windowEnd == null ? null : iso(windowEnd),
@@ -266,14 +295,14 @@ function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale
 async function writeResults(client, rows) {
   let n = 0;
   for (let i = 0; i < rows.length; i += 500) {
-    const part = rows.slice(i, i + 500).map((r) => ({ ...r, run_ts: iso(r.run_ts) }));
+    const part = rows.slice(i, i + 500).map((r) => ({ ...r, sensor_ref: r.sensor_ref ?? "", run_ts: iso(r.run_ts) }));
     const res = await client.query(
       `INSERT INTO openfdd.fdd_results
          SELECT * FROM jsonb_populate_recordset(null::openfdd.fdd_results, $1::jsonb)
-       ON CONFLICT (run_ts, equip, rule_id) DO UPDATE SET
+       ON CONFLICT (run_ts, equip, rule_id, sensor_ref) DO UPDATE SET
          site = EXCLUDED.site, fault_pct = EXCLUDED.fault_pct, fault_hours = EXCLUDED.fault_hours,
          covered_hours = EXCLUDED.covered_hours, metric = EXCLUDED.metric, engine = EXCLUDED.engine,
-         window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end`,
+         window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end, role = EXCLUDED.role`,
       [JSON.stringify(part)],
     );
     n += res.rowCount;

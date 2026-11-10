@@ -16,70 +16,53 @@ base_history AS (
     100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct
   FROM base_proof
 ),
-sensor_rows_raw AS (
-  SELECT equipment_id, 'oa_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, oa_t AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'mat' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, mat AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'zone_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, zone_t AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'rat' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, rat AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'sat' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, sat AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'chw_supply_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, chw_supply_t AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'chw_return_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, chw_return_t AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'hw_supply_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, hw_supply_t AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'hw_return_t' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, hw_return_t AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'oa_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, oa_h AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'ra_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, ra_h AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'zone_rh' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, zone_rh AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'ma_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, ma_h AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'sa_h' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, sa_h AS value FROM base_history
-  UNION ALL
-  SELECT equipment_id, 'duct_static' AS sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct, duct_static AS value FROM base_history
+equipment_summary AS (
+  SELECT equipment_id,
+    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,
+    100.0 * AVG(energized) AS coverage_pct
+  FROM base_proof
+  GROUP BY equipment_id
 ),
-authorized AS (
-  SELECT a.equipment_id, a.role, MAX(a.unit) AS unit, COUNT(*) AS binding_count
-  FROM authorized_series a JOIN equipment e
-    ON e.building_id = a.site_id AND e.equipment_id = a.equipment_id
-  GROUP BY a.equipment_id, a.role
+sensor_series AS (
+  SELECT equipment_id, series_id, sensor_role
+  FROM sensor_history
+  GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
-  SELECT r.equipment_id, r.sensor_role, r.timestamp_utc, r.observed_end_epoch, r.energized, r.coverage_pct,
-    fdd.mask_sweep_val(r.sensor_role, a.unit, r.value) AS value
-  FROM sensor_rows_raw r
-  LEFT JOIN authorized a ON a.equipment_id = r.equipment_id AND a.role = r.sensor_role AND a.binding_count = 1
-),
-valid AS (
-  SELECT equipment_id, sensor_role, timestamp_utc, observed_end_epoch, energized, coverage_pct,
-    EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds, value
-  FROM sensor_rows WHERE value IS NOT NULL
+  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,
+    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch
+      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,
+    COALESCE(bh.energized, 1) AS energized,
+    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
+    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
+    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static')
+      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+  FROM sensor_history s
+  LEFT JOIN base_history bh
+    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc
+  LEFT JOIN equipment_summary hs
+    ON hs.equipment_id = s.equipment_id
+  WHERE s.value IS NOT NULL
 ),
 prior AS (
-  SELECT valid.*,
-    LAG(value) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds) AS previous_value,
-    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,
-    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds) AS previous_epoch
-  FROM valid
+  SELECT sensor_rows.*,
+    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,
+    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,
+    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch
+  FROM sensor_rows
 ),
 prior_groups AS (
   SELECT prior.*,
-    SUM(CASE WHEN previous_epoch IS NULL OR epoch_seconds - previous_epoch > {{MAX_SILENCE_SECONDS}} THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment
+    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > {{MAX_SILENCE_SECONDS}} THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment
   FROM prior
 ),
+valid AS (
+  SELECT * FROM prior_groups WHERE value IS NOT NULL
+),
 windowed AS (
-  SELECT prior_groups.*
-  FROM prior_groups
+  SELECT valid.*
+  FROM valid
 ),
 signals AS (
   SELECT windowed.*,
@@ -99,21 +82,21 @@ segments AS (
 ),
 lagged AS (
   SELECT segments.*,
-    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, sensor_role ORDER BY epoch_seconds), 0) AS previous_raw_fault
+    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault
   FROM segments
 ),
 streak_groups AS (
   SELECT segments.*,
     SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0
              THEN 1 ELSE 0 END) OVER (
-      PARTITION BY equipment_id, sensor_role, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
+      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
     ) AS streak_group
   FROM lagged segments
 ),
 streaks AS (
   SELECT streak_groups.*,
     SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
-      PARTITION BY equipment_id, sensor_role, data_segment, streak_group
+      PARTITION BY equipment_id, series_id, data_segment, streak_group
       ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
     ) AS fault_streak_seconds
   FROM streak_groups
@@ -124,16 +107,25 @@ confirmed_rows AS (
   FROM streaks
 ),
 final AS (
-  SELECT equipment_id, sensor_role, epoch_seconds AS segment_epoch,
+  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,
     normal_confirmed AS confirmed, normal_seconds AS held_seconds
   FROM confirmed_rows WHERE normal_seconds > 0
   UNION ALL
-  SELECT equipment_id, sensor_role,
+  SELECT equipment_id, series_id, sensor_role,
     epoch_seconds + {{MAX_SILENCE_SECONDS}} AS segment_epoch,
     1 AS confirmed, silence_seconds AS held_seconds
   FROM confirmed_rows WHERE silence_seconds > 0
+),
+scored AS (
+  SELECT equipment_id, series_id, sensor_role,
+    SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
+    SUM(held_seconds) / 3600.0 AS covered_hours
+  FROM final
+  GROUP BY equipment_id, series_id, sensor_role
 )
-
-SELECT equipment_id, sensor_role,
-  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours
-FROM final GROUP BY equipment_id, sensor_role;
+SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
+  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  COALESCE(scored.covered_hours, 0.0) AS covered_hours
+FROM sensor_series ss
+LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
+ORDER BY ss.equipment_id, ss.series_id;

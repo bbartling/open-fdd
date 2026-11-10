@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import vm from "node:vm";
+import { multiSensorEquip } from "./fixtures/multi_sensor_equip.mjs";
 
 const dir = new URL("../static/", import.meta.url);
 const load = (...files) => {
@@ -138,4 +139,150 @@ test("FDD catalog covers every registry rule and only names NF classes", () => {
     for (const c of def.classes) assert.ok(nf.has(c), `${role}: ${c} is not an NF class`);
     assert.ok(def.classes.length || def.markers.length, `${role} cannot match anything`);
   }
+});
+
+test("Faults panel expands per-sensor sweep rows and heatmap scales hours separately from percent", async () => {
+  const els = new Map();
+  const el = (id) => { if (!els.has(id)) els.set(id, { hidden: false, checked: false, style: {}, innerHTML: "" }); return els.get(id); };
+  let chartOption = null;
+  const ctx = vm.createContext({
+    console,
+    document: { getElementById: (id) => el(id) },
+    location: { pathname: "/apps/static/open-fdd/" },
+    has: (p, tag) => p.tags.includes(tag),
+    idOf: (e) => e.id,
+    latestOf: (p) => p.value,
+    esc: (s) => String(s ?? "").replace(/[&<>\"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]),
+    fmt: (v) => String(v ?? "–"), dispVal: (_p, v) => v,
+    dispUnit: (p) => p.rec.attrs.unit,
+    parseTs: (v) => Date.parse(v),
+    rcxCurrentOutputSeries: (_p, samples, windowSec = 0) => {
+      const boundary = Date.parse(_p.rec.attrs.fddOutputSince || "");
+      if (!Number.isFinite(boundary)) return Array.from(samples || []);
+      const width = windowSec * 1e3, first = width ? Math.ceil(boundary / width) * width : boundary;
+      return Array.from(samples || []).filter(([t]) => t >= first);
+    },
+    FAULT_LANE: { lineStyle: { color: "#e11d48" } },
+    fetchDisplay: async (points) => new Map(points.map((p) => [p.uuid, p.history || []])),
+    ofddChart: () => ({ setOption: (o) => { chartOption = o; } }),
+  });
+  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  const h = 3600e3;
+  const point = (uuid, name, equipRef, tags, attrs = {}, value = 0, history = []) => ({ uuid, name, dis: name, equipRef, siteRef: attrs.siteRef || "site-fixture", tags, value,
+    latest: { ts: "2026-01-01T00:00:00Z" }, history, rec: { attrs: { ...attrs } } });
+  const mixedHistory = multiSensorEquip.unitBoundarySeries();
+  const mixedBoundary = new Date(mixedHistory[multiSensorEquip.unitBoundaryIndex].ts).toISOString();
+  const sensorRoles = {
+    "sensor-sat-1": "sat", "sensor-sat-2": "sat", "sensor-mat-1": "mat", "sensor-oa-1": "oa_t",
+    "sensor-rat-1": "rat", "sensor-static-1": "duct_static",
+  };
+  const inputs = multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A").map((p) => point(
+    p.uuid, p.attrs.dis, p.attrs.equipRef, p.attrs.markers.split(","), p.attrs, multiSensorEquip.historyValue(p.uuid, 1),
+  ));
+  const rules = ["SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE", "SV-RATE"];
+  const faultRole = { "SV-RANGE": "rat", "SV-FLATLINE": "sensor-sat-2", "SV-SPIKE": "mat", "SV-RATE": "mat" };
+  const results = [];
+  for (const rule of rules) {
+    const values = inputs.map((input) => {
+      const role = sensorRoles[input.uuid];
+      let status = faultRole[rule] === input.uuid || faultRole[rule] === role ? "fault" : "ok";
+      if (rule === "SV-STALE" && input.uuid === "sensor-sat-1") status = "stale";
+      if (rule === "SV-RATE" && input.uuid === "sensor-rat-1") status = "not-assessed";
+      const value = status === "fault" ? 2 : status === "ok" ? 0 : null;
+      return point(`${rule}-${input.uuid}`, `${input.name} ${rule}`, "AHU-A", ["fdd", "fault"], {
+        ruleRef: rule, fddSummary: "sensor", sensorRef: input.uuid, roleRef: role,
+        unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
+        fddStatus: status, fddWindowHours: "24", fddCoverageHours: "24",
+      }, value, [[0, 95], [h, 80], [2 * h, value]]);
+    });
+    results.push(point(`${rule}-summary`, `AHU-A ${rule}`, "AHU-A", ["fdd", "fault"], {
+      ruleRef: rule, fddSummary: "equip", unit: "h", fddOutput: "fault_hours", fddStatus: "fault", fddWindowHours: "24", fddCoverageHours: "24",
+    }, 2, [[2 * h, 2]]), ...values);
+  }
+  const percentResult = point("legacy-pct", "FC1 output", "AHU-A", ["fdd", "fault"], { ruleRef: "FC1", unit: "%", fddOutput: "fault_pct" }, 30, [[h, 30]]);
+  const mixedResult = point(multiSensorEquip.unitBoundaryPoint.uuid, "legacy sweep output", "AHU-A", ["fdd", "fault"], {
+    ruleRef: "SV-LEGACY", fddSummary: "equip", unit: "h", fddOutput: "fault_hours", fddOutputSince: mixedBoundary,
+    fddStatus: "fault", fddWindowHours: "24",
+  }, 2.25, mixedHistory.map((x) => [Date.parse(x.ts), x.value]));
+  const otherSiteResult = point("other-site-result", "other site", "AHU-A", ["fdd", "fault"], {
+    ruleRef: "SV-RANGE", fddSummary: "sensor", sensorRef: "other-sensor", roleRef: "rat", siteRef: "site-other", unit: "h", fddOutput: "fault_hours", fddStatus: "fault",
+  }, 99);
+  const vavResult = point("vav-result", "VAV-only result", "VAV-A", ["fdd", "fault"], {
+    ruleRef: "FC1", siteRef: "site-fixture", unit: "%", fddOutput: "fault_pct", fddStatus: "fault",
+  }, 5);
+  ctx.testModel = { equips: [
+    { id: "AHU-A", name: "AHU-A", attrs: { siteRef: "site-fixture" } },
+    { id: "VAV-A", name: "VAV-A", attrs: { siteRef: "site-fixture" } },
+    { id: "AHU-A", name: "Other AHU-A", attrs: { siteRef: "site-other" } },
+  ], points: [...results, percentResult, mixedResult, otherSiteResult, vavResult, ...inputs] };
+  vm.runInContext("model = testModel", ctx);
+  vm.runInContext('scope.site = "site-fixture"', ctx);
+  await vm.runInContext("renderScopedFddResults()", ctx);
+  let html = el("fddResultRows").innerHTML;
+  assert.match(html, /equipment summary/);
+  assert.match(html, /data-expand=/);
+  assert.match(html, /not-assessed/);
+  assert.match(html, /stale/);
+  assert.doesNotMatch(html, /other-sensor/);
+  assert.match(html, /sensor-1/);
+  assert.match(html, /sensor-2/);
+  assert.equal((html.match(/class="clickable fdd-sensor-row"/g) || []).length, 30, "six rows for each of five SV rules");
+  assert.match(html, /fdd-sensor-row[^>]* hidden/);
+  assert.equal(chartOption.visualMap.find((x) => x.max === 24).text[0], "24 h");
+  assert.equal(chartOption.visualMap.find((x) => x.max === 100).text[0], "100 %");
+  const hSeries = chartOption.series.find((s) => s.name === "h");
+  const hCells = Array.from(hSeries.data, (x) => Array.from(x));
+  assert.ok(hCells.some((x) => x[2] === 2.25), "current h value remains from the shared mixed-history fixture");
+  assert.ok(hCells.every((x) => x[2] !== 18 && x[2] !== 95 && x[2] !== 80), "pre-boundary % history is excluded");
+  const hRow = chartOption.yAxis.data.findIndex((x) => x.includes("SV-RANGE") && x.includes("sensor-5"));
+  assert.match(chartOption.tooltip.formatter({ value: [1, hRow, 2] }), /2 h/);
+  const percentRow = chartOption.yAxis.data.findIndex((x) => x.startsWith("FC1"));
+  assert.match(chartOption.tooltip.formatter({ value: [0, percentRow, 30] }), /30 %/);
+
+  el("fddFaultedOnly").checked = true;
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  html = el("fddResultRows").innerHTML;
+  assert.doesNotMatch(html, /data-rule="SV-RANGE" data-equip="AHU-A" data-sensor="sensor-sat-1"/);
+  assert.doesNotMatch(html, /stale|not-assessed/);
+  el("fddFaultedOnly").checked = false;
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  html = el("fddResultRows").innerHTML;
+  assert.match(html, /stale/);
+  assert.match(html, /not-assessed/);
+  vm.runInContext('scope.equip = "VAV-A"', ctx);
+  await vm.runInContext("renderScopedFddResults()", ctx);
+  assert.match(el("fddResultRows").innerHTML, /data-equip="VAV-A"/);
+  assert.doesNotMatch(el("fddResultRows").innerHTML, /SV-RANGE/);
+  vm.runInContext('scope.equip = "AHU-A"', ctx);
+  await vm.runInContext("renderScopedFddResults()", ctx);
+  assert.match(el("fddResultRows").innerHTML, /SV-RANGE/);
+});
+
+test("point history honors the same mixed-output boundary as FDD plots", async () => {
+  const elements = new Map();
+  const element = (id) => { if (!elements.has(id)) elements.set(id, { textContent: "" }); return elements.get(id); };
+  let plotted = null, requestedWindow = null;
+  const ctx = vm.createContext({
+    console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
+    GENERIC: new Set(), tooltip: {}, unitLabel: (u) => u, dispUnit: (p) => p.rec.attrs.unit,
+    pickWindow: () => 3600,
+    fetchDisplay: async (points, _hours, options) => {
+      requestedWindow = options.windowSec;
+      return new Map(points.map((p) => [p.uuid, [[0, 95], [3600e3, 80], [7200e3, 2], [10800e3, 0]]]));
+    },
+    rcxCurrentOutputSeries: (_p, samples, width) => {
+      const boundary = Date.parse(_p.rec.attrs.fddOutputSince || ""), first = Math.ceil(boundary / (width * 1e3)) * width * 1e3;
+      return samples.filter(([t]) => t >= first);
+    },
+    ofddChart: () => ({}), ofddRender: (_chart, option) => { plotted = option.series[0].data; },
+  });
+  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  const current = { uuid: "legacy", dis: "legacy output", name: "legacy output", kind: "Number", tags: [], rec: { attrs: {
+    unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
+  } } };
+  ctx.testModel = { points: [current] };
+  vm.runInContext('model = testModel; selectedPoint = "legacy"; histHours = 24', ctx);
+  await vm.runInContext("renderPointHistory()", ctx);
+  assert.equal(requestedWindow, 3600, "filter cutoff uses the same bucket width as the NF request");
+  assert.deepEqual(Array.from(plotted, (x) => Array.from(x)), [[7200e3, 2], [10800e3, 0]], "older % buckets are not shown under current h units");
 });

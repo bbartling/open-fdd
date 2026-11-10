@@ -241,11 +241,13 @@ function rcxMatchRank(p, who, model) {
   return ((model.equips || []).filter((e) => idOf(e) === who.id).length <= 1) ? 1 : 0;
 }
 
-function rcxBestPoint(model, equip, ruleId, markers) {
+function rcxBestPoint(model, equip, ruleId, markers, sensorRef = null) {
   const who = rcxEquipIdentity(equip);
   let best = null, bestRank = 0;
   for (const p of model.points) {
     if (!markers.every((m) => has(p, m)) || ((p.rec.attrs || {}).ruleRef || "") !== ruleId) continue;
+    if (sensorRef != null && String((p.rec.attrs || {}).sensorRef || "") !== String(sensorRef)) continue;
+    if (sensorRef == null && (p.rec.attrs || {}).sensorRef) continue;
     const r = rcxMatchRank(p, who, model);
     if (r > bestRank) { best = p; bestRank = r; }
   }
@@ -253,13 +255,22 @@ function rcxBestPoint(model, equip, ruleId, markers) {
 }
 
 /** The FDD hook's fault_pct result point (markers fdd + fault, ruleRef) of an equip + rule, site scoped, or null. */
-function rcxResultPoint(model, equip, ruleId) {
-  return rcxBestPoint(model, equip, ruleId, ["fdd", "fault"]);
+function rcxResultPoint(model, equip, ruleId, sensorRef = null) {
+  return rcxBestPoint(model, equip, ruleId, ["fdd", "fault"], sensorRef);
 }
 
 /** The hook's per-timestamp confirmed-fault point (marker fault_timeline, ruleRef) of an equip + rule, site scoped, or null. */
-function rcxTimelinePoint(model, equip, ruleId) {
-  return rcxBestPoint(model, equip, ruleId, ["fault_timeline"]);
+function rcxTimelinePoint(model, equip, ruleId, sensorRef = null) {
+  return rcxBestPoint(model, equip, ruleId, ["fault_timeline"], sensorRef);
+}
+
+/** Result points for each sensor series in a per-sensor sweep. */
+function rcxSensorResultPoints(model, equip, ruleId) {
+  const who = rcxEquipIdentity(equip);
+  return (model.points || []).filter((p) => has(p, "fdd") && has(p, "fault")
+    && ((p.rec.attrs || {}).ruleRef || "") === ruleId
+    && ((p.rec.attrs || {}).fddSummary === "sensor" || (p.rec.attrs || {}).sensorRef)
+    && rcxMatchRank(p, who, model) > 0);
 }
 
 /**
@@ -282,6 +293,23 @@ const rcxTagLane = (lane, source, approximate) =>
   Object.defineProperties(lane, { source: { value: source }, approximate: { value: approximate } });
 
 /**
+ * Keep a result history in the unit/output currently declared by its attrs.
+ * NF stores one unit attribute per point, not per sample. `fddOutputSince` is
+ * the durable boundary written when the output changes; skip the partial
+ * resample bucket containing that boundary so old and new values are never
+ * averaged/maxed together. Legacy points without the boundary retain history.
+ */
+function rcxCurrentOutputSeries(point, samples, windowSec = 0) {
+  const attrs = (point && point.rec && point.rec.attrs) || {};
+  if (!["fault_pct", "fault_hours"].includes(attrs.fddOutput)) return Array.from(samples || []);
+  const boundary = Date.parse(attrs.fddOutputSince || "");
+  if (!Number.isFinite(boundary)) return Array.from(samples || []);
+  const width = Math.max(0, Number(windowSec) || 0) * 1e3;
+  const firstAllowed = width > 0 ? Math.ceil(boundary / width) * width : boundary;
+  return Array.from(samples || []).filter(([t]) => Number(t) >= firstAllowed);
+}
+
+/**
  * Fault lane [[ms, 1 | 0 | null]] for an equip + rule over `hours` ([] when the rule never ran).
  *   1 confirmed fault, 0 assessed and ok, null not assessed (a gap: the hook wrote nothing there). Never 0 for unknown.
  *   equip = OfddEquip / NF equip record (matches by NF equip uuid, else siteRef + equipRef) or a legacy id string.
@@ -290,16 +318,18 @@ const rcxTagLane = (lane, source, approximate) =>
  * fault_pct fallback, whose 1 means "this hour had a run with fault time", not a confirmed timestamp).
  */
 async function rcxFaultData(model, equip, ruleId, hours, opts = {}) {
-  const tp = rcxTimelinePoint(model, equip, ruleId);
+  const sensorRef = opts.sensorRef == null ? null : opts.sensorRef;
+  const tp = rcxTimelinePoint(model, equip, ruleId, sensorRef);
   if (tp) {
     const windowSec = opts.windowSec || (hours <= 48 ? 300 : 3600);
     const data = await fetchSeries([tp], hours, { method: "MAX", windowSec });
     return rcxTagLane(rcxTimelineLane(data.get(tp.uuid) || [], windowSec), "timeline", false);
   }
-  const p = rcxResultPoint(model, equip, ruleId);
+  const p = sensorRef == null ? rcxResultPoint(model, equip, ruleId) : rcxResultPoint(model, equip, ruleId, sensorRef);
   if (!p) return rcxTagLane([], "none", false);
   const data = await fetchSeries([p], hours, { method: "MAX", windowSec: 3600 });
-  return rcxTagLane((data.get(p.uuid) || []).map(([t, v]) => [t, v == null ? null : v > 0 ? 1 : 0]), "fault_pct", true);
+  const samples = rcxCurrentOutputSeries(p, data.get(p.uuid) || [], 3600);
+  return rcxTagLane(samples.map(([t, v]) => [t, v == null ? null : v > 0 ? 1 : 0]), "fault_pct", true);
 }
 
 /**

@@ -2,6 +2,7 @@
 --
 -- Everything else (install.sql, hooks/lib/timescale.js, the history hook) reads samples through
 --   openfdd.nf_samples(point_uuid text, ts timestamptz, value double precision)
+-- Sweep queries keep point_uuid as the physical sensor identity, even when sensors share a role.
 -- so if NF's tables differ from the default below, edit the SELECT here and re-run this file
 -- (install() in hooks/lib/timescale.js runs it before install.sql; with psql:
 --   psql -f adapter_nf.sql -f install.sql ).

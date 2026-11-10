@@ -21,10 +21,11 @@ the equip's NF uuid plus the rule id, so it is stable across renames), then one 
 | Result point | `point,his,fault,fdd` (rules with a fault output) or `point,his,metric,fdd` | one sample per run: `fault_pct` in `%` (else `fault_hours` in `h`); metric rules: their first output | `fddStatus` (`ok`, `fault`, `not-assessed`, `stale`), `fddReason`, `fddCoverageHours`, `fddLastRun`, `fddWindowHours`, `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddOccSource`, `fddSensorFaultHours` (sensor sweeps) |
 | Fault timeline point (5.0.3, 68 of 77 rules) | `point,his,fault_timeline` (no `fdd`, no `fault`) | one sample per assessed history timestamp: `1` confirmed fault, `0` ok; **no sample** = not assessed (never written as 0) | `ruleRef`, `equipRef`, `siteRef`, `equipUuid`, `fddKind=fault-timeline`, `fddTimelineOf` (uuid of the result point), `fddTimelineThrough` (newest sample written) |
 
-SV-STALE, SV-FLATLINE, SV-RANGE and SV-SPIKE produce one SQL result per assessed sensor role. The existing NF result point
-and Timescale result row report the highest fault-hour total among those roles. The NF point's `fddSensorFaultHours` is a JSON
-object with each role's hours from the latest run. Timescale keeps the same object for each run in `metric.sensor_fault_hours`.
-The equipment timeline is flagged while any assessed role is faulting.
+All five SV sweeps produce one SQL result per sensor UUID. In addition to the equipment summary, NF publishes a result
+and timeline with `sensorRef` and `roleRef`. The result also has `fddSummary=sensor`. The summary's value is the highest sensor fault hours
+and its timeline flags intervals with any faulting sensor. Its `fddSensorFaultHours` maps sensor UUIDs to
+`{role, name, hours, status}`. Timescale keeps this object for each run in `metric.sensor_fault_hours`.
+See the [5.0.10 migration note](operations/nf/migrate-5.0.10.html) for the output history boundary and schema upgrade.
 
 Not assessed is never healthy: a result with no coverage gets `fddStatus: not-assessed` and no numeric value; a
 result that could not be refreshed gets `fddStatus: stale` and keeps its old samples.
@@ -41,10 +42,10 @@ and `newest_source_ts`, and a database failure with `ok: false` and the error.
 
 ## Optional: Timescale `openfdd.fdd_results`
 
-Only on the **full edition with the TimescaleDB engine**: the `fdd` hook also writes one row per (run, equip, rule)
+Only on the **full edition with the TimescaleDB engine**: the `fdd` hook also writes rows keyed by (run, equip, rule, sensor_ref)
 (`fault_pct`, `fault_hours`, `covered_hours`, `metric`, `engine`, window) into the hypertable `openfdd.fdd_results`
 (`nf-app/timescale/install.sql`). It is a convenience copy for SQL users, not the source of truth; the NF points
-above exist either way. It has no per-timestamp timeline (that lives in the NF timeline points). The `history` hook
+above exist either way. Equipment summaries use an empty `sensor_ref`. The per-timestamp timeline lives in NF. The `history` hook
 reads NF's own sample table (long-range min/avg/max per bucket) and needs Timescale too; without it the hook fails with
 `Timescale connection settings not found` (set the app option `timescale`, see [Install](install.html#optional-the-timescaledb-engine)).
 

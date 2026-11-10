@@ -3,6 +3,15 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.10 - 2026-11-09
+
+- Accept explicit NF and BACnet flow, pressure, temperature, and percent aliases. The hook reports skipped units and doctor warns when they occur (#1564).
+- Write Open-FDD result attributes explicitly so NF's merge behavior clears obsolete values on the next run (#1563).
+- Evaluate all five sensor sweeps by point UUID, including multiple sensors with the same role. Sensor points store fault and coverage hours, and the equipment summary retains the highest sensor fault hours. Timescale schema v3 adds `sensor_ref` and `role` and keys results by run, equipment, rule, and sensor (#1565).
+- Show per-sensor fault results and timelines. Display hours and percentages on separate scales and trim summary history at the current output boundary (#1566).
+
+See the [5.0.10 NF migration note](docs/operations/nf/migrate-5.0.10.md) for point identity, the summary JSON shape, and the Timescale upgrade.
+
 ## 5.0.9 - 2026-11-09
 
 - Documented the installer file-presence checks and tested the production HTTP client against NF's empty gRPC 500 response. Known files still fail on read errors (#1557, #1558).

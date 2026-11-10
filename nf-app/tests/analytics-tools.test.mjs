@@ -218,6 +218,44 @@ test("get_fdd_fault_timeline without a timeline point falls back to fault_pct an
   assert.equal(result.approximate, true);
 });
 
+test("analytics fault timeline excludes pre-boundary percent history from current hours output", async () => {
+  const http = nfHttp();
+  const end = Math.ceil(NOW / 3600e3) * 3600e3, boundary = end - 90 * 60e3;
+  const uuid = "mixed-output-result";
+  const point = { uuid, name: "rule result", layer: "default", pointType: "POINT", attrs: {
+    dis: "SV-RANGE", markers: "point,his,fdd,fault", equipRef: "AHU-1", siteRef: "site-a", ruleRef: "SV-RANGE", equipUuid: A.equipUuid,
+    fddOutput: "fault_hours", unit: "h", fddOutputSince: new Date(boundary).toISOString(),
+  } };
+  const post = http.post.bind(http), get = http.get.bind(http);
+  http.post = async (p, body) => {
+    const r = await post(p, body);
+    if (p === "/api/v1/point/query" && body.layer !== "model") {
+      const site = body.structuredQuery?.field?.text;
+      if (!site || site === "site-a") r.data.points.push(point);
+    }
+    return r;
+  };
+  http.get = async (p) => {
+    const r = await get(p);
+    if (p.startsWith("/api/v1/point/data?")) {
+      const q = new URLSearchParams(p.split("?")[1]);
+      if (q.getAll("uuids").includes(uuid)) {
+        const row = r.data.data.find((x) => x.uuid === uuid);
+        row.values = [
+          [end - 3 * 3600e3, 85], [end - 2 * 3600e3, 40], // old percent values
+          [end - 3600e3, 2], [end - 30 * 60e3, 0],       // current hours values
+        ].map(([ms, value]) => ({ ts: new Date(ms).toISOString(), double: value }));
+      }
+    }
+    return r;
+  };
+  const { result } = await ok({ tool: "get_fdd_fault_timeline", equipUuid: A.equipUuid, rule: "SV-RANGE", days: 1 }, { http });
+  assert.equal(result.source, "fault_pct");
+  assert.equal(result.step_s, 3600);
+  assert.deepEqual(result.timeline.map((x) => x.state), ["confirmed", "ok"]);
+  assert.ok(result.timeline.every((x) => Date.parse(x.ts) >= Math.ceil(boundary / 3600e3) * 3600e3));
+});
+
 // ---- 5. resolve_equipment_roles ------------------------------------------------------------------------------------------------
 test("resolve_equipment_roles: bound roles by equipUuid or (siteRef, equipRef); an ambiguous equipRef is an error with candidates", async () => {
   const a = (await ok({ tool: "resolve_equipment_roles", equipUuid: A.equipUuid })).result;

@@ -3125,8 +3125,10 @@
       ],
       "output_columns": [
         "equipment_id",
+        "series_id",
         "sensor_role",
-        "fault_hours"
+        "fault_hours",
+        "covered_hours"
       ],
       "pandas_function": null,
       "parameters": {
@@ -3304,8 +3306,10 @@
       ],
       "output_columns": [
         "equipment_id",
+        "series_id",
         "sensor_role",
-        "fault_hours"
+        "fault_hours",
+        "covered_hours"
       ],
       "pandas_function": null,
       "parameters": {
@@ -3466,8 +3470,10 @@
       ],
       "output_columns": [
         "equipment_id",
+        "series_id",
         "sensor_role",
-        "fault_hours"
+        "fault_hours",
+        "covered_hours"
       ],
       "pandas_function": null,
       "parameters": {
@@ -3653,8 +3659,10 @@
       ],
       "output_columns": [
         "equipment_id",
+        "series_id",
         "sensor_role",
-        "fault_hours"
+        "fault_hours",
+        "covered_hours"
       ],
       "pandas_function": null,
       "parameters": {
@@ -3761,7 +3769,10 @@
       ],
       "output_columns": [
         "equipment_id",
-        "fault_hours"
+        "series_id",
+        "sensor_role",
+        "fault_hours",
+        "covered_hours"
       ],
       "pandas_function": null,
       "parameters": {

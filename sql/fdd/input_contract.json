@@ -672,6 +672,28 @@
           "type": "text"
         }
       }
+    },
+    "sensor_history": {
+      "columns": {
+        "equipment_id": {
+          "type": "text"
+        },
+        "series_id": {
+          "type": "text"
+        },
+        "sensor_role": {
+          "type": "text"
+        },
+        "unit": {
+          "type": "text"
+        },
+        "timestamp_utc": {
+          "type": "timestamp"
+        },
+        "value": {
+          "type": "double"
+        }
+      }
     }
   }
 }

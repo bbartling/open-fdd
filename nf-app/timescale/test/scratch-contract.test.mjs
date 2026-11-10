@@ -85,6 +85,7 @@ test("scratch DDL prepares and executes every PostgreSQL rule with SI fixtures",
   const roleValues = Object.fromEntries(Object.entries(contract.roles).map(([role, spec]) => [role, valueFor(role, spec)]));
   await insertRow("history", { ...base, ...roleValues, timestamp_utc: "2026-10-01T00:00:00Z" });
   await insertRow("history", { ...base, ...roleValues, timestamp_utc: "2026-10-01T00:05:00Z" });
+  await insertRow("history", { ...base, ...roleValues, timestamp_utc: "2026-10-01T00:10:00Z" });
   await insertRow("weather", { timestamp_utc: "2026-10-01T00:00:00Z", oa_t: 20, web_oa_t: 20, web_oa_dp: 10 });
   await insertRow("utility_interval", { timestamp_utc: "2026-10-01T00:00:00Z", kwh: 1 });
   await insertRow("utility_monthly", { billing_period: "2026-10", kwh: 1 });
@@ -92,6 +93,14 @@ test("scratch DDL prepares and executes every PostgreSQL rule with SI fixtures",
   await insertRow("authorized_series", {
     site_id: "fixture-site", equipment_id: "fixture-equipment", role: "oa_t", unit: "degC",
   });
+  for (const [series_id, values] of [["sensor-1", [20, 20, 20]], ["sensor-2", [20, 75, 75]]]) {
+    for (const [index, timestamp_utc] of ["00:00:00Z", "00:05:00Z", "00:10:00Z"].entries()) {
+      await insertRow("sensor_history", {
+        equipment_id: "fixture-equipment", series_id, sensor_role: "sat", unit: "degC",
+        timestamp_utc: `2026-10-01T${timestamp_utc}`, value: values[index],
+      });
+    }
+  }
 
   assert.ok(Object.keys(pack.rules).length > 0, "PostgreSQL rule pack is not empty");
   for (const [index, [ruleId, rule]] of Object.entries(pack.rules).entries()) {
@@ -99,7 +108,13 @@ test("scratch DDL prepares and executes every PostgreSQL rule with SI fixtures",
     const prepared = `scratch_rule_${index}`;
     try {
       await client.query(`PREPARE ${prepared} AS ${statement}`);
-      await client.query(`EXECUTE ${prepared}`);
+      const result = await client.query(`EXECUTE ${prepared}`);
+      if (["SV-RATE", "SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE"].includes(ruleId)) {
+        assert.deepEqual(rule.output_columns, ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"], ruleId);
+        assert.equal(result.rows.length, 2, `${ruleId} must return one row for each of two same-role sensors`);
+        assert.deepEqual(result.rows.map((row) => row.series_id).sort(), ["sensor-1", "sensor-2"]);
+        assert.ok(result.rows.every((row) => Number(row.covered_hours) > 0), `${ruleId} must report per-sensor coverage`);
+      }
     } catch (error) {
       throw new Error(`${ruleId} failed against the canonical scratch contract: ${error.message}`, { cause: error });
     } finally {

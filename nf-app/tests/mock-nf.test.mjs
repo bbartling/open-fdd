@@ -69,3 +69,17 @@ test("mock NF: the GET history route still works next to the POST data route", a
   assert.equal(r.status, 200);
   assert.deepEqual((await r.json()).data, [{ uuid: "nope", values: [] }]);
 });
+
+test("mock NF: UpdatePoints merges attrs within a layer, including explicit empty values", async () => {
+  const basePoint = { uuid: "fixture-merge", name: "fixture", layer: "model" };
+  assert.equal((await post("/api/v1/point/points", { points: [
+    { ...basePoint, attrs: { a: "1", b: "2" } },
+    { ...basePoint, layer: "automation", attrs: { a: "other layer" } },
+  ] })).status, 200);
+  const findPoint = async () => (await (await post("/api/v1/point/query", { layer: "model" })).json())
+    .points.find(({ uuid }) => uuid === basePoint.uuid);
+  assert.equal((await post("/api/v1/point/points", { points: [{ ...basePoint, attrs: { a: "3" } }] })).status, 200);
+  assert.deepEqual((await findPoint()).attrs, { a: "3", b: "2" });
+  assert.equal((await post("/api/v1/point/points", { points: [{ ...basePoint, attrs: { b: "" } }] })).status, 200);
+  assert.deepEqual((await findPoint()).attrs, { a: "3", b: "" });
+});
