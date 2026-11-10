@@ -414,7 +414,9 @@ async function renderPointHistory() {
   const p = model.points.find((x) => x.uuid === selectedPoint);
   if (!p) return;
   $("histHint").textContent = `${p.dis} · ${p.tags.filter((t) => !GENERIC.has(t)).join(" ")}`;
-  const data = (await fetchDisplay([p], histHours)).get(p.uuid) || [];
+  const windowSec = pickWindow(histHours);
+  const history = (await fetchDisplay([p], histHours, { windowSec })).get(p.uuid) || [];
+  const data = rcxCurrentOutputSeries(p, history, windowSec);
   ofddRender(mk("histChart"), {
     tooltip, grid: { left: 50, right: 20, top: 30, bottom: 50 },
     xAxis: { type: "time" },

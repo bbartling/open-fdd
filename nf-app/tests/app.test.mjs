@@ -257,3 +257,32 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   await vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddResultRows").innerHTML, /SV-RANGE/);
 });
+
+test("point history honors the same mixed-output boundary as FDD plots", async () => {
+  const elements = new Map();
+  const element = (id) => { if (!elements.has(id)) elements.set(id, { textContent: "" }); return elements.get(id); };
+  let plotted = null, requestedWindow = null;
+  const ctx = vm.createContext({
+    console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
+    GENERIC: new Set(), tooltip: {}, unitLabel: (u) => u, dispUnit: (p) => p.rec.attrs.unit,
+    pickWindow: () => 3600,
+    fetchDisplay: async (points, _hours, options) => {
+      requestedWindow = options.windowSec;
+      return new Map(points.map((p) => [p.uuid, [[0, 95], [3600e3, 80], [7200e3, 2], [10800e3, 0]]]));
+    },
+    rcxCurrentOutputSeries: (_p, samples, width) => {
+      const boundary = Date.parse(_p.rec.attrs.fddOutputSince || ""), first = Math.ceil(boundary / (width * 1e3)) * width * 1e3;
+      return samples.filter(([t]) => t >= first);
+    },
+    ofddChart: () => ({}), ofddRender: (_chart, option) => { plotted = option.series[0].data; },
+  });
+  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  const current = { uuid: "legacy", dis: "legacy output", name: "legacy output", kind: "Number", tags: [], rec: { attrs: {
+    unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
+  } } };
+  ctx.testModel = { points: [current] };
+  vm.runInContext('model = testModel; selectedPoint = "legacy"; histHours = 24', ctx);
+  await vm.runInContext("renderPointHistory()", ctx);
+  assert.equal(requestedWindow, 3600, "filter cutoff uses the same bucket width as the NF request");
+  assert.deepEqual(Array.from(plotted, (x) => Array.from(x)), [[7200e3, 2], [10800e3, 0]], "older % buckets are not shown under current h units");
+});
