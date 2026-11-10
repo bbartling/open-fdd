@@ -392,8 +392,8 @@ test("mock NF serves read-only schedules and the binding works end to end", asyn
   const scheds = await S.loadSchedules(api);
   assert.equal(scheds.length, 1);
   assert.equal(scheds[0].hoursPerWeek, 55, "Mon-Fri 07:00-18:00");
-  const recs = (await api("/api/v1/point/query", { layer: "model" })).points;
-  const pts = (await api("/api/v1/point/query", { layer: "default" })).points.map((r) => ({ uuid: r.uuid, tags: (r.attrs.markers || "").split(","), cls: r.attrs.class || "", siteRef: r.attrs.siteRef || "" }));
+  const recs = (await api("/api/v1/point/query", { layer: "model", pageSize: 500 })).points;
+  const pts = (await api("/api/v1/point/query", { layer: "default", pageSize: 500 })).points.map((r) => ({ uuid: r.uuid, tags: (r.attrs.markers || "").split(","), cls: r.attrs.class || "", siteRef: r.attrs.siteRef || "" }));
   const model = { sites: recs.filter((r) => r.pointType === "SITE"), points: pts };
   const north = S.pickSiteSchedule(scheds, model, "site-north");
   assert.equal(north.source, "schedule");

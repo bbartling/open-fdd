@@ -22,6 +22,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
+  WHERE sensor_role IN ({{ASSESSABLE_ROLES}})
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -30,12 +31,12 @@ sensor_rows AS (
       THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')
-      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
+    AND s.sensor_role IN ({{ASSESSABLE_ROLES}})
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -119,7 +120,7 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
   COALESCE(scored.covered_hours, 0.0) AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)

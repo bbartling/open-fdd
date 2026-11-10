@@ -77,6 +77,41 @@ test("pickWindow keeps every chart request to ~360 values per series", () => {
   }
 });
 
+test("fetchDisplay chunks 161 and 709 point history reads below the request limit", async () => {
+  const ctx = load("nf.js", "model.js", "charts.js");
+  const requests = [];
+  ctx.fetch = async (url) => {
+    requests.push(String(url));
+    const params = new URL(String(url), "http://mock").searchParams;
+    return { ok: true, status: 200, json: async () => ({ data: [...params.getAll("uuids")].map((uuid) => ({
+      uuid, values: [{ ts: "2026-01-01T00:00:00Z", double: 1 }],
+    })) }) };
+  };
+  for (const count of [161, 709]) {
+    const points = Array.from({ length: count }, (_, i) => ({ uuid: `synthetic-${count}-${i.toString().padStart(4, "0")}`, units: "" }));
+    const before = requests.length;
+    const result = await ctx.fetchDisplay(points, 24, { windowSec: 3600 });
+    const used = requests.slice(before);
+    assert.ok(used.length > 1, `${count} uuids use multiple requests`);
+    assert.ok(used.every((url) => Buffer.byteLength(url) < 8192), "each request stays below the mock front-door limit");
+    assert.ok(used.every((url) => new URL(url, "http://mock").searchParams.getAll("uuids").length <= 40));
+    assert.equal(result.size, count);
+    assert.ok(points.every((p) => result.get(p.uuid)?.length === 1), "all chunk responses are merged");
+  }
+});
+
+test("live update stream caps oversized lists and leaves the complete set to polling", () => {
+  const ctx = load("nf.js");
+  let state, requests = 0;
+  ctx.fetch = async () => { requests++; throw new Error("should use polling"); };
+  const stop = ctx.streamUpdates(Array.from({ length: 161 }, (_, i) =>
+    `00000000-0000-4000-8000-${i.toString(16).padStart(12, "0")}`), () => {}, (up, err) => { state = { up, err }; });
+  assert.equal(requests, 0);
+  assert.equal(state.up, false);
+  assert.match(state.err.message, /safe request limit/);
+  assert.equal(typeof stop, "function");
+});
+
 test("byDay groups samples by local calendar day, in time order", () => {
   const ctx = load("nf.js", "model.js", "charts.js");
   const t0 = new Date(2026, 10, 1, 23, 30).getTime();
@@ -143,8 +178,9 @@ test("FDD catalog covers every registry rule and only names NF classes", () => {
 
 test("Faults panel expands per-sensor sweep rows and heatmap scales hours separately from percent", async () => {
   const els = new Map();
-  const el = (id) => { if (!els.has(id)) els.set(id, { hidden: false, checked: false, style: {}, innerHTML: "" }); return els.get(id); };
-  let chartOption = null;
+  const el = (id) => { if (!els.has(id)) els.set(id, { hidden: false, checked: false, style: {}, innerHTML: "", textContent: "", attrs: {}, classes: new Set(),
+    setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; }, classList: { add: (x) => el(id).classes.add(x), remove: (x) => el(id).classes.delete(x), contains: (x) => el(id).classes.has(x) } }); return els.get(id); };
+  let chartOption = null, disposedCharts = 0;
   const ctx = vm.createContext({
     console,
     document: { getElementById: (id) => el(id) },
@@ -163,6 +199,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
       return Array.from(samples || []).filter(([t]) => t >= first);
     },
     FAULT_LANE: { lineStyle: { color: "#e11d48" } },
+    echarts: { getInstanceByDom: () => ({ dispose: () => { disposedCharts++; } }) },
     fetchDisplay: async (points) => new Map(points.map((p) => [p.uuid, p.history || []])),
     ofddChart: () => ({ setOption: (o) => { chartOption = o; } }),
   });
@@ -256,6 +293,68 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   vm.runInContext('scope.equip = "AHU-A"', ctx);
   await vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddResultRows").innerHTML, /SV-RANGE/);
+  el("fddLanes").textContent = "echarts canvas marker";
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  assert.equal(el("fddLanes").textContent, "echarts canvas marker", "normal rerenders preserve chart DOM");
+  assert.equal(disposedCharts, 0, "normal rerenders reuse the live chart instance");
+  ctx.fetchDisplay = async () => { throw new Error("history unavailable"); };
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  assert.equal(el("fddLanes").hidden, false);
+  assert.equal(el("fddLanes").attrs.role, "alert");
+  assert.match(el("fddLanes").textContent, /history unavailable/);
+  assert.equal(disposedCharts, 1, "replace chart DOM only after disposing its instance");
+  ctx.fetchDisplay = async (points) => new Map(points.map((p) => [p.uuid, p.history || []]));
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  assert.equal(el("fddLanes").textContent, "", "successful recovery clears only the prior error text");
+  assert.equal(el("fddLanes").attrs.role, undefined);
+  assert.equal(el("fddLanes").classes.has("history-error"), false);
+});
+
+test("161 fault lanes render an option using the real chunked fetchDisplay path", async () => {
+  const elements = new Map();
+  const el = (id) => {
+    if (!elements.has(id)) elements.set(id, { hidden: false, checked: false, style: {}, innerHTML: "", textContent: "", attrs: {}, classes: new Set(),
+      setAttribute(k, v) { this.attrs[k] = v; }, removeAttribute(k) { delete this.attrs[k]; },
+      classList: { add: (x) => el(id).classes.add(x), remove: (x) => el(id).classes.delete(x), contains: (x) => el(id).classes.has(x) } });
+    return elements.get(id);
+  };
+  const requests = [];
+  let option = null;
+  const ctx = vm.createContext({
+    console, URLSearchParams, TextDecoder,
+    document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" },
+    has: (p, tag) => p.tags.includes(tag), idOf: (e) => e.id,
+    latestOf: (p) => p.latest?.double, esc: (s) => String(s ?? "").replace(/[&<>\"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]),
+    fmt: (v) => String(v ?? "–"), dispVal: (_p, v) => v, dispUnit: (p) => p.units || "",
+    rcxCurrentOutputSeries: (_p, samples) => samples,
+    FAULT_LANE: { lineStyle: { color: "#e11d48" } },
+    echarts: { getInstanceByDom: () => null },
+    fetch: async (url) => {
+      requests.push(url);
+      assert.ok(Buffer.byteLength(url) < 6500, "mock front door allows each chunk");
+      const params = new URLSearchParams(url.split("?")[1]);
+      const ids = params.getAll("uuids");
+      assert.ok(ids.length <= 40);
+      return { ok: true, json: async () => ({ data: ids.map((uuid) => ({ uuid, values: [{ ts: "2026-01-01T00:00:00Z", double: 1 }] })) }) };
+    },
+    ofddChart: () => ({ setOption: (built) => { option = built; } }),
+  });
+  for (const file of ["nf.js", "model.js", "charts.js", "app.js"]) {
+    vm.runInContext(readFileSync(new URL(`../static/${file}`, import.meta.url), "utf8"), ctx, { filename: file });
+  }
+  const points = Array.from({ length: 161 }, (_, i) => {
+    const uuid = `00000000-0000-4000-8000-${i.toString(16).padStart(12, "0")}`;
+    return { uuid, name: `sensor-${i}`, dis: `sensor-${i}`, units: "h", equipRef: "equip-1", siteRef: "site-1", tags: ["fdd", "fault"], latest: { double: 1, ts: "2026-01-01T00:00:00Z" },
+      rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: uuid, roleRef: "sat", fddSummary: "sensor", fddOutput: "fault_hours", fddStatus: "fault" } } };
+  });
+  ctx.testModel = { equips: [{ id: "equip-1", name: "equip-1", attrs: { siteRef: "site-1" } }], points };
+  vm.runInContext('model = testModel; scope.site = "site-1"', ctx);
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  assert.ok(requests.length > 1, "the rendered lanes read history in multiple bounded requests");
+  assert.equal(option.yAxis.data.length, 161);
+  assert.equal(option.series.length, 1);
+  assert.ok(option.series[0].data.length > 0, "the chart option has plotted lane data");
+  assert.equal(el("fddLanes").hidden, false);
 });
 
 test("point history honors the same mixed-output boundary as FDD plots", async () => {

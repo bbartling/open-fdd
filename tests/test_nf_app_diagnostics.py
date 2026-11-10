@@ -268,7 +268,8 @@ def test_rrule_interval_and_timestamp_helpers():
     assert sync.parse_ts("garbage") is None and sync.parse_ts(None) is None
 
 
-def test_doctor_fails_on_frozen_fdd_and_stays_read_only(tmp_path, capsys):
+def test_doctor_fails_on_frozen_fdd_and_stays_read_only(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(sync, "timescale_schema_check", lambda *_args, **_kwargs: ("PASS", "Timescale schema version 3"))
     m, nf = doctor_nf(tmp_path, sites=[{"id": "s", "latitude": 43.0, "longitude": -89.0}],
                       redirect=(302, {"Location": "https://h/api/v1/apps/static/new-app/"}), timescale=True)
     real = nf.call

@@ -26,6 +26,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
+  WHERE sensor_role IN ({{ASSESSABLE_ROLES}})
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -35,14 +36,14 @@ sensor_rows AS (
     COALESCE(bh.energized, 1) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')
-      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN base_history bh
     ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
+    AND s.sensor_role IN ({{ASSESSABLE_ROLES}})
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -148,7 +149,7 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
   COALESCE(scored.covered_hours, 0.0) AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)

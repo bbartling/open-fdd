@@ -4442,7 +4442,7 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     for role in FLATLINE_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-FLATLINE"):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -4526,7 +4526,7 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-RANGE"):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -4681,7 +4681,7 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     for role in SPIKE_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-SPIKE"):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -4773,7 +4773,7 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     present = [
         r
         for r in FLATLINE_SENSOR_ROLES
-        if r in d.columns and sweep_assessable_role(r, None, units_map)
+        if r in d.columns and sweep_assessable_role(r, None, units_map, rule_id="SV-STALE")
     ]
     per_role: dict[str, pd.Series] = {}
     for role in present:

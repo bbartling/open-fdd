@@ -11,8 +11,8 @@ import numpy as np
 import pandas as pd
 
 from open_fdd.rules.base import confirm_fault
+from open_fdd.rules.sensor_sweep_catalog import ASSESSABLE_ROLES_BY_SWEEP
 from open_fdd.rules.sensor_rate_profiles import (
-    ROLE_TO_PROFILE,
     SensorRateProfile,
     apply_profile_overrides,
     resolve_profile,
@@ -28,7 +28,7 @@ OperatingState = Literal[
 
 IntervalClass = Literal["STEADY", "TRANSIENT", "OFF", "UNKNOWN_STATE", "INSUFFICIENT_DATA"]
 
-RATEABLE_ROLES: tuple[str, ...] = tuple(ROLE_TO_PROFILE.keys())
+RATEABLE_ROLES: tuple[str, ...] = ASSESSABLE_ROLES_BY_SWEEP["SV-RATE"]
 MAX_GAP_HOURS_DEFAULT = 2.0
 # Noise deadband profiles (e.g. CO2 100 ppm) are authored for ~5-minute samples.
 DEADBAND_REFERENCE_HOURS = 5.0 / 60.0

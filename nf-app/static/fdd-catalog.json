@@ -4,6 +4,7 @@
   "sql/fdd/registry.yaml",
   "sql/fdd/role_map.json",
   "sql/fdd/input_contract.json",
+  "open_fdd/data/sensor_sweep_roles.json",
   "nf-app/rules/role_overrides.json"
  ],
  "equipment_kinds": {
@@ -937,6 +938,77 @@
    ],
    "scale": "si:degC"
   }
+ },
+ "sensor_sweep_roles": {
+  "SV-RANGE": [
+   "oa_t",
+   "mat",
+   "zone_t",
+   "rat",
+   "sat",
+   "chw_supply_t",
+   "chw_return_t",
+   "hw_supply_t",
+   "hw_return_t",
+   "oa_h",
+   "ra_h",
+   "zone_rh",
+   "ma_h",
+   "sa_h",
+   "duct_static"
+  ],
+  "SV-FLATLINE": [
+   "oa_t",
+   "mat",
+   "zone_t",
+   "rat",
+   "sat",
+   "chw_supply_t",
+   "chw_return_t",
+   "hw_supply_t",
+   "hw_return_t",
+   "oa_h",
+   "ra_h",
+   "zone_rh",
+   "ma_h",
+   "sa_h"
+  ],
+  "SV-SPIKE": [
+   "oa_t",
+   "mat",
+   "zone_t",
+   "rat",
+   "sat",
+   "chw_supply_t",
+   "chw_return_t",
+   "hw_supply_t",
+   "hw_return_t",
+   "oa_h",
+   "duct_static"
+  ],
+  "SV-STALE": [
+   "oa_t",
+   "mat",
+   "zone_t",
+   "rat",
+   "sat",
+   "chw_supply_t",
+   "chw_return_t",
+   "hw_supply_t",
+   "hw_return_t",
+   "oa_h",
+   "ra_h",
+   "zone_rh",
+   "ma_h",
+   "sa_h"
+  ],
+  "SV-RATE": [
+   "oa_t",
+   "mat",
+   "zone_t",
+   "rat",
+   "sat"
+  ]
  },
  "rules": [
   {

@@ -29,4 +29,9 @@ When a new trap shows up, add it to `docs/operations/nf/nf-gotchas.md` in the sa
     print path or verify aborts after a successful install (#1560).
 13. **UpdatePoints merges point attributes.** An omitted attribute can survive a result update. Write every
     Open-FDD result attribute and send an empty string for values that do not apply. Treat an empty or missing
-    value the same when reading. Whether NF removes the key or stores the empty string is unconfirmed (#1563).
+    value the same when reading. A disposable NF 3.10.9-1 lab stored empty strings and normalized null
+    attribute values to empty strings (#1563).
+14. **Large history URLs can fail at the NF front door.** Keep UUID lists bounded and merge history chunks
+    before rendering. The HTTP mock enforces a request-size limit (#1571).
+15. **Timescale runtime roles cannot migrate installer-owned objects.** Check the schema before uploading app
+    files and apply migrations as the installer role when needed (#1570).

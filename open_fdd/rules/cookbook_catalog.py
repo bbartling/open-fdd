@@ -26,7 +26,7 @@ from open_fdd.rules.mode_delay import (
     resolve_mode_delay_params,
 )
 from open_fdd.rules.sensor_sweep_catalog import (
-    flatline_quantity_allowed,
+    ASSESSABLE_ROLES_BY_SWEEP,
     limits_for_haystack_role,
     quantity_for_haystack_role,
     sweep_assessable_role,
@@ -205,23 +205,7 @@ def flatline_mask(series: pd.Series, tol: float, window: int) -> pd.Series:
 # Per-sensor validation limits (SI: °C, %, Pa; see sensor_sweep_catalog)
 # ---------------------------------------------------------------------------
 
-SWEEP_ROLE_CATALOG: tuple[str, ...] = (
-    "outside-air-temp",
-    "return-air-temp",
-    "mixed-air-temp",
-    "discharge-air-temp",
-    "zone-air-temp",
-    "chilled-water-supply-temp",
-    "chilled-water-return-temp",
-    "hot-water-supply-temp",
-    "hot-water-return-temp",
-    "outside-air-humidity",
-    "return-air-humidity",
-    "zone-air-humidity",
-    "mixed-air-humidity",
-    "supply-air-humidity",
-    "duct-static-pressure",
-)
+SWEEP_ROLE_CATALOG: tuple[str, ...] = ASSESSABLE_ROLES_BY_SWEEP["SV-RANGE"]
 
 SENSOR_LIMITS: dict[str, dict[str, float]] = {
     role: lim
@@ -230,24 +214,14 @@ SENSOR_LIMITS: dict[str, dict[str, float]] = {
 }
 
 # Sensor roles the validation sweep will check on any equipment (if present)
-SWEEP_SENSOR_ROLES = list(SENSOR_LIMITS.keys())
+SWEEP_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-RANGE"])
 
 # Flatline/stale detection targets analog temperature & humidity sensors only.
 # Pressure points (e.g. duct static) legitimately rest at ~0 when equipment is off,
 # so they would false-positive as "stuck" — exclude them from stuck-sensor sweeps.
-FLATLINE_SENSOR_ROLES = [
-    r
-    for r in SWEEP_SENSOR_ROLES
-    if quantity_for_haystack_role(r) and flatline_quantity_allowed(quantity_for_haystack_role(r) or "")
-]
+FLATLINE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-FLATLINE"])
 
-# SV-SPIKE's established SQL contract includes 9 temperature roles, outdoor
-# humidity, and duct static. Other humidity roles are checked by SV-RANGE.
-SPIKE_SENSOR_ROLES = [
-    "outside-air-temp", "mixed-air-temp", "zone-air-temp", "return-air-temp", "discharge-air-temp",
-    "chilled-water-supply-temp", "chilled-water-return-temp", "hot-water-supply-temp",
-    "hot-water-return-temp", "outside-air-humidity", "duct-static-pressure",
-]
+SPIKE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-SPIKE"])
 
 
 def sensor_type_for_role(role: str) -> str:
@@ -712,7 +686,7 @@ LEGACY_SUPPLY_PARAM = lambda: CookbookParam(  # noqa: E731
 
 # ---------------------------------------------------------------------------
 # Sensor validation sweep (SV-1/2/3 range, SV-5 stale, SV-6 flatline, SV-7 spike)
-# Applied to EVERY sensor present in the data model for the equipment.
+# Applied only to the canonical assessable roles present in the equipment data.
 # ---------------------------------------------------------------------------
 
 
@@ -732,7 +706,7 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-RANGE"):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -769,7 +743,7 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     for role in FLATLINE_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-FLATLINE"):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -801,7 +775,7 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     for role in SPIKE_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-SPIKE"):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -839,7 +813,7 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     present = [
         r
         for r in FLATLINE_SENSOR_ROLES
-        if r in d.columns and sweep_assessable_role(r, None, units_map)
+        if r in d.columns and sweep_assessable_role(r, None, units_map, rule_id="SV-STALE")
     ]
     per_role: dict[str, pd.Series] = {}
     for role in present:

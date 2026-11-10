@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Final
+
+_ROLE_FILE = Path(__file__).resolve().parents[1] / "data" / "sensor_sweep_roles.json"
+ASSESSABLE_ROLES_BY_SWEEP: Final[dict[str, tuple[str, ...]]] = {
+    rule_id: tuple(roles) for rule_id, roles in json.loads(_ROLE_FILE.read_text(encoding="utf-8")).items()
+}
+if set(ASSESSABLE_ROLES_BY_SWEEP) != {"SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE", "SV-RATE"}:
+    raise ValueError(f"{_ROLE_FILE}: expected exactly the five sensor sweep rules")
 
 # SI only: temperature degC (spike = delta-degC), humidity %, air pressure Pa. The same numbers
 # are the literals in sql/fdd/postgres/rules/sv_range.sql and sv_spike.sql.
@@ -108,7 +117,15 @@ def unit_declares_quantity(unit: str | None, quantity: str) -> bool:
     return False
 
 
-def sweep_assessable_role(role: str, unit: str | None, units_map: dict[str, str] | None = None) -> bool:
+def sweep_assessable_role(
+    role: str,
+    unit: str | None,
+    units_map: dict[str, str] | None = None,
+    *,
+    rule_id: str | None = None,
+) -> bool:
+    if rule_id is not None and role not in ASSESSABLE_ROLES_BY_SWEEP.get(rule_id, ()):
+        return False
     if is_expected_constant_role(role):
         return False
     lim = limits_for_haystack_role(role)

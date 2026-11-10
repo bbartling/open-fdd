@@ -9656,7 +9656,7 @@ Sensor flatline (stuck)
 **Output columns**: `equipment_id`, `series_id`, `sensor_role`, `fault_hours`, `covered_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (155 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_flatline.sql">template file</a></summary>
+<summary>SQL at defaults (156 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_flatline.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -9687,6 +9687,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
+  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -9696,14 +9697,14 @@ sensor_rows AS (
     COALESCE(bh.energized, 1) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')
-      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN base_history bh
     ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
+    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -9809,7 +9810,7 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
   COALESCE(scored.covered_hours, 0.0) AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
@@ -9872,7 +9873,7 @@ Sensor out of hard range
 **Output columns**: `equipment_id`, `series_id`, `sensor_role`, `fault_hours`, `covered_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (131 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_range.sql">template file</a></summary>
+<summary>SQL at defaults (132 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_range.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -9903,6 +9904,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
+  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static')
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -9912,14 +9914,14 @@ sensor_rows AS (
     COALESCE(bh.energized, 1) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static')
-      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN base_history bh
     ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
+    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static')
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -10001,7 +10003,7 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
   COALESCE(scored.covered_hours, 0.0) AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
@@ -10042,7 +10044,7 @@ Context-aware sensor rate of change
 **Output columns**: `equipment_id`, `series_id`, `sensor_role`, `fault_hours`, `covered_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (126 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_rate.sql">template file</a></summary>
+<summary>SQL at defaults (127 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_rate.sql">template file</a></summary>
 
 ```sql
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
@@ -10069,6 +10071,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
+  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -10077,12 +10080,12 @@ sensor_rows AS (
       THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')
-      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
+    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -10166,7 +10169,7 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
   COALESCE(scored.covered_hours, 0.0) AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
@@ -10223,7 +10226,7 @@ Sensor rate-of-change spike
 **Output columns**: `equipment_id`, `series_id`, `sensor_role`, `fault_hours`, `covered_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (131 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_spike.sql">template file</a></summary>
+<summary>SQL at defaults (132 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_spike.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -10254,6 +10257,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
+  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static')
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -10263,14 +10267,14 @@ sensor_rows AS (
     COALESCE(bh.energized, 1) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static')
-      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN base_history bh
     ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
+    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static')
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -10352,7 +10356,7 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
   COALESCE(scored.covered_hours, 0.0) AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
@@ -10399,7 +10403,7 @@ Stale data (no fresh samples)
 **Output columns**: `equipment_id`, `series_id`, `sensor_role`, `fault_hours`, `covered_hours`
 
 <details markdown="1">
-<summary>SQL at defaults (155 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql">template file</a></summary>
+<summary>SQL at defaults (156 lines) · <a href="https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql">template file</a></summary>
 
 ```sql
 WITH base_proof AS (
@@ -10430,6 +10434,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
+  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -10439,14 +10444,14 @@ sensor_rows AS (
     COALESCE(bh.energized, 1) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    CASE WHEN s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')
-      THEN fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) ELSE NULL END AS value
+    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN base_history bh
     ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
+    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -10552,7 +10557,7 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  COALESCE(scored.fault_hours, 0.0) AS fault_hours,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
   COALESCE(scored.covered_hours, 0.0) AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)

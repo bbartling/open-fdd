@@ -112,6 +112,7 @@ main { padding: 20px 24px 40px; max-width: 1500px; margin: 0 auto; }
   border: 1px dashed var(--line); overflow: hidden;
 }
 .chart.rendered { border-style: solid; }
+#fddLanes.history-error { height: auto; min-height: 0; padding: 14px; color: var(--hot); border-style: solid; }
 .chart.tall { height: 420px; }
 .chart.short { height: 260px; }
 .chart.full { height: calc(100vh - 190px); min-height: 380px; }

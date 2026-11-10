@@ -5,6 +5,13 @@ from __future__ import annotations
 import importlib.util
 from types import SimpleNamespace
 from pathlib import Path
+import base64
+import json
+import os
+import shutil
+import socket
+import subprocess
+import time
 
 import pytest
 
@@ -128,6 +135,199 @@ def test_resume_needs_exactly_one_hook():
     clock = FakeClock()
     with pytest.raises(SystemExit, match="--resume needs exactly one hook"):
         run(FakeConsole(clock, {}), clock, resume=1)
+
+
+def _app(engine="auto", timescale=None):
+    opts = [{"name": "engine", "value": {"string": engine}}]
+    if timescale is not None:
+        opts.append({"name": "timescale", "value": {"string": timescale}})
+    return {"options": opts, "hooks": []}
+
+
+def test_timescale_schema_preflight_engine_selection_and_lite_skip(monkeypatch):
+    assert sync.timescale_schema_check({})[0] == "SKIP"  # Lite has no engine/config
+    assert sync.timescale_schema_check(_app("sqlite", "postgresql://db/x"))[0] == "SKIP"
+    assert sync.timescale_schema_check(_app("pglite"), {"NF_TIMESCALE_PREFLIGHT_DSN": "postgresql://db/x"})[0] == "SKIP"
+    assert sync.timescale_schema_check(_app("auto"))[0] == "SKIP"
+    assert sync.timescale_schema_check(_app("timescale"))[0] == "FAIL"
+
+
+@pytest.mark.parametrize(("stdout", "expected"), [("3\n", "PASS"), ("2\n", "FAIL"), ("\n", "FAIL")])
+def test_timescale_schema_preflight_exact_version(stdout, expected, monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    seen = {}
+    def run(args, **kwargs):
+        seen.update(args=args, **kwargs)
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="secret should not escape")
+    app = _app("auto", "postgresql://alice:password@db.example/fdd?sslmode=require")
+    level, message = sync.timescale_schema_check(app, {}, runner=run)
+    assert level == expected
+    assert "password" not in message
+    assert "password" not in " ".join(seen["args"])
+    assert "-w" in seen["args"]
+    assert seen["env"]["PGPASSWORD"] == "password"
+    assert "CONSOLE_PASSWORD" not in seen["env"]
+    assert "BEGIN TRANSACTION READ ONLY" in seen["args"][-1]
+    assert seen["timeout"] == 10
+
+
+def test_timescale_schema_preflight_uses_password_env_without_logging(monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    seen = {}
+    def run(args, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="3\n", stderr="")
+    raw = json.dumps({"host": "db.example", "database": "fdd", "passwordEnv": "DB_SECRET"})
+    level, message = sync.timescale_schema_check(_app("timescale", raw), {"DB_SECRET": "top-secret"}, runner=run)
+    assert level == "PASS" and "top-secret" not in message
+    assert seen["env"]["PGPASSWORD"] == "top-secret"
+
+
+def test_timescale_schema_preflight_env_override_wins_and_failures_are_redacted(monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    seen = {}
+    def run(args, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=2, stdout="", stderr="postgres://secret")
+    level, message = sync.timescale_schema_check(
+        _app("timescale", "postgresql://old:secret@old/db"),
+        {"NF_TIMESCALE_PREFLIGHT_DSN": "postgresql://new:override@new/db"}, runner=run)
+    assert level == "FAIL"
+    assert "secret" not in message and "postgres://secret" not in message
+    assert seen["env"]["PGHOST"] == "new"
+    assert seen["env"]["PGPASSWORD"] == "override"
+    monkeypatch.setattr(sync.shutil, "which", lambda _: None)
+    assert "psql is unavailable" in sync.timescale_schema_check(_app("timescale", "postgresql://db/x"))[1]
+
+
+def test_timescale_schema_version_matches_runtime_constant():
+    source = Path(__file__).resolve().parents[1] / "nf-app" / "hooks" / "lib" / "timescale.js"
+    import re
+    match = re.search(r"const SCHEMA_VERSION = (\d+);", source.read_text(encoding="utf-8"))
+    assert match and int(match.group(1)) == 3
+
+
+@pytest.mark.parametrize(("verify_rc", "restored"), [(sync.EXIT_FAILED, True), (sync.EXIT_STILL_RUNNING, False)])
+def test_install_verification_failure_restores_snapshot(monkeypatch, capsys, verify_rc, restored):
+    app_id = "open-fdd"
+    old_version = b'{"version":"5.0.10"}'
+    class Console:
+        def __init__(self):
+            self.files = {"/hooks/fdd.js": b"old-hook", "/static/version.json": old_version}
+            self.record = {"id": app_id, "status": sync.INSTALLED,
+                           "files": [{"path": p} for p in self.files],
+                           "options": [{"name": "version", "value": {"string": "5.0.10"}}],
+                           "configuration": {"version": {"string": "5.0.10"}},
+                           "hooks": [{"id": "fdd", "entryPoint": "/hooks/fdd.js", "config": {"old": True}}]}
+            self.hooks = {"fdd": self.record["hooks"][0]}
+        def apps(self): return [self.record]
+        def app(self, _): return self.record
+        def read_file(self, _, path, **kwargs): return self.files.get(path)
+        def call(self, method, path, body=None, **kwargs):
+            if "/files" in path:
+                self.files[path.split("/files", 1)[1]] = base64.b64decode(body)
+            elif path.endswith("/hooks") and method == "POST":
+                self.hooks[body["id"]] = body
+            elif path.endswith("/restart"):
+                pass
+            elif path == f"/api/v1/apps/{app_id}" and "options" in (body or {}).get("updateMask", []):
+                self.record["options"] = body["options"]
+            elif path == f"/api/v1/apps/{app_id}" and "configuration" in (body or {}).get("updateMask", []):
+                self.record["configuration"] = body["configuration"]
+            return {}
+    c = Console()
+    m = {"application": {"id": app_id}, "_dir": Path("."),
+         "files": {"/hooks/fdd.js": "hooks/fdd.js"},
+         "hooks": [{"id": "fdd", "entryPoint": "/hooks/fdd.js", "mode": "MODE_ON_REQUEST"}]}
+    args = SimpleNamespace(skip_hooks=False, hooks=None, skip_deps=True, force=True, save_remote=None,
+                           skip_verify_run=True, wait=None, remove_old=False, yes=False, _environ={})
+    monkeypatch.setattr(sync, "preflight", lambda *_: {app_id: c.record})
+    monkeypatch.setattr(sync, "timescale_schema_check", lambda *_: ("SKIP", ""))
+    monkeypatch.setattr(sync, "version_info", lambda *_: {"version": "5.0.11", "commit": "new", "dirty": False})
+    def push(*_args, **_kwargs):
+        c.files["/hooks/fdd.js"] = b"new-hook"
+        c.files["/static/version.json"] = b'{"version":"5.0.11"}'
+        c.record["options"] = [{"name": "version", "value": {"string": "5.0.11"}}]
+        c.record["configuration"] = {"version": {"string": "5.0.11"}}
+        c.hooks["fdd"] = {"id": "fdd", "config": {"new": True}}
+        return 0
+    monkeypatch.setattr(sync, "cmd_push", push)
+    monkeypatch.setattr(sync, "verify_install", lambda *_args, **_kwargs: verify_rc)
+    assert sync.cmd_install(c, m, args) == verify_rc
+    if restored:
+        assert c.files == {"/hooks/fdd.js": b"old-hook", "/static/version.json": old_version}
+        assert c.record["options"] == [{"name": "version", "value": {"string": "5.0.10"}}]
+        assert c.record["configuration"] == {"version": {"string": "5.0.10"}}
+        assert c.hooks["fdd"]["config"] == {"old": True}
+        assert "previous files, settings and hooks restored" in capsys.readouterr().out
+    else:
+        assert c.files["/hooks/fdd.js"] == b"new-hook"
+        assert "no rollback or predecessor removal" in capsys.readouterr().out
+
+
+def test_verify_version_mismatch_does_not_start_scheduled_hooks(monkeypatch):
+    monkeypatch.setattr(sync, "version_info", lambda *_: {"version": "5.0.11"})
+    called = []
+    monkeypatch.setattr(sync, "cmd_run", lambda *_args, **_kwargs: called.append(True) or sync.EXIT_STILL_RUNNING)
+    c = SimpleNamespace(app=lambda _: {"options": []},
+                        read_file=lambda *_args, **_kwargs: b'{"version":"5.0.10"}')
+    m = {"application": {"id": "open-fdd"}, "_dir": Path("."),
+         "hooks": [{"id": "fdd", "mode": "MODE_SCHEDULED"}]}
+    assert sync.verify_install(c, m) == sync.EXIT_FAILED
+    assert not called
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="mock NF installer integration requires Node")
+def test_install_mock_nf_forced_verify_failure_restores_previous_app(tmp_path, monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    mock = root / "nf-app" / "dev" / "mock-nf.mjs"
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    proc = subprocess.Popen([shutil.which("node"), str(mock), str(port)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        base = f"http://127.0.0.1:{port}"
+        for _ in range(100):
+            try:
+                with sync.urllib.request.urlopen(base + "/api/v1/apps", timeout=0.2):
+                    break
+            except Exception:
+                if proc.poll() is not None:
+                    raise AssertionError("mock NF exited before becoming ready")
+                time.sleep(0.05)
+        old_version = b'{"version":"5.0.10","files":{}}'
+        old_hook = {"id": "fdd", "entryPoint": "/hooks/fdd.js", "mode": "MODE_ON_REQUEST", "config": {"old": True}}
+        initial = {"files": ["/hooks/fdd.js", "/static/version.json"],
+                   "contents": {"/hooks/fdd.js": base64.b64encode(b"old-hook").decode(),
+                                "/static/version.json": base64.b64encode(old_version).decode()},
+                   "options": [{"name": "version", "value": {"string": "5.0.10"}}],
+                   "configuration": {"version": {"string": "5.0.10"}}, "hooks": [old_hook]}
+        req = sync.urllib.request.Request(base + "/api/v1/_mock/install/state", data=json.dumps(initial).encode(),
+                                          headers={"Content-Type": "application/json"}, method="POST")
+        sync.urllib.request.urlopen(req, timeout=2).read()
+        c = sync.Console(base, "mock", "mock")
+        (tmp_path / "fdd.js").write_bytes(b"new-hook")
+        m = {"application": {"id": "open-fdd", "auth": {"mock": True}}, "_dir": tmp_path,
+             "files": {"/hooks/fdd.js": "fdd.js"},
+             "hooks": [{"id": "fdd", "entryPoint": "/hooks/fdd.js", "mode": "MODE_ON_REQUEST", "config": {"new": True}}]}
+        monkeypatch.setattr(sync, "version_info", lambda *_: {"version": "5.0.11", "commit": "new", "dirty": False})
+        args = SimpleNamespace(skip_hooks=False, hooks=None, skip_deps=True, force=True, save_remote=None,
+                               skip_verify_run=True, wait=None, remove_old=False, yes=False,
+                               _environ={})
+        assert sync.cmd_install(c, m, args) == sync.EXIT_FAILED
+        assert c.read_file("open-fdd", "/hooks/fdd.js") == b"old-hook"
+        assert c.read_file("open-fdd", "/static/version.json") == old_version
+        app = c.app("open-fdd")
+        assert app["options"][0]["value"]["string"] == "5.0.10"
+        assert app["configuration"]["version"]["string"] == "5.0.10"
+        assert app["hooks"][0]["config"] == {"old": True}
+        assert "auth" not in app, "guarded install leaves the app auth scopes untouched"
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
 
 def test_transient_poll_errors_do_not_abort_or_restart():

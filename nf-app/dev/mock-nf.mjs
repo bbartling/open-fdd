@@ -175,10 +175,11 @@ function query(body) {
   const layer = body.layer || "default";
   const f = textOf(body.structuredQuery);
   const out = [...new Map([...seedPoints, ...updatedPoints]).values()].filter((r) => (layer === "default" || r.layer === layer)
-    && (!f || String((r.attrs || {})[f[0]] ?? "") === f[1])).map(withLatest);
+    && (!f || String((r.attrs || {})[f[0]] ?? "") === f[1])).map(withLatest)
+    .sort((a, b) => a.uuid.localeCompare(b.uuid));
   // Like NF 3.10.x: pages by pageOffset + pageSize and reports totalCount, with NO nextPageToken (#1550).
-  // No pageSize in the request = everything (older callers).
-  const size = Number(body.pageSize) > 0 ? Number(body.pageSize) : out.length;
+  // NF 3.10.9-1 returns no rows for an absent/zero pageSize and ignores tokens.
+  const size = Number(body.pageSize) || 0;
   const off = Number(body.pageOffset) > 0 ? Number(body.pageOffset) : 0;
   return { points: out.slice(off, off + size), totalCount: String(out.length) };
 }
@@ -217,13 +218,64 @@ let runs = [];
 const writes = { points: [], data: [], calls: [] };
 const note = (route, n) => writes.calls.push({ route, n });
 
-const server = http.createServer(async (req, res) => {
+// Minimal installer API fixture. It is isolated from the synthetic point store and exists only
+// to exercise snapshot/verify/rollback behavior; it does not model authentication or NF secrets.
+const installApp = { id: "open-fdd", name: "Open-FDD", status: "APP_STATUS_INSTALLED", files: [],
+  options: [], configuration: {}, hooks: [] };
+const installFiles = new Map();
+let failVersionRead = false;
+
+// Let the fixture's front-door guard respond before Node rejects a large request line.
+const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) => {
+  // Model the request-line + header ceiling seen behind common NF front doors.
+  const headerBytes = req.rawHeaders.reduce((n, part) => n + Buffer.byteLength(part), 0);
+  if (req.method === "GET" && (Buffer.byteLength(req.url || "") > 6500 || headerBytes > 8192)) {
+    return json(res, 431, { error: "request URL or headers exceed the mock NF limit" });
+  }
   const url = new URL(req.url, `http://${req.headers.host}`);
   const p = url.pathname;
   let body = "";
   for await (const chunk of req) body += chunk;
   let b = {};
   try { b = body ? JSON.parse(body) : {}; } catch (e) { return json(res, 400, { error: "mock-nf: invalid JSON body" }); }
+  if (p === "/api/v1/_mock/install/state" && req.method === "POST") {
+    installApp.files = Array.isArray(b.files) ? b.files.map((path) => ({ path })) : [];
+    installApp.options = b.options || [];
+    installApp.configuration = b.configuration || {};
+    installApp.hooks = b.hooks || [];
+    installFiles.clear();
+    for (const [name, value] of Object.entries(b.contents || {})) installFiles.set(name, Buffer.from(value, "base64"));
+    failVersionRead = false;
+    return json(res, 200, { success: true });
+  }
+  if (p === "/api/v1/apps") return json(res, 200, { applications: [installApp] });
+  const appFile = p.match(/^\/api\/v1\/apps\/open-fdd\/files(\/.*)$/);
+  if (appFile && req.method === "GET") {
+    if (appFile[1] === "/static/version.json" && failVersionRead) return json(res, 503, { error: "forced verify failure" });
+    const data = installFiles.get(appFile[1]);
+    return data ? json(res, 200, { data: data.toString("base64") }) : json(res, 404, { error: "missing file" });
+  }
+  if (appFile && req.method === "POST") {
+    if (typeof b !== "string") return json(res, 400, { error: "file body must be base64 string" });
+    const data = Buffer.from(b, "base64");
+    installFiles.set(appFile[1], data);
+    if (appFile[1] === "/static/version.json") {
+      try { failVersionRead = JSON.parse(data.toString("utf8")).version === "5.0.11"; } catch { failVersionRead = false; }
+    }
+    if (!installApp.files.some((x) => x.path === appFile[1])) installApp.files.push({ path: appFile[1] });
+    return json(res, 200, { success: true });
+  }
+  if (p === "/api/v1/apps/open-fdd" && req.method === "PATCH") {
+    for (const field of b.updateMask || []) if (field in b) installApp[field] = b[field];
+    return json(res, 200, { success: true });
+  }
+  if (p === "/api/v1/apps/open-fdd/hooks" && req.method === "POST") {
+    const i = installApp.hooks.findIndex((h) => h.id === b.id);
+    if (i < 0) installApp.hooks.push(b); else installApp.hooks[i] = b;
+    return json(res, 200, { success: true });
+  }
+  if (p === "/api/v1/apps/open-fdd/dependencies" && req.method === "PATCH") return json(res, 200, { success: true });
+  if (p === "/api/v1/apps/open-fdd/restart" && req.method === "PATCH") return json(res, 200, { success: true });
   if (p === "/" || p === "/api/v1/apps/static/open-fdd") { res.writeHead(302, { Location: APP_PREFIX }); return res.end(); }
   if (p === `${APP_PREFIX}version.json`) {
     // Same shape nf_app_sync.py writes on deploy (VERSION + git commit); dev mock marks it "dev".
@@ -244,7 +296,10 @@ const server = http.createServer(async (req, res) => {
     return res.end(fs.readFileSync(file));
   }
   if (p === "/api/v1/platform/info") return json(res, 200, { version: "mock-3.10", provider: "", resources: [{ memory: { totalBytes: String(4 * 1024 ** 3) } }] });
-  if (p === "/api/v1/point/query") return json(res, 200, query(b));
+  if (p === "/api/v1/point/query") {
+    if (Number(b.pageOffset) < 0 || Number(b.pageSize) < 0) return json(res, 400, { error: "negative paging argument" });
+    return json(res, 200, query(b));
+  }
   if (p === "/api/v1/point/data" && req.method !== "POST") return json(res, 200, data(url.searchParams));
   if (p === "/api/v1/_mock/writes") {
     if (req.method === "DELETE") {
@@ -263,7 +318,8 @@ const server = http.createServer(async (req, res) => {
     for (const point of b.points) {
       const key = pointKey(point);
       const prior = updatedPoints.get(key) || seedPoints.get(key);
-      updatedPoints.set(key, { ...prior, ...point, attrs: { ...prior?.attrs, ...point.attrs } });
+      const attrs = Object.fromEntries(Object.entries(point.attrs ?? {}).map(([k, v]) => [k, v ?? ""]));
+      updatedPoints.set(key, { ...prior, ...point, attrs: { ...prior?.attrs, ...attrs } });
     }
     writes.points.push(...b.points); note(p, b.points.length);
     return json(res, 200, { results: b.points.map((r) => ({ uuid: r.uuid, success: true, newVersion: "1" })) });

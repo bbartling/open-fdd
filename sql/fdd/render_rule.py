@@ -4,6 +4,9 @@ All tuning values are SI (degC, delta-degC, Pa, L/s, ...); the rules read SI inp
 import argparse, json, math, re, sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parent
+REPO_ROOT = ROOT.parents[1]
+SWEEP_ROLE_SOURCE = REPO_ROOT / "open_fdd" / "data" / "sensor_sweep_roles.json"
+ROLE_MAP_SOURCE = ROOT / "role_map.json"
 
 def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None):
     rules = json.loads((ROOT / 'tuning_catalog.json').read_text())['rules']
@@ -57,6 +60,19 @@ def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None):
         values['WEB_ASOF_BOUND_SECONDS'] = round(values['WEB_CADENCE_SECONDS'] + values['WEB_ASOF_MARGIN_SECONDS'])
     folder = ROOT / 'postgres' / 'rules'
     sql = (folder / rule['sql_file']).read_text(encoding='utf-8')
+    if '{{ASSESSABLE_ROLES}}' in sql:
+        sweep_roles = json.loads(SWEEP_ROLE_SOURCE.read_text(encoding='utf-8'))
+        role_map = json.loads(ROLE_MAP_SOURCE.read_text(encoding='utf-8'))
+        inverse = {name: role for role, name in role_map.items()}
+        names = sweep_roles.get(rule['rule_id'])
+        if not names:
+            raise ValueError(f'No canonical assessable roles for {rule_id}')
+        missing = [name for name in names if name not in inverse]
+        if missing:
+            raise ValueError(f'Canonical sweep roles missing SQL mappings for {rule_id}: {missing}')
+        sql_roles = [inverse[name] for name in names]
+        allowed = ', '.join("'" + role.replace("'", "''") + "'" for role in sql_roles)
+        sql = sql.replace('{{ASSESSABLE_ROLES}}', allowed)
     # Substitution is numeric only; data scope/identifiers belong in bound application queries.
     def replace(match):
         key = match[1]

@@ -3,6 +3,14 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.11 - 2026-11-10
+
+- Split large history requests so Faults lanes can render through NF's front door. Show a visible history error in the panel and retain the unit scales and mixed-history cutover (#1571, #1566).
+- Publish sensor results only for roles the sweep assesses. Persist null fault hours for an assessable sensor with no coverage and keep numeric zero for an assessed sensor without faults (#1572).
+- Check the Timescale schema before an install and in doctor. Restore the previous app if post-install verification fails (#1570).
+
+See the [5.0.11 NF migration note](docs/operations/nf/migrate-5.0.11.md).
+
 ## 5.0.10 - 2026-11-09
 
 - Accept explicit NF and BACnet flow, pressure, temperature, and percent aliases. The hook reports skipped units and doctor warns when they occur (#1564).
