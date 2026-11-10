@@ -35,11 +35,23 @@ const path = require("path");
 const normUnit = (v) => (v == null ? "" : String(v).replace(/[^a-zA-Z0-9]/g, "").toLowerCase());
 
 const QUANTITY = {
-  oa_t: "absolute_temperature", rat: "absolute_temperature", zone_t: "absolute_temperature",
-  mat: "absolute_temperature", sat: "absolute_temperature", chw_supply_t: "absolute_temperature",
-  chw_return_t: "absolute_temperature", hw_supply_t: "absolute_temperature", hw_return_t: "absolute_temperature",
-  oa_h: "relative_humidity", ra_h: "relative_humidity", zone_rh: "relative_humidity", zone_h: "relative_humidity",
-  ma_h: "relative_humidity", sa_h: "relative_humidity", duct_static: "air_pressure",
+  ahu_sat: "absolute_temperature", chw_return_t: "absolute_temperature", chw_supply_sp: "absolute_temperature",
+  chw_supply_t: "absolute_temperature", cooling_coil_entering_temp: "absolute_temperature",
+  cooling_coil_leaving_temp: "absolute_temperature", cooling_sp: "absolute_temperature", cw_return_t: "absolute_temperature",
+  cw_supply_t: "absolute_temperature", heating_coil_entering_temp: "absolute_temperature",
+  heating_coil_leaving_temp: "absolute_temperature", heating_sp: "absolute_temperature", hw_return_t: "absolute_temperature",
+  hw_supply_t: "absolute_temperature", mat: "absolute_temperature", oa_t: "absolute_temperature",
+  preheat_leave_t: "absolute_temperature", rat: "absolute_temperature", sat: "absolute_temperature",
+  sat_sp: "absolute_temperature", vav_discharge_t: "absolute_temperature", vav_inlet_t: "absolute_temperature",
+  web_oa_dp: "absolute_temperature", web_oa_t: "absolute_temperature", web_wb_t: "absolute_temperature",
+  zone_air_temp_sp: "absolute_temperature", zone_t: "absolute_temperature",
+  ma_h: "relative_humidity", oa_h: "relative_humidity", ra_h: "relative_humidity", sa_h: "relative_humidity",
+  web_oa_h: "relative_humidity", zone_rh: "relative_humidity",
+  chw_dp: "air_pressure", chw_dp_sp: "air_pressure", duct_static: "air_pressure", duct_static_sp: "air_pressure",
+  chw_flow: "volume_flow", min_flow_sp: "volume_flow", vav_total_flow: "volume_flow", zone_airflow_sp: "volume_flow", zone_flow: "volume_flow",
+  chiller_power: "power", electric_kw: "power", electric_kwh: "energy", kwh: "energy",
+  chiller_amps: "electric_current", chiller_current: "electric_current", zone_co2: "concentration",
+  chw_reset_request_sum: "count", hw_reset_request_sum: "count", static_reset_request: "count",
 };
 const quantityForRole = (role) => (role == null ? null : QUANTITY[String(role).trim()] || null);
 
@@ -53,6 +65,12 @@ const unitDeclaresQuantity = (unit, quantity) => {
   if (quantity === "air_pressure") {
     return ["pa", "pascal"].includes(n) ? 1 : 0;
   }
+  if (quantity === "volume_flow") return n === "ls" ? 1 : 0;
+  if (quantity === "power") return n === "kw" ? 1 : 0;
+  if (quantity === "energy") return n === "kwh" ? 1 : 0;
+  if (quantity === "electric_current") return n === "a" ? 1 : 0;
+  if (quantity === "concentration") return n === "ppm" ? 1 : 0;
+  if (quantity === "count") return n === "count" ? 1 : 0;
   return 0;
 };
 
@@ -96,6 +114,7 @@ const HELPERS = {
 const TABLE_INPUT_KEY = {
   history: "history", weather: "weather", utility_interval: "utilityInterval",
   utility_monthly: "utilityMonthly", authorized_series: "authorizedSeries", equipment: "equipment",
+  sensor_history: "sensorHistory",
 };
 // Which input key feeds a contract column (timestamp_utc is fed from `ts`, epoch ms).
 const inputKey = (col) => (col === "timestamp_utc" ? "ts" : col);
@@ -298,23 +317,23 @@ async function createTimescale(pack, opts = {}) {
   if (!opts.client) ts.requireConfig(opts.config);   // engine "timescale" without config.timescale fails visibly, never falls back
   const client = opts.client || (await ts.connect(opts.config));
   const owned = !opts.client;
-  const warnings = [];
   try {
-    // First run, or an install older than this release (global retention): (re)apply install.sql. That needs the
-    // INSTALLER role; a runtime-only role keeps working but retention refuses until install.sql is run.
+    // The v3 result upsert requires the migrated key before any result writes.
     const ver = await ts.schemaVersion(client);
     if (ver < ts.SCHEMA_VERSION) {
       try { await ts.install(client); } catch (e) {
-        if (ver === 0) throw e;
-        warnings.push(`openfdd schema upgrade not applied (${e.message}); run timescale/install.sql as the installer role`);
+        throw new Error(`openfdd schema upgrade not applied (${e.message}); run timescale/install.sql as the installer role`);
       }
     }
   } catch (e) { if (owned) await client.end(); throw e; }
   return {
     kind: "timescale",
     client,
-    warnings,
-    async load(args) { return (await ts.loadHistory(client, { pack, ...args })).rows; },
+    warnings: [],
+    async load(args) {
+      const { rows, sensorRows } = await ts.loadHistory(client, { pack, ...args });
+      return rows || sensorRows;
+    },
     async query(ruleId) {
       const { results, errors } = await ts.runRules(client, pack, [ruleId]);
       if (errors[ruleId]) throw new Error(errors[ruleId]);

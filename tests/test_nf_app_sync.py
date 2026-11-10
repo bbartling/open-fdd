@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -171,3 +172,27 @@ def test_report_run_replaces_non_cp1252_event_and_ok_false_text(monkeypatch):
     output = "".join(out.parts)
     assert "event emoji ?" in output
     assert "hook returned ok:false: failure ?" in output
+
+
+@pytest.mark.parametrize(("result", "event", "warn"), [
+    ({"roles_skipped_by_unit": {"zone_flow": 1}}, "unrelated", True),
+    ({}, "roles skipped by unit: 1 (zone_flow 1)", True),
+    ({"roles_skipped_by_unit": {}}, "roles skipped by unit: 0", False),
+])
+def test_doctor_warns_only_when_latest_fdd_run_skipped_units(monkeypatch, tmp_path, capsys, result, event, warn):
+    hook = {"id": "fdd", "entryPoint": "/hooks/fdd.js"}
+    run = {"state": "STATE_SUCCESS", "results": {"g": {"result": result, "events": [{"message": event}]}}}
+    console = SimpleNamespace(
+        apps=lambda: [{"id": "open-fdd", "hooks": [hook]}],
+        call=lambda *_: {"runs": [run]},
+        read_file=lambda *_: b'{"version":"5.0.10"}',
+        probe=lambda *_: (200, {}),
+    )
+    monkeypatch.setattr(sync, "version_info", lambda *_: {"version": "5.0.10"})
+    monkeypatch.setattr(sync, "fdd_freshness", lambda *_: ("pass", "fresh"))
+    monkeypatch.setattr(sync, "find_drift", lambda *_: {})
+    monkeypatch.setattr(sync, "hand_edit_line", lambda *_: ("PASS", "hand edits", "none"))
+    manifest = {"application": {"id": "open-fdd"}, "_dir": tmp_path, "hooks": [hook]}
+    assert sync.cmd_doctor(console, manifest) == 0
+    output = capsys.readouterr().out
+    assert ("[WARN] fdd units: roles skipped by unit: 1 (zone_flow 1)" in output) is warn

@@ -27,7 +27,8 @@ const close = (a, b) => {
 };
 
 const sortRows = (rows) => [...rows].sort((x, y) =>
-  String(x.equipment_id).localeCompare(String(y.equipment_id)) || String(x.sensor_role || "").localeCompare(String(y.sensor_role || "")));
+  String(x.equipment_id).localeCompare(String(y.equipment_id)) || String(x.series_id || "").localeCompare(String(y.series_id || "")) ||
+  String(x.sensor_role || "").localeCompare(String(y.sensor_role || "")));
 
 /** Returns a list of difference strings (empty = match). */
 function diffRows(pg, lite) {
@@ -73,7 +74,7 @@ test("dataset covers every contract column (typed NULL for the rest) on both eng
   assert.equal(input.history.length, 2 * 864 - 40);
   assert.ok(Object.keys(pgPack.contract.history).length > 60);
   assert.deepEqual(Object.keys(pgPack.contract).sort(),
-    ["authorized_series", "equipment", "history", "utility_interval", "utility_monthly", "weather"]);
+    ["authorized_series", "equipment", "history", "sensor_history", "utility_interval", "utility_monthly", "weather"]);
 });
 
 test("every rule runs without error on both engines", () => {
@@ -132,11 +133,11 @@ test("timeline_sql: PGlite == SQLite for every rule (rows, timestamps, confirmed
       const a = results.tlPg[rid], b = results.tlLite[rid];
       assert.equal(a.length, b.length, `${rid}: row count ${a.length} (pglite) vs ${b.length} (sqlite)`);
       assert.ok(a.length > 0, `${rid}: timeline is empty`);
-      const perRole = pgPack.rules[rid].output_columns.includes("sensor_role");
-      assert.deepEqual(Object.keys(a[0]), perRole
-        ? ["equipment_id", "sensor_role", "ts_epoch", "confirmed", "held_seconds"]
+      const perSeries = pgPack.rules[rid].output_columns.includes("series_id");
+      assert.deepEqual(Object.keys(a[0]), perSeries
+        ? ["equipment_id", "series_id", "sensor_role", "ts_epoch", "confirmed", "held_seconds"]
         : ["equipment_id", "ts_epoch", "confirmed", "held_seconds"]);
-      const key = (r) => `${r.equipment_id}|${r.sensor_role || ""}|${Number(r.ts_epoch).toFixed(3)}`;
+      const key = (r) => `${r.equipment_id}|${r.series_id || ""}|${r.sensor_role || ""}|${Number(r.ts_epoch).toFixed(3)}`;
       const by = new Map(b.map((r) => [key(r), r]));
       for (const r of a) {
         const o = by.get(key(r));
@@ -157,9 +158,9 @@ test("timeline_sql: confirmed seconds add up to the rule's fault_hours (the lane
     for (const row of results.lite[rid] || []) {
       if (row.fault_hours == null) continue;
       const mine = results.tlLite[rid].filter((r) => r.equipment_id === row.equipment_id &&
-        (row.sensor_role == null || r.sensor_role === row.sensor_role));
+        (row.series_id == null || r.series_id === row.series_id) && (row.sensor_role == null || r.sensor_role === row.sensor_role));
       const hours = mine.reduce((a, r) => a + (Number(r.confirmed) === 1 ? Number(r.held_seconds) : 0), 0) / 3600;
-      assert.ok(close(hours, Number(row.fault_hours)), `${rid} ${row.equipment_id}${row.sensor_role ? `/${row.sensor_role}` : ""}: timeline ${hours} h vs fault_hours ${row.fault_hours}`);
+      assert.ok(close(hours, Number(row.fault_hours)), `${rid} ${row.equipment_id}${row.series_id ? `/${row.series_id}` : row.sensor_role ? `/${row.sensor_role}` : ""}: timeline ${hours} h vs fault_hours ${row.fault_hours}`);
       checked++;
       if (hours > 0) nonZero++;
     }
@@ -171,6 +172,19 @@ test("output columns match the pack's declared output_columns", () => {
   for (const [rid, rule] of Object.entries(litePack.rules)) {
     const rows = results.lite[rid] || [];
     if (rows.length) assert.deepEqual(Object.keys(rows[0]).sort(), [...rule.output_columns].sort(), rid);
+  }
+});
+
+test("all five SV sweeps keep same-role points separate and return coverage per series", () => {
+  const sweeps = ["SV-RATE", "SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE"];
+  const rowsFor = (rule, equipment) => (results.lite[rule] || []).filter((r) => r.equipment_id === equipment);
+  for (const rid of sweeps) {
+    const rows = rowsFor(rid, "AHU-1");
+    assert.ok(rows.length > 1, `${rid} has multiple per-sensor rows`);
+    assert.equal(new Set(rows.map((r) => r.series_id)).size, rows.length, `${rid} keeps unique series IDs`);
+    assert.ok(rows.every((r) => Object.hasOwn(r, "covered_hours")), `${rid} exposes covered hours`);
+    const sat = rows.filter((r) => r.sensor_role === "sat");
+    assert.equal(sat.length, 2, `${rid} retains duplicate SAT bindings as two sensor rows`);
   }
 });
 

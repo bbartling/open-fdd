@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { multiSensorEquip } from "./fixtures/multi_sensor_equip.mjs";
 
 const dir = new URL("../static/", import.meta.url);
 const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
@@ -170,6 +171,59 @@ test("rule plot without a result point draws signals only; without bound inputs 
   assert.match(note, /no result point/);
   assert.equal(plain(ctx.last.rendered.option).grid.length, 1);
   assert.match(await ctx.fddRulePlot({ style: {} }, { rule, equipRec: { name: "E", attrs: {} }, bound: {} }), /No bound input/);
+});
+
+test("SV rule plot draws six fixture sensors with sensor-specific status and timelines", async () => {
+  const roleByUuid = {
+    "sensor-sat-1": "sat", "sensor-sat-2": "sat", "sensor-mat-1": "mat", "sensor-oa-1": "oa_t",
+    "sensor-rat-1": "rat", "sensor-static-1": "duct_static",
+  };
+  const data = {};
+  const bound = {};
+  const inputs = multiSensorEquip.points.filter((p) => p.attrs.equipRef === "AHU-A").map((raw) => {
+    const input = pt(raw.uuid, raw.attrs.dis, { units: raw.attrs.unit, equipRef: "AHU-A", siteRef: "site-fixture", rec: { attrs: raw.attrs } });
+    const role = roleByUuid[raw.uuid];
+    (bound[role] ||= []).push(input);
+    data[raw.uuid] = Array.from({ length: 288 }, (_, i) => [i * 300e3, multiSensorEquip.historyValue(raw.uuid, i)]);
+    return input;
+  });
+  const sensorResults = [], timelines = [];
+  for (const input of inputs) {
+    const role = roleByUuid[input.uuid], status = input.uuid === "sensor-mat-1" ? "fault" : "ok";
+    sensorResults.push(pt(`result-${input.uuid}`, `${input.dis} result`, { tags: ["point", "fdd", "fault"], equipRef: "AHU-A", siteRef: "site-fixture",
+      rec: { attrs: { ruleRef: "SV-RATE", sensorRef: input.uuid, fddSummary: "sensor", fddStatus: status, roleRef: role, unit: "h", fddOutput: "fault_hours" } } }));
+    timelines.push(pt(`timeline-${input.uuid}`, `${input.dis} timeline`, { tags: ["point", "his", "fault_timeline"], equipRef: "AHU-A", siteRef: "site-fixture",
+      rec: { attrs: { ruleRef: "SV-RATE", sensorRef: input.uuid, roleRef: role, markers: "point,his,fault_timeline" } } }));
+    data[`timeline-${input.uuid}`] = [[0, 0], [300e3, status === "fault" ? 1 : 0]];
+  }
+  const ctx = load(data);
+  const equipRec = { name: "AHU-A", attrs: { id: "AHU-A", siteRef: "site-fixture" } };
+  const model = { equips: [equipRec], points: [...sensorResults, ...timelines, ...inputs] };
+  const note = await ctx.fddRulePlot({ style: {} }, { rule: { id: "SV-RATE", required_roles: [], optional_roles: ["sat", "mat", "oa_t", "rat"] },
+    equipRec, bound, model, hours: 24 });
+  const o = plain(ctx.last.rendered.option);
+  assert.match(note, /6 input sensors · 6 per-sensor timelines · 1 faulted/);
+  assert.equal(o.series.length, 12, "six input lines and one lane per sensor");
+  assert.equal(o.series.find((s) => s.name.includes("sensor-3")).lineStyle.color, "red", "mat gets its own fault color");
+  assert.equal(o.series.find((s) => s.name.includes("sensor-1")).lineStyle.color, "#16a34a", "healthy SAT keeps its own status color");
+  for (const raw of inputs) assert.ok(o.series.some((s) => s.name.includes(raw.dis)), `${raw.dis} plotted`);
+  const lanes = o.series.slice(-6);
+  assert.equal(lanes.length, 6);
+  assert.ok(lanes.some((s) => s.name.includes("sensor-3")), "spiking MAT has its own lane");
+  assert.deepEqual(Array.from(lanes.find((s) => s.name.includes("sensor-3")).data, (x) => Array.from(x)), [[0, 0], [300e3, 1]]);
+});
+
+test("legacy result history in a rule plot is cut at its % to h output boundary", async () => {
+  const sat = pt("sat", "sat");
+  const res = pt("res", "result", { tags: ["fdd", "fault"], rec: { attrs: {
+    ruleRef: "SV-RANGE", unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
+  } } });
+  const ctx = load({ sat: [[2 * H, 55]], res: [[0, 95], [H, 80], [2 * H, 2], [3 * H, 0]] });
+  const note = await ctx.fddRulePlot({ style: {} }, { rule: { id: "SV-RANGE", required_roles: ["sat"], optional_roles: [] },
+    equipRec: { name: "AHU-1", attrs: {} }, bound: { sat: [sat] }, resultPoint: res, hours: 24 });
+  const lane = plain(ctx.last.rendered.option.series.at(-1));
+  assert.deepEqual(lane.data, [[2 * H, 1], [3 * H, 0]]);
+  assert.match(note, /fault in 1 of 2/);
 });
 
 test("OAT-METEO view: lane from rcxFaultData is the last grid; omitted when no result point", async () => {

@@ -26,14 +26,15 @@ def test_every_role_has_a_typed_history_column_and_scale():
 def test_contract_declares_metadata_relations_and_every_rule_relation():
     contract = load_contract()
     assert set(contract) == {
-        "history", "weather", "utility_interval", "utility_monthly", "authorized_series", "equipment",
+        "history", "weather", "utility_interval", "utility_monthly", "authorized_series", "equipment", "sensor_history",
     }
     assert {"site_id", "equipment_id", "role", "unit"} <= {c["name"] for c in contract["authorized_series"]}
     assert {"building_id", "equipment_id"} <= {c["name"] for c in contract["equipment"]}
 
     sv_sql = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "sql/fdd/postgres/rules").glob("sv_*.sql"))
-    assert re.search(r"\bFROM\s+authorized_series\b", sv_sql, re.I)
-    assert re.search(r"\bJOIN\s+equipment\b", sv_sql, re.I)
+    assert sv_sql.count("sensor_series AS (") == 5
+    assert re.search(r"\bseries_id\b", sv_sql, re.I)
+    assert re.search(r"\bsensor_role\b", sv_sql, re.I)
 
 
 def test_standalone_ddl_and_role_scale_compatibility_are_generated():

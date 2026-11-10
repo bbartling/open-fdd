@@ -40,6 +40,7 @@ KNOWN_DIVERGENT = {
 
 
 NO_TWIN = {"AVG-ZONE-TEMP", "FAN-RUNTIME-HOURS", "FAULT-ELAPSED-HOURS", "UTIL-INTERVAL", "UTIL-MONTHLY", "ZONE-COMFORT-PCT"}
+SWEEP_RULES = ("SV-RATE", "SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE")
 
 
 @pytest.fixture(scope="session")
@@ -83,6 +84,7 @@ def test_dataset_follows_the_declared_scales(data):
 
 def test_sql_engines_agree(data):
     pg, lite = data["results"]["pglite"], data["results"]["sqlite"]
+    assert set(pg) == set(lite), (set(pg) - set(lite), set(lite) - set(pg))
     bad = []
     for rule in pg:
         a = sorted(pg[rule], key=h.sql_result_key)
@@ -91,14 +93,26 @@ def test_sql_engines_agree(data):
             bad.append(f"{rule}: {len(a)} vs {len(b)} rows")
             continue
         for ra, rb in zip(a, b):
+            if set(ra) != set(rb):
+                bad.append(f"{rule}.{h.sql_result_key(ra)}: columns differ {sorted(ra)} vs {sorted(rb)}")
+                continue
             for k in ra:
                 x, y = ra[k], rb.get(k)
                 if isinstance(x, (int, float)) and isinstance(y, (int, float)):
                     if abs(x - y) > 1e-9 + 1e-6 * max(abs(x), abs(y)):
-                        bad.append(f"{rule}.{ra['equipment_id']}.{k}: {x} vs {y}")
+                        bad.append(f"{rule}.{h.sql_result_key(ra)}.{k}: {x} vs {y}")
                 elif x != y:
-                    bad.append(f"{rule}.{ra['equipment_id']}.{k}: {x} vs {y}")
+                    bad.append(f"{rule}.{h.sql_result_key(ra)}.{k}: {x} vs {y}")
     assert not bad, bad[:10]
+
+
+def test_sweep_rows_retain_series_identity_and_coverage(data):
+    for rule in SWEEP_RULES:
+        rows = data["results"]["pglite"][rule]
+        assert rows, rule
+        assert all({"equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"} <= set(row) for row in rows), rule
+        identities = [h.sql_result_key(row) for row in rows]
+        assert len(identities) == len(set(identities)), (rule, "duplicate series identity", identities)
 
 
 def test_pandas_equals_sql_in_si(report):
@@ -166,8 +180,8 @@ def test_pandas_defaults_equal_sql_catalog(report):
 
 
 def test_sensor_sweep_parity_keeps_per_role_evidence(report):
-    """Per-role sweep rows must match pandas evidence; equipment totals stay worst-sensor hours."""
-    for rule in ("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE"):
+    """SQL series rows aggregate by original Haystack role for pandas comparison; totals stay worst-role hours."""
+    for rule in SWEEP_RULES:
         per = report["compared"][rule]
         assert per, rule
         for equip, result in per.items():
@@ -175,9 +189,40 @@ def test_sensor_sweep_parity_keeps_per_role_evidence(report):
             pandas_roles = result.get("pandas_sensor_fault_hours")
             silence_hours = result.get("pandas_sensor_silence_hours")
             assert sql_roles is not None and pandas_roles is not None, (rule, equip, result)
+            if rule == "SV-RATE" and not pandas_roles:
+                # SV-RATE deliberately remains algorithmically divergent and does not expose the same per-role oracle evidence.
+                assert rule in KNOWN_DIVERGENT and sql_roles, (rule, equip, result)
+                assert result["sql"] == pytest.approx(max(sql_roles.values(), default=0.0))
+                continue
             assert set(sql_roles) == set(pandas_roles), (rule, equip, sql_roles, pandas_roles)
             assert silence_hours is not None and set(silence_hours) == set(pandas_roles), (rule, equip, result)
             assert all(value >= 0 for value in silence_hours.values()), (rule, equip, silence_hours)
             assert result["sql"] == pytest.approx(max(sql_roles.values(), default=0.0))
             assert result["pandas"] == pytest.approx(max(pandas_roles.values(), default=0.0))
-            assert h.rule_matches({equip: result}), (rule, equip, result)
+            if rule not in KNOWN_DIVERGENT:
+                assert h.rule_matches({equip: result}), (rule, equip, result)
+
+
+@pytest.fixture(scope="session")
+def duplicate_sensor_data(tmp_path_factory):
+    out = tmp_path_factory.mktemp("parity-duplicate-sensor") / "sql.json"
+    d = h.run_sql(equips=1, days=1, out=out, rules=",".join(SWEEP_RULES), duplicate_role=True)
+    assert not d["errors"], d["errors"]
+    return d
+
+
+def test_duplicate_role_sensor_series_are_distinct_and_sql_engines_agree(duplicate_sensor_data):
+    """Two points with the same SAT role must survive SQL authorization as separate identities."""
+    pg, lite = duplicate_sensor_data["results"]["pglite"], duplicate_sensor_data["results"]["sqlite"]
+    assert set(pg) == set(SWEEP_RULES)
+    for rule in SWEEP_RULES:
+        a = sorted(pg[rule], key=h.sql_result_key)
+        b = sorted(lite[rule], key=h.sql_result_key)
+        assert len(a) == len(b), (rule, len(a), len(b))
+        assert [h.sql_result_key(row) for row in a] == [h.sql_result_key(row) for row in b], rule
+        for ra, rb in zip(a, b):
+            assert ra == rb, (rule, h.sql_result_key(ra), ra, rb)
+        sat = [row for row in a if row["equipment_id"] == "AHU-1" and row.get("sensor_role") == "sat"]
+        ids = {row["series_id"] for row in sat}
+        assert len(sat) == 2 and len(ids) == 2, (rule, sat)
+        assert all(row.get("covered_hours") is not None for row in sat), (rule, sat)

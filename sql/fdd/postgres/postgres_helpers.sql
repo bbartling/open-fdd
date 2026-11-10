@@ -11,9 +11,9 @@ EXCEPTION
 END;
 $$;
 
--- Sensor sweep assessability (twin of pandas sensor_sweep_catalog). Inputs are SI only:
--- a series is assessed only when its declared unit is the SI unit of the role's quantity
--- (degC, %, Pa). Any other unit, or none, masks the series; nothing is converted or guessed here.
+-- Sensor sweep assessability (twin of pandas sensor_sweep_catalog). Long-form inputs are SI only:
+-- each sample is assessed only when its declared unit matches the role's SI quantity. Any other
+-- unit, or none, masks that sample; nothing is converted or guessed here.
 CREATE OR REPLACE FUNCTION fdd.norm_unit(value text)
 RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
@@ -23,23 +23,22 @@ $$;
 CREATE OR REPLACE FUNCTION fdd.quantity_for_sql_role(role text)
 RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
-  SELECT CASE btrim(role)
-    WHEN 'oa_t' THEN 'absolute_temperature'
-    WHEN 'rat' THEN 'absolute_temperature'
-    WHEN 'zone_t' THEN 'absolute_temperature'
-    WHEN 'mat' THEN 'absolute_temperature'
-    WHEN 'sat' THEN 'absolute_temperature'
-    WHEN 'chw_supply_t' THEN 'absolute_temperature'
-    WHEN 'chw_return_t' THEN 'absolute_temperature'
-    WHEN 'hw_supply_t' THEN 'absolute_temperature'
-    WHEN 'hw_return_t' THEN 'absolute_temperature'
-    WHEN 'oa_h' THEN 'relative_humidity'
-    WHEN 'ra_h' THEN 'relative_humidity'
-    WHEN 'zone_rh' THEN 'relative_humidity'
-    WHEN 'zone_h' THEN 'relative_humidity'
-    WHEN 'ma_h' THEN 'relative_humidity'
-    WHEN 'sa_h' THEN 'relative_humidity'
-    WHEN 'duct_static' THEN 'air_pressure'
+  SELECT CASE
+    WHEN btrim(role) IN ('ahu_sat', 'chw_return_t', 'chw_supply_sp', 'chw_supply_t',
+      'cooling_coil_entering_temp', 'cooling_coil_leaving_temp', 'cooling_sp', 'cw_return_t',
+      'cw_supply_t', 'heating_coil_entering_temp', 'heating_coil_leaving_temp', 'heating_sp',
+      'hw_return_t', 'hw_supply_t', 'mat', 'oa_t', 'preheat_leave_t', 'rat', 'sat', 'sat_sp',
+      'vav_discharge_t', 'vav_inlet_t', 'web_oa_dp', 'web_oa_t', 'web_wb_t', 'zone_air_temp_sp', 'zone_t')
+      THEN 'absolute_temperature'
+    WHEN btrim(role) IN ('ma_h', 'oa_h', 'ra_h', 'sa_h', 'web_oa_h', 'zone_rh')
+      THEN 'relative_humidity'
+    WHEN btrim(role) IN ('chw_dp', 'chw_dp_sp', 'duct_static', 'duct_static_sp') THEN 'air_pressure'
+    WHEN btrim(role) IN ('chw_flow', 'min_flow_sp', 'vav_total_flow', 'zone_airflow_sp', 'zone_flow') THEN 'volume_flow'
+    WHEN btrim(role) IN ('chiller_power', 'electric_kw') THEN 'power'
+    WHEN btrim(role) IN ('electric_kwh', 'kwh') THEN 'energy'
+    WHEN btrim(role) IN ('chiller_amps', 'chiller_current') THEN 'electric_current'
+    WHEN btrim(role) = 'zone_co2' THEN 'concentration'
+    WHEN btrim(role) IN ('chw_reset_request_sum', 'hw_reset_request_sum', 'static_reset_request') THEN 'count'
     ELSE NULL
   END;
 $$;
@@ -56,6 +55,18 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
       OR position('%' IN unit) > 0
     WHEN quantity = 'air_pressure' THEN
       fdd.norm_unit(unit) IN ('pa', 'pascal')
+    WHEN quantity = 'volume_flow' THEN
+      fdd.norm_unit(unit) = 'ls'
+    WHEN quantity = 'power' THEN
+      fdd.norm_unit(unit) = 'kw'
+    WHEN quantity = 'energy' THEN
+      fdd.norm_unit(unit) = 'kwh'
+    WHEN quantity = 'electric_current' THEN
+      fdd.norm_unit(unit) = 'a'
+    WHEN quantity = 'concentration' THEN
+      fdd.norm_unit(unit) = 'ppm'
+    WHEN quantity = 'count' THEN
+      fdd.norm_unit(unit) = 'count'
     ELSE false
   END;
 $$;

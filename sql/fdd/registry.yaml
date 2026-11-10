@@ -1791,7 +1791,7 @@ rules:
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
     optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow, kwh, electric_kw, electric_kwh]
-    output_columns: [equipment_id, sensor_role, fault_hours]
+    output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -1887,7 +1887,7 @@ rules:
     required_roles: []
     # Pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
     optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow]
-    output_columns: [equipment_id, sensor_role, fault_hours]
+    output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -1973,7 +1973,7 @@ rules:
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
     optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow]
-    output_columns: [equipment_id, sensor_role, fault_hours]
+    output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -2080,7 +2080,7 @@ rules:
     # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
     required_roles: []
     optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h]
-    output_columns: [equipment_id, sensor_role, fault_hours]
+    output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -2136,7 +2136,7 @@ rules:
     description: Context-aware sensor rate of change
     required_roles: []
     optional_roles: [oa_t, mat, zone_t, rat, sat]
-    output_columns: [equipment_id, fault_hours]
+    output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false

@@ -27,3 +27,6 @@ When a new trap shows up, add it to `docs/operations/nf/nf-gotchas.md` in the sa
     arrive as strings. Coerce before use (`history.js` `normalizeArgs`; see #1559 for a shared helper).
 12. **Windows cp1252 consoles.** Hook event text can contain non-cp1252 Unicode; `report_run` must use the safe
     print path or verify aborts after a successful install (#1560).
+13. **UpdatePoints merges point attributes.** An omitted attribute can survive a result update. Write every
+    Open-FDD result attribute and send an empty string for values that do not apply. Treat an empty or missing
+    value the same when reading. Whether NF removes the key or stores the empty string is unconfirmed (#1563).

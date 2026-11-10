@@ -50,12 +50,15 @@ def node() -> str:
     return exe
 
 
-def run_sql(equips: int, days: int, out: Path, engines: str = "pglite,sqlite", rules: str = "") -> dict:
+def run_sql(equips: int, days: int, out: Path, engines: str = "pglite,sqlite", rules: str = "",
+            duplicate_role: bool = False) -> dict:
     """Run the SQL pack on the engines; return the parsed JSON (also left on disk at ``out``)."""
     cmd = [node(), str(HERE / "sql_run.mjs"), "--equips", str(equips), "--days", str(days), "--out", str(out),
            "--engines", engines]
     if rules:
         cmd += ["--rules", rules]
+    if duplicate_role:
+        cmd += ["--duplicate-role", "true"]
     t0 = time.time()
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -99,7 +102,7 @@ def weather_frame(data: dict) -> pd.DataFrame | None:
 
 
 def sql_rows(data: dict, engine: str, rule: str) -> dict[str, dict]:
-    """Rows by equipment, retaining per-role sweep scores and the legacy max aggregate."""
+    """Rows by equipment, aggregating duplicate series by the original oracle role."""
     rows = data["results"].get(engine, {}).get(rule) or []
     if not any("sensor_role" in row for row in rows):
         return {r["equipment_id"]: r for r in rows}
@@ -108,19 +111,20 @@ def sql_rows(data: dict, engine: str, rule: str) -> dict[str, dict]:
         grouped.setdefault(row["equipment_id"], []).append(row)
     out = {}
     for equip, group in grouped.items():
-        by_role = {}
+        by_role: dict[str, float] = {}
         for row in group:
             role = row.get("sensor_role")
-            if role is not None and row.get("fault_hours") is not None:
-                by_role[role] = max(float(row["fault_hours"]), by_role.get(role, float("-inf")))
+            hours, covered = row.get("fault_hours"), row.get("covered_hours")
+            if role is not None and hours is not None and covered is not None and float(covered) > 0:
+                by_role[role] = max(float(hours), by_role.get(role, float("-inf")))
         out[equip] = {"equipment_id": equip, "fault_hours": max(by_role.values(), default=None),
-                      "sensor_fault_hours": by_role}
+                      "sensor_fault_hours": by_role, "sensor_series_rows": group}
     return out
 
 
-def sql_result_key(row: dict) -> tuple[str, str]:
-    """Stable ordering for equipment-level rules and newly per-role sensor sweeps."""
-    return (row.get("equipment_id", ""), row.get("sensor_role", ""))
+def sql_result_key(row: dict) -> tuple[str, str, str]:
+    """Stable SQL row identity, including the physical series for per-sensor sweeps."""
+    return (row.get("equipment_id", ""), row.get("series_id", ""), row.get("sensor_role", ""))
 
 
 def pandas_rule_result(rule_id: str, df: pd.DataFrame, weather):

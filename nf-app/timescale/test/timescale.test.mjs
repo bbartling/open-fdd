@@ -98,7 +98,7 @@ const close = (a, b) => {
   return String(a) === String(b);
 };
 const diffRows = (a, b) => {
-  const key = (r) => `${r.equipment_id}|${r.sensor_role ?? ""}`;
+  const key = (r) => `${r.equipment_id}|${r.series_id ?? ""}`;
   const x = [...a].sort((p, q) => key(p).localeCompare(key(q)));
   const y = [...b].sort((p, q) => key(p).localeCompare(key(q)));
   if (x.length !== y.length) return [`row count ${x.length} vs ${y.length}`];
@@ -155,6 +155,44 @@ test("install is idempotent and registers the scoped size-cap job", { skip }, as
   assert.equal(Number(cfg.max_chunks_per_call), 100);
   const s = await db.query("SELECT count(*)::int AS n FROM openfdd.nf_samples");
   assert.ok(s.rows[0].n > 200000, `adapter view sees the seeded NF data (${s.rows[0].n} rows)`);
+});
+
+test("install upgrades a populated v2 hypertable to the v3 per-sensor key idempotently", { skip }, async () => {
+  await db.query(`
+    ALTER TABLE openfdd.fdd_results DROP CONSTRAINT fdd_results_pkey;
+    ALTER TABLE openfdd.fdd_results DROP COLUMN sensor_ref, DROP COLUMN role;
+    ALTER TABLE openfdd.fdd_results ADD PRIMARY KEY (run_ts, equip, rule_id);
+    UPDATE openfdd.config SET value = '2'::jsonb WHERE key = 'schema_version';
+    INSERT INTO openfdd.fdd_results (run_ts, equip, rule_id, fault_pct) VALUES
+      ('2026-10-12T00:00:00Z', 'fixture', 'SV-RATE', 12);
+  `);
+  assert.equal(await ts.schemaVersion(db), 2);
+  const engine = await createEngine({ kind: "timescale", pack, client: db });
+  assert.equal(await ts.schemaVersion(db), 3);
+  await engine.close();
+  assert.equal((await ts.install(db)).schemaVersion, 3);
+  const back = await db.query("SELECT sensor_ref, role, fault_pct FROM openfdd.fdd_results WHERE equip = 'fixture'");
+  assert.deepEqual(back.rows, [{ sensor_ref: "", role: null, fault_pct: 12 }]);
+  const result = (row) => ts.toResultRow({ runTs: "2026-10-13T00:00:00Z", equip: "fixture", ruleId: "SV-RATE", row });
+  const details = {
+    first: { role: "sat", name: "first", hours: 1, status: "fault" },
+    second: { role: "sat", name: "second", hours: 0, status: "ok" },
+  };
+  const rows = [
+    result({ fault_hours: 1, covered_hours: 2, sensor_fault_hours: details }),
+    result({ series_id: "first", sensor_role: "sat", fault_hours: 1, covered_hours: 2 }),
+    result({ series_id: "second", sensor_role: "sat", fault_hours: 0, covered_hours: 2 }),
+  ];
+  assert.equal(await ts.writeResults(db, rows), 3);
+  assert.equal(await ts.writeResults(db, rows), 3);
+  const saved = (await db.query(`SELECT sensor_ref, role, metric
+    FROM openfdd.fdd_results WHERE equip = 'fixture' AND run_ts = '2026-10-13T00:00:00Z' ORDER BY sensor_ref`)).rows;
+  assert.deepEqual(saved, [
+    { sensor_ref: "", role: null, metric: { sensor_fault_hours: details } },
+    { sensor_ref: "first", role: "sat", metric: null },
+    { sensor_ref: "second", role: "sat", metric: null },
+  ]);
+  await db.query("DELETE FROM openfdd.fdd_results WHERE equip = 'fixture'");
 });
 
 test("loadHistory builds the wide history in SI", { skip }, async () => {
@@ -314,16 +352,24 @@ test("valve (VAV-3) and unitless command: Timescale == PGlite, unitless role is 
 
 test("rules in Timescale == the pglite engine on the same history", { skip, timeout: 280000 }, async () => {
   if (sourceDirty) await seed();
-  loaded = await ts.loadHistory(db, { pack, equipId: EQUIP, siteId: "site-1", ...scaled(roleToUuid, unitsByUuid).args, from: FROM, to: TO, stepSec: STEP });
+  const sensorSeries = ["sat", "sat_aux", "mat", "oa_t", "rat", "duct_static"].map((name) => ({
+    uuid: roleToUuid[name], role: name === "sat_aux" ? "sat" : name,
+    unit: name === "duct_static" ? "Pa" : "°C",
+  }));
+  loaded = await ts.loadHistory(db, { pack, equipId: EQUIP, siteId: "site-1", ...scaled(roleToUuid, unitsByUuid).args,
+    unitsByUuid, sensorSeries, from: FROM, to: TO, stepSec: STEP });
   const t0 = Date.now();
   ruleRun = await ts.runRules(db, pack, RULES);
   const tsMs = Date.now() - t0;
   const q = async (sql) => (await db.query(sql)).rows;
   const hist = (await q("SELECT * FROM pg_temp.history ORDER BY timestamp_utc")).map(({ timestamp_utc, ...r }) => ({ ...r, ts: timestamp_utc.getTime() }));
   const weather = (await q("SELECT * FROM pg_temp.weather ORDER BY timestamp_utc")).map(({ timestamp_utc, ...r }) => ({ ...r, ts: timestamp_utc.getTime() }));
+  const sensorHistory = (await q("SELECT * FROM pg_temp.sensor_history")).map(({ timestamp_utc, ...r }) => ({ ...r, ts: timestamp_utc.getTime() }));
+  assert.equal(new Set(sensorHistory.map((row) => row.series_id)).size, 6);
+  assert.equal(new Set(sensorHistory.filter((row) => row.sensor_role === "sat").map((row) => row.series_id)).size, 2);
   const input = {
     historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })),
-    history: hist, weather, authorizedSeries: await q("SELECT * FROM pg_temp.authorized_series"),
+    history: hist, weather, sensorHistory, authorizedSeries: await q("SELECT * FROM pg_temp.authorized_series"),
     equipment: await q("SELECT * FROM pg_temp.equipment"),
   };
   const eng = await createEngine({ kind: "pglite", pack });
@@ -345,7 +391,7 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
       // 5.0.3 fault timeline: the same timeline_sql on the real database == pglite (per-timestamp confirmed flags).
       const tlSql = pack.rules[id] && pack.rules[id].timeline_sql;
       if (tlSql) {
-        const norm = (rows) => rows.map((r) => `${r.equipment_id}|${r.sensor_role ?? ""}|${Number(r.ts_epoch)}|${Number(r.confirmed)}|${Number(r.held_seconds)}`).sort();
+        const norm = (rows) => rows.map((r) => `${r.equipment_id}|${r.series_id ?? ""}|${Number(r.ts_epoch)}|${Number(r.confirmed)}|${Number(r.held_seconds)}`).sort();
         let tsTl, tsTlErr;
         try { tsTl = await q(tlSql); } catch (e) { tsTlErr = e.message; }
         if (tsTlErr) { problems.push(`${id} timeline: timescale error ${tsTlErr}`); continue; }
@@ -363,6 +409,12 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
   const fc1 = ruleRun.results.FC1[0];
   assert.equal(fc1.equipment_id, EQUIP);
   assert.equal(typeof fc1.fault_pct, "number", "numbers are coerced");
+  for (const id of RULES.filter((id) => id.startsWith("SV-"))) {
+    assert.equal(ruleRun.results[id]?.length, 6, `${id} scores all six physical sensors`);
+    const sat = ruleRun.results[id].filter((row) => row.sensor_role === "sat");
+    assert.equal(sat.length, 2, `${id} preserves both supply-air sensors`);
+    assert.ok(sat.every((row) => row.covered_hours > 0), `${id} reports real coverage`);
+  }
 });
 
 test("writeResults upserts into openfdd.fdd_results", { skip }, async () => {
@@ -371,7 +423,10 @@ test("writeResults upserts into openfdd.fdd_results", { skip }, async () => {
   const rows = [];
   for (const [id, res] of Object.entries(ruleRun.results)) {
     const row = hook.equipmentResult(pack.rules[id], res, EQUIP);
-    if (row) rows.push(ts.toResultRow({ runTs, equip: EQUIP, site: "site-1", ruleId: id, row, windowStart: FROM, windowEnd: TO }));
+    if (!row) continue;
+    for (const result of [row, ...(row.sensor_rows || [])]) {
+      rows.push(ts.toResultRow({ runTs, equip: EQUIP, site: "site-1", ruleId: id, row: result, windowStart: FROM, windowEnd: TO }));
+    }
   }
   assert.ok(rows.length >= 15);
   assert.equal(await ts.writeResults(db, rows), rows.length);
@@ -382,11 +437,16 @@ test("writeResults upserts into openfdd.fdd_results", { skip }, async () => {
   assert.ok(close(back.fault_pct, ruleRun.results.FC1[0].fault_pct));
   assert.equal(back.engine, "timescale");
   assert.equal(back.window_start.toISOString(), "2026-09-20T00:00:00.000Z");
-  const sweep = (await db.query("SELECT fault_hours, metric FROM openfdd.fdd_results WHERE rule_id = 'SV-STALE' AND run_ts = $1", [runTs])).rows[0];
-  const scores = Object.fromEntries(ruleRun.results["SV-STALE"].map((row) => [row.sensor_role, row.fault_hours]));
-  assert.ok(Object.keys(scores).length > 1, "fixture assesses multiple roles");
-  assert.deepEqual(sweep.metric.sensor_fault_hours, scores);
-  assert.equal(Number(sweep.fault_hours), Math.max(...Object.values(scores)));
+  const sweep = (await db.query(`SELECT sensor_ref, role, fault_hours, covered_hours, metric
+    FROM openfdd.fdd_results WHERE rule_id = 'SV-STALE' AND run_ts = $1 ORDER BY sensor_ref`, [runTs])).rows;
+  assert.equal(sweep.length, 7);
+  const [summary, ...sensors] = sweep;
+  assert.equal(summary.sensor_ref, "");
+  assert.deepEqual(summary.metric.sensor_fault_hours,
+    hook.equipmentResult(pack.rules["SV-STALE"], ruleRun.results["SV-STALE"], EQUIP).sensor_fault_hours);
+  assert.equal(summary.fault_hours, Math.max(...sensors.map((row) => row.fault_hours)));
+  assert.equal(summary.covered_hours, Math.max(...sensors.map((row) => row.covered_hours)));
+  assert.equal(sensors.filter((row) => row.role === "sat").length, 2);
 });
 
 test("history_buckets and historyRoute (bounds against the real database)", { skip }, async () => {
@@ -629,7 +689,7 @@ test("upgrade: an installed global-retention job becomes scoped (same job, no du
   const before = await snapshot();
 
   const inst = await ts.install(db);
-  assert.equal(inst.schemaVersion, 2);
+  assert.equal(inst.schemaVersion, ts.SCHEMA_VERSION);
   const jobs = (await db.query("SELECT job_id, config FROM timescaledb_information.jobs WHERE proc_name = 'size_cap_job'")).rows;
   assert.equal(jobs.length, 1, "duplicates removed, never a second job");
   assert.equal(jobs[0].job_id, old, "the existing job was altered in place");
@@ -645,7 +705,7 @@ test("upgrade: an installed global-retention job becomes scoped (same job, no du
   assert.deepEqual(after.other, before.other, "and the unrelated app");
   assert.equal(after.ours.chunks.length, 1, "while still enforcing the cap on Open-FDD results");
   assert.equal((await db.query("SELECT status FROM openfdd.retention_log ORDER BY id DESC LIMIT 1")).rows[0].status, "no_progress");
-  assert.equal((await ts.install(db)).schemaVersion, 2);
+  assert.equal((await ts.install(db)).schemaVersion, ts.SCHEMA_VERSION);
   assert.equal((await db.query("SELECT count(*)::int AS n FROM timescaledb_information.jobs WHERE proc_name = 'size_cap_job'")).rows[0].n, 1);
 });
 

@@ -5,6 +5,15 @@ nav_order: 14
 
 # Changelog
 
+## 5.0.10
+
+- Recognize explicit NF and BACnet unit aliases and warn about rejected units ([#1564](https://github.com/bbartling/open-fdd/issues/1564)).
+- Clear outdated Open-FDD attributes on result points after NF merges metadata ([#1563](https://github.com/bbartling/open-fdd/issues/1563)).
+- Publish five sensor validation sweeps per point UUID with hours and coverage. Timescale v3 retains separate sensor and equipment rows ([#1565](https://github.com/bbartling/open-fdd/issues/1565)).
+- Show per-sensor results and timelines and separate hours from percentages in the Full UI ([#1566](https://github.com/bbartling/open-fdd/issues/1566)).
+
+See the [5.0.10 NF migration note](operations/nf/migrate-5.0.10.html).
+
 ## 5.0.9
 
 - Hardened NF installer verification, StartHook argument handling and Windows hook reports ([#1557](https://github.com/bbartling/open-fdd/issues/1557), [#1558](https://github.com/bbartling/open-fdd/issues/1558), [#1559](https://github.com/bbartling/open-fdd/issues/1559), [#1560](https://github.com/bbartling/open-fdd/issues/1560)).

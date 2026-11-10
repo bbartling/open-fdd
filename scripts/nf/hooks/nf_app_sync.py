@@ -861,6 +861,27 @@ def run_error_text(run: dict) -> str:
     return "\n".join(parts)
 
 
+def fdd_unit_skip_text(run: dict) -> str | None:
+    """Read the latest FDD run's unit skips, including consoles that return only event text."""
+    for group in (run.get("results") or {}).values():
+        for key in ("result", "value", "output", "returnValue"):
+            result = group.get(key)
+            if isinstance(result, str):
+                try:
+                    result = json.loads(result)
+                except ValueError:
+                    continue
+            counts = result.get("roles_skipped_by_unit") if isinstance(result, dict) else None
+            if isinstance(counts, dict):
+                skips = {r: n for r, n in counts.items()
+                         if isinstance(r, str) and re.fullmatch(r"[a-z][a-z0-9_]*", r) and type(n) is int and n > 0}
+                if skips:
+                    roles = ", ".join(f"{r} {n}" for r, n in sorted(skips.items()))
+                    return f"roles skipped by unit: {sum(skips.values())} ({roles})"
+    match = re.search(r"\broles skipped by unit: [1-9][0-9]*(?: \([a-z0-9_, ]+\))?", run_error_text(run))
+    return match.group(0) if match else None
+
+
 def _safe_print(text: str) -> None:
     """Print without crashing on Windows cp1252 consoles when hook events contain Unicode."""
     try:
@@ -1321,7 +1342,7 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
     def line(level: str, what: str, text: str) -> None:
         nonlocal bad
         bad += level == "FAIL"
-        print(f"[{level}] {what}: {text}")
+        _safe_print(f"[{level}] {what}: {text}")
 
     try:
         apps = {a["id"]: a for a in c.apps()}
@@ -1378,6 +1399,8 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None) -> int:
         else:
             line("FAIL", f"hook {h['id']}", f"last run {last.get('state')}: "
                  f"{(result_failure(last) or text or '')[:160].strip()}")
+        if h["id"] == "fdd" and (unit_skips := fdd_unit_skip_text(last)):
+            line("WARN", "fdd units", unit_skips)
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
         lvl, text = weather_coords_source(c, a)
         line("PASS" if lvl == "pass" else "FAIL", "weather coords", text)

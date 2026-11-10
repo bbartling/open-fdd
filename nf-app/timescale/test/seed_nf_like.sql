@@ -31,8 +31,8 @@ INSERT INTO public.instances VALUES (md5('instance')::uuid, 'nf-test');
 DROP TABLE IF EXISTS pg_temp.roles;
 CREATE TEMP TABLE roles (role text, unit text);
 INSERT INTO roles VALUES
-  ('sat', 'degF'), ('sat_sp', 'degF'), ('rat', 'degF'), ('mat', 'degF'), ('oa_t', 'degF'), ('oa_h', '%RH'),
-  ('zone_t', 'degF'), ('duct_static', 'inH2O'), ('duct_static_sp', 'inH2O'), ('fan_status', ''), ('fan_cmd', '%'),
+  ('sat', 'degF'), ('sat_aux', 'degF'), ('sat_sp', 'degF'), ('rat', 'degF'), ('mat', 'degF'), ('oa_t', 'degF'), ('oa_h', '%RH'),
+  ('zone_t', 'degF'), ('duct_static', 'in h₂0'), ('duct_static_sp', 'inH2O'), ('fan_status', ''), ('fan_cmd', '%'),
   ('oa_damper_pct', '%'), ('htg_valve_pct', '%'), ('clg_valve_pct', '%');
 
 INSERT INTO public.points
@@ -47,6 +47,7 @@ SELECT md5('AHU-1/' || r.role)::uuid, g.t,
     WHEN 'zone_t' THEN 72.5 + s.nz * 0.6
     WHEN 'mat'    THEN 0.3 * s.oa + 0.7 * (72 + s.nz * 0.4)
     WHEN 'sat_sp' THEN 55
+    WHEN 'sat_aux' THEN 55
     WHEN 'sat'    THEN CASE WHEN s.fan_on THEN 55 + s.nz * 0.5 + CASE WHEN g.d BETWEEN 30 AND 32 THEN 9 ELSE 0 END ELSE 72 END
     WHEN 'duct_static_sp' THEN 1.5
     WHEN 'duct_static' THEN CASE WHEN NOT s.fan_on THEN 0.02

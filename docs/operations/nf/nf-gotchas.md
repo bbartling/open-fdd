@@ -147,4 +147,8 @@ Cloud backup itself works: it uploads about daily; contents are configuration, n
 - **Weather deadlines:** both editions budget 10 seconds for all Sites pages, 45 for the model fallback, 40 for
   two weather fetch attempts, and 30 for three point writes. Lite can spend another 40 seconds on its local
   mirror. The hook deadline is 180 seconds and NF allows 190 seconds for the invocation.
+- **13. UpdatePoints merges point attributes.** On a real NF 3.10.9-1 Full target, omitted result attributes
+  survived a new run. Open-FDD writes its result attributes on each update and sends an empty string when a value
+  does not apply. Readers treat empty and missing values alike. The mock models a shallow merge per point and layer.
+  Whether real NF removes the key or stores the empty string is unconfirmed (#1563).
 - **Live patching is last resort.** Capture with a read-only file GET first, patch one file, commit on a patch branch (HTML without `?v=` stamps), restart before verify, and do not rewrite push-manifest hashes until the deploying revision contains the fix. See repo-root `AGENTS.md`.

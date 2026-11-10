@@ -184,10 +184,22 @@ function buildDataset(pack, { equipments = 2, days = 3, stepSeconds = 300, gaps 
     ["chw_supply_t", "°C"], ["chw_return_t", "°C"], ["hw_supply_t", null], ["hw_return_t", "°F"],
     ["oa_h", "%"], ["ra_h", "%"], ["zone_rh", "%"], ["ma_h", "%"], ["sa_h", "%"], ["duct_static", "Pa"]];
   const authorizedSeries = [];
+  const sensorHistory = [];
   const equipment = [];
   for (const id of equipmentIds) {
     equipment.push({ building_id: "site-1", equipment_id: id });
     for (const [role, unit] of mixed) authorizedSeries.push({ site_id: "site-1", equipment_id: id, role, unit });
+    const series = mixed.map(([role, unit]) => ({ series_id: `series-${id}-${role}`, role, unit }));
+    if (duplicateRole) series.push({ series_id: `series-${id}-sat-duplicate`, role: "sat", unit: "°C" });
+    for (const sensor of series) {
+      for (const row of history) {
+        if (row.equipment_id !== id) continue;
+        sensorHistory.push({
+          equipment_id: id, series_id: sensor.series_id, sensor_role: sensor.role, unit: sensor.unit,
+          ts: row.ts, value: row[sensor.role] ?? null,
+        });
+      }
+    }
   }
   if (duplicateRole) authorizedSeries.push({ site_id: "site-1", equipment_id: equipmentIds[0], role: "sat", unit: "°C" }); // duplicate role: excluded by the rule
   const utilityMonthly = [{ billing_period: "2026-01", kwh: 5000 }, { billing_period: "2026-02", kwh: 100 }];
@@ -195,7 +207,7 @@ function buildDataset(pack, { equipments = 2, days = 3, stepSeconds = 300, gaps 
   for (let i = 0; i < steps; i += 3) utilityInterval.push({ ts: T0 + i * stepSeconds * 1000, kwh: 3.3 + 1.2 * wave(i, 288) });
   return {
     historyColumns: histCols.map((c) => ({ name: c.name, type: c.type === "text" ? "text" : "double" })),
-    history, weather, authorizedSeries, equipment, utilityMonthly, utilityInterval,
+    history, weather, authorizedSeries, sensorHistory, equipment, utilityMonthly, utilityInterval,
   };
 }
 

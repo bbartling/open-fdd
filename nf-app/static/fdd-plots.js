@@ -5,7 +5,8 @@
 //
 // All data comes from NF: points bound by fdd.js, history from fetchSeries (NF resamples
 // server side), fault lanes from the FDD hook's result points (markers fdd + fault, ruleRef,
-// equipRef; value = fault % of covered time over 24 h, trended hourly). The old central
+// equipRef; result outputs declare fault_pct (%) or fault_hours (h), while sweep timelines
+// and input lanes are per sensor. The old central
 // computed sensor health server side; here the same checks run on hourly NF aggregates.
 //
 // Classic script (no import/export/eval). Everything lives in the IIFE below; it exposes
@@ -74,7 +75,7 @@
       for (const s of g.series) {
         series.push({
           name: s.name, type: "line", xAxisIndex: i, yAxisIndex: i, showSymbol: false, connectNulls: false,
-          step: s.kind === "Bool" ? "end" : false, lineStyle: { width: 1.6 }, data: s.data,
+          step: s.kind === "Bool" ? "end" : false, lineStyle: { width: 1.6, ...(s.color ? { color: s.color } : {}) }, data: s.data,
         });
       }
     });
@@ -269,8 +270,8 @@
   }
 
   /**
-   * Per-rule result plot: the rule's bound input signals grouped by unit family plus a fault
-   * lane from the hook's result point. Returns a short note.
+   * Per-rule result plot: bound inputs grouped by unit family plus either the equipment fault
+   * lane or one sensor-specific lane per sweep input. Returns a short note.
    */
   /**
    * With `model`, the lane is rcxFaultData(model, equipRec, rule.id, hours): the hook's per-timestamp confirmed-fault
@@ -281,38 +282,77 @@
   async function fddRulePlot(el, { rule, equipRec, bound = {}, resultPoint = null, model = null, hours = 168 } = {}) {
     const wanted = [...new Set([...(rule.required_roles || []), ...(rule.optional_roles || [])])];
     const roles = fddPlotExpandRoles(rule.id, wanted, bound).filter((r) => bound[r] && bound[r].length);
-    if (!roles.length) return "No bound input points for this rule on this equip.";
-    const pts = roles.map((r) => bound[r][0]);
+    const sensorSweep = /^SV-(RATE|RANGE|FLATLINE|SPIKE|STALE)$/.test(String(rule.id || ""));
+    const sensorResults = sensorSweep && model ? rcxSensorResultPoints(model, equipRec, rule.id) : [];
+    if (!roles.length && !sensorResults.length) return "No bound input points for this rule on this equip.";
+    const pointRoles = new Map();
+    const boundPoints = sensorSweep ? roles.flatMap((r) => bound[r].map((p) => {
+      if (!pointRoles.has(p.uuid)) pointRoles.set(p.uuid, r);
+      return p;
+    })) : roles.map((r) => bound[r][0]);
+    if (sensorResults.length && model) {
+      for (const result of sensorResults) {
+        const attrs = result.rec?.attrs || {}, ref = String(attrs.sensorRef || "");
+        const input = model.points.find((p) => String(p.uuid) === ref && has(p, "point"));
+        if (input && !pointRoles.has(input.uuid)) pointRoles.set(input.uuid, attrs.roleRef || "sensor");
+        if (input) boundPoints.push(input);
+      }
+    }
+    const pts = sensorSweep ? [...new Map(boundPoints.map((p) => [p.uuid, p])).values()] : boundPoints;
+    const sensorResultByRef = new Map(sensorResults.map((p) => [String((p.rec.attrs || {}).sensorRef || ""), p]));
     const windowSec = pickWindow(hours);
-    const [sigRaw, lane] = await Promise.all([
-      fetchSeries(pts, hours, { windowSec }),
-      model ? rcxFaultData(model, equipRec, rule.id, hours)
+    const sigRaw = await fetchSeries(pts, hours, { windowSec });
+    let lane, sensorLanes = [];
+    if (sensorResults.length) {
+      sensorLanes = await Promise.all(pts.map(async (p) => {
+        const attrs = p.rec?.attrs || {}, ref = String(p.uuid), res = sensorResultByRef.get(ref);
+        const label = `${pointRoles.get(ref) || attrs.roleRef || "sensor"} · ${p.dis || p.name}`;
+        const data = await rcxFaultData(model, equipRec, rule.id, hours, { sensorRef: ref });
+        const samples = data.map((x) => [...x]);
+        Object.defineProperties(samples, { source: { value: data.source }, approximate: { value: !!data.approximate } });
+        return { point: p, result: res, label, data: samples };
+      }));
+      lane = [];
+    } else {
+      lane = model ? await rcxFaultData(model, equipRec, rule.id, hours)
         // no model: the fallback lane from the result point the caller already resolved
-        : resultPoint ? fetchSeries([resultPoint], hours, { method: "MAX", windowSec: 3600 })
-          .then((r) => rcxFaultLaneFromResult(r.get(resultPoint.uuid) || []))
-          : Promise.resolve(rcxFaultLaneFromResult(null, true)),
-    ]);
+        : resultPoint ? await fetchSeries([resultPoint], hours, { method: "MAX", windowSec: 3600 })
+          .then((r) => rcxFaultLaneFromResult(rcxCurrentOutputSeries(resultPoint, r.get(resultPoint.uuid) || [], 3600)))
+          : rcxFaultLaneFromResult(null, true);
+    }
     const groups = new Map();
-    roles.forEach((role, i) => {
-      const p = pts[i];
+    pts.forEach((p) => {
+      const role = pointRoles.get(p.uuid) || roles.find((r) => bound[r].includes(p)) || "sensor";
       const fam = unitFamily(p);
       // history arrives in the point's own unit: SI first, then display units for the chart
       const si = rcxSiUnit(p), unit = rcxDisp(0, si).unit;
       const g = groups.get(fam) || { family: fam, unit, series: [] };
-      g.series.push({ name: `${role}${unit ? ` (${unit})` : ""}`, kind: p.kind,
+      const sensorResult = sensorResultByRef.get(String(p.uuid));
+      const status = sensorResult?.rec?.attrs?.fddStatus;
+      const color = status === "fault" ? (FAULT_LANE.lineStyle.color || "#dc2626")
+        : status === "ok" ? "#16a34a" : status === "stale" ? "#64748b" : status === "not-assessed" ? "#94a3b8" : null;
+      const seriesName = sensorSweep ? `${role} · ${p.dis || p.name}${unit ? ` (${unit})` : ""}`
+        : `${role}${unit ? ` (${unit})` : ""}`;
+      g.series.push({ name: seriesName, kind: p.kind, color,
         data: rcxDispSeries(rcxToSI(sigRaw.get(p.uuid) || [], p), si) });
       groups.set(fam, g);
     });
     const built = fddPlotRuleOption({
       title: `${rule.id} · ${equipName(equipRec)}`,
       groups: [...groups.values()].sort((a, b) => familyRank(a.family) - familyRank(b.family) || a.family.localeCompare(b.family)),
-      withLane: lane.length > 0,
+      withLane: lane.length > 0 || sensorLanes.length > 0,
     });
     if (!built.option) return "No history for the bound inputs in this range.";
-    built.option = rcxWithFaultLane(built.option, [{ name: rule.id, data: lane }]);
+    built.option = rcxWithFaultLane(built.option, sensorLanes.length
+      ? sensorLanes.map((x) => ({ name: `${rule.id} · ${x.label}`, data: x.data }))
+      : [{ name: rule.id, data: lane }]);
     draw(el, built, `fdd_${rule.id}_${equipName(equipRec)}`);
     const scores = fddPlotSensorFaultHours(resultPoint || (model && rcxResultPoint(model, equipRec, rule.id)));
-    const sensorNote = scores ? ` · latest sensor fault hours: ${scores}` : "";
+    const sensorNote = scores && !sensorResults.length ? ` · latest sensor fault hours: ${scores}` : "";
+    if (sensorLanes.length) {
+      const faulted = sensorLanes.filter((x) => x.result?.rec?.attrs?.fddStatus === "fault").length;
+      return `${pts.length} input sensors · ${sensorLanes.length} per-sensor timelines · ${faulted} faulted`;
+    }
     if (lane.source === "none") return `${roles.length} inputs · no result point yet (the FDD hook has not written ${rule.id} for this equip)`;
     const confirmed = lane.filter(([, f]) => f === 1).length, gaps = lane.filter(([, f]) => f == null).length;
     if (lane.source === "timeline") {

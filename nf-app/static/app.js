@@ -27,6 +27,7 @@ let histHours = 24;
 const chartSel = { id: "", hours: 0, point: "" };  // Charts tab: the one chart on screen
 let selectedPoint = null; // Points tab
 let activeTab = "overview";
+const fddExpandedGroups = new Set();
 // Chart instances live in theme.js (one per element, rebuilt on a theme switch).
 const mk = (id) => ofddChart($(id));
 
@@ -252,7 +253,8 @@ async function runFddNow() {
 
 async function showRulePlot(ruleId, equipId) {
   const catalog = await loadCatalog();
-  const equipRec = model.equips.find((e) => idOf(e) === equipId);
+  const equipRec = model.equips.find((e) => idOf(e) === equipId && (e.attrs || {}).siteRef === scope.site)
+    || model.equips.find((e) => idOf(e) === equipId);
   const row = equipRec && equipRules(equipRec, model, catalog).find((r) => r.rule.id === ruleId);
   if (!row) return;
   $("fddPlotPanel").hidden = false;
@@ -268,7 +270,8 @@ async function showRulePlot(ruleId, equipId) {
 // Result points the FDD hook writes: markers fdd + fault|metric, ruleRef, equipRef.
 const ruleRefOf = (p) => (p.rec.attrs || {}).ruleRef || "";
 const fddResults = (equipIds) => model.points
-  .filter((p) => has(p, "fdd") && ruleRefOf(p) && equipIds.includes(p.equipRef))
+  .filter((p) => has(p, "fdd") && ruleRefOf(p) && equipIds.includes(p.equipRef)
+    && (!scope.site || p.siteRef === scope.site || (!p.siteRef && model.equips.filter((e) => idOf(e) === p.equipRef).length === 1)))
   .sort((a, b) => (latestOf(b) ?? 0) - (latestOf(a) ?? 0) || ruleRefOf(a).localeCompare(ruleRefOf(b)));
 
 /** Faults panel: latest value per rule/equip + a lane per fault rule (hourly max, 7 days). */
@@ -276,34 +279,100 @@ async function renderFddResults(equips) {
   const results = fddResults(equips.map(idOf));
   $("fddResultsPanel").hidden = !results.length;
   if (!results.length) return;
-  const equipName = (id) => { const e = model.equips.find((x) => idOf(x) === id); return (e && ((e.attrs || {}).dis || e.name)) || id; };
-  const when = (p) => (p.latest && p.latest.ts ? new Date(parseTs(p.latest.ts)).toLocaleString() : "–");
-  $("fddResultRows").innerHTML = results.map((p) => {
+  const equipName = (id) => {
+    const e = model.equips.find((x) => idOf(x) === id && (x.attrs || {}).siteRef === scope.site)
+      || model.equips.find((x) => idOf(x) === id);
+    return (e && ((e.attrs || {}).dis || e.name)) || id;
+  };
+  const attrsOf = (p) => p.rec.attrs || {};
+  const when = (p) => {
+    const ts = attrsOf(p).fddLastRun || (p.latest && p.latest.ts);
+    return ts ? new Date(parseTs(ts)).toLocaleString() : "–";
+  };
+  const sensorNameOf = (p) => {
+    const ref = attrsOf(p).sensorRef;
+    const input = ref && model.points.find((x) => x.uuid === ref && has(x, "point"));
+    return input ? (input.dis || input.name) : (p.name || p.dis);
+  };
+  const statusOf = (p) => attrsOf(p).fddStatus || (latestOf(p) == null ? "not-assessed" : has(p, "fault") && latestOf(p) > 0 ? "fault" : "ok");
+  const faulted = (p) => statusOf(p) === "fault" || (statusOf(p) !== "not-assessed" && statusOf(p) !== "stale" && has(p, "fault") && latestOf(p) > 0);
+  const sweeps = new Set(results.filter((p) => /^SV-/.test(ruleRefOf(p))).map(ruleRefOf));
+  const rows = [];
+  for (const ruleId of sweeps) {
+    const ruleRows = results.filter((p) => ruleRefOf(p) === ruleId);
+    const byGroup = new Map();
+    for (const p of ruleRows) {
+      const key = p.equipRef;
+      if (!byGroup.has(key)) byGroup.set(key, []);
+      byGroup.get(key).push(p);
+    }
+    for (const [equipId, group] of byGroup) {
+      const sensors = group.filter((p) => attrsOf(p).fddSummary === "sensor" || attrsOf(p).sensorRef);
+      const summary = group.find((p) => attrsOf(p).fddSummary === "equip") || group.find((p) => !sensors.includes(p));
+      if (summary) {
+        const groupId = `${ruleId}|${equipId}`;
+        const v = latestOf(summary), status = statusOf(summary), hot = faulted(summary);
+        rows.push(`<tr class="clickable fdd-summary-row" data-rule="${esc(ruleId)}" data-equip="${esc(equipId)}">
+          <td>${sensors.length ? `<button class="fdd-expand" type="button" data-expand="${esc(groupId)}" aria-expanded="${fddExpandedGroups.has(groupId)}" title="Show sensor results">${fddExpandedGroups.has(groupId) ? "▾" : "▸"}</button> ` : ""}<span class="rule-id">${esc(ruleId)}</span><div class="sub">equipment summary</div></td>
+          <td class="sub">${esc(equipName(equipId))}</td><td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${v == null ? `– ${esc(dispUnit(summary))}` : `${fmt(dispVal(summary, v))} ${esc(dispUnit(summary))}`}</td>
+          <td class="sub">${esc(when(summary))}${attrsOf(summary).fddCoverageHours !== "" && attrsOf(summary).fddCoverageHours != null ? ` · ${esc(attrsOf(summary).fddCoverageHours)} h covered` : ""}</td></tr>`);
+      }
+      const faultedOnly = $("fddFaultedOnly")?.checked;
+      for (const p of sensors.sort((a, b) => Number(faulted(b)) - Number(faulted(a)) || String(attrsOf(a).roleRef || "").localeCompare(String(attrsOf(b).roleRef || "")))) {
+        const v = latestOf(p), status = statusOf(p), hot = faulted(p), groupId = `${ruleId}|${equipId}`;
+        if (faultedOnly && !hot) continue;
+        const role = attrsOf(p).roleRef || "sensor";
+        const hidden = !fddExpandedGroups.has(groupId);
+        rows.push(`<tr class="clickable fdd-sensor-row" data-rule="${esc(ruleId)}" data-equip="${esc(equipId)}" data-sensor="${esc(attrsOf(p).sensorRef || "")}"${hidden ? " hidden" : ""}>
+          <td><span class="rule-id">${esc(ruleId)}</span><div class="sub">${esc(role)}</div></td><td class="sub">${esc(sensorNameOf(p))}<div class="sub">${esc(equipName(equipId))}</div></td>
+          <td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${v == null ? `– ${esc(dispUnit(p))}` : `${fmt(dispVal(p, v))} ${esc(dispUnit(p))}`}</td>
+          <td class="sub">${esc(when(p))}${attrsOf(p).fddCoverageHours !== "" && attrsOf(p).fddCoverageHours != null ? ` · ${esc(attrsOf(p).fddCoverageHours)} h covered` : ""}</td></tr>`);
+      }
+    }
+  }
+  for (const p of results.filter((x) => !sweeps.has(ruleRefOf(x)))) {
     const v = latestOf(p);
     const hot = has(p, "fault") && v > 0;
-    return `<tr class="clickable" data-rule="${esc(ruleRefOf(p))}" data-equip="${esc(p.equipRef)}" title="plot this rule"><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
-      <td class="${hot ? "warn" : "ok"}">${fmt(dispVal(p, v))} ${esc(dispUnit(p))}</td><td class="sub">${esc(when(p))}</td></tr>`;
-  }).join("");
-  const faults = results.filter((p) => has(p, "fault"));
+    rows.push(`<tr class="clickable" data-rule="${esc(ruleRefOf(p))}" data-equip="${esc(p.equipRef)}" title="plot this rule"><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
+      <td class="${hot ? "warn" : "ok"}">${fmt(dispVal(p, v))} ${esc(dispUnit(p))}</td><td class="sub">${esc(when(p))}</td></tr>`);
+  }
+  $("fddResultRows").innerHTML = rows.join("");
+  const sweepSensorPoints = results.filter((p) => /^SV-/.test(ruleRefOf(p)) && (attrsOf(p).fddSummary === "sensor" || attrsOf(p).sensorRef));
+  const heatmapRows = results.filter((p) => has(p, "fault") && !sweepSensorPoints.some((s) => s.equipRef === p.equipRef && ruleRefOf(s) === ruleRefOf(p) && (attrsOf(p).fddSummary === "equip" || !attrsOf(p).fddSummary)));
+  const faults = heatmapRows;
   const el = $("fddLanes");
   el.hidden = !faults.length;
   if (!faults.length) return;
   const series = await fetchDisplay(faults, 24 * 7, { method: "MAX", windowSec: 3600 });
-  const label = (p) => (equips.length > 1 ? `${ruleRefOf(p)} · ${equipName(p.equipRef)}` : ruleRefOf(p));
+  const label = (p) => `${ruleRefOf(p)} · ${attrsOf(p).roleRef ? `${attrsOf(p).roleRef} · ${sensorNameOf(p)}` : equipName(p.equipRef)}`;
   el.style.height = `${Math.max(160, 26 * faults.length + 70)}px`;
   // Heatmaps need category axes: one column per hour.
-  const hours = [...new Set(faults.flatMap((p) => (series.get(p.uuid) || []).map(([t]) => Math.floor(t / 3600e3) * 3600e3)))].sort((a, b) => a - b);
+  const units = (p) => dispUnit(p) || (attrsOf(p).fddOutput === "fault_hours" ? "h" : "%");
+  const filtered = new Map(faults.map((p) => [p.uuid, rcxCurrentOutputSeries(p, series.get(p.uuid) || [], 3600)]));
+  const hours = [...new Set(faults.flatMap((p) => (filtered.get(p.uuid) || []).map(([t]) => Math.floor(t / 3600e3) * 3600e3)))].sort((a, b) => a - b);
   const col = new Map(hours.map((t, i) => [t, i]));
   const hourLabel = (t) => new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric" });
+  const unitGroups = new Map();
+  for (const p of faults) {
+    const unit = units(p);
+    if (!unitGroups.has(unit)) unitGroups.set(unit, []);
+    unitGroups.get(unit).push(p);
+  }
+  const unitEntries = [...unitGroups];
+  const heatSeries = unitEntries.map(([unit, points]) => ({ type: "heatmap", name: unit, data: points.flatMap((p) =>
+    (filtered.get(p.uuid) || []).map(([t, v]) => [col.get(Math.floor(t / 3600e3) * 3600e3), faults.indexOf(p), v])) }));
+  const visualMaps = unitEntries.map(([unit, points], seriesIndex) => {
+    const max = unit === "h" ? Math.max(1, ...points.map((p) => Number(attrsOf(p).fddWindowHours) || 24)) : 100;
+    return { min: 0, max, seriesIndex, dimension: 2, orient: "horizontal", left: `${Math.round((seriesIndex + 1) * 100 / (unitEntries.length + 1))}%`, bottom: 0, itemHeight: 100,
+      text: [`${max} ${unit}`, `0 ${unit}`], inRange: { color: ["rgba(239,68,68,0.05)", FAULT_LANE.lineStyle.color] } };
+  });
   ofddChart(el).setOption({
-    tooltip: { formatter: (x) => `${esc(label(faults[x.value[1]]))}<br>${esc(hourLabel(hours[x.value[0]]))}: ${fmt(x.value[2])} %` },
+    tooltip: { formatter: (x) => { const p = faults[x.value[1]], unit = units(p); return `${esc(label(p))}<br>${esc(hourLabel(hours[x.value[0]]))}: ${fmt(x.value[2])} ${esc(unit)}`; } },
     grid: { left: 200, right: 20, top: 10, bottom: 70 },
     xAxis: { type: "category", data: hours.map(hourLabel), splitArea: { show: false } },
     yAxis: { type: "category", data: faults.map(label), inverse: true },
-    visualMap: { min: 0, max: 100, dimension: 2, orient: "horizontal", left: "center", bottom: 0, itemHeight: 120,
-      text: ["100 %", "0 %"], inRange: { color: ["rgba(239,68,68,0.05)", FAULT_LANE.lineStyle.color] } },
-    series: [{ type: "heatmap", data: faults.flatMap((p, i) => (series.get(p.uuid) || [])
-      .map(([t, v]) => [col.get(Math.floor(t / 3600e3) * 3600e3), i, v])) }],
+    visualMap: visualMaps,
+    series: heatSeries,
   }, true);
 }
 
@@ -783,12 +852,23 @@ function wireControls() {
     renderPointHistory().catch((e) => setLive(false, e.message));
   };
   $("fddRunnableOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
+  $("fddFaultedOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
   $("rcxRange").onchange = () => { rcxRangeChosen = true; renderRcx().catch((e) => setLive(false, e.message)); };
 
   // Click a rule (Faults or Rule inputs) → stacked signal plot + bottom fault lane (fdd-plots.js).
   const plotErr = (e) => ($("fddPlotNote").textContent = `could not draw: ${e.message}`);
   for (const id of ["fddRows", "fddResultRows"]) {
-    $(id).onclick = (ev) => { const tr = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("tr[data-rule]")); if (tr) showRulePlot(tr.dataset.rule, tr.dataset.equip).catch(plotErr); };
+    $(id).onclick = (ev) => {
+      const toggle = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("[data-expand]"));
+      if (toggle) {
+        const groupId = toggle.dataset.expand;
+        fddExpandedGroups.has(groupId) ? fddExpandedGroups.delete(groupId) : fddExpandedGroups.add(groupId);
+        renderFddResults(model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site)).catch(showErr);
+        ev.stopPropagation(); return;
+      }
+      const tr = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("tr[data-rule]"));
+      if (tr) showRulePlot(tr.dataset.rule, tr.dataset.equip).catch(plotErr);
+    };
   }
   $("fddPlotClose").onclick = () => { $("fddPlotPanel").hidden = true; };
   $("fddRunNow").onclick = () => runFddNow().catch((e) => ($("fddRunState").textContent = `could not start: ${e.message}`));
@@ -835,4 +915,4 @@ async function main() {
   setInterval(() => { if (activeTab === "charts" && !document.hidden) renderCharts().catch(() => {}); }, CHART_REFRESH_MS);
 }
 
-main().catch(showErr);
+if (typeof document !== "undefined" && document.documentElement) main().catch(showErr);

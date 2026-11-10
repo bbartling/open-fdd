@@ -12,21 +12,23 @@
   const norm = (u) => String(u || "").trim().toLowerCase().replace(/[\s_]/g, "").replace("₂", "2").replace("º", "°");
 
   // unit → [quantity, SI unit, toSI(x)]
-  const TABLE = {};
+  const TABLE = Object.create(null);
   const add = (names, quantity, si, f) => { for (const n of names) TABLE[norm(n)] = [quantity, si, f]; };
   const id = (x) => x;
-  add(["°C", "degC", "C", "celsius", "deg_c"], "temperature", "°C", id);
-  add(["°F", "degF", "F", "fahrenheit", "deg_f"], "temperature", "°C", (x) => (x - 32) * 5 / 9);
+  add(["°C", "degC", "C", "celsius", "deg_c", "degrees-celsius"], "temperature", "°C", id);
+  add(["°F", "degF", "F", "fahrenheit", "deg_f", "degrees-fahrenheit"], "temperature", "°C", (x) => (x - 32) * 5 / 9);
   add(["K", "kelvin"], "temperature", "°C", (x) => x - 273.15);
-  add(["Pa", "pascal"], "pressure", "Pa", id);
-  add(["kPa"], "pressure", "Pa", (x) => x * 1000);
-  add(["inH2O", "inWC", "in wc", "in. w.c.", "inH₂O", "\"wc", "in_h2o"], "pressure", "Pa", (x) => x * 249.0889);
+  add(["Pa", "pascal", "pascals"], "pressure", "Pa", id);
+  add(["kPa", "kilopascals"], "pressure", "Pa", (x) => x * 1000);
+  add(["inH2O", "inH20", "inWC", "in wc", "in. w.c.", "inH₂O", "\"wc", "in_h2o",
+    "inches of water", "inches-of-water", "iwc"], "pressure", "Pa", (x) => x * 249.0889);
   add(["psi", "psig", "psid"], "pressure", "Pa", (x) => x * 6894.757);
   add(["bar"], "pressure", "Pa", (x) => x * 1e5);
-  add(["L/s", "l/s", "lps"], "flow", "L/s", id);
+  add(["L/s", "lps", "L/sec", "liters/second", "litres/second", "liters per second", "litres per second",
+    "liters-per-second"], "flow", "L/s", id);
   add(["m³/s", "m3/s"], "flow", "L/s", (x) => x * 1000);
   add(["m³/h", "m3/h", "cmh"], "flow", "L/s", (x) => x / 3.6);
-  add(["cfm", "ft³/min", "ft3/min"], "flow", "L/s", (x) => x * 0.4719474);
+  add(["cfm", "ft³/min", "ft3/min", "cubic-feet-per-minute"], "flow", "L/s", (x) => x * 0.4719474);
   add(["gpm", "gal/min"], "flow", "L/s", (x) => x * 0.0630902);
   add(["kW"], "power", "kW", id);
   add(["W"], "power", "kW", (x) => x / 1000);
@@ -40,7 +42,7 @@
   add(["kBtu"], "energy", "kWh", (x) => x * 0.29307107);
   add(["MMBtu"], "energy", "kWh", (x) => x * 293.07107);
   add(["therm", "therms"], "energy", "kWh", (x) => x * 29.307107);
-  add(["%", "%RH", "percent", "pct"], "percent", "%", id);
+  add(["%", "%RH", "percent", "pct", "percent-relative-humidity"], "percent", "%", id);
   add(["ppm"], "concentration", "ppm", id);
 
   /** Value in canonical SI, or null when the unit is unknown/empty (caller keeps it as-is). */
