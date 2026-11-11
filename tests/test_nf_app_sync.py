@@ -152,6 +152,45 @@ def test_timescale_schema_preflight_engine_selection_and_lite_skip(monkeypatch):
     assert sync.timescale_schema_check(_app("timescale"))[0] == "FAIL"
 
 
+@pytest.mark.parametrize("raw", [
+    json.dumps({"host": "localhost"}),
+    json.dumps({"host": "LOCALHOST."}),
+    json.dumps({"host": "127.0.0.1"}),
+    json.dumps({"host": "127.22.33.44"}),
+    json.dumps({"host": "::1"}),
+    json.dumps({"connectionString": "postgresql://user@localhost/fdd"}),
+    "postgresql://user@[::1]:5432/fdd",
+    "host=127.0.0.9 dbname=fdd",
+    "host=db.example host=127.0.0.1",
+])
+def test_loopback_hook_host_fails_before_cli_probe(raw):
+    called = []
+    level, message = sync.timescale_schema_check(_app("timescale", raw), {}, runner=lambda *_a, **_k: called.append(True))
+    assert level == "FAIL"
+    assert "loopback from the NF host's perspective" in message
+    assert "NF_TIMESCALE_PREFLIGHT_DSN" in message and "reachable" in message
+    assert not called, "never probe the deploy PC's local loopback by accident"
+
+
+def test_duplicate_host_guard_uses_last_case_sensitive_dsn_value():
+    assert sync.timescale_connection_host("host=db.example host=127.0.0.1") == "127.0.0.1"
+    assert sync.timescale_connection_host("host=127.0.0.1 HOST=db.example") == "127.0.0.1"
+
+
+def test_explicit_loopback_dsn_override_allows_an_intentional_local_forward(monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
+    seen = {}
+    def run(args, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="3\n", stderr="")
+    app = _app("timescale", json.dumps({"host": "127.0.0.1", "password": "hook-secret"}))
+    level, message = sync.timescale_schema_check(
+        app, {"NF_TIMESCALE_PREFLIGHT_DSN": "postgresql://forward-user@127.0.0.1:15432/fdd"}, runner=run)
+    assert level == "PASS", message
+    assert seen["env"]["PGHOST"] == "127.0.0.1" and seen["env"]["PGPORT"] == "15432"
+    assert "PGPASSWORD" not in seen["env"]
+
+
 @pytest.mark.parametrize(("stdout", "expected"), [("3\n", "PASS"), ("2\n", "FAIL"), ("\n", "FAIL")])
 def test_timescale_schema_preflight_exact_version(stdout, expected, monkeypatch):
     monkeypatch.setattr(sync.shutil, "which", lambda _: "psql-test")
@@ -159,7 +198,7 @@ def test_timescale_schema_preflight_exact_version(stdout, expected, monkeypatch)
     def run(args, **kwargs):
         seen.update(args=args, **kwargs)
         return SimpleNamespace(returncode=0, stdout=stdout, stderr="secret should not escape")
-    app = _app("auto", "postgresql://alice:password@db.example/fdd?sslmode=require")
+    app = _app("auto", "postgresql://alice:password@192.0.2.10/fdd?sslmode=require")
     level, message = sync.timescale_schema_check(app, {}, runner=run)
     assert level == expected
     assert "password" not in message

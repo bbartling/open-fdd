@@ -267,3 +267,21 @@ test("health view tells you when no sensor role is bound", async () => {
   const note = await view.render({ style: {} }, { equips: [{ id: "x", name: "x", bound: {} }], hours: 24, first: () => null });
   assert.match(note, /No temperature/);
 });
+
+test("health view builds hourly columns from the selected historical range", async () => {
+  const ctx = load();
+  const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-health");
+  const point = pt("sat", "supply air temp");
+  const fromMs = Date.parse("2026-10-31T10:30:00Z"), toMs = Date.parse("2026-10-31T12:15:00Z");
+  const range = { resolvedBounds: { fromMs, toMs } };
+  const data = new Map([["sat", [[Date.parse("2026-10-31T10:00:00Z"), 20], [Date.parse("2026-10-31T11:00:00Z"), 21], [Date.parse("2026-10-31T12:00:00Z"), 22]]]]);
+  const note = await view.render({ style: {} }, {
+    equips: [{ id: "AHU-1", name: "AHU-1", bound: { sat: [point] } }],
+    first: (eq, role) => eq.bound[role]?.[0] || null,
+    series: async () => data, hours: 168, range, siteTz: "UTC", catalog,
+  });
+  const option = plain(ctx.last.rendered.option);
+  assert.equal(option.xAxis.data.length, 3, "include the hourly bins intersecting both partial edges");
+  assert.deepEqual(option.xAxis.data, ["Sat 10 AM", "Sat 11 AM", "Sat 12 PM"]);
+  assert.match(note, /1 sensors/);
+});

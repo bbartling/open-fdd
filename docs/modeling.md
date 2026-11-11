@@ -1,61 +1,42 @@
 ---
 title: Modeling
-nav_order: 4
+nav_order: 3
 ---
 
-# Model your site in NF
+# Model equipment and points
 
-Open-FDD has no configuration of its own. Sites, equipment, points and units are **discovered** from NF's Haystack
-model. To support a new building, tag it in NF (console, or the NF MCP `tag_points` / `manage_equipment`); no app
-change is needed, and the app must never be forked per site.
+Open-FDD discovers sites, equipment, and points from NF's Haystack model. No site-specific code or app settings are
+needed. Tag the model in NF, then reload the app.
 
-## What to tag
+## Records and attributes
 
-| Level | What NF needs |
+| Record | Useful fields |
 |---|---|
-| **Site** | a site record with `latitude`, `longitude`, timezone, and optionally `area` (floor area) |
-| **Equipment** | an equip instance with markers that say what it is (`ahu`, `vav`, `chiller`, `boiler`, `meter`, ...) |
-| **Points** | `siteRef`, `equipRef` (and `deviceRef` for the BACnet device), `class`, `markers`, `kind`, `unit` |
+| Site | latitude, longitude, timezone, optional area and areaUnit |
+| Equipment | siteRef, equipment markers such as ahu, vav, or chiller |
+| Point | siteRef, equipRef, class, markers, kind, unit, and history |
 
-Trend (history) every point you want to chart or run rules on.
+Trend points used by a chart or rule. Site coordinates support the weather hook. If using energy intensity charts,
+set floor area and its unit.
 
-- **Site coordinates** drive the weather hook (Open-Meteo). Set them in NF Sites.
-- **Site area** is the `area` attribute on the NF site record. It is assumed to be ft2 unless the site has
-  `areaUnit` set to m2. Without it, energy charts show kWh instead of EUI (kWh/m2/yr, shown as kBtu/ft2/yr in the imperial display).
-- **Units**: set `unit` on the point (`degF`, `cfm`, `inH2O`, ...). Open-FDD converts to SI on ingest. See [Units](units.html).
+## How a role binds
 
-## How roles bind
+Rules and charts ask for named roles such as supply-air temperature or fan command. The generated
+[FDD catalog](fdd-rules.html) lists each rule's roles. The NF class and marker map is in
+nf-app/static/fdd-catalog.json.
 
-Each rule and chart declares **roles**, the inputs it needs (for example `sat`, `sat_sp`, `fan_cmd`, `zone_t`).
-The catalog `nf-app/static/fdd-catalog.json` lists every role with the NF classes and Haystack markers that fill it.
-A point fills a role when:
+A point fills a role when its NF class matches a listed class, or when it has every marker for the role. A class is
+preferred because it is more specific. Markers are one comma-separated string in NF. Setting class does not add
+markers. Equipment kinds come from equipment markers. Weather points fill weather roles only.
 
-1. its NF **class** is in the role's class list (preferred, best match), or
-2. it carries **every marker** of the role.
+The FDD and RCx pages show missing required roles. Add the appropriate class or markers to the point in NF, ensure it
+has history and a usable unit, then reload.
 
-Equipment kinds (ahu, vav, chiller, ...) come from the equip's own markers. Weather-service points (marker
-`weather`) fill only `web_*` roles; equipment sensors never do. The same binding code runs in the browser and in the
-FDD hook, so the UI and the hook cannot disagree.
+## Units and checks
 
-NF class names are dash-case, for example `discharge-air-temp-sensor`, `zone-air-temp-sensor`, `outside-damper-cmd`.
-The full list is in NF at `GET /api/v1/equipment/classes?pageSize=1000`.
+Use truthful point units. Open-FDD converts supported values to SI at ingest. Rules never infer a unit from magnitude.
+Unknown or incompatible units are skipped. See [Units](units.html).
 
-## The FDD tab: "missing inputs"
-
-The FDD tab lists every rule per equipment with a status:
-
-- **can run now**: all required roles are bound.
-- **missing inputs**: shows the missing roles (for example `needs sat_sp`). Add the class or markers to a point in
-  NF, reload, and the rule becomes runnable.
-
-The RCx tab does the same for charts: views that cannot draw are listed with what they are missing.
-Browse the rules and their roles in [FDD rules](fdd-rules.html).
-
-## Tips
-
-- Prefer an NF **class** over bare markers; it is unambiguous.
-- Tag spare or unused I/O so it is not mistaken for a sensor.
-- One equip instance per physical unit; give every point an `equipRef` and `siteRef`.
-- Check the Model and RDF tab for dangling references ([RDF and SPARQL](rdf-sparql.html)).
-- How NF stores these tags (layers, one marker per query clause, markers are not derived from `class`) and how to
-  check a site from a terminal: [Haystack tagging](operations/nf/haystack-tagging.html).
+The Model and RDF views report dangling references. The FDD tab reports missing rule inputs. For RDF
+export and query examples, see [RDF and SPARQL](rdf-sparql.html). Internal details about NF layers and marker queries
+remain in the repository's docs/operations/nf/haystack-tagging.md.

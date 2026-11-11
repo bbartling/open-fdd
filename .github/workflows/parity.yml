@@ -3,26 +3,7 @@
 name: pandas == SQL parity
 
 on:
-  push:
-    paths:
-      - "sql/fdd/**"
-      - "open_fdd/**"
-      - "nf-app/hooks/**"
-      - "nf-app/rules/**"
-      - "nf-app/tests/**"
-      - "tests/parity/**"
-      - "pyproject.toml"
-      - ".github/workflows/parity.yml"
-  pull_request:
-    paths:
-      - "sql/fdd/**"
-      - "open_fdd/**"
-      - "nf-app/hooks/**"
-      - "nf-app/rules/**"
-      - "nf-app/tests/**"
-      - "tests/parity/**"
-      - "pyproject.toml"
-      - ".github/workflows/parity.yml"
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -58,5 +39,5 @@ jobs:
       - name: Python tests (pandas == SQL parity, NF agent tools, deploy tool)
         run: python -m pytest tests -q
 
-      - name: Stress report (8 equips x 7 days)
+      - name: SI stress report (8 equips x 7 days)
         run: python tests/parity/stress.py --equips 8 --days 7

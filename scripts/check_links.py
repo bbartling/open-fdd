@@ -15,11 +15,21 @@ from pathlib import Path
 from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
+DOCS = ROOT / "docs"
 DEFAULT = ["README.md", "SECURITY.md", "AGENTS.md", "CHANGELOG.md", "nf-app/README.md", "lite/README.md",
            "deploy/nf-caddy/README.md", "tools/rdf-check/README.md",
            "tools/bacnet-scan/README.md", "scripts/nf/README.md", "scripts/nf/tools/README.md"]
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)|(?:src|href)=\"([^\"]+)\"")
 FENCE = re.compile(r"^(```|~~~)")
+
+
+def is_generated_docs_file(path: Path) -> bool:
+    """Exclude local Bundler/Jekyll output, which is neither project source nor link-check input."""
+    try:
+        parts = path.relative_to(DOCS).parts
+    except ValueError:
+        return False
+    return parts[:2] == ("vendor", "bundle") or bool(parts and parts[0] == "_site")
 
 
 def targets(path: Path):
@@ -46,7 +56,9 @@ def exists(base: Path, link: str) -> bool:
 
 def main(argv: list[str]) -> int:
     files = [Path(a).resolve() for a in argv] or (
-        [ROOT / f for f in DEFAULT if (ROOT / f).is_file()] + sorted((ROOT / "docs").rglob("*.md")) + sorted((ROOT / "openfdd_agent_spec").rglob("*.md")))
+        [ROOT / f for f in DEFAULT if (ROOT / f).is_file()]
+        + [f for f in sorted(DOCS.rglob("*.md")) if not is_generated_docs_file(f)]
+        + sorted((ROOT / "openfdd_agent_spec").rglob("*.md")))
     bad = 0
     total = 0
     for f in files:

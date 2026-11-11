@@ -45,7 +45,7 @@ interface RcxViewDef {
 
 /** What a view's render() receives (rcxContext()). Chart options stay `any` (ECharts). */
 interface RcxContext {
-  view: RcxViewDef; equips: OfddEquip[]; hours: number; model: OfddModel; catalog: FddCatalog;
+  view: RcxViewDef; equips: OfddEquip[]; hours: number; model: OfddModel; catalog: FddCatalog; range: any; siteTz: string;
   first(eq: OfddEquip, role: string): OfddPoint | null;
   series(pts: OfddPoint[], o?: { hours?: number; method?: string; windowSec?: number }): Promise<Map<string, [number, number][]>>;
   aligned(cols: Record<string, OfddPoint>, o?: { hours?: number; method?: string; windowSec?: number }): Promise<{ t: number[]; cols: Record<string, (number | null)[]> }>;

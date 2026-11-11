@@ -64,6 +64,7 @@ import difflib
 import errno
 import hashlib
 import http.client
+import ipaddress
 import json
 import os
 import re
@@ -1458,6 +1459,56 @@ def timescale_check(app: dict) -> tuple[str, str]:
     return "PASS", 'app option "timescale" parses and names a host (value not shown)'
 
 
+def timescale_connection_host(value) -> str | None:
+    """Extract the configured PostgreSQL host without exposing the connection value."""
+    if isinstance(value, dict):
+        value = value.get("connectionString") or value.get("host")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.startswith("{"):
+        try:
+            config = json.loads(text)
+        except ValueError:
+            return None
+        return timescale_connection_host(config) if isinstance(config, dict) else None
+    try:
+        parsed = urllib.parse.urlparse(text)
+        if parsed.scheme.lower() in ("postgres", "postgresql"):
+            return parsed.hostname
+        if not parsed.scheme and "=" not in text:
+            return text
+    except ValueError:
+        return None
+    if "=" in text:
+        import shlex
+        found = None
+        try:
+            for part in shlex.split(text):
+                key, sep, host = part.partition("=")
+                if sep and key == "host":
+                    found = host
+        except ValueError:
+            return None
+        return found
+    return None
+
+
+def is_loopback_host(host: str | None) -> bool:
+    """Recognize localhost and every IPv4/IPv6 loopback address, including mapped IPv4."""
+    if not host:
+        return False
+    name = host.strip().strip("[]").rstrip(".").lower()
+    if name == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(name)
+    except ValueError:
+        return False
+    mapped = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else None
+    return address.is_loopback or bool(mapped and mapped.is_loopback)
+
+
 def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tuple[str, str]:
     """Read-only preflight against the configured Timescale database, with no credentials in argv/output."""
     env = os.environ if environ is None else environ
@@ -1468,6 +1519,9 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
     if engine in {"sqlite", "pglite"} or (not explicit and not configured):
         return "SKIP", ""
     dsn_override = env.get("NF_TIMESCALE_PREFLIGHT_DSN")
+    if not dsn_override and is_loopback_host(timescale_connection_host(raw)):
+        return "FAIL", ("Timescale hook host is loopback from the NF host's perspective; this CLI cannot assume "
+                         "the same loopback. Set NF_TIMESCALE_PREFLIGHT_DSN to a forwarded or reachable DB endpoint")
     conn = dsn_override or raw
     if not conn:
         return "FAIL", ('Timescale is selected but no connection is available; set NF_TIMESCALE_PREFLIGHT_DSN '

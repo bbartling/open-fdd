@@ -146,6 +146,13 @@ main { padding: 20px 24px 40px; max-width: 1500px; margin: 0 auto; }
   font: inherit; font-size: 12px; cursor: pointer;
 }
 .seg button.on { background: var(--accent); color: #04111d; font-weight: 600; }
+.chart-range { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.chart-range-presets { margin-left: 0; }
+.chart-range label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
+.chart-range input[type=datetime-local] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px; font: inherit; font-size: 11px; }
+.chart-range [data-range-apply] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+.spark-range-panel { padding: 8px 14px; }
+.spark-range-panel h2 { margin: 2px 0; }
 select, input[type=search] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
 input[type=search] { cursor: text; min-width: 220px; }
 .btn { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px;

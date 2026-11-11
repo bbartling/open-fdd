@@ -67,6 +67,8 @@
   <!-- Overview: live cards + equipment status -->
   <section class="tab on" id="tab-overview">
     <div class="stats" id="summary"></div>
+    <div id="overviewRangeControl"></div>
+    <p id="overviewRangeStatus" class="hint" role="status"></p>
     <section class="cards" id="cards"></section>
     <section class="panel">
       <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
@@ -84,9 +86,10 @@
       <h2><span id="chartTitle">–</span>
         <select id="chartPick" class="hidden"></select>
         <span class="hint" id="chartHint"></span>
-        <span class="seg" id="chartRange"></span>
         <a class="btn" id="chartOpen" target="_blank" rel="noopener" title="open this chart in its own window">open in new window ↗</a>
       </h2>
+      <div id="chartRangeControl"></div>
+      <p id="chartRangeStatus" class="hint" role="status"></p>
       <div class="chart tall" id="chartHost"></div>
     </section>
   </section>
@@ -97,11 +100,14 @@
     <section class="panel" id="fddPlotPanel" hidden>
       <h2><span id="fddPlotTitle">Rule plot</span> <span class="hint" id="fddPlotNote"></span>
         <button class="btn" id="fddPlotClose">Close</button></h2>
+      <div id="fddPlotRangeControl"></div><p id="fddPlotRangeStatus" class="hint" role="status"></p>
       <div class="chart" id="fddPlot"></div>
     </section>
     <section class="panel" id="fddResultsPanel" hidden>
       <h2>Faults <span class="hint" id="fddResultsHint">written by the open-fdd hook · sensor sweeps show per-sensor results</span>
         <label class="hint"><input type="checkbox" id="fddFaultedOnly"> faulted sensors only</label></h2>
+      <div id="fddRangeControl"></div>
+      <p id="fddRangeStatus" class="hint" role="status"></p>
       <div class="chart" id="fddLanes"></div>
       <div class="tablewrap"><table class="bac">
         <thead><tr><th>Rule</th><th>Equip</th><th>Latest</th><th>Run</th></tr></thead>
@@ -125,10 +131,8 @@
   <section class="tab" id="tab-rcx">
     <section class="panel">
       <h2>Retro-commissioning <span class="hint" id="rcxHint">views draw when their roles bind on the equips in scope</span>
-        <label class="hint">range <select id="rcxRange">
-          <option value="24">24 h</option><option value="72">3 days</option><option value="168" selected>7 days</option><option value="672">28 days</option>
-        </select></label>
       </h2>
+      <div id="rcxRangeControl"></div><p id="rcxRangeStatus" class="hint" role="status"></p>
     </section>
     <div id="rcxBody"></div>
     <section class="panel">
@@ -154,11 +158,8 @@
     </section>
     <section class="panel">
       <h2>History <span class="hint" id="histHint">click a point above</span>
-        <span class="seg" id="histRange">
-          <button data-h="6">6h</button><button data-h="24" class="on">24h</button>
-          <button data-h="72">3d</button><button data-h="168">7d</button>
-        </span>
       </h2>
+      <div id="histRangeControl"></div><p id="histRangeStatus" class="hint" role="status"></p>
       <div class="chart short" id="histChart"></div>
     </section>
   </section>
@@ -187,9 +188,8 @@
   <section class="tab" id="tab-export">
     <section class="panel">
       <h2>Export CSV <span class="hint">history for the points in the site / equip scope above, resampled by NF · opens in Excel</span></h2>
+      <div id="exRangeControl"></div><p id="exRangeStatus" class="hint" role="status"></p>
       <div class="exform">
-        <label>Start <input type="datetime-local" id="exStart"></label>
-        <label>End <input type="datetime-local" id="exEnd"></label>
         <label>Resolution <select id="exRes"></select></label>
         <label>Units <select id="exUnits">
           <option value="display">As displayed</option>

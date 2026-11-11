@@ -41,6 +41,23 @@ exclude:
   - vendor
   - .sass-cache
   - .jekyll-cache
+  - prompts/**
+  - lite.md
+  - operations/nf/index.md
+  - operations/nf/lite-vs-full.md
+  - operations/nf/haystack-tagging.md
+  - operations/nf/front-door-caddy.md
+  - operations/nf/nf-upgrade-compose.md
+  - operations/nf/bacnet-validate.md
+  - operations/nf/migrate-5.0.10.md
+  - operations/nf/migrate-5.0.11.md
+  - operations/nf/nf-gotchas.md
+  - operations/nf/PORT_NOTES.md
+  - migration/nf-plugin/PLAN.md
+  - migration/nf-plugin/STATUS.md
+  - migration/nf-plugin/NF_FEATURES.md
+  - migration/nf-plugin/ARCHIVE_MAP.md
+  - architecture/adr-014-open-fdd-as-nf-plugin.md
 
 mermaid:
   version: "10.9.1"

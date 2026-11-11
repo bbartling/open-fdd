@@ -11,6 +11,10 @@ permissions:
   contents: read
 
 jobs:
+  parity:
+    name: pandas == SQL parity
+    uses: ./.github/workflows/parity.yml
+
   npm-audit:
     name: npm audit (nf-app)
     runs-on: ubuntu-latest
@@ -39,6 +43,7 @@ jobs:
 
   zap-baseline:
     name: ZAP baseline (mock NF server)
+    needs: parity
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

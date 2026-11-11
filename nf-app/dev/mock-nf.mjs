@@ -192,17 +192,25 @@ function data(params) {
   const uuids = params.getAll("uuids");
   const from = Math.max(START, Date.parse(params.get("from") || new Date(START).toISOString()));
   const to = Math.min(NOW, Date.parse(params.get("to") || new Date(NOW).toISOString()));
-  const win = (parseInt(params.get("window") || "300", 10) || 300) * 1e3;
+  const win = Math.max(0, parseInt(params.get("window") || "0", 10) || 0) * 1e3;
+  const count = Math.min(10000, Math.max(1, parseInt(params.get("count") || "10000", 10) || 10000));
+  const reverse = params.get("reverse") === "true";
   const agg = AGG[params.get("method") || "AVERAGE"] || AGG.AVERAGE;
   return { data: uuids.map((uuid) => {
     const fn = signals.get(uuid);
-    const values = [];
-    if (fn) for (let b = Math.floor(from / win) * win; b < to; b += win) {
-      const xs = [];
-      for (let t = Math.max(b, START); t < Math.min(b + win, NOW); t += 300e3) xs.push(fn(t));
-      if (xs.length) values.push({ ts: new Date(b).toISOString(), double: Math.round(agg(xs) * 1000) / 1000 });
+    const buckets = new Map();
+    // NF's time bounds select the raw samples before resampling. With no window,
+    // each sample keeps its own timestamp and count applies per UUID.
+    if (fn) for (let t = Math.ceil(from / 300e3) * 300e3; t <= to; t += 300e3) {
+      const bucket = win ? Math.floor(t / win) * win : t;
+      if (!buckets.has(bucket)) buckets.set(bucket, []);
+      buckets.get(bucket).push(fn(t));
     }
-    return { uuid, values };
+    const ordered = [...buckets];
+    if (reverse) ordered.reverse();
+    return { uuid, values: ordered.slice(0, count).map(([t, xs]) => ({
+      ts: new Date(t).toISOString(), double: Math.round((win ? agg(xs) : xs[0]) * 1000) / 1000,
+    })) };
   }) };
 }
 
