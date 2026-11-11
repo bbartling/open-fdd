@@ -28,6 +28,13 @@ _EDGE = ("SQL holds the fan-restart / mode-delay window over rolling rows, panda
 _PROOF = "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve"
 _WX = "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
 _GATE = "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+_STARTUP = ("pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has "
+            "no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start "
+            "(0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL")
+_TRIM_REQUESTS = ("three differences: (1) pandas reads role hw-reset-request-sum, the SQL contract and NF role is "
+                  "hot-water-reset-request-sum, so the harness gives pandas no input and it skips; (2) SQL faults at request sum <= "
+                  "request_lo, pandas at < request_lo; (3) pandas applies the hydronic-flow gate with a 600 s startup holdoff. "
+                  "Follow-up: align names and comparison with the owner (see #1582)")
 KNOWN_DIVERGENT = {
     "AHU-SATDEV": _GATE, "CHW-1": _EDGE, "CHW-NOLOAD-1": _PROOF,
     "ECON-3": _WX, "ECON-4": _EDGE, "ECON-7": _WX, "FC13-SAT-HIGH": _GATE, "FC14": _GATE, "FC5": _EDGE, "FC6": _GATE, "FC7": _GATE,
@@ -37,6 +44,9 @@ KNOWN_DIVERGENT = {
     "TRIM-1": _GATE, "TRIM-4": "pandas skips (missing roles: reset requests); SQL treats absent requests as zero",
     "VAV-6": _EDGE, "VAV-AHU-LEAVE": _EDGE,
 }
+# #1582: divergences that only appear on the longer stress datasets (tests/parity/stress.py). The 2x3 pytest dataset never
+# reaches the branch that shows them, so they are NOT in KNOWN_DIVERGENT (that set is asserted exactly on 2x3).
+STRESS_ONLY_DIVERGENT = {"TRIM-3": _TRIM_REQUESTS, "VAV-REHEAT": _STARTUP}
 
 
 NO_TWIN = {"AVG-ZONE-TEMP", "FAN-RUNTIME-HOURS", "FAULT-ELAPSED-HOURS", "UTIL-INTERVAL", "UTIL-MONTHLY", "ZONE-COMFORT-PCT"}
@@ -226,3 +236,75 @@ def test_duplicate_role_sensor_series_are_distinct_and_sql_engines_agree(duplica
         ids = {row["series_id"] for row in sat}
         assert len(sat) == 2 and len(ids) == 2, (rule, sat)
         assert all(row.get("covered_hours") is not None for row in sat), (rule, sat)
+
+
+def test_stress_verdict_fails_on_unexpected_divergence_or_short_comparison():
+    import stress
+    known = {"SV-RATE"}
+    assert stress.verdict(70, 70, {"SV-RATE"}, known)["ok"]
+    bad = stress.verdict(70, 70, {"SV-RATE", "SOME-RULE"}, known)
+    assert not bad["ok"] and bad["unexpected_rules"] == ["SOME-RULE"] and bad["unexpected"] == 1
+    assert not stress.verdict(0, 70, set(), known)["ok"]
+    assert not stress.verdict(60, 70, set(), known)["ok"]
+
+
+# --- #1582 regression fixtures: one tiny SI frame per stress-only divergence ---------------------------------------------
+STEP_S = 300
+
+
+def _fixture_frame(n, **cols):
+    idx = h.pd.date_range("2026-01-05", periods=n, freq="5min", tz="UTC", name="timestamp_utc")
+    df = h.pd.DataFrame({k: h.pd.Series(v, index=idx, dtype=float) for k, v in cols.items()}, index=idx)
+    df.attrs["equipment_id"] = "FIXTURE"
+    df.attrs["role_units"] = {}
+    return df
+
+
+def _sql_confirmed_hours(raw, confirm_s):
+    """The SQL pack's confirmation model: forward sample-and-hold, a streak confirms once its elapsed seconds reach confirm_s."""
+    total, elapsed = 0.0, 0.0
+    for i, flag in enumerate(raw):
+        held = STEP_S if i + 1 < len(raw) else 0.0
+        elapsed = elapsed + held if flag else 0.0
+        if flag and elapsed >= confirm_s:
+            total += held
+    return total / 3600.0
+
+
+def test_vav_reheat_difference_is_exactly_the_startup_holdoff(monkeypatch):
+    from dataclasses import replace
+    from open_fdd.rules import operational_gate as og
+
+    n = 30
+    fan = [0] * 4 + [1] * 26
+    rise_bad = [0.5] * 22 + [2.5] * 8  # the fault is present from the first fan-on sample, then ends
+    df = _fixture_frame(n, **{"fan-status": fan, "zone-airflow": [50.0] * n, "reheat-valve": [0.7] * n,
+                              "vav-inlet-air-temp": [15.0] * n,
+                              "vav-discharge-air-temp": [15.0 + r for r in rise_bad]})
+    raw = [f == 1 and r < 1.666667 for f, r in zip(fan, rise_bad)]
+    sql_hours = _sql_confirmed_hours(raw, CATALOG_CONFIRM["VAV-REHEAT"])
+    pandas_hours, status = h.pandas_fault_hours("VAV-REHEAT", df.copy(), None)
+    assert status == "FAULT"
+    assert sql_hours - pandas_hours == pytest.approx(STEP_S / 3600)  # one sample later in pandas
+    # the 600 s startup holdoff is the whole difference: with it removed pandas equals the SQL confirmation model
+    gate = og.RULE_GATES["VAV-REHEAT"]
+    assert gate.startup_delay_seconds == 600
+    monkeypatch.setitem(og.RULE_GATES, "VAV-REHEAT", replace(gate, startup_delay_seconds=0.0))
+    assert h.pandas_fault_hours("VAV-REHEAT", df.copy(), None)[0] == pytest.approx(sql_hours)
+
+
+def test_trim3_difference_is_request_threshold_role_name_and_gate():
+    n = 24
+    common = {"hot-water-supply-temp": [75.0] * n, "pump-status": [1] * n}
+    # (2) request sum exactly at request_lo (1): SQL (<=) faults, pandas (<) passes
+    df = _fixture_frame(n, **common, **{"hw-reset-request-sum": [1.0] * n})
+    pandas_hours, status = h.pandas_fault_hours("TRIM-3", df, None)
+    assert status == "PASS" and pandas_hours == 0.0
+    assert _sql_confirmed_hours([True] * n, CATALOG_CONFIRM["TRIM-3"]) > 0.0
+    # (1) the SQL contract / NF role name has no pandas input: pandas skips instead of evaluating
+    df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [0.0] * n})
+    assert h.pandas_fault_hours("TRIM-3", df, None)[1] == "SKIPPED_MISSING_ROLES"
+    assert "hw_reset_request_sum" not in h.ROLE_MAP and "hot-water-reset-request-sum" not in h.ROLE_MAP.values()
+
+
+CATALOG_CONFIRM = {rid: h.CATALOG[rid]["parameters"]["confirm_min"]["default"] * 60 for rid in ("VAV-REHEAT", "TRIM-3")}

@@ -67,7 +67,7 @@ flagged AS (
     CAST(CASE
       WHEN previous_epoch IS NULL OR epoch_seconds - previous_epoch > {{MAX_GAP_HOURS}} * 3600.0 THEN 0
       WHEN dt_hours IS NULL OR dt_hours <= 0.0 THEN 0
-      WHEN delta / dt_hours > ({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0) THEN 1
+      WHEN delta / dt_hours > {{SV_RATE_THRESHOLD}} THEN 1
       ELSE 0
     END AS INT) AS over_rate
   FROM rates

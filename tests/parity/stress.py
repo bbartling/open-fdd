@@ -6,8 +6,8 @@
 Generates a deterministic SI dataset (nf-app/hooks/lib/synthetic_dataset.js: alternating healthy / fault-injected
 equipment, 5-minute grid), runs the SQL pack on PGlite and SQLite, runs every rule that has a pandas twin through
 open_fdd.rules, and prints: rows, per-engine runtime, SQL-side RSS, Python-side peak RSS, pandas runtime, how many
-rules match, which differ, and which SQL rules have NO pandas twin. Exit code 1 only if an SQL engine errors or the two SQL engines
-disagree; pandas-vs-SQL divergences are listed (the pytest suite pins the exact set on its 2x3 dataset).
+rules match, which differ, and which SQL rules have NO pandas twin. Exit code 1 if an SQL engine errors, the two SQL engines disagree, a rule diverges from pandas without being listed in
+KNOWN_DIVERGENT, or fewer rules were compared than have a pandas twin (zero compared fails). With --no-pandas no pandas verdict is made.
 """
 from __future__ import annotations
 
@@ -24,6 +24,18 @@ sys.path.insert(0, str(HERE))
 import harness as h  # noqa: E402
 
 
+def verdict(compared: int, twins: int, diverged, known) -> dict:
+    """Acceptance verdict for the pandas-vs-SQL comparison: fails on any unlisted divergence or a short comparison."""
+    diverged = set(diverged)
+    unexpected = sorted(diverged - set(known))
+    matched = compared - len(diverged)
+    return {
+        "compared": compared, "matched": matched, "known_divergent": len(diverged & set(known)),
+        "unexpected": len(unexpected), "unexpected_rules": unexpected,
+        "ok": not unexpected and compared >= twins and compared > 0,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--equips", type=int, default=4)
@@ -33,7 +45,9 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=None, help="write the JSON report here")
     args = ap.parse_args()
 
-    from test_parity import KNOWN_DIVERGENT  # same documented set as the pytest suite
+    from test_parity import KNOWN_DIVERGENT, STRESS_ONLY_DIVERGENT  # documented sets, with reasons
+
+    known = set(KNOWN_DIVERGENT) | set(STRESS_ONLY_DIVERGENT)
 
     tmp = Path(tempfile.mkdtemp(prefix="parity_")) / "sql.json"
     t0 = time.time()
@@ -75,15 +89,20 @@ def main() -> int:
             "python_peak_rss_mb": round(h.peak_rss_mb(), 1),
             "rules_total": len(h.CATALOG), "rules_with_pandas_twin": len(cmp["twins"]),
             "rules_compared": len(cmp["compared"]), "rules_match": len(cmp["compared"]) - len(diverged),
-            "rules_diverge": diverged, "unexpected_divergence": sorted(set(diverged) - set(KNOWN_DIVERGENT)),
+            "rules_diverge": diverged, "unexpected_divergence": sorted(set(diverged) - known),
             "now_matching_but_listed": sorted(set(KNOWN_DIVERGENT) - set(diverged)),
             "rules_without_pandas_twin": cmp["no_twin"],
         })
-        # divergences are reported, not fatal: the exact KNOWN_DIVERGENT set is only pinned for the pytest dataset
-        # (2 equips x 3 days); bigger/longer datasets exercise more branches and may add entries.
+        v = verdict(len(cmp["compared"]), len(cmp["twins"]), diverged, known)
+        rep["verdict"] = v
+        ok = ok and v["ok"]
     else:
         rep["python_peak_rss_mb"] = round(h.peak_rss_mb(), 1)
     print(json.dumps(rep, indent=2, ensure_ascii=False))
+    if "verdict" in rep:
+        v = rep["verdict"]
+        print(f"parity: compared={v['compared']} matched={v['matched']} known-divergent={v['known_divergent']} "
+              f"unexpected={v['unexpected']} -> {'OK' if ok else 'FAIL'}")
     if args.out:
         args.out.write_text(json.dumps(rep, indent=2, ensure_ascii=False), encoding="utf-8")
     return 0 if ok else 1

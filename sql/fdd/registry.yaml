@@ -1781,7 +1781,7 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
-# --- Ported from datafusion-sql-cookbook (feat/sql-rules-59) ---
+# --- Ported from the original SQL cookbook ---
 
   - rule_id: SV-RANGE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump, meter]
