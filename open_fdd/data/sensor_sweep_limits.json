@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "units": "SI (degC, delta degC, %RH, Pa, L/s, kW)",
+  "defaults": {
+    "flat_tol_temperature": 0.055556,
+    "stale_tol_temperature": 0.027778,
+    "rate_per_h": 3.333333,
+    "flat_s": 3600,
+    "stale_s": 7200
+  },
+  "quantity_fallback": {
+    "absolute_temperature": {
+      "lo": -51.111111,
+      "hi": 54.444444,
+      "spike_delta": 20.0
+    },
+    "relative_humidity": {
+      "lo": 0.0,
+      "hi": 100.0,
+      "spike_delta": 25.0
+    },
+    "air_pressure": {
+      "lo": -248.84,
+      "hi": 1990.72,
+      "spike_delta": 497.68
+    }
+  },
+  "roles": [
+    {
+      "role": "outside-air-temp",
+      "quantity": "absolute_temperature",
+      "lo": -51.111111,
+      "hi": 54.444445,
+      "spike_delta": 20.0,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": 3.333333,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "mixed-air-temp",
+      "quantity": "absolute_temperature",
+      "lo": -28.888889,
+      "hi": 43.333333,
+      "spike_delta": 13.888889,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": 3.333333,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "zone-air-temp",
+      "quantity": "absolute_temperature",
+      "lo": 4.444444,
+      "hi": 37.777778,
+      "spike_delta": 6.666667,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": 3.333333,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "return-air-temp",
+      "quantity": "absolute_temperature",
+      "lo": 4.444444,
+      "hi": 37.777778,
+      "spike_delta": 6.666667,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": 3.333333,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "discharge-air-temp",
+      "quantity": "absolute_temperature",
+      "lo": -1.111111,
+      "hi": 65.555555,
+      "spike_delta": 22.222222,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": 3.333333,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "chilled-water-supply-temp",
+      "quantity": "absolute_temperature",
+      "lo": -1.111111,
+      "hi": 26.666667,
+      "spike_delta": 11.111111,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "chilled-water-return-temp",
+      "quantity": "absolute_temperature",
+      "lo": -1.111111,
+      "hi": 32.222223,
+      "spike_delta": 11.111111,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "hot-water-supply-temp",
+      "quantity": "absolute_temperature",
+      "lo": 4.444444,
+      "hi": 104.444444,
+      "spike_delta": 33.333333,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "hot-water-return-temp",
+      "quantity": "absolute_temperature",
+      "lo": 4.444444,
+      "hi": 104.444444,
+      "spike_delta": 33.333333,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "outside-air-humidity",
+      "quantity": "relative_humidity",
+      "lo": 0.0,
+      "hi": 100.0,
+      "spike_delta": 25.0,
+      "flat_tol": 0.1,
+      "stale_tol": 0.05,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "return-air-humidity",
+      "quantity": "relative_humidity",
+      "lo": 0.0,
+      "hi": 100.0,
+      "spike_delta": null,
+      "flat_tol": 0.1,
+      "stale_tol": 0.05,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "zone-air-humidity",
+      "quantity": "relative_humidity",
+      "lo": 0.0,
+      "hi": 100.0,
+      "spike_delta": null,
+      "flat_tol": 0.1,
+      "stale_tol": 0.05,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "mixed-air-humidity",
+      "quantity": "relative_humidity",
+      "lo": 0.0,
+      "hi": 100.0,
+      "spike_delta": null,
+      "flat_tol": 0.1,
+      "stale_tol": 0.05,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "supply-air-humidity",
+      "quantity": "relative_humidity",
+      "lo": 0.0,
+      "hi": 100.0,
+      "spike_delta": null,
+      "flat_tol": 0.1,
+      "stale_tol": 0.05,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "duct-static-pressure",
+      "quantity": "air_pressure",
+      "lo": -248.84,
+      "hi": 1990.72,
+      "spike_delta": 497.68,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+      "role": "chw-flow",
+      "quantity": "volume_flow",
+      "lo": -1.0,
+      "hi": 1500.0,
+      "spike_delta": null,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+      "role": "chw-diff-pressure",
+      "quantity": "air_pressure",
+      "lo": -6894.76,
+      "hi": 689475.73,
+      "spike_delta": null,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+      "role": "condenser-water-supply-temp",
+      "quantity": "absolute_temperature",
+      "lo": 0.0,
+      "hi": 50.0,
+      "spike_delta": 11.111111,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+      "role": "condenser-water-return-temp",
+      "quantity": "absolute_temperature",
+      "lo": 0.0,
+      "hi": 55.0,
+      "spike_delta": 11.111111,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+      "role": "chiller-power",
+      "quantity": "power",
+      "lo": -1.0,
+      "hi": 10000.0,
+      "spike_delta": null,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    }
+  ]
+}

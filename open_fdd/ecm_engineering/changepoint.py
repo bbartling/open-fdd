@@ -9,7 +9,7 @@ Clean-room Inverse Modeling Toolkit shapes used for Option C M&V oracles:
 * ``5P`` — dual slope, two change-points
 
 Requires ``numpy`` (``pip install "open-fdd[oracle]"`` / ``[analytics]``).
-Not a product DataFusion path — PyPI oracle / ECM tooling only.
+Not a product SQL path — PyPI oracle / ECM tooling only.
 
 External algorithm reference: Camber (Apache-2.0) — do not vendor into GHCR.
 """

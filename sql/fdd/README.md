@@ -24,7 +24,7 @@ The script prints SQL; it does not connect to your database. In an application i
 
 ## What changed
 
-`CAST(... AS DOUBLE)` became `DOUBLE PRECISION`. PostgreSQL does not provide the DataFusion `TRY_CAST` syntax: occupancy rules call `fdd.try_double(text)`, returning NULL for invalid or overflowing numeric text. Numeric occupancy strings such as `0.0` still work, and textual tokens still use the original CASE branches.
+`CAST(... AS DOUBLE)` became `DOUBLE PRECISION`. PostgreSQL has no `TRY_CAST` syntax: occupancy rules call `fdd.try_double(text)`, returning NULL for invalid or overflowing numeric text. Numeric occupancy strings such as `0.0` still work, and textual tokens still use the original CASE branches.
 
 `SV-RANGE` uses explicit comparisons to PostgreSQL floating-point NaN because PostgreSQL considers NaN equal to itself; the original `x != x` test is unsuitable there. For other rules, normalize nonfinite inputs to NULL before arithmetic, while retaining an invalid-value quality channel and raw NaN for SV-RANGE. Do not globally convert NaN to a healthy numeric value. Invalid sensor data must not create false comfort/economizer findings.
 
@@ -40,7 +40,58 @@ Execute against **one authorized tenant and building at a time**. Most rules par
 
 All five sensor sweeps return one row per assessable bound sensor series: `(equipment_id, series_id, sensor_role, fault_hours, covered_hours)`. The canonical per-sweep role lists are in `open_fdd/data/sensor_sweep_roles.json`; SQL rendering, the generated NF rule catalog, and the pandas oracle read the same lists. `zone_flow` is never a sweep target. `duct_static` is assessed only by SV-RANGE and SV-SPIKE. Other bound roles can still provide operating-state context to rules but do not create sensor result rows. Two bound points with the same assessable role remain separate results. `series_id` is the point UUID; `sensor_role` describes the point and selects its rule threshold. A separate series result prevents a healthy sensor from masking a faulty peer and lets callers identify the exact point. Each sample in `sensor_history` carries its own SI unit; unsupported units and invalid/mixed-unit samples are masked. An assessable series with no covered interval returns `fault_hours = NULL` and `covered_hours = 0`.
 
-`max_silence_hours` is available on the four silence sweeps (minimum and step 0.25 h). Gaps at or below the threshold use sample-and-hold. When a sensor has a next observation after a longer gap, the interval after the threshold is fault time for that series. If the point stops reporting while equipment rows continue, its final gap is measured through the equipment's last timestamp. A series with no valid observation is unknown. `SV-STALE` and `SV-FLATLINE` use elapsed-time trailing windows; their minimum window is 0.25 h. Numeric `RANGE` frames and the cutoff-crossing held sample keep the window tied to elapsed time on PostgreSQL, SQLite and DataFusion instead of a row count. `SV-RATE` retains its portable screening equation but evaluates consecutive samples, confirmation, coverage, and output independently for each sensor UUID.
+## Sensor sweep limits: one SI source (#1581)
+
+Every per-role number the five sweeps use lives in `open_fdd/data/sensor_sweep_limits.json` (SI only: degC, delta-degC,
+%RH, Pa, L/s, kW). `sql/fdd/render_rule.py` renders it into the `sv_*` rules (`{{SV_RANGE_BANDS}}`, `{{SV_SPIKE_BANDS}}`,
+`{{SV_FLATLINE_TOL}}`, `{{SV_STALE_TOL}}`, `{{SV_RATE_THRESHOLD}}`) and the pandas sweeps read the same file through
+`open_fdd.rules.sensor_sweep_catalog.load_role_limits()`. Which sweep assesses a role is still decided by
+`sensor_sweep_roles.json`. An invalid limit (non-finite, `lo >= hi`, non-positive delta, unknown quantity, missing source,
+an assessed role without a limits entry) is rejected when the file is loaded.
+
+- `lo` / `hi`: SV-RANGE band. SQL renders centre +/- half-width times the existing `range_scale_*` tuner (temperature, humidity,
+  pressure); flow and power have no scale tuner.
+- `spike_delta`: SV-SPIKE sample-to-sample delta (a real consecutive-sample difference within `max_silence_hours`, not a rate).
+- `flat_tol` / `stale_tol`: span tolerance. Empty on a temperature role means "follow the rule tuner" (`flatline_tol` 0.055556,
+  `stale_tol` 0.027778 delta-degC); a value equal to that default also follows the tuner. Humidity roles carry their own %RH value.
+- `rate_per_h`: SV-RATE threshold per hour (portable SQL rule only; see KNOWN_DIFFERENCES.md). Empty or equal to the default
+  3.333333 follows the `steady_fault_per_hour` tuner.
+- Window lengths (`flat_s` 3600, `stale_s` 7200) and the 5 minute confirmation are global defaults, recorded in the file's
+  `defaults` block: the SQL window frames are one constant per rule, so they cannot vary per role.
+
+Inventory (R range, S spike, F flatline, T stale, A rate). The 5.0.12 rows are the previous effective defaults moved
+unchanged (imperial-derived bands, so the SI numbers look odd: for example outside air -60 to 130 degF). The 5.0.13 plant
+rows are conservative gross-fault bands for owner review; they are not tuned to any site.
+
+| Role | Unit | Sweeps | Range | Spike delta | Flat tol | Stale tol | Rate per h | Provenance |
+|---|---|---|---|---|---|---|---|---|
+| `outside-air-temp` | degC | R S F T A | -51.111111 to 54.444445 | 20 |  |  | 3.333333 | 5.0.12 default |
+| `mixed-air-temp` | degC | R S F T A | -28.888889 to 43.333333 | 13.888889 |  |  | 3.333333 | 5.0.12 default |
+| `zone-air-temp` | degC | R S F T A | 4.444444 to 37.777778 | 6.666667 |  |  | 3.333333 | 5.0.12 default |
+| `return-air-temp` | degC | R S F T A | 4.444444 to 37.777778 | 6.666667 |  |  | 3.333333 | 5.0.12 default |
+| `discharge-air-temp` | degC | R S F T A | -1.111111 to 65.555555 | 22.222222 |  |  | 3.333333 | 5.0.12 default |
+| `chilled-water-supply-temp` | degC | R S F T . | -1.111111 to 26.666667 | 11.111111 |  |  |  | 5.0.12 default |
+| `chilled-water-return-temp` | degC | R S F T . | -1.111111 to 32.222223 | 11.111111 |  |  |  | 5.0.12 default |
+| `hot-water-supply-temp` | degC | R S F T . | 4.444444 to 104.44444 | 33.333333 |  |  |  | 5.0.12 default |
+| `hot-water-return-temp` | degC | R S F T . | 4.444444 to 104.44444 | 33.333333 |  |  |  | 5.0.12 default |
+| `outside-air-humidity` | %RH | R S F T . | 0 to 100 | 25 | 0.1 | 0.05 |  | 5.0.12 default |
+| `return-air-humidity` | %RH | R . F T . | 0 to 100 |  | 0.1 | 0.05 |  | 5.0.12 default |
+| `zone-air-humidity` | %RH | R . F T . | 0 to 100 |  | 0.1 | 0.05 |  | 5.0.12 default |
+| `mixed-air-humidity` | %RH | R . F T . | 0 to 100 |  | 0.1 | 0.05 |  | 5.0.12 default |
+| `supply-air-humidity` | %RH | R . F T . | 0 to 100 |  | 0.1 | 0.05 |  | 5.0.12 default |
+| `duct-static-pressure` | Pa | R S . . . | -248.84 to 1990.72 | 497.68 |  |  |  | 5.0.12 default |
+| `chw-flow` | L/s | R . . . . | -1 to 1500 |  |  |  |  | 5.0.13 plant default |
+| `chw-diff-pressure` | Pa | R . . . . | -6894.76 to 689475.73 |  |  |  |  | 5.0.13 plant default |
+| `condenser-water-supply-temp` | degC | R S . . . | 0 to 50 | 11.111111 |  |  |  | 5.0.13 plant default |
+| `condenser-water-return-temp` | degC | R S . . . | 0 to 55 | 11.111111 |  |  |  | 5.0.13 plant default |
+| `chiller-power` | kW | R . . . . | -1 to 10000 |  |  |  |  | 5.0.13 plant default |
+
+Plant roles are assessed by SV-RANGE (all five) and SV-SPIKE (condenser-water temperatures only). Flow, differential pressure
+and power are not flatline/stale targets because they rest at a constant when the plant is off. Their unit gate is exact: only
+`L/s`, `Pa` and `kW` are assessed; anything else is skipped, never converted. `chw-diff-pressure` uses the `air_pressure`
+quantity of the SQL helpers (declared `Pa`).
+
+`max_silence_hours` is available on the four silence sweeps (minimum and step 0.25 h). Gaps at or below the threshold use sample-and-hold. When a sensor has a next observation after a longer gap, the interval after the threshold is fault time for that series. If the point stops reporting while equipment rows continue, its final gap is measured through the equipment's last timestamp. A series with no valid observation is unknown. `SV-STALE` and `SV-FLATLINE` use elapsed-time trailing windows; their minimum window is 0.25 h. Numeric `RANGE` frames and the cutoff-crossing held sample keep the window tied to elapsed time on PostgreSQL, SQLite and TimescaleDB instead of a row count. `SV-RATE` retains its portable screening equation but evaluates consecutive samples, confirmation, coverage, and output independently for each sensor UUID.
 
 ## Units: SI only
 
@@ -100,6 +151,6 @@ A caller that feeds the SQL directly (a warehouse view, the pandas oracle, the p
 
 ## Verification
 
-All 77 templates render with defaults and bind/execute on empty DuckDB inputs using compatibility adapters for the PostgreSQL helper and month formatting. Seventy-six match their original DataFusion SQL on a small regular-grid DuckDB fixture. UTIL-MONTHLY is excluded from that comparison because of its changed month-key contract. These are preliminary checks, not execution on either PostgreSQL or DataFusion and not exhaustive rule accuracy tests. Qualify fault cases and tuning responsiveness before deployment.
+Every template is executed on PGlite (real PostgreSQL) and on the translated SQLite pack, and each rule that has a pandas twin is compared with it over a deterministic SI dataset: see `tests/parity/stress.py` (`--equips N --days N`; it fails on any unlisted divergence) and `docs/rules/parity.md`. These are synthetic screening checks, not field-data accuracy tests. Qualify fault cases and tuning responsiveness before deployment.
 
 Sources: [Open-FDD rule catalog](https://bbartling.github.io/open-fdd/fdd-rules.html), [PostgreSQL numeric types and NaN](https://www.postgresql.org/docs/current/datatype-numeric.html), [window functions](https://www.postgresql.org/docs/current/functions-window.html), [date/time functions](https://www.postgresql.org/docs/current/functions-datetime.html). Source license is included.

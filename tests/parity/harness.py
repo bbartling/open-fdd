@@ -51,7 +51,7 @@ def node() -> str:
 
 
 def run_sql(equips: int, days: int, out: Path, engines: str = "pglite,sqlite", rules: str = "",
-            duplicate_role: bool = False) -> dict:
+            duplicate_role: bool = False, rule_sql: dict | None = None, plant_sensors: bool = False) -> dict:
     """Run the SQL pack on the engines; return the parsed JSON (also left on disk at ``out``)."""
     cmd = [node(), str(HERE / "sql_run.mjs"), "--equips", str(equips), "--days", str(days), "--out", str(out),
            "--engines", engines]
@@ -59,6 +59,12 @@ def run_sql(equips: int, days: int, out: Path, engines: str = "pglite,sqlite", r
         cmd += ["--rules", rules]
     if duplicate_role:
         cmd += ["--duplicate-role", "true"]
+    if plant_sensors:
+        cmd += ["--plant-sensors", "true"]
+    if rule_sql:
+        rule_sql_file = out.with_name(out.stem + "_rule_sql.json")
+        rule_sql_file.write_text(json.dumps(rule_sql), encoding="utf-8")
+        cmd += ["--rule-sql", str(rule_sql_file)]
     t0 = time.time()
     proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if proc.returncode != 0:

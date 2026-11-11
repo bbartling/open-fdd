@@ -1,7 +1,7 @@
 """Deterministic effective rule catalog (defaults + overrides) and hashes.
 
 The serialized document is the complete effective settings, not user overrides
-alone. Key order is stable so Python and a future DataFusion hasher can compare
+alone. Key order is stable so Python and a SQL-side hasher can compare
 SHA-256 of the same JSON bytes.
 """
 

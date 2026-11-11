@@ -29,6 +29,7 @@ from open_fdd.rules.sensor_sweep_catalog import (
     ASSESSABLE_ROLES_BY_SWEEP,
     limits_for_haystack_role,
     quantity_for_haystack_role,
+    stale_tolerance_for_role,
     sweep_assessable_role,
 )
 
@@ -690,6 +691,12 @@ LEGACY_SUPPLY_PARAM = lambda: CookbookParam(  # noqa: E731
 # ---------------------------------------------------------------------------
 
 
+def _sweep_limits(d: pd.DataFrame) -> dict | None:
+    """Role limits override for this frame (``d.attrs['sweep_limits']``, a load_role_limits() result), else the shipped set."""
+    raw = d.attrs.get("sweep_limits")
+    return raw if isinstance(raw, dict) else None
+
+
 def _units_map(d: pd.DataFrame) -> dict[str, str]:
     raw = d.attrs.get("units_map")
     if isinstance(raw, dict):
@@ -703,15 +710,16 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     # SQL's range query gates each ordinary sample on the point-priority
     # energized signal. Long-silence tails are added later and remain ungated.
     energized = _flatline_energized(d)
+    limits = _sweep_limits(d)
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map, rule_id="SV-RANGE"):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-RANGE", limits=limits):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
             continue
-        lim = SENSOR_LIMITS[role]
+        lim = limits_for_haystack_role(role, limits)
         if lim is None:
             raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
         base_lo, base_hi = lim["lo"], lim["hi"]
@@ -740,10 +748,11 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     gate = _flatline_energized(d)
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
+    limits = _sweep_limits(d)
     for role in FLATLINE_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map, rule_id="SV-FLATLINE"):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-FLATLINE", limits=limits):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -754,7 +763,7 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         role_mask = _window_flatline_mask(
             s,
             hours=hours,
-            tolerance=flatline_tolerance_for_role(role, tol),
+            tolerance=flatline_tolerance_for_role(role, tol, limits),
             max_silence_hours=max_silence,
             poll=poll,
             gate=role_gate,
@@ -772,16 +781,17 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     energized = _flatline_energized(d)
     coverage_pct = 100.0 * float(energized.mean()) if len(energized) else 0.0
     gate_ok = (not require_gate) or coverage_pct >= _f(p, "minimum_active_coverage_pct", 5.0)
+    limits = _sweep_limits(d)
     for role in SPIKE_SENSOR_ROLES:
         if role not in d.columns:
             continue
-        if not sweep_assessable_role(role, None, units_map, rule_id="SV-SPIKE"):
+        if not sweep_assessable_role(role, None, units_map, rule_id="SV-SPIKE", limits=limits):
             continue
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
             continue
         type_scale = _role_type_scale(p, role, kind="spike")
-        lim = SENSOR_LIMITS[role]
+        lim = limits_for_haystack_role(role, limits)
         if lim is None:
             raise ValueError(f"SV-SPIKE role {role!r} has no SI limit")
         limit = lim["spike"] * type_scale
@@ -810,17 +820,18 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     tolerance = _f(p, "stale_tol", 0.027778)
     max_silence = _f(p, "max_silence_hours", 0.5)
     units_map = _units_map(d)
+    limits = _sweep_limits(d)
     present = [
         r
         for r in FLATLINE_SENSOR_ROLES
-        if r in d.columns and sweep_assessable_role(r, None, units_map, rule_id="SV-STALE")
+        if r in d.columns and sweep_assessable_role(r, None, units_map, rule_id="SV-STALE", limits=limits)
     ]
     per_role: dict[str, pd.Series] = {}
     for role in present:
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
             continue
-        role_tol = 0.05 if sensor_type_for_role(role).lower() == "humidity" else tolerance
+        role_tol = stale_tolerance_for_role(role, tolerance, limits)
         per_role[role] = _window_flatline_mask(
             s,
             hours=hours,

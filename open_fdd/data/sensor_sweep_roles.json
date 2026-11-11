@@ -14,7 +14,12 @@
     "zone-air-humidity",
     "mixed-air-humidity",
     "supply-air-humidity",
-    "duct-static-pressure"
+    "duct-static-pressure",
+    "chw-flow",
+    "chw-diff-pressure",
+    "condenser-water-supply-temp",
+    "condenser-water-return-temp",
+    "chiller-power"
   ],
   "SV-FLATLINE": [
     "outside-air-temp",
@@ -43,7 +48,9 @@
     "hot-water-supply-temp",
     "hot-water-return-temp",
     "outside-air-humidity",
-    "duct-static-pressure"
+    "duct-static-pressure",
+    "condenser-water-supply-temp",
+    "condenser-water-return-temp"
   ],
   "SV-STALE": [
     "outside-air-temp",
