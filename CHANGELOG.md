@@ -3,6 +3,14 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.14 — 2026-11-11 (app) / open-fdd 4.5.5 (PyPI)
+
+- Parity harness in the PyPI package (`open_fdd.parity`): `generate` (basic profile bit-identical to the JS generator; `edge` profile with null runs, gaps, jitter, duplicate and out-of-order rows, a DST week, planted faults), `reference`, `Policy`/`compare`, adapter interface, imperial-ingest helper. Known differences ship as data; `stress.py --profile` (#1591).
+- Edge profile: 6 input-handling differences documented and pinned with reasons (FC8, FC9, VAV-7, VAV-1, FCU-VALVE-PASS-CLG, WX-1).
+- Shared plot spec v1 (`open_fdd.plot_spec`, `nf-app/static/plot-spec.js`), model-only series selection. Canonical `rcx_presets.json` registry (42 presets, aliases, new `ahu-cooling-valves`/`ahu-heating-valves`), `palette.json`, `units.json`, `plot_spec.schema.json`; `docs/plot-spec.md`. No UI change yet.
+- Installer bootstraps the NF-side schema probe on apps that predate it, so an upgrade from 5.0.12 or earlier needs no psql or DB route; `install --dry-run`; doctor WARN when the probe isn't installed yet (#1593, #1585).
+- Doctor explains an HTML answer from the console URL as a likely front-door URL (#1594).
+
 ## 5.0.13 — 2026-11-11 (app) / open-fdd 4.5.4 (PyPI)
 
 - Resolve the site timezone from the modeled site, a new validated `timezone` app option, or the NF Sites API before the browser zone and UTC in Full and Lite; show `UTC (fallback)` when nothing is set and make `doctor` warn (#1584).
