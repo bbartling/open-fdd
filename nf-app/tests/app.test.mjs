@@ -495,5 +495,6 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
   assert.equal(element("fddPlotRangeStatus").textContent, "Resolving range…");
   rejectRange(new Error("range lookup failed"));
   await plot;
+  assert.equal(element("fddPlotRangeStatus").textContent, "Could not load this range: range lookup failed");
   assert.equal(element("fddPlotNote").textContent, "could not draw: range lookup failed");
 });

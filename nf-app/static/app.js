@@ -306,7 +306,12 @@ async function showRulePlot(ruleId, equipId) {
   $("fddPlotNote").textContent = row.rule.description || "";
   $("fddPlotRangeStatus").textContent = "Resolving range…";
   $("fddPlotPanel").scrollIntoView({ behavior: "smooth", block: "start" });
-  const range = await resolveChartSelection(historyPoints, rangeState, { siteTz });
+  let range;
+  try { range = await resolveChartSelection(historyPoints, rangeState, { siteTz }); }
+  catch (e) {
+    if (read === fddPlotRead) $("fddPlotRangeStatus").textContent = `Could not load this range: ${e.message}`;
+    throw e;
+  }
   if (read !== fddPlotRead) return;
   const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
   $("fddPlotRangeStatus").textContent = "Loading history…";
