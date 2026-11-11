@@ -1,0 +1,1672 @@
+{
+  "_doc": "Canonical RCx preset registry. Ids are Open-FDD's; aliases hold old downstream ids. series[]: a selector is {role} (an fdd-catalog.json role, bound by NF class = score 2, else marker set = score 1) or {markers, any_of, exclude}; required = the preset needs it on an equip; use = how a renderer draws it (primary, overlay, return, x, gate, signal); axis = expected axis (the spec's own axis comes from the resolved unit); multiple = every matching point, not just the best. fault_rules = rules whose fault strips accompany the plot. skip_equip_if_bound = the equip is left out when a preferred role is bound. derived = values a renderer computes from the series. chart = renderer hint. Generated once from nf-app/static/rcx-presets.js, rcx-overview.js and fdd-plots.js; this file is now the source of truth.",
+  "version": 1,
+  "presets": [
+    {
+      "id": "zone_comfort_rank",
+      "title": "Zones — comfort ranking (% time in band)",
+      "group": "Zones",
+      "scope": "site",
+      "equip_kinds": [
+        "vav",
+        "zone_other"
+      ],
+      "series": [
+        {
+          "role": "zone_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "zone_air_temp_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "cooling_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "heating_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "ranking",
+      "aliases": []
+    },
+    {
+      "id": "zone_temps",
+      "title": "Zones — all space temps (timeseries)",
+      "group": "Zones",
+      "scope": "site",
+      "equip_kinds": [
+        "vav",
+        "zone_other"
+      ],
+      "series": [
+        {
+          "role": "zone_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "zone_air_temp_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [
+        "ZONE-COMFORT-PCT"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "vav_health",
+      "title": "VAV — health (broken / comfort / rogue)",
+      "group": "VAV",
+      "scope": "site",
+      "equip_kinds": [
+        "vav",
+        "zone_other"
+      ],
+      "series": [
+        {
+          "role": "zone_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "zone_air_temp_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "cooling_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "heating_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "damper_pct",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "damper_cmd",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "zone_flow",
+          "use": "signal",
+          "required": false,
+          "axis": "flow"
+        },
+        {
+          "role": "zone_airflow_sp",
+          "use": "signal",
+          "required": false,
+          "axis": "flow"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "health",
+      "aliases": []
+    },
+    {
+      "id": "vav_flows",
+      "title": "Zones — zone airflow (timeseries)",
+      "group": "VAV",
+      "scope": "site",
+      "equip_kinds": [
+        "vav",
+        "zone_other"
+      ],
+      "series": [
+        {
+          "role": "zone_flow",
+          "use": "primary",
+          "required": true,
+          "axis": "flow"
+        },
+        {
+          "role": "zone_airflow_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "flow"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "ahu_dats",
+      "title": "AHU — all DATs / SAT (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "sat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "sat_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [
+        "AHU-SATDEV"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "ahu_mats",
+      "title": "AHU — all MATs (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "mat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "ahu_rats",
+      "title": "AHU — all RATs (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "rat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "ahu_dampers",
+      "title": "AHU — OA dampers (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "oa_damper_pct",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "fan_speeds",
+      "title": "AHU — fan speeds / cmds (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "fan_cmd",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "duct_static_ts",
+      "title": "AHU — duct static + setpoint (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "duct_static",
+          "use": "primary",
+          "required": true,
+          "axis": "pressure"
+        },
+        {
+          "role": "duct_static_sp",
+          "use": "overlay",
+          "required": false,
+          "axis": "pressure"
+        }
+      ],
+      "fault_rules": [
+        "FC1",
+        "AHU-DUCTHI"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "duct_static_box",
+      "title": "AHU — duct static, fan on (box)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "duct_static",
+          "use": "primary",
+          "required": true,
+          "axis": "pressure"
+        },
+        {
+          "role": "fan_status",
+          "use": "gate",
+          "required": false,
+          "axis": "bool"
+        },
+        {
+          "role": "fan_cmd",
+          "use": "gate",
+          "required": false,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "box",
+      "aliases": []
+    },
+    {
+      "id": "ahu_sat_reset_scatter",
+      "title": "AHU — SAT vs web dry-bulb (scatter)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "sat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 720,
+      "chart": "scatter_oat",
+      "aliases": []
+    },
+    {
+      "id": "ahu-cooling-valves",
+      "title": "AHU — cooling valve command vs supply air temp and OAT (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "clg_valve_pct",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "sat_sp",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [
+        "VLV-1",
+        "FC13-SAT-HIGH",
+        "AHU-SIMUL"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": [
+        "ahu_cooling_valves"
+      ]
+    },
+    {
+      "id": "ahu-heating-valves",
+      "title": "AHU — heating valve command vs supply air temp and OAT (timeseries)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "htg_valve_pct",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "sat_sp",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [
+        "FC7",
+        "FC5",
+        "AHU-SIMUL"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": [
+        "ahu_heating_valves"
+      ]
+    },
+    {
+      "id": "hw_reset_scatter",
+      "title": "Boiler — HWS vs web dry-bulb (scatter)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "boiler"
+      ],
+      "series": [
+        {
+          "role": "hw_supply_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 720,
+      "chart": "scatter_oat",
+      "aliases": []
+    },
+    {
+      "id": "chw_reset_scatter",
+      "title": "Chiller — CHWS vs web dry-bulb (scatter)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant"
+      ],
+      "series": [
+        {
+          "role": "chw_supply_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 720,
+      "chart": "scatter_oat",
+      "aliases": []
+    },
+    {
+      "id": "cw_reset_scatter",
+      "title": "Tower / CW — leave temp vs wet-bulb (dry-bulb fallback)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant",
+        "cooling_tower"
+      ],
+      "series": [
+        {
+          "role": "cw_supply_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "web_wb_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 720,
+      "chart": "scatter_oat",
+      "aliases": []
+    },
+    {
+      "id": "chw_temps_ts",
+      "title": "Chiller — CHW supply / return / ΔT (timeseries)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant"
+      ],
+      "series": [
+        {
+          "role": "chw_supply_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_return_t",
+          "use": "return",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [
+        "CHW-1"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": [],
+      "derived": [
+        {
+          "name": "delta_t",
+          "expr": "return - primary",
+          "quantity": "temperature_delta"
+        }
+      ]
+    },
+    {
+      "id": "cw_temps_ts",
+      "title": "Tower / CW — supply / return / ΔT (timeseries)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant",
+        "cooling_tower"
+      ],
+      "series": [
+        {
+          "role": "cw_supply_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "cw_return_t",
+          "use": "return",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": [],
+      "derived": [
+        {
+          "name": "delta_t",
+          "expr": "return - primary",
+          "quantity": "temperature_delta"
+        }
+      ]
+    },
+    {
+      "id": "meter_elec_cdd",
+      "title": "Metering — electric kWh/month vs CDD",
+      "group": "Metering",
+      "scope": "site",
+      "equip_kinds": [
+        "meter"
+      ],
+      "series": [
+        {
+          "role": "electric_kwh",
+          "use": "signal",
+          "required": false,
+          "axis": "energy"
+        },
+        {
+          "role": "kwh",
+          "use": "signal",
+          "required": false,
+          "axis": "energy"
+        },
+        {
+          "role": "electric_kw",
+          "use": "signal",
+          "required": false,
+          "axis": "power"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 9600,
+      "chart": "metering",
+      "aliases": []
+    },
+    {
+      "id": "meter_gas_hdd",
+      "title": "Metering — gas/month vs HDD",
+      "group": "Metering",
+      "scope": "site",
+      "equip_kinds": [
+        "meter"
+      ],
+      "series": [
+        {
+          "markers": [
+            "point",
+            "gas"
+          ],
+          "any_of": [
+            "energy",
+            "volume",
+            "flow"
+          ],
+          "exclude": [
+            "spare"
+          ],
+          "use": "signal",
+          "required": false,
+          "axis": "other",
+          "multiple": true
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 9600,
+      "chart": "metering",
+      "aliases": []
+    },
+    {
+      "id": "weekly-fan",
+      "title": "Weekly runtime: Supply fans (status)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "fan_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "fan_cmd",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [
+        "SCHED-247"
+      ],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": [
+        "ahu_motor_weekly"
+      ]
+    },
+    {
+      "id": "weekly-fan-cmd",
+      "title": "Weekly runtime: Supply fans (command)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "fan_cmd",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "fan_status",
+          "use": "signal",
+          "required": false,
+          "axis": "bool"
+        }
+      ],
+      "fault_rules": [
+        "SCHED-247"
+      ],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": [],
+      "skip_equip_if_bound": [
+        "fan_status"
+      ]
+    },
+    {
+      "id": "weekly-pump",
+      "title": "Weekly runtime: Pumps",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "boiler",
+        "chwPlant",
+        "chiller"
+      ],
+      "series": [
+        {
+          "role": "pump_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": [
+        "boiler_motor_weekly"
+      ]
+    },
+    {
+      "id": "weekly-chw-pump",
+      "title": "Weekly runtime: Chilled-water pumps (status)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant"
+      ],
+      "series": [
+        {
+          "role": "chw_pump_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_pump_cmd",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": []
+    },
+    {
+      "id": "weekly-chw-pump-cmd",
+      "title": "Weekly runtime: Chilled-water pumps (command)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant"
+      ],
+      "series": [
+        {
+          "role": "chw_pump_cmd",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_pump_status",
+          "use": "signal",
+          "required": false,
+          "axis": "bool"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": [],
+      "skip_equip_if_bound": [
+        "chw_pump_status"
+      ]
+    },
+    {
+      "id": "weekly-cw-pump",
+      "title": "Weekly runtime: Condenser-water pumps",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant",
+        "cooling_tower"
+      ],
+      "series": [
+        {
+          "role": "cw_pump_cmd",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": []
+    },
+    {
+      "id": "weekly-compressor",
+      "title": "Weekly runtime: Compressors",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "compressor_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": []
+    },
+    {
+      "id": "weekly-chiller",
+      "title": "Weekly runtime: Chillers (status)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant"
+      ],
+      "series": [
+        {
+          "role": "chiller_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chiller_cmd",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": [
+        "chiller_motor_weekly"
+      ]
+    },
+    {
+      "id": "weekly-chiller-cmd",
+      "title": "Weekly runtime: Chillers (command)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "chiller",
+        "chwPlant"
+      ],
+      "series": [
+        {
+          "role": "chiller_cmd",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chiller_status",
+          "use": "signal",
+          "required": false,
+          "axis": "bool"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": [],
+      "skip_equip_if_bound": [
+        "chiller_status"
+      ]
+    },
+    {
+      "id": "weekly-tower-fan",
+      "title": "Weekly runtime: Cooling-tower fans",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [
+        "cooling_tower",
+        "chiller",
+        "chwPlant"
+      ],
+      "series": [
+        {
+          "role": "tower_fan_cmd",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 672,
+      "chart": "weekly_runtime",
+      "aliases": []
+    },
+    {
+      "id": "mech-cooling-compressor-status",
+      "title": "Mechanical cooling hours by outdoor air (compressor status)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "compressor_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 720,
+      "chart": "oat_bins",
+      "aliases": []
+    },
+    {
+      "id": "mech-cooling-chiller-status",
+      "title": "Mechanical cooling hours by outdoor air (chiller status)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "chiller_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 720,
+      "chart": "oat_bins",
+      "aliases": [
+        "mech_cooling_oat_bins"
+      ]
+    },
+    {
+      "id": "mech-cooling-chiller-cmd",
+      "title": "Mechanical cooling hours by outdoor air (chiller cmd)",
+      "group": "Plant",
+      "scope": "site",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "chiller_cmd",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "x",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 720,
+      "chart": "oat_bins",
+      "aliases": []
+    },
+    {
+      "id": "economizer-delta",
+      "title": "Economizer: free-cooling delta scatter",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "rat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "mat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "fan_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_damper_pct",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "scatter",
+      "aliases": [
+        "economizer_delta"
+      ]
+    },
+    {
+      "id": "economizer-mat-residual",
+      "title": "Economizer: MAT residual (measured - mixing model)",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "rat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "mat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "fan_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "oa_damper_pct",
+          "use": "primary",
+          "required": true,
+          "axis": "percent"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [
+        "ECON-1",
+        "ECON-2",
+        "DMP-1"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": [
+        "economizer_mat_resid"
+      ]
+    },
+    {
+      "id": "economizer-temps",
+      "title": "Economizer: temperatures and OA damper",
+      "group": "Air handlers",
+      "scope": "equip",
+      "equip_kinds": [
+        "ahu"
+      ],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "rat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "mat",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "fan_status",
+          "use": "primary",
+          "required": true,
+          "axis": "bool"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_damper_pct",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [
+        "ECON-1",
+        "ECON-2",
+        "DMP-1"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": [
+        "economizer_temps_overlay"
+      ]
+    },
+    {
+      "id": "bas-vs-web-oat",
+      "title": "BAS vs web outdoor-air temperature",
+      "group": "Weather",
+      "scope": "site",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": [
+        "bas_vs_web_oat"
+      ]
+    },
+    {
+      "id": "bas-vs-web-oat-hist",
+      "title": "BAS vs web outdoor-air deviation",
+      "group": "Weather",
+      "scope": "site",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "histogram",
+      "aliases": []
+    },
+    {
+      "id": "fdd-oat-meteo",
+      "title": "BAS vs web outside air temp (OAT-METEO)",
+      "group": "Weather",
+      "scope": "equip",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        },
+        {
+          "role": "web_oa_t",
+          "use": "primary",
+          "required": true,
+          "axis": "temp"
+        }
+      ],
+      "fault_rules": [
+        "OAT-METEO"
+      ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "timeseries",
+      "aliases": []
+    },
+    {
+      "id": "fdd-sensor-health",
+      "title": "Sensor health by hour (stale / flatline / out of range)",
+      "group": "Sensors",
+      "scope": "equip",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "mat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "zone_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "rat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_supply_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_return_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "hw_supply_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "hw_return_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "ra_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "zone_rh",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "ma_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "sa_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "duct_static",
+          "use": "signal",
+          "required": false,
+          "axis": "pressure"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "heatmap",
+      "aliases": []
+    },
+    {
+      "id": "fdd-sensor-fault",
+      "title": "Sensor fault lanes (worst sensor)",
+      "group": "Sensors",
+      "scope": "equip",
+      "equip_kinds": [],
+      "series": [
+        {
+          "role": "oa_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "mat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "zone_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "rat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_supply_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_return_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "hw_supply_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "hw_return_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "ra_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "zone_rh",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "ma_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "sa_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "duct_static",
+          "use": "signal",
+          "required": false,
+          "axis": "pressure"
+        }
+      ],
+      "fault_rules": [],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "sensor_lanes",
+      "aliases": []
+    }
+  ]
+}

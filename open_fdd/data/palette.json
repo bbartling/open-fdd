@@ -1,0 +1,41 @@
+{
+  "_doc": "Series palettes and fixed status colours. Source for nf-app/static/theme.js and any downstream renderer. A series colour is palette[color_key % palette.length]; status is never encoded by line colour.",
+  "version": 1,
+  "series": {
+    "light": [
+      "#e11d48",
+      "#ea580c",
+      "#ca8a04",
+      "#16a34a",
+      "#0d9488",
+      "#2563eb",
+      "#7c3aed",
+      "#db2777",
+      "#0891b2",
+      "#65a30d",
+      "#9333ea",
+      "#dc2626"
+    ],
+    "dark": [
+      "#4cc9f0",
+      "#f8961e",
+      "#f94144",
+      "#90be6d",
+      "#b5179e",
+      "#f9c74f",
+      "#43aa8b",
+      "#577590"
+    ]
+  },
+  "color_key_modulus": 12,
+  "status": {
+    "fault": "#dc2626",
+    "ok": "#16a34a",
+    "unknown": "#94a3b8",
+    "stale": "#64748b"
+  },
+  "fault_lane": {
+    "line": "rgba(220,38,38,0.9)",
+    "fill": "rgba(239,68,68,0.35)"
+  }
+}

@@ -48,6 +48,8 @@
     "/static/model.js": "static/model.js",
     "/static/nf.js": "static/nf.js",
     "/static/rcx-overview.js": "static/rcx-overview.js",
+    "/static/plot-spec-data.js": "static/plot-spec-data.js",
+    "/static/plot-spec.js": "static/plot-spec.js",
     "/static/rcx-presets.js": "static/rcx-presets.js",
     "/static/rcx.js": "static/rcx.js",
     "/static/schedule.js": "static/schedule.js",

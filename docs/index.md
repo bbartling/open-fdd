@@ -24,6 +24,7 @@ equipment, points, and history and writes its results as ordinary NF points.
 - [API reference](fdd-data-access.html) covers point metadata, results, and history.
 - [FDD rule catalog](fdd-rules.html) lists production rules and defaults.
 - [Charts](charts.html), [export](export.html), and [RDF/SPARQL](rdf-sparql.html).
+- [Plot spec](plot-spec.html) is the shared description of which series and fault strips a plot shows.
 
 Find the source and full release history on [Open-FDD on GitHub](https://github.com/bbartling/open-fdd) and its
 [releases](https://github.com/bbartling/open-fdd/releases).
