@@ -3,13 +3,17 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
-## 5.0.13 (unreleased)
+## 5.0.13 — 2026-11-11 (app) / open-fdd 4.5.4 (PyPI)
 
 - Resolve the site timezone from the modeled site, a new validated `timezone` app option, or the NF Sites API before the browser zone and UTC in Full and Lite; show `UTC (fallback)` when nothing is set and make `doctor` warn (#1584).
 - Read the Timescale schema version through a read-only NF-side `schema` hook so `doctor` and `install` need neither a database route nor `psql`; the `NF_TIMESCALE_PREFLIGHT_DSN` path remains the fallback for older releases (#1585).
 - Count a stale result once in `doctor`; fault-timeline companions are reported separately (#1586).
 - Prove with a mock NF that silently drops out-of-retention AddData samples that a supported run (`windowHours` within retention) never loses a timeline retry, and pin the unsupported limit (#1574).
-<!-- sql-lane entries -->
+- Parity: `tests/parity/stress.py` exits non-zero on an unlisted pandas-vs-SQL divergence or when fewer rules are compared than have a pandas twin, and prints a one-line summary (#1582).
+- Parity: TRIM-3 and VAV-REHEAT stress differences root-caused and pinned with reasons: startup holdoff, and the request-sum role name, threshold and gate (#1582).
+- Sensor sweeps: one typed SI role-limit source (`open_fdd/data/sensor_sweep_limits.json`) feeds the SQL renderer and pandas sweeps; defaults unchanged, pack byte-identical (#1581).
+- Sensor sweeps: new plant roles (CHW flow, CHW differential pressure, condenser-water supply/return temperature, chiller kW) with conservative SI range limits (#1581).
+- Docs: removed stale DuckDB/DataFusion references.
 
 ## 5.0.12 - 2026-11-10
 

@@ -5,7 +5,7 @@ nav_order: 18
 
 # Changelog
 
-## Open-FDD 5.0.13 (unreleased)
+## Open-FDD 5.0.13 - 2026-11-11 (open-fdd 4.5.4 on PyPI)
 
 - **Site timezone:** range pickers and hour labels resolve the zone from the modeled site, the new `timezone` app option, or
   the NF Sites API, then the browser and UTC. A fallback is labeled (for example `UTC (fallback)`) and `doctor` warns.
@@ -16,7 +16,9 @@ nav_order: 18
   [#1586](https://github.com/bbartling/open-fdd/issues/1586)
 - **Timeline watermark:** tests model NF acknowledging an AddData batch that dropped a sample and show a supported
   window loses no retry. [#1574](https://github.com/bbartling/open-fdd/issues/1574)
-<!-- sql-lane entries -->
+- **Parity stress:** `tests/parity/stress.py` fails on unlisted pandas-vs-SQL divergence; TRIM-3 and VAV-REHEAT differences are root-caused and pinned. [#1582](https://github.com/bbartling/open-fdd/issues/1582)
+- **Sensor sweeps:** one typed SI limit source feeds SQL and pandas sweeps; new plant roles (CHW flow and differential pressure, condenser-water temperatures, chiller kW). [#1581](https://github.com/bbartling/open-fdd/issues/1581)
+- **Docs:** removed stale DuckDB/DataFusion references.
 
 ## Open-FDD 5.0.12
 
