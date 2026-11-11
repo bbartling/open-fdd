@@ -8,12 +8,18 @@ copied here from their single source of truth:
     sql/fdd/role_scales.json        ->  open_fdd/data/role_scales.json   (role -> declared scale)
     sql/fdd/role_map.json           ->  open_fdd/data/role_map.json      (SQL role -> pandas Haystack column)
 
+and builds one derived file for the parity harness (``open_fdd.parity``):
+
+    nf-app/rules/pack-postgres.json (contract.history) + sql/fdd/tuning_catalog.json (confirm_min defaults)
+                                    ->  open_fdd/data/parity_contract.json
+
     python scripts/nf/sync_pypi_data.py            # copy
     python scripts/nf/sync_pypi_data.py --check    # exit 1 when a copy is missing or stale (CI)
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -23,6 +29,23 @@ PAIRS = [
     ("sql/fdd/role_scales.json", "open_fdd/data/role_scales.json"),
     ("sql/fdd/role_map.json", "open_fdd/data/role_map.json"),
 ]
+
+
+def parity_contract() -> bytes:
+    """History columns of the SQL input contract and each rule's default confirm_min, for open_fdd.parity."""
+    pack = json.loads((ROOT / "nf-app/rules/pack-postgres.json").read_text(encoding="utf-8"))
+    tuning = json.loads((ROOT / "sql/fdd/tuning_catalog.json").read_text(encoding="utf-8"))
+    cols = [{"name": c["name"], "type": c["type"]} for c in pack["contract"]["history"]
+            if c["name"] not in ("equipment_id", "timestamp_utc")]
+    confirm = {r["rule_id"]: float((r["parameters"].get("confirm_min") or {}).get("default", 0.0))
+               for r in sorted(tuning["rules"], key=lambda r: r["rule_id"])}
+    doc = {"_doc": "Derived by scripts/nf/sync_pypi_data.py. history_columns = SQL input contract (history table, "
+                   "without equipment_id/timestamp_utc); confirm_min = default confirm delay in minutes per rule.",
+           "history_columns": cols, "confirm_min": confirm}
+    return (json.dumps(doc, indent=1, ensure_ascii=True) + "\n").encode("utf-8")
+
+
+DERIVED = [("open_fdd/data/parity_contract.json", parity_contract)]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,6 +63,14 @@ def main(argv: list[str] | None = None) -> int:
         stale.append(dst_rel)
         if not args.check:
             dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(data)
+            print(f"updated {dst_rel}")
+    for dst_rel, build in DERIVED:
+        data, dst = build(), ROOT / dst_rel
+        if dst.is_file() and dst.read_bytes().replace(b"\r\n", b"\n") == data:
+            continue
+        stale.append(dst_rel)
+        if not args.check:
             dst.write_bytes(data)
             print(f"updated {dst_rel}")
     if args.check and stale:

@@ -1,0 +1,156 @@
+{
+ "_doc": "Rules whose pandas twin and SQL pack differ on the parity dataset. scope: all = any size (asserted exactly on the 2x3 pytest dataset); stress_only = only shows on longer datasets; edge = only on the edge profile. Read by open_fdd.parity, tests/parity and scripts/nf/gen_cookbook.py.",
+ "version": 1,
+ "differences": [
+  {
+   "rule": "AHU-SATDEV",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "CHW-1",
+   "scope": "all",
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+  },
+  {
+   "rule": "CHW-NOLOAD-1",
+   "scope": "all",
+   "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve"
+  },
+  {
+   "rule": "ECON-3",
+   "scope": "all",
+   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
+  },
+  {
+   "rule": "ECON-4",
+   "scope": "all",
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+  },
+  {
+   "rule": "ECON-7",
+   "scope": "all",
+   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
+  },
+  {
+   "rule": "FC13-SAT-HIGH",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "FC14",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "FC5",
+   "scope": "all",
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+  },
+  {
+   "rule": "FC6",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "FC7",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "FCU-HTG-COIL",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "FCU-MODE-CYCLE",
+   "scope": "all",
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+  },
+  {
+   "rule": "HP-1",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "MECH-OAT-1",
+   "scope": "all",
+   "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve"
+  },
+  {
+   "rule": "OA-1",
+   "scope": "all",
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+  },
+  {
+   "rule": "OAT-METEO",
+   "scope": "all",
+   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
+  },
+  {
+   "rule": "SV-RATE",
+   "scope": "all",
+   "reason": "documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances"
+  },
+  {
+   "rule": "TRIM-1",
+   "scope": "all",
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+  },
+  {
+   "rule": "TRIM-4",
+   "scope": "all",
+   "reason": "pandas skips (missing roles: reset requests); SQL treats absent requests as zero"
+  },
+  {
+   "rule": "VAV-6",
+   "scope": "all",
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+  },
+  {
+   "rule": "VAV-AHU-LEAVE",
+   "scope": "all",
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+  },
+  {
+   "rule": "TRIM-3",
+   "scope": "stress_only",
+   "reason": "three differences: (1) pandas reads role hw-reset-request-sum, the SQL contract and NF role is hot-water-reset-request-sum, so the harness gives pandas no input and it skips; (2) SQL faults at request sum <= request_lo, pandas at < request_lo; (3) pandas applies the hydronic-flow gate with a 600 s startup holdoff. Follow-up: align names and comparison with the owner (see #1582)"
+  },
+  {
+   "rule": "VAV-REHEAT",
+   "scope": "stress_only",
+   "reason": "pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL"
+  },
+  {
+   "rule": "FC8",
+   "scope": "edge",
+   "reason": "Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas."
+  },
+  {
+   "rule": "FC9",
+   "scope": "edge",
+   "reason": "Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start)."
+  },
+  {
+   "rule": "VAV-1",
+   "scope": "edge",
+   "reason": "Two input-handling differences: (1) NULL zone_t cells: SQL drops NULL rows (WHERE zone_t IS NOT NULL) and holds the previous sample's state across the null run, pandas scores a NULL as not faulted; (2) planted out-of-range zone_t (80 degC): the pandas quality layer marks it OUT_OF_RANGE and excludes it, SQL scores the value as given."
+  },
+  {
+   "rule": "FCU-VALVE-PASS-CLG",
+   "scope": "edge",
+   "reason": "Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults."
+  },
+  {
+   "rule": "VAV-7",
+   "scope": "edge",
+   "reason": "Duplicate (equipment, timestamp) rows: SQL scores the rows as delivered, the reference de-duplicates first (the input contract is one row per timestamp). Verified: de-duplicating the rows before SQL makes SQL equal pandas."
+  },
+  {
+   "rule": "WX-1",
+   "scope": "edge",
+   "reason": "Gap handling: SQL flags |oa_t - previous sample| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only."
+  }
+ ]
+}
