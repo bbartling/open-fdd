@@ -5,6 +5,19 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.13 (unreleased)
+
+- **Site timezone:** range pickers and hour labels resolve the zone from the modeled site, the new `timezone` app option, or
+  the NF Sites API, then the browser and UTC. A fallback is labeled (for example `UTC (fallback)`) and `doctor` warns.
+  [#1584](https://github.com/bbartling/open-fdd/issues/1584)
+- **Schema probe:** a read-only NF-side `schema` hook lets `doctor` and `install` check the Timescale schema without a
+  database route or `psql`. [#1585](https://github.com/bbartling/open-fdd/issues/1585)
+- **Doctor counts:** a stale result is counted once; fault-timeline companions are listed separately.
+  [#1586](https://github.com/bbartling/open-fdd/issues/1586)
+- **Timeline watermark:** tests model NF acknowledging an AddData batch that dropped a sample and show a supported
+  window loses no retry. [#1574](https://github.com/bbartling/open-fdd/issues/1574)
+<!-- sql-lane entries -->
+
 ## Open-FDD 5.0.12
 
 - **Chart ranges:** every chart defaults to All history and supports 1 hour, 24 hours, 1 week, and a custom range.

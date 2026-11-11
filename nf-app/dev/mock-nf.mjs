@@ -21,6 +21,11 @@ const APP_PREFIX = "/api/v1/apps/static/open-fdd/";
 const PORT = Number(process.argv[2]) || 8765;
 const catalog = JSON.parse(fs.readFileSync(path.join(STATIC, "fdd-catalog.json"), "utf8"));
 const DAYS = 8;
+// MOCK_PROFILE=real-nf reproduces what real NF 3.10 gives a site with nothing configured (#1584): the model site
+// has no tz, /api/v1/sites is empty, platform/info reports the container zone (Etc/UTC). MOCK_APP_TIMEZONE sets the
+// open-fdd app option "timezone". Without the profile every site carries tz and /sites returns it.
+const REAL_NF = process.env.MOCK_PROFILE === "real-nf";
+const APP_TZ_OPTION = process.env.MOCK_APP_TIMEZONE || "";
 const NOW = Math.floor(Date.now() / 300e3) * 300e3;
 const START = NOW - DAYS * 86400e3;
 
@@ -104,7 +109,7 @@ const records = [];   // model-layer entities + default-layer points
 const signals = new Map();   // uuid -> (t) => value
 for (const s of sites) {
   records.push({ uuid: uuidOf(s.id), name: s.id, layer: "model", pointType: "SITE",
-    attrs: { id: s.id, dis: s.dis, markers: "site", area: s.area, tz: s.tz } });
+    attrs: { id: s.id, dis: s.dis, markers: "site", area: s.area, ...(REAL_NF ? {} : { tz: s.tz }) } });
 }
 equips.forEach((e, ei) => {
   const site = sites[e.site].id;
@@ -261,7 +266,10 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
     failVersionReadOnNextWrite = b.failVersionRead === true;
     return json(res, 200, { success: true });
   }
-  if (p === "/api/v1/apps") return json(res, 200, { applications: [installApp] });
+  if (p === "/api/v1/apps") {
+    const options = [...(installApp.options || []).filter((o) => o.name !== "timezone"), ...(APP_TZ_OPTION ? [{ name: "timezone", value: { string: APP_TZ_OPTION } }] : [])];
+    return json(res, 200, { applications: [{ ...installApp, options }] });
+  }
   const appFile = p.match(/^\/api\/v1\/apps\/open-fdd\/files(\/.*)$/);
   if (appFile && req.method === "DELETE") {
     installFiles.delete(appFile[1]);
@@ -320,7 +328,7 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
       "Content-Security-Policy": "frame-ancestors 'self'" });
     return res.end(fs.readFileSync(file));
   }
-  if (p === "/api/v1/platform/info") return json(res, 200, { version: "mock-3.10", provider: "", resources: [{ memory: { totalBytes: String(4 * 1024 ** 3) } }] });
+  if (p === "/api/v1/platform/info") return json(res, 200, { version: "mock-3.10", provider: "", ...(REAL_NF ? { timezone: "Etc/UTC" } : {}), resources: [{ memory: { totalBytes: String(4 * 1024 ** 3) } }] });
   if (p === "/api/v1/point/query") {
     if (Number(b.pageOffset) < 0 || Number(b.pageSize) < 0) return json(res, 400, { error: "negative paging argument" });
     return json(res, 200, query(b));
@@ -370,7 +378,7 @@ const server = http.createServer({ maxHeaderSize: 64 * 1024 }, async (req, res) 
     return one ? json(res, 200, { schedule: one }) : json(res, 404, { error: "schedule not found" });
   }
   if (p === "/api/v1/point/updates/data") { res.writeHead(204); return res.end(); }
-  if (p === "/api/v1/sites") return json(res, 200, { sites: sites.map((s) => ({ id: s.id, name: s.dis, latitude: s.lat, longitude: s.lon, timezone: s.tz })) });
+  if (p === "/api/v1/sites") return json(res, 200, REAL_NF ? { sites: [], totalCount: "0" } : { sites: sites.map((s) => ({ id: s.id, name: s.dis, latitude: s.lat, longitude: s.lon, timezone: s.tz })) });
   if (p === "/api/v1/bacnet/configuration") return json(res, 200, { deviceInstance: 54321, deviceName: "MockNF" });
   if (p === "/api/v1/bacnet/ports") return json(res, 200, { ports: [] });
   if (p === "/api/v1/bacnet/local") return json(res, 200, { objects: [] });

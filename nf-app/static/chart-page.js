@@ -25,7 +25,7 @@ function syncUrl() {
 
 async function draw() {
   const state = getChartRangeState("charts"), site = model.sites.find((s) => idOf(s) === sel.site);
-  const siteTz = chartTimeZone(site?.attrs?.tz || site?.attrs?.timezone);
+  const siteTz = resolveSiteTimeZone(site).zone;
   renderRangeControl($("range"), { key: "charts", state, siteTz, onChange: () => draw() });
   const baseCtx = pointSets(model, sel.site, sel.equip);
   const candidate = def.pick ? def.pick(baseCtx) : [...baseCtx.cards, ...baseCtx.status, ...baseCtx.weather];
@@ -49,6 +49,7 @@ async function main() {
   if (typeof ofddUnits === "undefined") await loadScript("units.js").catch(() => {});
   window.addEventListener("storage", (e) => { if (e.key === "openfdd-units") draw(); });  // toggled in the dashboard
   await initAuth();
+  await loadSiteTimeZoneSources();
   model = await loadModel();
   if (!model.sites.some((s) => idOf(s) === sel.site)) sel.site = idOf(model.sites[0]);
   ctx = pointSets(model, sel.site, sel.equip);

@@ -3,6 +3,14 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.13 (unreleased)
+
+- Resolve the site timezone from the modeled site, a new validated `timezone` app option, or the NF Sites API before the browser zone and UTC in Full and Lite; show `UTC (fallback)` when nothing is set and make `doctor` warn (#1584).
+- Read the Timescale schema version through a read-only NF-side `schema` hook so `doctor` and `install` need neither a database route nor `psql`; the `NF_TIMESCALE_PREFLIGHT_DSN` path remains the fallback for older releases (#1585).
+- Count a stale result once in `doctor`; fault-timeline companions are reported separately (#1586).
+- Prove with a mock NF that silently drops out-of-retention AddData samples that a supported run (`windowHours` within retention) never loses a timeline retry, and pin the unsupported limit (#1574).
+<!-- sql-lane entries -->
+
 ## 5.0.12 - 2026-11-10
 
 - Open chart history on All and add 1 h, 24 h, 1 week, and custom ranges (#1577).

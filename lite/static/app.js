@@ -81,7 +81,7 @@ async function loadSparks() {
   const site = model.sites.find((s) => idOf(s) === scope.site);
   renderSparkRange(site);
   let result;
-  try { result = await fetchRange(list, range, { target: 72, siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC" }); }
+  try { result = await fetchRange(list, range, { target: 72, siteTz: resolveSiteTimeZone(site).zone }); }
   catch (e) { if (read === sparkRangeRead) throw e; return; }
   if (read !== sparkRangeRead || siteRef !== scope.site || equipRef !== scope.equip || range !== sparkRange) return;
   sparkHist = result.series;
@@ -111,7 +111,7 @@ function appendSpark(uuid, ts, value) {
 
 function renderSparkRange(site = model?.sites.find((s) => idOf(s) === scope.site)) {
   renderRangeControl($("sparkRange"), { key: "lite.overview", state: sparkRange,
-    siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC",
+    siteTz: resolveSiteTimeZone(site).zone,
     onChange: (next) => { sparkRange = next; loadSparks().catch(showErr); } });
 }
 
@@ -189,10 +189,7 @@ function renderChips() {
 // ---- Charts tab -----------------------------------------------------------------------
 // A gallery of the catalog (charts.js) and ONE chart below it. Picking a chart fetches
 // just that chart's points, resampled by NF; "open in new window" = chart.html.
-const siteTimeZone = () => {
-  const attrs = model?.sites.find((s) => idOf(s) === scope.site)?.attrs || {};
-  return attrs.tz || attrs.timezone || "UTC";
-};
+const siteTimeZone = () => resolveSiteTimeZone(model?.sites.find((s) => idOf(s) === scope.site)).zone;
 const chartCtx = () => ({ cards: points, status: statusPts, weather: variables, siteTz: siteTimeZone() });
 const PREF_KEY = "openfddlite.chart";
 
@@ -287,16 +284,16 @@ async function renderPointHistory() {
   $("histHint").textContent = `${p.dis} · ${p.tags.filter((t) => !GENERIC.has(t)).join(" ")}`;
   const site = model.sites.find((s) => idOf(s) === scope.site);
   renderRangeControl($("histRange"), { key: "lite.points", state: pointRange,
-    siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC",
+    siteTz: resolveSiteTimeZone(site).zone,
     onChange: (next) => { pointRange = next; renderPointHistory().catch((e) => setLive(false, e.message)); } });
   let fetched;
-  try { fetched = await fetchRange([p], range, { siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC" }); }
+  try { fetched = await fetchRange([p], range, { siteTz: resolveSiteTimeZone(site).zone }); }
   catch (e) { if (read === pointHistoryRead) throw e; return; }
   if (read !== pointHistoryRead || selectedPoint !== pointUuid || range !== pointRange) return;
   const data = fetched.series.get(p.uuid) || [];
   mk("histChart").setOption({
-    tooltip: rangeTooltip((site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC"), grid: { left: 50, right: 20, top: 20, bottom: 50 },
-    xAxis: { ...timeAxis((site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC"), min: fetched.fromMs, max: fetched.toMs },
+    tooltip: rangeTooltip(resolveSiteTimeZone(site).zone), grid: { left: 50, right: 20, top: 20, bottom: 50 },
+    xAxis: { ...timeAxis(resolveSiteTimeZone(site).zone), min: fetched.fromMs, max: fetched.toMs },
     yAxis: { type: "value", scale: true, name: p.kind === "Bool" ? "on / off" : unitLabel(p.units), nameTextStyle: { color: LT.label }, ...axisStyle },
     dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 6, borderColor: LT.axisLine, fillerColor: LT.filler, textStyle: { color: LT.label } }],
     series: [{
@@ -683,6 +680,7 @@ async function main() {
   wireControls();
   loadChartPref();
   await initAuth();
+  await loadSiteTimeZoneSources();
   model = await loadModel();
   scope.site = idOf(model.sites[0]);
   fillPickers();

@@ -25,6 +25,7 @@
     "/hooks/lib/settings.js": "hooks/lib/settings.js",
     "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
     "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
+    "/hooks/schema.js": "hooks/schema.js",
     "/hooks/sparql.js": "hooks/sparql.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
     "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
@@ -146,6 +147,16 @@
       },
       "mode": "MODE_ON_REQUEST",
       "invokeTimeout": "120s"
+    },
+    {
+      "id": "schema",
+      "name": "schema",
+      "entryPoint": "/hooks/schema.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "30s"
     },
     {
       "id": "history",

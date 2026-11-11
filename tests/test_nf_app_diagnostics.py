@@ -241,6 +241,18 @@ def test_frozen_computed_results_with_fresh_raw_fail_and_name_the_stale_reasons(
     assert "2 results flagged stale (required roles missing x2)" in text
 
 
+def test_stale_result_and_its_timeline_companion_count_once():
+    """#1586: a stale result plus its fault-timeline companion is one stale result, not two."""
+    res = result_point(19 * 60, "stale", "rule was not run for this equip")
+    res["attrs"]["fddSummary"] = "sensor"
+    tl = {"uuid": "tl", "attrs": {"markers": "point,his,fault_timeline", "ruleRef": "FC1", "fddKind": "fault-timeline",
+                                  "fddStatus": "stale", "fddReason": "rule was not run for this equip",
+                                  "fddTimelineThrough": iso(19 * 60)}, "latestValue": {"ts": iso(19 * 60)}}
+    lvl, text = sync.fdd_freshness(Pts([raw_point(2), res, tl]), 3600, NOW)
+    assert "1 results flagged stale (rule was not run for this equip x1)" in text
+    assert "x2" not in text and "1 fault timelines flagged stale" in text
+
+
 def test_threshold_is_twice_the_schedule_interval():
     ok = sync.fdd_freshness(Pts([raw_point(1), result_point(119)]), 3600, NOW)[0]
     bad = sync.fdd_freshness(Pts([raw_point(1), result_point(121)]), 3600, NOW)[0]

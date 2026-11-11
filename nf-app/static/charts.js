@@ -85,6 +85,67 @@ const validChartTimeZone = (tz) => {
   catch { return "UTC"; }
 };
 function chartTimeZone(siteTz) { return validChartTimeZone(siteTz); }
+
+// ---- site timezone (#1584) -------------------------------------------------------------------
+// Real NF often has no site `tz`, an empty /api/v1/sites and a container zone of Etc/UTC. Resolution order:
+// model site `tz`/`timezone` -> app option `timezone` -> NF Sites API `timezone` -> browser-local -> UTC.
+// Nothing is retagged; the resolved source is shown next to the zone when it is a fallback.
+const SITE_TZ_SOURCES = { appOption: null, sites: [] };
+const chartTzLabels = new Map();            // zone -> label shown next to the range pickers
+const knownZone = (z) => {
+  const s = String(z ?? "").trim();
+  if (!s) return null;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: s }); return s; } catch { return null; }
+};
+const isUtcZone = (z) => /^(utc|etc\/utc|etc\/gmt|gmt|z)$/i.test(String(z ?? "").trim());
+/** @param {{appOption?: string|null, sites?: any[]}} s */
+function setSiteTimeZoneSources(s = {}) {
+  SITE_TZ_SOURCES.appOption = knownZone(s.appOption);
+  SITE_TZ_SOURCES.sites = Array.isArray(s.sites) ? s.sites : [];
+}
+/** The app option `timezone` (typed or scalar) from a GET /api/v1/apps listing entry, or null. */
+function appTimeZoneOption(app) {
+  for (const o of (app && app.options) || []) {
+    if (o && o.name === "timezone") {
+      const v = o.value && typeof o.value === "object" ? Object.values(o.value)[0] : o.value;
+      return knownZone(v);
+    }
+  }
+  return null;
+}
+/** Best-effort read of the two non-model zone sources; a failure just leaves that source empty. */
+async function loadSiteTimeZoneSources() {
+  const loc = typeof location === "undefined" ? null : location;
+  const appId = loc && (String(loc.pathname || "").match(/\/apps\/static\/([^/]+)\//) || [])[1];
+  let appOption = null, sites = [];
+  try { appOption = appId ? appTimeZoneOption(((await api("/api/v1/apps")).applications || []).find((a) => a.id === appId)) : null; } catch { /* no access: leave empty */ }
+  try { sites = ((await api("/api/v1/sites?pageSize=100")).sites || []).filter((s) => s && knownZone(s.timezone)); } catch { /* leave empty */ }
+  setSiteTimeZoneSources({ appOption, sites });
+}
+/**
+ * The zone to show and parse for a model site record.
+ * @param {any} siteRec model SITE record (attrs.tz / attrs.timezone), may be null
+ * @param {{browser?: boolean, register?: boolean}} [opts] browser:false skips the browser zone (hooks)
+ * @returns {{zone: string, source: string, fallback: boolean, label: string}}
+ */
+function resolveSiteTimeZone(siteRec, opts = {}) {
+  const a = (siteRec && siteRec.attrs) || {};
+  const names = [a.id, a.name, a.dis, siteRec && siteRec.name].filter(Boolean).map(String);
+  const fromApi = (SITE_TZ_SOURCES.sites.find((s) => [s.id, s.name].filter(Boolean).map(String).some((n) => names.includes(n)))
+    || (SITE_TZ_SOURCES.sites.length === 1 ? SITE_TZ_SOURCES.sites[0] : null) || {}).timezone;
+  let browser = null;
+  if (opts.browser !== false) {
+    try { browser = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { browser = null; }
+    browser = isUtcZone(browser) ? null : knownZone(browser);
+  }
+  const hit = [[knownZone(a.tz), "model site", false], [knownZone(a.timezone), "model site", false],
+    [SITE_TZ_SOURCES.appOption, "app option", false], [knownZone(fromApi), "NF Sites API", false], [browser, "browser", true]]
+    .find((c) => c[0]) || ["UTC", "none", true];
+  const [zone, source, fallback] = hit;
+  const label = !fallback ? zone : source === "browser" ? `${zone} (browser fallback)` : `${zone} (fallback)`;
+  if (opts.register !== false) chartTzLabels.set(zone, label);
+  return { zone, source, fallback, label };
+}
 const scheduleApi = () => /** @type {any} */ (globalThis).ofddSchedule;
 function getChartRangeState(key) {
   const q = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
@@ -157,7 +218,7 @@ function renderRangeControl(container, { key = "default", state = getChartRangeS
     `<button type="button" data-range="${v}" class="${state.preset === v ? "on" : ""}">${label}</button>`).join("")}</div>
     <label>From <input type="datetime-local" data-range-from step="60" value="${dateTimeInputValue(bounds.fromMs, tz)}"></label>
     <label>To <input type="datetime-local" data-range-to step="60" value="${dateTimeInputValue(bounds.toMs, tz)}"></label>
-    <span class="sub">${esc(tz)}</span><button type="button" data-range-apply>Apply</button>`;
+    <span class="sub">${esc(chartTzLabels.get(tz) || tz)}</span><button type="button" data-range-apply>Apply</button>`;
   const applyState = (next, push = true) => {
     setChartRangeState(key, next, { push });
     onChange?.(next);
