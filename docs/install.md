@@ -74,12 +74,18 @@ role. Give the hooks a separate least-privilege runtime role. See the
 The installer and `doctor` check the selected Timescale schema before upgrading. If the schema is behind, apply
 `nf-app/timescale/install.sql` as the database installer role, then repeat the check. Releases from 5.0.13 ship a
 read-only `schema` hook: the check runs inside NF with the hook's own `timescale` option and returns only the installed
-and required versions. It needs no database route and no `psql` on the workstation. A box that still runs an older
-release has no such hook, so the check falls back to `psql` on the workstation. If the option names `localhost`,
-`127.0.0.1`, or `::1`, that address refers to the NF host, so set `NF_TIMESCALE_PREFLIGHT_DSN` in the protected
-environment to a reachable endpoint for the same database (for example a temporary approved forward) and install a
-PostgreSQL client. Otherwise the installer stops and names both remedies. Keep credentials out of the command line.
-Lite, SQLite, and PGlite skip this preflight.
+and required versions. It needs no database route and no `psql` on the workstation. When the installed app has no
+`schema` hook (any upgrade from 5.0.12 or earlier), `install` bootstraps it first: it checks the probe's files for hand
+edits (`--force` overrides), pushes only `hooks/schema.js`, `hooks/lib/settings.js`, `hooks/lib/timescale.js` and
+`static/units.js`, registers only the `schema` hook, records them in the push manifest, runs the probe, and then
+continues with the normal install. If the schema is behind, the install stops there and those probe files stay on the
+box; the app keeps its version and its other hooks. `install --dry-run` only reports "would bootstrap the schema probe".
+`doctor` stays read-only and shows a WARN until the probe is installed. If the probe cannot run (the hook does not start,
+or the `pg` package is missing), the installer stops and names both remedies: forward the database and use `psql`
+(set `NF_TIMESCALE_PREFLIGHT_DSN` in the protected environment to a reachable endpoint for the same database and install
+a PostgreSQL client; a `localhost`, `127.0.0.1` or `::1` option names the NF host, so it is never used from the
+workstation), or fix the probe by installing the app dependencies. Keep credentials out of the command line.
+Lite, SQLite, and PGlite skip this preflight and never bootstrap the probe.
 
 ## Site timezone
 
@@ -143,6 +149,9 @@ Use the named failure to choose the next check.
 
 - **connectivity** means the workstation could not reach NF. Use the front-door URL or approved forward, not an
   unreachable NF loopback address.
+- **timescale schema** `schema probe not installed yet; install will bootstrap it` is a WARN, not a failure: the app
+  predates the schema hook, and `install` pushes just the probe first (`install --dry-run` previews it). If `install`
+  stops with "the NF-side schema probe could not run", install the app dependencies (`pg`) or use the `psql` route above.
 - **tls** means the server certificate is not trusted. Use the installer CA-file or certificate-pin option.
 - **auth** means NF rejected the console credentials. Verify the local console login before changing credentials.
 - **fdd freshness** compares output age with raw history. If raw history is current, read the latest `fdd` hook run

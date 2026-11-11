@@ -343,7 +343,9 @@ class Console:
             connecting = isinstance(e, urllib.error.URLError)  # a bare timeout is raised while reading the reply
             raise transport_error(method, path, self.base, e, connecting) from None
         if text.lstrip().startswith("<"):
-            raise ApiError(f"{method} {shown} returned HTML (unknown route on this NF version?)", 0)
+            raise ApiError(f"{method} {shown} returned HTML, not the NF API. NF_CONSOLE_URL (or --console) may point at "
+                           "the app front door / static UI instead of the NF console: try the NF console port, or the "
+                           "front-door route that proxies the NF API. (Rarely: this NF version has no such route.)", 0)
         return json.loads(text) if text else {}
 
     def probe(self, path: str) -> tuple[int, dict[str, str]]:
@@ -621,8 +623,9 @@ def commit_blob(m: dict, rel: str, commit: str) -> bytes | None:
     return lf_bytes(rel, out)
 
 
-def find_drift(c, m: dict) -> dict:
-    """Which files on the box were edited by hand since the last push. Read-only.
+def find_drift(c, m: dict, only: set[str] | None = None) -> dict:
+    """Which files on the box were edited by hand since the last push. Read-only. `only` limits the check to those NF
+    paths (the schema-probe bootstrap guards just the files it will write).
 
     Baseline, best first:
       "manifest"  the sha256 of every file the last push wrote (static/version.json "files"): the exact answer;
@@ -647,6 +650,8 @@ def find_drift(c, m: dict) -> dict:
     out["baseline"] = "manifest" if pushed is not None else "commit" if commit else "repo"
     out["commit"] = commit
     for nf_path, rel in m["files"].items():
+        if only is not None and nf_path not in only:
+            continue
         remote = c.read_file(app_id, nf_path, known_paths=known, push_manifest=pushed)
         if remote is None:
             continue                       # not on the box yet: nothing to lose
@@ -689,9 +694,11 @@ def save_remote_files(drift: dict, folder: Path) -> list[Path]:
     return saved
 
 
-def guard_pushed_files(c, m: dict, force: bool = False, save_remote: Path | None = None) -> int:
-    """Run before a push writes anything. 0 = go ahead; EXIT_DRIFT = stop (nothing was written)."""
-    drift = find_drift(c, m)
+def guard_pushed_files(c, m: dict, force: bool = False, save_remote: Path | None = None,
+                       only: set[str] | None = None) -> int:
+    """Run before a push writes anything. 0 = go ahead; EXIT_DRIFT = stop (nothing was written).
+    `only` limits the check to those NF paths."""
+    drift = find_drift(c, m, only)
     if drift["baseline"] == "none" or not drift["checked"]:
         return 0
     if drift["baseline"] != "manifest":
@@ -1124,17 +1131,30 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
     apps = preflight(c, m)
     app_id = m["application"]["id"]
     prior = (c.app(app_id) if apps.get(app_id) else None) or apps.get(app_id)
-    # Schema preflight precedes even the remote-file snapshot reads, then all reads precede mutation.
-    lvl, message = schema_preflight(c, prior or {}, app_id, getattr(a, "_environ", os.environ))
+    dry_run = getattr(a, "dry_run", False)
+    # Schema preflight precedes even the remote-file snapshot reads, then all reads precede mutation. When the installed
+    # app has no (or an older) NF-side schema probe, the gate bootstraps just the probe first (#1593).
+    lvl, message, bootstrapped = install_schema_gate(c, m, a, prior, app_id, getattr(a, "_environ", os.environ),
+                                                     clock, sleep, dry_run)
+    if lvl == "DRIFT":
+        print(f"install: STOPPED (exit {EXIT_DRIFT}): hand-edited files on the box (see above); the box was not changed")
+        return EXIT_DRIFT
     if lvl == "FAIL":
         print(f"install: STOPPED: Timescale schema preflight failed: {message}")
         return EXIT_FAILED
-    if lvl == "PASS" and message:
+    if lvl == "DRYRUN":
+        print(f"install: dry run: {message}")
+    elif lvl == "PASS" and message:
         print(f"install: Timescale schema preflight: {message}")
+    if bootstrapped:
+        prior = c.app(app_id) or prior     # the snapshot below must include the bootstrapped probe
     rc = guard_pushed_files(c, m, getattr(a, "force", False), getattr(a, "save_remote", None))
     if rc == EXIT_DRIFT:
         print(f"install: STOPPED (exit {rc}): hand-edited files on the box (see above); the box was not changed")
         return rc
+    if dry_run:
+        print("install: dry run: nothing was changed; re-run without --dry-run to install")
+        return 0
     if prior:
         # NF 3.10's DELETE file/hook routes are documented. Snapshot existing targets; track new ones
         # separately so a failed verification can remove them without touching older app content.
@@ -1593,20 +1613,33 @@ def probe_result(run: dict) -> dict | None:
     return None
 
 
-def schema_probe(c, app: dict, app_id: str, clock=time.monotonic, sleep=time.sleep) -> tuple[str, str] | None:
-    """('PASS'|'FAIL'|'SKIP', text) from the NF-side read-only probe hook, or None when the installed app has no such
-    hook or the run gave no usable answer (the caller then falls back to the DSN path). Only {installed, required, ok}
-    comes back from NF; connection details never leave the hook."""
-    if not any(isinstance(h, dict) and h.get("id") == PROBE_HOOK_ID for h in app.get("hooks") or []):
-        return None
+def has_probe_hook(app: dict) -> bool:
+    return any(isinstance(h, dict) and h.get("id") == PROBE_HOOK_ID for h in app.get("hooks") or [])
+
+
+def probe_run(c, app_id: str, clock=time.monotonic, sleep=time.sleep) -> dict | None:
+    """Start the NF-side `schema` hook once and return its {installed, required, ok} answer, or None when the hook
+    could not be started or the run gave no usable answer. Never raises."""
     try:
         pid = c.call("POST", f"/api/v1/apps/{app_id}/hooks/{PROBE_HOOK_ID}", {}).get("pid")
         run = wait_for_run(c, app_id, PROBE_HOOK_ID, pid, PROBE_WAIT_SECONDS, clock, sleep)
     except (SystemExit, OSError):
         return None
-    got = probe_result(run) if run else None
-    if got is None:
+    return probe_result(run) if run else None
+
+
+def schema_probe(c, app: dict, app_id: str, clock=time.monotonic, sleep=time.sleep) -> tuple[str, str] | None:
+    """('PASS'|'FAIL'|'SKIP', text) from the NF-side read-only probe hook, or None when the installed app has no such
+    hook or the run gave no usable answer (the caller then falls back to the DSN path). Only {installed, required, ok}
+    comes back from NF; connection details never leave the hook."""
+    if not has_probe_hook(app):
         return None
+    got = probe_run(c, app_id, clock, sleep)
+    return None if got is None else probe_verdict(got)
+
+
+def probe_verdict(got: dict) -> tuple[str, str]:
+    """('PASS'|'FAIL'|'SKIP', text) for a probe answer."""
     if got.get("skipped"):
         return "SKIP", ""
     required = got.get("required")
@@ -1618,6 +1651,139 @@ def schema_probe(c, app: dict, app_id: str, clock=time.monotonic, sleep=time.sle
         return "PASS", f"Timescale schema version {installed} (read by the NF-side probe)"
     return "FAIL", (f"Timescale schema version {installed}; this release requires {required}. "
                     "Run nf-app/timescale/install.sql as installer/owner")
+
+
+# ---- bootstrapping the probe on an app that predates it (#1593)
+
+# What hooks/schema.js needs at run time: itself, the two libs it requires, and static/units.js (required by
+# lib/timescale.js). tests/test_nf_app_install.py checks this list against the real require() graph. The only npm
+# package involved is pg (loaded lazily by lib/timescale.js), which every Timescale install already has.
+PROBE_FILES = ("/hooks/schema.js", "/hooks/lib/settings.js", "/hooks/lib/timescale.js", "/static/units.js")
+PROBE_DEP = "pg"
+PROBE_LEFTOVER = ("The probe files and the `schema` hook were put on the box ahead of the install; nothing else was "
+                  "changed (the app keeps its current version, hooks and settings).")
+
+
+def manifest_ships_probe(m: dict) -> bool:
+    """True when the manifest has the `schema` hook definition and every file the probe needs."""
+    return (any(h.get("id") == PROBE_HOOK_ID for h in m.get("hooks") or [])
+            and all(p in m["files"] and (m["_dir"] / m["files"][p]).is_file() for p in PROBE_FILES))
+
+
+def local_required_schema(m: dict) -> int | None:
+    """The schema version this release's hooks/lib/timescale.js requires (SCHEMA_VERSION), None if not readable."""
+    rel = m["files"].get("/hooks/lib/timescale.js")
+    try:
+        found = re.search(r"^const SCHEMA_VERSION = (\d+);", (m["_dir"] / rel).read_text(encoding="utf-8"), re.M)
+    except (OSError, TypeError):
+        return None
+    return int(found.group(1)) if found else None
+
+
+def probe_cannot_run(why: str) -> str:
+    return (f"the NF-side schema probe could not run ({why}), so the Timescale schema version was not checked. Either "
+            "(a) forward the database to this machine, install a PostgreSQL client (psql) and set "
+            "NF_TIMESCALE_PREFLIGHT_DSN to the forwarded endpoint, then re-run; or (b) fix the probe: make sure the app "
+            f"dependencies ({PROBE_DEP}) are installed (PATCH /api/v1/apps/<app-id>/dependencies, then "
+            "PATCH /api/v1/apps/<app-id>/restart), then re-run. " + PROBE_LEFTOVER)
+
+
+def record_in_push_manifest(c, app_id: str, hashes: dict[str, str]) -> bool:
+    """Add `hashes` ({nf_path: sha256}) to the box's push manifest (static/version.json "files") so a later push does
+    not take those files for hand edits. A box with no push manifest is left alone (creating one would make every other
+    file look hand-edited). Returns whether version.json was rewritten."""
+    info = remote_version_info(c, app_id, known_paths=remote_file_paths(c, app_id))
+    if not isinstance(info.get(PUSH_MANIFEST_KEY), dict):
+        return False
+    info[PUSH_MANIFEST_KEY] = {**info[PUSH_MANIFEST_KEY], **hashes}
+    c.call("POST", f"/api/v1/apps/{app_id}/files/static/version.json",
+           base64.b64encode(json.dumps(info).encode()).decode())
+    return True
+
+
+def bootstrap_schema_probe(c, m: dict, a, app: dict, app_id: str, clock=time.monotonic,
+                           sleep=time.sleep) -> tuple[str, str]:
+    """Put the schema probe on an app that has none (or an older one) and read the schema through it. Touches ONLY the
+    probe files and the `schema` hook definition (plus static/version.json's push manifest, and the dependency step when
+    pg is not installed): never other hooks, static files or running hooks' code. Guards those files for hand edits
+    first. Returns ('PASS'|'FAIL'|'SKIP'|'DRIFT', text). Not rolled back if the full install later stops."""
+    listed = {f.get("path") for f in app.get("files") or [] if isinstance(f, dict)}
+    paths = list(PROBE_FILES)
+    if "/package.json" in m["files"] and "/package.json" not in listed:
+        paths.insert(0, "/package.json")      # no dependency list on the box at all: the probe needs pg from it
+    if not has_probe_hook(app) and getattr(a, "skip_hooks", False):
+        return "FAIL", probe_cannot_run("--skip-hooks leaves the schema hook unregistered")
+    if guard_pushed_files(c, m, getattr(a, "force", False), getattr(a, "save_remote", None), only=set(paths)):
+        return "DRIFT", ""
+    print("install: bootstrapping the schema probe (" + ", ".join(paths) + " and the schema hook only)")
+    known = remote_file_paths(c, app_id)
+    pushed: dict[str, str] = {}
+    for p in paths:
+        data = deploy_bytes(m, m["files"][p])
+        if c.read_file(app_id, p, known_paths=known) != data:
+            c.call("POST", f"/api/v1/apps/{app_id}/files{p}", base64.b64encode(data).decode())
+            print(f"wrote {p} ({len(data)} bytes)")
+        pushed[p] = sha256_hex(data)
+    if not getattr(a, "skip_deps", False) and not deps_present(c, app_id, [PROBE_DEP]):
+        report_deps(install_deps(c, m, clock, sleep), app_id)     # the full install's dependency step
+    c.call("POST", f"/api/v1/apps/{app_id}/hooks", next(h for h in m["hooks"] if h.get("id") == PROBE_HOOK_ID))
+    print(f"updated hook {PROBE_HOOK_ID}")
+    if record_in_push_manifest(c, app_id, pushed):
+        print("recorded the probe files in the box's push manifest")
+    got = probe_run(c, app_id, clock, sleep)
+    if got is None:      # a runtime may cache hook modules: restart once, then ask again
+        try:
+            c.call("PATCH", f"/api/v1/apps/{app_id}/restart", {})
+        except SystemExit:
+            pass
+        got = probe_run(c, app_id, clock, sleep)
+    if got is None:
+        return "FAIL", probe_cannot_run("the schema hook did not start or gave no answer")
+    if got.get("skipped"):
+        return "SKIP", ""
+    if "installed" not in got:
+        err = str(got.get("error") or "unknown error")
+        if "pg not installed" in err:
+            return "FAIL", probe_cannot_run("the pg package is not installed in the app")
+        return "FAIL", f"the NF-side schema probe could not read the Timescale schema: {err[:200]}. " + PROBE_LEFTOVER
+    lvl, text = probe_verdict(got)
+    if lvl == "PASS":
+        return lvl, text + "; the probe was bootstrapped first"
+    return lvl, text + ". " + PROBE_LEFTOVER
+
+
+def install_schema_gate(c, m: dict, a, prior: dict | None, app_id: str, environ, clock=time.monotonic,
+                        sleep=time.sleep, dry_run: bool = False) -> tuple[str, str, bool]:
+    """(level, text, bootstrapped) for the install's Timescale schema check. level: SKIP (Lite / no Timescale / no app),
+    PASS, FAIL, DRIFT (a probe file was hand-edited), DRYRUN (a bootstrap would be needed; nothing was written).
+    The probe on the box is used when it is current; an app with no `schema` hook, or one whose probe reports an older
+    required schema than this release, gets the probe bootstrapped first. A manifest that ships no probe keeps the
+    DSN/psql path. Never falls back to psql on its own when the probe cannot run."""
+    if not prior or not timescale_selected(prior):
+        return "SKIP", "", False
+    if not manifest_ships_probe(m):
+        lvl, text = schema_preflight(c, prior, app_id, environ)
+        return lvl, text, False
+    if has_probe_hook(prior):
+        got = probe_run(c, app_id, clock, sleep)
+        if got is None:                  # hook there but no usable answer: the explicit DSN path, as before
+            lvl, text = timescale_schema_check(prior, environ)
+            return lvl, text, False
+        want, have = local_required_schema(m), got.get("required")
+        if not (isinstance(have, int) and want is not None and have < want):
+            lvl, text = probe_verdict(got)
+            return lvl, text, False
+        why = f"the installed probe checks schema {have}, this release needs {want}"
+    else:
+        why = "the installed app has no schema probe"
+    if dry_run:
+        if guard_pushed_files(c, m, getattr(a, "force", False), getattr(a, "save_remote", None), only=set(PROBE_FILES)):
+            return "DRIFT", "", False
+        return "DRYRUN", (f"would bootstrap the schema probe ({why}): push {', '.join(PROBE_FILES)} and register the "
+                          f"{PROBE_HOOK_ID} hook, then read the schema through it"), False
+    print(f"install: {why}; bootstrapping it")
+    lvl, text = bootstrap_schema_probe(c, m, a, prior, app_id, clock, sleep)
+    return lvl, text, lvl != "DRIFT"
 
 
 def schema_preflight(c, app: dict, app_id: str, environ=None, **kw) -> tuple[str, str]:
@@ -1847,8 +2013,11 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line(lvl.upper(), "fdd freshness", text)
     lvl, text = timescale_check(a)
     line(lvl, "timescale", text)
-    schema_lvl, schema_text = schema_preflight(c, a, app_id, environ)
-    line(schema_lvl, "timescale schema", schema_text or "not selected (Lite/sqlite/pglite)")
+    if timescale_selected(a) and manifest_ships_probe(m) and not has_probe_hook(a):
+        line("WARN", "timescale schema", "schema probe not installed yet; install will bootstrap it")
+    else:
+        schema_lvl, schema_text = schema_preflight(c, a, app_id, environ)
+        line(schema_lvl, "timescale schema", schema_text or "not selected (Lite/sqlite/pglite)")
     try:
         drift = find_drift(c, m)
     except SystemExit as e:
@@ -1903,6 +2072,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="push/install: overwrite files on the box that were edited by hand (default: stop and list them)")
     ap.add_argument("--save-remote", type=Path, metavar="DIR",
                     help="push/install: first download the hand-edited box copies to DIR (same folder layout) for review")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="install: run the read-only checks (login, schema probe, hand edits) and say what would happen, "
+                         "e.g. \"would bootstrap the schema probe\"; writes nothing")
     ap.add_argument("--skip-verify-run", action="store_true",
                     help="install: do not run the scheduled hooks once to verify")
     ap.add_argument("--remove-old", action="store_true",
