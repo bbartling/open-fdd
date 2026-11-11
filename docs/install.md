@@ -114,7 +114,25 @@ write to HVAC controllers or other field devices.
 
 ## Further help
 
+- [NF gotchas](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-gotchas.md) documents NF-specific behaviors and workarounds.
 - [Modeling](modeling.html) covers classes, markers, roles, and point units.
 - [API reference](fdd-data-access.html) covers NF points, results, and history.
 - [Timescale guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale) covers schema, roles, and retention.
 - [Development](development.html) covers the local mock, tests, and generated packs.
+
+## 10. Troubleshooting
+
+Run `doctor` from the release checkout with the protected console environment file.
+
+```bash
+python3 scripts/nf/hooks/nf_app_sync.py --env <protected-env-file> doctor nf-app/app.json
+```
+
+Use the named failure to choose the next check.
+
+- **connectivity** means the workstation could not reach NF. Use the front-door URL or approved forward, not an
+  unreachable NF loopback address.
+- **tls** means the server certificate is not trusted. Use the installer CA-file or certificate-pin option.
+- **auth** means NF rejected the console credentials. Verify the local console login before changing credentials.
+- **fdd freshness** compares output age with raw history. If raw history is current, read the latest `fdd` hook run
+  with `include_results=true` for per-equipment skip or stale reasons.

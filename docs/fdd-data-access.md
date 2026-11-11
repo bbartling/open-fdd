@@ -8,12 +8,12 @@ nav_order: 11
 Open-FDD uses the Normal Framework API. Results are ordinary NF points. This page describes generic read routes and
 the Open-FDD result shape. Use the NF documentation for routes not listed here.
 
-Set the base URL and credentials in your local environment. Do not place credentials in a URL or commit them:
+Set the base URL and credentials in a protected local environment.
 
 ```bash
-export NF_BASE_URL=<reachable-console-base-url>
-export NF_USER=<read-only-user>
-export NF_PASSWORD=<secret>
+export NF_URL='<reachable-console-base-url>'
+export NF_CONSOLE_USER='<read-only-user>'
+export NF_CONSOLE_PASSWORD='<secret>'
 ```
 
 Use Basic auth for a local console, or the bearer token issued by the Normal Online portal. Portal API keys are
@@ -75,6 +75,15 @@ Result points use fault or metric markers and carry attributes such as those bel
 
 With no coverage, status is not-assessed and there is no numeric fault value. Stale means the current run
 could not refresh the point. It does not erase earlier history.
+
+### Checking that results are fresh
+
+Run `doctor` from the release checkout against the installed app. Its read-only **fdd freshness** check compares the
+newest computed result with raw history and the configured FDD schedule. It fails when results are over twice the
+schedule old while raw history is fresh. If raw history is also old, investigate the source or its polling first.
+The check reports `fddStatus: stale` reasons. Read the latest FDD hook run with `include_results=true` for
+per-equipment details. The Full Timescale edition's on-request `history` hook can report `newest_source_ts` for a
+requested set of points, even when the selected range is empty.
 
 ### Query current fault status
 

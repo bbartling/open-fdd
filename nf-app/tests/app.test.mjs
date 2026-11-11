@@ -469,3 +469,31 @@ test("RCx ignores superseded range resolutions and failures", async () => {
   await newer;
   assert.equal(element("rcxRangeStatus").textContent, "");
 });
+
+test("rule plot panel is visible while resolving a range and exposes lookup errors", async () => {
+  const elements = new Map();
+  const element = (id) => {
+    if (!elements.has(id)) elements.set(id, { textContent: "", hidden: true, classList: { add() {}, remove() {} }, scrollIntoView() {} });
+    return elements.get(id);
+  };
+  let rejectRange;
+  const ctx = vm.createContext({
+    console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
+    idOf: (r) => (r.attrs || {}).id || r.name, has: (p, marker) => (p.tags || []).includes(marker),
+    equipLabel: (e) => e.name, chartTimeZone: () => "UTC", getChartRangeState: () => ({ preset: "custom" }),
+    renderRangeControl: () => {}, loadCatalog: async () => ({}), equipRules: () => [{ rule: { id: "SV-RANGE", description: "sensor bounds" }, bound: {} }],
+    resolveChartSelection: () => new Promise((_resolve, reject) => { rejectRange = reject; }),
+  });
+  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  ctx.testModel = { equips: [{ name: "AHU-1", attrs: { id: "AHU-1", siteRef: "site-a" } }],
+    points: [{ name: "SAT", equipRef: "AHU-1", siteRef: "site-a", tags: ["his"] }] };
+  vm.runInContext('model = testModel; scope.site = "site-a"', ctx);
+
+  const plot = vm.runInContext('showRulePlot("SV-RANGE", "AHU-1").catch((e) => { $("fddPlotNote").textContent = `could not draw: ${e.message}`; })', ctx);
+  await new Promise(setImmediate);
+  assert.equal(element("fddPlotPanel").hidden, false);
+  assert.equal(element("fddPlotRangeStatus").textContent, "Resolving range…");
+  rejectRange(new Error("range lookup failed"));
+  await plot;
+  assert.equal(element("fddPlotNote").textContent, "could not draw: range lookup failed");
+});

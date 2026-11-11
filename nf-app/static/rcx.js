@@ -141,7 +141,17 @@ function rcxSiteChart(el, siteTz, range) {
     chart.setOption = (option, ...args) => {
       const cfg = rcxChartConfig.get(chart);
       const styled = typeof chartOptionSiteTime === "function"
-        ? chartOptionSiteTime(option, cfg.siteTz, cfg.range?.resolvedBounds) : option;
+        ? chartOptionSiteTime(option, cfg.siteTz) : option;
+      // Keep explicit view extents (for example a week bucket whose start precedes a short
+      // selected interval). The input series itself is already fetched for cfg.range.
+      const bounds = cfg.range?.resolvedBounds;
+      if (bounds && Number.isFinite(bounds.fromMs) && Number.isFinite(bounds.toMs)) {
+        for (const axis of (Array.isArray(styled?.xAxis) ? styled.xAxis : [styled?.xAxis])) {
+          if (axis?.type !== "time") continue;
+          if (axis.min == null) axis.min = bounds.fromMs;
+          if (axis.max == null) axis.max = bounds.toMs;
+        }
+      }
       return original(styled, ...args);
     };
   }

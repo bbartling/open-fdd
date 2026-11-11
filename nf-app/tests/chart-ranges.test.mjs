@@ -68,6 +68,45 @@ test("All range discovery and history reads stay in 40 UUID, count-bounded reque
   assert.ok(calls.some((p) => new URL(p, "https://nf.example.test").searchParams.get("count") === "10000"));
 });
 
+test("All discovery caches successful chunks only and retries a failed chunk", async () => {
+  const c = context(), calls = [];
+  let failUuid = "p-40";
+  c.api = async (path) => {
+    calls.push(path);
+    const q = new URL(path, "https://nf.example.test").searchParams, uuids = q.getAll("uuids");
+    if (q.get("count") === "1") {
+      if (uuids.includes(failUuid)) { failUuid = null; throw new Error("temporary oldest lookup failure"); }
+      return { data: uuids.map((uuid) => ({ uuid, values: [{ ts: "2026-11-01T00:00:00Z" }] })) };
+    }
+    return { data: [] };
+  };
+  const points = Array.from({ length: 41 }, (_, i) => ({ uuid: `p-${i}` }));
+  await assert.rejects(c.get("fetchRange")(points, { preset: "all" }), /temporary oldest lookup failure/);
+  const firstAttempt = calls.filter((x) => new URL(x, "https://nf.example.test").searchParams.get("count") === "1");
+  assert.equal(firstAttempt.length, 2);
+  const result = await c.get("fetchRange")(points, { preset: "all" });
+  const totalOldestReads = calls.filter((x) => new URL(x, "https://nf.example.test").searchParams.get("count") === "1");
+  assert.equal(totalOldestReads.length, 3, "the completed chunk stays cached; only the failed chunk retries");
+  assert.equal(result.fromMs, Date.parse("2026-11-01T00:00:00Z"));
+});
+
+test("multi-page range merges duplicate boundary timestamps, preferring the later page", async () => {
+  const c = context();
+  let boundary, dataPage = 0;
+  c.api = async (path) => {
+    const q = new URL(path, "https://nf.example.test").searchParams;
+    if (q.get("count") === "1") return { data: [] };
+    dataPage++;
+    if (dataPage === 1) boundary = Date.parse(q.get("to"));
+    return { data: [{ uuid: "p1", values: [{ ts: new Date(boundary).toISOString(), double: dataPage }] }] };
+  };
+  const toMs = Date.parse("2026-11-10T00:00:00Z"), fromMs = toMs - 8 * 86400000;
+  const result = await c.get("fetchRange")([{ uuid: "p1" }], { preset: "custom", fromMs, toMs },
+    { windowSec: 60, minWindowSec: 60, preserveWindow: true });
+  assert.equal(dataPage, 2);
+  assert.deepEqual(Array.from(result.series.get("p1"), (row) => Array.from(row)), [[boundary, 2]]);
+});
+
 test("custom range includes clipped edge buckets and sends exact endpoints", async () => {
   const c = context(), fromMs = Date.parse("2026-11-01T01:02:00Z"), toMs = Date.parse("2026-11-01T01:04:00Z");
   let dataUrl;

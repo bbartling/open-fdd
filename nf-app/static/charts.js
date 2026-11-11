@@ -65,8 +65,11 @@ function dewPointF(tF, rh) {
 // ---- history: resampled by NF, cached briefly ---------------------------------------
 const WINDOWS = [60, 300, 600, 900, 1800, 3600, 7200, 14400, 86400];
 
+/** @typedef {Map<any, any> & {windowSec: number}} HistorySeriesMap */
+
 /** Smallest window giving at most ~`target` values per series over `hours`. */
 const pickWindow = (hours, target = 360) => WINDOWS.find((w) => (hours * 3600) / w <= target) || 86400;
+const windowLabel = (seconds) => seconds >= 3600 ? `${+(seconds / 3600).toFixed(1)} h` : `${+(seconds / 60).toFixed(1)} min`;
 
 const seriesCache = new Map();  // url -> { at, promise }
 const CACHE_MS = 60e3;
@@ -204,7 +207,8 @@ function historyChunks(list, from, to, windowSec, method) {
  * UUIDs are grouped into bounded requests; repeat calls within a minute reuse each chunk answer.
  */
 async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWindow(hours), endMs = null, fromMs = null } = {}) {
-  const out = new Map(list.map((p) => [p.uuid, []]));
+  const out = /** @type {HistorySeriesMap} */ (new Map(list.map((p) => [p.uuid, []])));
+  out.windowSec = windowSec;
   if (!list.length) return out;
   // Round the end to the window so repeat views share a cache entry. endMs (window-aligned) lets a
   // caller walk a long span back in chunks (rcx.js alignedFine).
@@ -261,15 +265,24 @@ async function oldestSamples(list) {
   });
   const chunks = oldestChunks(missing);
   for (let base = 0; base < chunks.length; base += 4) {
-    for (const p of chunks.slice(base, base + 4).flat()) oldestCache.set(p.uuid, { at: now, value: null });
-    const bodies = await Promise.all(chunks.slice(base, base + 4).map((c) => api(oldestUrl(c))));
-    for (const body of bodies) {
+    const batch = chunks.slice(base, base + 4);
+    const results = await Promise.all(batch.map(async (chunk) => {
+      try { return { body: await api(oldestUrl(chunk)) }; }
+      catch (error) { return { error }; }
+    }));
+    let failure;
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.error) { failure ||= result.error; continue; }
+      const body = result.body, chunk = batch[i];
       const rows = Array.isArray(body.data) ? body.data : body.data?.data || [];
       for (const row of rows) {
         const ts = row?.values?.[0]?.ts;
         oldestCache.set(row.uuid, { at: now, value: ts ? parseTs(ts) : null });
       }
+      for (const p of chunk) if (oldestCache.get(p.uuid)?.at !== now) oldestCache.set(p.uuid, { at: now, value: null });
     }
+    if (failure) throw failure;
   }
   return list.map((p) => oldestCache.get(p.uuid)?.value ?? null);
 }
@@ -315,6 +328,11 @@ async function fetchRange(list, state, { method = "AVERAGE", windowSec = null, m
       endMs: chunk.toMs, fromMs: chunk.fromMs });
     for (const p of list) series.get(p.uuid).push(...(got.get(p.uuid) || []));
   }
+  for (const [uuid, values] of series) {
+    const byTimestamp = new Map();
+    for (const [timestamp, value] of values) byTimestamp.set(timestamp, value);
+    series.set(uuid, [...byTimestamp].sort((a, b) => a[0] - b[0]));
+  }
   // Resampling buckets are aligned to the Unix epoch. NF applies `from`/`to` to input samples;
   // clamp display coordinates so partial edge buckets remain visible inside the chosen interval.
   if (state?.preset === "custom") for (const [uuid, values] of series) {
@@ -326,7 +344,12 @@ async function fetchRange(list, state, { method = "AVERAGE", windowSec = null, m
 
 /** Catalog chart fetcher: retain fetchSeries' Map shape while honoring the active range. */
 async function fetchChartSeries(ctx, list, hours, opts = {}) {
-  if (ctx?.range) return (await fetchRange(list, ctx.range, { ...opts, siteTz: ctx.siteTz || "UTC" })).series;
+  if (ctx?.range) {
+    const result = await fetchRange(list, ctx.range, { ...opts, siteTz: ctx.siteTz || "UTC" });
+    const series = /** @type {HistorySeriesMap} */ (result.series);
+    series.windowSec = result.windowSec;
+    return series;
+  }
   return fetchSeries(list, hours, opts);
 }
 async function fetchChartDisplay(ctx, list, hours, opts = {}) {
@@ -391,7 +414,7 @@ const CHARTS = [
       const temps = c.cards.filter(isTemp);
       const s = await fetchChartDisplay(c, temps, hours);
       return {
-        hint: `${temps.length} points · ${pickWindow(hours) / 60} min averages`,
+        hint: `${temps.length} points · ${windowLabel(s.windowSec)} averages`,
         option: {
           tooltip, legend, grid: { left: 50, right: 20, top: 36, bottom: 60 },
           xAxis: { type: "time", ...axisStyle },
@@ -446,7 +469,7 @@ const CHARTS = [
       });
       const vals = data.map((d) => d[2]);
       return {
-        hint: `${p.dis} · hourly averages, local time`,
+        hint: `${p.dis} · hourly averages, site time`,
         option: {
           tooltip: { position: "top", formatter: (x) => `${days[x.value[1]]} ${x.value[0]}:00<br><b>${x.value[2]} ${dispUnit(p)}</b>` },
           grid: { left: 90, right: 20, top: 10, bottom: 80 },
@@ -476,7 +499,7 @@ const CHARTS = [
         fetchChartDisplay(c, temps, hours, { method, windowSec: 3600, preserveWindow: true })));
       const days = [...byDay(avg.get(temps[0].uuid) || [], c.siteTz).keys()];
       return {
-        hint: "hourly MIN / MAX / AVERAGE from NF, grouped by local day",
+        hint: "hourly MIN / MAX / AVERAGE from NF, grouped by site day",
         option: {
           legend,
           tooltip: { trigger: "item", formatter: (x) => `${x.seriesName} · ${x.name}<br>min ${fmt(x.value[3])} · mean ${fmt((x.value[1] + x.value[2]) / 2)} · max ${fmt(x.value[4])}` },
@@ -542,7 +565,7 @@ const CHARTS = [
       const lastT = dispVal(t, latestOf(t)), lastRH = dispVal(rh, latestOf(rh));
       const tU = dispUnit(t);
       return {
-        hint: `${t.name} × ${rh.name} · 15 min averages · ringed dot = now`,
+        hint: `${t.name} × ${rh.name} · ${windowLabel(s.windowSec)} averages · ringed dot = now`,
         option: {
           tooltip: { formatter: (x) => `${stamp.format(x.value[3] ?? Date.now())}<br>${fmt(x.value[0])} ${tU} · ${fmt(x.value[1])} %RH`
               + (/F$/.test(tU) ? `<br>dew point ${fmt(dewPointF(x.value[0], x.value[1]))} °F`
@@ -570,7 +593,7 @@ const CHARTS = [
       const others = c.cards.filter((p) => !isTemp(p) && !isRH(p)).slice(0, 2);
       const s = await fetchChartDisplay(c, others, hours);
       return {
-        hint: `${pickWindow(hours) / 60} min averages`,
+        hint: `${windowLabel(s.windowSec)} averages`,
         option: {
           tooltip, legend, grid: { left: 50, right: 50, top: 36, bottom: 60 },
           xAxis: { type: "time", ...axisStyle },

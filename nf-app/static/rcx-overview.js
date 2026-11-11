@@ -257,7 +257,8 @@
   async function faultLanes(ctx, rules, eqs) {
     const lanes = [];
     for (const rule of rules) {
-      const arrays = await Promise.all(eqs.map((eq) => rcxFaultData(ctx.model, eq, rule, ctx.hours)));
+      const arrays = await Promise.all(eqs.map((eq) => rcxFaultData(ctx.model, eq, rule, ctx.hours,
+        { range: ctx.range, siteTz: ctx.siteTz })));
       const data = M.mergeFaultLanes(arrays);
       if (data.length) lanes.push({ name: rule, data });
     }

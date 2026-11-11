@@ -301,13 +301,14 @@ async function showRulePlot(ruleId, equipId) {
   const historyPoints = model.points.filter((p) => p.siteRef === scope.site && p.equipRef === equipId && has(p, "his"));
   renderRangeControl($("fddPlotRangeControl"), { key: "rulePlot", state: rangeState, siteTz,
     onChange: () => showRulePlot(ruleId, equipId).catch((e) => ($("fddPlotRangeStatus").textContent = `Could not load this range: ${e.message}`)) });
-  const range = await resolveChartSelection(historyPoints, rangeState, { siteTz });
-  if (read !== fddPlotRead) return;
-  const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
   $("fddPlotPanel").hidden = false;
   $("fddPlotTitle").textContent = `${ruleId} · ${equipLabel(equipRec)}`;
   $("fddPlotNote").textContent = row.rule.description || "";
+  $("fddPlotRangeStatus").textContent = "Resolving range…";
   $("fddPlotPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  const range = await resolveChartSelection(historyPoints, rangeState, { siteTz });
+  if (read !== fddPlotRead) return;
+  const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
   $("fddPlotRangeStatus").textContent = "Loading history…";
   const note = await fddRulePlot($("fddPlot"), { rule: row.rule, equipRec, bound: row.bound,
     resultPoint: rcxResultPoint(model, equipRec, ruleId), model, hours, range, siteTz });

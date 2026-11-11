@@ -63,7 +63,14 @@ async function main() {
   chart = echarts.init($("chart"), null, { renderer: "canvas" });
   window.addEventListener("resize", () => chart.resize());
   await draw();
-  window.addEventListener("popstate", () => { rangeState = getChartRangeState("lite.chart"); draw(); });
+  window.addEventListener("popstate", () => {
+    const restored = new URLSearchParams(location.search), candidate = restored.get("point") || "";
+    const opts = def.pick ? def.pick(ctx) : [];
+    sel.point = opts.some((p) => p.uuid === candidate) ? candidate : (def.pick ? def.defaultPick(ctx) : "");
+    if (def.pick) $("pick").value = sel.point;
+    rangeState = getChartRangeState("lite.chart");
+    draw();
+  });
   setInterval(() => { if (!document.hidden) draw(); }, 5 * 60e3);
 }
 

@@ -273,16 +273,24 @@ async function oldestSamples(list) {
   });
   const chunks = oldestChunks(missing);
   for (let base = 0; base < chunks.length; base += 4) {
-    for (const p of chunks.slice(base, base + 4).flat()) oldestCache.set(p.uuid, { at: now, value: null });
-    const bodies = await Promise.all(chunks.slice(base, base + 4).map((c) => api(oldestUrl(c))));
-    for (const body of bodies) {
+    const batch = chunks.slice(base, base + 4);
+    const results = await Promise.all(batch.map(async (chunk) => {
+      try { return { body: await api(oldestUrl(chunk)) }; }
+      catch (error) { return { error }; }
+    }));
+    let failure;
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.error) { failure ||= result.error; continue; }
+      const body = result.body, chunk = batch[i];
       const rows = Array.isArray(body.data) ? body.data : body.data?.data || [];
       for (const row of rows) {
         const ts = row?.values?.[0]?.ts;
         oldestCache.set(row.uuid, { at: now, value: ts ? parseTs(ts) : null });
       }
+      for (const p of chunk) if (oldestCache.get(p.uuid)?.at !== now) oldestCache.set(p.uuid, { at: now, value: null });
     }
-    for (const p of chunks.slice(base, base + 4).flat()) if (!oldestCache.has(p.uuid)) oldestCache.set(p.uuid, { at: now, value: null });
+    if (failure) throw failure;
   }
   return list.map((p) => oldestCache.get(p.uuid)?.value ?? null);
 }
@@ -327,6 +335,11 @@ async function fetchRange(list, state, { method = "AVERAGE", windowSec = null, m
     const got = await fetchSeries(list, (chunk.toMs - chunk.fromMs) / 3600e3, { method, windowSec: effectiveWindowSec,
       endMs: chunk.toMs, fromMs: chunk.fromMs });
     for (const p of list) series.get(p.uuid).push(...(got.get(p.uuid) || []));
+  }
+  for (const [uuid, values] of series) {
+    const byTimestamp = new Map();
+    for (const [timestamp, value] of values) byTimestamp.set(timestamp, value);
+    series.set(uuid, [...byTimestamp].sort((a, b) => a[0] - b[0]));
   }
   // Resampling buckets are aligned to the Unix epoch. NF applies `from`/`to` to input samples;
   // clamp display coordinates so partial edge buckets remain visible inside the chosen interval.

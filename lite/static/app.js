@@ -79,6 +79,7 @@ async function applyScope() {
 async function loadSparks() {
   const read = ++sparkRangeRead, range = sparkRange, list = points, siteRef = scope.site, equipRef = scope.equip;
   const site = model.sites.find((s) => idOf(s) === scope.site);
+  renderSparkRange(site);
   let result;
   try { result = await fetchRange(list, range, { target: 72, siteTz: (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC" }); }
   catch (e) { if (read === sparkRangeRead) throw e; return; }
@@ -86,7 +87,6 @@ async function loadSparks() {
   sparkHist = result.series;
   sparkBounds = { fromMs: result.fromMs, toMs: result.toMs };
   sparkWindowSec = result.windowSec;
-  renderSparkRange(site);
   if (activeTab === "overview") points.forEach((p, i) => updateCard(i, false));
 }
 

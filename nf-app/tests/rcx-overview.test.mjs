@@ -20,14 +20,16 @@ function load() {
   ctx.units = "imperial";
   ctx.pickWindow = () => 3600;                // one value per hour
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
-  ctx.ofddChart = (el) => ({ el });
+  ctx.ofddChart = (el) => ({ el, setOption(option) { this.option = option; } });
   ctx.rendered = [];
-  ctx.ofddRender = (chart, option, name) => ctx.rendered.push({ option, name });
+  ctx.ofddRender = (chart, option, name) => { chart.setOption?.(option); ctx.rendered.push({ option: chart.option || option, name }); };
   ctx.series = new Map();                      // uuid -> [[ms, v]] served by the fetchSeries stub
   ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));
-  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "schedule.js", "rcx.js", "rcx-overview.js"]) {
+  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "schedule.js", "charts.js", "rcx.js", "rcx-overview.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
+  ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));
+  ctx.pickWindow = () => 3600;
   ctx.get = (name) => vm.runInContext(name, ctx);
   return ctx;
 }
@@ -233,6 +235,33 @@ test("weekly-fan view: runtime bars per equip, fault lane last when the SCHED-24
   const cmd = await view(ctx, "weekly-fan-cmd").render({}, ctx.rcxContext(view(ctx, "weekly-fan-cmd"),
     ctx.rcxBind(view(ctx, "weekly-fan-cmd"), model.equips, model, catalog), 48, model, catalog));
   assert.match(cmd, /counted by the fan_status view/);
+});
+
+test("weekly runtime keeps week buckets visible for a one-hour historical range and bounds fault lanes to it", async () => {
+  const result = pt("SCHED", "fdd,fault", { ruleRef: "SCHED-247", unit: "" });
+  const { ctx, model, byName } = setup([...POINTS, result]);
+  const fromMs = T0 + 2 * 86400e3 + 12 * HOUR, toMs = fromMs + HOUR;
+  const range = { preset: "custom", resolvedBounds: { fromMs, toMs } };
+  const calls = [];
+  ctx.fetchRange = async (points, selected, options) => {
+    calls.push({ selected, options });
+    return { series: new Map(points.map((p) => [p.uuid, p.rec.name === "SCHED" ? [[fromMs, 1]]
+      : p.rec.name === "FAN-S" ? [[fromMs, 1], [fromMs + 5 * 60e3, 1]] : p.rec.name === "OAT" ? [[fromMs, 10]] : []])) };
+  };
+  const v = view(ctx, "weekly-fan"), bound = ctx.rcxBind(v, model.equips, model, catalog);
+  const note = await v.render({}, ctx.rcxContext(v, bound, 1, model, catalog, range, "UTC"));
+  assert.ok(ctx.rendered.length, `weekly chart should render: ${note}`);
+  const option = ctx.rendered.at(-1).option;
+  const lane = option.series.at(-1);
+  assert.ok(calls.some((c) => c.selected === range && c.options.method === "MAX"), "fault result history uses the selected interval");
+  assert.deepEqual(arr(lane.data, (x) => arr(x)), [[fromMs, 1]]);
+  assert.ok(option.xAxis[0].min <= fromMs && option.xAxis[0].max > toMs, "weekly aggregate axis still spans its whole week");
+
+  const chart = ctx.rcxContext(v, bound, 1, model, catalog, range, "UTC").chart({});
+  chart.setOption({ xAxis: { type: "time" }, series: [] });
+  assert.equal(chart.option.xAxis.min, fromMs, "ordinary time axes retain the selected lower bound");
+  assert.equal(chart.option.xAxis.max, toMs, "ordinary time axes retain the selected upper bound");
+  assert.equal(typeof chart.option.xAxis.axisLabel.formatter, "function", "site-time formatting remains installed");
 });
 
 test("no result point -> no fault lane", async () => {
