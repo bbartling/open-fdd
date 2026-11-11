@@ -729,3 +729,280 @@ def test_doctor_timezone_pass_from_model_option_or_nf_sites(tmp_path, capsys):
 def test_doctor_names_an_invalid_timezone_option(tmp_path, capsys):
     out = tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {}}], option="Central Time")
     assert out.startswith("[WARN] timezone: UTC fallback") and "'Central Time' is not an IANA zone name" in out
+
+
+# ---------------------------------------------------------------- bootstrapping the schema probe on an upgrade (#1593)
+
+PROBE_BODY = {"/hooks/schema.js": "// schema probe\n", "/hooks/lib/settings.js": "// settings\n",
+              "/hooks/lib/timescale.js": "const SCHEMA_VERSION = 3;\n", "/static/units.js": "// units\n"}
+OK3 = {"ok": True, "installed": 3, "required": 3}
+
+
+def boot_manifest(tmp_path: Path) -> dict:
+    """make_manifest plus the probe's files and the `schema` hook, as the 5.0.13+ manifest ships them."""
+    m = make_manifest(tmp_path)
+    for i, (nf_path, body) in enumerate(PROBE_BODY.items()):
+        (tmp_path / f"probe{i}.js").write_text(body)
+        m["files"][nf_path] = f"probe{i}.js"
+    m["hooks"].append({"id": "schema", "mode": "MODE_ON_REQUEST", "entryPoint": "/hooks/schema.js", "invokeTimeout": "30s"})
+    p = tmp_path / "app.json"
+    p.write_text(json.dumps({k: v for k, v in m.items() if k != "_dir"}))
+    return sync.manifest(p)
+
+
+class BootNF(ProbeNF):
+    """ProbeNF that answers the probe from a list (the last answer repeats), records every file write and snapshots the
+    box at the moment the probe is first started."""
+
+    def __init__(self, answers, start_fails=False, **kw):
+        super().__init__(None, **kw)
+        self.answers, self.start_fails = list(answers), start_fails
+        self.written: list[str] = []
+        self.snap = None
+
+    def call(self, method, path, body=None, ok_404=False):
+        parts = path.split("?")[0].split("/")
+        if method == "POST" and parts[5:6] == ["files"]:
+            self.written.append("/" + "/".join(parts[6:]))
+        if method == "POST" and parts[5:7] == ["hooks", "schema"]:
+            if self.start_fails:
+                raise sync.ApiError("POST hooks/schema -> HTTP 500", 500, "http")
+            if self.snap is None:
+                self.snap = {"written": list(self.written), "files": dict(self.files),
+                             "hooks": [dict(h) for h in self.store["new-app"]["hooks"]], "log": len(self.log)}
+            self.answer = self.answers.pop(0) if len(self.answers) > 1 else self.answers[0]
+        return super().call(method, path, body, ok_404)
+
+
+def old_box(m, answers, *, engine="timescale", probe_hook=False, deps=True, edit=None, **kw) -> BootNF:
+    """An installed 5.0.12-like app: Timescale on a loopback host, no schema hook, a push manifest in version.json."""
+    nf = BootNF(answers, **kw)
+    nf.deps_installed = deps
+    app = nf.app_rec("new-app", "9.9.8 (old)")
+    if engine:
+        app["options"] += [{"name": "engine", "value": {"string": engine}},
+                           {"name": "timescale", "value": {"string": json.dumps({"host": "127.0.0.1", "user": "u"})}}]
+    app["hooks"] = [{"id": h["id"], "mode": h["mode"]} for h in m["hooks"] if probe_hook or h["id"] != "schema"]
+    nf.store["new-app"] = app
+    pushed = {}
+    for nf_path, rel in m["files"].items():
+        if nf_path == "/hooks/schema.js" and not probe_hook:
+            continue
+        data = (m["_dir"] / rel).read_bytes() if nf_path == "/package.json" else b"// old " + nf_path.encode() + b"\n"
+        pushed[nf_path] = sync.sha256_hex(data)
+        if edit == nf_path:
+            data += b"// hand edit\n"
+        nf.files[("new-app", nf_path)] = data
+    nf.files[("new-app", "/static/version.json")] = json.dumps(
+        {"version": "9.9.8", "commit": "", "files": pushed, "extra": "kept"}).encode()
+    return nf
+
+
+@pytest.fixture
+def forbid_psql(no_psql_no_dsn, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("the psql/DSN path was used")
+    monkeypatch.setattr(sync, "timescale_schema_check", boom)
+
+
+def install_on(nf, m, *extra):
+    clk = Clock()
+    return sync.cmd_install(nf, m, install_args(*extra), clk, clk.sleep)
+
+
+def test_probe_files_cover_the_require_graph_of_the_real_hook():
+    root = Path(__file__).resolve().parents[1] / "nf-app"
+    seen, todo, external = set(), [root / "hooks" / "schema.js"], set()
+    while todo:
+        f = todo.pop()
+        rel = "/" + f.relative_to(root).as_posix()
+        if rel in seen:
+            continue
+        seen.add(rel)
+        import re as _re
+        code = "\n".join(ln for ln in f.read_text(encoding="utf-8").splitlines()
+                         if not ln.lstrip().startswith(("//", "*", "/*")))     # not the examples in comments
+        for req in _re.findall(r"""require\(\s*["']([^"']+)["']\s*\)""", code):
+            if req.startswith("."):
+                target = (f.parent / req).resolve()
+                todo.append(target if target.suffix else target.with_suffix(".js"))
+            else:
+                external.add(req)
+    assert seen == set(sync.PROBE_FILES), "update PROBE_FILES: the probe needs " + ", ".join(sorted(seen))
+    assert external <= {"fs", "path", sync.PROBE_DEP}, external
+    app = json.loads((root / "app.json").read_text(encoding="utf-8"))
+    assert set(sync.PROBE_FILES) <= set(app["files"])
+    assert any(h["id"] == "schema" for h in app["hooks"])
+
+
+def test_upgrade_without_a_probe_bootstraps_it_probes_then_installs(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3])
+    before = dict(nf.files)
+    assert install_on(nf, m) == 0
+    out = capsys.readouterr().out
+    snap = nf.snap
+    # before the probe ran (so before the full push) only the probe files + the push manifest were written
+    assert sorted(snap["written"]) == sorted([*sync.PROBE_FILES, "/static/version.json"])
+    for path, data in before.items():
+        if path[1] not in sync.PROBE_FILES and path[1] != "/static/version.json":
+            assert snap["files"][path] == data, f"{path} changed before the full install"
+    assert [h for h in snap["hooks"] if h["id"] != "schema"] == [
+        {"id": h["id"], "mode": h["mode"]} for h in m["hooks"] if h["id"] != "schema"]
+    assert [h["id"] for h in snap["hooks"]].count("schema") == 1
+    calls = [f"{mt} {p}" for mt, p in nf.log[:snap["log"]]]
+    assert not [c for c in calls if "/dependencies" in c or "/restart" in c], "pg is present: no dependency step, no restart"
+    info = json.loads(snap["files"][("new-app", "/static/version.json")])
+    assert info["extra"] == "kept" and info["version"] == "9.9.8"
+    for p in sync.PROBE_FILES:
+        assert info["files"][p] == sync.sha256_hex(sync.deploy_bytes(m, m["files"][p])), p
+    assert "bootstrapping" in out and "Timescale schema version 3" in out and "install: OK" in out
+    assert "127.0.0.1" not in out
+    final = json.loads(nf.files[("new-app", "/static/version.json")])
+    assert final["version"] == "9.9.9"
+    for p in sync.PROBE_FILES:      # the full push left the probe files recorded
+        assert final["files"][p] == sync.sha256_hex(sync.deploy_bytes(m, m["files"][p]))
+    assert nf.written.index("/package.json") > len(snap["written"]) - 1
+
+
+def test_bootstrap_installs_pg_through_the_same_dependency_step(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3], deps=False)
+    assert install_on(nf, m) == 0
+    calls = [f"{mt} {p}" for mt, p in nf.log]
+    boot_part = calls[:nf.snap["log"]]
+    assert "PATCH /api/v1/apps/new-app/dependencies" in boot_part
+    assert "dependencies: installed (pg, sql.js)" in capsys.readouterr().out
+
+
+def test_bootstrap_without_a_dependency_route_refuses_naming_both_remedies(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    err = {"ok": False, "required": 3, "error": "pg not installed: install the app dependencies"}
+    nf = old_box(m, [err], deps=False, deps_route=False)
+    assert install_on(nf, m) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "STOPPED" in out and "NF_TIMESCALE_PREFLIGHT_DSN" in out and "/dependencies" in out and "pg" in out
+    assert "put on the box ahead of the install" in out
+    assert sorted(nf.written) == sorted([*sync.PROBE_FILES, "/static/version.json"])
+    assert "/package.json" not in nf.written
+
+
+@pytest.mark.parametrize("fails", [True, False])
+def test_probe_that_cannot_run_refuses_instead_of_falling_back_to_psql(forbid_psql, tmp_path, capsys, fails):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [None], start_fails=fails)          # hook start fails / run gives no answer
+    assert install_on(nf, m) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "could not run" in out and "NF_TIMESCALE_PREFLIGHT_DSN" in out and "fix the probe" in out
+    assert [mt for mt, p in nf.log if p.endswith("/restart")] == ["PATCH"], "one restart-and-retry before giving up"
+    assert "/package.json" not in nf.written and "/hooks/x.js" not in nf.written
+
+
+def test_probe_behind_refuses_before_the_full_push_and_documents_the_leftover(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [{"ok": False, "installed": 2, "required": 3}])
+    assert install_on(nf, m) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "version 2" in out and "requires 3" in out and "nf-app/timescale/install.sql" in out
+    assert "put on the box ahead of the install" in out and "keeps its current version" in out
+    assert sorted(nf.written) == sorted([*sync.PROBE_FILES, "/static/version.json"])
+    app = nf.store["new-app"]
+    assert sync.option_value(app, "version") == "9.9.8 (old)"
+    assert [h["id"] for h in app["hooks"]] == ["fdd", "weather", "sparql", "schema"]
+    assert nf.files[("new-app", "/hooks/x.js")] == b"// old /hooks/x.js\n"
+    assert not [p for mt, p in nf.log if mt == "PATCH" and p == "/api/v1/apps/new-app"]
+
+
+def test_hand_edited_probe_file_stops_the_install_unless_forced(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3], edit="/hooks/lib/settings.js")
+    edited = nf.files[("new-app", "/hooks/lib/settings.js")]
+    assert install_on(nf, m) == sync.EXIT_DRIFT
+    out = capsys.readouterr().out
+    assert "/hooks/lib/settings.js" in out and "STOPPED" in out and "--force" in out
+    assert not [1 for mt, p in nf.log if mt != "GET"], "nothing is written on a STOP"
+    assert nf.files[("new-app", "/hooks/lib/settings.js")] == edited
+    nf2 = old_box(m, [OK3], edit="/hooks/lib/settings.js")
+    assert install_on(nf2, m, "--force") == 0
+    assert "--force: overwriting" in capsys.readouterr().out
+
+
+def test_dry_run_reports_the_bootstrap_and_writes_nothing(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3])
+    assert install_on(nf, m, "--dry-run") == 0
+    out = capsys.readouterr().out
+    assert "would bootstrap the schema probe" in out and "nothing was changed" in out
+    assert not [1 for mt, p in nf.log if mt != "GET"], nf.log
+    assert nf.starts == []
+
+
+def test_dry_run_still_stops_on_a_hand_edited_probe_file(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3], edit="/hooks/lib/timescale.js")
+    assert install_on(nf, m, "--dry-run") == sync.EXIT_DRIFT
+    assert not [1 for mt, p in nf.log if mt != "GET"]
+
+
+@pytest.mark.parametrize("engine", ["sqlite", "pglite", None])
+def test_lite_and_non_timescale_engines_never_bootstrap(forbid_psql, tmp_path, capsys, engine):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3], engine=engine)
+    assert install_on(nf, m) == 0
+    assert "bootstrapping" not in capsys.readouterr().out
+    assert nf.snap is None and "schema" not in [h for h, _ in nf.starts]
+
+
+def test_a_current_probe_is_used_as_is_with_no_bootstrap(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3], probe_hook=True)
+    assert install_on(nf, m) == 0
+    out = capsys.readouterr().out
+    assert "bootstrapping" not in out and "Timescale schema version 3" in out
+    assert len(nf.snap["written"]) == 0, "nothing written before the full install"
+
+
+def test_an_older_probe_that_checks_an_older_schema_is_refreshed(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [{"ok": True, "installed": 2, "required": 2}, OK3], probe_hook=True)
+    assert install_on(nf, m) == 0
+    out = capsys.readouterr().out
+    assert "checks schema 2, this release needs 3" in out and "Timescale schema version 3" in out
+    assert sorted(nf.written[:5]) == sorted([*sync.PROBE_FILES, "/static/version.json"])
+
+
+def test_doctor_warns_that_install_will_bootstrap_a_missing_probe(forbid_psql, tmp_path, capsys):
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [OK3])
+    nf.files[("new-app", "/static/version.json")] = json.dumps({"version": "9.9.9"}).encode()
+    sync.cmd_doctor(nf, m)
+    out = capsys.readouterr().out
+    assert "[WARN] timescale schema: schema probe not installed yet; install will bootstrap it" in out
+    assert "[FAIL] timescale schema" not in out
+    assert not [(mt, p) for mt, p in nf.log if mt != "GET" and p != "/api/v1/point/query"], "doctor stays read-only"
+    assert nf.starts == []
+
+
+def test_html_answer_from_the_console_url_names_the_front_door_not_the_nf_version(tmp_path, capsys):
+    class H(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"<!doctype html><title>app</title>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = sync.Console(f"http://127.0.0.1:{srv.server_port}", "admin", PASSWORD)
+        assert sync.cmd_doctor(c, make_manifest(tmp_path)) == 1
+    finally:
+        srv.shutdown()
+    out = capsys.readouterr().out
+    assert "returned HTML" in out and "NF_CONSOLE_URL" in out and "--console" in out and "front door" in out
+    assert "unknown route" not in out
