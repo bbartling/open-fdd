@@ -7,7 +7,7 @@
 -- With neither signal, the product path reports NOT_ASSESSED_NO_OCCUPANCY (0 fault
 -- seconds). Unoccupied setback stays on VAV-2.
 -- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas
--- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
+-- often lack fan_cmd; the rule is then → SKIPPED_MISSING_ROLES.
 WITH h AS (
   SELECT
     equipment_id,

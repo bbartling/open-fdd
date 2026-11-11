@@ -1,6 +1,6 @@
 """SQL-portable anomaly detectors (pandas / numpy only).
 
-Rolling Z-score and rolling MAD are written so a later DataFusion port can
+Rolling Z-score and rolling MAD are written so a later SQL port can
 reuse the same thresholds and window semantics. This module must not import
 ``sklearn`` or ``statsmodels``.
 """

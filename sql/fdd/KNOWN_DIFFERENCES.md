@@ -8,6 +8,34 @@ This is not rounding noise. The source SQL checks two consecutive instantaneous 
 
 The strict suite deliberately fails SV-RATE for immediate and 15-minute confirmation, in both dialects. It has no xfail or relaxed tolerance. To close the blocker, port the actual profile algorithm and tuning effects to the target warehouse, or explicitly version the portable screening rule as a different algorithm. Do not change the expected timestamps to fit whichever output is convenient. With profile-equivalent behavior, retain the authored golden and add noise/transition/profile boundary fixtures. A source-faithful portable subset can remain separately documented, but cannot claim full Open-FDD pandas parity.
 
+## SV-RATE: portable screening rule versus the context-aware pandas profile algorithm (decision, #1581)
+
+The SQL SV-RATE stays the portable screening rule: one sample-to-sample rate per hour, a generic `rate_per_h` threshold
+(`open_fdd/data/sensor_sweep_limits.json`, default 3.333333 delta-degC/h for the five air-temperature roles), a 1 h gap
+limit and a 10 min confirmation. The pandas `sensor_rate` profile library (per-role steady/transient thresholds, rolling
+median, noise deadband, operating-state context) is a different, richer algorithm. They are deliberately not forced to agree:
+SV-RATE remains in `KNOWN_DIVERGENT` and the section above still applies. Only the SQL side reads `rate_per_h`; the pandas
+profile numbers are unchanged. Porting the profile algorithm to SQL is a separate decision, not part of the limits source.
+
+## Stress-only differences: TRIM-3 and VAV-REHEAT (#1582)
+
+`python tests/parity/stress.py --equips 8 --days 7` compares 71 pandas twins; the 2x3 pytest dataset never reaches the
+branches below, so these two are pinned in `STRESS_ONLY_DIVERGENT` (tests/parity/test_parity.py), not in `KNOWN_DIVERGENT`.
+
+- **VAV-REHEAT** (SQL 16.0833 h, pandas 15.9167 h on one equipment): pandas runs the rule behind the operational gate
+  `fan_running` with `startup_delay_seconds=600`; SQL has no startup holdoff. A standing fault at fan start is confirmed one
+  5-minute sample earlier in SQL at each of the two fan starts in the 7-day run (0.1667 h in total). With the holdoff removed
+  pandas equals SQL (regression test `test_vav_reheat_difference_is_exactly_the_startup_holdoff`). Same family as VAV-6 and
+  VAV-AHU-LEAVE ("Default startup/mode behavior is not yet fully equivalent" above).
+- **TRIM-3** (SQL 1.5 h, pandas skipped on every equipment): three separate differences. (1) pandas reads the role
+  `hw-reset-request-sum`; the SQL contract and the NF role are `hot-water-reset-request-sum` (the same applies to TRIM-4 and
+  `chw-reset-request-sum` / `chilled-water-reset-request-sum`), so with contract names pandas has no input and returns
+  `SKIPPED_MISSING_ROLES`. (2) With the pandas name supplied, SQL faults when the request sum is `<=` `request_lo` and pandas
+  when it is `<` `request_lo` (the synthetic request sum takes the value 1 = `request_lo` on 78 of 384 hot samples). (3) pandas adds
+  the hydronic-flow gate with a 600 s startup holdoff. With the pandas name supplied the two still differ (SQL 1.5 h against
+  pandas 0.4167 h). Not changed here: aligning the names and the comparison changes public pandas roles and rule semantics and
+  needs an owner decision; see the follow-up on #1582.
+
 ## Imported FC1 healthy baseline was not healthy under current rules
 
 The old fixture held duct static at 1.2 against a 1.5 setpoint during ordinary fan-on hours. Current pandas/SQL use fan status for full-fan proof and therefore detect roughly 40 hours rather than the old one-hour expectation. The new fixture explicitly sets static equal to its setpoint outside the intended injection while preserving the one-hour injection and golden interval. This is a new fixture correction, not a changed expected value. The original ZIP remains byte-for-byte intact. `reports/initial_import_comparison.json` retains the original failure evidence.
@@ -42,7 +70,7 @@ The preparation host's installed `open-fdd` distribution is 4.4.1 (62 diagnostic
 - The six analytic/utility cases use authored numerical expectations; they are not diagnostic `open_fdd.rules.run_rule` twins.
 - Three aggregate-only FCU rules do not implement configurable confirmation. The tests keep their confirmation at zero and the UI must label/disable unsupported controls.
 - Utility fault-hours retain a fixed 720-hour proxy. This is not measured fault duration, including in the interval-MAE rule.
-- The focused SV fixtures cover per-role isolation, long and trailing silence, de-energized silence, irregular 7-minute sampling and spike role attribution on both SQL engines. They are synthetic screening proofs, not field-data accuracy or every boundary value. The separate DataFusion and Timescale suites provide additional dialect/runtime qualification.
+- The focused SV fixtures cover per-role isolation, long and trailing silence, de-energized silence, irregular 7-minute sampling and spike role attribution on both SQL engines. They are synthetic screening proofs, not field-data accuracy or every boundary value. The separate Timescale suite provides additional dialect/runtime qualification.
 - Sensor-sweep tolerance metadata may span different physical quantities. Temperature display conversions are a convenience, not permission to apply Celsius offsets to humidity or pressure tolerances. Resolve per-role quantities explicitly for a warehouse UI.
 
 ## Percent / fraction contract (#1541)

@@ -71,13 +71,24 @@ Full can use SQLite, PGlite, or TimescaleDB. Lite does not use Timescale. For Ti
 role. Give the hooks a separate least-privilege runtime role. See the
 [`nf-app/timescale` guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
 
-The installer checks the selected Timescale schema before upgrading. If the schema is behind, apply
-`nf-app/timescale/install.sql` as the database installer role, then repeat the check. The check runs `psql` from the workstation
-using the configured connection details. If the option names `localhost`, `127.0.0.1`, or `::1`, that address
-refers to the NF host, not the remote workstation. The installer stops before connecting in that case.
-Set `NF_TIMESCALE_PREFLIGHT_DSN` in the protected environment to a reachable endpoint for the same database, such
-as a temporary approved forward. The override is required for a loopback host even when the CLI runs on the NF host.
-Keep credentials out of the command line. Lite, SQLite, and PGlite skip this Timescale preflight.
+The installer and `doctor` check the selected Timescale schema before upgrading. If the schema is behind, apply
+`nf-app/timescale/install.sql` as the database installer role, then repeat the check. Releases from 5.0.13 ship a
+read-only `schema` hook: the check runs inside NF with the hook's own `timescale` option and returns only the installed
+and required versions. It needs no database route and no `psql` on the workstation. A box that still runs an older
+release has no such hook, so the check falls back to `psql` on the workstation. If the option names `localhost`,
+`127.0.0.1`, or `::1`, that address refers to the NF host, so set `NF_TIMESCALE_PREFLIGHT_DSN` in the protected
+environment to a reachable endpoint for the same database (for example a temporary approved forward) and install a
+PostgreSQL client. Otherwise the installer stops and names both remedies. Keep credentials out of the command line.
+Lite, SQLite, and PGlite skip this preflight.
+
+## Site timezone
+
+Range pickers, hour labels, and RCx weekly views use the site timezone. Open-FDD takes the first of: the modeled site's
+`tz` or `timezone`, the app option `timezone` (an IANA name such as `America/Chicago`, set in the NF console app
+settings like `latitude` and `longitude`), the NF Sites API `timezone`, the browser zone, then UTC. When it has to
+fall back, the label says so, for example `UTC (fallback)`, and `doctor` reports a WARN that names the fix. No point is
+retagged. Keep `windowHours` no longer than the history retention of the timeline points: NF acknowledges an AddData
+batch even when it drops a sample older than the retention, and the timeline watermark does not retry it.
 
 ## Model and verify
 

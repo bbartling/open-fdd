@@ -163,7 +163,7 @@ function renderChips() {
 const chartCtx = () => ({ cards: points, status: statusPts, weather: variables });
 const siteTimeZone = () => {
   const site = model?.sites?.find((s) => idOf(s) === scope.site) || (model?.sites?.length === 1 ? model.sites[0] : null);
-  return chartTimeZone(site?.attrs?.tz || site?.attrs?.timezone);
+  return resolveSiteTimeZone(site).zone;
 };
 const PREF_KEY = "benchviz.chart";
 let chartRangeRead = 0;
@@ -1041,6 +1041,7 @@ async function main() {
   wireControls();
   loadChartPref();
   await initAuth();
+  await loadSiteTimeZoneSources();
   model = await loadModel();
   scope.site = idOf(model.sites[0]);
   fillPickers();

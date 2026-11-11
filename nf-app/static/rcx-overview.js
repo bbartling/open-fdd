@@ -307,6 +307,14 @@
     };
   }
 
+  /** The site's zone: model tz, else the app option / NF Sites zone when the page loaded them (#1584), else null. */
+  function siteZone(rec) {
+    const own = (rec && rec.attrs && (rec.attrs.tz || rec.attrs.timezone)) || null;
+    if (own || typeof resolveSiteTimeZone !== "function") return own;
+    const r = resolveSiteTimeZone(rec, { browser: false, register: false });
+    return r.source === "none" ? null : r.zone;
+  }
+
   /**
    * Per siteRef of the given equips: { siteRef, schedule, tz, weekOf, occ } with the schedule NF binds to
    * the site's occupancy point (else the 4.x default 50 h/week calendar), loaded once. Empty Map when
@@ -319,7 +327,7 @@
     try { if (typeof api === "function") schedules = await S.loadSchedules(api); } catch (e) { schedules = []; }
     for (const ref of new Set(eqs.map(siteOf))) {
       const rec = ((ctx.model && ctx.model.sites) || []).find((r) => ((r.attrs && r.attrs.id) || r.name) === ref);
-      const tz = (rec && rec.attrs && (rec.attrs.tz || rec.attrs.timezone)) || null;
+      const tz = siteZone(rec);
       const schedule = S.pickSiteSchedule(schedules, ctx.model, ref) || S.defaultSchedule(tz);
       const zone = schedule.tz || tz || null;
       out.set(ref, { siteRef: ref, schedule, tz: zone, weekOf: weekIndexer(zone), occ: (ms) => S.occupied(schedule, ms, zone) });

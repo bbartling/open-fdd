@@ -955,7 +955,12 @@
    "zone_rh",
    "ma_h",
    "sa_h",
-   "duct_static"
+   "duct_static",
+   "chw_flow",
+   "chw_dp",
+   "cw_supply_t",
+   "cw_return_t",
+   "chiller_power"
   ],
   "SV-FLATLINE": [
    "oa_t",
@@ -984,7 +989,9 @@
    "hw_supply_t",
    "hw_return_t",
    "oa_h",
-   "duct_static"
+   "duct_static",
+   "cw_supply_t",
+   "cw_return_t"
   ],
   "SV-STALE": [
    "oa_t",

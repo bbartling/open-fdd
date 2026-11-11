@@ -206,7 +206,8 @@
   function siteTimeZone() {
     const { model, scope } = st.cur || {};
     const site = model?.sites?.find((s) => (((s.attrs || {}).id) || s.name) === scope?.site);
-    return root.chartTimeZone ? root.chartTimeZone(site?.attrs?.tz || site?.attrs?.timezone) : (site?.attrs?.tz || site?.attrs?.timezone || "UTC");
+    return root.resolveSiteTimeZone ? root.resolveSiteTimeZone(site).zone
+      : root.chartTimeZone ? root.chartTimeZone(site?.attrs?.tz || site?.attrs?.timezone) : (site?.attrs?.tz || site?.attrs?.timezone || "UTC");
   }
   async function refreshRange(state = root.getChartRangeState("export")) {
     if (!st.cur || !root.resolveChartSelection) return;

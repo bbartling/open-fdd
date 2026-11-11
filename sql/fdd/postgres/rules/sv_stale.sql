@@ -93,7 +93,7 @@ signals AS (
   SELECT elapsed_window.*,
     CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0
          ELSE next_epoch - epoch_seconds END AS dt_seconds,
-    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - {{STALE_SECONDS}}) AND (elapsed_window_max - elapsed_window_min <= CASE WHEN sensor_role IN ('oa_h','ra_h','zone_rh','ma_h','sa_h') THEN 0.05 ELSE {{STALE_TOL}} END))) THEN 1 ELSE 0 END AS INT) AS raw_fault
+    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - {{STALE_SECONDS}}) AND (elapsed_window_max - elapsed_window_min <= {{SV_STALE_TOL}}))) THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM elapsed_window
 ),
 segments AS (

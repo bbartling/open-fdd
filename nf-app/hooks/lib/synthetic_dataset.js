@@ -3,7 +3,7 @@
  * Deterministic synthetic input for the SQL engines (tests/engines.test.mjs, scripts/nf/measure_engines.mjs).
  * Not used by the hooks at run time. Same `input` shape as engines.js `load()`.
  *
- *   buildDataset(pack, { equipments: 2, days: 3, stepSeconds: 300, gaps: true, duplicateRole: true })
+ *   buildDataset(pack, { equipments: 2, days: 3, stepSeconds: 300, gaps: true, duplicateRole: true, plantSensors: false })
  *
  * Physical inputs use SI values directly (degrees Celsius, temperature differences in kelvin, Pa, L/s).
  * Fraction and relative humidity scales follow the input contract below.
@@ -137,7 +137,7 @@ function percentSignal(col, e, i, h, occ, step) {
   }
 }
 
-function buildDataset(pack, { equipments = 2, days = 3, stepSeconds = 300, gaps = true, duplicateRole = true } = {}) {
+function buildDataset(pack, { equipments = 2, days = 3, stepSeconds = 300, gaps = true, duplicateRole = true, plantSensors = false } = {}) {
   const histCols = pack.contract.history.filter((c) => c.name !== "equipment_id" && c.name !== "timestamp_utc");
   const history = [];
   const equipmentIds = Array.from({ length: equipments }, (_, e) => `AHU-${e + 1}`);
@@ -175,6 +175,8 @@ function buildDataset(pack, { equipments = 2, days = 3, stepSeconds = 300, gaps 
   const sensorUnits = [["oa_t", "°C"], ["mat", "°C"], ["zone_t", "°C"], ["rat", "°C"], ["sat", "°C"],
     ["chw_supply_t", "°C"], ["chw_return_t", "°C"], ["hw_supply_t", "°C"], ["hw_return_t", "°C"],
     ["oa_h", "%"], ["ra_h", "%"], ["zone_rh", "%"], ["ma_h", "%"], ["sa_h", "%"], ["duct_static", "Pa"]];
+  // opt-in (default off keeps the stress/parity datasets unchanged): the plant sweep roles, all SI
+  if (plantSensors) sensorUnits.push(["chw_flow", "L/s"], ["chw_dp", "Pa"], ["cw_supply_t", "°C"], ["cw_return_t", "°C"], ["chiller_power", "kW"]);
   const authorizedSeries = [];
   const sensorHistory = [];
   const equipment = [];

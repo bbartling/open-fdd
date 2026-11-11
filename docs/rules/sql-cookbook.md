@@ -5371,7 +5371,7 @@ Zone comfort band during occupied hours when occupancy is set; unoccupied setbac
 -- With neither signal, the product path reports NOT_ASSESSED_NO_OCCUPANCY (0 fault
 -- seconds). Unoccupied setback stays on VAV-2.
 -- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas
--- often lack fan_cmd; DataFusion then schema-errors → SKIPPED_MISSING_ROLES.
+-- often lack fan_cmd; the rule is then → SKIPPED_MISSING_ROLES.
 WITH h AS (
   SELECT
     equipment_id,
@@ -9903,7 +9903,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
-  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static')
+  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static', 'chw_flow', 'chw_dp', 'cw_supply_t', 'cw_return_t', 'chiller_power')
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -9920,7 +9920,7 @@ sensor_rows AS (
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
-    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static')
+    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static', 'chw_flow', 'chw_dp', 'cw_supply_t', 'cw_return_t', 'chiller_power')
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -9946,7 +9946,7 @@ signals AS (
   SELECT windowed.*,
     CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0
          ELSE next_epoch - epoch_seconds END AS dt_seconds,
-    CAST(CASE WHEN ((energized = 1 AND ((sensor_role = 'oa_t' AND (value < (1.666667 - 52.777778 * 1) OR value > (1.666667 + 52.777778 * 1))) OR (sensor_role = 'mat' AND (value < (7.222222 - 36.111111 * 1) OR value > (7.222222 + 36.111111 * 1))) OR (sensor_role = 'zone_t' AND (value < (21.111111 - 16.666667 * 1) OR value > (21.111111 + 16.666667 * 1))) OR (sensor_role = 'rat' AND (value < (21.111111 - 16.666667 * 1) OR value > (21.111111 + 16.666667 * 1))) OR (sensor_role = 'sat' AND (value < (32.222222 - 33.333333 * 1) OR value > (32.222222 + 33.333333 * 1))) OR (sensor_role = 'chw_supply_t' AND (value < (12.777778 - 13.888889 * 1) OR value > (12.777778 + 13.888889 * 1))) OR (sensor_role = 'chw_return_t' AND (value < (15.555556 - 16.666667 * 1) OR value > (15.555556 + 16.666667 * 1))) OR (sensor_role = 'hw_supply_t' AND (value < (54.444444 - 50.0 * 1) OR value > (54.444444 + 50.0 * 1))) OR (sensor_role = 'hw_return_t' AND (value < (54.444444 - 50.0 * 1) OR value > (54.444444 + 50.0 * 1))) OR (sensor_role = 'oa_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'ra_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'zone_rh' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'ma_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'sa_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'duct_static' AND (value < (870.94 - 1119.78 * 1) OR value > (870.94 + 1119.78 * 1)))))) THEN 1 ELSE 0 END AS INT) AS raw_fault
+    CAST(CASE WHEN ((energized = 1 AND ((sensor_role = 'oa_t' AND (value < (1.666667 - 52.777778 * 1) OR value > (1.666667 + 52.777778 * 1))) OR (sensor_role = 'mat' AND (value < (7.222222 - 36.111111 * 1) OR value > (7.222222 + 36.111111 * 1))) OR (sensor_role = 'zone_t' AND (value < (21.111111 - 16.666667 * 1) OR value > (21.111111 + 16.666667 * 1))) OR (sensor_role = 'rat' AND (value < (21.111111 - 16.666667 * 1) OR value > (21.111111 + 16.666667 * 1))) OR (sensor_role = 'sat' AND (value < (32.222222 - 33.333333 * 1) OR value > (32.222222 + 33.333333 * 1))) OR (sensor_role = 'chw_supply_t' AND (value < (12.777778 - 13.888889 * 1) OR value > (12.777778 + 13.888889 * 1))) OR (sensor_role = 'chw_return_t' AND (value < (15.555556 - 16.666667 * 1) OR value > (15.555556 + 16.666667 * 1))) OR (sensor_role = 'hw_supply_t' AND (value < (54.444444 - 50.0 * 1) OR value > (54.444444 + 50.0 * 1))) OR (sensor_role = 'hw_return_t' AND (value < (54.444444 - 50.0 * 1) OR value > (54.444444 + 50.0 * 1))) OR (sensor_role = 'oa_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'ra_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'zone_rh' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'ma_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'sa_h' AND (value < (50.0 - 50.0 * 1) OR value > (50.0 + 50.0 * 1))) OR (sensor_role = 'duct_static' AND (value < (870.94 - 1119.78 * 1) OR value > (870.94 + 1119.78 * 1))) OR (sensor_role = 'chw_flow' AND (value < (749.5 - 750.5) OR value > (749.5 + 750.5))) OR (sensor_role = 'chw_dp' AND (value < (341290.485 - 348185.245 * 1) OR value > (341290.485 + 348185.245 * 1))) OR (sensor_role = 'cw_supply_t' AND (value < (25.0 - 25.0 * 1) OR value > (25.0 + 25.0 * 1))) OR (sensor_role = 'cw_return_t' AND (value < (27.5 - 27.5 * 1) OR value > (27.5 + 27.5 * 1))) OR (sensor_role = 'chiller_power' AND (value < (4999.5 - 5000.5) OR value > (4999.5 + 5000.5)))))) THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM windowed
 ),
 segments AS (
@@ -10256,7 +10256,7 @@ equipment_summary AS (
 sensor_series AS (
   SELECT equipment_id, series_id, sensor_role
   FROM sensor_history
-  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static')
+  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static', 'cw_supply_t', 'cw_return_t')
   GROUP BY equipment_id, series_id, sensor_role
 ),
 sensor_rows AS (
@@ -10273,7 +10273,7 @@ sensor_rows AS (
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
-    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static')
+    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static', 'cw_supply_t', 'cw_return_t')
 ),
 prior AS (
   SELECT sensor_rows.*,
@@ -10299,7 +10299,7 @@ signals AS (
   SELECT windowed.*,
     CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0
          ELSE next_epoch - epoch_seconds END AS dt_seconds,
-    CAST(CASE WHEN (((1 < 0.5 OR (energized = 1 AND coverage_pct >= 5)) AND ((sensor_role = 'oa_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 20.0 * 1) OR (sensor_role = 'mat' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 13.888889 * 1) OR (sensor_role = 'zone_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 6.666667 * 1) OR (sensor_role = 'rat' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 6.666667 * 1) OR (sensor_role = 'sat' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 22.222222 * 1) OR (sensor_role = 'chw_supply_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 11.111111 * 1) OR (sensor_role = 'chw_return_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 11.111111 * 1) OR (sensor_role = 'hw_supply_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 33.333333 * 1) OR (sensor_role = 'hw_return_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 33.333333 * 1) OR (sensor_role = 'oa_h' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 25.0 * 1) OR (sensor_role = 'duct_static' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 497.68 * 1)))) THEN 1 ELSE 0 END AS INT) AS raw_fault
+    CAST(CASE WHEN (((1 < 0.5 OR (energized = 1 AND coverage_pct >= 5)) AND ((sensor_role = 'oa_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 20.0 * 1) OR (sensor_role = 'mat' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 13.888889 * 1) OR (sensor_role = 'zone_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 6.666667 * 1) OR (sensor_role = 'rat' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 6.666667 * 1) OR (sensor_role = 'sat' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 22.222222 * 1) OR (sensor_role = 'chw_supply_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 11.111111 * 1) OR (sensor_role = 'chw_return_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 11.111111 * 1) OR (sensor_role = 'hw_supply_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 33.333333 * 1) OR (sensor_role = 'hw_return_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 33.333333 * 1) OR (sensor_role = 'oa_h' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 25.0 * 1) OR (sensor_role = 'duct_static' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 497.68 * 1) OR (sensor_role = 'cw_supply_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 11.111111 * 1) OR (sensor_role = 'cw_return_t' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= 1800 AND ABS(value - previous_value) > 11.111111 * 1)))) THEN 1 ELSE 0 END AS INT) AS raw_fault
   FROM windowed
 ),
 segments AS (

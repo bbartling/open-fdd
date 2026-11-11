@@ -600,3 +600,132 @@ def test_no_action_ever_sends_a_delete_on_a_point_route(tmp_path):
         m, nf, clk = make_manifest(tmp_path), fake(predecessors(), points=pts()), Clock()
         action(m, nf, clk)
         assert not [c for c in nf.log if c[0] == "DELETE" and "/point" in c[1]], nf.log
+
+
+# ---------------------------------------------------------------- NF-side schema probe (#1585)
+
+class ProbeNF(FakeNF):
+    """FakeNF whose `schema` hook answers with a canned probe result (None = no usable answer)."""
+
+    def __init__(self, answer, **kw):
+        super().__init__(**kw)
+        self.answer = answer
+
+    def call(self, method, path, body=None, ok_404=False):
+        parts = path.split("?")[0].split("/")
+        if method == "POST" and parts[3:4] == ["apps"] and parts[5:6] == ["hooks"] and parts[6:7] == ["schema"]:
+            self.log.append((method, path))
+            self.starts.append(("schema", dict(body or {})))
+            run = {"pid": 900, "state": "STATE_SUCCESS", "startTime": "t",
+                   "results": {"g": {"events": [{"ts": "x", "message": json.dumps(self.answer)}] if self.answer else []}}}
+            self.runs[(parts[4], "schema")] = [run]
+            return {"pid": 900}
+        return super().call(method, path, body, ok_404)
+
+
+def probe_box(answer, *, hook=True, host="127.0.0.1"):
+    nf = ProbeNF(answer)
+    app = nf.app_rec("new-app", "9.9.8 (old)")
+    app["options"] += [{"name": "engine", "value": {"string": "timescale"}},
+                       {"name": "timescale", "value": {"string": json.dumps({"host": host, "user": "u", "password": PASSWORD})}}]
+    app["hooks"] = [{"id": "schema", "mode": "MODE_ON_REQUEST"}] if hook else []
+    nf.store["new-app"] = app
+    return nf
+
+
+@pytest.fixture
+def no_psql_no_dsn(monkeypatch):
+    monkeypatch.setattr(sync.shutil, "which", lambda _name: None)       # no psql on PATH
+    monkeypatch.delenv("NF_TIMESCALE_PREFLIGHT_DSN", raising=False)
+    monkeypatch.setattr(sync, "POLL_SECONDS", 0)
+
+
+def test_probe_reports_installed_and_required_with_no_psql_and_no_dsn(no_psql_no_dsn):
+    nf = probe_box({"ok": True, "installed": 3, "required": 3})        # loopback DB: the old path would refuse
+    lvl, text = sync.schema_preflight(nf, nf.store["new-app"], "new-app", {})
+    assert lvl == "PASS" and "schema version 3" in text and "NF-side probe" in text
+    assert PASSWORD not in text and "127.0.0.1" not in text
+
+
+def test_probe_behind_refuses_with_the_installer_instruction(no_psql_no_dsn):
+    nf = probe_box({"ok": False, "installed": 2, "required": 3})
+    lvl, text = sync.schema_preflight(nf, nf.store["new-app"], "new-app", {})
+    assert lvl == "FAIL" and "version 2" in text and "requires 3" in text and "nf-app/timescale/install.sql" in text
+
+
+def test_install_refuses_before_any_write_when_the_probe_says_behind(no_psql_no_dsn, tmp_path, capsys):
+    m, nf = make_manifest(tmp_path), probe_box({"ok": False, "installed": 2, "required": 3})
+    rc = sync.cmd_install(nf, m, install_args(), Clock(), Clock().sleep)
+    out = capsys.readouterr().out
+    assert rc == sync.EXIT_FAILED and "install.sql" in out
+    writes = [(mt, p) for mt, p in nf.log if mt != "GET" and p != "/api/v1/apps/new-app/hooks/schema"]
+    assert writes == [], writes
+    assert PASSWORD not in out and "127.0.0.1" not in out
+
+
+def test_install_proceeds_when_the_probe_passes_without_psql(no_psql_no_dsn, tmp_path, capsys):
+    m, nf = make_manifest(tmp_path), probe_box({"ok": True, "installed": 3, "required": 3})
+    clk = Clock()
+    assert sync.cmd_install(nf, m, install_args(), clk, clk.sleep) == 0
+    assert "Timescale schema preflight: Timescale schema version 3" in capsys.readouterr().out
+
+
+def test_old_release_without_the_probe_falls_back_and_names_both_remedies(no_psql_no_dsn):
+    nf = probe_box(None, hook=False)
+    lvl, text = sync.schema_preflight(nf, nf.store["new-app"], "new-app", {})
+    assert lvl == "FAIL" and "NF_TIMESCALE_PREFLIGHT_DSN" in text and "NF-side schema probe" in text
+    assert nf.starts == [], "no probe hook to start on a pre-probe release"
+    nf2 = probe_box(None, hook=False, host="db.example")                # reachable host but no psql
+    lvl, text = sync.schema_preflight(nf2, nf2.store["new-app"], "new-app", {})
+    assert lvl == "FAIL" and "psql is unavailable" in text and "NF-side schema probe" in text
+
+
+def test_probe_without_a_usable_answer_falls_back_to_the_dsn_path(no_psql_no_dsn):
+    nf = probe_box(None)                                                 # hook exists, run returned nothing
+    lvl, text = sync.schema_preflight(nf, nf.store["new-app"], "new-app", {})
+    assert lvl == "FAIL" and "NF_TIMESCALE_PREFLIGHT_DSN" in text
+
+
+def test_schema_check_is_skipped_on_lite_or_a_non_timescale_engine(no_psql_no_dsn):
+    nf = probe_box({"ok": True, "installed": 3, "required": 3})
+    assert sync.schema_preflight(nf, {"options": [], "hooks": []}, "new-app", {})[0] == "SKIP"
+    sqlite = nf.store["new-app"]
+    sqlite["options"] = [{"name": "engine", "value": {"string": "sqlite"}}]
+    assert sync.schema_preflight(nf, sqlite, "new-app", {})[0] == "SKIP"
+    assert nf.starts == []
+
+
+def test_doctor_reads_the_schema_through_the_probe(no_psql_no_dsn, tmp_path, capsys):
+    m, nf = make_manifest(tmp_path), probe_box({"ok": True, "installed": 3, "required": 3})
+    nf.files[("new-app", "/static/version.json")] = json.dumps({"version": "9.9.9"}).encode()
+    sync.cmd_doctor(nf, m)
+    out = capsys.readouterr().out
+    assert "[PASS] timescale schema: Timescale schema version 3 (read by the NF-side probe)" in out
+    assert PASSWORD not in out
+
+
+# ---------------------------------------------------------------- site timezone source (#1584)
+
+def tz_out(tmp_path, capsys, *, model=None, option=None, sites=None):
+    m, nf = doctor_nf(tmp_path, model=model, sites=sites)
+    if option is not None:
+        nf.store["new-app"]["options"].append({"name": "timezone", "value": {"string": option}})
+    assert sync.cmd_doctor(nf, m) in (0, 1)
+    return next(x for x in capsys.readouterr().out.splitlines() if "timezone:" in x and "timescale" not in x)
+
+
+def test_doctor_warns_when_the_zone_would_fall_back_to_utc(tmp_path, capsys):
+    out = tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {"id": "s"}}])
+    assert out.startswith("[WARN] timezone: UTC fallback") and "app option" in out and "America/Chicago" in out
+
+
+def test_doctor_timezone_pass_from_model_option_or_nf_sites(tmp_path, capsys):
+    assert tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {"tz": "America/Chicago"}}]).startswith("[PASS] timezone: every modeled site has a tz")
+    assert tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {}}], option="America/Chicago").startswith('[PASS] timezone: app option "timezone" is set (America/Chicago)')
+    assert tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {}}],
+                  sites=[{"id": "s", "timezone": "America/Chicago"}]).startswith("[PASS] timezone: NF Sites API")
+
+
+def test_doctor_names_an_invalid_timezone_option(tmp_path, capsys):
+    out = tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {}}], option="Central Time")
+    assert out.startswith("[WARN] timezone: UTC fallback") and "'Central Time' is not an IANA zone name" in out

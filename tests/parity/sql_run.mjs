@@ -28,15 +28,20 @@ const engines = arg("engines", "pglite,sqlite").split(",");
 const only = arg("rules", "") ? new Set(arg("rules").split(",")) : null;
 const noGaps = !process.argv.includes("--gaps");
 const duplicateRole = arg("duplicate-role", "false") === "true";
+const plantSensors = arg("plant-sensors", "false") === "true";
 
 const readPack = (n) => JSON.parse(readFileSync(path.join(root, "nf-app/rules", n), "utf8"));
 const PACK = { pglite: readPack("pack-postgres.json"), sqlite: readPack("pack-sqlite.json") };
+// --rule-sql file.json: {rule_id: sql} replaces that rule's PGlite SQL (e.g. a render with overridden role limits)
+if (arg("rule-sql", "")) {
+  for (const [rid, sql] of Object.entries(JSON.parse(readFileSync(arg("rule-sql"), "utf8")))) PACK.pglite.rules[rid].sql = sql;
+}
 const mb = () => Math.round(process.memoryUsage().rss / 1048576);
 let peak = mb();
 const sample = () => { peak = Math.max(peak, mb()); };
 
 const t0 = Date.now();
-const input = buildDataset(PACK.pglite, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole });
+const input = buildDataset(PACK.pglite, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole, plantSensors });
 const tGen = Date.now() - t0;
 sample();
 

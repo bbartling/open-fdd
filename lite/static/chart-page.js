@@ -36,13 +36,14 @@ async function draw() {
 
 async function main() {
   await initAuth();
+  await loadSiteTimeZoneSources();
   model = await loadModel();
   if (!model.sites.some((s) => idOf(s) === sel.site)) sel.site = idOf(model.sites[0]);
   ctx = pointSets(model, sel.site, sel.equip);
   def = chartDef(sel.id);
   if (!def || !def.applies(ctx)) throw new Error(`chart "${sel.id}" has no matching tagged points here`);
   const site = model.sites.find((s) => idOf(s) === sel.site);
-  siteTz = (site?.attrs || {}).tz || (site?.attrs || {}).timezone || "UTC";
+  siteTz = resolveSiteTimeZone(site).zone;
   ctx.siteTz = siteTz;
   if (!q.has("range.lite.chart") && sel.hours > 0) {
     rangeState = { preset: "custom", fromMs: Date.now() - sel.hours * 3600e3, toMs: Date.now() };

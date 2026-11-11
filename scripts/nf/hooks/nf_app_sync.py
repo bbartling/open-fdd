@@ -1125,7 +1125,7 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
     app_id = m["application"]["id"]
     prior = (c.app(app_id) if apps.get(app_id) else None) or apps.get(app_id)
     # Schema preflight precedes even the remote-file snapshot reads, then all reads precede mutation.
-    lvl, message = timescale_schema_check(prior or {}, getattr(a, "_environ", os.environ))
+    lvl, message = schema_preflight(c, prior or {}, app_id, getattr(a, "_environ", os.environ))
     if lvl == "FAIL":
         print(f"install: STOPPED: Timescale schema preflight failed: {message}")
         return EXIT_FAILED
@@ -1342,6 +1342,50 @@ def weather_coords_source(c, app: dict | None = None) -> tuple[str, str]:
                     "on the NF site or the modeled site" + note)
 
 
+IANA_SHAPE = re.compile(r"^(UTC|GMT|[A-Za-z]+(/[A-Za-z0-9_+\-]+)+)$")
+
+
+def timezone_source(c, app: dict | None = None) -> tuple[str, str]:
+    """('pass'|'warn', text): where the UI gets the site timezone, in the UI's own order (#1584): the modeled site's
+    tz/timezone, the app option "timezone", then the NF Sites API timezone. None of them = the charts fall back to
+    the browser zone or UTC and label it "(fallback)". Read-only."""
+    opt = option_scalar(app, "timezone")
+    opt_ok = isinstance(opt, str) and bool(IANA_SHAPE.match(opt.strip()))
+    sites_missing, n_sites = 0, 0
+    for layer in ("model",):
+        try:
+            recs = query_pages(c, {"layer": layer})
+        except SystemExit as e:
+            if isinstance(e, PagingError):
+                return "warn", f"could not read the {layer} layer completely: {e}"
+            recs = []
+        for p in recs:
+            if p.get("pointType") == "SITE":
+                n_sites += 1
+                a = p.get("attrs") or {}
+                if not (a.get("tz") or a.get("timezone")):
+                    sites_missing += 1
+    if n_sites and not sites_missing:
+        return "pass", "every modeled site has a tz (the UI uses it first)"
+    if opt_ok:
+        return "pass", f'app option "timezone" is set ({opt.strip()}); modeled sites without tz use it'
+    bad = f' (the app option "timezone" is set but {opt!r} is not an IANA zone name such as America/Chicago)' if opt not in (None, "") else ""
+    try:
+        def _page(p):
+            q = [f"pageSize={p['pageSize']}"]
+            if p.get("pageOffset"):
+                q.append(f"pageOffset={p['pageOffset']}")
+            return c.call("GET", "/api/v1/sites?" + "&".join(q)) or {}
+        api_sites = page_all(_page, "sites", what="sites")
+    except SystemExit:
+        api_sites = []
+    if any(s.get("timezone") for s in api_sites):
+        return "pass", "NF Sites API has a timezone (used when the model site has no tz and no app option is set)"
+    return "warn", ("UTC fallback (no site tz on the modeled site, no app option, no NF Sites timezone): range pickers and "
+                    "hour labels show UTC" + bad + '. Set the app option "timezone" to an IANA zone such as America/Chicago '
+                    "(NF console > app settings); no points need retagging")
+
+
 RRULE_SECONDS = {"SECONDLY": 1, "MINUTELY": 60, "HOURLY": 3600, "DAILY": 86400, "WEEKLY": 604800}
 DEFAULT_FDD_INTERVAL = 3600
 
@@ -1387,6 +1431,7 @@ def fdd_freshness(c, interval: int, now: datetime.datetime) -> tuple[str, str]:
     computed: list[datetime.datetime] = []
     raw: list[datetime.datetime] = []
     stale_reasons: dict[str, int] = {}
+    stale_timelines = 0
     results = 0
     for p in pts:
         a = p.get("attrs") or {}
@@ -1396,8 +1441,11 @@ def fdd_freshness(c, interval: int, now: datetime.datetime) -> tuple[str, str]:
             if latest:
                 computed.append(latest)
             if a.get("fddStatus") == "stale":
-                why = re.sub(r"\s*\(.*$", "", str(a.get("fddReason") or "no reason recorded"))[:60]
-                stale_reasons[why] = stale_reasons.get(why, 0) + 1
+                if a.get("fddKind") == "fault-timeline":     # a companion of a result: counted apart (#1586)
+                    stale_timelines += 1
+                else:
+                    why = re.sub(r"\s*\(.*$", "", str(a.get("fddReason") or "no reason recorded"))[:60]
+                    stale_reasons[why] = stale_reasons.get(why, 0) + 1
             elif parse_ts(a.get("fddLastRun")):
                 computed.append(parse_ts(a.get("fddLastRun")))
             if parse_ts(a.get("fddTimelineThrough")):
@@ -1415,6 +1463,8 @@ def fdd_freshness(c, interval: int, now: datetime.datetime) -> tuple[str, str]:
     sched = f"fdd runs every {human_age(interval)}"
     why = "; ".join(f"{k} x{n}" for k, n in sorted(stale_reasons.items(), key=lambda kv: -kv[1]))
     stale_note = f"; {sum(stale_reasons.values())} results flagged stale ({why})" if stale_reasons else ""
+    if stale_timelines:
+        stale_note += f"; {stale_timelines} fault timelines flagged stale"
     if c_age is not None and c_age <= limit:
         return "pass", (f"computed results {human_age(max(c_age, 0))} old (newest {c_new:%Y-%m-%dT%H:%M:%SZ}), raw history "
                         f"{human_age(max(r_age, 0))} old; {sched}{stale_note}")
@@ -1509,6 +1559,78 @@ def is_loopback_host(host: str | None) -> bool:
     return address.is_loopback or bool(mapped and mapped.is_loopback)
 
 
+PROBE_HOOK_ID = "schema"
+PROBE_WAIT_SECONDS = 45
+SCHEMA_REMEDY = ("install a PostgreSQL client (psql) and set NF_TIMESCALE_PREFLIGHT_DSN to a reachable DB endpoint, "
+                 "or install a release that ships the NF-side schema probe (the `schema` hook), which needs neither")
+
+
+def timescale_selected(app: dict) -> bool:
+    """True when the app's options select Timescale (engine "timescale", or a connection set and the engine not forced off)."""
+    engine = str(option_scalar(app, "engine") or "auto").strip().lower()
+    raw = option_scalar(app, "timescale")
+    if engine in {"sqlite", "pglite"}:
+        return False
+    return engine == "timescale" or (raw is not None and str(raw).strip() != "")
+
+
+def probe_result(run: dict) -> dict | None:
+    """The {installed, required, ok} object a finished schema-probe run returned (result or JSON event line), else None."""
+    def pick(v):
+        if isinstance(v, str):
+            try:
+                v = json.loads(v)
+            except ValueError:
+                return None
+        return v if isinstance(v, dict) and "required" in v else None
+    for g in (run.get("results") or {}).values():
+        for key in ("result", "value", "output", "returnValue"):
+            if (found := pick(g.get(key))) is not None:
+                return found
+        for e in g.get("events", []):
+            if (found := pick(e.get("message"))) is not None:
+                return found
+    return None
+
+
+def schema_probe(c, app: dict, app_id: str, clock=time.monotonic, sleep=time.sleep) -> tuple[str, str] | None:
+    """('PASS'|'FAIL'|'SKIP', text) from the NF-side read-only probe hook, or None when the installed app has no such
+    hook or the run gave no usable answer (the caller then falls back to the DSN path). Only {installed, required, ok}
+    comes back from NF; connection details never leave the hook."""
+    if not any(isinstance(h, dict) and h.get("id") == PROBE_HOOK_ID for h in app.get("hooks") or []):
+        return None
+    try:
+        pid = c.call("POST", f"/api/v1/apps/{app_id}/hooks/{PROBE_HOOK_ID}", {}).get("pid")
+        run = wait_for_run(c, app_id, PROBE_HOOK_ID, pid, PROBE_WAIT_SECONDS, clock, sleep)
+    except (SystemExit, OSError):
+        return None
+    got = probe_result(run) if run else None
+    if got is None:
+        return None
+    if got.get("skipped"):
+        return "SKIP", ""
+    required = got.get("required")
+    if "installed" not in got:
+        # the hook could not read the schema (error text is already redacted inside NF)
+        return "FAIL", f"the NF-side schema probe could not read the Timescale schema: {str(got.get('error') or 'unknown error')[:200]}"
+    installed = got.get("installed")
+    if got.get("ok") is True:
+        return "PASS", f"Timescale schema version {installed} (read by the NF-side probe)"
+    return "FAIL", (f"Timescale schema version {installed}; this release requires {required}. "
+                    "Run nf-app/timescale/install.sql as installer/owner")
+
+
+def schema_preflight(c, app: dict, app_id: str, environ=None, **kw) -> tuple[str, str]:
+    """Schema check order: the NF-side probe when the installed app has it, else the NF_TIMESCALE_PREFLIGHT_DSN path
+    (psql), else a refusal that names both remedies. SKIP on Lite or a non-Timescale engine."""
+    if not timescale_selected(app):
+        return "SKIP", ""
+    probed = schema_probe(c, app, app_id)
+    if probed is not None:
+        return probed
+    return timescale_schema_check(app, environ, **kw)
+
+
 def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tuple[str, str]:
     """Read-only preflight against the configured Timescale database, with no credentials in argv/output."""
     env = os.environ if environ is None else environ
@@ -1521,7 +1643,8 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
     dsn_override = env.get("NF_TIMESCALE_PREFLIGHT_DSN")
     if not dsn_override and is_loopback_host(timescale_connection_host(raw)):
         return "FAIL", ("Timescale hook host is loopback from the NF host's perspective; this CLI cannot assume "
-                         "the same loopback. Set NF_TIMESCALE_PREFLIGHT_DSN to a forwarded or reachable DB endpoint")
+                         "the same loopback. Set NF_TIMESCALE_PREFLIGHT_DSN to a forwarded or reachable DB endpoint, "
+                         "or install a release with the NF-side schema probe (the `schema` hook), which needs no DB route")
     conn = dsn_override or raw
     if not conn:
         return "FAIL", ('Timescale is selected but no connection is available; set NF_TIMESCALE_PREFLIGHT_DSN '
@@ -1583,7 +1706,7 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
         return "FAIL", "Timescale connection setting is not usable for the read-only schema check (value not shown)"
     psql = shutil.which("psql")
     if not psql:
-        return "FAIL", "psql is unavailable; install PostgreSQL client tools to verify Timescale schema version"
+        return "FAIL", ("psql is unavailable; to verify the Timescale schema version " + SCHEMA_REMEDY)
     inherited_allowlist = ("PATH", "SystemRoot", "WINDIR", "HOME", "USERPROFILE", "TMP", "TEMP")
     child_env = {k: os.environ[k] for k in inherited_allowlist if k in os.environ}
     child_env.update({k: env[k] for k in inherited_allowlist if k in env})
@@ -1710,6 +1833,8 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
         lvl, text = weather_coords_source(c, a)
         line("PASS" if lvl == "pass" else "FAIL", "weather coords", text)
+    lvl, text = timezone_source(c, a)
+    line(lvl.upper(), "timezone", text)
     fdd_def = next((h for h in a.get("hooks", []) if h.get("id") == "fdd"), None)
     fdd_man = next((h for h in m["hooks"] if h.get("id") == "fdd"), None)
     if fdd_def or fdd_man:
@@ -1722,7 +1847,7 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line(lvl.upper(), "fdd freshness", text)
     lvl, text = timescale_check(a)
     line(lvl, "timescale", text)
-    schema_lvl, schema_text = timescale_schema_check(a, environ)
+    schema_lvl, schema_text = schema_preflight(c, a, app_id, environ)
     line(schema_lvl, "timescale schema", schema_text or "not selected (Lite/sqlite/pglite)")
     try:
         drift = find_drift(c, m)

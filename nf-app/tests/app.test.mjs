@@ -218,7 +218,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     FAULT_LANE: { lineStyle: { color: "#e11d48" } },
     fddCatalog: { sensor_sweep_roles: { "SV-STALE": ["sat", "mat", "oa_t", "rat"] } },
     echarts: { getInstanceByDom: () => ({ dispose: () => { disposedCharts++; } }) },
-    chartTimeZone: (tz) => tz || "UTC",
+    chartTimeZone: (tz) => tz || "UTC", resolveSiteTimeZone: (s) => ({ zone: s?.attrs?.tz || s?.attrs?.timezone || "UTC" }),
     getChartRangeState: () => chosenRange,
     renderRangeControl: (_el, options) => { rangeControl = options; },
     fetchRange: readRange,
@@ -412,7 +412,7 @@ test("point history honors the same mixed-output boundary as FDD plots", async (
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
     GENERIC: new Set(), tooltip: {}, unitLabel: (u) => u, dispUnit: (p) => p.rec.attrs.unit, dispSeries: (_p, arr) => arr,
     pickWindow: () => 3600,
-    getChartRangeState: () => ({ preset: "24h" }), renderRangeControl: () => {}, chartTimeZone: (tz) => tz || "UTC",
+    getChartRangeState: () => ({ preset: "24h" }), renderRangeControl: () => {}, chartTimeZone: (tz) => tz || "UTC", resolveSiteTimeZone: (s) => ({ zone: s?.attrs?.tz || s?.attrs?.timezone || "UTC" }),
     chartOptionSiteTime: (option) => option,
     resolveChartSelection: async (_points, state) => ({ ...state, resolvedBounds: { fromMs: 0, toMs: 24 * 3600e3 } }),
     fetchRange: async (points, _state, options) => {
@@ -448,7 +448,7 @@ test("RCx ignores superseded range resolutions and failures", async () => {
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
     idOf: (r) => (r.attrs || {}).id || r.name,
     has: (p, marker) => (p.tags || []).includes(marker),
-    chartTimeZone: (tz) => tz || "UTC", getChartRangeState: () => ({ preset: "24h" }),
+    chartTimeZone: (tz) => tz || "UTC", resolveSiteTimeZone: (s) => ({ zone: s?.attrs?.tz || s?.attrs?.timezone || "UTC" }), getChartRangeState: () => ({ preset: "24h" }),
     renderRangeControl: () => {}, loadCatalog: async () => ({}),
     rcxPlan: () => ({ ready: [], missing: [] }),
     resolveChartSelection: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
@@ -480,7 +480,7 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
   const ctx = vm.createContext({
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
     idOf: (r) => (r.attrs || {}).id || r.name, has: (p, marker) => (p.tags || []).includes(marker),
-    equipLabel: (e) => e.name, chartTimeZone: () => "UTC", getChartRangeState: () => ({ preset: "custom" }),
+    equipLabel: (e) => e.name, chartTimeZone: () => "UTC", resolveSiteTimeZone: () => ({ zone: "UTC" }), getChartRangeState: () => ({ preset: "custom" }),
     renderRangeControl: () => {}, loadCatalog: async () => ({}), equipRules: () => [{ rule: { id: "SV-RANGE", description: "sensor bounds" }, bound: {} }],
     resolveChartSelection: () => new Promise((_resolve, reject) => { rejectRange = reject; }),
   });
