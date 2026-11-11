@@ -3,6 +3,7 @@
 // pandas side needs to a JSON file.
 //
 //   node tests/parity/sql_run.mjs --equips 4 --days 3 --out out.json [--engines pglite,sqlite] [--rules FC1,FC2]
+//   node tests/parity/sql_run.mjs --dataset ds.json --out out.json ...   (ds.json = open_fdd.parity Dataset.to_loader_json())
 //
 // Output: { meta, columns, history: {equip: {ts: [...], <col>: [...]}}, weather: [...], units: {role: unit},
 //           results: {pglite: {rule: [rows]}, sqlite: {...}}, errors, timing: {...}, memory: {...} }
@@ -30,6 +31,23 @@ const noGaps = !process.argv.includes("--gaps");
 const duplicateRole = arg("duplicate-role", "false") === "true";
 const plantSensors = arg("plant-sensors", "false") === "true";
 
+const datasetFile = arg("dataset", "");
+// A Python-generated dataset (open_fdd.parity): the compact loader JSON carries `sensorSeries`; sensorHistory is
+// expanded here from the history rows, exactly as synthetic_dataset.js does.
+function loadDataset(file) {
+  const d = JSON.parse(readFileSync(file, "utf8"));
+  const byEquip = new Map();
+  for (const row of d.history) { if (!byEquip.has(row.equipment_id)) byEquip.set(row.equipment_id, []); byEquip.get(row.equipment_id).push(row); }
+  d.sensorHistory = [];
+  for (const s of d.sensorSeries) {
+    for (const row of byEquip.get(s.equipment_id) || []) {
+      d.sensorHistory.push({ equipment_id: s.equipment_id, series_id: s.series_id, sensor_role: s.role, unit: s.unit, ts: row.ts, value: row[s.role] ?? null });
+    }
+  }
+  delete d.sensorSeries;
+  return d;
+}
+
 const readPack = (n) => JSON.parse(readFileSync(path.join(root, "nf-app/rules", n), "utf8"));
 const PACK = { pglite: readPack("pack-postgres.json"), sqlite: readPack("pack-sqlite.json") };
 // --rule-sql file.json: {rule_id: sql} replaces that rule's PGlite SQL (e.g. a render with overridden role limits)
@@ -41,7 +59,7 @@ let peak = mb();
 const sample = () => { peak = Math.max(peak, mb()); };
 
 const t0 = Date.now();
-const input = buildDataset(PACK.pglite, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole, plantSensors });
+const input = datasetFile ? loadDataset(datasetFile) : buildDataset(PACK.pglite, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole, plantSensors });
 const tGen = Date.now() - t0;
 sample();
 
@@ -77,7 +95,7 @@ for (const row of input.history) {
 const units = {};
 for (const a of input.authorizedSeries) units[a.role] = a.unit;
 writeFileSync(out, JSON.stringify({
-  meta: { equips, days, step_seconds: 300, rows: input.history.length, columns: cols.length },
+  meta: { equips: input.equipment.length, days, step_seconds: 300, rows: input.history.length, columns: cols.length },
   columns: input.historyColumns, history, weather: input.weather, units, results, errors, timing,
   memory: { ...memory, rss_peak_mb: peak },
 }));

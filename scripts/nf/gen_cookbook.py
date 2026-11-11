@@ -10,7 +10,8 @@ Sources (all read, nothing hand-copied):
   sql/fdd/role_map.json                 SQL history column -> Haystack role
   nf-app/rules/pack-postgres.json       the PostgreSQL SQL of every rule, rendered at its defaults
   open_fdd/rules/cookbook_catalog.py    the pandas twin of each rule (real function source via inspect)
-  tests/parity/test_parity.py           KNOWN_DIVERGENT (with reasons) and NO_TWIN, read with ast
+  open_fdd/data/parity_known_differences.json   known differences with reasons (scope all)
+  tests/parity/test_parity.py           NO_TWIN, read with ast
 
 Pages: docs/rules/index.md, sql-cookbook.md, pandas-cookbook.md, parity.md (and docs/fdd-rules.md keeps its own
 generator, scripts/nf/gen_rule_docs.py). Needs pandas + numpy + pyyaml (the pandas cookbook imports open_fdd.rules).
@@ -33,6 +34,7 @@ TUNING = ROOT / "sql" / "fdd" / "tuning_catalog.json"
 ROLE_MAP = ROOT / "sql" / "fdd" / "role_map.json"
 PACK = ROOT / "nf-app" / "rules" / "pack-postgres.json"
 PARITY_TEST = ROOT / "tests" / "parity" / "test_parity.py"
+KNOWN_DIFFS = ROOT / "open_fdd" / "data" / "parity_known_differences.json"
 OUT_DIR = ROOT / "docs" / "rules"
 
 GH = "https://github.com/bbartling/open-fdd/blob/master"
@@ -163,15 +165,15 @@ def load() -> dict:
 
 
 def read_parity() -> tuple[dict, set]:
-    """KNOWN_DIVERGENT / NO_TWIN from tests/parity/test_parity.py, read with ast (no pytest import)."""
+    """Known differences (scope ``all``, with reasons) from open_fdd/data/parity_known_differences.json, and NO_TWIN
+    from tests/parity/test_parity.py (read with ast, no pytest import)."""
+    doc = json.loads(KNOWN_DIFFS.read_text(encoding="utf-8"))
+    known = {d["rule"]: d["reason"] for d in doc["differences"] if d["scope"] == "all"}
     tree = ast.parse(PARITY_TEST.read_text(encoding="utf-8"))
-    env: dict = {}
     for node in tree.body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            name = node.targets[0].id
-            if name in {"_EDGE", "_PROOF", "_WX", "_GATE", "KNOWN_DIVERGENT", "NO_TWIN"}:
-                env[name] = eval(compile(ast.Expression(node.value), str(PARITY_TEST), "eval"), {"__builtins__": {}}, env)  # noqa: S307
-    return env["KNOWN_DIVERGENT"], set(env["NO_TWIN"])
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)                 and node.targets[0].id == "NO_TWIN":
+            return known, set(ast.literal_eval(node.value))
+    raise RuntimeError("NO_TWIN not found in tests/parity/test_parity.py")
 
 
 def kind_legend(cat: dict) -> str:
@@ -505,7 +507,9 @@ the production result. Pandas is the reference for offline use. Update the fixtu
 rule changes match status.
 
 Run the strict suite with `python -m pytest tests/parity -q`. See the [SQL guide](../sql-rules.html) and
-[pandas guide](../pandas-rules.html) for the authoring workflows.
+[pandas guide](../pandas-rules.html) for the authoring workflows. The dataset, the pandas reference, the compare policy
+and the known-difference list ship in the PyPI package as `open_fdd.parity`; see the
+[parity harness](parity-harness.html) to run the same proof on your own database.
 """)
     return "\n".join(out)
 

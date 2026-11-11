@@ -34,4 +34,6 @@ the production result. Pandas is the reference for offline use. Update the fixtu
 rule changes match status.
 
 Run the strict suite with `python -m pytest tests/parity -q`. See the [SQL guide](../sql-rules.html) and
-[pandas guide](../pandas-rules.html) for the authoring workflows.
+[pandas guide](../pandas-rules.html) for the authoring workflows. The dataset, the pandas reference, the compare policy
+and the known-difference list ship in the PyPI package as `open_fdd.parity`; see the
+[parity harness](parity-harness.html) to run the same proof on your own database.
