@@ -5,6 +5,13 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.14 - 2026-11-11 (open-fdd 4.5.5 on PyPI)
+
+- **Parity harness:** `open_fdd.parity` ships in the PyPI package: synthetic data generation (basic and `edge` profiles), a pandas reference, `Policy`/`compare`, and known differences as data. Six edge-profile input-handling differences are pinned with reasons. [#1591](https://github.com/bbartling/open-fdd/issues/1591)
+- **Shared plot spec v1:** `open_fdd.plot_spec` and `nf-app/static/plot-spec.js`, a canonical preset registry, palette and units data. No UI change yet.
+- **Installer:** bootstraps the NF-side schema probe on apps that predate it, adds `install --dry-run`, and `doctor` warns until the probe is installed. [#1593](https://github.com/bbartling/open-fdd/issues/1593)
+- **Doctor:** explains an HTML answer from the console URL as a likely front-door URL. [#1594](https://github.com/bbartling/open-fdd/issues/1594)
+
 ## Open-FDD 5.0.13 - 2026-11-11 (open-fdd 4.5.4 on PyPI)
 
 - **Site timezone:** range pickers and hour labels resolve the zone from the modeled site, the new `timezone` app option, or

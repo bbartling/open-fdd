@@ -1,0 +1,12 @@
+{
+  "window": {"from": "2026-11-02T00:00:00Z", "to": "2026-11-09T00:00:00Z"},
+  "cases": [
+    {"name": "rule-sv-range-chw-flow", "kind": "rule", "id": "SV-RANGE", "equips": ["site-a/CH-1"]},
+    {"name": "rule-fc1", "kind": "rule", "id": "FC1", "equips": ["site-a/AHU-1"]},
+    {"name": "rule-chw-1", "kind": "rule", "id": "CHW-1", "equips": ["site-a/CH-1"]},
+    {"name": "preset-weekly-fan", "kind": "preset", "id": "weekly-fan", "equips": ["site-a/AHU-1"]},
+    {"name": "preset-ahu-dats-imperial-site", "kind": "preset", "id": "ahu_dats", "equips": ["site-b/AHU-1"]},
+    {"name": "preset-ahu-cooling-valves", "kind": "preset", "id": "ahu-cooling-valves", "equips": ["site-a/AHU-1"]},
+    {"name": "preset-ahu-cooling-valves-unbound-by-alias", "kind": "preset", "id": "ahu_cooling_valves", "equips": ["site-b/AHU-1"]}
+  ]
+}

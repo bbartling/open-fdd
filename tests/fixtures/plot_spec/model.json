@@ -1,0 +1,1310 @@
+{
+  "sites": [
+    {
+      "uuid": "3e688592-f246-5401-ab31-4e55add453b1",
+      "name": "site-a",
+      "layer": "model",
+      "pointType": "SITE",
+      "attrs": {
+        "id": "site-a",
+        "dis": "site-a",
+        "markers": "site",
+        "tz": "America/Chicago"
+      }
+    },
+    {
+      "uuid": "261fced3-d42c-573a-ae20-5e3af807720c",
+      "name": "site-b",
+      "layer": "model",
+      "pointType": "SITE",
+      "attrs": {
+        "id": "site-b",
+        "dis": "site-b",
+        "markers": "site",
+        "tz": "America/New_York"
+      }
+    }
+  ],
+  "equips": [
+    {
+      "uuid": "00f75631-e560-5185-a0dd-579f17129e1b",
+      "name": "AHU-1",
+      "layer": "model",
+      "pointType": "EQUIPMENT",
+      "attrs": {
+        "id": "AHU-1",
+        "dis": "AHU-1",
+        "markers": "equip,ahu",
+        "siteRef": "site-a"
+      }
+    },
+    {
+      "uuid": "ae096848-345a-59ce-acfa-cb39cd68860e",
+      "name": "AHU-1",
+      "layer": "model",
+      "pointType": "EQUIPMENT",
+      "attrs": {
+        "id": "AHU-1",
+        "dis": "AHU-1",
+        "markers": "equip,ahu",
+        "siteRef": "site-b"
+      }
+    },
+    {
+      "uuid": "9a1ac854-56b9-5237-a15c-1c4d64f8223c",
+      "name": "CH-1",
+      "layer": "model",
+      "pointType": "EQUIPMENT",
+      "attrs": {
+        "id": "CH-1",
+        "dis": "CH-1",
+        "markers": "equip,chiller",
+        "siteRef": "site-a"
+      }
+    }
+  ],
+  "points": [
+    {
+      "uuid": "e75bf35b-906a-5f93-adf8-7f88d40d5aac",
+      "tags": [
+        "point",
+        "his",
+        "fan",
+        "run",
+        "sensor"
+      ],
+      "dis": "AHU-1 fan-status",
+      "units": "",
+      "kind": "Bool",
+      "name": "fan run",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-run-sensor",
+      "rec": {
+        "uuid": "e75bf35b-906a-5f93-adf8-7f88d40d5aac",
+        "name": "site-a AHU-1 fan_status",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 fan-status",
+          "markers": "point,his,fan,run,sensor",
+          "class": "discharge-run-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Bool"
+        }
+      }
+    },
+    {
+      "uuid": "60140e88-9070-5fa7-a965-72432a23356b",
+      "tags": [
+        "point",
+        "his",
+        "fan",
+        "run",
+        "cmd"
+      ],
+      "dis": "AHU-1 fan-cmd",
+      "units": "%",
+      "kind": "Number",
+      "name": "fan run cmd",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-run-cmd",
+      "rec": {
+        "uuid": "60140e88-9070-5fa7-a965-72432a23356b",
+        "name": "site-a AHU-1 fan_cmd",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 fan-cmd",
+          "markers": "point,his,fan,run,cmd",
+          "class": "discharge-run-cmd",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "%",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "de46e335-b043-54a5-a721-6ce4684625e4",
+      "tags": [
+        "point",
+        "his",
+        "outside",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 outside-air-temp",
+      "units": "°C",
+      "kind": "Number",
+      "name": "outside air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "outside-air-temp-sensor",
+      "rec": {
+        "uuid": "de46e335-b043-54a5-a721-6ce4684625e4",
+        "name": "site-a AHU-1 oa_t",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 outside-air-temp",
+          "markers": "point,his,outside,air,temp,sensor",
+          "class": "outside-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "°C",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "34101046-777e-52f7-a750-dae9ee770b4a",
+      "tags": [
+        "point",
+        "his",
+        "return",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 return-air-temp",
+      "units": "°C",
+      "kind": "Number",
+      "name": "return air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "return-air-temp-sensor",
+      "rec": {
+        "uuid": "34101046-777e-52f7-a750-dae9ee770b4a",
+        "name": "site-a AHU-1 rat",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 return-air-temp",
+          "markers": "point,his,return,air,temp,sensor",
+          "class": "return-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "°C",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "e138aba4-cb5c-5bec-a0cd-9eee35ebc01e",
+      "tags": [
+        "point",
+        "his",
+        "mixed",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 mixed-air-temp",
+      "units": "°C",
+      "kind": "Number",
+      "name": "mixed air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "mixed-air-temp-sensor",
+      "rec": {
+        "uuid": "e138aba4-cb5c-5bec-a0cd-9eee35ebc01e",
+        "name": "site-a AHU-1 mat",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 mixed-air-temp",
+          "markers": "point,his,mixed,air,temp,sensor",
+          "class": "mixed-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "°C",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "6dcb8915-2e7c-5850-a9e4-618435bd2f33",
+      "tags": [
+        "point",
+        "his",
+        "discharge",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 discharge-air-temp",
+      "units": "°C",
+      "kind": "Number",
+      "name": "discharge air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-air-temp-sensor",
+      "rec": {
+        "uuid": "6dcb8915-2e7c-5850-a9e4-618435bd2f33",
+        "name": "site-a AHU-1 sat",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 discharge-air-temp",
+          "markers": "point,his,discharge,air,temp,sensor",
+          "class": "discharge-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "°C",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "62535a14-7efc-5226-ac36-48ccf299048e",
+      "tags": [
+        "point",
+        "his",
+        "discharge",
+        "air",
+        "temp",
+        "sp"
+      ],
+      "dis": "AHU-1 discharge-air-temp-sp",
+      "units": "°C",
+      "kind": "Number",
+      "name": "discharge air temp sp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-air-temp-sp",
+      "rec": {
+        "uuid": "62535a14-7efc-5226-ac36-48ccf299048e",
+        "name": "site-a AHU-1 sat_sp",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 discharge-air-temp-sp",
+          "markers": "point,his,discharge,air,temp,sp",
+          "class": "discharge-air-temp-sp",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "°C",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "0ae010e9-93a3-50b0-a566-4bcd251bb34c",
+      "tags": [
+        "point",
+        "his",
+        "outside",
+        "damper"
+      ],
+      "dis": "AHU-1 outside-air-damper",
+      "units": "%",
+      "kind": "Number",
+      "name": "outside damper",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "outside-damper-cmd",
+      "rec": {
+        "uuid": "0ae010e9-93a3-50b0-a566-4bcd251bb34c",
+        "name": "site-a AHU-1 oa_damper_pct",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 outside-air-damper",
+          "markers": "point,his,outside,damper",
+          "class": "outside-damper-cmd",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "%",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "2f13ddb8-2520-5c74-aa77-6052aec11f3d",
+      "tags": [
+        "point",
+        "his",
+        "compressor",
+        "run",
+        "sensor"
+      ],
+      "dis": "AHU-1 compressor-status",
+      "units": "",
+      "kind": "Bool",
+      "name": "compressor run",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "2f13ddb8-2520-5c74-aa77-6052aec11f3d",
+        "name": "site-a AHU-1 compressor_status",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 compressor-status",
+          "markers": "point,his,compressor,run,sensor",
+          "class": "",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Bool"
+        }
+      }
+    },
+    {
+      "uuid": "d89a13e8-7f07-54d1-a5c8-e62ec8a369d5",
+      "tags": [
+        "point",
+        "his",
+        "occ",
+        "cmd"
+      ],
+      "dis": "site-a occupancy",
+      "units": "",
+      "kind": "Bool",
+      "name": "occ cmd",
+      "equipRef": "",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "occupied-cmd",
+      "rec": {
+        "uuid": "d89a13e8-7f07-54d1-a5c8-e62ec8a369d5",
+        "name": "site-a occupancy",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "site-a occupancy",
+          "markers": "point,his,occ,cmd",
+          "class": "occupied-cmd",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Bool"
+        }
+      }
+    },
+    {
+      "uuid": "9fc1c009-8f68-568c-a9b7-e5163145e311",
+      "tags": [
+        "point",
+        "his",
+        "fan",
+        "run",
+        "sensor"
+      ],
+      "dis": "AHU-1 fan-status",
+      "units": "",
+      "kind": "Bool",
+      "name": "fan run",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-run-sensor",
+      "rec": {
+        "uuid": "9fc1c009-8f68-568c-a9b7-e5163145e311",
+        "name": "site-b AHU-1 fan_status",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 fan-status",
+          "markers": "point,his,fan,run,sensor",
+          "class": "discharge-run-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "",
+          "kind": "Bool"
+        }
+      }
+    },
+    {
+      "uuid": "44e93151-c546-52cc-a288-d0fd29c49b43",
+      "tags": [
+        "point",
+        "his",
+        "fan",
+        "run",
+        "cmd"
+      ],
+      "dis": "AHU-1 fan-cmd",
+      "units": "%",
+      "kind": "Number",
+      "name": "fan run cmd",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-run-cmd",
+      "rec": {
+        "uuid": "44e93151-c546-52cc-a288-d0fd29c49b43",
+        "name": "site-b AHU-1 fan_cmd",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 fan-cmd",
+          "markers": "point,his,fan,run,cmd",
+          "class": "discharge-run-cmd",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "%",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "80682ab8-2c52-58b3-af46-b2c442af5e00",
+      "tags": [
+        "point",
+        "his",
+        "outside",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 outside-air-temp",
+      "units": "°F",
+      "kind": "Number",
+      "name": "outside air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "outside-air-temp-sensor",
+      "rec": {
+        "uuid": "80682ab8-2c52-58b3-af46-b2c442af5e00",
+        "name": "site-b AHU-1 oa_t",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 outside-air-temp",
+          "markers": "point,his,outside,air,temp,sensor",
+          "class": "outside-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "°F",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "712c7d2d-9461-5dc2-acee-bac95cecabd4",
+      "tags": [
+        "point",
+        "his",
+        "return",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 return-air-temp",
+      "units": "°F",
+      "kind": "Number",
+      "name": "return air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "return-air-temp-sensor",
+      "rec": {
+        "uuid": "712c7d2d-9461-5dc2-acee-bac95cecabd4",
+        "name": "site-b AHU-1 rat",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 return-air-temp",
+          "markers": "point,his,return,air,temp,sensor",
+          "class": "return-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "°F",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "0ee94d02-27de-5ffa-a06e-49d99e3240c4",
+      "tags": [
+        "point",
+        "his",
+        "mixed",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 mixed-air-temp",
+      "units": "°F",
+      "kind": "Number",
+      "name": "mixed air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "mixed-air-temp-sensor",
+      "rec": {
+        "uuid": "0ee94d02-27de-5ffa-a06e-49d99e3240c4",
+        "name": "site-b AHU-1 mat",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 mixed-air-temp",
+          "markers": "point,his,mixed,air,temp,sensor",
+          "class": "mixed-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "°F",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "84af4222-6ee7-58d1-a73c-6395bac9b6cb",
+      "tags": [
+        "point",
+        "his",
+        "discharge",
+        "air",
+        "temp",
+        "sensor"
+      ],
+      "dis": "AHU-1 discharge-air-temp",
+      "units": "°F",
+      "kind": "Number",
+      "name": "discharge air temp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-air-temp-sensor",
+      "rec": {
+        "uuid": "84af4222-6ee7-58d1-a73c-6395bac9b6cb",
+        "name": "site-b AHU-1 sat",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 discharge-air-temp",
+          "markers": "point,his,discharge,air,temp,sensor",
+          "class": "discharge-air-temp-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "°F",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "4b55df4e-c6e5-506c-adfc-a2345a516fab",
+      "tags": [
+        "point",
+        "his",
+        "discharge",
+        "air",
+        "temp",
+        "sp"
+      ],
+      "dis": "AHU-1 discharge-air-temp-sp",
+      "units": "°F",
+      "kind": "Number",
+      "name": "discharge air temp sp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-air-temp-sp",
+      "rec": {
+        "uuid": "4b55df4e-c6e5-506c-adfc-a2345a516fab",
+        "name": "site-b AHU-1 sat_sp",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 discharge-air-temp-sp",
+          "markers": "point,his,discharge,air,temp,sp",
+          "class": "discharge-air-temp-sp",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "°F",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "f49a4f1c-d387-5869-ae04-dc0254b64ccc",
+      "tags": [
+        "point",
+        "his",
+        "outside",
+        "damper"
+      ],
+      "dis": "AHU-1 outside-air-damper",
+      "units": "%",
+      "kind": "Number",
+      "name": "outside damper",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "outside-damper-cmd",
+      "rec": {
+        "uuid": "f49a4f1c-d387-5869-ae04-dc0254b64ccc",
+        "name": "site-b AHU-1 oa_damper_pct",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 outside-air-damper",
+          "markers": "point,his,outside,damper",
+          "class": "outside-damper-cmd",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "%",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "e1231f5c-1dbb-592f-af6c-2f9d42f4626d",
+      "tags": [
+        "point",
+        "his",
+        "compressor",
+        "run",
+        "sensor"
+      ],
+      "dis": "AHU-1 compressor-status",
+      "units": "",
+      "kind": "Bool",
+      "name": "compressor run",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "e1231f5c-1dbb-592f-af6c-2f9d42f4626d",
+        "name": "site-b AHU-1 compressor_status",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 compressor-status",
+          "markers": "point,his,compressor,run,sensor",
+          "class": "",
+          "equipRef": "AHU-1",
+          "siteRef": "site-b",
+          "unit": "",
+          "kind": "Bool"
+        }
+      }
+    },
+    {
+      "uuid": "cf6d9e2c-c248-56ab-a6d6-6d16ab84a917",
+      "tags": [
+        "point",
+        "his",
+        "lighting",
+        "cmd"
+      ],
+      "dis": "site-b lighting",
+      "units": "",
+      "kind": "Bool",
+      "name": "lighting cmd",
+      "equipRef": "",
+      "weatherStationRef": "",
+      "siteRef": "site-b",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "lighting-cmd",
+      "rec": {
+        "uuid": "cf6d9e2c-c248-56ab-a6d6-6d16ab84a917",
+        "name": "site-b lighting",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "site-b lighting",
+          "markers": "point,his,lighting,cmd",
+          "class": "lighting-cmd",
+          "siteRef": "site-b",
+          "unit": "",
+          "kind": "Bool"
+        }
+      }
+    },
+    {
+      "uuid": "93b4d51f-789a-5aaa-a9f6-180371067907",
+      "tags": [
+        "point",
+        "his",
+        "cool",
+        "valve",
+        "cmd"
+      ],
+      "dis": "AHU-1 cooling-valve",
+      "units": "%",
+      "kind": "Number",
+      "name": "cool valve cmd",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "chilled-water-cool-valve-cmd",
+      "rec": {
+        "uuid": "93b4d51f-789a-5aaa-a9f6-180371067907",
+        "name": "site-a AHU-1 clg_valve_pct",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 cooling-valve",
+          "markers": "point,his,cool,valve,cmd",
+          "class": "chilled-water-cool-valve-cmd",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "%",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "91f0ba2b-c9bf-514b-a326-99b0f9e4726d",
+      "tags": [
+        "point",
+        "his",
+        "discharge",
+        "air",
+        "pressure",
+        "sensor"
+      ],
+      "dis": "AHU-1 duct-static-pressure",
+      "units": "inH2O",
+      "kind": "Number",
+      "name": "discharge air pressure",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-air-pressure-sensor",
+      "rec": {
+        "uuid": "91f0ba2b-c9bf-514b-a326-99b0f9e4726d",
+        "name": "site-a AHU-1 duct_static",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 duct-static-pressure",
+          "markers": "point,his,discharge,air,pressure,sensor",
+          "class": "discharge-air-pressure-sensor",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "inH2O",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "b755cb92-9f35-5f25-ad65-196c258c6c47",
+      "tags": [
+        "point",
+        "his",
+        "discharge",
+        "air",
+        "pressure",
+        "sp"
+      ],
+      "dis": "AHU-1 duct-static-pressure-sp",
+      "units": "Pa",
+      "kind": "Number",
+      "name": "discharge air pressure sp",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "discharge-air-pressure-sp",
+      "rec": {
+        "uuid": "b755cb92-9f35-5f25-ad65-196c258c6c47",
+        "name": "site-a AHU-1 duct_static_sp",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 duct-static-pressure-sp",
+          "markers": "point,his,discharge,air,pressure,sp",
+          "class": "discharge-air-pressure-sp",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "Pa",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "ea064811-f0a2-5f54-abc8-b1ca6ff1727f",
+      "tags": [
+        "point",
+        "his",
+        "chilled",
+        "water",
+        "leaving",
+        "temp",
+        "sensor"
+      ],
+      "dis": "CH-1 chilled-water-supply-temp",
+      "units": "°F",
+      "kind": "Number",
+      "name": "chilled water leaving temp",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "ea064811-f0a2-5f54-abc8-b1ca6ff1727f",
+        "name": "site-a CH-1 chw_supply_t",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 chilled-water-supply-temp",
+          "markers": "point,his,chilled,water,leaving,temp,sensor",
+          "class": "",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "°F",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "5d30cbe9-f826-5d51-ac11-e4a3b9dbec7c",
+      "tags": [
+        "point",
+        "his",
+        "chilled",
+        "water",
+        "entering",
+        "temp",
+        "sensor"
+      ],
+      "dis": "CH-1 chilled-water-return-temp",
+      "units": "°F",
+      "kind": "Number",
+      "name": "chilled water entering temp",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "5d30cbe9-f826-5d51-ac11-e4a3b9dbec7c",
+        "name": "site-a CH-1 chw_return_t",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 chilled-water-return-temp",
+          "markers": "point,his,chilled,water,entering,temp,sensor",
+          "class": "",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "°F",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "fc0d32b0-bfa2-582f-a57d-da965843453a",
+      "tags": [
+        "point",
+        "his",
+        "chilled",
+        "water",
+        "flow",
+        "sensor"
+      ],
+      "dis": "CH-1 chw-flow",
+      "units": "gpm",
+      "kind": "Number",
+      "name": "chilled water flow",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "chilled-water-delta-flow-sensor",
+      "rec": {
+        "uuid": "fc0d32b0-bfa2-582f-a57d-da965843453a",
+        "name": "site-a CH-1 chw_flow",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 chw-flow",
+          "markers": "point,his,chilled,water,flow,sensor",
+          "class": "chilled-water-delta-flow-sensor",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "gpm",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "cb932bdd-5b35-5391-ade9-863689f960be",
+      "tags": [
+        "point",
+        "his",
+        "chilled",
+        "water",
+        "pump",
+        "run",
+        "cmd"
+      ],
+      "dis": "CH-1 chw-pump-cmd",
+      "units": "%",
+      "kind": "Number",
+      "name": "chilled water pump run cmd",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "cb932bdd-5b35-5391-ade9-863689f960be",
+        "name": "site-a CH-1 chw_pump_cmd",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 chw-pump-cmd",
+          "markers": "point,his,chilled,water,pump,run,cmd",
+          "class": "",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "%",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "6b0ea524-9283-539a-aa51-dfc55c084f57",
+      "tags": [
+        "point",
+        "his",
+        "chiller",
+        "run",
+        "sensor"
+      ],
+      "dis": "CH-1 chiller-status",
+      "units": "",
+      "kind": "Bool",
+      "name": "chiller run",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "6b0ea524-9283-539a-aa51-dfc55c084f57",
+        "name": "site-a CH-1 chiller_status",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 chiller-status",
+          "markers": "point,his,chiller,run,sensor",
+          "class": "",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Bool"
+        }
+      }
+    },
+    {
+      "uuid": "a5954d72-dccc-58b5-a6e9-8eed0b9112ac",
+      "tags": [
+        "point",
+        "his",
+        "elec",
+        "power",
+        "sensor"
+      ],
+      "dis": "CH-1 chiller-power",
+      "units": "",
+      "kind": "Number",
+      "name": "elec power",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "total-active-ac-elec-power-sensor",
+      "rec": {
+        "uuid": "a5954d72-dccc-58b5-a6e9-8eed0b9112ac",
+        "name": "site-a CH-1 chiller_power",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 chiller-power",
+          "markers": "point,his,elec,power,sensor",
+          "class": "total-active-ac-elec-power-sensor",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "50f7648c-2a8e-5a15-accd-95826b0dc224",
+      "tags": [
+        "point",
+        "his",
+        "weather",
+        "outside",
+        "air",
+        "temp"
+      ],
+      "dis": "Outside air temp (weather)",
+      "units": "°C",
+      "kind": "Number",
+      "name": "weather outside air temp",
+      "equipRef": "",
+      "weatherStationRef": "station-1",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "50f7648c-2a8e-5a15-accd-95826b0dc224",
+        "name": "site-a weather web_oa_t",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "Outside air temp (weather)",
+          "markers": "point,his,weather,outside,air,temp",
+          "class": "",
+          "siteRef": "site-a",
+          "weatherStationRef": "station-1",
+          "unit": "°C",
+          "kind": "Number"
+        }
+      }
+    },
+    {
+      "uuid": "53b43a08-a7f4-5aa8-a7fc-1231c9c6ae25",
+      "tags": [
+        "point",
+        "his",
+        "fdd",
+        "fault_timeline"
+      ],
+      "dis": "AHU-1 FC1 fdd+fault_timeline",
+      "units": "",
+      "kind": "Number",
+      "name": "fdd fault_timeline",
+      "equipRef": "AHU-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "53b43a08-a7f4-5aa8-a7fc-1231c9c6ae25",
+        "name": "site-a AHU-1 FC1 fdd+fault_timeline",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "AHU-1 FC1 fdd+fault_timeline",
+          "markers": "point,his,fdd,fault_timeline",
+          "class": "",
+          "equipRef": "AHU-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Number",
+          "ruleRef": "FC1"
+        }
+      }
+    },
+    {
+      "uuid": "d1689f1e-77ef-5ed0-a58e-7ed286e12ece",
+      "tags": [
+        "point",
+        "his",
+        "fdd",
+        "fault"
+      ],
+      "dis": "CH-1 CHW-1 fdd+fault",
+      "units": "",
+      "kind": "Number",
+      "name": "fdd fault",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "d1689f1e-77ef-5ed0-a58e-7ed286e12ece",
+        "name": "site-a CH-1 CHW-1 fdd+fault",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 CHW-1 fdd+fault",
+          "markers": "point,his,fdd,fault",
+          "class": "",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Number",
+          "ruleRef": "CHW-1"
+        }
+      }
+    },
+    {
+      "uuid": "f2084f57-1152-5ba8-a537-423642e6814e",
+      "tags": [
+        "point",
+        "his",
+        "fdd",
+        "fault"
+      ],
+      "dis": "CH-1 SV-RANGE fdd+fault",
+      "units": "",
+      "kind": "Number",
+      "name": "fdd fault",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "f2084f57-1152-5ba8-a537-423642e6814e",
+        "name": "site-a CH-1 SV-RANGE fdd+fault",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 SV-RANGE fdd+fault",
+          "markers": "point,his,fdd,fault",
+          "class": "",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Number",
+          "ruleRef": "SV-RANGE",
+          "sensorRef": "fc0d32b0-bfa2-582f-a57d-da965843453a",
+          "roleRef": "chw_flow",
+          "fddSummary": "sensor"
+        }
+      }
+    },
+    {
+      "uuid": "c940c4bb-92c9-5756-a9d6-8f3007688ec1",
+      "tags": [
+        "point",
+        "his",
+        "fdd",
+        "fault_timeline"
+      ],
+      "dis": "CH-1 SV-RANGE fdd+fault_timeline",
+      "units": "",
+      "kind": "Number",
+      "name": "fdd fault_timeline",
+      "equipRef": "CH-1",
+      "weatherStationRef": "",
+      "siteRef": "site-a",
+      "deviceRef": "",
+      "objectId": "",
+      "bacnet": "",
+      "cls": "",
+      "rec": {
+        "uuid": "c940c4bb-92c9-5756-a9d6-8f3007688ec1",
+        "name": "site-a CH-1 SV-RANGE fdd+fault_timeline",
+        "layer": "default",
+        "pointType": "POINT",
+        "attrs": {
+          "dis": "CH-1 SV-RANGE fdd+fault_timeline",
+          "markers": "point,his,fdd,fault_timeline",
+          "class": "",
+          "equipRef": "CH-1",
+          "siteRef": "site-a",
+          "unit": "",
+          "kind": "Number",
+          "ruleRef": "SV-RANGE",
+          "sensorRef": "fc0d32b0-bfa2-582f-a57d-da965843453a"
+        }
+      }
+    }
+  ]
+}

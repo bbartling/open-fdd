@@ -1,6 +1,6 @@
 {
   "name": "open-fdd-nf-app",
-  "version": "5.0.13",
+  "version": "5.0.14",
   "private": true,
   "description": "Open-FDD NF app: hook dependencies (SQL engines for the FDD rule pack).",
   "license": "MIT",

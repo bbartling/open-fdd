@@ -17,36 +17,16 @@ import harness as h
 
 ROOT = h.ROOT
 
-# Rules whose pandas twin and SQL rule are *different algorithms or gates* on this dataset. None of these is a unit
-# problem (their threshold equations were checked in SI: same constants on both sides); they differ by how the
-# operational gate / equipment proof / weather join / fan proof is defined. Keep the set exact: a fix removes an
-# entry, a regression adds one, and either way this test says so. Reasons are grouped by cause.
-# #1541 (one declared scale per column: fractions in, no magnitude guess on either side) removed AHU-SIMUL, CHW-2 and
-# FCU-VALVE-PASS-CLG: their old differences were the SQL element-wise vs pandas series-level percent guess.
-_EDGE = ("SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: "
-         "differs by a few samples at fault edges")
-_PROOF = "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve"
-_WX = "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
-_GATE = "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
-_STARTUP = ("pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has "
-            "no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start "
-            "(0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL")
-_TRIM_REQUESTS = ("three differences: (1) pandas reads role hw-reset-request-sum, the SQL contract and NF role is "
-                  "hot-water-reset-request-sum, so the harness gives pandas no input and it skips; (2) SQL faults at request sum <= "
-                  "request_lo, pandas at < request_lo; (3) pandas applies the hydronic-flow gate with a 600 s startup holdoff. "
-                  "Follow-up: align names and comparison with the owner (see #1582)")
-KNOWN_DIVERGENT = {
-    "AHU-SATDEV": _GATE, "CHW-1": _EDGE, "CHW-NOLOAD-1": _PROOF,
-    "ECON-3": _WX, "ECON-4": _EDGE, "ECON-7": _WX, "FC13-SAT-HIGH": _GATE, "FC14": _GATE, "FC5": _EDGE, "FC6": _GATE, "FC7": _GATE,
-    "FCU-HTG-COIL": _GATE, "FCU-MODE-CYCLE": _EDGE, "HP-1": _GATE,
-    "MECH-OAT-1": _PROOF, "OA-1": _EDGE, "OAT-METEO": _WX,
-    "SV-RATE": "documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances",
-    "TRIM-1": _GATE, "TRIM-4": "pandas skips (missing roles: reset requests); SQL treats absent requests as zero",
-    "VAV-6": _EDGE, "VAV-AHU-LEAVE": _EDGE,
-}
-# #1582: divergences that only appear on the longer stress datasets (tests/parity/stress.py). The 2x3 pytest dataset never
-# reaches the branch that shows them, so they are NOT in KNOWN_DIVERGENT (that set is asserted exactly on 2x3).
-STRESS_ONLY_DIVERGENT = {"TRIM-3": _TRIM_REQUESTS, "VAV-REHEAT": _STARTUP}
+# Known differences live in open_fdd/data/parity_known_differences.json (rule, scope, reason), shipped with the package
+# so downstream apps and stress.py use the same list. Rules whose pandas twin and SQL rule are *different algorithms or
+# gates* on this dataset (none is a unit problem: thresholds were checked in SI). Keep the set exact: a fix removes an
+# entry, a regression adds one, and either way this test says so.
+# scope "all" is asserted exactly on the 2x3 pytest dataset; "stress_only" (#1582) only shows on the longer stress
+# datasets (tests/parity/stress.py), so it is NOT in KNOWN_DIVERGENT.
+from open_fdd.parity import known_differences  # noqa: E402
+
+KNOWN_DIVERGENT = known_differences("all")
+STRESS_ONLY_DIVERGENT = known_differences("stress_only")
 
 
 NO_TWIN = {"AVG-ZONE-TEMP", "FAN-RUNTIME-HOURS", "FAULT-ELAPSED-HOURS", "UTIL-INTERVAL", "UTIL-MONTHLY", "ZONE-COMFORT-PCT"}
@@ -239,13 +219,13 @@ def test_duplicate_role_sensor_series_are_distinct_and_sql_engines_agree(duplica
 
 
 def test_stress_verdict_fails_on_unexpected_divergence_or_short_comparison():
-    import stress
+    from open_fdd.parity.policy import verdict_from_counts as verdict
     known = {"SV-RATE"}
-    assert stress.verdict(70, 70, {"SV-RATE"}, known)["ok"]
-    bad = stress.verdict(70, 70, {"SV-RATE", "SOME-RULE"}, known)
+    assert verdict(70, 70, {"SV-RATE"}, known)["ok"]
+    bad = verdict(70, 70, {"SV-RATE", "SOME-RULE"}, known)
     assert not bad["ok"] and bad["unexpected_rules"] == ["SOME-RULE"] and bad["unexpected"] == 1
-    assert not stress.verdict(0, 70, set(), known)["ok"]
-    assert not stress.verdict(60, 70, set(), known)["ok"]
+    assert not verdict(0, 70, set(), known)["ok"]
+    assert not verdict(60, 70, set(), known)["ok"]
 
 
 # --- #1582 regression fixtures: one tiny SI frame per stress-only divergence ---------------------------------------------

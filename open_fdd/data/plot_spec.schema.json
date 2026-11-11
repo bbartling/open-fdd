@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bbartling.github.io/open-fdd/schemas/plot_spec.schema.json",
+  "title": "Open-FDD plot spec v1",
+  "description": "What to plot, never the values. Selection is model-only; each renderer fetches values for point_uuid + window and draws them. Data is SI; display conversion is the renderer's job (units.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_version", "kind", "rule_id", "preset_id", "site", "equip", "window", "series", "fault_strips", "missing", "selection_reason"],
+  "properties": {
+    "spec_version": { "const": 1 },
+    "kind": { "enum": ["rule", "preset"] },
+    "rule_id": { "type": ["string", "null"] },
+    "preset_id": { "type": ["string", "null"] },
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ref", "tz", "tz_source"],
+      "properties": {
+        "ref": { "type": "string" },
+        "tz": { "type": "string" },
+        "tz_source": { "enum": ["model", "option", "sites", "fallback"] }
+      }
+    },
+    "equip": { "type": "array", "items": { "$ref": "#/$defs/equip" } },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$" },
+        "to": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$" }
+      }
+    },
+    "series": { "type": "array", "items": { "$ref": "#/$defs/series" } },
+    "fault_strips": { "type": "array", "items": { "$ref": "#/$defs/fault_strip" } },
+    "missing": { "type": "array", "items": { "$ref": "#/$defs/missing" } },
+    "selection_reason": { "type": "string" }
+  },
+  "$defs": {
+    "equip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uuid", "ref", "dis", "kind"],
+      "properties": {
+        "uuid": { "type": "string" },
+        "ref": { "type": "string" },
+        "dis": { "type": "string" },
+        "kind": { "type": "string" }
+      }
+    },
+    "series": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["point_uuid", "equip_uuid", "role", "dis", "nav", "tags", "class", "quantity", "unit_si", "kind", "axis", "color_key", "required"],
+      "properties": {
+        "point_uuid": { "type": "string" },
+        "equip_uuid": { "type": ["string", "null"] },
+        "role": { "type": "string" },
+        "dis": { "type": "string" },
+        "nav": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "class": { "type": ["string", "null"] },
+        "quantity": { "type": "string" },
+        "unit_si": { "type": "string" },
+        "kind": { "enum": ["sensor", "sp", "cmd", "status", "weather"] },
+        "axis": { "type": "string" },
+        "color_key": { "type": "integer", "minimum": 0, "maximum": 11 },
+        "required": { "type": "boolean" }
+      }
+    },
+    "fault_strip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "equip_uuid", "point_uuid", "sensor_uuid", "source", "approximate"],
+      "properties": {
+        "rule_id": { "type": "string" },
+        "equip_uuid": { "type": "string" },
+        "point_uuid": { "type": ["string", "null"], "description": "The fault_timeline point (1 fault, 0 ok, null not assessed), else the fault_pct result point, else null." },
+        "sensor_uuid": { "type": ["string", "null"], "description": "The input point a per-sensor sweep strip belongs to; null for any other strip." },
+        "source": { "enum": ["timeline", "fault_pct", "intervals"] },
+        "approximate": { "type": "boolean" }
+      }
+    },
+    "missing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "reason"],
+      "properties": {
+        "role": { "type": "string" },
+        "reason": { "enum": ["unbound", "no_data", "unit_unusable"] }
+      }
+    }
+  }
+}

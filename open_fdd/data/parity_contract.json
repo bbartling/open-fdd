@@ -1,0 +1,380 @@
+{
+ "_doc": "Derived by scripts/nf/sync_pypi_data.py. history_columns = SQL input contract (history table, without equipment_id/timestamp_utc); confirm_min = default confirm delay in minutes per rule.",
+ "history_columns": [
+  {
+   "name": "ahu_sat",
+   "type": "double"
+  },
+  {
+   "name": "building_ahu_load_satisfied",
+   "type": "double"
+  },
+  {
+   "name": "building_zone_load_satisfied",
+   "type": "double"
+  },
+  {
+   "name": "chiller_amps",
+   "type": "double"
+  },
+  {
+   "name": "chiller_cmd",
+   "type": "double"
+  },
+  {
+   "name": "chiller_current",
+   "type": "double"
+  },
+  {
+   "name": "chiller_power",
+   "type": "double"
+  },
+  {
+   "name": "chiller_status",
+   "type": "double"
+  },
+  {
+   "name": "chw_dp",
+   "type": "double"
+  },
+  {
+   "name": "chw_dp_sp",
+   "type": "double"
+  },
+  {
+   "name": "chw_flow",
+   "type": "double"
+  },
+  {
+   "name": "chw_pump_cmd",
+   "type": "double"
+  },
+  {
+   "name": "chw_pump_status",
+   "type": "double"
+  },
+  {
+   "name": "chw_reset_request_sum",
+   "type": "double"
+  },
+  {
+   "name": "chw_return_t",
+   "type": "double"
+  },
+  {
+   "name": "chw_supply_sp",
+   "type": "double"
+  },
+  {
+   "name": "chw_supply_t",
+   "type": "double"
+  },
+  {
+   "name": "clg_available",
+   "type": "double"
+  },
+  {
+   "name": "clg_valve_pct",
+   "type": "double"
+  },
+  {
+   "name": "compressor_status",
+   "type": "double"
+  },
+  {
+   "name": "cooling_coil_entering_temp",
+   "type": "double"
+  },
+  {
+   "name": "cooling_coil_leaving_temp",
+   "type": "double"
+  },
+  {
+   "name": "cooling_sp",
+   "type": "double"
+  },
+  {
+   "name": "cw_pump_cmd",
+   "type": "double"
+  },
+  {
+   "name": "cw_return_t",
+   "type": "double"
+  },
+  {
+   "name": "cw_supply_t",
+   "type": "double"
+  },
+  {
+   "name": "damper_cmd",
+   "type": "double"
+  },
+  {
+   "name": "damper_pct",
+   "type": "double"
+  },
+  {
+   "name": "duct_static",
+   "type": "double"
+  },
+  {
+   "name": "duct_static_sp",
+   "type": "double"
+  },
+  {
+   "name": "electric_kw",
+   "type": "double"
+  },
+  {
+   "name": "electric_kwh",
+   "type": "double"
+  },
+  {
+   "name": "fan_cmd",
+   "type": "double"
+  },
+  {
+   "name": "fan_status",
+   "type": "double"
+  },
+  {
+   "name": "heating_coil_entering_temp",
+   "type": "double"
+  },
+  {
+   "name": "heating_coil_leaving_temp",
+   "type": "double"
+  },
+  {
+   "name": "heating_sp",
+   "type": "double"
+  },
+  {
+   "name": "htg_valve_pct",
+   "type": "double"
+  },
+  {
+   "name": "hw_reset_request_sum",
+   "type": "double"
+  },
+  {
+   "name": "hw_return_t",
+   "type": "double"
+  },
+  {
+   "name": "hw_supply_t",
+   "type": "double"
+  },
+  {
+   "name": "kwh",
+   "type": "double"
+  },
+  {
+   "name": "loop_enabled",
+   "type": "double"
+  },
+  {
+   "name": "ma_h",
+   "type": "double"
+  },
+  {
+   "name": "mat",
+   "type": "double"
+  },
+  {
+   "name": "min_flow_sp",
+   "type": "double"
+  },
+  {
+   "name": "oa_damper_pct",
+   "type": "double"
+  },
+  {
+   "name": "oa_h",
+   "type": "double"
+  },
+  {
+   "name": "oa_t",
+   "type": "double"
+  },
+  {
+   "name": "occ_mode",
+   "type": "text"
+  },
+  {
+   "name": "preheat_leave_t",
+   "type": "double"
+  },
+  {
+   "name": "pump_status",
+   "type": "double"
+  },
+  {
+   "name": "ra_h",
+   "type": "double"
+  },
+  {
+   "name": "rat",
+   "type": "double"
+  },
+  {
+   "name": "reheat_valve_pct",
+   "type": "double"
+  },
+  {
+   "name": "return_fan",
+   "type": "double"
+  },
+  {
+   "name": "sa_h",
+   "type": "double"
+  },
+  {
+   "name": "sat",
+   "type": "double"
+  },
+  {
+   "name": "sat_sp",
+   "type": "double"
+  },
+  {
+   "name": "static_reset_request",
+   "type": "double"
+  },
+  {
+   "name": "tower_fan_cmd",
+   "type": "double"
+  },
+  {
+   "name": "vav_discharge_t",
+   "type": "double"
+  },
+  {
+   "name": "vav_inlet_t",
+   "type": "double"
+  },
+  {
+   "name": "vav_total_flow",
+   "type": "double"
+  },
+  {
+   "name": "web_oa_dp",
+   "type": "double"
+  },
+  {
+   "name": "web_oa_h",
+   "type": "double"
+  },
+  {
+   "name": "web_oa_t",
+   "type": "double"
+  },
+  {
+   "name": "web_wb_t",
+   "type": "double"
+  },
+  {
+   "name": "zone_air_temp_sp",
+   "type": "double"
+  },
+  {
+   "name": "zone_airflow_sp",
+   "type": "double"
+  },
+  {
+   "name": "zone_co2",
+   "type": "double"
+  },
+  {
+   "name": "zone_flow",
+   "type": "double"
+  },
+  {
+   "name": "zone_rh",
+   "type": "double"
+  },
+  {
+   "name": "zone_t",
+   "type": "double"
+  }
+ ],
+ "confirm_min": {
+  "AHU-DUCTHI": 5.0,
+  "AHU-SATDEV": 10.0,
+  "AHU-SIMUL": 5.0,
+  "AVG-ZONE-TEMP": 0.0,
+  "CHW-1": 15.0,
+  "CHW-2": 5.0,
+  "CHW-3": 5.0,
+  "CHW-4": 5.0,
+  "CHW-NOLOAD-1": 30.0,
+  "CMD-1": 10.0,
+  "CW-APR-1": 15.0,
+  "CW-FAN-1": 15.0,
+  "CW-OPT-1": 15.0,
+  "DMP-1": 15.0,
+  "ECON-1": 10.0,
+  "ECON-2": 5.0,
+  "ECON-3": 5.0,
+  "ECON-4": 10.0,
+  "ECON-5": 10.0,
+  "ECON-6": 10.0,
+  "ECON-7": 10.0,
+  "FAN-RUNTIME-HOURS": 0.0,
+  "FAULT-ELAPSED-HOURS": 0.0,
+  "FC1": 5.0,
+  "FC10": 10.0,
+  "FC11": 10.0,
+  "FC12": 10.0,
+  "FC13-SAT-HIGH": 10.0,
+  "FC14": 10.0,
+  "FC15": 10.0,
+  "FC2": 10.0,
+  "FC3": 10.0,
+  "FC4": 60.0,
+  "FC5": 10.0,
+  "FC6": 10.0,
+  "FC7": 10.0,
+  "FC8": 10.0,
+  "FC9": 10.0,
+  "FCU-CLG-COIL": 15.0,
+  "FCU-CO2-DAMPER": 15.0,
+  "FCU-DAMPER-POS": 15.0,
+  "FCU-DEADBAND": 0.0,
+  "FCU-HTG-COIL": 15.0,
+  "FCU-MODE-CYCLE": 0.0,
+  "FCU-SENSOR-NULL": 0.0,
+  "FCU-VALVE-PASS-CLG": 15.0,
+  "FCU-VALVE-PASS-HTG": 15.0,
+  "HP-1": 10.0,
+  "MECH-OAT-1": 10.0,
+  "OA-1": 15.0,
+  "OAT-METEO": 15.0,
+  "PID-HUNT-1": 0.0,
+  "RESET-1": 15.0,
+  "SCHED-1": 30.0,
+  "SCHED-247": 60.0,
+  "SV-FLATLINE": 5.0,
+  "SV-RANGE": 5.0,
+  "SV-RATE": 10.0,
+  "SV-SPIKE": 5.0,
+  "SV-STALE": 5.0,
+  "TRIM-1": 30.0,
+  "TRIM-3": 30.0,
+  "TRIM-4": 30.0,
+  "UTIL-INTERVAL": 0.0,
+  "UTIL-MONTHLY": 0.0,
+  "VAV-1": 15.0,
+  "VAV-2": 15.0,
+  "VAV-3": 5.0,
+  "VAV-4": 15.0,
+  "VAV-5": 15.0,
+  "VAV-6": 15.0,
+  "VAV-7": 15.0,
+  "VAV-AHU-LEAVE": 15.0,
+  "VAV-REHEAT": 15.0,
+  "VLV-1": 15.0,
+  "WX-1": 5.0,
+  "ZONE-COMFORT-PCT": 0.0
+ }
+}

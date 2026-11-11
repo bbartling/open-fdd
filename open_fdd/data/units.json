@@ -1,0 +1,732 @@
+{
+  "_doc": "Quantity -> SI unit, accepted unit spellings and display conversions. Data reaching a renderer is always SI; convert for display only, with value * mul + add. Spellings are matched after the same normalisation as nf-app/static/units.js (trim, lower-case, drop spaces and underscores, 2-subscript to 2, masculine ordinal to degree). ingest: si = value * to_si.mul + to_si.add. An alias quantity named in refine (pressure, flow, percent) is refined by the point's markers; any other is the quantity itself.",
+  "version": 1,
+  "quantities": {
+    "temperature": {
+      "family": "temperature",
+      "si": "°C",
+      "axis": "temp",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "°C",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "°F",
+          "mul": 1.8,
+          "add": 32
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "°C"
+      }
+    },
+    "temperature_delta": {
+      "family": "temperature",
+      "si": "Δ°C",
+      "axis": "temp_delta",
+      "kind": "difference",
+      "display": {
+        "si": {
+          "unit": "Δ°C",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "Δ°F",
+          "mul": 1.8,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "deltaFromSI",
+        "si": "°C"
+      }
+    },
+    "temperature_rate": {
+      "family": "temperature",
+      "si": "Δ°C/h",
+      "axis": "temp_rate",
+      "kind": "rate",
+      "display": {
+        "si": {
+          "unit": "Δ°C/h",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "Δ°F/h",
+          "mul": 1.8,
+          "add": 0
+        }
+      },
+      "units_js": null,
+      "note": "temperature rate of change (SV-RATE style); a difference per hour, so scale only"
+    },
+    "pressure_air": {
+      "family": "pressure",
+      "si": "Pa",
+      "axis": "pressure",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "Pa",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "inH₂O",
+          "mul": 0.004014630920928231,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "Pa"
+      }
+    },
+    "pressure_water": {
+      "family": "pressure",
+      "si": "Pa",
+      "axis": "pressure",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "Pa",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "psi",
+          "mul": 0.00014503774389728312,
+          "add": 0
+        }
+      },
+      "units_js": null,
+      "note": "units.js converts every pressure to inH2O; hydronic pressure reads in psi, so this is new"
+    },
+    "flow_air": {
+      "family": "flow",
+      "si": "L/s",
+      "axis": "flow",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "L/s",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "cfm",
+          "mul": 2.1188801972423197,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "L/s"
+      }
+    },
+    "flow_water": {
+      "family": "flow",
+      "si": "L/s",
+      "axis": "flow",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "L/s",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "gpm",
+          "mul": 15.85032223705108,
+          "add": 0
+        }
+      },
+      "units_js": null,
+      "note": "units.js converts every flow to cfm; water flow reads in gpm, so this is new"
+    },
+    "power": {
+      "family": "power",
+      "si": "kW",
+      "axis": "power",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "kW",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "kW",
+          "mul": 1,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "kW"
+      }
+    },
+    "energy": {
+      "family": "energy",
+      "si": "kWh",
+      "axis": "energy",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "kWh",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "kWh",
+          "mul": 1,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "kWh"
+      }
+    },
+    "percent": {
+      "family": "percent",
+      "si": "%",
+      "axis": "percent",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "%",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "%",
+          "mul": 1,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "%"
+      }
+    },
+    "humidity": {
+      "family": "percent",
+      "si": "%",
+      "axis": "percent",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "%",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "%",
+          "mul": 1,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "%"
+      },
+      "note": "relative humidity, 0-100; a percent point carrying the humidity marker"
+    },
+    "fraction": {
+      "family": "fraction",
+      "si": "",
+      "axis": "fraction",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "",
+          "mul": 1,
+          "add": 0
+        }
+      },
+      "units_js": null,
+      "note": "unitless 0-1; only for a point with no declared unit whose role scale is fraction"
+    },
+    "boolean": {
+      "family": "boolean",
+      "si": "",
+      "axis": "bool",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "",
+          "mul": 1,
+          "add": 0
+        }
+      },
+      "units_js": null,
+      "note": "0/1 status; a Bool point with no declared unit"
+    },
+    "concentration": {
+      "family": "concentration",
+      "si": "ppm",
+      "axis": "other",
+      "kind": "absolute",
+      "display": {
+        "si": {
+          "unit": "ppm",
+          "mul": 1,
+          "add": 0
+        },
+        "imperial": {
+          "unit": "ppm",
+          "mul": 1,
+          "add": 0
+        }
+      },
+      "units_js": {
+        "fn": "fromSI",
+        "si": "ppm"
+      }
+    }
+  },
+  "aliases": [
+    {
+      "names": [
+        "°C",
+        "degC",
+        "C",
+        "celsius",
+        "deg_c",
+        "degrees-celsius"
+      ],
+      "quantity": "temperature",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "°F",
+        "degF",
+        "F",
+        "fahrenheit",
+        "deg_f",
+        "degrees-fahrenheit"
+      ],
+      "quantity": "temperature",
+      "to_si": {
+        "mul": 0.5555555555555556,
+        "add": -17.77777777777778
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "K",
+        "kelvin"
+      ],
+      "quantity": "temperature",
+      "to_si": {
+        "mul": 1,
+        "add": -273.15
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "Δ°C",
+        "ΔK",
+        "delta-degC",
+        "delta-K"
+      ],
+      "quantity": "temperature_delta",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": false
+    },
+    {
+      "names": [
+        "Δ°F",
+        "delta-degF"
+      ],
+      "quantity": "temperature_delta",
+      "to_si": {
+        "mul": 0.5555555555555556,
+        "add": 0
+      },
+      "units_js": false
+    },
+    {
+      "names": [
+        "Δ°C/h",
+        "K/h",
+        "delta-degC/h"
+      ],
+      "quantity": "temperature_rate",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": false
+    },
+    {
+      "names": [
+        "Δ°F/h",
+        "delta-degF/h"
+      ],
+      "quantity": "temperature_rate",
+      "to_si": {
+        "mul": 0.5555555555555556,
+        "add": 0
+      },
+      "units_js": false
+    },
+    {
+      "names": [
+        "Pa",
+        "pascal",
+        "pascals"
+      ],
+      "quantity": "pressure",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "kPa",
+        "kilopascals"
+      ],
+      "quantity": "pressure",
+      "to_si": {
+        "mul": 1000,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "inH2O",
+        "inH20",
+        "inWC",
+        "in wc",
+        "in. w.c.",
+        "inH₂O",
+        "\"wc",
+        "in_h2o",
+        "inches of water",
+        "inches-of-water",
+        "iwc"
+      ],
+      "quantity": "pressure",
+      "to_si": {
+        "mul": 249.0889,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "psi",
+        "psig",
+        "psid"
+      ],
+      "quantity": "pressure",
+      "to_si": {
+        "mul": 6894.757,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "bar"
+      ],
+      "quantity": "pressure",
+      "to_si": {
+        "mul": 100000.0,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "L/s",
+        "lps",
+        "L/sec",
+        "liters/second",
+        "litres/second",
+        "liters per second",
+        "litres per second",
+        "liters-per-second"
+      ],
+      "quantity": "flow",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "m³/s",
+        "m3/s"
+      ],
+      "quantity": "flow",
+      "to_si": {
+        "mul": 1000,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "m³/h",
+        "m3/h",
+        "cmh"
+      ],
+      "quantity": "flow",
+      "to_si": {
+        "mul": 0.2777777777777778,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "cfm",
+        "ft³/min",
+        "ft3/min",
+        "cubic-feet-per-minute"
+      ],
+      "quantity": "flow",
+      "to_si": {
+        "mul": 0.4719474,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "gpm",
+        "gal/min"
+      ],
+      "quantity": "flow",
+      "to_si": {
+        "mul": 0.0630902,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "kW"
+      ],
+      "quantity": "power",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "W"
+      ],
+      "quantity": "power",
+      "to_si": {
+        "mul": 0.001,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "MW"
+      ],
+      "quantity": "power",
+      "to_si": {
+        "mul": 1000,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "Btu/h",
+        "btuh",
+        "btu/hr"
+      ],
+      "quantity": "power",
+      "to_si": {
+        "mul": 0.00029307107,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "ton",
+        "tons",
+        "tonref",
+        "tr"
+      ],
+      "quantity": "power",
+      "to_si": {
+        "mul": 3.5168525,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "hp"
+      ],
+      "quantity": "power",
+      "to_si": {
+        "mul": 0.7456999,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "kWh"
+      ],
+      "quantity": "energy",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "Wh"
+      ],
+      "quantity": "energy",
+      "to_si": {
+        "mul": 0.001,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "MWh"
+      ],
+      "quantity": "energy",
+      "to_si": {
+        "mul": 1000,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "kBtu"
+      ],
+      "quantity": "energy",
+      "to_si": {
+        "mul": 0.29307107,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "MMBtu"
+      ],
+      "quantity": "energy",
+      "to_si": {
+        "mul": 293.07107,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "therm",
+        "therms"
+      ],
+      "quantity": "energy",
+      "to_si": {
+        "mul": 29.307107,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "%",
+        "%RH",
+        "percent",
+        "pct",
+        "percent-relative-humidity"
+      ],
+      "quantity": "percent",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": true
+    },
+    {
+      "names": [
+        "ppm"
+      ],
+      "quantity": "concentration",
+      "to_si": {
+        "mul": 1,
+        "add": 0
+      },
+      "units_js": true
+    }
+  ],
+  "refine": {
+    "pressure": {
+      "marker": "water",
+      "yes": "pressure_water",
+      "no": "pressure_air"
+    },
+    "flow": {
+      "marker": "water",
+      "yes": "flow_water",
+      "no": "flow_air"
+    },
+    "percent": {
+      "marker": "humidity",
+      "yes": "humidity",
+      "no": "percent"
+    }
+  },
+  "role_scales": {
+    "fraction": "fraction",
+    "boolean": "boolean",
+    "percent_rh": "humidity"
+  },
+  "display_systems": [
+    "si",
+    "imperial"
+  ],
+  "default_display_system": "imperial"
+}
