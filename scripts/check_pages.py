@@ -89,6 +89,11 @@ def local_target(site: Path, source: Path, raw: str) -> tuple[Path | None, str]:
         target = site / path.lstrip("/")
     else:
         target = (source.parent / path).resolve()
+    target = target.resolve()
+    try:
+        target.relative_to(site)
+    except ValueError:
+        return site / "__outside_site__", unquote(url.fragment)
     if target.is_dir() or not target.suffix:
         target = target / "index.html"
     return target, unquote(url.fragment)

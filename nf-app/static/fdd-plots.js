@@ -422,8 +422,11 @@
       const pts = sensors.map((s) => s.p);
       const [avg, min, max, count] = await Promise.all(["AVERAGE", "MIN", "MAX", "COUNT"]
         .map((method) => ctx.series(pts, { windowSec: 3600, method })));
-      const now = hourFloor(Date.now());
-      const grid = Array.from({ length: ctx.hours }, (_, i) => now - (ctx.hours - 1 - i) * HOUR);
+      const bounds = ctx.range?.resolvedBounds;
+      const hasRange = Number.isFinite(bounds?.fromMs) && Number.isFinite(bounds?.toMs) && bounds.toMs > bounds.fromMs;
+      const firstHour = hasRange ? hourFloor(bounds.fromMs) : hourFloor(Date.now()) - (ctx.hours - 1) * HOUR;
+      const lastHour = hasRange ? hourFloor(bounds.toMs - 1) : hourFloor(Date.now());
+      const grid = Array.from({ length: Math.floor((lastHour - firstHour) / HOUR) + 1 }, (_, i) => firstHour + i * HOUR);
       const stale = svParam(ctx, "SV-STALE", "stale_hours", 2), tol = svParam(ctx, "SV-FLATLINE", "flatline_tol", 0.055556);
       const rows = sensors.map(({ role, p }) => ({
         label: `${role} · ${p.dis || p.name}`,

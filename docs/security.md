@@ -6,7 +6,7 @@ nav_order: 15
 # Security
 
 Open-FDD runs inside Normal Framework and uses NF for authentication, point data, and history. It is designed for
-trusted building networks and approved remote access; do not expose an unauthenticated NF console to the public
+trusted building networks and approved remote access. Do not expose an unauthenticated NF console to the public
 internet.
 
 ## Credentials and access
@@ -14,7 +14,7 @@ internet.
 - Store console credentials and database secrets outside the repository.
 - A Normal Online API key can read data but cannot install or deploy the app.
 - Use TLS with a trusted certificate for remote access. Do not disable certificate verification.
-- The optional Caddy front door can protect console and write routes; follow the short guidance in
+- The optional Caddy front door can protect console and write routes. Follow the short guidance in
   [Install](install.html) and the repository's deploy/nf-caddy README.
 - Open-FDD writes its own result points and weather variables. It does not write to field devices.
 

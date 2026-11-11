@@ -37,6 +37,7 @@ test("Lite history views use shared range controls and keep overview samples bou
   assert.match(app, /read !== sparkRangeRead/);
   assert.match(app, /read !== pointHistoryRead/);
   assert.match(app, /renderRangeControl\(\$\("chartRange"\)/);
+  assert.match(app, /q\.set\("range\.lite\.chart", chartRange\.preset\)/);
   assert.match(page, /renderRangeControl\(\$\("range"\)/);
   assert.doesNotMatch(app, /SPARK_HOURS/);
   assert.match(read("static/index.html"), /id="sparkRange"/);
@@ -60,7 +61,7 @@ test("Lite chart range helpers encode URL state, resolve presets and chunk bound
       return { data: [...new URL(url, "https://nf.example.test").searchParams.getAll("uuids")].map((uuid) => ({ uuid, values: [] })) };
     },
   });
-  const api = runInContext(`${read("static/charts.js")}\n;({ getChartRangeState, setChartRangeState, resolveChartRange, dateTimeInputValue, dateTimeInputMs, chartTimeParts, chartTimeLabel, timeAxis, fetchRange })`, context);
+  const api = runInContext(`${read("static/charts.js")}\n;({ getChartRangeState, setChartRangeState, resolveChartRange, dateTimeInputValue, dateTimeInputMs, chartTimeParts, chartTimeLabel, timeAxis, fetchRange, fetchSeries })`, context);
   api.setChartRangeState("lite.chart", { preset: "custom", fromMs: 1000, toMs: 9000 });
   assert.deepEqual({
     preset: api.getChartRangeState("lite.chart").preset,
@@ -80,6 +81,8 @@ test("Lite chart range helpers encode URL state, resolve presets and chunk bound
   assert.equal(calls.length, 3);
   assert.ok(calls.every((url) => new URL(url, "https://nf.example.test").searchParams.getAll("uuids").length <= 40));
   assert.ok(calls.every((url) => /count=10000/.test(url) && /reverse=false/.test(url)));
+  const year = await api.fetchSeries([{ uuid: "long-history" }], { preset: "custom", fromMs: Date.now() - 365 * 86400000, toMs: Date.now() });
+  assert.ok(year.windowSec > 86400, `All/custom range should choose coarse target-based bins, got ${year.windowSec}s`);
 });
 
 test("manifest: the app id is the slug of the name (NF derives the id from the name)", () => {

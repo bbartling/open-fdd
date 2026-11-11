@@ -294,20 +294,22 @@
   }
 
   async function run() {
-    const { model, scope } = st.cur;
-    const revision = st.revision;
-    const selected = st.rows.filter((r) => st.selected.has(r.p.uuid));
-    const resolved = await root.resolveChartSelection(selected.map((r) => r.p), root.getChartRangeState("export"), { siteTz: siteTimeZone() });
-    if (revision !== st.revision) { $("exStatus").textContent = "Export cancelled because its range or selection changed."; return; }
-    st.bounds = resolved.resolvedBounds;
-    const { startMs, endMs } = readRange();
-    const windowSec = windowFor($("exRes").value);
-    const sel = st.rows.filter((r) => st.selected.has(r.p.uuid));
-    const err = validate({ nPoints: sel.length, startMs, endMs, windowSec });
-    if (err) { $("exStatus").textContent = err; return; }
+    if (st.busy) return;
     st.busy = true;
     $("exGo").disabled = true;
     try {
+      const { model, scope } = st.cur;
+      const revision = st.revision;
+      const selected = st.rows.filter((r) => st.selected.has(r.p.uuid));
+      $("exStatus").textContent = "Resolving history range…";
+      const resolved = await root.resolveChartSelection(selected.map((r) => r.p), root.getChartRangeState("export"), { siteTz: siteTimeZone() });
+      if (revision !== st.revision) throw new Error("cancelled because the range or selection changed");
+      st.bounds = resolved.resolvedBounds;
+      const { startMs, endMs } = readRange();
+      const windowSec = windowFor($("exRes").value);
+      const sel = st.rows.filter((r) => st.selected.has(r.p.uuid));
+      const err = validate({ nPoints: sel.length, startMs, endMs, windowSec });
+      if (err) { $("exStatus").textContent = err; return; }
       // NF clips source samples to the requested exact start and end; edge buckets retain only those samples.
       const from = startMs;
       const data = await collect({
@@ -349,7 +351,7 @@
       if (t.checked) st.selected.add(id); else st.selected.delete(id);
       refreshRange();
     });
-    $("exGo").addEventListener("click", () => run());
+    $("exGo").addEventListener("click", () => { run().catch((e) => { $("exStatus").textContent = `export failed: ${e.message}`; }); });
   }
 
   /** Draw/refresh the Export tab for the current scope ({ model, scope }). */

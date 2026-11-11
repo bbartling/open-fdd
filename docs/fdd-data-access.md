@@ -6,7 +6,7 @@ nav_order: 11
 # NF API reference
 
 Open-FDD uses the Normal Framework API. Results are ordinary NF points. This page describes generic read routes and
-the Open-FDD result shape; use the NF documentation for routes not listed here.
+the Open-FDD result shape. Use the NF documentation for routes not listed here.
 
 Set the base URL and credentials in your local environment. Do not place credentials in a URL or commit them:
 
@@ -38,13 +38,13 @@ Query point metadata and current values. A query body selects a layer and uses s
 }
 ```
 
-One marker is used per clause. Use the model layer for site, equipment, and device records; default combines layers
-and exposes current values. The supported pager uses `pageOffset` with `totalCount`; it does not use a
+One marker is used per clause. Use the model layer for site, equipment, and device records. The default layer combines records
+and exposes current values. The supported pager uses `pageOffset` with `totalCount`. It does not use a
 `nextPageToken`. Open-FDD reads every page and rejects repeated records.
 
 ### GET /api/v1/equipment/classes
 
-Returns the NF class vocabulary. The result can be paged; query parameters accepted by the installed NF version are
+Returns the NF class vocabulary. The result can be paged. Query parameters accepted by the installed NF version are
 authoritative. Open-FDD uses classes and Haystack markers to bind points to named roles. See [Modeling](modeling.html).
 
 ## Point history
@@ -53,16 +53,16 @@ authoritative. Open-FDD uses classes and Haystack markers to bind points to name
 
 Read resampled point history. Common query fields include repeated `uuids`, `from`, `to`, `window`, and
 `method`. The response contains timestamps and values keyed by point id. Supported aggregation methods depend on
-NF; Open-FDD uses averages for signals and maxima for fault timelines.
+NF. Open-FDD uses averages for signals and maxima for fault timelines.
 
-Use bounded requests: batch point ids and split long ranges into time chunks. The app limits request URL size and
-pages range reads where supported. A missing timestamp means no sample; it is not a zero. The NF API and the
+Use bounded requests. Batch point ids and split long ranges into time chunks. The app limits request URL size and
+pages range reads where supported. A missing timestamp means no sample. It is not a zero. The NF API and the
 [Python client](python-tools.html) provide the response envelopes for your NF release.
 
 ## Open-FDD result points
 
 The hourly Full FDD hook writes one equipment summary per rule and, for sensor sweeps, one row per assessed sensor.
-Result points use fault or metric markers and carry attributes such as:
+Result points use fault or metric markers and carry attributes such as those below.
 
 | Attribute | Meaning |
 |---|---|
@@ -73,14 +73,14 @@ Result points use fault or metric markers and carry attributes such as:
 | `sensorRef`, `roleRef` | Sensor UUID and role on a per-sensor result |
 | `fddSensorFaultHours` | Per-sensor hours included on the equipment summary |
 
-No coverage is not healthy: status is not-assessed and there is no numeric fault value. Stale means the current run
-could not refresh the point; it does not erase earlier history.
+With no coverage, status is not-assessed and there is no numeric fault value. Stale means the current run
+could not refresh the point. It does not erase earlier history.
 
 ### Query current fault status
 
 Use point/query with clauses for the fault result markers. Read `attrs.fddStatus`, `attrs.ruleRef`,
 `attrs.siteRef`, and `attrs.equipRef`. Treat `not-assessed` and `stale` as unknown, not healthy. The numeric
-latest value is expressed in the point's declared unit; fault percentage uses the 0–100 scale.
+latest value is expressed in the point's declared unit. Fault percentage uses the 0–100 scale.
 
 ### Read fault timelines
 
@@ -90,9 +90,9 @@ The series records 1 when a fault is confirmed and 0 when assessed healthy. A mi
 
 ## Hook routes
 
-NF exposes app hooks under `/api/v1/apps/{app-id}/hooks/{hook-name}`. POST to a hook route to start a run; read
+NF exposes app hooks under `/api/v1/apps/{app-id}/hooks/{hook-name}`. POST to a hook route to start a run. Read
 results from its `/runs?include_results=true` route. The browser/app uses the scheduled Full hooks for FDD and
-weather; the SPARQL hook is on request. A successful HTTP response means NF accepted the run; inspect run status and
+weather. The SPARQL hook is on request. A successful HTTP response means NF accepted the run. Inspect run status and
 results before treating it as complete.
 
 ## Timescale copy

@@ -76,12 +76,14 @@ const rangeHours = (range) => typeof range === "number" ? range
   : range?.preset === "1h" ? 1 : range?.preset === "24h" ? 24 : range?.preset === "1w" ? 168
     : range?.preset === "custom" ? Math.max(1, (range.toMs - range.fromMs) / 3600e3) : 168;
 const pickWindow = (hours, target = 360) => WINDOWS.find((w) => (rangeHours(hours) * 3600) / w <= target) || 86400;
+const windowLabel = (seconds) => seconds >= 3600 ? `${+(seconds / 3600).toFixed(1)} h` : `${+(seconds / 60).toFixed(1)} min`;
 
 const seriesCache = new Map();  // url -> { at, promise }
 const CACHE_MS = 60e3;
 // Leave room for fixed query parameters and request headers under NF's ~8 KB front-door limit.
 const HISTORY_URL_BUDGET = 6000;
 const HISTORY_UUID_BATCH = 40;
+/** @typedef {Map<any, any> & {windowSec: number}} HistorySeriesMap */
 
 // A chart range is stored as absolute instants in the page URL. Date-time inputs are
 // formatted and parsed in the site's IANA timezone, not the browser's local timezone.
@@ -167,7 +169,7 @@ function renderRangeControl(container, opts = {}) {
       const toInput = /** @type {HTMLInputElement} */ (container.querySelector("[data-range-to]"));
       const toMs = dateTimeInputMs(toInput.value, tz);
       if (Number.isFinite(fromMs) && fromMs < toMs) applyState({ preset: "custom", fromMs, toMs });
-      else toInput.setCustomValidity("End must be after start");
+      else { toInput.setCustomValidity("Enter valid site-local times with end after start"); toInput.reportValidity(); }
     }
   };
   container.oninput = (/** @type {Event} */ event) => /** @type {HTMLInputElement} */ (event.target).setCustomValidity?.("");
@@ -201,19 +203,30 @@ function historyChunks(list, from, to, windowSec, method) {
  * uuid -> [[ms, value], ...] for `list` over the last `hours`, one value per window.
  * UUIDs are grouped into bounded requests; repeat calls within a minute reuse each chunk answer.
  */
-async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWindow(hours), endMs = null, fromMs = null } = {}) {
-  if (typeof hours === "object" && hours) return (await fetchRange(list, hours, { method, windowSec })).series;
-  const out = new Map(list.map((p) => [p.uuid, []]));
+/** @returns {Promise<HistorySeriesMap>} */
+async function fetchSeries(list, hours, opts = {}) {
+  const method = opts.method || "AVERAGE";
+  const windowSec = opts.windowSec ?? (typeof hours === "number" ? pickWindow(hours) : null);
+  if (typeof hours === "object" && hours) {
+    const result = await fetchRange(list, hours, { ...opts, method, ...(windowSec == null ? {} : { windowSec }) });
+    const series = /** @type {HistorySeriesMap} */ (result.series);
+    series.windowSec = result.windowSec;
+    return series;
+  }
+  const endMs = opts.endMs ?? null, fromMs = opts.fromMs ?? null;
+  const effectiveWindowSec = windowSec || pickWindow(hours);
+  const out = /** @type {HistorySeriesMap} */ (new Map(list.map((p) => [p.uuid, []])));
+  out.windowSec = effectiveWindowSec;
   if (!list.length) return out;
   // Round the end to the window so repeat views share a cache entry. endMs (window-aligned) lets a
   // caller walk a long span back in chunks (rcx.js alignedFine).
-  const end = endMs != null ? endMs : Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
+  const end = endMs != null ? endMs : Math.ceil(Date.now() / (effectiveWindowSec * 1e3)) * effectiveWindowSec * 1e3;
   const from = new Date(fromMs == null ? end - hours * 3600e3 : fromMs).toISOString(), to = new Date(end).toISOString();
-  const chunks = historyChunks(list, from, to, windowSec, method);
+  const chunks = historyChunks(list, from, to, effectiveWindowSec, method);
   // A small fixed concurrency bounds load while keeping 709-sensor views practical.
   for (let base = 0; base < chunks.length; base += 4) {
     const responses = await Promise.all(chunks.slice(base, base + 4).map((chunk) => {
-      const url = historyUrl(chunk, from, to, windowSec, method);
+      const url = historyUrl(chunk, from, to, effectiveWindowSec, method);
       let hit = seriesCache.get(url);
       if (!hit || Date.now() - hit.at > CACHE_MS) {
         hit = { at: Date.now(), promise: api(url) };
@@ -370,7 +383,7 @@ const CHARTS = [
       const temps = c.cards.filter(isTemp);
       const s = await fetchSeries(temps, hours);
       return {
-        hint: `${temps.length} points · ${pickWindow(hours) / 60} min averages`,
+        hint: `${temps.length} points · ${windowLabel(s.windowSec)} averages`,
         option: {
           color: PALETTE, tooltip: rangeTooltip(c.siteTz), legend, grid: { left: 50, right: 20, top: 36, bottom: 60 },
           xAxis: timeAxis(c.siteTz),
@@ -416,7 +429,8 @@ const CHARTS = [
     defaultPick: (c) => (c.cards.find((p) => has(p, "discharge", "air", "temp")) || c.cards[0])?.uuid,
     async build(c, hours, opt) {
       const p = c.cards.find((x) => x.uuid === opt.point) || c.cards[0];
-      const arr = (await fetchSeries([p], hours, { windowSec: 3600 })).get(p.uuid);
+      const history = await fetchSeries([p], hours, { windowSec: 3600, preserveWindow: true });
+      const arr = history.get(p.uuid);
       const days = [];
       const data = arr.map(([t, v]) => {
         const day = localDay(t, c.siteTz);
@@ -425,7 +439,7 @@ const CHARTS = [
       });
       const vals = data.map((d) => d[2]);
       return {
-        hint: `${p.dis} · hourly averages, local time`,
+        hint: `${p.dis} · ${windowLabel(history.windowSec)} averages, site time`,
         option: {
           tooltip: { position: "top", backgroundColor: LT.tipBg, borderColor: LT.axisLine, textStyle: { color: LT.tipText },
             formatter: (x) => `${days[x.value[1]]} ${x.value[0]}:00<br><b>${x.value[2]} ${unitLabel(p.units)}</b>` },
@@ -451,10 +465,10 @@ const CHARTS = [
       // Hourly MIN / MAX / AVERAGE from NF, folded into local days here (NF's daily
       // windows are UTC-aligned). 3 small requests instead of every raw sample.
       const [lo, hi, avg] = await Promise.all(["MIN", "MAX", "AVERAGE"].map((method) =>
-        fetchSeries(temps, hours, { method, windowSec: 3600 })));
+        fetchSeries(temps, hours, { method, windowSec: 3600, preserveWindow: true })));
       const days = [...byDay(avg.get(temps[0].uuid) || [], c.siteTz).keys()];
       return {
-        hint: "hourly MIN / MAX / AVERAGE from NF, grouped by local day",
+        hint: `${windowLabel(avg.windowSec)} MIN / MAX / AVERAGE from NF, grouped by site day`,
         option: {
           color: PALETTE, legend,
           tooltip: { trigger: "item", backgroundColor: LT.tipBg, borderColor: LT.axisLine, textStyle: { color: LT.tipText },
@@ -486,10 +500,10 @@ const CHARTS = [
     applies: (c) => c.status.length > 0,
     async build(c, hours) {
       // Hourly AVERAGE of a 0/1 point = fraction of that hour it was on.
-      const s = await fetchSeries(c.status, hours, { windowSec: 3600 });
+      const s = await fetchSeries(c.status, hours, { windowSec: 3600, preserveWindow: true });
       const days = [...byDay(s.get(c.status[0].uuid) || [], c.siteTz).keys()];
       return {
-        hint: "from hourly averages of each Bool point",
+        hint: `from ${windowLabel(s.windowSec)} averages of each Bool point`,
         option: {
           color: PALETTE, legend, tooltip: { ...tooltip, valueFormatter: (v) => `${fmt(v)} h` },
           grid: { left: 50, right: 20, top: 36, bottom: 30 },
@@ -516,7 +530,7 @@ const CHARTS = [
         .map(([k, tv]) => { const parts = chartTimeParts(k, c.siteTz); return [tv, rhAt.get(k), parts.h + parts.mi / 60, k]; });
       const lastT = latestOf(t), lastRH = latestOf(rh);
       return {
-        hint: `${t.name} × ${rh.name} · 15 min averages · white = now`,
+        hint: `${t.name} × ${rh.name} · ${windowLabel(s.windowSec)} averages · white = now`,
         option: {
           tooltip: { backgroundColor: LT.tipBg, borderColor: LT.axisLine, textStyle: { color: LT.tipText },
             formatter: (x) => `${new Date(x.value[3] ?? Date.now()).toLocaleString(undefined, c.siteTz ? { timeZone: chartTimeZone(c.siteTz) } : {})}<br>${fmt(x.value[0])} ${unitLabel(t.units)} · ${fmt(x.value[1])} %RH`
@@ -544,7 +558,7 @@ const CHARTS = [
       const others = c.cards.filter((p) => !isTemp(p) && !isRH(p)).slice(0, 2);
       const s = await fetchSeries(others, hours);
       return {
-        hint: `${pickWindow(hours) / 60} min averages`,
+        hint: `${windowLabel(s.windowSec)} averages`,
         option: {
           color: PALETTE.slice(3), tooltip: rangeTooltip(c.siteTz), legend, grid: { left: 50, right: 50, top: 36, bottom: 60 },
           xAxis: timeAxis(c.siteTz),

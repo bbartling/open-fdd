@@ -239,3 +239,48 @@ test("toCsv neutralises malicious point and equip names in the header, not the d
   assert.equal(cells[4], "'+1 -2");
   assert.ok(row.endsWith(",-3.2,5,-0.5"), row);
 });
+
+test("export locks before resolving its range and restores state when that lookup fails", async () => {
+  const saved = new Map();
+  const globals = ["document", "renderRangeControl", "getChartRangeState", "resolveChartSelection", "chartTimeZone", "ofddUnits", "esc"];
+  for (const key of globals) saved.set(key, { had: Object.hasOwn(globalThis, key), value: globalThis[key] });
+  const listeners = new Map(), elements = new Map();
+  const element = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      value: id === "exUnits" ? "display" : id === "exRes" ? "15m" : "",
+      options: [{ textContent: "" }], classList: { toggle() {} },
+      addEventListener(type, fn) { listeners.set(id + ":" + type, fn); },
+    });
+    return elements.get(id);
+  };
+  const gates = [];
+  try {
+    globalThis.document = { getElementById: element };
+    globalThis.renderRangeControl = () => {};
+    globalThis.getChartRangeState = () => ({ preset: "all" });
+    globalThis.chartTimeZone = () => "UTC";
+    globalThis.ofddUnits = { displaySystem: () => "si", display: () => ({ unit: "" }) };
+    globalThis.esc = (x) => String(x);
+    globalThis.resolveChartSelection = () => new Promise((resolve, reject) => gates.push({ resolve, reject }));
+    const point = { uuid: "p1", tags: ["point", "his"], siteRef: "site-a", kind: "Number", units: "", dis: "point", equipRef: "" };
+    X.render({ model: { sites: [{ name: "site-a", attrs: { id: "site-a" } }], equips: [], points: [point] }, scope: { site: "site-a", equip: "" } });
+    await new Promise(setImmediate);
+    gates[0].resolve({ resolvedBounds: { fromMs: 1000, toMs: 3600e3 } });
+    await new Promise(setImmediate);
+
+    const go = element("exGo");
+    listeners.get("exGo:click")();
+    assert.equal(go.disabled, true);
+    listeners.get("exGo:click")();
+    assert.equal(gates.length, 2);
+    gates[1].reject(new Error("range endpoint failed"));
+    await new Promise(setImmediate);
+    assert.match(element("exStatus").textContent, /range endpoint failed/);
+    assert.equal(go.disabled, false, "button is restored after a failed preflight");
+  } finally {
+    for (const [key, prior] of saved) {
+      if (prior.had) globalThis[key] = prior.value;
+      else delete globalThis[key];
+    }
+  }
+});

@@ -14,7 +14,7 @@ documented and tested.
 Each rule receives a pandas `DataFrame` with a UTC `DatetimeIndex`, one column per Haystack role, and SI values.
 Metadata such as role units and equipment kind travels in `DataFrame.attrs`. A rule returns a `RuleResult` with status,
 fault hours, coverage, and diagnostic notes. Missing roles, unknown values, and zero assessed coverage remain
-not-assessed; do not report them as healthy.
+not-assessed. Do not report them as healthy.
 
 ## Add or change a rule
 
@@ -36,7 +36,7 @@ python scripts/nf/gen_cookbook.py --check
 ```
 
 Parity runs a deterministic synthetic dataset through pandas, PostgreSQL SQL in PGlite, and SQLite. A passing case
-means the declared outputs agree on that dataset within the harness tolerance; it is not a proof for every possible
+means the declared outputs agree on that dataset within the harness tolerance. It does not prove agreement for every possible
 input. Read the generated [parity report](rules/parity.html) before comparing a documented divergence. The
 [pandas cookbook](rules/pandas-cookbook.html) shows each registered function and a runnable example.
 

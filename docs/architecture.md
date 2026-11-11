@@ -17,7 +17,7 @@ flowchart LR
 ```
 
 The Full app runs SQL rules through SQLite, PGlite, or an optional Timescale connector. Lite has no FDD engine. Both
-editions use the NF model and history; neither adds a second historian or field-device write path.
+editions use the NF model and history. Neither adds a second historian or field-device write path.
 
 For contributor details, start with AGENTS.md and the agent spec. The 4.x central-stack design is frozen at release
 v4.0.11-central.

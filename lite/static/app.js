@@ -205,8 +205,11 @@ function saveChartPref() {
 
 function chartUrl(def) {
   const q = new URLSearchParams({ c: def.id, site: scope.site, h: String(chartSel.hours) });
-  for (const key of ["range.lite.chart", "from.lite.chart", "to.lite.chart"])
-    if (new URLSearchParams(location.search).has(key)) q.set(key, new URLSearchParams(location.search).get(key));
+  q.set("range.lite.chart", chartRange.preset);
+  if (chartRange.preset === "custom") {
+    q.set("from.lite.chart", String(chartRange.fromMs));
+    q.set("to.lite.chart", String(chartRange.toMs));
+  }
   if (scope.equip) q.set("equip", scope.equip);
   if (def.pick && chartSel.point) q.set("point", chartSel.point);
   return `chart.html?${q}`;

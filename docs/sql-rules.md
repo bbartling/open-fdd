@@ -10,13 +10,13 @@ site-neutral and use SI values at the rule boundary.
 
 ## Rule contract
 
-The FDD engine loads a scoped, typed `history` table: one equipment and timestamp per row, with one SI column per
-role. `weather` contains as-of weather data; `equipment` contains model and operational context. A rule query receives
+The FDD engine loads a scoped, typed `history` table with one equipment and timestamp per row and one SI column per
+role. `weather` contains as-of weather data. `equipment` contains model and operational context. A rule query receives
 those tables and its tuned parameters, then returns one row per equipment with its `equipment_id` and declared output
 columns. Sensor sweeps use the long-form sensor relation and return one row per assessed sensor series.
 
 Rules must not read NF tables directly, perform unit conversion, or infer scales from values. Missing, unknown, or
-unusable input remains unknown; it must not be converted to a healthy zero. Keep operational gates and coverage
+unusable input remains unknown. Do not convert it to a healthy zero. Keep operational gates and coverage
 requirements explicit in the SQL.
 
 ## Add or change a rule
@@ -25,7 +25,7 @@ requirements explicit in the SQL.
 2. Declare the rule, equipment kinds, required and optional roles, parameters, units, confirmation time, and output
    columns in `sql/fdd/registry.yaml` and `sql/fdd/tuning_catalog.json`.
 3. Add any new canonical role in `sql/fdd/role_map.json` and its scale/type in `sql/fdd/input_contract.json`.
-4. Render the rule and build the catalog and both packs:
+4. Render the rule and build the catalog and both packs with these commands.
 
    ```bash
    python3 scripts/nf/build_rule_catalog.py
@@ -41,8 +41,8 @@ requirements explicit in the SQL.
 
 ## Roles and units
 
-Use the canonical role names in `role_map.json`. Equipment kinds restrict where a rule runs; required roles determine
-whether the rule can run; optional roles refine proof or context. The input contract fixes each role's numeric scale
+Use the canonical role names in `role_map.json`. Equipment kinds restrict where a rule runs. Required roles determine
+whether the rule can run. Optional roles refine proof or context. The input contract fixes each role's numeric scale
 and database type. Use °C for temperature, Pa for pressure, L/s for flow, kW for power, kWh for energy, %RH on a
 0–100 scale, fractions on 0–1, and status values on 0–1. SI conversion occurs at ingest. Rules contain SI thresholds
 and never convert values.
@@ -66,5 +66,5 @@ python scripts/nf/gen_rule_docs.py --check
 python scripts/nf/gen_cookbook.py --check
 ```
 
-The generated [rule catalog](fdd-rules.html) is the compact index; the [SQL cookbook](rules/sql-cookbook.html)
+The generated [rule catalog](fdd-rules.html) is the compact index. The [SQL cookbook](rules/sql-cookbook.html)
 contains the rendered rule SQL, parameters, roles, and outputs. See [Units](units.html) for the conversion boundary.

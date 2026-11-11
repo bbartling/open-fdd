@@ -787,12 +787,19 @@ async function renderRcx() {
   const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
   const rangeState = getChartRangeState("rcx"), siteTz = siteTimeZone();
   renderRangeControl($("rcxRangeControl"), { key: "rcx", state: rangeState, siteTz,
-    onChange: () => renderRcx().catch((e) => ($("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`)) });
+    onChange: () => {
+      const pending = renderRcx(), requested = rcxRun;
+      pending.catch((e) => { if (requested === rcxRun) $("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`; });
+    } });
   const rangePoints = model.points.filter((p) => p.siteRef === scope.site && has(p, "his")
     && (!scope.equip || p.equipRef === scope.equip || p.weatherStationRef));
   let range;
   try { range = await resolveChartSelection(rangePoints, rangeState, { siteTz }); }
-  catch (e) { $("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`; throw e; }
+  catch (e) {
+    if (run === rcxRun) $("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`;
+    throw e;
+  }
+  if (run !== rcxRun) return;
   const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
   const hoursFor = (_view) => hours;
   $("rcxRangeStatus").textContent = "Loading history…";
@@ -832,10 +839,10 @@ async function renderRcx() {
         $("nRcx").textContent = String(Number($("nRcx").textContent) - 1);
       }
     } catch (e) {
-      $(`rcx-note-${i}`).textContent = `could not draw: ${e.message}`;
+      if (run === rcxRun) $(`rcx-note-${i}`).textContent = `could not draw: ${e.message}`;
     }
   }
-  $("rcxRangeStatus").textContent = "";
+  if (run === rcxRun) $("rcxRangeStatus").textContent = "";
 }
 
 // ---- display units: imperial | si (units.js, localStorage "openfdd-units") -------------------

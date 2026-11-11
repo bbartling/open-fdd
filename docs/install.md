@@ -12,18 +12,19 @@ It does not need a separate login or historian. Choose Full for FDD and larger h
 
 | Edition | App id | Includes | Typical resources |
 |---|---|---|---|
-| Full | `open-fdd` | SQL FDD, charts, export, RDF/SPARQL, and FDD, weather, and SPARQL hooks | SQLite on smaller hosts; PGlite or Timescale on larger hosts |
-| Lite | `open-fdd-lite` | dashboard, charts, export, weather hook, and RDF | about 1 GB RAM; no FDD or Timescale |
+| Full | `open-fdd` | SQL FDD, charts, export, RDF/SPARQL, and FDD, weather, and SPARQL hooks | SQLite on smaller hosts, PGlite or Timescale on larger hosts |
+| Lite | `open-fdd-lite` | dashboard, charts, export, weather hook, and RDF | about 1 GB RAM, without FDD or Timescale |
 
-Do not install both editions on a constrained box. Build, test, and run installer commands from a PC; NF runs the
+Do not install both editions on a constrained box. Build, test, and run installer commands from a PC. NF runs the
 installed app and hooks.
 
 ## Choose an install route
 
-### Recommended: sync from a workstation
+### Recommended workstation route
 
 Clone or download the repository on a workstation that can reach the NF console. The installer uses Python 3 and the
-standard library; it does not build the app. Prepare an environment file outside the repository:
+standard library. It does not build the app. Prepare a protected environment file outside the repository and include
+these variables.
 
 ```text
 NF_CONSOLE_URL=<reachable-NF-console-url>
@@ -58,7 +59,7 @@ or expose the console to the public internet. See [Security](security.html).
 ## Reach NF safely
 
 The workstation must reach the NF console over the site LAN, an approved VPN, or a temporary SSH forward. If the
-console is behind a TLS proxy, trust its certificate with the installer CA-file or certificate-pin option; do not
+console is behind a TLS proxy, trust its certificate with the installer CA-file or certificate-pin option. Do not
 disable certificate verification. Use the front-door URL that the workstation can reach and confirm that the proxy
 and NF accept the same console login. Plain HTTP is for a trusted local network only. The portal API key path is for
 reads and is not a deployment route.
@@ -73,45 +74,47 @@ role. Give the hooks a separate least-privilege runtime role. See the
 The installer checks the selected Timescale schema before upgrading. If the schema is behind, apply
 `nf-app/timescale/install.sql` as the database installer role, then repeat the check. The check runs `psql` from the workstation
 using the configured connection details. If the option names `localhost`, `127.0.0.1`, or `::1`, that address
-refers to the NF host; it does not refer to a remote workstation. In that case the installer stops before connecting.
+refers to the NF host, not the remote workstation. The installer stops before connecting in that case.
 Set `NF_TIMESCALE_PREFLIGHT_DSN` in the protected environment to a reachable endpoint for the same database, such
-as a temporary approved forward, or run the CLI on the NF host. Keep credentials out of the command line. Lite,
-SQLite, and PGlite skip this Timescale preflight.
+as a temporary approved forward. The override is required for a loopback host even when the CLI runs on the NF host.
+Keep credentials out of the command line. Lite, SQLite, and PGlite skip this Timescale preflight.
 
 ## Model and verify
 
-Tag sites, equipment, points, and units in NF; Open-FDD has no per-site configuration. Points need history for charts
+Tag sites, equipment, points, and units in NF. Open-FDD has no per-site configuration. Points need history for charts
 and rules. The FDD page lists missing required roles. See [Modeling](modeling.html) and [Units](units.html).
 
-After install, check:
+After install, verify the following.
 
 - `doctor` reports a clean install and the expected engine/schema state.
-- The dashboard and charts load; Full FDD reports current results.
+- The dashboard and charts load. Full FDD reports current results.
 - RDF export has no dangling references.
 - The weather hook has coordinates from its app option or modeled site.
-- If using the BACnet server, validate point mappings before enabling its output.
+- If using the BACnet server, validate point mappings before enabling its output. See the
+  [BACnet validation guide](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/bacnet-validate.md).
 
 ## Upgrade, pin, and remove
 
 Before an upgrade, run `doctor` and review the target release notes. Fetch or check out the exact release tag or commit
 you intend to deploy, then run `install` from that tree. Keep the edition pinned to the same reviewed revision on
-each site; do not deploy floating `master` in a controlled rollout.
+each site. Avoid floating `master` in a controlled rollout.
 
-`install --remove-old` lists predecessor apps; add `--yes` only when you intend to remove those apps. It does not
+`install --remove-old` lists predecessor apps. Add `--yes` only when you intend to remove those apps. It does not
 delete hook-created history or points. Run `uninstall` to remove the current app after reviewing its dry-run output.
-Back up NF configuration before changing the host itself. Upgrading the NF framework is a separate operation; follow
-the framework's release instructions and verify its console before installing Open-FDD. App uninstall is not a
-substitute for an NF backup.
+Back up NF configuration before changing the host itself. Upgrading the NF framework is a separate operation. Follow
+the framework's release instructions and verify its console before installing Open-FDD. For the NF Compose backup,
+upgrade, and rollback steps, see the [NF Compose guide](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-upgrade-compose.md).
+App uninstall is not a substitute for an NF backup.
 
 ## Hooks
 
-Full schedules `fdd` hourly and `weather` every 20 minutes; `sparql` is on request. Lite schedules `weather`
-only. Hook runs and results appear in NF. The app writes its own result points and weather variables; it does not
+Full schedules `fdd` hourly and `weather` every 20 minutes. `sparql` is on request. Lite schedules `weather`
+only. Hook runs and results appear in NF. The app writes its own result points and weather variables. It does not
 write to HVAC controllers or other field devices.
 
 ## Further help
 
-- [Modeling](modeling.html): classes, markers, roles, and point units.
-- [API reference](fdd-data-access.html): read NF points, results, and history.
-- [Timescale guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale): schema, roles, and retention.
-- [Development](development.html): local mock, tests, and generated packs.
+- [Modeling](modeling.html) covers classes, markers, roles, and point units.
+- [API reference](fdd-data-access.html) covers NF points, results, and history.
+- [Timescale guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale) covers schema, roles, and retention.
+- [Development](development.html) covers the local mock, tests, and generated packs.

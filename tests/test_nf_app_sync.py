@@ -161,6 +161,7 @@ def test_timescale_schema_preflight_engine_selection_and_lite_skip(monkeypatch):
     json.dumps({"connectionString": "postgresql://user@localhost/fdd"}),
     "postgresql://user@[::1]:5432/fdd",
     "host=127.0.0.9 dbname=fdd",
+    "host=db.example host=127.0.0.1",
 ])
 def test_loopback_hook_host_fails_before_cli_probe(raw):
     called = []
@@ -169,6 +170,11 @@ def test_loopback_hook_host_fails_before_cli_probe(raw):
     assert "loopback from the NF host's perspective" in message
     assert "NF_TIMESCALE_PREFLIGHT_DSN" in message and "reachable" in message
     assert not called, "never probe the deploy PC's local loopback by accident"
+
+
+def test_duplicate_host_guard_uses_last_case_sensitive_dsn_value():
+    assert sync.timescale_connection_host("host=db.example host=127.0.0.1") == "127.0.0.1"
+    assert sync.timescale_connection_host("host=127.0.0.1 HOST=db.example") == "127.0.0.1"
 
 
 def test_explicit_loopback_dsn_override_allows_an_intentional_local_forward(monkeypatch):

@@ -1482,13 +1482,15 @@ def timescale_connection_host(value) -> str | None:
         return None
     if "=" in text:
         import shlex
+        found = None
         try:
             for part in shlex.split(text):
                 key, sep, host = part.partition("=")
-                if sep and key.lower() == "host":
-                    return host
+                if sep and key == "host":
+                    found = host
         except ValueError:
             return None
+        return found
     return None
 
 

@@ -436,3 +436,36 @@ test("point history honors the same mixed-output boundary as FDD plots", async (
   assert.equal(requestedWindow, 3600, "filter cutoff uses the same bucket width as the NF request");
   assert.deepEqual(Array.from(plotted, (x) => Array.from(x)), [[7200e3, 2], [10800e3, 0]], "older % buckets are not shown under current h units");
 });
+
+test("RCx ignores superseded range resolutions and failures", async () => {
+  const elements = new Map();
+  const element = (id) => {
+    if (!elements.has(id)) elements.set(id, { textContent: "", innerHTML: "", classList: { add() {}, remove() {}, toggle() {} } });
+    return elements.get(id);
+  };
+  const pending = [];
+  const ctx = vm.createContext({
+    console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
+    idOf: (r) => (r.attrs || {}).id || r.name,
+    has: (p, marker) => (p.tags || []).includes(marker),
+    chartTimeZone: (tz) => tz || "UTC", getChartRangeState: () => ({ preset: "24h" }),
+    renderRangeControl: () => {}, loadCatalog: async () => ({}),
+    rcxPlan: () => ({ ready: [], missing: [] }),
+    resolveChartSelection: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+  });
+  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  ctx.testModel = { sites: [{ name: "Site", attrs: { id: "site-a" } }], equips: [], points: [] };
+  vm.runInContext('model = testModel; scope.site = "site-a"', ctx);
+
+  const older = vm.runInContext("renderRcx()", ctx);
+  await new Promise(setImmediate);
+  const newer = vm.runInContext("renderRcx()", ctx);
+  await new Promise(setImmediate);
+  element("rcxRangeStatus").textContent = "new range is loading";
+  pending[0].reject(new Error("obsolete failure"));
+  await assert.rejects(older, /obsolete failure/);
+  assert.equal(element("rcxRangeStatus").textContent, "new range is loading");
+  pending[1].resolve({ resolvedBounds: { fromMs: 0, toMs: 3600e3 } });
+  await newer;
+  assert.equal(element("rcxRangeStatus").textContent, "");
+});
