@@ -18,7 +18,7 @@ nav_order: 18
   window loses no retry. [#1574](https://github.com/bbartling/open-fdd/issues/1574)
 - **Parity stress:** `tests/parity/stress.py` fails on unlisted pandas-vs-SQL divergence; TRIM-3 and VAV-REHEAT differences are root-caused and pinned. [#1582](https://github.com/bbartling/open-fdd/issues/1582)
 - **Sensor sweeps:** one typed SI limit source feeds SQL and pandas sweeps; new plant roles (CHW flow and differential pressure, condenser-water temperatures, chiller kW). [#1581](https://github.com/bbartling/open-fdd/issues/1581)
-- **Docs:** removed stale DuckDB/DataFusion references.
+- **Docs:** removed stale references to retired 4.x SQL engines.
 
 ## Open-FDD 5.0.12
 

@@ -13,7 +13,7 @@ Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) 
 - Parity: TRIM-3 and VAV-REHEAT stress differences root-caused and pinned with reasons: startup holdoff, and the request-sum role name, threshold and gate (#1582).
 - Sensor sweeps: one typed SI role-limit source (`open_fdd/data/sensor_sweep_limits.json`) feeds the SQL renderer and pandas sweeps; defaults unchanged, pack byte-identical (#1581).
 - Sensor sweeps: new plant roles (CHW flow, CHW differential pressure, condenser-water supply/return temperature, chiller kW) with conservative SI range limits (#1581).
-- Docs: removed stale DuckDB/DataFusion references.
+- Docs: removed stale references to retired 4.x SQL engines.
 
 ## 5.0.12 - 2026-11-10
 
