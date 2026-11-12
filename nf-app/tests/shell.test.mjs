@@ -30,6 +30,9 @@ const FIXTURE = {
     pt("FLOW", { equipRef: "VAV-A", dis: "Airflow", unit: "cfm", markers: "point,sensor,air,flow,his,cur" }),
     pt("FAN", { equipRef: "VAV-A", dis: "Fan status", kind: "Bool", markers: "point,sensor,fan,run,his,cur" }),
     pt("ZN-T2", { equipRef: "VAV-B", dis: "Zone temp", unit: "°F", markers: "point,sensor,zone,air,temp,his,cur" }),
+    pt("FDD-F1", { equipRef: "VAV-A", dis: "SV-RANGE fault", unit: "h", markers: "point,fdd,fault,his,cur", ruleRef: "SV-RANGE" }),
+    pt("FDD-F2", { equipRef: "VAV-A", dis: "SV-STALE fault", unit: "h", markers: "point,fdd,fault,his,cur", ruleRef: "SV-STALE" }),
+    pt("FDD-B", { equipRef: "VAV-A", dis: "fault flag", kind: "Bool", markers: "point,fdd,fault,his,cur", ruleRef: "SV-RATE" }),
     pt("WX-T", { weatherStationRef: "wx-1", dis: "Web outside air temp", unit: "°F", markers: "point,sensor,weather,outside,air,temp,his" }),
     pt("WX-H", { weatherStationRef: "wx-1", dis: "Web outside air humidity", unit: "%RH", markers: "point,sensor,weather,outside,air,humidity,his" }),
   ],
@@ -166,5 +169,19 @@ test("weather mirror: this edition's copy of the hook mirrors to the BACnet serv
   assert.equal(hook.OFDD_EDITION, edition);
   const src = readFileSync(new URL(edition === "full" ? "../hooks/weather.js" : "../../lite/hooks/open_meteo_weather.js", import.meta.url), "utf8");
   assert.match(src, /explicit === undefined \? true :/);
+});
+
+test("FDD hook result points are outputs: never in All signals, the heat-map dropdown, cards or lanes; no two series share a name", () => {
+  const ctx = load(), m = modelFor(ctx);
+  assert.equal(m.points.filter((p) => p.tags.includes("fault")).length, 3, "the fixture has fault result points");
+  const a = ctx.pointSets(m, "site-a", "VAV-A");
+  const all = [...a.cards, ...a.numeric, ...a.status, ...ctx.pointSets(m, "site-a", "").numeric];
+  assert.ok(all.every((p) => !p.tags.includes("fault") && !p.tags.includes("fdd")));
+  assert.ok(Array.from(ctx.pickOptions(ctx.get("chartDef")("heatmap"), a), (o) => o.label).every((l) => !/fault/.test(l)));
+  const { lines, lanes } = ctx.signalSets(a);
+  const opt = ctx.signalsOption(ctx.signalAxes(lines), lanes, () => [[1, 1]], (p) => ctx.signalLabel(p, a, [...lines, ...lanes]));
+  const names = Array.from(opt.series, (x) => x.name);
+  assert.equal(new Set(names).size, names.length, names.join(" | "));
+  assert.ok(names.every((n) => !/fault/i.test(n)));
 });
 }

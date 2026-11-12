@@ -35,6 +35,8 @@ const rank = (p) => (has(p, "sensor") ? 0 : 2) + (isTemp(p) ? 0 : 1);
 const WEATHER_SCOPE = "__weather__";
 const WEATHER_LABEL = "Weather";
 /** A weather-service point (marker `weather` or a `weatherStationRef`): never one of an equip's own sensors. */
+/** An FDD hook result point (markers fdd / fault, or a ruleRef): an output, never a signal; same test the FDD tab uses. */
+const isFddResult = (p) => has(p, "fdd") || has(p, "fault") || !!((p.rec && p.rec.attrs) || {}).ruleRef;
 const isWeatherPoint = (p) => has(p, "weather") || !!p.weatherStationRef;
 
 /**
@@ -48,13 +50,13 @@ function pointSets(model, site, equip) {
   const weather = tagged.filter(isWeatherPoint).sort((a, b) => a.name.localeCompare(b.name));
   const inScope = (p) => !isWeatherPoint(p) && p.equipRef && (equip ? p.equipRef === equip : equipIds.includes(p.equipRef));
   const equipPts = equip === WEATHER_SCOPE ? weather : tagged.filter(inScope);
-  const trended = (p) => p.kind === "Number" && has(p, "his") && !has(p, "spare");
+  const trended = (p) => p.kind === "Number" && has(p, "his") && !has(p, "spare") && !isFddResult(p);
   return {
     // weather points are cards whether or not the station tagged them `sensor`
     cards: equipPts.filter((p) => trended(p) && (equip === WEATHER_SCOPE || has(p, "sensor") || has(p, "sp")))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
     numeric: equipPts.filter(trended).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
-    status: equipPts.filter((p) => p.kind === "Bool" && !has(p, "spare"))
+    status: equipPts.filter((p) => p.kind === "Bool" && !has(p, "spare") && !isFddResult(p))
       .sort((a, b) => (a.equipRef || "").localeCompare(b.equipRef || "") || a.name.localeCompare(b.name)),
     weather,
     scopeEquip: equip || "",
@@ -689,7 +691,9 @@ function signalLabel(p, c, points) {
   if (!base) return "";
   const owners = new Set((points || []).map((x) => pointOwner(x, c)));
   const owner = pointOwner(p, c);
-  return owners.size > 1 && owner ? `${owner} · ${base}` : base;
+  const twin = (points || []).some((x) => x !== p && (x.name || x.dis) === base && pointOwner(x, c) === owner);
+  const named = twin && p.dis && p.dis !== base ? `${base} (${p.dis})` : base;      // equal marker names on one equip: add the point's own name
+  return owners.size > 1 && owner ? `${owner} · ${named}` : named;
 }
 /**
  * The numeric lines and on/off lanes of `c`. A point without any model label is omitted, never named "Sensor N".
