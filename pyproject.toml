@@ -113,7 +113,7 @@ release = [
 include = ["open_fdd*"]
 
 [tool.setuptools.package-data]
-"open_fdd" = ["data/*.json"]
+"open_fdd" = ["data/*.json", "data/*.sql"]
 "open_fdd.ecm_engineering" = [
     "data/*.xlsx",
     "data/*.json",

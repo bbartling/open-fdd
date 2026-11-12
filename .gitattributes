@@ -1,0 +1,4 @@
+sql/fdd/schema/core.sql text eol=lf
+nf-app/timescale/core.sql text eol=lf
+open_fdd/data/core.sql text eol=lf
+sql/fdd/schema/core.catalog.json text eol=lf

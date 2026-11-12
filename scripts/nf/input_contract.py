@@ -19,7 +19,7 @@ _SQL_TYPES = {"double": "DOUBLE PRECISION", "text": "VARCHAR", "timestamp": "tim
 def load_source() -> dict:
     """Return the canonical contract after checking role and relation consistency."""
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
-    if contract.get("version") != 2:
+    if contract.get("version") != 3:
         raise ValueError(f"unsupported input contract version: {contract.get('version')!r}")
     roles = contract.get("roles")
     tables = contract.get("tables")
@@ -34,6 +34,16 @@ def load_source() -> dict:
         expected_type = "text" if scale == "text" else "double"
         if sql_type != expected_type:
             raise ValueError(f"{role}: scale {scale!r} requires type {expected_type!r}, got {sql_type!r}")
+
+    sources = contract.get("sources")
+    if not isinstance(sources, dict) or set(sources) != {"point", "input_sample"}:
+        raise ValueError("input contract v3 must declare sources point and input_sample")
+    view_columns = sources["input_sample"].get("columns")
+    if not isinstance(view_columns, dict) or not view_columns:
+        raise ValueError("sources.input_sample.columns must be a nonempty object")
+    for name, spec in view_columns.items():
+        if not _IDENTIFIER.fullmatch(name) or spec.get("type") not in _TYPES:
+            raise ValueError(f"sources.input_sample.{name}: invalid column declaration")
 
     normalized = {}
     for table, declaration in tables.items():
@@ -71,6 +81,13 @@ def load_source() -> dict:
     if missing_tables := sorted(required_tables - set(normalized)):
         raise ValueError(f"input contract is missing required tables: {missing_tables}")
     return {**contract, "_normalized_tables": normalized}
+
+
+def input_sample_signature() -> list[tuple[str, str]]:
+    """The fdd.input_sample view signature every application must expose: [(column, format_type name), ...]."""
+    columns = load_source()["sources"]["input_sample"]["columns"]
+    names = {"double": "double precision", "text": "text", "timestamp": "timestamp with time zone"}
+    return [(name, names[spec["type"]]) for name, spec in columns.items()]
 
 
 def load_contract() -> dict[str, list[dict[str, str]]]:
