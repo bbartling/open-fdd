@@ -15,7 +15,7 @@ Date-time controls display the modeled site's timezone. Saved instants remain un
 The top bar holds only the site. Each tab that needs an equip (Overview, Charts, Points, FDD, RCx, Export) has its own
 equip picker at its top, with weather listed as its own **Weather** entry: weather points are never shown as an equip's
 own sensors. On the Charts tab the hour-of-day heat map has a sensor dropdown (the equip's numeric sensors, labelled
-with name and unit), and **Other signals** plots every numeric signal of the equip with one y-axis per unit and the
+with name and unit), and **All signals** plots every numeric signal of the selected equip (the first equip when none is selected) with one y-axis per unit and the
 on/off points in a lane underneath.
 
 History loads in bounded chunks and displays a loading state and a visible error if a request fails. The UI merges the

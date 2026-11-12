@@ -57,6 +57,7 @@ function pointSets(model, site, equip) {
     status: equipPts.filter((p) => p.kind === "Bool" && !has(p, "spare"))
       .sort((a, b) => (a.equipRef || "").localeCompare(b.equipRef || "") || a.name.localeCompare(b.name)),
     weather,
+    scopeEquip: equip || "",
     equipNames: Object.fromEntries(equips.map((e) => [idOf(e), (e.attrs || {}).dis || e.name])),
   };
 }
@@ -662,19 +663,19 @@ const CHARTS = [
     },
   },
   {
-    id: "other", title: "Other signals", desc: "Every numeric signal of the equip, one y-axis per unit; on/off points in a lane below",
+    id: "other", title: "All signals", desc: "All numeric data of the selected equip, one y-axis per unit; on/off points in a lane below",
     ranges: [6, 24, 72, 168], range: 24,
     applies: (c) => signalSets(c).lines.length > 0,
     async build(c, hours) {
-      const { lines, lanes } = signalSets(c);
+      const { lines, lanes, shown, narrowed } = signalSets(c);
       const [s, sb] = await Promise.all([
         fetchChartDisplay(c, lines, hours),
         lanes.length ? fetchChartSeries(c, lanes, hours, { method: "MAX" }) : new Map(),
       ]);
       const data = (p) => (s.get(p.uuid) || sb.get(p.uuid) || []);
-      const labelOf = (p) => pointLabel(p, c, [...lines, ...lanes]);
+      const labelOf = (p) => signalLabel(p, c, [...lines, ...lanes]);
       return {
-        hint: `${lines.length} numeric signal${lines.length === 1 ? "" : "s"} on ${signalAxes(lines).length} axis(es)`
+        hint: `${narrowed ? `showing ${shown}, pick an equip above · ` : ""}${lines.length} numeric signal${lines.length === 1 ? "" : "s"} on ${signalAxes(lines).length} axis(es)`
           + `${lanes.length ? ` · ${lanes.length} on/off in the lane below` : ""} · ${windowLabel(s.windowSec)} averages`,
         option: signalsOption(signalAxes(lines), lanes, data, labelOf),
       };
@@ -682,10 +683,30 @@ const CHARTS = [
   },
 ];
 
-/** The numeric lines and on/off lanes of `c`. A point without any model label is omitted, never named "Sensor N". */
+/** Series label of the signals chart: the same human label as the Temperatures chart (p.name), equip-prefixed only across several equips. */
+function signalLabel(p, c, points) {
+  const base = p.name || p.dis || "";
+  if (!base) return "";
+  const owners = new Set((points || []).map((x) => pointOwner(x, c)));
+  const owner = pointOwner(p, c);
+  return owners.size > 1 && owner ? `${owner} · ${base}` : base;
+}
+/**
+ * The numeric lines and on/off lanes of `c`. A point without any model label is omitted, never named "Sensor N".
+ * With no single equip selected the chart shows the first equip (sorted by name) that has signals: `narrowed`, `shown`.
+ */
 function signalSets(c) {
-  const labelled = (p) => !!(p.dis || p.name);
-  return { lines: (c.numeric || c.cards || []).filter(labelled), lanes: (c.status || []).filter(labelled) };
+  const labelled = (p) => !!(p.name || p.dis);
+  let lines = (c.numeric || c.cards || []).filter(labelled), lanes = (c.status || []).filter(labelled);
+  let shown = "", narrowed = false;
+  const owners = new Set([...lines, ...lanes].map((p) => p.equipRef || ""));
+  if (!c.scopeEquip && owners.size > 1) {
+    const nameOf = (id) => pointOwner({ equipRef: id, tags: [] }, c);
+    const first = [...owners].sort((x, y) => nameOf(x).localeCompare(nameOf(y)))[0];
+    lines = lines.filter((p) => (p.equipRef || "") === first); lanes = lanes.filter((p) => (p.equipRef || "") === first);
+    shown = nameOf(first); narrowed = true;
+  }
+  return { lines, lanes, shown, narrowed };
 }
 /** Group points by display unit, in first-seen order: [{ unit, points }] (one y-axis each). */
 function signalAxes(points) {
@@ -702,7 +723,7 @@ function signalAxes(points) {
  * and, when there are on/off points, a bottom grid with one step lane per point. `data(p)` -> [[ms, v], ...].
  */
 function signalsOption(axes, lanes, data, labelOf) {
-  const nLeft = Math.ceil(axes.length / 2), nRight = Math.floor(axes.length / 2), W = 54;
+  const nLeft = Math.ceil(axes.length / 2), nRight = Math.floor(axes.length / 2), W = 70;
   const laneH = lanes.length ? Math.min(160, 16 * lanes.length + 10) : 0;
   const left = (lanes.length ? 110 : 50) + W * Math.max(0, nLeft - 1), right = 20 + W * nRight;
   const bottom = 56 + (laneH ? laneH + 22 : 0);

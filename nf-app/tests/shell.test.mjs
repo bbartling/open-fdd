@@ -1,6 +1,6 @@
 // node --test nf-app/tests (also imported by lite/tests/shell.test.mjs) — the shared dashboard shell
 // (shared/static/app-core.js + charts.js) as each edition ships it: the top bar, the equip pickers, the heat-map sensor
-// dropdown, the "Other signals" chart and the Weather category. Every check runs against the Full AND the Lite copies.
+// dropdown, the "All signals" chart and the Weather category. Every check runs against the Full AND the Lite copies.
 import { test as baseTest } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -106,7 +106,8 @@ test("Other signals: every numeric signal grouped by unit onto its own y-axis, o
   assert.deepEqual(Array.from(axes, (x) => x.unit).sort(), ["%", "cfm", "°F"]);
   assert.deepEqual(Array.from(axes.find((x) => x.unit === "°F").points, (p) => p.dis).sort(), ["Discharge temp", "Zone temp"]);
   const data = () => [[1000, 1], [2000, 2]];
-  const opt = ctx.signalsOption(axes, lanes, data, (p) => ctx.pointLabel(p, a, [...lines, ...lanes]));
+  const names0 = (o) => Array.from(o.series, (x) => x.name);
+  const opt = ctx.signalsOption(axes, lanes, data, (p) => ctx.signalLabel(p, a, [...lines, ...lanes]));
   const valueAxes = opt.yAxis.filter((y) => y.gridIndex === 0);
   assert.equal(valueAxes.length, 3, "one y-axis per unit");
   assert.deepEqual(Array.from(valueAxes, (y) => y.name).sort(), ["%", "cfm", "°F"]);
@@ -114,18 +115,31 @@ test("Other signals: every numeric signal grouped by unit onto its own y-axis, o
   assert.equal(opt.yAxis.length, 4);
   const lineSeries = opt.series.filter((s) => s.yAxisIndex < 3);
   assert.equal(lineSeries.length, 4);
-  for (const s of lineSeries) assert.equal(valueAxes[s.yAxisIndex].name, ctx.get("dispUnit")(lines.find((p) => p.dis === s.name)), `${s.name} sits on its unit's axis`);
+  for (const s of lineSeries) assert.equal(valueAxes[s.yAxisIndex].name, ctx.get("dispUnit")(lines.find((p) => p.name === s.name)), `${s.name} sits on its unit's axis`);
   const lane = opt.series.find((s) => s.xAxisIndex === 1);
-  assert.equal(lane.name, "Fan status");
+  assert.equal(lane.name, "fan run");
+  assert.ok(names0(opt).includes("discharge air temp"), "the same human label the Temperatures chart uses, no equip prefix for one equip");
   assert.equal(lane.step, "end");
   const names = Array.from(opt.series, (s) => s.name);
   assert.ok(names.every((n) => n && !/^(sensor|series|unnamed)\s*\d*$/i.test(n)), names.join(" | "));
-  // several equips: series are named equip · point, never "Sensor N"
+  // no equip selected: the chart shows the first equip by name and says so
   const all = ctx.pointSets(m, "site-a", "");
   const both = ctx.signalSets(all);
-  assert.ok(Array.from(both.lines, (p) => ctx.pointLabel(p, all, [...both.lines, ...both.lanes])).includes("Zone B · Zone temp"));
+  assert.equal(both.narrowed, true);
+  assert.equal(both.shown, "Zone A");
+  assert.ok(Array.from(both.lines, (p) => p.equipRef).every((e) => e === "VAV-A"));
+  assert.equal(ctx.signalSets(a).narrowed, false);
+  // axis offsets: distinct per side and at least 55 px apart
+  const many = ["a", "b", "c", "d", "e"].map((u) => ({ unit: u, points: [lines[0]] }));
+  const wide = ctx.signalsOption(many, [], data, (p) => p.name);
+  for (const side of ["left", "right"]) {
+    const offs = wide.yAxis.filter((y) => y.position === side).map((y) => y.offset).sort((x, y) => x - y);
+    assert.equal(new Set(offs).size, offs.length, `${side} offsets distinct`);
+    offs.forEach((o, i) => i && assert.ok(o - offs[i - 1] >= 55, `${side} offsets >= 55 apart: ${offs}`));
+  }
+  assert.ok(wide.grid[0].left >= 50 + 55 * 2 && wide.grid[0].right >= 20 + 55, "grid margins grow to fit the stacked axes");
   // a point with no model label is omitted rather than named
-  const bare = ctx.signalSets({ numeric: [{ uuid: "x", dis: "", name: "", units: "" }, ...a.numeric], status: [] });
+  const bare = ctx.signalSets({ scopeEquip: "VAV-A", numeric: [{ uuid: "x", dis: "", name: "", units: "" }, ...a.numeric], status: [] });
   assert.equal(bare.lines.length, a.numeric.length);
   // no bool points: no second grid
   const noLane = ctx.signalsOption(axes, [], data, (p) => p.dis);
