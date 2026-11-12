@@ -16,7 +16,7 @@ import path from "node:path";
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const { createEngine } = require(path.join(root, "nf-app/hooks/lib/engines.js"));
-const { buildDataset } = require(path.join(root, "nf-app/hooks/lib/synthetic_dataset.js"));
+const { buildDataset } = require(path.join(root, "nf-app/tests/fixtures/synthetic_dataset.js"));
 
 const arg = (name, dflt) => {
   const i = process.argv.indexOf("--" + name);

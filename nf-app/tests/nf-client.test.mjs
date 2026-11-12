@@ -22,6 +22,7 @@ function load(file, statuses) {
     fetch, console, URLSearchParams, TextDecoder, atob, btoa,
     setTimeout: (fn) => { fn(); return 0; },          // no real back-off delays in tests
   });
+  vm.runInContext(readFileSync(new URL("paging.js", file), "utf8"), ctx, { filename: "paging.js" });   // nf.js needs OfddPaging
   vm.runInContext(readFileSync(file, "utf8"), ctx, { filename: "nf.js" });
   return { api: vm.runInContext("api", ctx), calls };
 }

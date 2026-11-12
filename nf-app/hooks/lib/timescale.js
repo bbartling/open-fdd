@@ -117,7 +117,7 @@ async function createTempTables(client, pack) {
 }
 
 /**
- * Builds the pack's wide `history` (+ weather, authorized_series, equipment) as TEMP tables in this session.
+ * Builds the pack's wide `history` (+ weather, sensor_history) as TEMP tables in this session (the tables of pack.contract).
  *   roleToUuid  {role: pointUuid}   roles must be history columns of pack.contract
  *   unitsByUuid {pointUuid: nfUnit} values are converted to SI in SQL (a + b*avg): one avg per role per bucket
  *   fractionRoles [role]  roles to divide by 100 (declared-% fraction/boolean roles): siPlan().scaled from hooks/fdd.js
@@ -216,10 +216,6 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
   }
   const si = {};
   for (const [role, uuid] of roles) si[role] = factorsFor(role, uuid).unit;
-  for (const [role, unit] of Object.entries(si)) {
-    await client.query("INSERT INTO pg_temp.authorized_series (site_id, equipment_id, role, unit) VALUES ($1, $2, $3, $4)", [siteId, equipId, role, unit]);
-  }
-  await client.query("INSERT INTO pg_temp.equipment (building_id, equipment_id) VALUES ($1, $2)", [siteId, equipId]);
   return { rows, sensorRows, roles: roles.map(([r]) => r), si };
 }
 

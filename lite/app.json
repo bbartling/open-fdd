@@ -18,6 +18,8 @@
     }
   },
   "files": {
+    "/hooks/lib/paging.js": "hooks/lib/paging.js",
+    "/hooks/lib/settings.js": "hooks/lib/settings.js",
     "/hooks/open_meteo_weather.js": "hooks/open_meteo_weather.js",
     "/static/app.js": "static/app.js",
     "/static/chart-page.js": "static/chart-page.js",
@@ -27,6 +29,7 @@
     "/static/lite-theme.js": "static/lite-theme.js",
     "/static/model.js": "static/model.js",
     "/static/nf.js": "static/nf.js",
+    "/static/paging.js": "static/paging.js",
     "/static/style.css": "static/style.css",
     "/static/theme-init.js": "static/theme-init.js",
     "/static/tree.css": "static/tree.css",
@@ -74,7 +77,6 @@
       },
       "config": {
         "site": "",
-        "bacnetMirror": true,
         "avInstances": [
           1,
           2,

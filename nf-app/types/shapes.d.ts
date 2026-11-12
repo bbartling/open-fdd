@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/types/shapes.d.ts by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 // Shared data shapes (global types; used from JSDoc as {OfddPoint}, {OfddModel}, ...).
 
 /** A raw NF point/entity record (point/query result row). */

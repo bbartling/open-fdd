@@ -37,7 +37,7 @@ function load({ units = "si" } = {}) {
   const http = fakeSdkHttp(fx);
   ctx.api = async (p) => (await http.get(p)).data;              // nf.js api() stand-in (GET, parsed JSON)
   void nowFor;
-  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "schedule.js", "rcx.js", "rcx-overview.js"]) {
+  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "schedule.js", "rcx.js", "rcx-overview.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.api = async (p) => (await http.get(p)).data;              // nf.js redefines api(); put the stand-in back

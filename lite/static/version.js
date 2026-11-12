@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/static/version.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 // App version in the header: "v5.0.0 · abc1234", linked to that exact commit on GitHub.
 // version.json is generated at deploy time by scripts/nf/hooks/nf_app_sync.py from the repo's
 // VERSION file + `git rev-parse HEAD` (never committed, never edited by hand), so what a box

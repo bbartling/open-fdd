@@ -89,10 +89,6 @@ test("scratch DDL prepares and executes every PostgreSQL rule with SI fixtures",
   await insertRow("weather", { timestamp_utc: "2026-10-01T00:00:00Z", oa_t: 20, web_oa_t: 20, web_oa_dp: 10 });
   await insertRow("utility_interval", { timestamp_utc: "2026-10-01T00:00:00Z", kwh: 1 });
   await insertRow("utility_monthly", { billing_period: "2026-10", kwh: 1 });
-  await insertRow("equipment", { building_id: "fixture-site", equipment_id: "fixture-equipment" });
-  await insertRow("authorized_series", {
-    site_id: "fixture-site", equipment_id: "fixture-equipment", role: "oa_t", unit: "degC",
-  });
   for (const [series_id, values] of [["sensor-1", [20, 20, 20]], ["sensor-2", [20, 75, 75]]]) {
     for (const [index, timestamp_utc] of ["00:00:00Z", "00:05:00Z", "00:10:00Z"].entries()) {
       await insertRow("sensor_history", {

@@ -148,7 +148,7 @@ function rcx(w, nowMs, { onlyResult = false } = {}) {
     const end = (Math.floor(nowMs / (windowSec * 1e3)) + 1) * windowSec * 1e3;      // the window containing now, so a sample stamped exactly now is in
     return new Map(list.map((p) => [p.uuid, resample(w.data.get(p.uuid) || [], end - windowSec * 1e3 - hours * 3600e3, end, windowSec, method)]));
   };
-  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "schedule.js", "rcx.js"]) {
+  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "schedule.js", "rcx.js"]) {
     vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });
   }
   const toPoint = vm.runInContext("toPoint", ctx);

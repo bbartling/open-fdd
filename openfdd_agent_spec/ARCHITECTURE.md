@@ -45,6 +45,32 @@ Oxigraph (WASM, vendored, `wasm-unsafe-eval` in the CSP). The `sparql` hook does
 `POST /api/v1/apps/open-fdd/hooks/sparql` with `args.query` and `args.format` (`json`, `csv`, `turtle`); read the
 answer from `.../hooks/sparql/runs?include_results=true`. `tools/rdf-check` validates the export with Oxigraph and rdflib.
 
+## Hooks and data surface
+
+The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hook>`, answer from `.../runs?include_results=true`) plus the 17 NF REST paths the pages and hooks consume. There is no Open-FDD HTTP server.
+
+| Hook | Edition | Mode | Caller | Reads / writes |
+|---|---|---|---|---|
+| `fdd` | Full | scheduled hourly (+ run-now) | dashboard (run-now, runs), installer, `export.js`, `rcx.js` | reads NF points + history; writes result points (and `openfdd.fdd_results` with the Timescale engine) |
+| `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; Lite also mirrors them to 3 BACnet AVs (`bacnetMirror`) |
+| `sparql` | Full | on request | agents and docs (the browser runs the same engine in `static/sparql.js`) | read-only |
+| `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
+| `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
+| `history` | Full | on request | `doctor` and agents (charts read `/api/v1/point/data` directly); agent-only API | read-only; server-side bucketed history from Timescale |
+
+Tables the **Full** edition creates, only when the optional Timescale engine is installed (`timescale/install.sql`; `SCHEMA_VERSION` 3):
+
+| Object | Kind | Written by | Read by |
+|---|---|---|---|
+| `openfdd.config` | table | `install.sql` seeds | `hooks/lib/timescale.js`, the retention functions, `doctor` |
+| `openfdd.fdd_results` | hypertable | `fdd` hook (upsert per run) | **integration output**: BI tools and downstream apps read it; the dashboard reads the hook's result points instead. PK `(run_ts, equip, rule_id, sensor_ref)`; columns `site`, `fault_pct`, `fault_hours`, `covered_hours`, `metric` (jsonb), `engine`, `window_start`, `window_end`, `role` |
+| `openfdd.retention_log` | table | `openfdd.retention_run()` | audit trail (tests, operators) |
+| `openfdd.nf_samples` | view | n/a | `hooks/lib/timescale.js`, `hooks/lib/engines.js` (adapter over NF's sample table) |
+
+The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 2): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
+
+`sql/fdd/tuning_storage.sql` (`fdd.rule_config_revision`, `fdd.active_rule_config`, `fdd.rule_result`) is **not** part of the above: it is the tuning storage contract that integrators adopt (see [`sql/fdd/README.md`](../sql/fdd/README.md)); no Open-FDD component reads or writes those tables.
+
 ## Constraints
 
 - No site-specific code; the model in NF is the only configuration.

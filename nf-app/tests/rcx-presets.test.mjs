@@ -25,7 +25,7 @@ function load(fetchData = new Map()) {
     ofddRender: (chart, option, name) => rendered.push({ chart, option, name }),
   });
   ctx.units = "imperial";
-  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "rcx.js", "rcx-presets.js"]) {
+  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "rcx.js", "rcx-presets.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.get = (name) => vm.runInContext(name, ctx);

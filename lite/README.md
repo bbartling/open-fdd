@@ -34,12 +34,12 @@ Runs every 20 minutes (`MODE_SCHEDULED`).
   to the site id. Set the coordinates in NF (Sites), not in code.
 - **Variables:** `oa_dry_bulb_web`, `oa_rh_web`, `oa_dewpoint_web` (NF points with history).
 - **BACnet mirror:** analog values on NF's own BACnet server, named `WEB OA-T`, `WEB OA-H`,
-  `WEB OA-DP`. Hook config in `app.json`:
+  `WEB OA-DP`. NF drops hook-level config, so these are app options (set them in the NF console app settings):
 
   | key | default | meaning |
   |---|---|---|
   | `site` | `""` | NF site id, only needed when several sites have coordinates |
-  | `bacnetMirror` | `true` | `false` skips the BACnet objects |
+  | `bacnetMirror` | on in Lite (the edition default; no setting needed) | `false` skips the BACnet objects (alias `bacnet_mirror`) |
   | `avInstances` | `[1, 2, 3]` | AV instance numbers for temp, RH, dewpoint (three distinct integers; an array or `"1,2,3"`) |
 
   The `bacnet_object` attrs on the global variables in `app.json` are informational labels. If you

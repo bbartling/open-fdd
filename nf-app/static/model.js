@@ -1,4 +1,5 @@
-// Haystack model for the Open-FDD pages. Every tab renders from the object
+// GENERATED COPY of shared/static/model.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
+// Haystack model for the Open-FDD pages (both editions; source: shared/static/model.js). Every tab renders from the object
 // loadModel() returns — nothing site-specific lives in the UI code.
 //
 //   model layer   SITE / EQUIPMENT / DEVICE records (ids, siteRef, equipRef, markers)
@@ -87,8 +88,9 @@ const ttlId = (s) => String(s).replace(/[^A-Za-z0-9_-]/g, "_");
  * local:store_nf is the NF store node. nfBase = opts.nfBase, else the page origin (never a
  * hard-coded host); with neither, the URL is omitted and the uuid is the only key. NF's class and
  * the FDD hook's ruleRef are exported as local:nfClass / local:ruleRef (defined as rdf:Property).
- * Full profile hook: pass opts.timescale = { label, uri } to add a second reference per point,
- * stored at local:store_timescaledb (same uuid; the TimescaleDB rows are keyed by it).
+ * Full edition: pass opts.timescale = { label, uri } to add a second reference per point,
+ * stored at local:store_timescaledb (same uuid; the TimescaleDB rows are keyed by it). Lite has no
+ * TimescaleDB and never passes it.
  */
 function modelToTurtle(model, base, opts = {}) {
   const nfBase = (opts.nfBase ?? (typeof location !== "undefined" && location.origin !== "null" ? location.origin : "")).replace(/\/$/, "");

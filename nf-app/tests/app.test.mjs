@@ -38,7 +38,7 @@ function modelFor(ctx) {
 }
 
 test("toPoint reads tags, refs, units and labels from NF attrs", () => {
-  const ctx = load("nf.js", "model.js");
+  const ctx = load("paging.js", "nf.js", "model.js");
   const p = ctx.toPoint(FIXTURE.points[0]);
   assert.deepEqual([...p.tags], ["point", "sensor", "discharge", "air", "temp", "his", "cur"]);
   assert.equal(p.equipRef, "AHU-1");
@@ -48,7 +48,7 @@ test("toPoint reads tags, refs, units and labels from NF attrs", () => {
 });
 
 test("Turtle export: every ref target and every non-standard tag is defined (no orphans)", () => {
-  const ctx = load("nf.js", "model.js");
+  const ctx = load("paging.js", "nf.js", "model.js");
   const { turtle, nonStandard } = ctx.modelToTurtle(modelFor(ctx), "urn:test:");
   assert.deepEqual([...nonStandard], ["rooftop", "spare"]);
   const defined = new Set([...turtle.matchAll(/^local:(\S+)\n\s+a /gm)].map((m) => m[1]));
@@ -61,7 +61,7 @@ test("Turtle export: every ref target and every non-standard tag is defined (no 
 });
 
 test("pointSets picks cards, status and weather by tags only", () => {
-  const ctx = load("nf.js", "model.js", "charts.js");
+  const ctx = load("paging.js", "nf.js", "model.js", "charts.js");
   const sets = ctx.pointSets(modelFor(ctx), "site-a", "");
   assert.deepEqual(Array.from(sets.cards, (p) => p.uuid), ["u-SAT", "u-OAT", "u-OAH"]);   // temps first, then by label
   assert.deepEqual(Array.from(sets.status, (p) => p.uuid), ["u-FAN-C"]);
@@ -70,7 +70,7 @@ test("pointSets picks cards, status and weather by tags only", () => {
 });
 
 test("pickWindow keeps every chart request to ~360 values per series", () => {
-  const ctx = load("nf.js", "model.js", "charts.js");
+  const ctx = load("paging.js", "nf.js", "model.js", "charts.js");
   for (const [hours, win] of [[6, 60], [24, 300], [72, 900], [168, 1800], [720, 7200]]) {
     assert.equal(ctx.get("pickWindow")(hours), win, `${hours} h`);
     assert.ok((hours * 3600) / win <= 360);
@@ -78,7 +78,7 @@ test("pickWindow keeps every chart request to ~360 values per series", () => {
 });
 
 test("fetchDisplay chunks 161 and 709 point history reads below the request limit", async () => {
-  const ctx = load("nf.js", "model.js", "charts.js");
+  const ctx = load("paging.js", "nf.js", "model.js", "charts.js");
   const requests = [];
   ctx.fetch = async (url) => {
     requests.push(String(url));
@@ -101,7 +101,7 @@ test("fetchDisplay chunks 161 and 709 point history reads below the request limi
 });
 
 test("live update stream caps oversized lists and leaves the complete set to polling", () => {
-  const ctx = load("nf.js");
+  const ctx = load("paging.js", "nf.js");
   let state, requests = 0;
   ctx.fetch = async () => { requests++; throw new Error("should use polling"); };
   const stop = ctx.streamUpdates(Array.from({ length: 161 }, (_, i) =>
@@ -113,7 +113,7 @@ test("live update stream caps oversized lists and leaves the complete set to pol
 });
 
 test("byDay groups samples by local calendar day, in time order", () => {
-  const ctx = load("nf.js", "model.js", "charts.js");
+  const ctx = load("paging.js", "nf.js", "model.js", "charts.js");
   const t0 = new Date(2026, 10, 1, 23, 30).getTime();
   const days = ctx.byDay([[t0, 1], [t0 + 3600e3, 2], [t0 + 7200e3, 3]]);
   assert.equal(days.size, 2);
@@ -146,7 +146,7 @@ test("weather hook: site comes from NF, never hard-coded", () => {
 });
 
 test("FDD binding: kinds from equip markers, inputs by NF class or markers", () => {
-  const ctx = load("nf.js", "model.js", "fdd.js");
+  const ctx = load("paging.js", "nf.js", "model.js", "fdd.js");
   const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
   const model = modelFor(ctx);
   assert.ok(Array.from(ctx.equipKinds(FIXTURE.equips[0], catalog)).includes("ahu"));
@@ -384,7 +384,7 @@ test("161 fault lanes render an option using the real chunked All history path",
     },
     ofddChart: () => ({ setOption: (built) => { option = built; } }),
   });
-  for (const file of ["nf.js", "model.js", "charts.js", "app.js"]) {
+  for (const file of ["paging.js", "nf.js", "model.js", "charts.js", "app.js"]) {
     vm.runInContext(readFileSync(new URL(`../static/${file}`, import.meta.url), "utf8"), ctx, { filename: file });
   }
   ctx.renderRangeControl = () => {};

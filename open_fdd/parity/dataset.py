@@ -1,6 +1,6 @@
 """Deterministic SI parity datasets: ``generate(seed, equips, days, profile)``.
 
-The ``basic`` profile is a faithful port of ``nf-app/hooks/lib/synthetic_dataset.js`` (the data the in-repo parity
+The ``basic`` profile is a faithful port of ``nf-app/tests/fixtures/synthetic_dataset.js`` (the data the in-repo parity
 suite has always used); ``tests/parity/test_generator_equivalence.py`` runs both generators and asserts the rows are
 identical. The ``edge`` profile is ``basic`` plus input-handling stress: null runs, a long gap, timestamp jitter,
 duplicate rows, out-of-order rows, a DST-transition week and planted faults with known windows.

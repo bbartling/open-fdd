@@ -1,4 +1,8 @@
--- Starter schema for integration, not an automatically executed migration.
+-- TUNING STORAGE CONTRACT: Open-FDD's schema for rule tuning (parameter revisions) and result provenance.
+-- No Open-FDD component reads or writes these tables: the NF app keeps its tuning in hook config and its results in
+-- NF points (and openfdd.fdd_results, see nf-app/timescale/install.sql). Downstream applications that store tuning
+-- adopt this layout so their data stays interchangeable; keep the table and column names stable.
+-- Not an automatically executed migration: run it yourself, in your own database.
 -- Application validates catalog ranges, rule existence, role availability and authorization.
 CREATE SCHEMA IF NOT EXISTS fdd;
 CREATE TABLE IF NOT EXISTS fdd.rule_config_revision (

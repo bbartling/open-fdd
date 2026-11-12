@@ -347,34 +347,6 @@
     "type": "double"
    }
   ],
-  "authorized_series": [
-   {
-    "name": "site_id",
-    "type": "text"
-   },
-   {
-    "name": "equipment_id",
-    "type": "text"
-   },
-   {
-    "name": "role",
-    "type": "text"
-   },
-   {
-    "name": "unit",
-    "type": "text"
-   }
-  ],
-  "equipment": [
-   {
-    "name": "building_id",
-    "type": "text"
-   },
-   {
-    "name": "equipment_id",
-    "type": "text"
-   }
-  ],
   "sensor_history": [
    {
     "name": "equipment_id",

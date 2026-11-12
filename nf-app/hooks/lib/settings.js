@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/hooks/settings.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 'use strict';
 /**
  * Hook settings, the way NF 3.10.x actually stores them (5.0.6, #1550).
@@ -22,7 +23,7 @@
 /** Options whose value is an object/array in the code but arrives as a JSON string in NF options. */
 const JSON_OPTIONS = ['timescale', 'history', 'bacnet', 'equips'];
 const NUMBER_OPTIONS = ['windowHours', 'latitude', 'longitude', 'writeRetryMs'];
-const BOOLEAN_OPTIONS = ['dryRun'];
+const BOOLEAN_OPTIONS = ['dryRun', 'bacnetMirror', 'bacnet_mirror'];
 
 /** NF typed values, e.g. { string: "x" } / { signed: 24 } / { boolean: true } (as GetApplications shows an option). */
 const TYPED_KEYS = ['string', 'signed', 'unsigned', 'double', 'real', 'boolean'];

@@ -7,7 +7,7 @@ import vm from "node:vm";
 const dir = new URL("../static/", import.meta.url);
 const load = () => {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
-  for (const f of ["nf.js", "model.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  for (const f of ["paging.js", "nf.js", "model.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   ctx.get = (name) => vm.runInContext(name, ctx);
   return ctx;
 };

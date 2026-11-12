@@ -4,7 +4,7 @@
   "files": [
     "types/globals.d.ts", "types/shapes.d.ts",
     "static/theme-init.js",
-    "static/version.js", "static/nf.js", "static/model.js", "static/units.js", "static/schedule.js", "static/theme.js", "static/charts.js",
+    "static/version.js", "static/paging.js", "static/nf.js", "static/model.js", "static/units.js", "static/schedule.js", "static/theme.js", "static/charts.js",
     "static/fdd.js", "static/rcx.js", "static/fdd-plots.js", "static/rcx-overview.js",
     "static/rcx-presets.js", "static/plot-spec-data.js", "static/plot-spec.js", "static/energy.js", "static/export.js", "static/app.js", "static/sparql.js"
   ]

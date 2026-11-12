@@ -1,6 +1,6 @@
 """pandas == SQL parity harness (SI only): thin repo-side glue over ``open_fdd.parity``.
 
-Dataset:  ``open_fdd.parity.generate`` (a bit-exact port of nf-app/hooks/lib/synthetic_dataset.js; see
+Dataset:  ``open_fdd.parity.generate`` (a bit-exact port of nf-app/tests/fixtures/synthetic_dataset.js; see
           test_generator_equivalence.py).
 SQL side: ``adapters.NodeEngineAdapter`` runs the pack (nf-app/rules/pack-*.json) on PGlite (real Postgres) and sql.js
           (SQLite) through ``sql_run.mjs``.
