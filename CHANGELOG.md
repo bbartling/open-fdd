@@ -3,6 +3,18 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.15 — 2026-11-11 (app) / open-fdd 4.5.6 (PyPI)
+
+Tidy-up; FDD results are unchanged (parity: compared=71 matched=47 known-divergent=24 unexpected=0).
+
+- **Breaking (contract):** SQL input contract version 2 drops the scratch tables `authorized_series` and `equipment`. 0 of 77 rules read them; the hooks no longer fill them (two fewer TEMP tables and inserts per run). Rule SQL and packs are otherwise byte-identical. An integrator that built views for those two relations can delete them.
+- One shared source (`shared/`) for the code both editions had hand-copied: `nf.js`, `model.js`, `theme-init.js`, `tree.css`, `version.js`, the weather hook, `settings.js`, the pager and `shapes.d.ts`. `python scripts/nf/sync_shared.py` writes the copies into `nf-app/` and `lite/`; `--check` (and a pytest) fails when one drifts.
+- One pager: `shared/paging.js` (CommonJS in the hooks, `OfddPaging` in the pages; pages load `paging.js` before `nf.js`). It replaces four inline copies.
+- One weather hook source for both editions. Hook ids and entry points are unchanged. The BACnet mirror default is built into each edition (Lite on, Full off; `sync_shared.py` writes an edition constant, since NF drops hook-level config), and the app option `bacnetMirror` overrides it either way. Lite also gains the `latitude`/`longitude` option override.
+- `sql/fdd/tuning_storage.sql` is documented as the tuning storage contract (no Open-FDD component reads or writes it; kept at its path for integrators). `openfdd.fdd_results` is documented as the durable integration output.
+- Docs: "Hooks and data surface" tables (`nf-app/README.md`, `openfdd_agent_spec/ARCHITECTURE.md`).
+- Removed the stray `nf-app/timescale/integration.diff`; moved the test-only `synthetic_dataset.js` from `nf-app/hooks/lib/` to `nf-app/tests/fixtures/`.
+
 ## 5.0.14 — 2026-11-11 (app) / open-fdd 4.5.5 (PyPI)
 
 - Parity harness in the PyPI package (`open_fdd.parity`): `generate` (basic profile bit-identical to the JS generator; `edge` profile with null runs, gaps, jitter, duplicate and out-of-order rows, a DST week, planted faults), `reference`, `Policy`/`compare`, adapter interface, imperial-ingest helper. Known differences ship as data; `stress.py --profile` (#1591).

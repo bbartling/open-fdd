@@ -5,6 +5,15 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.15 - 2026-11-11 (open-fdd 4.5.6 on PyPI)
+
+Tidy-up. FDD results are unchanged (parity run: 71 compared, 47 matched, 24 known-divergent, 0 unexpected).
+
+- **Breaking (contract):** SQL input contract version 2 drops the scratch tables `authorized_series` and `equipment`: no rule reads them and the hooks no longer fill them. Rule SQL is unchanged.
+- **One shared source** (`shared/`, copied by `scripts/nf/sync_shared.py`, `--check` in CI) for the files Full and Lite had hand-copied, including the weather hook and a single pager. Hook ids are unchanged; the BACnet mirror default is built into each edition (Lite on, Full off) and the `bacnetMirror` app option overrides it.
+- **Docs:** `sql/fdd/tuning_storage.sql` is documented as the tuning storage contract, `openfdd.fdd_results` as the integration output, and the hooks and tables each edition creates are listed in one table.
+- Removed a stray dev patch; moved a test-only fixture out of `hooks/lib`.
+
 ## Open-FDD 5.0.14 - 2026-11-11 (open-fdd 4.5.5 on PyPI)
 
 - **Parity harness:** `open_fdd.parity` ships in the PyPI package: synthetic data generation (basic and `edge` profiles), a pandas reference, `Policy`/`compare`, and known differences as data. Six edge-profile input-handling differences are pinned with reasons. [#1591](https://github.com/bbartling/open-fdd/issues/1591)

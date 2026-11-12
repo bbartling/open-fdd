@@ -87,6 +87,13 @@ a PostgreSQL client; a `localhost`, `127.0.0.1` or `::1` option names the NF hos
 workstation), or fix the probe by installing the app dependencies. Keep credentials out of the command line.
 Lite, SQLite, and PGlite skip this preflight and never bootstrap the probe.
 
+## Weather hook BACnet mirror
+
+Full and Lite run the same weather hook. Lite mirrors the three weather values to analog values on NF's own BACnet server
+by default; Full does not. The default is part of the edition (built in), because NF drops hook-level config and only app
+**options** reach the hook. To change it set the app option `bacnetMirror` to `true` or `false` (alias `bacnet_mirror`);
+`avInstances` works the same way.
+
 ## Site timezone
 
 Range pickers, hour labels, and RCx weekly views use the site timezone. Open-FDD takes the first of: the modeled site's
