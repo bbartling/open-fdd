@@ -25,7 +25,7 @@ function load() {
   ctx.ofddRender = (chart, option, name) => { chart.setOption?.(option); ctx.rendered.push({ option: chart.option || option, name }); };
   ctx.series = new Map();                      // uuid -> [[ms, v]] served by the fetchSeries stub
   ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));
-  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "schedule.js", "charts.js", "rcx.js", "rcx-overview.js"]) {
+  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "schedule.js", "charts.js", "rcx.js", "rcx-overview.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));

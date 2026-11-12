@@ -1,31 +1,53 @@
+// GENERATED COPY of shared/hooks/open_meteo_weather.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 /**
- * Open-FDD Lite: Open-Meteo outdoor-air weather hook, mirrored to NF's BACnet server.
+ * Open-FDD: Open-Meteo outdoor-air weather hook for Normal Framework (NF) 3.10.x.
  *
- * Same fetch / retry / deadline / AddPointsData pattern as the full edition's
- * nf-app/hooks/weather.js. Every 20 minutes it:
+ * Runs as a scheduled NF Applications SDK hook (MODE_SCHEDULED, RRULE every
+ * 20 minutes). Each run fetches the current conditions from Open-Meteo (free,
+ * no API key) and writes three hook *global variables*. NF stores variables as
+ * ordinary points (pointType VARIABLE), and each run appends one sample to
+ * their history via AddPointsData, so /api/v1/point/data (console or the
+ * Normal Online portal) returns them like any trended BACnet point.
  *
- *   1. reads the site location from NF itself (GET /api/v1/sites: latitude,
- *      longitude, name). Nothing site-specific lives in this file. With one
- *      site that has coordinates it is used; with several, set the hook config
- *      value `site` to the site id,
- *   2. fetches current conditions from Open-Meteo (no API key),
- *   3. writes three hook global variables (NF points with history),
- *   4. creates (once) and updates three analog-value objects on NF's own BACnet
- *      server so any BACnet client can read the same numbers. The AV instance
- *      numbers come from the hook config value `avInstances` (default [1, 2, 3],
- *      in the order oa_dry_bulb_web, oa_rh_web, oa_dewpoint_web). Set
- *      `bacnetMirror` to false to skip the BACnet part.
+ *   label oa_dry_bulb_web  outdoor air dry bulb   degF
+ *   label oa_rh_web        outdoor air RH         %
+ *   label oa_dewpoint_web  outdoor air dewpoint   degF
  *
- *        label              default object  name        units
- *        oa_dry_bulb_web    av.1            WEB OA-T    degF  (64)
- *        oa_rh_web          av.2            WEB OA-H    %RH   (29)
- *        oa_dewpoint_web    av.3            WEB OA-DP   degF  (64)
+ * Dewpoint: Open-Meteo's dew_point_2m is used when present. It is also computed
+ * here with the Magnus formula from temperature and RH and used as a
+ * fallback. Both values are logged on every run.
  *
- * Local objects are created WITHOUT a uuid. Passing an existing point uuid to
- * CreateLocalObject overwrites that point (NF 3.10.9), so let NF assign one.
- * Node's built-in https only: no npm dependencies.
+ * Site location comes from NF itself, so nothing site-specific lives in this
+ * file. Order: the hook settings `latitude` + `longitude` (NF passes the app
+ * options as ctx.config; set them in the NF console app settings), then the NF
+ * Sites collection (GET /api/v1/sites), then the modeled Haystack SITE. With
+ * one site that has coordinates it is used; with several, set the app option
+ * `site` to the site id. Otherwise the run fails naming where to set them.
+ * The answer's coords_source says which one was used.
+ *
+ * BACnet mirror (default ON in the Lite edition, OFF in Full; the edition is written into each copy by
+ * scripts/nf/sync_shared.py). NF drops hook-level config, so the default cannot live in app.json; the app OPTION
+ * `bacnetMirror` (true/false; alias `bacnet_mirror`) overrides it either way. When on, the hook also creates (once) and
+ * updates three analog-value objects on NF's own BACnet server so any BACnet client can read the same numbers. The AV instance numbers come from the config value `avInstances`
+ * (default [1, 2, 3], in the order oa_dry_bulb_web, oa_rh_web, oa_dewpoint_web).
+ *
+ *     label              default object  name        units
+ *     oa_dry_bulb_web    av.1            WEB OA-T    degF  (64)
+ *     oa_rh_web          av.2            WEB OA-H    %RH   (29)
+ *     oa_dewpoint_web    av.3            WEB OA-DP   degF  (64)
+ *
+ * Local objects are created WITHOUT a uuid: passing an existing point uuid to CreateLocalObject overwrites that point
+ * (NF 3.10.9), so NF assigns one.
+ *
+ * ONE source for both editions (shared/hooks/open_meteo_weather.js, copied by scripts/nf/sync_shared.py to
+ * nf-app/hooks/weather.js and lite/hooks/open_meteo_weather.js). Uses Node's built-in https module plus the
+ * dependency-free ./lib/paging.js and ./lib/settings.js (also shared): no npm install needed.
  */
+// Written per edition by scripts/nf/sync_shared.py: 'lite' mirrors to NF's BACnet server by default, 'full' does not.
+const OFDD_EDITION = /** @type {string} */ ('lite');
 const https = require('https');
+const { pageAll, listAll } = require('./lib/paging.js');
+const settings = require('./lib/settings.js');
 
 const openMeteoUrl = (lat, lon) =>
   'https://api.open-meteo.com/v1/forecast' +
@@ -56,72 +78,19 @@ function coordsFromAttrs(attrs) {
 }
 
 /**
- * The Lite edition's one pager (the full edition shares nf-app/hooks/lib/paging.js; Lite is a single-file app, so this
- * is the same algorithm inline, #1550). NF pages by pageOffset + totalCount, not only by a next-page token:
- * a nextPageToken is followed when present, else pageOffset advances until totalCount (or an empty / short page when
- * there is no totalCount). A page that repeats, a short read and a hard cap are errors (err.paging), never a
- * silently truncated list.
- * @param {(p: { pageSize: number, pageOffset?: number, pageToken?: string }) => Promise<any>} fetchPage
- * @param {{ key: string, what: string, pageSize?: number, maxRecords?: number, maxPages?: number }} o
+ * All pages of POST /api/v1/point/query for one layer (shared pager: pageOffset + totalCount, #1550); a layer that
+ * does not exist (HTTP error) is just empty. A paging failure (cap, short read) is NOT swallowed: a truncated model
+ * would hide the SITE record the same way it did for the fdd hook.
  */
-async function pageAll(fetchPage, o) {
-  const pageSize = o.pageSize || 500;
-  const maxRecords = o.maxRecords || 200000;
-  const maxPages = o.maxPages || 1000;
-  const fail = (m) => Object.assign(new Error(`${o.what}: ${m}`), { paging: true });
-  const out = [];
-  const seen = new Set();
-  const tokens = new Set();
-  let token = '';
-  let offset = 0;
-  let total = null;
-  for (let pages = 0; ; pages += 1) {
-    if (pages >= maxPages || offset >= maxRecords) {
-      throw fail(`paging cap reached after ${offset} records in ${pages} pages (totalCount ${total === null ? 'unknown' : total}); refusing to continue with a partial result`);
-    }
-    const params = { pageSize };
-    if (token) params.pageToken = token;
-    else if (offset > 0) params.pageOffset = offset;
-    const page = (await fetchPage(params)) || {};
-    const recs = Array.isArray(page[o.key]) ? page[o.key] : [];
-    const t = page.totalCount === undefined || page.totalCount === null || page.totalCount === '' ? NaN : Number(page.totalCount);
-    if (Number.isFinite(t) && t >= 0) total = t;
-    let added = 0;
-    for (const r of recs) {
-      const id = (r && (r.uuid || r.id)) || JSON.stringify(r);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      out.push(r);
-      added += 1;
-    }
-    if (recs.length && !added) throw fail(`page ${pages + 1} repeated records already read (the server ignored the paging parameters); refusing to loop`);
-    offset += recs.length;
-    if (page.nextPageToken) {
-      if (tokens.has(page.nextPageToken)) throw fail('nextPageToken repeated; refusing to loop');
-      tokens.add(page.nextPageToken);
-      token = page.nextPageToken;
-      continue;
-    }
-    token = '';
-    if (!recs.length) break;
-    if (total !== null) {
-      if (offset >= total) break;
-    } else if (recs.length < pageSize) break;
-  }
-  if (total !== null && offset < total) throw fail(`read ${offset} of totalCount ${total} records, then the server returned an empty page; refusing to continue with a partial result`);
-  return out;
-}
-
-/** All pages of POST /api/v1/point/query for one layer; a layer that does not exist (HTTP error) is just empty. */
 async function queryLayer(http, layer) {
   // First-request failure (missing/unreadable layer) -> []; a later-page failure must propagate
   // so a truncated model is never mistaken for "no site found" (#1553 CodeRabbit).
   let pages = 0;
   try {
     return await pageAll(async (p) => {
-      const data = (await http.post('/api/v1/point/query', { layer, ...p })).data;
+      const res = await http.post('/api/v1/point/query', { layer, ...p });
       pages += 1;
-      return data;
+      return res && res.data;
     }, { key: 'points', what: 'point/query' });
   } catch (e) {
     if (e && e.paging) throw e;
@@ -134,6 +103,29 @@ async function queryLayer(http, layer) {
     if (status === 404 || /\bHTTP\s*404\b/i.test(msg)) return [];
     throw e;
   }
+}
+
+const APP_OPTIONS_HINT = 'set the app options "latitude" and "longitude" (NF console > app settings: the hook reads them first)';
+
+/**
+ * Coordinates from the hook settings (NF passes the app options as ctx.config): latitude + longitude, as numbers or
+ * numeric strings. Blank or 0,0 = not set (null). Set but unusable (one of the pair, not a number, out of range)
+ * throws, naming the options: a typo must not silently fall through to some other site.
+ * @param {any} config
+ * @returns {{ id: string, name: string, latitude: number, longitude: number, source: string } | null}
+ */
+function coordsFromConfig(config) {
+  const c = config || {};
+  if (!present(c.latitude) && !present(c.longitude)) return null;
+  const c2 = { latitude: present(c.latitude) ? Number(c.latitude) : NaN, longitude: present(c.longitude) ? Number(c.longitude) : NaN };
+  // 0 and 0 is what an option shows when nobody filled it in (and is never a real site): unset, not an error
+  if (c2.latitude === 0 && c2.longitude === 0) return null;
+  if (!hasCoords(c2) || Math.abs(c2.latitude) > 90 || Math.abs(c2.longitude) > 180) {
+    throw new Error('app options "latitude" and "longitude" must both be set to valid, non-zero coordinates '
+      + `(got latitude=${JSON.stringify(c.latitude)}, longitude=${JSON.stringify(c.longitude)})`);
+  }
+  const id = present(c.site) ? String(c.site) : 'app-settings';
+  return { id, name: id, ...c2, source: 'app setting (latitude/longitude)' };
 }
 
 /**
@@ -200,7 +192,7 @@ const bacnetObjects = (siteName, instances) =>
 
 const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo request
 const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
-const WRITE_TIMEOUT_MS = 10000; // per NF API call
+const WRITE_TIMEOUT_MS = 10000; // per NF API call (point write, BACnet mirror)
 const SITES_TIMEOUT_MS = 10000; // whole paginated Sites lookup
 const MODEL_LOOKUP_TIMEOUT_MS = 45000; // paginated model/site lookup (many sequential pages)
 const RUN_DEADLINE_MS = 180000; // Sites (10s) + model (45s) + fetch (40s) + point writes (30s) + mirror (40s)
@@ -225,7 +217,7 @@ function getJson(url) {
   return new Promise((resolve, reject) => {
     const req = https.get(
       url,
-      { headers: { 'User-Agent': 'open-fdd-lite-weather-hook/1.0', Accept: 'application/json' } },
+      { headers: { 'User-Agent': 'openfdd-nf-weather-hook/1.0', Accept: 'application/json' } },
       (res) => {
         let body = '';
         res.setEncoding('utf8');
@@ -243,12 +235,14 @@ function getJson(url) {
         });
       },
     );
+    // req.setTimeout only fires on an idle socket; the hard total deadline is in getJsonWithRetry.
     req.setTimeout(HTTP_TIMEOUT_MS, () => req.destroy(new Error(`Open-Meteo idle timeout after ${HTTP_TIMEOUT_MS} ms`)));
     req.on('error', reject);
     /** @type {any} */ (getJson).lastReq = req;
   });
 }
 
+/** Open-Meteo fetch with a hard per-attempt deadline (covers DNS stalls and slow-drip bodies) and one retry. */
 async function getJsonWithRetry(url, log) {
   let lastErr;
   for (let attempt = 0; attempt <= HTTP_RETRIES; attempt += 1) {
@@ -341,22 +335,28 @@ async function runOnce({ globalVariables, sdk, config }) {
     }
   };
 
-  const instances = avInstances(config); // validate config before any network call
-  const sites = await withDeadline(pageAll(async (p) => nf(sdk.http.get(`/api/v1/sites?pageSize=${p.pageSize}${p.pageOffset ? `&pageOffset=${p.pageOffset}` : ''}${p.pageToken ? `&pageToken=${encodeURIComponent(p.pageToken)}` : ''}`), 'GetSites'),
-    { key: 'sites', what: 'sites' }), SITES_TIMEOUT_MS, 'GetSites');
-  const wanted = config && config.site;
-  let site;
-  try {
-    site = pickSite(sites, wanted);
-    site.source = 'nf sites api';
-  } catch (e) {
-    if (!e || !e.noCoords) throw e;
-    // NF's Sites collection has no usable coordinates: try the modeled Haystack SITE (never invent any)
-    site = await withDeadline(siteFromModel(sdk.http, wanted), MODEL_LOOKUP_TIMEOUT_MS, 'model site lookup');
-    if (!site) throw e;
-    log(`weather location from the ${site.source} (site ${site.id}); NF Sites had none`);
+  // NF passes the app options as ctx.config (numbers can arrive as strings; blank options are "not set")
+  config = settings.normalizeConfig(config);
+  const wanted = config.site;
+  const explicit = config.bacnetMirror !== undefined ? config.bacnetMirror : config.bacnet_mirror;
+  const mirror = explicit === undefined ? OFDD_EDITION === 'lite' : explicit === true || explicit === 'true';
+  const instances = mirror ? avInstances(config) : null; // validate before any network call
+  // 1) the hook settings / app options latitude + longitude (an explicit override), 2) NF Sites, 3) the modeled SITE
+  let site = coordsFromConfig(config);
+  if (site) log(`weather location from the ${site.source}`);
+  else {
+    const sites = await withDeadline(listAll(sdk.http, '/api/v1/sites', 'sites'), SITES_TIMEOUT_MS, 'GetSites');
+    try {
+      site = pickSite(sites, wanted);
+      site.source = 'nf sites api';
+    } catch (e) {
+      if (!e || !e.noCoords) throw e;
+      // NF's Sites collection has no usable coordinates: try the modeled Haystack SITE (never invent any)
+      site = await withDeadline(siteFromModel(sdk.http, wanted), MODEL_LOOKUP_TIMEOUT_MS, 'model site lookup');
+      if (!site) throw new Error(`${e.message}; or ${APP_OPTIONS_HINT}`);
+      log(`weather location from the ${site.source} (site ${site.id}); NF Sites had none`);
+    }
   }
-  const siteName = site.name || site.id;
   const wx = await getJsonWithRetry(openMeteoUrl(site.latitude, site.longitude), log);
   const cur = wx && wx.current;
   if (!cur) throw new Error('Open-Meteo response has no "current" block');
@@ -366,45 +366,79 @@ async function runOnce({ globalVariables, sdk, config }) {
   const apiDewF = cur.dew_point_2m === null || cur.dew_point_2m === undefined ? NaN : Number(cur.dew_point_2m);
   const calcDewF = magnusDewpointF(tempF, rh);
   const dewF = Number.isFinite(apiDewF) ? apiDewF : calcDewF;
+  const dewSource = Number.isFinite(apiDewF) ? 'open-meteo' : 'magnus';
+
   if (!Number.isFinite(tempF) || !Number.isFinite(rh)) {
     throw new Error(`Open-Meteo returned non-numeric values: ${JSON.stringify(cur)}`);
   }
-  const values = { oa_dry_bulb_web: tempF, oa_rh_web: rh, oa_dewpoint_web: dewF };
 
-  // Await each write so a failure fails the run (variable.write() does not).
+  const writes = [
+    ['oa_dry_bulb_web', tempF],
+    ['oa_rh_web', rh],
+    ['oa_dewpoint_web', dewF],
+  ];
+  // NF 3.10.9 gotchas (see scripts/nf/hooks/README.md):
+  //  * The app MUST have auth.apiKey scopes (normalgw.hpl.v1/v2.readwrite) or
+  //    every SDK call from the runtime gets 401/UNAUTHENTICATED.
+  //  * variable.write() does not await the underlying AddPointsData call, so an
+  //    auth failure is swallowed and the run still reports STATE_SUCCESS.
+  // So write through the NF point API (POST /api/v1/point/data) and await it,
+  // which makes failures fail the run.
   const ts = new Date().toISOString();
-  for (const [label, value] of Object.entries(values)) {
+  let writePath = 'sdk.http AddPointsData';
+  for (const [label, value] of writes) {
     const v = globalVariables.byLabel(label);
     if (!v) throw new Error(`global variable "${label}" not found; check the hook's globalVariables`);
     if (!Number.isFinite(value)) continue;
-    const res = await nf(
-      sdk.http.post('/api/v1/point/data', { uuid: v.uuid, values: [{ ts, real: round2(value) }] }),
-      `AddPointsData ${label}`,
-    );
-    if (!res || res.success !== true) throw new Error(`AddPointsData ${label} (${v.uuid}): ${JSON.stringify(res)}`);
+    if (sdk && sdk.http && typeof sdk.http.post === 'function') {
+      let res;
+      try {
+        res = await withDeadline(
+          sdk.http.post('/api/v1/point/data', {
+            uuid: v.uuid,
+            values: [{ ts, real: round2(value) }],
+          }),
+          WRITE_TIMEOUT_MS,
+          `AddPointsData ${label}`,
+        );
+      } catch (e) {
+        // sdk.http rejects with a plain object, not an Error
+        throw new Error(`AddPointsData ${label} (${v.uuid}) failed: ${e && e.message} status=${e && e.status}`);
+      }
+      if (!res || !res.data || res.data.success !== true) {
+        throw new Error(`AddPointsData failed for ${label} (${v.uuid}): ${JSON.stringify(res && res.data)}`);
+      }
+    } else {
+      writePath = 'variable.write';
+      await withDeadline(v.write({ real: round2(value) }), WRITE_TIMEOUT_MS, `variable.write ${label}`);
+    }
   }
 
-  const mirror = !(config && (config.bacnetMirror === false || config.bacnetMirror === 'false'));
-  const bacnet = mirror ? await mirrorToBacnet(sdk, bacnetObjects(siteName, instances), values, cur.time, log) : null;
+  const bacnet = mirror ? await mirrorToBacnet(sdk, bacnetObjects(site.name || site.id, instances), { oa_dry_bulb_web: tempF, oa_rh_web: rh, oa_dewpoint_web: dewF }, cur.time, log) : null;
 
   const summary = {
     site: site.id,
-    siteName,
+    siteName: site.name || site.id,
     location: `${site.latitude},${site.longitude}`,
+    coords_source: site.source,
     observed: cur.time,
     oa_dry_bulb_f: round2(tempF),
     oa_rh_pct: round2(rh),
-    coords_source: site.source,
     dewpoint_open_meteo_f: Number.isFinite(apiDewF) ? round2(apiDewF) : null,
     dewpoint_magnus_f: Number.isFinite(calcDewF) ? round2(calcDewF) : null,
+    dewpoint_delta_f: Number.isFinite(apiDewF) && Number.isFinite(calcDewF) ? round2(calcDewF - apiDewF) : null,
+    dewpoint_written_f: round2(dewF),
+    dewpoint_source: dewSource,
+    write_path: writePath,
     bacnet,
   };
   log(`open-meteo weather ${JSON.stringify(summary)}`);
   return summary;
 }
 
-// The hook is the function; the helpers hang off it for offline tests.
+// The hook is the function; the helpers hang off it for offline tests
+// (load the file from the hooks folder of either edition in node and call magnusDewpointF(70, 50)).
 module.exports = Object.assign(
   async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
-  { magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, avInstances, bacnetObjects, withDeadline, pageAll },
+  { OFDD_EDITION, magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, avInstances, bacnetObjects, withDeadline, pageAll },
 );

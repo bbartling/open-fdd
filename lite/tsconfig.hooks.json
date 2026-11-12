@@ -1,5 +1,5 @@
 {
   // CommonJS hook
   "extends": "./tsconfig.base.json",
-  "files": ["types/globals.d.ts", "hooks/open_meteo_weather.js"]
+  "files": ["types/globals.d.ts", "types/shapes.d.ts", "hooks/open_meteo_weather.js", "hooks/lib/paging.js", "hooks/lib/settings.js"]
 }

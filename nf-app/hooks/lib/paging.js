@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/paging.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 /**
  * The ONE pager the Open-FDD hooks use for NF list routes (point/query, sites, ...).
  *
@@ -13,8 +14,11 @@
  *   4. fewer records than `totalCount` after an empty page is an error (short read), never a silent truncation;
  *   5. a hard cap (`maxRecords`, `maxPages`) ends in a loud PagingError, never a partial result.
  *
- * Plain CommonJS, no dependencies (runs in the NF hook runtime). A browser twin lives in static/nf.js (`pageAll`).
+ * ONE source for every runtime (shared/paging.js, copied by scripts/nf/sync_shared.py): plain JS with no dependencies,
+ * CommonJS in the NF hook runtime (`require('./lib/paging.js')`) and the classic global `OfddPaging` in the pages
+ * (static/paging.js, loaded before nf.js, whose `pageAll` / `queryAll` use it).
  */
+(function (root) {
 'use strict';
 
 const DEFAULT_PAGE_SIZE = 500;
@@ -143,4 +147,7 @@ function listAll(http, base, key, opts = {}) {
   }, { ...opts, key, what: base.split('?')[0].replace(/^\/api\/v1\//, '') });
 }
 
-module.exports = { pageAll, queryPoints, listAll, PagingError, DEFAULT_PAGE_SIZE };
+const api = { pageAll, queryPoints, listAll, PagingError, DEFAULT_PAGE_SIZE };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+else root.OfddPaging = api;
+})(typeof self !== 'undefined' ? self : globalThis);

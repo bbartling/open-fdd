@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/hooks/open_meteo_weather.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 /**
  * Open-FDD: Open-Meteo outdoor-air weather hook for Normal Framework (NF) 3.10.x.
  *
@@ -24,9 +25,26 @@
  * `site` to the site id. Otherwise the run fails naming where to set them.
  * The answer's coords_source says which one was used.
  *
- * Uses Node's built-in https module only (no npm dependencies), so the app can
- * be created through the console API without a git repository or npm install.
+ * BACnet mirror (default ON in the Lite edition, OFF in Full; the edition is written into each copy by
+ * scripts/nf/sync_shared.py). NF drops hook-level config, so the default cannot live in app.json; the app OPTION
+ * `bacnetMirror` (true/false; alias `bacnet_mirror`) overrides it either way. When on, the hook also creates (once) and
+ * updates three analog-value objects on NF's own BACnet server so any BACnet client can read the same numbers. The AV instance numbers come from the config value `avInstances`
+ * (default [1, 2, 3], in the order oa_dry_bulb_web, oa_rh_web, oa_dewpoint_web).
+ *
+ *     label              default object  name        units
+ *     oa_dry_bulb_web    av.1            WEB OA-T    degF  (64)
+ *     oa_rh_web          av.2            WEB OA-H    %RH   (29)
+ *     oa_dewpoint_web    av.3            WEB OA-DP   degF  (64)
+ *
+ * Local objects are created WITHOUT a uuid: passing an existing point uuid to CreateLocalObject overwrites that point
+ * (NF 3.10.9), so NF assigns one.
+ *
+ * ONE source for both editions (shared/hooks/open_meteo_weather.js, copied by scripts/nf/sync_shared.py to
+ * nf-app/hooks/weather.js and lite/hooks/open_meteo_weather.js). Uses Node's built-in https module plus the
+ * dependency-free ./lib/paging.js and ./lib/settings.js (also shared): no npm install needed.
  */
+// Written per edition by scripts/nf/sync_shared.py: 'lite' mirrors to NF's BACnet server by default, 'full' does not.
+const OFDD_EDITION = /** @type {string} */ ('full');
 const https = require('https');
 const { pageAll, listAll } = require('./lib/paging.js');
 const settings = require('./lib/settings.js');
@@ -149,12 +167,35 @@ function pickSite(sites, wanted) {
   throw new Error(`several NF sites have coordinates (${located.map((x) => x.id).join(', ')}); set the app config value "site"`);
 }
 
+const DEFAULT_AV_INSTANCES = [1, 2, 3];
+
+/** The three mirrored values: variable label, AV name and BACnet units enum (64 = degF, 29 = %RH). */
+const BACNET_SPECS = [
+  { label: 'oa_dry_bulb_web', name: 'WEB OA-T', units: 64, what: 'outdoor air dry bulb' },
+  { label: 'oa_rh_web', name: 'WEB OA-H', units: 29, what: 'outdoor air RH' },
+  { label: 'oa_dewpoint_web', name: 'WEB OA-DP', units: 64, what: 'outdoor air dewpoint' },
+];
+
+/** AV instance numbers from config.avInstances (three distinct non-negative integers), else 1, 2, 3. */
+function avInstances(config) {
+  const raw = config && config.avInstances;
+  if (raw === undefined || raw === null || raw === '') return DEFAULT_AV_INSTANCES.slice();
+  const list = (Array.isArray(raw) ? raw : String(raw).split(',')).map((x) => Number(String(x).trim()));
+  const ok = list.length === BACNET_SPECS.length && list.every((n) => Number.isInteger(n) && n >= 0 && n < 4194303) && new Set(list).size === list.length;
+  if (!ok) throw new Error(`config avInstances must be ${BACNET_SPECS.length} distinct instance numbers, got ${JSON.stringify(raw)}`);
+  return list;
+}
+
+/** Objects to mirror for this site: BACNET_SPECS with their configured instance numbers. */
+const bacnetObjects = (siteName, instances) =>
+  BACNET_SPECS.map((sp, i) => ({ ...sp, instance: instances[i], description: `Open-Meteo ${sp.what}, ${siteName}` }));
+
 const HTTP_TIMEOUT_MS = 20000; // per-attempt deadline for the Open-Meteo request
 const HTTP_RETRIES = 1; // one retry on network error/timeout/5xx
-const WRITE_TIMEOUT_MS = 10000; // per-point AddPointsData deadline
+const WRITE_TIMEOUT_MS = 10000; // per NF API call (point write, BACnet mirror)
 const SITES_TIMEOUT_MS = 10000; // whole paginated Sites lookup
 const MODEL_LOOKUP_TIMEOUT_MS = 45000; // paginated model/site lookup (many sequential pages)
-const RUN_DEADLINE_MS = 180000; // Sites (10s) + model (45s) + fetch (40s) + point writes (30s)
+const RUN_DEADLINE_MS = 180000; // Sites (10s) + model (45s) + fetch (40s) + point writes (30s) + mirror (40s)
 
 /** Reject if `promise` doesn't settle within `ms`; calls onTimeout (e.g. abort) first. */
 function withDeadline(promise, ms, what, onTimeout) {
@@ -236,6 +277,54 @@ function magnusDewpointF(tempF, rhPct) {
 
 const round2 = (x) => Math.round(x * 100) / 100;
 
+/** sdk.http (axios) rejects with a plain object; turn it into an Error that names the call. */
+async function nf(promise, what) {
+  try {
+    return (await withDeadline(promise, WRITE_TIMEOUT_MS, what)).data;
+  } catch (e) {
+    const status = e && (e.status || (e.response && e.response.status));
+    const detail = e && e.response && e.response.data ? JSON.stringify(e.response.data).slice(0, 200) : '';
+    throw new Error(`${what} failed: ${e && e.message} status=${status} ${detail}`);
+  }
+}
+
+/** Create the weather AVs on NF's BACnet server if missing, then set their present values. */
+async function mirrorToBacnet(sdk, objects, values, observed, log) {
+  const listing = await nf(sdk.http.get('/api/v1/bacnet/local'), 'GetLocalObjects');
+  const have = new Set(
+    (listing.objects || [])
+      .filter((o) => o.objectId && o.objectId.objectType === 'OBJECT_ANALOG_VALUE')
+      .map((o) => o.objectId.instance),
+  );
+  const mirrored = {};
+  for (const obj of objects) {
+    const value = values[obj.label];
+    if (!Number.isFinite(value)) continue;
+    const objectId = { objectType: 'OBJECT_ANALOG_VALUE', instance: obj.instance };
+    const pv = { property: 'PROP_PRESENT_VALUE', value: { real: round2(value) } };
+    const desc = { property: 'PROP_DESCRIPTION', value: { characterString: `${obj.description} (obs ${observed})` } };
+    if (!have.has(obj.instance)) {
+      await nf(
+        sdk.http.post('/api/v1/bacnet/local', {
+          objectId,
+          props: [
+            { property: 'PROP_OBJECT_NAME', value: { characterString: obj.name } },
+            { property: 'PROP_UNITS', value: { enumerated: obj.units } },
+            desc,
+            pv,
+          ],
+        }),
+        `CreateLocalObject av.${obj.instance}`,
+      );
+      log(`created BACnet av.${obj.instance} ${obj.name}`);
+    } else {
+      await nf(sdk.http.patch('/api/v1/bacnet/local', { objectId, props: [pv, desc] }), `UpdateLocalObject av.${obj.instance}`);
+    }
+    mirrored[`av.${obj.instance}`] = round2(value);
+  }
+  return mirrored;
+}
+
 async function runOnce({ globalVariables, sdk, config }) {
   const log = (msg) => {
     console.log(msg);
@@ -249,6 +338,9 @@ async function runOnce({ globalVariables, sdk, config }) {
   // NF passes the app options as ctx.config (numbers can arrive as strings; blank options are "not set")
   config = settings.normalizeConfig(config);
   const wanted = config.site;
+  const explicit = config.bacnetMirror !== undefined ? config.bacnetMirror : config.bacnet_mirror;
+  const mirror = explicit === undefined ? OFDD_EDITION === 'lite' : explicit === true || explicit === 'true';
+  const instances = mirror ? avInstances(config) : null; // validate before any network call
   // 1) the hook settings / app options latitude + longitude (an explicit override), 2) NF Sites, 3) the modeled SITE
   let site = coordsFromConfig(config);
   if (site) log(`weather location from the ${site.source}`);
@@ -322,8 +414,11 @@ async function runOnce({ globalVariables, sdk, config }) {
     }
   }
 
+  const bacnet = mirror ? await mirrorToBacnet(sdk, bacnetObjects(site.name || site.id, instances), { oa_dry_bulb_web: tempF, oa_rh_web: rh, oa_dewpoint_web: dewF }, cur.time, log) : null;
+
   const summary = {
     site: site.id,
+    siteName: site.name || site.id,
     location: `${site.latitude},${site.longitude}`,
     coords_source: site.source,
     observed: cur.time,
@@ -335,14 +430,15 @@ async function runOnce({ globalVariables, sdk, config }) {
     dewpoint_written_f: round2(dewF),
     dewpoint_source: dewSource,
     write_path: writePath,
+    bacnet,
   };
   log(`open-meteo weather ${JSON.stringify(summary)}`);
   return summary;
 }
 
 // The hook is the function; the helpers hang off it for offline tests
-// (node -e "require('./open_meteo_weather.js').magnusDewpointF(70,50)").
+// (load the file from the hooks folder of either edition in node and call magnusDewpointF(70, 50)).
 module.exports = Object.assign(
   async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
-  { magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, withDeadline },
+  { OFDD_EDITION, magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, avInstances, bacnetObjects, withDeadline, pageAll },
 );

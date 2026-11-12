@@ -1,3 +1,4 @@
+/* GENERATED COPY of shared/static/tree.css by scripts/nf/sync_shared.py: edit the source, then re-run the script. */
 /* tree.html only: its two-column layout on top of style.css (tokens + components). */
 header { padding: 18px 24px; }
 main { display: grid; gap: 18px; max-width: 1600px; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }

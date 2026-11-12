@@ -12,7 +12,7 @@ const mb = (b) => (b / 1048576).toFixed(1);
 const packFile = kind === "pglite" ? "pack-postgres.json" : "pack-sqlite.json";
 const pack = JSON.parse(readFileSync(new URL(`../../nf-app/rules/${packFile}`, import.meta.url), "utf8"));
 const { createEngine } = require("../../nf-app/hooks/lib/engines.js");
-const { buildDataset } = require("../../nf-app/hooks/lib/synthetic_dataset.js");
+const { buildDataset } = require("../../nf-app/tests/fixtures/synthetic_dataset.js");
 
 let peak = 0;
 const sample = () => { peak = Math.max(peak, process.memoryUsage().rss); };

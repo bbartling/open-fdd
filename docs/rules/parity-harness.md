@@ -40,7 +40,7 @@ assert verdict.ok
 ## Profiles
 
 - `basic`: the dataset the in-repo suite has always used (a healthy unit, a sick unit with fault windows, a 5-minute
-  grid, Monday 2026-01-05 00:00 UTC). It is a bit-exact port of `nf-app/hooks/lib/synthetic_dataset.js`; the repo test
+  grid, Monday 2026-01-05 00:00 UTC). It is a bit-exact port of `nf-app/tests/fixtures/synthetic_dataset.js`; the repo test
   `tests/parity/test_generator_equivalence.py` runs both generators and asserts identical rows, which keeps the
   known-difference list valid. Seed 0 is that data. Other seeds salt the column hash and shift the start by whole weeks.
 - `edge`: `basic` plus, deterministically from the seed: null runs, a 3 hour gap on every even unit, timestamp jitter of

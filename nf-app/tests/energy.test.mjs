@@ -18,7 +18,7 @@ const load = () => {
   });
   ctx.units = "imperial";
   ctx.rendered = [];
-  for (const f of ["units.js", "nf.js", "model.js", "fdd.js", "rcx.js", "energy.js"]) {
+  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "rcx.js", "energy.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.get = (n) => vm.runInContext(n, ctx);

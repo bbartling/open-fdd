@@ -2,7 +2,7 @@
 
 Run:  python -m pytest tests/parity -q      (needs node + `npm ci` in nf-app, and pandas/numpy/pyyaml)
 
-Everything is SI. The dataset is nf-app/hooks/lib/synthetic_dataset.js (deterministic; AHU-1 mostly healthy,
+Everything is SI. The dataset is nf-app/tests/fixtures/synthetic_dataset.js (deterministic; AHU-1 mostly healthy,
 AHU-2 "sick" with injected fault windows), run through PGlite + sql.js by tests/parity/sql_run.mjs.
 """
 from __future__ import annotations

@@ -29,7 +29,7 @@ const records = [...fixture.records, {
 
 function turtleOf(recs, nfBase = "http://nf.example.test") {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
-  for (const f of ["nf.js", "model.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  for (const f of ["paging.js", "nf.js", "model.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   ctx.records = recs;
   return vm.runInContext(`(() => {
     const of = (t) => records.filter((x) => x.pointType === t);

@@ -47,6 +47,7 @@
     "/static/index.html": "static/index.html",
     "/static/model.js": "static/model.js",
     "/static/nf.js": "static/nf.js",
+    "/static/paging.js": "static/paging.js",
     "/static/rcx-overview.js": "static/rcx-overview.js",
     "/static/plot-spec-data.js": "static/plot-spec-data.js",
     "/static/plot-spec.js": "static/plot-spec.js",

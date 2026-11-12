@@ -1,4 +1,5 @@
-// Shared NF access for the Open-FDD pages: same-origin /api/v1/* calls with
+// GENERATED COPY of shared/static/nf.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
+// Shared NF access for the Open-FDD pages (both editions; source: shared/static/nf.js): same-origin /api/v1/* calls with
 // the console's login (LAN auth bypass, or the Clerk token through Normal Online).
 
 // Bearer source for the API, or null when NF needs none (LAN auth bypass).
@@ -144,56 +145,15 @@ function streamUpdates(uuids, onValue, onState = () => {}) {
 const field = (property, text) => ({ field: { property, text } });
 
 /**
- * The ONE pager of these pages (the hooks' twin is hooks/lib/paging.js; same algorithm, #1550). NF pages by
- * pageOffset + totalCount, not only by a next-page token: a loop that only follows a token reads the first 500 records
- * and stops silently. Here: a nextPageToken is followed when present, else pageOffset advances until totalCount is
- * reached (or an empty page; with no totalCount a short page ends it too). A page that repeats, a short read and a
- * hard cap throw (err.paging = true), never a silently truncated list.
- * @param {(p: {pageSize: number, pageOffset?: number, pageToken?: string}) => Promise<any>} fetchPage one request -> response body
- * @param {{key?: string, what?: string, pageSize?: number, maxRecords?: number, maxPages?: number}} [o]
- * @returns {Promise<any[]>}
+ * The ONE pager of these pages is shared/paging.js (static/paging.js, loaded before this file; the hooks load the same
+ * file as hooks/lib/paging.js, #1550). NF pages by pageOffset + totalCount, not only by a next-page token: a loop that
+ * only follows a token reads the first 500 records and stops silently. It follows a nextPageToken when present, else
+ * advances pageOffset until totalCount is reached; a repeated page, a short read and a hard cap throw
+ * (err.paging = true), never a silently truncated list.
+ * @type {(fetchPage: (p: {pageSize: number, pageOffset?: number, pageToken?: string}) => Promise<any>,
+ *         o?: {key?: string, what?: string, pageSize?: number, maxRecords?: number, maxPages?: number}) => Promise<any[]>}
  */
-async function pageAll(fetchPage, o = {}) {
-  const key = o.key || "points", what = o.what || "NF list";
-  const pageSize = o.pageSize || 500, maxRecords = o.maxRecords || 200000, maxPages = o.maxPages || 1000;
-  /** @param {string} m */
-  const fail = (m) => Object.assign(new Error(`${what}: ${m}`), { paging: true });
-  const out = [], seen = new Set(), tokens = new Set();
-  let token = "", offset = 0, total = null;
-  for (let pages = 0; ; pages++) {
-    if (pages >= maxPages || offset >= maxRecords) {
-      throw fail(`paging cap reached after ${offset} records in ${pages} pages (totalCount ${total === null ? "unknown" : total}); refusing to continue with a partial result`);
-    }
-    /** @type {{pageSize: number, pageOffset?: number, pageToken?: string}} */
-    const params = { pageSize };
-    if (token) params.pageToken = token;
-    else if (offset > 0) params.pageOffset = offset;
-    const page = (await fetchPage(params)) || {};
-    const recs = Array.isArray(page[key]) ? page[key] : [];
-    const t = page.totalCount === undefined || page.totalCount === null || page.totalCount === "" ? NaN : Number(page.totalCount);
-    if (Number.isFinite(t) && t >= 0) total = t;
-    let added = 0;
-    for (const r of recs) {
-      const id = (r && (r.uuid || r.id)) || JSON.stringify(r);
-      if (seen.has(id)) continue;
-      seen.add(id); out.push(r); added++;
-    }
-    if (recs.length && !added) throw fail(`page ${pages + 1} repeated records already read (the server ignored the paging parameters); refusing to loop`);
-    offset += recs.length;
-    if (page.nextPageToken) {
-      if (tokens.has(page.nextPageToken)) throw fail("nextPageToken repeated; refusing to loop");
-      tokens.add(page.nextPageToken); token = page.nextPageToken;
-      continue;
-    }
-    token = "";
-    if (!recs.length) break;
-    if (total !== null) { if (offset >= total) break; }
-    else if (recs.length < pageSize) break;
-  }
-  if (total !== null && offset < total) throw fail(`read ${offset} of totalCount ${total} records, then the server returned an empty page; refusing to continue with a partial result`);
-  Object.defineProperty(out, "totalCount", { value: total, enumerable: false });
-  return out;
-}
+const pageAll = OfddPaging.pageAll;
 
 /** @param {object} body point/query body; every page is read (see pageAll) @returns {Promise<any[]>} */
 function queryAll(body) {
@@ -202,6 +162,11 @@ function queryAll(body) {
 
 /** @param {unknown} s */
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+/** Colour the legend dots from data-c (CSSOM; an inline style attribute would break the page CSP). */
+function paintLegend(/** @type {any} */ el) {
+  for (const i of el.querySelectorAll("i[data-c]")) i.style.background = i.dataset.c;
+}
 
 // ---- BACnet helpers -----------------------------------------------------------
 const BAC_UNITS = { 29: "%RH", 53: "Pa", 58: "inH₂O", 62: "°C", 64: "°F", 84: "cfm", 95: "", 96: "ppm", 98: "%" };

@@ -1,6 +1,6 @@
 """The Python generator (open_fdd.parity.dataset, profile "basic", seed 0) reproduces the JS generator exactly.
 
-nf-app/hooks/lib/synthetic_dataset.js is what the parity data was born from; the known-difference sets are only valid
+nf-app/tests/fixtures/synthetic_dataset.js is what the parity data was born from; the known-difference sets are only valid
 for that data, so any drift between the two generators must fail loudly here.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from open_fdd.parity import generate
 ROOT = Path(__file__).resolve().parents[2]
 
 JS = """
-const { buildDataset } = require(process.argv[1] + '/nf-app/hooks/lib/synthetic_dataset.js');
+const { buildDataset } = require(process.argv[1] + '/nf-app/tests/fixtures/synthetic_dataset.js');
 const pack = require(process.argv[1] + '/nf-app/rules/pack-postgres.json');
 const opts = JSON.parse(process.argv[2]);
 process.stdout.write(JSON.stringify(buildDataset(pack, opts)));

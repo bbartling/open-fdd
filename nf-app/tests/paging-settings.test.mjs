@@ -222,6 +222,7 @@ function loadNf(file, serve) {
     return { ok: true, status: 200, json: async () => data };
   };
   const ctx = vm.createContext({ fetch, console, URLSearchParams, TextDecoder, atob, btoa, setTimeout: (fn) => { fn(); return 0; } });
+  vm.runInContext(readFileSync(new URL("paging.js", file), "utf8"), ctx, { filename: "paging.js" });   // nf.js needs OfddPaging
   vm.runInContext(readFileSync(file, "utf8"), ctx, { filename: "nf.js" });
   return { queryAll: vm.runInContext("queryAll", ctx), pageAll: vm.runInContext("pageAll", ctx), calls };
 }

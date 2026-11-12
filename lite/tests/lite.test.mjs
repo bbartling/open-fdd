@@ -124,12 +124,14 @@ test("manifest: the app id is the slug of the name (NF derives the id from the n
 test("manifest: no FDD hook, no npm dependencies", () => {
   assert.deepEqual(manifest.hooks.map((h) => h.id), ["open-meteo-weather"]);
   assert.ok(!existsSync(path.join(root, "package.json")));
-  assert.ok(!/require\((?!['"](https|http|node:)[^'"]*['"]\))/.test(read("hooks/open_meteo_weather.js")), "hook may only require node built-ins");
+  // node built-ins plus the dependency-free shared libs (shared/paging.js, shared/hooks/settings.js; scripts/nf/sync_shared.py)
+  assert.ok(!/require\((?!['"](https|http|node:|\.\/lib\/(paging|settings)\.js)['"]\))/.test(read("hooks/open_meteo_weather.js")), "hook may only require node built-ins and ./lib/{paging,settings}.js");
 });
 
 test("manifest: the weather hook config defaults to av.1-3 and matches the code", () => {
   const h = manifest.hooks[0];
   assert.deepEqual(h.config.avInstances, [1, 2, 3]);
+  assert.equal(h.config.bacnetMirror, undefined, "NF drops hook-level config: the edition constant (not app.json) decides the mirror default");
   assert.deepEqual(hook.avInstances(h.config), [1, 2, 3]);
   assert.deepEqual(h.points.globalVariables.map((v) => v.label), ["oa_dry_bulb_web", "oa_rh_web", "oa_dewpoint_web"]);
 });
@@ -142,7 +144,7 @@ test("renamed everywhere: no Bench Viz / bench-viz left in the shipped code, pag
   for (const f of files) assert.ok(!/bench[ -_]?viz/i.test(shipped(f)), `${f} still says Bench Viz`);
   assert.deepEqual(manifest.replaces, ["bench-viz", "open-meteo-weather"]);
   for (const f of ["index.html", "chart.html", "tree.html"]) assert.match(read(`static/${f}`), /<title>Open-FDD Lite/);
-  assert.match(read("hooks/open_meteo_weather.js"), /open-fdd-lite-weather-hook/);
+  assert.match(read("hooks/open_meteo_weather.js"), /openfdd-nf-weather-hook/);
 });
 
 test("no hard-coded site: no coordinates, city, device or bench names in the code", () => {
@@ -188,15 +190,12 @@ test("pickSite: a configured site must exist and have coordinates", () => {
   assert.throws(() => hook.pickSite([S("a", 10, 20), S("b", 0, 0)], "b"), /no latitude\/longitude/);
 });
 
-test("pickSite: identical to nf-app/hooks/weather.js when that file is present", () => {
+test("the weather hook is the Full edition's hook (one shared source, scripts/nf/sync_shared.py)", () => {
   const full = path.join(root, "..", "nf-app", "hooks", "weather.js");
   if (!existsSync(full)) return;
-  const ref = require(full);
-  const cases = [[[S("a", 10, 20)], undefined], [[S("a", 10, 20), S("b", 1, 2)], "b"], [[S("a", 0, 0)], undefined], [[S("a", 1, 2), S("b", 3, 4)], undefined]];
-  for (const [sites, wanted] of cases) {
-    const run = (fn) => { try { return fn(sites, wanted).id; } catch (e) { return `error: ${e.message}`; } };
-    assert.equal(run(hook.pickSite), run(ref.pickSite));
-  }
+  const lf = (s) => s.replace(/\r\n/g, "\n").replace(/\('(full|lite)'\);/, "('X');");
+  assert.equal(lf(readFileSync(full, "utf8")), lf(read("hooks/open_meteo_weather.js")), "same source except the edition constant");
+  assert.equal(hook.OFDD_EDITION, "lite");
 });
 
 // ---- BACnet AV instances from config ----------------------------------------------------
@@ -264,13 +263,36 @@ test("hook run: location from NF /sites, AVs created at the configured instances
   };
   try {
     const vars = { byLabel: (label) => ({ uuid: `u-${label}` }) };
-    const out = await hook({ globalVariables: vars, sdk, config: { avInstances: [21, 22, 23] } });
+    const out = await hook({ globalVariables: vars, sdk, config: { avInstances: [21, 22, 23] } });   // no bacnetMirror: Lite mirrors by default
     assert.match(requested, /latitude=40\.5&longitude=-75\.25/);
     assert.equal(out.site, "s1");
     assert.deepEqual(Object.keys(out.bacnet), ["av.21", "av.22", "av.23"]);
     const created = posted.filter(([u]) => u === "/api/v1/bacnet/local").map(([, b]) => b.objectId.instance);
     assert.deepEqual(created, [21, 22, 23]);
     assert.equal(posted.filter(([u]) => u === "/api/v1/point/data").length, 3);
+    // NF drops hook-level config: an empty or null config must still mirror on Lite (the edition decides the default)
+    for (const config of [{}, null, undefined]) {
+      calls.length = 0;
+      const o = await hook({ globalVariables: vars, sdk, config });
+      assert.deepEqual(Object.keys(o.bacnet), ["av.1", "av.2", "av.3"], JSON.stringify(config));
+      assert.ok(calls.some((c) => c.includes("/bacnet/local")));
+    }
+    // an explicit app option overrides it: false (bool, string or the snake_case alias) = no BACnet calls
+    for (const config of [{ bacnetMirror: false }, { bacnetMirror: "false" }, { bacnet_mirror: false }]) {
+      calls.length = 0;
+      const o = await hook({ globalVariables: vars, sdk, config });
+      assert.equal(o.bacnet, null, JSON.stringify(config));
+      assert.ok(!calls.some((c) => c.includes("/bacnet/")), calls.join(" | "));
+    }
+    // the Full edition runs the same code with the default OFF; an explicit true turns it on
+    const full = require(path.join(root, "..", "nf-app", "hooks", "weather.js"));
+    assert.equal(full.OFDD_EDITION, "full");
+    calls.length = 0;
+    const fo = await full({ globalVariables: vars, sdk, config: {} });
+    assert.equal(fo.bacnet, null);
+    assert.ok(!calls.some((c) => c.includes("/bacnet/")), calls.join(" | "));
+    const fon = await full({ globalVariables: vars, sdk, config: { bacnetMirror: true } });
+    assert.deepEqual(Object.keys(fon.bacnet), ["av.1", "av.2", "av.3"]);
   } finally {
     https.get = realGet;
   }
@@ -360,7 +382,7 @@ test("no inline style=, event handlers, javascript: URLs, eval or new Function i
 async function liteTurtle() {
   const { createContext, runInContext } = await import("node:vm");
   const ctx = createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
-  for (const f of ["nf.js", "model.js"]) runInContext(read(`static/${f}`), ctx, { filename: f });
+  for (const f of ["paging.js", "nf.js", "model.js"]) runInContext(read(`static/${f}`), ctx, { filename: f });
   const repo = path.resolve(root, "..");
   ctx.records = JSON.parse(readFileSync(path.join(repo, "tools/rdf-check/fixtures/model.json"), "utf8")).records;
   const pt = ctx.records.find((x) => x.pointType === "POINT");
