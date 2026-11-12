@@ -72,6 +72,7 @@
     "/static/vendor/oxigraph/web_bg.wasm": "static/vendor/oxigraph/web_bg.wasm",
     "/static/version.js": "static/version.js",
     "/timescale/adapter_nf.sql": "timescale/adapter_nf.sql",
+    "/timescale/core.sql": "timescale/core.sql",
     "/timescale/install.sql": "timescale/install.sql"
   },
   "hooks": [

@@ -1,20 +1,25 @@
 -- Open-FDD on NF's TimescaleDB northbound database. Idempotent: safe to re-run any time, and it UPGRADES an
 -- older install in place (function bodies are replaced, the existing daily job is altered, not duplicated).
--- Run adapter_nf.sql FIRST (hooks/lib/timescale.js install() does that for you):
---   psql "$PGURL" -f adapter_nf.sql -f install.sql
+-- Run order (hooks/lib/timescale.js install() does it for you): core.sql, adapter_nf.sql, then this file:
+--   psql "$PGURL" -v ON_ERROR_STOP=1 -1 -f core.sql -f adapter_nf.sql -f install.sql
+--   (-1 = one transaction, ON_ERROR_STOP: a refused upgrade must stop before the old tables are dropped)
 -- Run it as the INSTALLER role (see README: installer vs runtime role).
 --
--- Creates (schema openfdd):
+-- core.sql (generated copy of sql/fdd/schema/core.sql) owns the Open-FDD tables fdd.point, fdd.rule_result and
+-- fdd.rule_config. This file owns schema openfdd and the policy around them:
 --   config               key/value settings: max_bytes (retention cap, default 100 GB),
 --                        retention_allowlist (JSON array of "schema.table" source hypertables that MAY be trimmed,
---                        default [] = none), max_chunks_per_call (default 100), schema_version
---   fdd_results          hypertable of rule results written by the fdd hook
---   retention_scope()    the hypertables retention may touch: everything in schema openfdd + the allowlist
+--                        default [] = none), max_chunks_per_call (default 100), retention_last (result of the last real
+--                        retention run), schema_version
+--   fdd.rule_result      made a hypertable on window_end (30 day chunks) here; the table itself is core.sql
+--   retention_scope()    the hypertables retention may touch: everything in schemas openfdd and fdd + the allowlist
 --   enforce_size_cap()   drops the oldest chunks IN SCOPE until the scope fits under the cap (budgeted, explicit status)
 --   retention_preview()  dry run of enforce_size_cap(): lists what would be dropped, drops nothing
---   retention_log        one row per real run (status + full result)
 --   size_cap_job()       procedure for a TimescaleDB job (daily) when the role may add_job
 --   history_buckets()    time_bucket aggregates over nf_samples for long-range charts / CSV
+-- Schema version 4 (5.0.16) UPGRADES v3 in one transaction: openfdd.fdd_results is copied into fdd.rule_result
+-- (row-count guarded: a mismatch raises and leaves both tables untouched), then openfdd.fdd_results and
+-- openfdd.retention_log are dropped.
 -- NF's own tables (its connector `data` table, other apps' tables) are NEVER touched unless listed in
 -- retention_allowlist. Needs: the timescaledb extension (NF's connector already creates it), CREATE on the database.
 
@@ -54,52 +59,54 @@ LANGUAGE sql STABLE AS $$
   SELECT COALESCE(greatest(1, (SELECT (value #>> '{}')::int FROM openfdd.config WHERE key = 'max_chunks_per_call')), 100)
 $$;
 
--- ------------------------------------------------------------------ results hypertable
-CREATE TABLE IF NOT EXISTS openfdd.fdd_results (
-  run_ts          timestamptz      NOT NULL,
-  equip           text             NOT NULL,
-  site            text,
-  rule_id         text             NOT NULL,
-  fault_pct       double precision,
-  fault_hours     double precision,
-  covered_hours   double precision,
-  metric          jsonb,
-  engine          text,
-  window_start    timestamptz,
-  window_end      timestamptz,
-  sensor_ref      text             NOT NULL DEFAULT '',
-  role            text,
-  PRIMARY KEY (run_ts, equip, rule_id, sensor_ref)
-);
-SELECT create_hypertable('openfdd.fdd_results', 'run_ts',
-                         chunk_time_interval => interval '30 days', if_not_exists => true);
--- v2 rows keep their equipment-level identity through the empty sensor_ref default.
-ALTER TABLE openfdd.fdd_results ADD COLUMN IF NOT EXISTS sensor_ref text NOT NULL DEFAULT '';
-ALTER TABLE openfdd.fdd_results ADD COLUMN IF NOT EXISTS role text;
+-- ------------------------------------------------------------------ results hypertable (table = core.sql)
+SELECT create_hypertable('fdd.rule_result', 'window_end',
+                         chunk_time_interval => interval '30 days', if_not_exists => true, migrate_data => true);
+
+-- ------------------------------------------------------------------ v3 -> v4: legacy results into the core table
+-- One-time, guarded. Mapping: run_ts -> created_at, equip -> equipment_id, site -> site_id (NULL -> ''), sensor_ref ->
+-- subject_key, metric -> metrics; status from fault_hours (> 0 FAULT, = 0 PASS, NULL INCONCLUSIVE); rule_hash and
+-- config_hash '' (v3 did not record them); a missing or non-increasing window becomes (window_end - 1 second, window_end)
+-- with diagnostics.legacy.window_defaulted. Rows that would share a primary key keep the newest run_ts.
 DO $do$
 DECLARE
-  v_name text;
-  v_definition text;
+  v_expected bigint;
+  v_copied   bigint;
 BEGIN
-  LOCK TABLE openfdd.fdd_results IN ACCESS EXCLUSIVE MODE;
-  SELECT conname, pg_get_constraintdef(oid) INTO v_name, v_definition
-  FROM pg_constraint WHERE conrelid = 'openfdd.fdd_results'::regclass AND contype = 'p';
-  IF v_definition = 'PRIMARY KEY (run_ts, equip, rule_id)' THEN
-    EXECUTE format('ALTER TABLE openfdd.fdd_results DROP CONSTRAINT %I, ADD PRIMARY KEY (run_ts, equip, rule_id, sensor_ref)', v_name);
-  ELSIF v_definition IS DISTINCT FROM 'PRIMARY KEY (run_ts, equip, rule_id, sensor_ref)' THEN
-    RAISE EXCEPTION 'Unexpected openfdd.fdd_results primary key: %', v_definition;
+  IF to_regclass('openfdd.fdd_results') IS NULL THEN RETURN; END IF;
+  CREATE TEMP TABLE legacy_map ON COMMIT DROP AS
+  SELECT DISTINCT ON (m.site_id, m.equipment_id, m.rule_id, m.subject_key, m.window_start, m.window_end) m.*
+  FROM (
+    SELECT coalesce(r.site, '') AS site_id, r.equip AS equipment_id, r.rule_id, coalesce(r.sensor_ref, '') AS subject_key,
+           CASE WHEN r.window_start IS NOT NULL AND r.window_end IS NOT NULL AND r.window_start < r.window_end
+                THEN r.window_start ELSE coalesce(r.window_end, r.run_ts) - interval '1 second' END AS window_start,
+           coalesce(r.window_end, r.run_ts) AS window_end,
+           CASE WHEN r.fault_hours IS NULL THEN 'INCONCLUSIVE' WHEN r.fault_hours > 0 THEN 'FAULT' ELSE 'PASS' END AS status,
+           r.fault_hours, r.covered_hours, r.fault_pct, r.role, r.engine, coalesce(r.metric, '{}'::jsonb) AS metrics,
+           jsonb_build_object('legacy', jsonb_build_object('source', 'openfdd.fdd_results',
+             'window_defaulted', NOT (r.window_start IS NOT NULL AND r.window_end IS NOT NULL AND r.window_start < r.window_end))) AS diagnostics,
+           r.run_ts AS created_at
+    FROM openfdd.fdd_results r
+  ) m
+  ORDER BY m.site_id, m.equipment_id, m.rule_id, m.subject_key, m.window_start, m.window_end, m.created_at DESC;
+  SELECT count(*) INTO v_expected FROM legacy_map;
+  INSERT INTO fdd.rule_result (site_id, equipment_id, rule_id, subject_key, window_start, window_end, status,
+                               fault_hours, covered_hours, fault_pct, role, engine, metrics, diagnostics, created_at)
+  SELECT site_id, equipment_id, rule_id, subject_key, window_start, window_end, status,
+         fault_hours, covered_hours, fault_pct, role, engine, metrics, diagnostics, created_at
+  FROM legacy_map
+  ON CONFLICT DO NOTHING;
+  GET DIAGNOSTICS v_copied = ROW_COUNT;
+  IF v_copied <> v_expected THEN
+    RAISE EXCEPTION 'openfdd v4 upgrade refused: copied % of % legacy result rows into fdd.rule_result; openfdd.fdd_results was NOT dropped',
+      v_copied, v_expected USING ERRCODE = 'data_exception';
   END IF;
+  INSERT INTO openfdd.config (key, value)
+  VALUES ('legacy_results_copied', jsonb_build_object('rows', v_copied, 'at', to_jsonb(now())))
+  ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+  DROP TABLE openfdd.fdd_results;
 END
 $do$;
-CREATE INDEX IF NOT EXISTS fdd_results_equip_rule_ts ON openfdd.fdd_results (equip, rule_id, run_ts DESC);
-
-CREATE TABLE IF NOT EXISTS openfdd.retention_log (
-  id      bigserial PRIMARY KEY,
-  run_at  timestamptz NOT NULL DEFAULT now(),
-  status  text        NOT NULL,
-  dry_run boolean     NOT NULL DEFAULT false,
-  result  jsonb       NOT NULL
-);
 
 -- ------------------------------------------------------------------ retention scope
 -- The allowlist as text[] of "schema.table". Validated against the existing hypertables; ANY problem
@@ -141,14 +148,15 @@ BEGIN
 END
 $$;
 
--- Hypertables automatic retention may touch: all of schema openfdd + the allowlist. Nothing else.
+-- Hypertables automatic retention may touch: all of schemas openfdd and fdd (only fdd.rule_result is a hypertable
+-- there) + the allowlist. Nothing else.
 CREATE OR REPLACE FUNCTION openfdd.retention_scope()
 RETURNS TABLE (schema_name text, table_name text, reason text)
 LANGUAGE sql STABLE AS $$
   SELECT h.hypertable_schema::text, h.hypertable_name::text,
-         CASE WHEN h.hypertable_schema = 'openfdd' THEN 'openfdd' ELSE 'allowlist' END
+         CASE WHEN h.hypertable_schema IN ('openfdd', 'fdd') THEN 'openfdd' ELSE 'allowlist' END
   FROM timescaledb_information.hypertables h
-  WHERE h.hypertable_schema = 'openfdd'
+  WHERE h.hypertable_schema IN ('openfdd', 'fdd')
      OR (h.hypertable_schema || '.' || h.hypertable_name) = ANY (openfdd.retention_allowlist())
   ORDER BY 1, 2
 $$;
@@ -205,7 +213,8 @@ BEGIN
     v_res := jsonb_build_object('status', 'refused_allowlist', 'dry_run', dry_run, 'error', SQLERRM,
       'max_bytes', max_bytes, 'chunks_dropped', 0, 'reached_cap', false, 'dropped', '[]'::jsonb, 'scope', '[]'::jsonb);
     IF NOT dry_run THEN
-      INSERT INTO openfdd.retention_log (status, dry_run, result) VALUES ('refused_allowlist', false, v_res);
+      INSERT INTO openfdd.config (key, value) VALUES ('retention_last', v_res)
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
     END IF;
     RETURN v_res;
   END;
@@ -273,8 +282,8 @@ BEGIN
   END IF;
   IF v_err IS NOT NULL THEN v_res := v_res || jsonb_build_object('error', v_err); END IF;
   IF NOT dry_run THEN
-    INSERT INTO openfdd.retention_log (status, dry_run, result) VALUES (v_status, false, v_res);
-    DELETE FROM openfdd.retention_log WHERE run_at < now() - interval '90 days';
+    INSERT INTO openfdd.config (key, value) VALUES ('retention_last', v_res)
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
   END IF;
   RETURN v_res;
 END
@@ -294,7 +303,7 @@ LANGUAGE sql AS $$
   SELECT openfdd.retention_run(max_bytes, true)
 $$;
 
--- TimescaleDB job entry point (reads the cap from openfdd.config; result goes to the server log + retention_log).
+-- TimescaleDB job entry point (reads the cap from openfdd.config; result goes to the server log + config retention_last).
 CREATE OR REPLACE PROCEDURE openfdd.size_cap_job(job_id int, config jsonb)
 LANGUAGE plpgsql AS $$
 DECLARE r jsonb;
@@ -311,7 +320,7 @@ $$;
 DO $do$
 DECLARE
   v_keep int;
-  v_cfg  jsonb := '{"scope": "openfdd+allowlist", "schema_version": 3}'::jsonb;
+  v_cfg  jsonb := '{"scope": "openfdd+fdd+allowlist", "schema_version": 4}'::jsonb;
 BEGIN
   SELECT min(job_id) INTO v_keep FROM timescaledb_information.jobs
   WHERE proc_schema = 'openfdd' AND proc_name = 'size_cap_job';
@@ -347,6 +356,10 @@ LANGUAGE sql STABLE AS $$
   ORDER BY 1, 2
 $$;
 
--- Last statement: mark the per-sensor results schema after the migration succeeds.
-INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(3))
+-- v4: the retention log is gone (the last real retention result lives in config retention_last). retention_run() above
+-- no longer references it, so nothing depends on it.
+DROP TABLE IF EXISTS openfdd.retention_log;
+
+-- Last statement: mark the schema after the migration succeeds.
+INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(4))
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

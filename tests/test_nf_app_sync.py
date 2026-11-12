@@ -312,7 +312,7 @@ def test_timescale_schema_version_matches_runtime_constant():
     source = Path(__file__).resolve().parents[1] / "nf-app" / "hooks" / "lib" / "timescale.js"
     import re
     match = re.search(r"const SCHEMA_VERSION = (\d+);", source.read_text(encoding="utf-8"))
-    assert match and int(match.group(1)) == 3
+    assert match and int(match.group(1)) == 4
 
 
 @pytest.mark.parametrize(("verify_rc", "restored"), [(sync.EXIT_FAILED, True), (sync.EXIT_STILL_RUNNING, False)])

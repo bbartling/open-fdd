@@ -798,7 +798,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const unitsByUuid = Object.fromEntries([...Object.values(roles), ...sweepSensors.map((s) => s.point)].map((p) => [p.uuid, p.units || '']));
           const sensorPlan = buildSensorInput({ equipId, sensors: sweepSensors, hist: {}, grid: [], catalog: shared.catalog, log, warned: warnedUnits });
           for (const [role, count] of Object.entries(sensorPlan.skipped)) summary.roles_skipped_by_unit[role] = (summary.roles_skipped_by_unit[role] || 0) + count;
-          loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid,
+          const pointMeta = Object.fromEntries([...Object.values(roles), ...sweepSensors.map((s) => s.point)]
+            .map((p) => [p.uuid, { name: p.name, dis: p.dis, kind: p.kind }]));
+          loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, pointMeta,
             sensorSeries: sensorPlan.sensorSeries, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
           if (!loadedRows && engine.newestSample) {   // empty window: when did these points last have a sample at all?
             try { newestHere = await engine.newestSample(uuids); } catch (e) { log(`${equipId}: newest-sample lookup failed: ${errText(e)}`); }
@@ -828,7 +830,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         const records = [];
         const values = [];
         const timelines = [];         // { records, series } per fault rule with a timeline_sql
-        const dbRows = [];            // timescale: rows for openfdd.fdd_results
+        const dbRows = [];            // timescale: rows for fdd.rule_result
         for (const r of runnable) {
           let rows;
           try {
