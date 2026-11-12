@@ -132,8 +132,8 @@ const FDD_RULE_RICH = {
 const fddRuleRich = (title, id, equip = "") => `{t|${title}} {b|rule ${id}}${equip ? ` {e|· ${equip}}` : ""}`;
 
 // ---- FDD tab state: one equip filter + the heat map's row limit -----------------------------
-/** "" = all equipment. heatAll = show every heat-map row instead of the most-faulted FDD_HEAT_TOP_N. */
-const fddUi = { equip: "", heatAll: false };
+/** heatAll = show every heat-map row instead of the most-faulted FDD_HEAT_TOP_N. (The equipment filter is the shell's per-tab equip picker.) */
+const fddUi = { heatAll: false };
 
 /** Heat map rows shown by default: the most-faulted rules (sorted by fault time), not every rule x equip. */
 const FDD_HEAT_TOP_N = 12;

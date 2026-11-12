@@ -206,7 +206,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     return { series: new Map(points.map((p) => [p.uuid, p.history || []])), windowSec: 3600 };
   };
   const ctx = vm.createContext({
-    ...sharedFdd(),
+    ...sharedFdd(), WEATHER_SCOPE: "weather",
     console,
     document: { getElementById: (id) => el(id) },
     location: { pathname: "/apps/static/open-fdd/" },
@@ -340,11 +340,11 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   html = el("fddResultRows").innerHTML;
   assert.match(html, /stale/);
   assert.match(html, /not-assessed/);
-  ctx.fddUi.equip = "VAV-A";
+  vm.runInContext('scope.equip = "VAV-A"', ctx);
   await vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddResultRows").innerHTML, /data-equip="VAV-A"/);
   assert.doesNotMatch(el("fddResultRows").innerHTML, /SV-RANGE/);
-  ctx.fddUi.equip = "AHU-A";
+  vm.runInContext('scope.equip = "AHU-A"', ctx);
   await vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddResultRows").innerHTML, /SV-RANGE/);
   el("fddLanes").textContent = "echarts canvas marker";
@@ -522,8 +522,7 @@ test("AHU on defaults to ON when a feeding AHU is known (airRef or the only AHU)
   const elements = new Map();
   const el = (id) => { if (!elements.has(id)) elements.set(id, { textContent: "", hidden: true, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, classList: { toggle() {} } }); return elements.get(id); };
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" }, esc: (x) => String(x ?? "") });
-  for (const f of ["paging.js", "nf.js", "model.js", "fdd.js", "rcx.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
-  vm.runInContext(readFileSync(new URL("app.js", dir), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["paging.js", "nf.js", "model.js", "fdd.js", "rcx.js", "charts.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
   const eq = (name, markers, extra = {}) => ({ uuid: `u-${name}`, name, attrs: { id: name, siteRef: "s", markers, ...extra } });
   const ui = vm.runInContext("rcxUi", ctx);

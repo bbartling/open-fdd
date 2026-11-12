@@ -102,10 +102,7 @@
   <!-- FDD: which Open-FDD rules each equip can run, with inputs bound by Haystack class/markers -->
   <section class="tab" id="tab-fdd">
     <div class="stats" id="fddStats"></div>
-    <section class="panel">
-      <h2>Equipment <select id="fddEquip" aria-label="FDD equipment filter"></select>
-        <span class="hint" id="fddMode"></span></h2>
-    </section>
+    <p class="hint" id="fddMode"></p>
     <section class="panel" id="fddPlotPanel" hidden>
       <h2><span id="fddPlotTitle">Rule plot</span> <span class="hint" id="fddPlotNote"></span>
         <button class="btn" id="fddPlotClose">Close</button></h2>
@@ -149,7 +146,6 @@
       <h2>Retro-commissioning <span class="hint" id="rcxHint">views draw when their roles bind on the equips in scope</span>
       </h2>
       <div class="rcx-controls">
-        <label class="hint">Devices <select id="rcxEquip" aria-label="RCx device filter"></select></label>
         <button class="btn" id="rcxAhuOn" type="button" aria-pressed="false" title="Only times the feeding AHU's fan is running">AHU on</button>
         <span class="hint" id="rcxAhuNote"></span>
       </div>

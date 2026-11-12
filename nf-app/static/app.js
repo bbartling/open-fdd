@@ -7,18 +7,10 @@ const fddExpandedGroups = new Set();
 
 // ---- FDD tab --------------------------------------------------------------------------
 // Which rules from the catalog each equip in the FDD tab can run (fdd.js binds inputs by tags). The tab has its own
-// equipment filter (fddUi.equip, "" = all equipment); the header only picks the site.
-const fddEquipsInScope = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!fddUi.equip || idOf(e) === fddUi.equip));
+// equipment filter: the shell's per-tab equip picker (scope.equip, "" = all equipment); the top bar only picks the site.
+const tabEquip = () => (scope.equip && scope.equip !== WEATHER_SCOPE ? scope.equip : "");
+const fddEquipsInScope = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!tabEquip() || idOf(e) === tabEquip()));
 const renderScopedFddResults = () => renderFddResults(fddEquipsInScope(), fddCatalog?.sensor_sweep_roles);
-
-/** Fill a tab's equipment picker ("" = all) from the site's equips; drops a selection that left the site. */
-function fillEquipPicker(selectId, ui, allLabel) {
-  const el = $(selectId);
-  if (!el) return;
-  const opts = fddEquipOptions(model, scope.site);
-  if (ui.equip && !opts.some((o) => o.id === ui.equip)) ui.equip = "";
-  el.innerHTML = `<option value="">${esc(allLabel)}</option>${opts.map((o) => `<option value="${esc(o.id)}"${o.id === ui.equip ? " selected" : ""}>${esc(o.label)}</option>`).join("")}`;
-}
 
 let viewTabsWired = false;
 /** One-time wiring of the FDD / RCx tab controls (equipment filter, heat-map rows, "AHU on"). */
@@ -27,16 +19,13 @@ function wireViewTabs() {
   viewTabsWired = true;
   const fail = (e) => setLive(false, e.message);
   const on = (id, event, fn) => { const el = $(id); if (el) el[event] = fn; };
-  on("fddEquip", "onchange", (e) => { fddUi.equip = e.target.value; renderFdd().catch(fail); });
   on("fddHeatAll", "onchange", (e) => { fddUi.heatAll = e.target.checked; renderScopedFddResults().catch(fail); });
-  on("rcxEquip", "onchange", (e) => { rcxUi.equip = e.target.value; renderRcx().catch(fail); });
   on("rcxAhuOn", "onclick", (e) => { rcxUi.ahuOn = e.currentTarget.getAttribute("aria-pressed") !== "true"; renderRcx().catch(fail); });
 }
 
 async function renderFdd() {
   const catalog = await loadCatalog();
   wireViewTabs();
-  fillEquipPicker("fddEquip", fddUi, "All equipment");
   const equips = fddEquipsInScope();
   const rows = equips.flatMap((e) => equipRules(e, model, catalog).map((r) => ({ ...r, equip: e })));
   const runnable = rows.filter((r) => r.runnable);
@@ -263,7 +252,7 @@ async function renderFddResults(equips, sweepRoles = {}) {
   // Which faults happen most: rows sorted by fault time; by default only the top rows (or the selected equip's), the
   // "all rows" box widens it. Fault time (minutes) = fault hours, or fault % of each bucket.
   const faultMinutes = (p) => filtered.get(p.uuid).reduce((a, [, v]) => a + (attrsOf(p).fddOutput === "fault_hours" ? v * 60 : (v / 100) * (windowSec / 60)), 0);
-  const heat = fddHeatRows(faults.map((p) => ({ key: p.uuid, p, equip: p.equipRef, faultTime: faultMinutes(p) })), { selectedEquip: fddUi.equip, showAll: fddUi.heatAll });
+  const heat = fddHeatRows(faults.map((p) => ({ key: p.uuid, p, equip: p.equipRef, faultTime: faultMinutes(p) })), { selectedEquip: tabEquip(), showAll: fddUi.heatAll });
   const shown = heat.rows.map((r) => r.p);
   const heatNote = $("fddHeatNote");
   if (heatNote) heatNote.textContent = heat.trimmed ? `Showing the ${shown.length} most-faulted of ${heat.total} rows (sorted by fault time). Tick "all rows" or pick an equipment to see more.` : `${shown.length} row${shown.length === 1 ? "" : "s"}, sorted by fault time.`;
@@ -348,8 +337,7 @@ async function renderViewTab(tab) {
   const catalog = await loadCatalog();
   wireViewTabs();
   const siteEquips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site);
-  fillEquipPicker(`${tab}Equip`, ui, tab === "rcx" ? "All devices" : "All equipment");
-  const equips = siteEquips.filter((e) => !ui.equip || idOf(e) === ui.equip), single = !!ui.equip;
+  const equips = siteEquips.filter((e) => !tabEquip() || idOf(e) === tabEquip()), single = !!tabEquip();
   const ahuOn = tab === "rcx" ? renderAhuControl(siteEquips, catalog) : false;
   const rangeState = getChartRangeState(T.key), siteTz = siteTimeZone();
   renderRangeControl($(T.range), { key: T.key, state: rangeState, siteTz,
@@ -358,7 +346,7 @@ async function renderViewTab(tab) {
       pending.catch((e) => { if (requested === viewTabRuns[tab]) $(T.status).textContent = `Could not load this range: ${e.message}`; });
     } });
   const rangePoints = model.points.filter((p) => p.siteRef === scope.site && has(p, "his")
-    && (!ui.equip || p.equipRef === ui.equip || p.weatherStationRef));
+    && (!tabEquip() || p.equipRef === tabEquip() || p.weatherStationRef));
   let range;
   try { range = await resolveChartSelection(rangePoints, rangeState, { siteTz }); }
   catch (e) {
@@ -378,7 +366,7 @@ async function renderViewTab(tab) {
       <td class="sub">${roles.length ? esc(roles.join(", ")) : `equipment kind: ${esc(view.kinds.join(" / "))}`}</td></tr>`).join("");
   }
   if ($(T.mode)) {
-    const who = single ? (fddEquipOptions(model, scope.site).find((o) => o.id === ui.equip) || { label: ui.equip }).label : "";
+    const who = single ? (fddEquipOptions(model, scope.site).find((o) => o.id === tabEquip()) || { label: tabEquip() }).label : "";
     $(T.mode).textContent = tab === "fdd"
       ? (single ? `Single equipment: ${who}.` : "All equipment in scope.")
       : (single ? `Single device: ${who}. Only this device's own charts are shown; fleet analytics are in the all-devices view.`

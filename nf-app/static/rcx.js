@@ -11,8 +11,8 @@
 
 const RCX_VIEWS = [];
 
-/** RCx tab state: equip = the tab's own device filter ("" = all devices), ahuOn = the "AHU on" filter (null = automatic: on when the feeding AHU is known). */
-const rcxUi = { equip: "", ahuOn: null };
+/** RCx tab state (the device filter is the shell's per-tab equip picker): ahuOn = the "AHU on" filter (null = automatic: on when the feeding AHU is known). */
+const rcxUi = { ahuOn: null };
 
 /**
  * Register a view.
