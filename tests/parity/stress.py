@@ -84,7 +84,7 @@ def main() -> int:
 
     results, errors, timing, memory = {}, {}, {}, {}
     t0 = time.time()
-    ts_raw = None
+    ts_raw = ts_ad = None
     for kind in args.engines.split(","):
         ad = TimescaleAdapter() if kind == "timescale" else NodeEngineAdapter(kind)
         ad.load(ds)
@@ -94,7 +94,7 @@ def main() -> int:
             ad.close()
         errors.update(ad.stats["errors"])
         if kind == "timescale":
-            ts_raw = ad.raw
+            ts_raw, ts_ad = ad.raw, ad
             timing.update({f"timescale_{k}": v for k, v in ad.stats["timing"].items()})
             memory.update({f"timescale_{k}": v for k, v in ad.stats["memory"].items()})
         else:
@@ -114,8 +114,20 @@ def main() -> int:
         ok = ok and not bad
 
     if ts_raw is not None:
+        # like for like: PGlite on the SI cells the fdd.input_sample view produced (last-bit differences can move a sample
+        # that sits exactly on a threshold); the plain PGlite-vs-Timescale differences are reported as threshold ties
+        pg_same = None
+        if "pglite" in results:
+            same = NodeEngineAdapter("pglite")
+            same.load(ts_ad.loaded_dataset(ds))
+            try:
+                pg_same = same.run()
+            finally:
+                same.close()
         checks = {
-            "timescale_vs_pglite_mismatches": engines_disagree(results, "timescale") if "pglite" in results else ["no pglite run to compare"],
+            "timescale_vs_pglite_mismatches": (engines_disagree({"pglite": pg_same, "timescale": results["timescale"]}, "timescale")
+                                               if pg_same is not None else ["no pglite run to compare"]),
+            "threshold_ties_vs_si_dataset": engines_disagree(results, "timescale") if "pglite" in results else [],
             "history_cell_mismatches": ts_raw["history_mismatches"],
             "native_unit_factor_mismatches": ts_raw["factor"]["factor_mismatches"],
             "rerun_added_rows": ts_raw["stored"]["after"] - ts_raw["stored"]["before"],

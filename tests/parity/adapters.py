@@ -9,6 +9,7 @@ and drops its own database) and is skipped by the tests when none is configured.
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 import shutil
@@ -121,7 +122,23 @@ class TimescaleAdapter:
             "site_id": site, "step_seconds": dataset.step_seconds,
             "window": {"from_ms": t0, "to_ms": t0 + steps * dataset.step_seconds * 1000},
             "points": points, "samples": columnar, "si_history": si_history, "weather": dataset.weather,
+            "utility_interval": dataset.utility_interval, "utility_monthly": dataset.utility_monthly,
             "history_columns": dataset.history_columns}, ensure_ascii=False), encoding="utf-8")
+
+    def loaded_dataset(self, dataset):
+        """``dataset`` with every history cell the runner loaded replaced by the SI value the ``fdd.input_sample`` view gave
+        (native value x si_scale + si_offset in float8). The view's arithmetic differs from the dataset in the last bits, so
+        a sample that sits exactly on a rule threshold can fall either side; PGlite on this copy is the like-for-like engine
+        comparison. ``raw`` must come from a ``run()``."""
+        loaded = self.raw.get("loaded_history") or {}
+        out = copy.deepcopy(dataset)
+        out.__dict__.pop("sensor_history", None)
+        cells = {(e, r["ts"]): r for e, rows in loaded.items() for r in rows}
+        for row in out.history:
+            got = cells.get((row["equipment_id"], row["ts"]))
+            if got:
+                row.update({k: v for k, v in got.items() if k != "ts"})
+        return out
 
     def run(self, rule_ids: Sequence[str] | None = None) -> dict[str, list[dict]]:
         if self._in is None:

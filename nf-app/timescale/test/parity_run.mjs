@@ -151,6 +151,7 @@ try {
   const signatureOk = JSON.stringify(sig) === JSON.stringify(wantSig);
 
   const history_mismatches = [];
+  const loaded_history = {};   // the SI cells the view produced (native value x si_scale + si_offset), for a like-for-like PGlite run
   const results = {};
   const written = [];
   let indexOk = null, indexPlan = [];
@@ -180,6 +181,11 @@ try {
       }
     }
     for (const t of got.keys()) if (!want.has(t)) history_mismatches.push(`${equip}: extra loaded row @${t}`);
+    loaded_history[equip] = [...got.entries()].map(([t, g]) => {
+      const cells = { ts: t };
+      for (const role of Object.keys(args.roleToUuid)) cells[role] = num(g[role]);
+      return cells;
+    });
 
     // keep this equipment's loaded tables: the rules run ONCE over every equipment, as the PGlite adapter runs them
     // (site-level inputs such as weather and web reference columns are shared across equipment in some rules)
@@ -217,6 +223,17 @@ try {
       `INSERT INTO pg_temp.weather (timestamp_utc, ${wcols.map((c) => `"${c}"`).join(", ")})
        SELECT to_timestamp((r->>'ts')::float8 / 1000.0), ${wcols.map((c) => `(r->>'${c}')::double precision`).join(", ")}
        FROM jsonb_array_elements($1::jsonb) r`, [JSON.stringify(input.weather)]);
+  }
+  // the utility tables (UTIL-INTERVAL / UTIL-MONTHLY inputs) from the dataset, as the PGlite adapter feeds them
+  for (const [table, key] of [["utility_interval", "utility_interval"], ["utility_monthly", "utility_monthly"]]) {
+    const cols = pack.contract[table];
+    const rows = input[key] || [];
+    if (!cols || !rows.length) continue;
+    const expr = (c) => c.name === "timestamp_utc" ? "to_timestamp((r->>'ts')::float8 / 1000.0)"
+      : c.type === "text" ? `(r->>'${c.name}')` : `(r->>'${c.name}')::double precision`;
+    await db.query(`DELETE FROM pg_temp.${table}`);
+    await db.query(`INSERT INTO pg_temp.${table} (${cols.map((c) => `"${c.name}"`).join(", ")})
+      SELECT ${cols.map(expr).join(", ")} FROM jsonb_array_elements($1::jsonb) r`, [JSON.stringify(rows)]);
   }
   await db.query("ANALYZE pg_temp.history");
   const run = await ts.runRules(db, pack, ruleIds);
@@ -257,7 +274,7 @@ try {
 
   writeFileSync(outFile, JSON.stringify({
     results, errors, timing, memory: { rss_peak_mb: Math.round(process.memoryUsage().rss / 1048576) },
-    history_mismatches, written: written.length, stored: { before, after }, index_ok: indexOk, index_plan: indexPlan, signature_ok: signatureOk,
+    history_mismatches, loaded_history, written: written.length, stored: { before, after }, index_ok: indexOk, index_plan: indexPlan, signature_ok: signatureOk,
     schema_version: installed.schemaVersion, factor: factorCheck(),
   }));
   console.log(`wrote ${outFile}: ${written.length} rows, ${stored.length} stored, history mismatches ${history_mismatches.length}`);

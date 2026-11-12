@@ -106,6 +106,17 @@ def test_timescale_through_the_core_tables_reproduces_the_verdict(ds):
     assert raw["factor"]["factor_mismatches"] == []
     assert raw["stored"]["after"] == raw["stored"]["before"] > 0, "re-running writes no new rows"
     assert raw["index_ok"] is True, f"the loader query can use NF's (point_id, time) index: {raw.get('index_plan')}"
-    assert engines_disagree({"pglite": pg_rows, "timescale": ts_rows}, "timescale") == []
+    # like for like: PGlite on the SI cells the view produced (the dataset differs in the last bits, and a sample that
+    # sits exactly on a threshold, e.g. AHU-SATDEV's 5 degF band, can fall either side)
+    same = NodeEngineAdapter("pglite")
+    same.load(adapter.loaded_dataset(ds))
+    try:
+        pg_same = same.run()
+    finally:
+        same.close()
+    bad = engines_disagree({"pglite": pg_same, "timescale": ts_rows}, "timescale")
+    assert bad == [], bad
+    tie_only = engines_disagree({"pglite": pg_rows, "timescale": pg_same}, "timescale")
+    assert all(not r.startswith(("UTIL-", "OAT-METEO")) for r in tie_only), tie_only
     verdict = compare(ts_rows, reference(ds), Policy.default(ARGS["profile"], stress=True))
     assert summary(verdict) == PINNED["verdict"], verdict.summary()
