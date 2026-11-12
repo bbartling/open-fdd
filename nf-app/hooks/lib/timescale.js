@@ -351,7 +351,7 @@ const RESULT_KEY = ["site_id", "equipment_id", "rule_id", "subject_key", "window
  * are required (window_end > window_start); rule_hash / config_hash '' when the caller has none.
  */
 function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale", windowStart, windowEnd, pollSeconds = 300,
-  ruleHash = "", configHash = "", parameters = {} }) {
+  ruleHash = "", configHash = "", configRevision = null, parameters = {} }) {
   if (windowStart == null || windowEnd == null) throw new Error("toResultRow: windowStart and windowEnd are required");
   const known = new Set(["equipment_id", "series_id", "sensor_role", "fault_pct", "fault_hours", "covered_hours"]);
   const metrics = {};
@@ -367,7 +367,7 @@ function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale
   const faultHours = sensorNotAssessed ? null : num(row.fault_hours);
   return {
     site_id: site || "", equipment_id: equip, rule_id: ruleId, subject_key: row.series_id || "",
-    window_start: iso(windowStart), window_end: iso(windowEnd), rule_hash: ruleHash, config_hash: configHash,
+    window_start: iso(windowStart), window_end: iso(windowEnd), rule_hash: ruleHash, config_hash: configHash, config_revision: configRevision,
     effective_parameters: parameters, poll_seconds: pollSeconds,
     status: faultHours == null ? "INCONCLUSIVE" : faultHours > 0 ? "FAULT" : "PASS",
     reason: faultHours != null ? null : sensorNotAssessed ? "sensor not assessed (no covered time)" : "rule reports no fault_hours",
@@ -552,7 +552,64 @@ async function historyRoute(client, args = {}, limits = {}) {
   };
 }
 
+// ---------------------------------------------------------------- sweep role-limit overrides (#1589, fdd.rule_config)
+
+const LIMITS_RULE_ID = "SV-LIMITS";
+
+/** Active SV-LIMITS revisions, all sites: [{ site_id, scope_key, revision, parameters }] (read-only). */
+async function activeRoleLimitOverrides(client, siteId) {
+  const args = [LIMITS_RULE_ID];
+  let where = "rule_id = $1 AND active";
+  if (siteId != null) { args.push(siteId); where += " AND site_id = $2"; }
+  const { rows } = await client.query(`SELECT site_id, scope_key, revision, parameters FROM fdd.rule_config WHERE ${where} ORDER BY site_id, scope_key`, args);
+  return rows.map((r) => ({ site_id: r.site_id, scope_key: r.scope_key, revision: Number(r.revision), parameters: r.parameters }));
+}
+
+/** Revision history (newest first) of one scope: [{ revision, active, created_at, created_by, parameters }]. */
+async function roleLimitHistory(client, siteId, scopeKey, limit = 50) {
+  const { rows } = await client.query(
+    `SELECT revision, active, created_at, created_by, parameters FROM fdd.rule_config
+      WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 ORDER BY revision DESC LIMIT $4`,
+    [siteId, LIMITS_RULE_ID, scopeKey, Math.max(1, Math.min(500, Number(limit) || 50))]);
+  return rows.map((r) => ({ revision: Number(r.revision), active: r.active, created_at: iso(r.created_at), created_by: r.created_by, parameters: r.parameters }));
+}
+
+/**
+ * Append a new ACTIVE revision for (site, SV-LIMITS, scope) in one transaction (the previous active one is kept, inactive).
+ * The caller validated `parameters` (role-limits.js); this only stores. Returns the new revision number.
+ */
+async function appendRoleLimitRevision(client, { siteId, scopeKey, parameters, createdBy }) {
+  if (!scopeKey || (scopeKey !== "site" && !scopeKey.startsWith("equip:"))) throw new Error('scope must be "site" or "equip:<equipment id>"');
+  await client.query("BEGIN");
+  try {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${siteId}|${LIMITS_RULE_ID}|${scopeKey}`]);
+    const { rows } = await client.query(
+      "SELECT coalesce(max(revision), 0) + 1 AS rev FROM fdd.rule_config WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3",
+      [siteId, LIMITS_RULE_ID, scopeKey]);
+    const rev = Number(rows[0].rev);
+    await client.query("UPDATE fdd.rule_config SET active = false WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 AND active",
+      [siteId, LIMITS_RULE_ID, scopeKey]);
+    await client.query(
+      "INSERT INTO fdd.rule_config (site_id, rule_id, scope_key, revision, parameters, active, created_by) VALUES ($1, $2, $3, $4, $5::jsonb, true, $6)",
+      [siteId, LIMITS_RULE_ID, scopeKey, rev, JSON.stringify(parameters), String(createdBy || "open-fdd")]);
+    await client.query("COMMIT");
+    return rev;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  }
+}
+
+/** The parameters of one stored revision (null when it does not exist). */
+async function roleLimitRevision(client, siteId, scopeKey, revision) {
+  const { rows } = await client.query(
+    "SELECT parameters FROM fdd.rule_config WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 AND revision = $4",
+    [siteId, LIMITS_RULE_ID, scopeKey, Number(revision)]);
+  return rows.length ? rows[0].parameters : null;
+}
+
 module.exports = {
   connect, install, coreOk, schemaVersion, requireConfig, SCHEMA_VERSION, SQL_FILES, pointRows, syncPoints, loadHistory, runRules, toResultRow, writeResults,
   maybeEnforceCap, retentionPreview, historyRoute, siFactors, newestSample,
+  LIMITS_RULE_ID, activeRoleLimitOverrides, roleLimitHistory, appendRoleLimitRevision, roleLimitRevision,
 };

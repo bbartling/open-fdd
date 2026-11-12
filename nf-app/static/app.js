@@ -437,7 +437,8 @@ function setUnits(sys) {
 ofddTabs.fdd = () => renderFdd();
 ofddTabs.rcx = () => renderRcx();
 ofddTabs.export = () => ofddExport.render({ model, scope });
-for (const tab of ["fdd", "rcx", "export"]) ofddEquipScoped.add(tab);     // these get an equip picker too
+ofddTabs.tuning = () => ofddTuning.render({ model, scope });
+for (const tab of ["fdd", "rcx", "export", "tuning"]) ofddEquipScoped.add(tab);     // these get an equip picker too
 
 ofddWire.push(() => {
   $("fddRunnableOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));

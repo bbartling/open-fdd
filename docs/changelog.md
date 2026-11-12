@@ -7,7 +7,9 @@ nav_order: 18
 
 ## Open-FDD 5.0.16 - 2026-11-12 (open-fdd 4.5.7 on PyPI)
 
-One shared core schema (`sql/fdd/schema/core.sql`: `fdd.point`, `fdd.rule_result`, `fdd.rule_config`). Timescale schema version 4 copies and drops `openfdd.fdd_results` / `openfdd.retention_log` (see [migrating to 5.0.16](upgrade-5x.html)). The hook loads history from the SI view `fdd.input_sample`. Input contract version 3 declares that view's signature. FDD results are unchanged.
+One shared core schema (`sql/fdd/schema/core.sql`: `fdd.point`, `fdd.rule_result`, `fdd.rule_config`). Timescale schema version 4 copies and drops `openfdd.fdd_results` / `openfdd.retention_log` (see [migrating to 5.0.16](upgrade-5x.html)). The hook loads history from the SI view `fdd.input_sample`. Input contract version 3 declares that view's signature. FDD results are unchanged unless you save tuning.
+
+- **Sweep tuning (Full, #1589):** a Tuning tab edits the five sensor sweeps' per-role limits for a site or one equipment in display units (degF, inH2O, cfm, gpm) and stores SI revisions in `fdd.rule_config` (shipped, then site, then equipment). Every save is validated first; preview, reset and rollback keep an append-only history. The next `fdd` run applies the active revision and records it on each result row. Lite has no editor.
 
 ## Open-FDD 5.0.15 - 2026-11-11 (open-fdd 4.5.6 on PyPI)
 

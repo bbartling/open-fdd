@@ -9,6 +9,7 @@ a copy is missing, hand-edited or stale. Edit shared/..., run this script, commi
     shared/paging.js                        -> {nf-app,lite}/hooks/lib/paging.js, {nf-app,lite}/static/paging.js
     shared/hooks/settings.js                -> {nf-app,lite}/hooks/lib/settings.js
     shared/hooks/site-timezone.js           -> nf-app/hooks/lib/site-timezone.js   (the fdd / analytics hooks' site time zone, same order as the UI)
+    shared/role-limits.js                   -> nf-app/hooks/lib/role-limits.js, nf-app/static/role-limits.js   (sweep role-limit overrides, #1589; Full only)
     shared/hooks/open_meteo_weather.js      -> nf-app/hooks/weather.js, lite/hooks/open_meteo_weather.js   (edition constant substituted: 'full' / 'lite')
     shared/static/<file>                    -> {nf-app,lite}/static/<file>
         the dashboard shell: app-core.js (top bar, equip pickers, tab router, Overview, Charts, Points, BACnet Server,
@@ -39,6 +40,7 @@ SHARED: dict[str, list[str]] = {
     "shared/paging.js": [f"{app}/{sub}/paging.js" for app in BOTH for sub in ("hooks/lib", "static")],
     "shared/hooks/settings.js": [f"{app}/hooks/lib/settings.js" for app in BOTH],
     "shared/hooks/site-timezone.js": ["nf-app/hooks/lib/site-timezone.js"],
+    "shared/role-limits.js": ["nf-app/hooks/lib/role-limits.js", "nf-app/static/role-limits.js"],
     "shared/hooks/open_meteo_weather.js": ["nf-app/hooks/weather.js", "lite/hooks/open_meteo_weather.js"],
     "shared/types/shapes.d.ts": [f"{app}/types/shapes.d.ts" for app in BOTH],
 }

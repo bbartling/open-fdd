@@ -3,6 +3,8 @@
 declare const echarts: any;                       // vendored ECharts, exposed by echarts-global.js (options stay `any`)
 declare var ofddUnits: any;                       // static/units.js (classic global / CommonJS export)
 declare var ofddExport: any;
+declare var ofddTuning: any;
+declare var ofddRoleLimits: any;
 declare var OfddPaging: any;                      // static/paging.js (shared/paging.js): the one pager, also required by the hooks
 declare const fddRulePlot: any;
 interface Window { echarts: any; ofddUnits: any; Clerk: any; }

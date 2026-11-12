@@ -349,14 +349,16 @@ async function createTimescale(pack, opts = {}) {
     },
     /** Mirror the bound points of one equipment into fdd.point (load() does this itself). */
     syncPoints: (args) => ts.syncPoints(client, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) }),
-    async query(ruleId) {
-      const { results, errors } = await ts.runRules(client, pack, [ruleId]);
+    /** sql: optional { sql, timeline_sql } of this rule re-rendered with role-limit overrides (#1589); default the pack's. */
+    async query(ruleId, sql) {
+      const runPack = sql && pack.rules[ruleId] ? { ...pack, rules: { ...pack.rules, [ruleId]: { ...pack.rules[ruleId], ...sql } } } : pack;
+      const { results, errors } = await ts.runRules(client, runPack, [ruleId]);
       if (errors[ruleId]) throw new Error(errors[ruleId]);
       return results[ruleId];
     },
     /** Same contract as the other engines; call it after query() of the rule (the helper SQL is installed there). */
-    async timeline(ruleId) {
-      const rule = pack.rules[ruleId];
+    async timeline(ruleId, sql) {
+      const rule = sql && pack.rules[ruleId] ? { ...pack.rules[ruleId], ...sql } : pack.rules[ruleId];
       if (!rule || !rule.timeline_sql) return [];
       const res = await client.query(rule.timeline_sql);
       const numeric = new Set(res.fields.filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
@@ -365,6 +367,8 @@ async function createTimescale(pack, opts = {}) {
     /** Newest sample (epoch ms | null) of these points in the source table, any age (read-only). */
     newestSample: (uuids) => ts.newestSample(client, uuids),
     resultRow: (a) => ts.toResultRow({ engine: "timescale", pollSeconds: pack.poll_seconds, ruleHash: ruleHash(pack, a.ruleId), ...a }),
+    /** Active role-limit override revisions (fdd.rule_config SV-LIMITS) of every site (#1589). */
+    roleLimitOverrides: () => ts.activeRoleLimitOverrides(client),
     writeResults: (rows) => ts.writeResults(client, rows),
     maybeEnforceCap: () => ts.maybeEnforceCap(client),
     async close() { if (owned) await client.end(); },

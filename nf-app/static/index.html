@@ -36,6 +36,8 @@
 <script defer src="rcx-presets.js"></script>
 <script defer src="energy.js"></script>
 <script defer src="export.js"></script>
+<script defer src="role-limits.js"></script>
+<script defer src="tuning.js"></script>
 <script defer src="app-core.js"></script>
 <script defer src="app.js"></script>
 <script defer src="sparql.js"></script>
@@ -63,6 +65,7 @@
   <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
   <button data-tab="export">Export</button>
+  <button data-tab="tuning">Tuning</button>
   <button data-tab="model">Model &amp; RDF</button>
 </nav>
 
@@ -229,6 +232,36 @@
       <div class="sub" id="exStatus"></div>
       <p class="sub">Columns: <code>timestamp</code> (local time), <code>timestamp_utc</code>, then one column per point as
         <code>equip point [unit]</code>. Boolean / fault points use the window maximum, everything else the average. 1 day windows follow UTC days.</p>
+    </section>
+  </section>
+
+  <!-- Tuning: sweep role limits per site / equipment (tuning.js, hooks/tuning.js; #1589) -->
+  <section class="tab" id="tab-tuning">
+    <section class="panel">
+      <h2>Sensor sweep limits <span class="hint">stored in SI, edited in display units · applied by the next FDD run · Timescale required</span></h2>
+      <div class="exform">
+        <label>Scope <select id="tunScope"></select></label>
+        <label>Chart <select id="tunQuantity">
+          <option value="absolute_temperature">Temperature bands</option>
+          <option value="relative_humidity">Humidity bands</option>
+          <option value="air_pressure">Pressure bands</option>
+          <option value="volume_flow">Flow bands</option>
+          <option value="power">Power bands</option>
+        </select></label>
+        <label>Note <input id="tunNote" maxlength="200" placeholder="why (stored with the revision)"></label>
+      </div>
+      <div class="chart" id="tunChart" style="height:360px"></div>
+      <div class="tablewrap"><table class="tun-table" id="tunRows"></table></div>
+      <div class="exbar">
+        <button class="btn" id="tunPreview" type="button">Preview</button>
+        <button class="btn primary" id="tunSave" type="button">Save revision</button>
+        <button class="btn" id="tunReset" type="button">Reset to defaults</button>
+        <span class="hint" id="tunStatus" role="status"></span>
+      </div>
+      <p class="sub">Precedence: shipped defaults, then the site, then the equipment. Each cell shows its source and the SI value
+        that is stored. Saving validates the whole set first (low below high, positive tolerances); history keeps every revision.</p>
+      <h2>History</h2>
+      <ul id="tunHistory"></ul>
     </section>
   </section>
 

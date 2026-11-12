@@ -24,12 +24,14 @@
     "/hooks/history.js": "hooks/history.js",
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
     "/hooks/lib/paging.js": "hooks/lib/paging.js",
+    "/hooks/lib/role-limits.js": "hooks/lib/role-limits.js",
     "/hooks/lib/settings.js": "hooks/lib/settings.js",
     "/hooks/lib/site-timezone.js": "hooks/lib/site-timezone.js",
     "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
     "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
     "/hooks/schema.js": "hooks/schema.js",
     "/hooks/sparql.js": "hooks/sparql.js",
+    "/hooks/tuning.js": "hooks/tuning.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
     "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
     "/hooks/vendor/sql.js/sql-wasm.wasm": "hooks/vendor/sql.js/sql-wasm.wasm",
@@ -58,6 +60,7 @@
     "/static/plot-spec.js": "static/plot-spec.js",
     "/static/rcx-presets.js": "static/rcx-presets.js",
     "/static/rcx.js": "static/rcx.js",
+    "/static/role-limits.js": "static/role-limits.js",
     "/static/schedule.js": "static/schedule.js",
     "/static/sparql.js": "static/sparql.js",
     "/static/style.css": "static/style.css",
@@ -66,6 +69,7 @@
     "/static/tree.css": "static/tree.css",
     "/static/tree.html": "static/tree.html",
     "/static/tree.js": "static/tree.js",
+    "/static/tuning.js": "static/tuning.js",
     "/static/units.js": "static/units.js",
     "/static/vendor/echarts.esm.min.js": "static/vendor/echarts.esm.min.js",
     "/static/vendor/oxigraph/LICENSE-APACHE": "static/vendor/oxigraph/LICENSE-APACHE",
@@ -161,6 +165,16 @@
       "id": "schema",
       "name": "schema",
       "entryPoint": "/hooks/schema.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "30s"
+    },
+    {
+      "id": "tuning",
+      "name": "tuning",
+      "entryPoint": "/hooks/tuning.js",
       "points": {
         "noPoints": true
       },

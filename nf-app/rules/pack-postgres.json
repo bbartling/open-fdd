@@ -1226,5 +1226,480 @@
    "timeline_sql": null,
    "timeline_reason": "no per-row confirmed flag (the rule aggregates a ratio, count or window statistic)"
   }
+ },
+ "role_limit_templates": {
+  "version": 1,
+  "rule_config_id": "SV-LIMITS",
+  "shipped": {
+   "version": 1,
+   "units": "SI (degC, delta degC, %RH, Pa, L/s, kW)",
+   "defaults": {
+    "flat_tol_temperature": 0.055556,
+    "stale_tol_temperature": 0.027778,
+    "rate_per_h": 3.333333,
+    "flat_s": 3600,
+    "stale_s": 7200
+   },
+   "quantity_fallback": {
+    "absolute_temperature": {
+     "lo": -51.111111,
+     "hi": 54.444444,
+     "spike_delta": 20.0
+    },
+    "relative_humidity": {
+     "lo": 0.0,
+     "hi": 100.0,
+     "spike_delta": 25.0
+    },
+    "air_pressure": {
+     "lo": -248.84,
+     "hi": 1990.72,
+     "spike_delta": 497.68
+    }
+   },
+   "roles": [
+    {
+     "role": "outside-air-temp",
+     "quantity": "absolute_temperature",
+     "lo": -51.111111,
+     "hi": 54.444445,
+     "spike_delta": 20.0,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": 3.333333,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "mixed-air-temp",
+     "quantity": "absolute_temperature",
+     "lo": -28.888889,
+     "hi": 43.333333,
+     "spike_delta": 13.888889,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": 3.333333,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "zone-air-temp",
+     "quantity": "absolute_temperature",
+     "lo": 4.444444,
+     "hi": 37.777778,
+     "spike_delta": 6.666667,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": 3.333333,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "return-air-temp",
+     "quantity": "absolute_temperature",
+     "lo": 4.444444,
+     "hi": 37.777778,
+     "spike_delta": 6.666667,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": 3.333333,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "discharge-air-temp",
+     "quantity": "absolute_temperature",
+     "lo": -1.111111,
+     "hi": 65.555555,
+     "spike_delta": 22.222222,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": 3.333333,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "chilled-water-supply-temp",
+     "quantity": "absolute_temperature",
+     "lo": -1.111111,
+     "hi": 26.666667,
+     "spike_delta": 11.111111,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "chilled-water-return-temp",
+     "quantity": "absolute_temperature",
+     "lo": -1.111111,
+     "hi": 32.222223,
+     "spike_delta": 11.111111,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "hot-water-supply-temp",
+     "quantity": "absolute_temperature",
+     "lo": 4.444444,
+     "hi": 104.444444,
+     "spike_delta": 33.333333,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "hot-water-return-temp",
+     "quantity": "absolute_temperature",
+     "lo": 4.444444,
+     "hi": 104.444444,
+     "spike_delta": 33.333333,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "outside-air-humidity",
+     "quantity": "relative_humidity",
+     "lo": 0.0,
+     "hi": 100.0,
+     "spike_delta": 25.0,
+     "flat_tol": 0.1,
+     "stale_tol": 0.05,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "return-air-humidity",
+     "quantity": "relative_humidity",
+     "lo": 0.0,
+     "hi": 100.0,
+     "spike_delta": null,
+     "flat_tol": 0.1,
+     "stale_tol": 0.05,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "zone-air-humidity",
+     "quantity": "relative_humidity",
+     "lo": 0.0,
+     "hi": 100.0,
+     "spike_delta": null,
+     "flat_tol": 0.1,
+     "stale_tol": 0.05,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "mixed-air-humidity",
+     "quantity": "relative_humidity",
+     "lo": 0.0,
+     "hi": 100.0,
+     "spike_delta": null,
+     "flat_tol": 0.1,
+     "stale_tol": 0.05,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "supply-air-humidity",
+     "quantity": "relative_humidity",
+     "lo": 0.0,
+     "hi": 100.0,
+     "spike_delta": null,
+     "flat_tol": 0.1,
+     "stale_tol": 0.05,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "duct-static-pressure",
+     "quantity": "air_pressure",
+     "lo": -248.84,
+     "hi": 1990.72,
+     "spike_delta": 497.68,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
+    },
+    {
+     "role": "chw-flow",
+     "quantity": "volume_flow",
+     "lo": -1.0,
+     "hi": 1500.0,
+     "spike_delta": null,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+     "role": "chw-diff-pressure",
+     "quantity": "air_pressure",
+     "lo": -6894.76,
+     "hi": 689475.73,
+     "spike_delta": null,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+     "role": "condenser-water-supply-temp",
+     "quantity": "absolute_temperature",
+     "lo": 0.0,
+     "hi": 50.0,
+     "spike_delta": 11.111111,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+     "role": "condenser-water-return-temp",
+     "quantity": "absolute_temperature",
+     "lo": 0.0,
+     "hi": 55.0,
+     "spike_delta": 11.111111,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    },
+    {
+     "role": "chiller-power",
+     "quantity": "power",
+     "lo": -1.0,
+     "hi": 10000.0,
+     "spike_delta": null,
+     "flat_tol": null,
+     "stale_tol": null,
+     "rate_per_h": null,
+     "source": "Open-FDD 5.0.13 conservative default (wide gross-fault band, owner review)"
+    }
+   ]
+  },
+  "allowlists": {
+   "SV-RANGE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "return-air-humidity",
+    "zone-air-humidity",
+    "mixed-air-humidity",
+    "supply-air-humidity",
+    "duct-static-pressure",
+    "chw-flow",
+    "chw-diff-pressure",
+    "condenser-water-supply-temp",
+    "condenser-water-return-temp",
+    "chiller-power"
+   ],
+   "SV-FLATLINE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "return-air-humidity",
+    "zone-air-humidity",
+    "mixed-air-humidity",
+    "supply-air-humidity"
+   ],
+   "SV-SPIKE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "duct-static-pressure",
+    "condenser-water-supply-temp",
+    "condenser-water-return-temp"
+   ],
+   "SV-STALE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp",
+    "chilled-water-supply-temp",
+    "chilled-water-return-temp",
+    "hot-water-supply-temp",
+    "hot-water-return-temp",
+    "outside-air-humidity",
+    "return-air-humidity",
+    "zone-air-humidity",
+    "mixed-air-humidity",
+    "supply-air-humidity"
+   ],
+   "SV-RATE": [
+    "outside-air-temp",
+    "mixed-air-temp",
+    "zone-air-temp",
+    "return-air-temp",
+    "discharge-air-temp"
+   ]
+  },
+  "rules": {
+   "SV-RANGE": {
+    "sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static', 'chw_flow', 'chw_dp', 'cw_supply_t', 'cw_return_t', 'chiller_power')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static', 'chw_flow', 'chw_dp', 'cw_supply_t', 'cw_return_t', 'chiller_power')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*\n  FROM valid\n),\nsignals AS (\n  SELECT windowed.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN ((energized = 1 AND (__OFDD_SV_RANGE_BANDS__))) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM windowed\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n),\nscored AS (\n  SELECT equipment_id, series_id, sensor_role,\n    SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,\n    SUM(held_seconds) / 3600.0 AS covered_hours\n  FROM final\n  GROUP BY equipment_id, series_id, sensor_role\n)\nSELECT ss.equipment_id, ss.series_id, ss.sensor_role,\n  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,\n  COALESCE(scored.covered_hours, 0.0) AS covered_hours\nFROM sensor_series ss\nLEFT JOIN scored USING (equipment_id, series_id, sensor_role)\nORDER BY ss.equipment_id, ss.series_id;\n",
+    "timeline_sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static', 'chw_flow', 'chw_dp', 'cw_supply_t', 'cw_return_t', 'chiller_power')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h', 'duct_static', 'chw_flow', 'chw_dp', 'cw_supply_t', 'cw_return_t', 'chiller_power')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*\n  FROM valid\n),\nsignals AS (\n  SELECT windowed.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN ((energized = 1 AND (__OFDD_SV_RANGE_BANDS__))) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM windowed\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n)\nSELECT equipment_id, series_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE held_seconds > 0 ORDER BY equipment_id, series_id, sensor_role, segment_epoch\n",
+    "fragment": "SV_RANGE_BANDS",
+    "sql_roles": {
+     "outside-air-temp": "oa_t",
+     "mixed-air-temp": "mat",
+     "zone-air-temp": "zone_t",
+     "return-air-temp": "rat",
+     "discharge-air-temp": "sat",
+     "chilled-water-supply-temp": "chw_supply_t",
+     "chilled-water-return-temp": "chw_return_t",
+     "hot-water-supply-temp": "hw_supply_t",
+     "hot-water-return-temp": "hw_return_t",
+     "outside-air-humidity": "oa_h",
+     "return-air-humidity": "ra_h",
+     "zone-air-humidity": "zone_rh",
+     "mixed-air-humidity": "ma_h",
+     "supply-air-humidity": "sa_h",
+     "duct-static-pressure": "duct_static",
+     "chw-flow": "chw_flow",
+     "chw-diff-pressure": "chw_dp",
+     "condenser-water-supply-temp": "cw_supply_t",
+     "condenser-water-return-temp": "cw_return_t",
+     "chiller-power": "chiller_power"
+    },
+    "values": {
+     "MAX_SILENCE_SECONDS": "1800",
+     "RANGE_SCALE_HUMIDITY": "1",
+     "RANGE_SCALE_PRESSURE": "1",
+     "RANGE_SCALE_TEMPERATURE": "1",
+     "SENSOR_SPAN": "100",
+     "SPIKE_SCALE_HUMIDITY": "1",
+     "SPIKE_SCALE_PRESSURE": "1",
+     "SPIKE_SCALE_TEMPERATURE": "1"
+    }
+   },
+   "SV-SPIKE": {
+    "sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static', 'cw_supply_t', 'cw_return_t')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static', 'cw_supply_t', 'cw_return_t')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*\n  FROM valid\n),\nsignals AS (\n  SELECT windowed.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((1 < 0.5 OR (energized = 1 AND coverage_pct >= 5)) AND (__OFDD_SV_SPIKE_BANDS__))) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM windowed\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n),\nscored AS (\n  SELECT equipment_id, series_id, sensor_role,\n    SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,\n    SUM(held_seconds) / 3600.0 AS covered_hours\n  FROM final\n  GROUP BY equipment_id, series_id, sensor_role\n)\nSELECT ss.equipment_id, ss.series_id, ss.sensor_role,\n  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,\n  COALESCE(scored.covered_hours, 0.0) AS covered_hours\nFROM sensor_series ss\nLEFT JOIN scored USING (equipment_id, series_id, sensor_role)\nORDER BY ss.equipment_id, ss.series_id;\n",
+    "timeline_sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static', 'cw_supply_t', 'cw_return_t')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'duct_static', 'cw_supply_t', 'cw_return_t')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*\n  FROM valid\n),\nsignals AS (\n  SELECT windowed.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((1 < 0.5 OR (energized = 1 AND coverage_pct >= 5)) AND (__OFDD_SV_SPIKE_BANDS__))) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM windowed\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n)\nSELECT equipment_id, series_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE held_seconds > 0 ORDER BY equipment_id, series_id, sensor_role, segment_epoch\n",
+    "fragment": "SV_SPIKE_BANDS",
+    "sql_roles": {
+     "outside-air-temp": "oa_t",
+     "mixed-air-temp": "mat",
+     "zone-air-temp": "zone_t",
+     "return-air-temp": "rat",
+     "discharge-air-temp": "sat",
+     "chilled-water-supply-temp": "chw_supply_t",
+     "chilled-water-return-temp": "chw_return_t",
+     "hot-water-supply-temp": "hw_supply_t",
+     "hot-water-return-temp": "hw_return_t",
+     "outside-air-humidity": "oa_h",
+     "duct-static-pressure": "duct_static",
+     "condenser-water-supply-temp": "cw_supply_t",
+     "condenser-water-return-temp": "cw_return_t"
+    },
+    "values": {
+     "MAX_SILENCE_SECONDS": "1800",
+     "SENSOR_SPAN": "100",
+     "SPIKE_SCALE_HUMIDITY": "1",
+     "SPIKE_SCALE_PRESSURE": "1",
+     "SPIKE_SCALE_TEMPERATURE": "1"
+    }
+   },
+   "SV-FLATLINE": {
+    "sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_first_epoch,\n    MIN(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_min,\n    MAX(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_max,\n    FIRST_VALUE(previous_value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_first_prev_value,\n    FIRST_VALUE(previous_epoch) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_first_prev_epoch\n  FROM valid\n),\nsegments0 AS (\n  SELECT windowed.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id, data_segment) AS segment_start_epoch\n  FROM windowed\n),\nelapsed_window AS (\n  SELECT segments0.*,\n    CASE WHEN window_first_epoch > epoch_seconds - 3600\n           AND window_first_prev_epoch <= epoch_seconds - 3600\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value < window_min\n         THEN window_first_prev_value ELSE window_min END AS elapsed_window_min,\n    CASE WHEN window_first_epoch > epoch_seconds - 3600\n           AND window_first_prev_epoch <= epoch_seconds - 3600\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value > window_max\n         THEN window_first_prev_value ELSE window_max END AS elapsed_window_max\n  FROM segments0\n),\nsignals AS (\n  SELECT elapsed_window.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - 3600) AND (elapsed_window_max - elapsed_window_min <= __OFDD_SV_FLATLINE_TOL__) AND energized = 1)) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM elapsed_window\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n),\nscored AS (\n  SELECT equipment_id, series_id, sensor_role,\n    SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,\n    SUM(held_seconds) / 3600.0 AS covered_hours\n  FROM final\n  GROUP BY equipment_id, series_id, sensor_role\n)\nSELECT ss.equipment_id, ss.series_id, ss.sensor_role,\n  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,\n  COALESCE(scored.covered_hours, 0.0) AS covered_hours\nFROM sensor_series ss\nLEFT JOIN scored USING (equipment_id, series_id, sensor_role)\nORDER BY ss.equipment_id, ss.series_id;\n",
+    "timeline_sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_first_epoch,\n    MIN(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_min,\n    MAX(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_max,\n    FIRST_VALUE(previous_value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_first_prev_value,\n    FIRST_VALUE(previous_epoch) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 3600 PRECEDING AND CURRENT ROW) AS window_first_prev_epoch\n  FROM valid\n),\nsegments0 AS (\n  SELECT windowed.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id, data_segment) AS segment_start_epoch\n  FROM windowed\n),\nelapsed_window AS (\n  SELECT segments0.*,\n    CASE WHEN window_first_epoch > epoch_seconds - 3600\n           AND window_first_prev_epoch <= epoch_seconds - 3600\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value < window_min\n         THEN window_first_prev_value ELSE window_min END AS elapsed_window_min,\n    CASE WHEN window_first_epoch > epoch_seconds - 3600\n           AND window_first_prev_epoch <= epoch_seconds - 3600\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value > window_max\n         THEN window_first_prev_value ELSE window_max END AS elapsed_window_max\n  FROM segments0\n),\nsignals AS (\n  SELECT elapsed_window.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - 3600) AND (elapsed_window_max - elapsed_window_min <= __OFDD_SV_FLATLINE_TOL__) AND energized = 1)) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM elapsed_window\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n)\nSELECT equipment_id, series_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE held_seconds > 0 ORDER BY equipment_id, series_id, sensor_role, segment_epoch\n",
+    "fragment": "SV_FLATLINE_TOL",
+    "sql_roles": {
+     "outside-air-temp": "oa_t",
+     "mixed-air-temp": "mat",
+     "zone-air-temp": "zone_t",
+     "return-air-temp": "rat",
+     "discharge-air-temp": "sat",
+     "chilled-water-supply-temp": "chw_supply_t",
+     "chilled-water-return-temp": "chw_return_t",
+     "hot-water-supply-temp": "hw_supply_t",
+     "hot-water-return-temp": "hw_return_t",
+     "outside-air-humidity": "oa_h",
+     "return-air-humidity": "ra_h",
+     "zone-air-humidity": "zone_rh",
+     "mixed-air-humidity": "ma_h",
+     "supply-air-humidity": "sa_h"
+    },
+    "values": {
+     "FLATLINE_TOL": "0.055556",
+     "MAX_SILENCE_SECONDS": "1800",
+     "SENSOR_SPAN": "100",
+     "SPIKE_SCALE_HUMIDITY": "1",
+     "SPIKE_SCALE_PRESSURE": "1",
+     "SPIKE_SCALE_TEMPERATURE": "1"
+    }
+   },
+   "SV-STALE": {
+    "sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_first_epoch,\n    MIN(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_min,\n    MAX(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_max,\n    FIRST_VALUE(previous_value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_first_prev_value,\n    FIRST_VALUE(previous_epoch) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_first_prev_epoch\n  FROM valid\n),\nsegments0 AS (\n  SELECT windowed.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id, data_segment) AS segment_start_epoch\n  FROM windowed\n),\nelapsed_window AS (\n  SELECT segments0.*,\n    CASE WHEN window_first_epoch > epoch_seconds - 7200\n           AND window_first_prev_epoch <= epoch_seconds - 7200\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value < window_min\n         THEN window_first_prev_value ELSE window_min END AS elapsed_window_min,\n    CASE WHEN window_first_epoch > epoch_seconds - 7200\n           AND window_first_prev_epoch <= epoch_seconds - 7200\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value > window_max\n         THEN window_first_prev_value ELSE window_max END AS elapsed_window_max\n  FROM segments0\n),\nsignals AS (\n  SELECT elapsed_window.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - 7200) AND (elapsed_window_max - elapsed_window_min <= __OFDD_SV_STALE_TOL__))) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM elapsed_window\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n),\nscored AS (\n  SELECT equipment_id, series_id, sensor_role,\n    SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,\n    SUM(held_seconds) / 3600.0 AS covered_hours\n  FROM final\n  GROUP BY equipment_id, series_id, sensor_role\n)\nSELECT ss.equipment_id, ss.series_id, ss.sensor_role,\n  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,\n  COALESCE(scored.covered_hours, 0.0) AS covered_hours\nFROM sensor_series ss\nLEFT JOIN scored USING (equipment_id, series_id, sensor_role)\nORDER BY ss.equipment_id, ss.series_id;\n",
+    "timeline_sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(bh.energized, 1) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN base_history bh\n    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1800 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_first_epoch,\n    MIN(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_min,\n    MAX(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_max,\n    FIRST_VALUE(previous_value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_first_prev_value,\n    FIRST_VALUE(previous_epoch) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN 7200 PRECEDING AND CURRENT ROW) AS window_first_prev_epoch\n  FROM valid\n),\nsegments0 AS (\n  SELECT windowed.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id, data_segment) AS segment_start_epoch\n  FROM windowed\n),\nelapsed_window AS (\n  SELECT segments0.*,\n    CASE WHEN window_first_epoch > epoch_seconds - 7200\n           AND window_first_prev_epoch <= epoch_seconds - 7200\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value < window_min\n         THEN window_first_prev_value ELSE window_min END AS elapsed_window_min,\n    CASE WHEN window_first_epoch > epoch_seconds - 7200\n           AND window_first_prev_epoch <= epoch_seconds - 7200\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value > window_max\n         THEN window_first_prev_value ELSE window_max END AS elapsed_window_max\n  FROM segments0\n),\nsignals AS (\n  SELECT elapsed_window.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - 7200) AND (elapsed_window_max - elapsed_window_min <= __OFDD_SV_STALE_TOL__))) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM elapsed_window\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < 1800 THEN dt_seconds\n         ELSE 1800 END AS normal_seconds,\n    CASE WHEN dt_seconds > 1800\n         THEN dt_seconds - 1800 ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 300 THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n  UNION ALL\n  SELECT equipment_id, series_id, sensor_role,\n    epoch_seconds + 1800 AS segment_epoch,\n    1 AS confirmed, silence_seconds AS held_seconds\n  FROM confirmed_rows WHERE silence_seconds > 0\n)\nSELECT equipment_id, series_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE held_seconds > 0 ORDER BY equipment_id, series_id, sensor_role, segment_epoch\n",
+    "fragment": "SV_STALE_TOL",
+    "sql_roles": {
+     "outside-air-temp": "oa_t",
+     "mixed-air-temp": "mat",
+     "zone-air-temp": "zone_t",
+     "return-air-temp": "rat",
+     "discharge-air-temp": "sat",
+     "chilled-water-supply-temp": "chw_supply_t",
+     "chilled-water-return-temp": "chw_return_t",
+     "hot-water-supply-temp": "hw_supply_t",
+     "hot-water-return-temp": "hw_return_t",
+     "outside-air-humidity": "oa_h",
+     "return-air-humidity": "ra_h",
+     "zone-air-humidity": "zone_rh",
+     "mixed-air-humidity": "ma_h",
+     "supply-air-humidity": "sa_h"
+    },
+    "values": {
+     "MAX_SILENCE_SECONDS": "1800",
+     "SENSOR_SPAN": "100",
+     "SPIKE_SCALE_HUMIDITY": "1",
+     "SPIKE_SCALE_PRESSURE": "1",
+     "SPIKE_SCALE_TEMPERATURE": "1",
+     "STALE_TOL": "0.027778"
+    }
+   },
+   "SV-RATE": {
+    "sql": "-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.\n-- Sensor-series input and output are keyed by the bound point UUID, not the role.\nWITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL\n                  OR epoch_seconds - previous_epoch > 1 * 3600.0\n             THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nrates AS (\n  SELECT valid.*,\n    (epoch_seconds - previous_epoch) / 3600.0 AS dt_hours,\n    ABS(value - previous_value) AS delta\n  FROM valid\n),\nflagged AS (\n  SELECT rates.*,\n    CAST(CASE\n      WHEN previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1 * 3600.0 THEN 0\n      WHEN dt_hours IS NULL OR dt_hours <= 0.0 THEN 0\n      WHEN delta / dt_hours > __OFDD_SV_RATE_THRESHOLD__ THEN 1\n      ELSE 0\n    END AS INT) AS over_rate\n  FROM rates\n),\nlagged AS (\n  SELECT flagged.*,\n    COALESCE(LAG(over_rate) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_over_rate\n  FROM flagged\n),\nbase AS (\n  SELECT lagged.*,\n    CAST(CASE WHEN over_rate = 1 AND previous_over_rate = 1 THEN 1 ELSE 0 END AS INT) AS raw_fault,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         WHEN next_epoch - epoch_seconds > 1 * 3600.0 THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS held_seconds\n  FROM lagged\n),\nstreak_groups AS (\n  SELECT base.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM base\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    SUM(CASE WHEN raw_fault = 1 THEN held_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 600 THEN 1 ELSE 0 END AS confirmed,\n    held_seconds\n  FROM confirmed_rows WHERE held_seconds > 0\n),\nscored AS (\n  SELECT equipment_id, series_id, sensor_role,\n    SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,\n    SUM(held_seconds) / 3600.0 AS covered_hours\n  FROM final\n  GROUP BY equipment_id, series_id, sensor_role\n)\nSELECT ss.equipment_id, ss.series_id, ss.sensor_role,\n  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,\n  COALESCE(scored.covered_hours, 0.0) AS covered_hours\nFROM sensor_series ss\nLEFT JOIN scored USING (equipment_id, series_id, sensor_role)\nORDER BY ss.equipment_id, ss.series_id;\n",
+    "timeline_sql": "WITH base_proof AS (\n  SELECT h.*,\n    CASE\n      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END\n      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END\n      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END\n      ELSE 1 END AS energized\n  FROM history h\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL\n                  OR epoch_seconds - previous_epoch > 1 * 3600.0\n             THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nrates AS (\n  SELECT valid.*,\n    (epoch_seconds - previous_epoch) / 3600.0 AS dt_hours,\n    ABS(value - previous_value) AS delta\n  FROM valid\n),\nflagged AS (\n  SELECT rates.*,\n    CAST(CASE\n      WHEN previous_epoch IS NULL OR epoch_seconds - previous_epoch > 1 * 3600.0 THEN 0\n      WHEN dt_hours IS NULL OR dt_hours <= 0.0 THEN 0\n      WHEN delta / dt_hours > __OFDD_SV_RATE_THRESHOLD__ THEN 1\n      ELSE 0\n    END AS INT) AS over_rate\n  FROM rates\n),\nlagged AS (\n  SELECT flagged.*,\n    COALESCE(LAG(over_rate) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_over_rate\n  FROM flagged\n),\nbase AS (\n  SELECT lagged.*,\n    CAST(CASE WHEN over_rate = 1 AND previous_over_rate = 1 THEN 1 ELSE 0 END AS INT) AS raw_fault,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         WHEN next_epoch - epoch_seconds > 1 * 3600.0 THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS held_seconds\n  FROM lagged\n),\nstreak_groups AS (\n  SELECT base.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM base\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    SUM(CASE WHEN raw_fault = 1 THEN held_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= 600 THEN 1 ELSE 0 END AS confirmed,\n    held_seconds\n  FROM confirmed_rows WHERE held_seconds > 0\n)\nSELECT equipment_id, series_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE held_seconds > 0 ORDER BY equipment_id, series_id, sensor_role, segment_epoch\n",
+    "fragment": "SV_RATE_THRESHOLD",
+    "sql_roles": {
+     "outside-air-temp": "oa_t",
+     "mixed-air-temp": "mat",
+     "zone-air-temp": "zone_t",
+     "return-air-temp": "rat",
+     "discharge-air-temp": "sat"
+    },
+    "values": {
+     "SENSOR_SPAN": "100",
+     "SPIKE_SCALE_HUMIDITY": "1",
+     "SPIKE_SCALE_PRESSURE": "1",
+     "SPIKE_SCALE_TEMPERATURE": "1",
+     "STEADY_FAULT_PER_HOUR": "3.333333"
+    }
+   }
+  }
  }
 }

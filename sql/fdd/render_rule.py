@@ -65,7 +65,53 @@ def _sweep_fragments(rule, role_limits, sql_by_name, names):
         frag['SV_RATE_THRESHOLD'] = f'(CASE{whens} ELSE {base} END)' if whens else base
     return frag
 
+# Sweep rules with persisted role-limit overrides (#1589) are re-rendered at run time from a template: the SQL with every
+# per-role limit fragment left as a sentinel, plus the numbers those fragments reference. fill_template() below and the
+# NF hook (nf-app/hooks/lib/role-limits.js) fill it the same way; with the shipped limits the result is byte-identical
+# to render() (scripts/nf/build_sql_pack.py checks it, nf-app/tests/role-limits.test.mjs checks the JS twin).
+FRAGMENT_KEYS = {'SV-RANGE': 'SV_RANGE_BANDS', 'SV-SPIKE': 'SV_SPIKE_BANDS', 'SV-FLATLINE': 'SV_FLATLINE_TOL',
+                 'SV-STALE': 'SV_STALE_TOL', 'SV-RATE': 'SV_RATE_THRESHOLD'}
+_PLACEHOLDER = re.compile(r'\{\{([A-Z_0-9]+)\}\}')
+
+def sentinel(key):
+    return f'__OFDD_{key}__'
+
+def _format_value(value):
+    return str(int(value)) if float(value).is_integer() else repr(float(value))
+
 def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, role_limits=None):
+    return _render(rule_id, poll_seconds, overrides, parameter_controls, role_limits)[0]
+
+def render_template(rule_id, poll_seconds=300, overrides=None, parameter_controls=None):
+    """{sql, fragment, sql_roles, values} for a sweep rule: sql has the role-limit fragment as sentinel(fragment);
+    values are the formatted numbers the fragment's own placeholders take; sql_roles maps canonical role -> SQL role."""
+    key = FRAGMENT_KEYS.get(rule_id)
+    if key is None:
+        raise ValueError(f'{rule_id} has no role-limit fragment')
+    sql, values, inverse = _render(rule_id, poll_seconds, overrides, parameter_controls, None, sentinels=True)
+    names = json.loads(SWEEP_ROLE_SOURCE.read_text(encoding='utf-8'))[rule_id]
+    used = {}
+    probe = _sweep_fragments({'rule_id': rule_id}, sweep_catalog.load_role_limits(), inverse, set(names))[key]
+    # every placeholder a fragment can reference, whatever the limits (CASE arms appear only with explicit values)
+    probe += ' {{MAX_SILENCE_SECONDS}} {{SENSOR_SPAN}} ' + ' '.join(_RANGE_SCALE.values()) + ' ' + ' '.join(_SPIKE_SCALE.values())
+    probe += ' {{FLATLINE_TOL}}' if rule_id == 'SV-FLATLINE' else ' {{STALE_TOL}}' if rule_id == 'SV-STALE' else ''
+    probe += ' {{STEADY_FAULT_PER_HOUR}}' if rule_id == 'SV-RATE' else ''
+    for k in sorted(set(_PLACEHOLDER.findall(probe))):
+        if k in values:
+            used[k] = _format_value(values[k])
+    return {'sql': sql, 'fragment': key, 'sql_roles': {name: inverse[name] for name in names}, 'values': used}
+
+def fill_template(template_sql, rule_id, values, sql_roles, role_limits):
+    """The rule SQL (or its timeline) for these role limits: the fragment rendered, its placeholders resolved, the sentinel replaced."""
+    key = FRAGMENT_KEYS[rule_id]
+    text = _sweep_fragments({'rule_id': rule_id}, role_limits, sql_roles, set(sql_roles))[key]
+    def replace(match):
+        if match[1] not in values:
+            raise ValueError(f'Unresolved placeholder {match[1]} in the {rule_id} fragment')
+        return values[match[1]]
+    return template_sql.replace(sentinel(key), _PLACEHOLDER.sub(replace, text))
+
+def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, role_limits=None, sentinels=False):
     rules = json.loads((ROOT / 'tuning_catalog.json').read_text())['rules']
     rule = next((r for r in rules if r['rule_id'] == rule_id or rule_id in r.get('aliases',[])), None)
     if rule is None:
@@ -134,15 +180,16 @@ def render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, r
         # role_limits: a sweep_catalog.load_role_limits() result; default = open_fdd/data/sensor_sweep_limits.json.
         limits = role_limits if role_limits is not None else sweep_catalog.load_role_limits()
         for key, text in _sweep_fragments(rule, limits, inverse, set(names)).items():
-            sql = sql.replace('{{' + key + '}}', text)
+            sql = sql.replace('{{' + key + '}}', sentinel(key) if sentinels else text)
+    else:
+        inverse = {}
     # Substitution is numeric only; data scope/identifiers belong in bound application queries.
     def replace(match):
         key = match[1]
         if key not in values:
             raise ValueError(f'Unresolved placeholder {key} in {rule_id}')
-        value = values[key]
-        return str(int(value)) if float(value).is_integer() else repr(float(value))
-    return re.sub(r'\{\{([A-Z_0-9]+)\}\}',replace,sql)
+        return _format_value(values[key])
+    return _PLACEHOLDER.sub(replace, sql), values, inverse
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)

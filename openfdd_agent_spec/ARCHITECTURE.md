@@ -65,7 +65,7 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 | `openfdd.config` | table | `install.sql` seeds | `hooks/lib/timescale.js`, the retention functions, `doctor` |
 | `fdd.point` | table | `fdd` hook (synced per equipment before each load) | **core schema** (`sql/fdd/schema/core.sql`): one row per bound point with its SI `unit`, `si_scale` / `si_offset` and `role`; read by `fdd.input_sample` |
 | `fdd.rule_result` | hypertable (`window_end`, 30 d) | `fdd` hook (upsert per run) | **core schema; integration output**: BI tools and downstream apps read it. PK `(site_id, equipment_id, rule_id, subject_key, window_start, window_end, rule_hash, config_hash)`; `status` PASS/FAULT/INCONCLUSIVE/SKIPPED/ERROR/STALE, `fault_hours`, `covered_hours`, `fault_pct`, `metrics`, `diagnostics` |
-| `fdd.rule_config` | table | created, unused by Open-FDD | **core schema**: append-only tuning revisions (one active per scope) for integrators that store tuning |
+| `fdd.rule_config` | table | tuning hook (writes), `fdd` hook (reads) | **core schema**: append-only tuning revisions (one active per scope); Open-FDD stores sweep role-limit overrides as `rule_id` `SV-LIMITS` (#1589) |
 | `openfdd.nf_samples` | view | n/a | NF's samples in native units (`history_buckets`, newest-sample lookup) |
 | `fdd.input_sample` | view | n/a | SI samples of the bound points (`value * si_scale + si_offset`); the loader reads it (`adapter_nf.sql`) |
 

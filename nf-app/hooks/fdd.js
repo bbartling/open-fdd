@@ -82,6 +82,7 @@ const STATIC = path.join(__dirname, '..', 'static');
 const RULES = path.join(__dirname, '..', 'rules');
 const { queryPoints } = require('./lib/paging.js');
 const settings = require('./lib/settings.js');
+const roleLimits = require('./lib/role-limits.js');
 const PGLITE_MIN_BYTES = 3.5 * 1024 ** 3;
 
 // ---- shared code with the UI ------------------------------------------------------
@@ -728,6 +729,67 @@ async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInsta
 }
 
 /**
+ * Persisted sweep role-limit overrides (#1589; Full edition, Timescale engine only). Reads the active SV-LIMITS revisions
+ * of fdd.rule_config once per run and returns forEquip(site, equip): null when the shipped limits apply, else the five
+ * sweep rules re-rendered from the pack's role_limit_templates with shipped < site < equipment, plus the provenance the
+ * fdd.rule_result rows record (rule_hash of the rendered SQL, config_hash, config_revision, effective_parameters).
+ * An override that no longer validates (e.g. after a newer shipped file) is skipped LOUDLY: logged and listed in the summary.
+ * @param {{ engine: any, pack: any, log: (m: string) => void }} args
+ */
+async function loadRoleLimitOverrides({ engine, pack, log }) {
+  const summary = { source: 'shipped', revisions: 0, equips: 0, errors: /** @type {string[]} */ ([]) };
+  /** @type {{ summary: typeof summary, forEquip: (siteId: string, equipId: string) => any }} */
+  const none = { summary, forEquip: () => null };
+  if (!engine.roleLimitOverrides || !pack.role_limit_templates) return none;
+  let rows;
+  try { rows = await engine.roleLimitOverrides(); } catch (e) {
+    summary.errors.push(`could not read role-limit overrides: ${errText(e)}`);
+    log(`role limits: could not read fdd.rule_config (${errText(e)}); shipped limits used`);
+    return none;
+  }
+  if (!rows.length) return none;
+  summary.source = 'fdd.rule_config';
+  summary.revisions = rows.length;
+  const tpl = pack.role_limit_templates;
+  const byKey = new Map(rows.map((r) => [`${r.site_id}\u0001${r.scope_key}`, r]));
+  const cache = new Map();
+  const empty = (r) => !r || !r.parameters || !r.parameters.roles || !Object.keys(r.parameters.roles).length;
+  const sha = (/** @type {string} */ t) => crypto.createHash('sha256').update(t).digest('hex');
+  return {
+    summary,
+    forEquip(siteId, equipId) {
+      const site = byKey.get(`${siteId}\u0001${roleLimits.SITE_SCOPE}`);
+      const equip = byKey.get(`${siteId}\u0001${roleLimits.EQUIP_SCOPE_PREFIX}${equipId}`);
+      if (empty(site) && empty(equip)) return null;
+      const text = roleLimits.configText(site && site.parameters, equip && equip.parameters);
+      const key = `${site ? site.revision : ''}|${equip ? equip.revision : ''}`;
+      if (!cache.has(key)) {
+        try {
+          const limits = roleLimits.effectiveRoleLimits(tpl.shipped, tpl.allowlists, site && site.parameters, equip && equip.parameters);
+          const sweeps = roleLimits.renderSweeps(pack, limits);
+          cache.set(key, {
+            sweeps,
+            ruleHashes: Object.fromEntries(Object.entries(sweeps).map(([id, x]) => [id, sha(x.sql)])),
+            configHash: sha(text),
+            configRevision: !empty(equip) ? equip.revision : site.revision,
+            parameters: { role_limits: { config_rule_id: roleLimits.LIMITS_RULE_ID, site_revision: site ? site.revision : null,
+              equipment_revision: equip ? equip.revision : null, overrides: JSON.parse(text) } },
+          });
+        } catch (e) {
+          const msg = `${siteId || '(no site)'} / ${equipId}: role-limit override not applied (${errText(e)}); shipped limits used`;
+          summary.errors.push(msg);
+          log(`role limits: ${msg}`);
+          cache.set(key, null);
+        }
+      }
+      const out = cache.get(key);
+      if (out) summary.equips++;
+      return out;
+    },
+  };
+}
+
+/**
  * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
  *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number }} FddConfig
  * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number, hasPglite?: () => boolean }} args
@@ -773,6 +835,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const warnedUnits = new Set();
   const engine = await createEngine({ kind, pack, config: config.timescale });
   try {
+    const tuning = await loadRoleLimitOverrides({ engine, pack, log });
+    summary.role_limits = tuning.summary;
     for (const equipRec of model.equips) {
       const equipId = shared.idOf(equipRec);
       if (only && !only.has(equipId)) continue;
@@ -901,10 +965,11 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         const values = [];
         const timelines = [];         // { records, series } per fault rule with a timeline_sql
         const dbRows = [];            // timescale: rows for fdd.rule_result
+        const limitsHere = tuning.forEquip(siteId, equipId);      // persisted sweep role-limit overrides (#1589), else null
         for (const r of runnable) {
           let rows;
           try {
-            rows = await engine.query(r.rule.id);
+            rows = await engine.query(r.rule.id, limitsHere ? limitsHere.sweeps[r.rule.id] : undefined);
           } catch (e) {
             summary.errors++;
             reasons.set(r.rule.id, `rule error: ${errText(e)}`);
@@ -913,6 +978,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }
           summary.rules++;
           const packRule = pack.rules[r.rule.id];
+          const tuned = limitsHere && limitsHere.sweeps[r.rule.id] ? { ruleHash: limitsHere.ruleHashes[r.rule.id],
+            configHash: limitsHere.configHash, configRevision: limitsHere.configRevision, parameters: limitsHere.parameters } : {};
           const ruleSensors = packRule.output_columns?.includes('series_id')
             ? sweepSensors.filter((sensor) => sensor.ruleIds.has(r.rule.id)) : [];
           const assessableSeries = new Map(ruleSensors.map((sensor) => [sensor.point.uuid, sensor.role]));
@@ -931,9 +998,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }]));
           if (engine.resultRow && perSensor.length) {
             for (const sensorRow of perSensor) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId,
-              ruleId: r.rule.id, row: sensorRow, windowStart: from, windowEnd: to }));
+              ruleId: r.rule.id, row: sensorRow, windowStart: from, windowEnd: to, ...tuned }));
             if (row) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id,
-              row, windowStart: from, windowEnd: to }));
+              row, windowStart: from, windowEnd: to, ...tuned }));
           }
           if (perSensor.length) {
             for (const sensorRow of perSensor) {
@@ -953,7 +1020,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           if (out.status !== 'not-assessed') {
             summary.results.push({ site: siteId, equip: equipId, rule: r.rule.id, value: out.value, unit: out.unit, fault: out.fault, status: out.status,
               ...(sensorFaultHours ? { sensor_fault_hours: sensorFaultHours } : {}) });
-            if (engine.resultRow && !perSensor.length) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to }));
+            if (engine.resultRow && !perSensor.length) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to, ...tuned }));
           }
           const uuid = resultUuid(key, r.rule.id);
           touched.add(uuid);
@@ -964,7 +1031,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           if (out.status !== 'not-assessed') values.push({ uuid, value: out.value });
           if (out.kind === 'fault' && !config.dryRun && engine.timeline && pack.rules[r.rule.id].timeline_sql) {
             try {
-              const timelineRows = await engine.timeline(r.rule.id);
+              const timelineRows = await engine.timeline(r.rule.id, limitsHere ? limitsHere.sweeps[r.rule.id] : undefined);
               const sensorTimelineRows = timelineRows?.some((x) => x.series_id) ? timelineRows : null;
               if (sensorTimelineRows) {
                 const timelineBySeries = new Map();
@@ -1247,4 +1314,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { applyOatPolicy, runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });

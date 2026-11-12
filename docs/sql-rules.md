@@ -13,7 +13,8 @@ site-neutral and use SI values at the rule boundary.
 
 Rules read per-run scratch tables (`history`, `weather`, ...) built from the input contract. In the Full edition the
 scratch `history` is built from the view `fdd.input_sample(site_id, point_key, ts, value)` (SI values) joined to
-`fdd.point`, and results are upserted into `fdd.rule_result`; tuning revisions have a table, `fdd.rule_config`. All
+`fdd.point`, and results are upserted into `fdd.rule_result`; tuning revisions live in `fdd.rule_config` (the Full edition's Tuning tab
+stores per-site and per-equipment sensor-sweep limits there in SI, rule id `SV-LIMITS`). All
 three tables are in `sql/fdd/schema/core.sql`, which every application using Open-FDD shares byte for byte. An
 application provides only its own `fdd.input_sample` view with the signature declared under `sources` in
 `sql/fdd/input_contract.json`.

@@ -538,6 +538,97 @@ test("writeResults upserts rule results into fdd.rule_result", { skip }, async (
   assert.equal(sensors.filter((row) => row.role === "sat").length, 2);
 });
 
+test("sweep role-limit overrides (#1589): tuning hook preview / save / reset / rollback; the run uses and records the revision", { skip, timeout: 120000 }, async () => {
+  if (sourceDirty) await seed();
+  const tuning = require("../../hooks/tuning.js");
+  const T = pack.role_limit_templates;
+  const logs = [];
+  const call = (args) => tuning.handle({ sdk: { logEvent: (m) => logs.push(m) }, args, connect: async () => db, templates: T });
+  await db.query("DELETE FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'");
+  const SITE = "site-1";
+  const first = await call({ action: "get", site: SITE });
+  assert.equal(first.ok, true, first.error);
+  assert.deepEqual(first.history, [], "no revisions yet");
+  assert.equal(first.effective.sources["discharge-air-temp"].hi, "shipped");
+
+  // invalid overrides are rejected and nothing is stored
+  const bad = await call({ action: "save", site: SITE, overrides: JSON.stringify({ version: 1, roles: { "discharge-air-temp": { lo: 30, hi: 20 } } }) });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /lo \(30\) must be < hi \(20\)/);
+  for (const roles of [{ "no-such-role": { lo: 1 } }, { "discharge-air-temp": { spike_delta: -1 } }, { "discharge-air-temp": { colour: 1 } }]) {
+    const r = await call({ action: "save", site: SITE, overrides: JSON.stringify({ version: 1, roles }) });
+    assert.equal(r.ok, false, JSON.stringify(roles));
+  }
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'")).rows[0].n, 0);
+
+  // preview validates without writing
+  const siteOv = { version: 1, roles: { "discharge-air-temp": { lo: 4, hi: 16 } } };
+  const pv = await call({ action: "preview", site: SITE, overrides: JSON.stringify(siteOv) });
+  assert.equal(pv.ok, true, pv.error);
+  assert.equal(pv.written, false);
+  assert.equal(pv.effective.roles["discharge-air-temp"].hi, 16);
+  assert.equal(pv.effective.sources["discharge-air-temp"].hi, "site");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'")).rows[0].n, 0);
+
+  // save: site, then equipment (precedence shipped < site < equipment)
+  const s1 = await call({ action: "save", site: SITE, overrides: JSON.stringify(siteOv), note: "tighter supply band", by: "test" });
+  assert.equal(s1.ok, true, s1.error);
+  assert.equal(s1.revision, 1);
+  const e1 = await call({ action: "save", site: SITE, scope: "equip:" + EQUIP, overrides: JSON.stringify({ version: 1, roles: { "discharge-air-temp": { hi: 13 } } }) });
+  assert.equal(e1.ok, true, e1.error);
+  assert.equal(e1.effective.roles["discharge-air-temp"].lo, 4, "site value inherited");
+  assert.equal(e1.effective.sources["discharge-air-temp"].lo, "site");
+  assert.equal(e1.effective.roles["discharge-air-temp"].hi, 13, "equipment wins");
+  assert.equal(e1.effective.sources["discharge-air-temp"].hi, "equipment");
+  assert.equal(e1.effective.sources["mixed-air-temp"].hi, "shipped");
+
+  // the scheduled run: the fdd hook's loader re-renders the sweeps for this equipment and records the revision
+  const engine = await createEngine({ kind: "timescale", pack, client: db });
+  const tuned = await hook.loadRoleLimitOverrides({ engine, pack, log: () => {} });
+  assert.equal(tuned.forEquip(SITE, "AHU-OTHER") && tuned.forEquip(SITE, "AHU-OTHER").configRevision, 1, "other equipment: site revision");
+  const lim = tuned.forEquip(SITE, EQUIP);
+  assert.equal(lim.configRevision, e1.revision);
+  assert.equal(lim.parameters.role_limits.site_revision, 1);
+  assert.notEqual(lim.sweeps["SV-RANGE"].sql, pack.rules["SV-RANGE"].sql);
+  assert.equal(lim.sweeps["SV-SPIKE"].sql, pack.rules["SV-SPIKE"].sql, "rules whose limits did not change keep the pack SQL");
+  assert.equal(tuned.forEquip("site-2", EQUIP), null, "another site keeps the shipped limits");
+  const sensorSeries = ["sat", "mat", "oa_t"].map((name) => ({ uuid: roleToUuid[name], role: name, unit: "°C" }));
+  await load({ equipId: EQUIP, siteId: SITE, ...scaled(roleToUuid, unitsByUuid).args, unitsByUuid, sensorSeries, from: FROM, to: TO, stepSec: STEP });
+  const base = await engine.query("SV-RANGE");
+  const over = await engine.query("SV-RANGE", lim.sweeps["SV-RANGE"]);
+  const satHours = (rows) => rows.find((r) => r.sensor_role === "sat").fault_hours;
+  assert.ok(satHours(over) > satHours(base), `a 4..13 degC band flags more supply-air hours (${satHours(base)} -> ${satHours(over)})`);
+  const mat = (rows) => rows.find((r) => r.sensor_role === "mat").fault_hours;
+  assert.equal(mat(over), mat(base), "roles without an override are unchanged");
+  const row = hook.equipmentResult(pack.rules["SV-RANGE"], over, EQUIP);
+  const runTs = "2026-10-14T01:00:00Z";
+  const extra = { ruleHash: lim.ruleHashes["SV-RANGE"], configHash: lim.configHash, configRevision: lim.configRevision, parameters: lim.parameters };
+  await ts.writeResults(db, [row, ...row.sensor_rows].map((r) => engine.resultRow({ runTs, equip: EQUIP, site: SITE, ruleId: "SV-RANGE", row: r, windowStart: FROM, windowEnd: TO, ...extra })));
+  const stored = (await db.query("SELECT DISTINCT config_revision, config_hash, rule_hash, effective_parameters FROM fdd.rule_result WHERE rule_id = 'SV-RANGE' AND created_at = $1", [runTs])).rows;
+  assert.equal(stored.length, 1);
+  assert.equal(Number(stored[0].config_revision), e1.revision, "the run records the parameter revision");
+  assert.equal(stored[0].config_hash, lim.configHash);
+  assert.notEqual(stored[0].rule_hash, "");
+  assert.equal(stored[0].effective_parameters.role_limits.equipment_revision, e1.revision);
+
+  // reset (equipment back to the site) and rollback (a new revision with the old parameters; history append-only)
+  const r2 = await call({ action: "reset", site: SITE, scope: "equip:" + EQUIP });
+  assert.equal(r2.revision, 2);
+  assert.equal(r2.effective.roles["discharge-air-temp"].hi, 16, "back to the site value");
+  const rb = await call({ action: "rollback", site: SITE, scope: "equip:" + EQUIP, revision: "1" });
+  assert.equal(rb.ok, true, rb.error);
+  assert.equal(rb.revision, 3);
+  assert.equal(rb.effective.roles["discharge-air-temp"].hi, 13);
+  assert.deepEqual(rb.history.map((h) => [h.revision, h.active]), [[3, true], [2, false], [1, false]]);
+  assert.equal(rb.history[0].parameters.rollback_of, 1);
+  const actives = (await db.query("SELECT scope_key, revision FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS' AND active ORDER BY scope_key")).rows;
+  assert.deepEqual(actives.map((r) => [r.scope_key, Number(r.revision)]), [["equip:" + EQUIP, 3], ["site", 1]], "one active revision per scope");
+  const site0 = await call({ action: "reset", site: SITE });
+  assert.equal(site0.effective.sources["discharge-air-temp"].lo, "shipped", "site reset: shipped defaults below");
+  assert.ok(logs.some((m) => m.includes("revision 1")), "saves are logged");
+  await db.query("DELETE FROM fdd.rule_config WHERE rule_id = 'SV-LIMITS'");
+});
+
 test("history_buckets and historyRoute (bounds against the real database)", { skip }, async () => {
   const sat = roleToUuid.sat;
   const { rows } = await db.query(
