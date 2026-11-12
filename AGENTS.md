@@ -119,6 +119,15 @@ When a live hotfix is unavoidable (for example a StartHook type error that block
 Grok Bot (or the designated deploy agent) owns NF site deploys. Coding agents open the PR; they do not push to a live console unless the owner explicitly assigned that deploy.
 
 
+## Access model (SSH is optional)
+
+Pick the path in this order: (1) **console only**: HTTPS to the NF console plus a console login, using `nf_app_sync.py` and the NF
+API; (2) console plus whatever remote access the site already has (site VPN, IT reverse proxy, NF portal); (3) SSH, only when the
+owner says the site has it. SSH, host package installs and Docker on the NF host are optional and site-dependent; Tailscale is
+how we reach our own validation sites, not a requirement. When none of them is available, do not work around it: produce the
+hand-off for the site's IT (the release zip from `scripts/nf/build_app_dist.py`, the `deploy/nf-caddy` front door, the Timescale
+`install.sql` step) and say what is needed. Install methods: `docs/normal-framework.md` (Install methods).
+
 ## Security and reporting
 
 See [SECURITY.md](SECURITY.md). CI runs ZAP against the mock NF, `npm audit` and gitleaks.

@@ -93,6 +93,7 @@ jobs:
           python3 scripts/nf/build_sql_pack.py --check
           python3 scripts/nf/sync_pypi_data.py --check
           python3 scripts/nf/build_plot_spec_data.py --check
+          python3 scripts/nf/build_app_dist.py --check
           python3 scripts/nf/gen_rule_docs.py --check
           python3 -m pip install --quiet pandas numpy
           python3 scripts/nf/gen_cookbook.py --check

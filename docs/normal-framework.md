@@ -39,6 +39,25 @@ refuses to overwrite hand-edited files without `--force`.
 | Known NF behaviors | [NF gotchas](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-gotchas.md) |
 | Validate BACnet mappings | [BACnet validation](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/bacnet-validate.md) |
 
+### Install methods
+
+Four ways to put the app on NF. None needs SSH or Tailscale: each needs only the NF console over HTTP(S) and, for A, NF's own
+reach to a git host.
+
+| | Method | Needs | Status |
+|---|---|---|---|
+| A | **Git URL** (console **+Create**, or `POST /api/v1/apps`) | A repository whose root is the app: `python3 scripts/nf/build_app_dist.py --out build/dist` writes it (`app.json`, `hooks-update/`, `hooks/`, `static/`, `package.json`); push that folder to its own repo. NF needs outbound access to the git host and npm. | Not tested on NF |
+| B | **`nf_app_sync.py`** (NF app API) | Any PC with Python 3 and HTTPS reach to the console, plus a console login. Remote access is whatever the site already has. | Tested, Full and Lite |
+| C | **Single hook** (NF MCP `deploy_hook` / `manage_app write_file`) | The weather hook plus `hooks/lib/paging.js` and `hooks/lib/settings.js` (Lite is that one hook). Full's `fdd` hook needs its whole tree. | Not tested on NF |
+| D | **Release zip** | The `open-fdd-lite-<version>.zip` / `open-fdd-<version>.zip` attached to each release (same tree as A), checksums in `SHA256SUMS`. IT unpacks it into an internal git repo and uses A, so the NF host needs no internet. | Zip built by CI; install not tested |
+
+Repository subfolders do not work for A: NF reads `app.json` from the repository root and its docs name no subfolder or branch
+field, so a clone of this repo (whose apps live in `nf-app/` and `lite/`) is not an app. For the IT department: send the zip, the
+console URL, a console login for the integrator and, for Full, the Timescale connection (the `install.sql` step runs as the
+database owner; see the install reference). Health checks need no SSH: `doctor` over the console API, the app's settings page and
+the NF console hook runs. What was tested offline: the bundle contents against the manifest, byte for byte, and B on live sites. What needs a live
+NF site: A, C and D (`docs/prompts/2026-11-12-install-methods-checklist.md`).
+
 ## Verify
 
 - `doctor` reports a clean install and the expected engine state.

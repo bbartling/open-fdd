@@ -1,0 +1,42 @@
+# Attach the NF-native install bundles (one zip per edition) to each GitHub release (#1567).
+# The zip root is a git-installable app root: app.json (CreateApplication), hooks-update/*.json, hooks/, static/, package.json.
+# Built by scripts/nf/build_app_dist.py from the same manifests nf_app_sync.py pushes.
+name: NF app release bundles
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bundles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build and verify
+        run: |
+          python3 scripts/nf/build_app_dist.py --check
+          python3 scripts/nf/build_app_dist.py --out build/dist --zip
+          cd build/dist && sha256sum *.zip > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nf-app-bundles
+          path: |
+            build/dist/*.zip
+            build/dist/SHA256SUMS
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/dist/*.zip
+            build/dist/SHA256SUMS
