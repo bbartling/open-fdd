@@ -3,6 +3,15 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.16 — 2026-11-12 (app) / open-fdd 4.5.7 (PyPI)
+
+One small shared core schema. FDD results are unchanged (parity: compared=71 matched=49 known-divergent=22 unexpected=0 for 4 equipment x 3 days; the 8 x 7 stress verdict is pinned too).
+
+- **Breaking (schema):** Timescale schema version 4. `sql/fdd/schema/core.sql` defines `fdd.point`, `fdd.rule_result` and `fdd.rule_config`; the NF app installs it and downstream applications vendor it byte for byte (`open_fdd/data/core.sql` in the wheel, `core.catalog.json`, `scripts/nf/build_core_schema.py --check`). `openfdd.fdd_results` and `openfdd.retention_log` are copied (row-count guarded) and dropped on upgrade; see `docs/operations/nf/migrate-5.x.md` for rollback.
+- The `fdd` hook mirrors the bound points into `fdd.point` and loads history from the view `fdd.input_sample` (SI by `si_scale` / `si_offset`; was a per-query affine in JS). Results are upserted into `fdd.rule_result` on a primary key that now includes the window and a rule hash. The schema probe reports `core_ok`.
+- Input contract version 3: `sources` declares the `fdd.input_sample` signature every application exposes. `sql/fdd/tuning_storage.sql` is a pointer.
+- Parity: `Dataset.to_core_rows()`, `to_imperial(ds, ingest="nf")`, `TimescaleAdapter`, `stress.py --engines ...,timescale`, `tests/parity/baseline.json`. Found: `open_fdd.units.convert` (248.84, 0.471947) and the NF ingest table (249.0889, 0.4719474) differ in the fourth digit.
+
 ## 5.0.15 — 2026-11-11 (app) / open-fdd 4.5.6 (PyPI)
 
 Tidy-up; FDD results are unchanged (parity: compared=71 matched=47 known-divergent=24 unexpected=0).

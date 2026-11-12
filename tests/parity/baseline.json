@@ -1,0 +1,5 @@
+{
+  "_doc": "The pandas == SQL verdict pinned for the default stress dataset. Every engine path (PGlite, SQLite, Timescale through the core tables, a downstream app's own database) must reproduce it; a change here is a deliberate decision, not a drift. Scoped to Policy.default('basic', stress=True).",
+  "dataset": {"equips": 4, "days": 3, "profile": "basic", "seed": 0},
+  "verdict": {"compared": 71, "matched": 47, "known_divergent": 24, "unexpected": 0}
+}

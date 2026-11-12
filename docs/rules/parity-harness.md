@@ -91,6 +91,27 @@ assert conformance_errors(SqliteAdapter(), generate(0, 2, 1), ["FC1"]) == []
 
 The in-repo adapters (`tests/parity/adapters.py`) run the pack on PGlite and sql.js through `nf-app/hooks/lib/engines.js`.
 
+## Adapter contract for apps that store data in the core tables
+
+An application that keeps its data in the shared core schema (`sql/fdd/schema/core.sql`) proves its own database with
+the same dataset and the same pinned verdict:
+
+1. Apply the vendored `core.sql` (compare its bytes with `open_fdd/data/core.sql` from the installed wheel) and define
+   your `fdd.input_sample` view with the signature under `sources` in `input_contract.json`.
+2. `points, samples = ds.to_core_rows()` gives `fdd.point` rows and long `(site_id, point_key, ts_ms, value)` samples in SI.
+   `to_imperial(ds, ingest="nf").to_core_rows()` gives the same in native units (`unit` per point, `si_unit` the SI unit):
+   seed those to prove a read-time conversion (`si_scale` / `si_offset`). `to_imperial(ds)` uses `open_fdd.units.convert`
+   (248.84 Pa per inH2O, 0.471947 L/s per CFM); the NF ingest table uses 249.0889 and 0.4719474: use the table your ingest uses.
+3. Load through your real ingest path, build the `history` scratch table from `fdd.point` + `fdd.input_sample`, run the pack,
+   write `fdd.rule_result` through your product code and read the rows BACK from it as the adapter's result.
+4. Assert: the loaded `history` equals `ds.history` cell for cell (1e-9 relative); the verdict equals
+   `tests/parity/baseline.json` (`compared=71 matched=49 known-divergent=22 unexpected=0` for 4 equipment x 3 days, see the file for the
+   pinned arguments); a second run writes zero new rows (the upsert key is the primary key).
+
+The in-repo reference is `TimescaleAdapter` (`tests/parity/adapters.py`, runner `nf-app/timescale/test/parity_run.mjs`);
+`python tests/parity/stress.py --engines pglite,sqlite,timescale` runs it against a disposable TimescaleDB
+(`PGURL`, `OPENFDD_TS_TEST_DISPOSABLE=1`).
+
 ## How a downstream app uses it
 
 1. Add `open-fdd[oracle]` to the test dependencies.

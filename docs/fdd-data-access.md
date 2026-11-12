@@ -106,6 +106,6 @@ results before treating it as complete.
 
 ## Timescale copy
 
-Full installations using Timescale may also store a run-level copy in `openfdd.fdd_results`. It is optional and
-not the source of truth. NF result points and their histories remain the normal API surface. See the
+Full installations using Timescale also store a run-level copy in `fdd.rule_result` (the shared core schema,
+`sql/fdd/schema/core.sql`; it replaced `openfdd.fdd_results` in 5.0.16). It is not the source of truth. NF result points and their histories remain the normal API surface. See the
 [Timescale setup guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
