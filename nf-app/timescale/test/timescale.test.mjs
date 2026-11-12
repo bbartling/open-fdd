@@ -74,7 +74,7 @@ function scaled(r2u, units, kinds = {}) {
 /** The engine's load(): mirror the bound points into fdd.point, then build the TEMP history from fdd.input_sample. */
 async function load(args) {
   await ts.syncPoints(db, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) });
-  return load({ ...args });
+  return ts.loadHistory(db, { pack, ...args });
 }
 
 const EQUIP = "AHU-1";
