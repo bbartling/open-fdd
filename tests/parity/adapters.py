@@ -82,7 +82,7 @@ def timescale_configured() -> bool:
 class TimescaleAdapter:
     """load(dataset) writes the core rows (native units); run() spawns ``nf-app/timescale/test/parity_run.mjs``.
 
-    The runner seeds an NF-like ``public.data`` from ``to_imperial(ds, ingest="nf").to_core_rows()`` (so the affine ``fdd.input_sample``
+    The runner seeds an NF-like ``public.data`` from ``to_imperial(ds).to_core_rows()`` (so the affine ``fdd.input_sample``
     view converts), syncs ``fdd.point``, loads the history, runs the pack, writes ``fdd.rule_result`` and reads the rows
     BACK from it. ``raw`` keeps the runner's whole answer (history mismatches, idempotency counts, index / signature flags).
     ``plan_only=True`` needs no database: it checks the scale / offset the loader would apply against the SI dataset.
@@ -106,7 +106,7 @@ class TimescaleAdapter:
         self._dir = Path(tempfile.mkdtemp(prefix="parity_timescale_"))
         self._in = self._dir / "input.json"
         site = "parity"
-        points, samples = to_imperial(dataset, ingest="nf").to_core_rows(site)
+        points, samples = to_imperial(dataset).to_core_rows(site)
         columnar: dict[str, list[list]] = {}
         for _site, key, ts, value in samples:
             cols = columnar.setdefault(key, [[], []])

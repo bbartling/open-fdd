@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from docs_units import (INPUT_HEADER, PARAM_HEADER, Contract, cell, fmt, imperial_note, output_rows, param_rows,  # noqa: E402
-                        parity_status, read_parity, units_convention)
+                        parity_status, read_parity, read_pins, units_convention)
 
 CATALOG = ROOT / "nf-app" / "static" / "fdd-catalog.json"
 TUNING = ROOT / "sql" / "fdd" / "tuning_catalog.json"
@@ -95,7 +95,7 @@ def load() -> dict:
     pack = json.loads(PACK.read_text(encoding="utf-8"))["rules"]  # the columns each rendered SQL really returns
     known, other, no_twin = read_parity()
     return {"cat": cat, "tuning": tuning, "pack": pack, "rules": rules, "twins": twins, "known": known, "other": other,
-            "no_twin": no_twin, "contract": Contract()}
+            "no_twin": no_twin, "pins": read_pins(), "contract": Contract()}
 
 
 def grouped(d: dict) -> list[tuple[str, str, str, list[dict]]]:
@@ -327,6 +327,35 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
 # --------------------------------------------------------------------------------------------------------------------
 
 
+DATASET_TITLES = {"basic/0/4/3": "4 equip x 3 d", "basic/0/8/7": "8 equip x 7 d (CI stress size)", "edge/0/2/3": "edge, 2 equip x 3 d"}
+
+
+def pinned_deltas_table(d: dict) -> str:
+    """Every known difference with the expected SQL-vs-pandas delta the stress run pins for it, per canonical dataset."""
+    keys = [k for k in DATASET_TITLES if any(k in p for p in d["pins"].values())]
+    head = ["Rule", "Scope"] + [DATASET_TITLES[k] for k in keys]
+    scope = {rid: "all" for rid in d["known"]}
+    scope.update({rid: s for rid, (s, _why) in d["other"].items()})
+    rows = []
+    for rid in sorted(scope):
+        cells = []
+        for k in keys:
+            pin = d["pins"].get(rid, {}).get(k)
+            cells.append("-" if pin is None else f"{pin['hours']:g} h &plusmn; {pin['tol']:g}")
+        rows.append(f"| [{rid}](#{anchor(rid)}) | {scope[rid].replace('_', '-')} | " + " | ".join(cells) + " |\n")
+    return f"""
+## Pinned deltas
+
+Each known difference carries its expected delta: the sum over all equipment of the absolute fault-hours difference between SQL and
+pandas (a skipped pandas side counts as 0 h), with a tolerance, for the canonical seed (0) and dataset. `tests/parity/stress.py` fails
+when an observed delta leaves its band, so a known difference cannot grow unnoticed; a rule that matches on a dataset is pinned at 0 h.
+The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, keyed `profile/seed/equips/days`).
+
+| {" | ".join(head)} |
+|{"---|" * len(head)}
+""" + "".join(rows)
+
+
 def render_parity(d: dict) -> str:
     twins, known, no_twin = d["twins"], d["known"], d["no_twin"]
     total = len(d["rules"])
@@ -375,6 +404,7 @@ per-rule imperial parity run.
         else:
             note = ""
         out.append(f'| <a id="{anchor(rid)}"></a>[{rid}](sql-cookbook.html#{anchor(rid)}) | {status} | {cell(note)} |\n')
+    out.append(pinned_deltas_table(d))
     out.append(f"""
 Known differences: [KNOWN_DIFFERENCES.md]({GH}/sql/fdd/KNOWN_DIFFERENCES.md). Wider SI stress run: `python tests/parity/stress.py --equips 8 --days 7`.
 
@@ -383,7 +413,7 @@ Known differences: [KNOWN_DIFFERENCES.md]({GH}/sql/fdd/KNOWN_DIFFERENCES.md). Wi
 1. SQL: edit `sql/fdd/postgres/rules/<rule>.sql`, then `sql/fdd/registry.yaml` and `sql/fdd/tuning_catalog.json`. New roles go in `role_map.json` and `input_contract.json`. See [Writing SQL rules](../sql-rules.html).
 2. pandas: add the function in `open_fdd/rules/` and register it in `cookbook_catalog.py`. Keep role names, SI units, defaults, confirm time and gating the same as SQL.
 3. Add the fault, healthy, missing-input and boundary cases to the parity dataset.
-4. If the two intentionally differ, add the rule and a reason to `open_fdd/data/parity_known_differences.json`.
+4. If the two intentionally differ, add the rule, a reason and the expected delta (`expected`, fault hours and tolerance per canonical dataset) to `open_fdd/data/parity_known_differences.json`.
 5. Regenerate: `python scripts/nf/gen_rule_docs.py && python scripts/nf/gen_cookbook.py`.
 
 Use the [parity harness](parity-harness.html) to run the same proof on your own database.

@@ -29,7 +29,7 @@ from open_fdd.parity._fdlibm import sin as _sin  # V8's sin, bit for bit (math.s
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 #: Bump when ``generate`` changes its output for any (profile, seed, equips, days). Published hashes are per version.
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 
 PROFILES = ("basic", "edge")
 EDGE_FEATURES = ("nulls", "planted", "gap", "jitter", "duplicates", "out_of_order")

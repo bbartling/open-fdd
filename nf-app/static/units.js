@@ -15,33 +15,47 @@
   const TABLE = Object.create(null);
   const add = (names, quantity, si, f) => { for (const n of names) TABLE[norm(n)] = [quantity, si, f]; };
   const id = (x) => x;
+  // BEGIN GENERATED unit factors (open_fdd/data/unit_factors.json; python scripts/nf/build_unit_factors.py)
+  const F = {
+    pa_per_in_wc: 249.0889,
+    pa_per_psi: 6894.757,
+    lps_per_cfm: 0.4719474,
+    lps_per_gpm: 0.0630902,
+    kw_per_btuh: 0.00029307107,
+    kw_per_ton: 3.5168525,
+    kw_per_hp: 0.7456999,
+    kwh_per_kbtu: 0.29307107,
+    kwh_per_mmbtu: 293.07107,
+    kwh_per_therm: 29.307107,
+  };
+  // END GENERATED unit factors
   add(["°C", "degC", "C", "celsius", "deg_c", "degrees-celsius"], "temperature", "°C", id);
   add(["°F", "degF", "F", "fahrenheit", "deg_f", "degrees-fahrenheit"], "temperature", "°C", (x) => (x - 32) * 5 / 9);
   add(["K", "kelvin"], "temperature", "°C", (x) => x - 273.15);
   add(["Pa", "pascal", "pascals"], "pressure", "Pa", id);
   add(["kPa", "kilopascals"], "pressure", "Pa", (x) => x * 1000);
   add(["inH2O", "inH20", "inWC", "in wc", "in. w.c.", "inH₂O", "\"wc", "in_h2o",
-    "inches of water", "inches-of-water", "iwc"], "pressure", "Pa", (x) => x * 249.0889);
-  add(["psi", "psig", "psid"], "pressure", "Pa", (x) => x * 6894.757);
+    "inches of water", "inches-of-water", "iwc"], "pressure", "Pa", (x) => x * F.pa_per_in_wc);
+  add(["psi", "psig", "psid"], "pressure", "Pa", (x) => x * F.pa_per_psi);
   add(["bar"], "pressure", "Pa", (x) => x * 1e5);
   add(["L/s", "lps", "L/sec", "liters/second", "litres/second", "liters per second", "litres per second",
     "liters-per-second"], "flow", "L/s", id);
   add(["m³/s", "m3/s"], "flow", "L/s", (x) => x * 1000);
   add(["m³/h", "m3/h", "cmh"], "flow", "L/s", (x) => x / 3.6);
-  add(["cfm", "ft³/min", "ft3/min", "cubic-feet-per-minute"], "flow", "L/s", (x) => x * 0.4719474);
-  add(["gpm", "gal/min"], "flow", "L/s", (x) => x * 0.0630902);
+  add(["cfm", "ft³/min", "ft3/min", "cubic-feet-per-minute"], "flow", "L/s", (x) => x * F.lps_per_cfm);
+  add(["gpm", "gal/min"], "flow", "L/s", (x) => x * F.lps_per_gpm);
   add(["kW"], "power", "kW", id);
   add(["W"], "power", "kW", (x) => x / 1000);
   add(["MW"], "power", "kW", (x) => x * 1000);
-  add(["Btu/h", "btuh", "btu/hr"], "power", "kW", (x) => x * 0.00029307107);
-  add(["ton", "tons", "tonref", "tr"], "power", "kW", (x) => x * 3.5168525);
-  add(["hp"], "power", "kW", (x) => x * 0.7456999);
+  add(["Btu/h", "btuh", "btu/hr"], "power", "kW", (x) => x * F.kw_per_btuh);
+  add(["ton", "tons", "tonref", "tr"], "power", "kW", (x) => x * F.kw_per_ton);
+  add(["hp"], "power", "kW", (x) => x * F.kw_per_hp);
   add(["kWh"], "energy", "kWh", id);
   add(["Wh"], "energy", "kWh", (x) => x / 1000);
   add(["MWh"], "energy", "kWh", (x) => x * 1000);
-  add(["kBtu"], "energy", "kWh", (x) => x * 0.29307107);
-  add(["MMBtu"], "energy", "kWh", (x) => x * 293.07107);
-  add(["therm", "therms"], "energy", "kWh", (x) => x * 29.307107);
+  add(["kBtu"], "energy", "kWh", (x) => x * F.kwh_per_kbtu);
+  add(["MMBtu"], "energy", "kWh", (x) => x * F.kwh_per_mmbtu);
+  add(["therm", "therms"], "energy", "kWh", (x) => x * F.kwh_per_therm);
   add(["%", "%RH", "percent", "pct", "percent-relative-humidity"], "percent", "%", id);
   add(["ppm"], "concentration", "ppm", id);
 
@@ -58,8 +72,8 @@
   // SI → display. Imperial = US customary as commonly shown on a BAS.
   const IMPERIAL = {
     "°C": ["°F", (x) => x * 9 / 5 + 32, (d) => d * 9 / 5],
-    Pa: ["inH₂O", (x) => x / 249.0889, (d) => d / 249.0889],
-    "L/s": ["cfm", (x) => x / 0.4719474, (d) => d / 0.4719474],
+    Pa: ["inH₂O", (x) => x / F.pa_per_in_wc, (d) => d / F.pa_per_in_wc],
+    "L/s": ["cfm", (x) => x / F.lps_per_cfm, (d) => d / F.lps_per_cfm],
     kW: ["kW", (x) => x, (d) => d],
     kWh: ["kWh", (x) => x, (d) => d],
   };

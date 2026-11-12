@@ -92,7 +92,7 @@ each input, parameter and output.
 | [**SV-STALE**](sql-cookbook.html#sv-stale) | Stale data (no fresh samples) | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 5 min | [pandas](pandas-cookbook.html#sv-stale) | match |
 | [**TRIM-1**](sql-cookbook.html#trim-1) | Duct static trim advisory | ahu | 30 min | [pandas](pandas-cookbook.html#trim-1) | known divergence |
 | [**TRIM-3**](sql-cookbook.html#trim-3) | HWST trim advisory | boiler | 30 min | [pandas](pandas-cookbook.html#trim-3) | match |
-| [**TRIM-4**](sql-cookbook.html#trim-4) | CHW plant reset advisory | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#trim-4) | known divergence |
+| [**TRIM-4**](sql-cookbook.html#trim-4) | CHW plant reset advisory | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#trim-4) | match |
 | [**UTIL-INTERVAL**](sql-cookbook.html#util-interval) | BAS 15m vs utility interval (MAE threshold) | meter, ahu, heatpump | immediate | SQL only | SQL only |
 | [**UTIL-MONTHLY**](sql-cookbook.html#util-monthly) | BAS monthly kWh vs utility monthly bills (% deviation) | meter, ahu, heatpump | immediate | SQL only | SQL only |
 | [**VAV-1**](sql-cookbook.html#vav-1) | Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2; no occupancy model or schedule → NOT_ASSESSED_NO_OCCUPANCY | vav, zone_other, heatpump, baseboard | 15 min | [pandas](pandas-cookbook.html#vav-1) | match |

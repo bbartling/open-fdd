@@ -2328,7 +2328,7 @@ Flags condenser water colder than wet-bulb + approach — tower over-cooling / n
 
 ### TRIM-4 {#trim-4}
 
-CHW supply < 7.2 °C while reset requests are low.
+CHW supply < 7.2 °C while the reset request sum is at or below request_lo.
 
 **CHW plant reset advisory** · **Family** trim · **Equipment** `chiller` · **Confirm** 30 min · function `trim4` · [SQL entry](sql-cookbook.html#trim-4)
 
@@ -2337,7 +2337,7 @@ CHW supply < 7.2 °C while reset requests are low.
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---:|---|
 | `chw_supply_t` | `chilled-water-supply-temp` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
-| `chw_reset_request_sum` | `chw-reset-request-sum` | Count | count | none | - | required |
+| `chw_reset_request_sum` | `chilled-water-reset-request-sum` | Count | count | none | - | required |
 
 **Parameters**
 
@@ -2356,7 +2356,7 @@ CHW supply < 7.2 °C while reset requests are low.
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [known divergence](parity.html#trim-4): pandas skips (missing roles: reset requests); SQL treats absent requests as zero
+**Parity** [match](parity.html#trim-4); differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run
 
 
 ## Boilers {#group-boiler}
@@ -2366,7 +2366,7 @@ Boiler plants.
 
 ### TRIM-3 {#trim-3}
 
-HW supply > 71.1 °C while reset requests are low.
+HW supply > 71.1 °C while the reset request sum is at or below request_lo.
 
 **HWST trim advisory** · **Family** trim · **Equipment** `boiler` · **Confirm** 30 min · function `trim3` · [SQL entry](sql-cookbook.html#trim-3)
 
@@ -2375,7 +2375,7 @@ HW supply > 71.1 °C while reset requests are low.
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---:|---|
 | `hw_supply_t` | `hot-water-supply-temp` | Temperature | °C | °F, K | 4.44 to 104.44 | required |
-| `hw_reset_request_sum` | `hw-reset-request-sum` | Count | count | none | - | required |
+| `hw_reset_request_sum` | `hot-water-reset-request-sum` | Count | count | none | - | required |
 
 **Parameters**
 
@@ -2394,7 +2394,7 @@ HW supply > 71.1 °C while reset requests are low.
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [match](parity.html#trim-3); differs only on stress-only data: three differences: (1) pandas reads role hw-reset-request-sum, the SQL contract and NF role is hot-water-reset-request-sum, so the harness gives pandas no input and it skips; (2) SQL faults at request sum <= request_lo, pandas at < request_lo; (3) pandas applies the hydronic-flow gate with a 600 s startup holdoff. Follow-up: align names and comparison with the owner (see #1582)
+**Parity** [match](parity.html#trim-3); differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run
 
 
 ## Heat pumps {#group-heatpump}

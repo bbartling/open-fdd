@@ -8,7 +8,18 @@ pandas rules and the SQL pack see identical numbers. An unknown or empty unit re
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Callable, NamedTuple
+
+#: Multiplicative declared-unit -> SI factors: the one canonical table open_fdd/data/unit_factors.json (nf-app/static/units.js
+#: gets the same numbers from scripts/nf/build_unit_factors.py).
+FACTORS: dict[str, float] = {
+    k: float(v["value"])
+    for k, v in json.loads(
+        (Path(__file__).resolve().parent.parent / "data" / "unit_factors.json").read_text(encoding="utf-8")
+    )["factors"].items()
+}
 
 
 class SI(NamedTuple):
@@ -43,26 +54,26 @@ _add(["°F", "degF", "F", "fahrenheit", "deg_f"], "temperature", "°C", lambda x
 _add(["K", "kelvin"], "temperature", "°C", lambda x: x - 273.15)
 _add(["Pa", "pascal"], "pressure", "Pa", _ident)
 _add(["kPa"], "pressure", "Pa", lambda x: x * 1000)
-_add(["inH2O", "inWC", "in wc", "in. w.c.", "inH₂O", '"wc', "in_h2o"], "pressure", "Pa", lambda x: x * 249.0889)
-_add(["psi", "psig", "psid"], "pressure", "Pa", lambda x: x * 6894.757)
+_add(["inH2O", "inWC", "in wc", "in. w.c.", "inH₂O", '"wc', "in_h2o"], "pressure", "Pa", lambda x: x * FACTORS["pa_per_in_wc"])
+_add(["psi", "psig", "psid"], "pressure", "Pa", lambda x: x * FACTORS["pa_per_psi"])
 _add(["bar"], "pressure", "Pa", lambda x: x * 1e5)
 _add(["L/s", "l/s", "lps"], "flow", "L/s", _ident)
 _add(["m³/s", "m3/s"], "flow", "L/s", lambda x: x * 1000)
 _add(["m³/h", "m3/h", "cmh"], "flow", "L/s", lambda x: x / 3.6)
-_add(["cfm", "ft³/min", "ft3/min"], "flow", "L/s", lambda x: x * 0.4719474)
-_add(["gpm", "gal/min"], "flow", "L/s", lambda x: x * 0.0630902)
+_add(["cfm", "ft³/min", "ft3/min"], "flow", "L/s", lambda x: x * FACTORS["lps_per_cfm"])
+_add(["gpm", "gal/min"], "flow", "L/s", lambda x: x * FACTORS["lps_per_gpm"])
 _add(["kW"], "power", "kW", _ident)
 _add(["W"], "power", "kW", lambda x: x / 1000)
 _add(["MW"], "power", "kW", lambda x: x * 1000)
-_add(["Btu/h", "btuh", "btu/hr"], "power", "kW", lambda x: x * 0.00029307107)
-_add(["ton", "tons", "tonref", "tr"], "power", "kW", lambda x: x * 3.5168525)
-_add(["hp"], "power", "kW", lambda x: x * 0.7456999)
+_add(["Btu/h", "btuh", "btu/hr"], "power", "kW", lambda x: x * FACTORS["kw_per_btuh"])
+_add(["ton", "tons", "tonref", "tr"], "power", "kW", lambda x: x * FACTORS["kw_per_ton"])
+_add(["hp"], "power", "kW", lambda x: x * FACTORS["kw_per_hp"])
 _add(["kWh"], "energy", "kWh", _ident)
 _add(["Wh"], "energy", "kWh", lambda x: x / 1000)
 _add(["MWh"], "energy", "kWh", lambda x: x * 1000)
-_add(["kBtu"], "energy", "kWh", lambda x: x * 0.29307107)
-_add(["MMBtu"], "energy", "kWh", lambda x: x * 293.07107)
-_add(["therm", "therms"], "energy", "kWh", lambda x: x * 29.307107)
+_add(["kBtu"], "energy", "kWh", lambda x: x * FACTORS["kwh_per_kbtu"])
+_add(["MMBtu"], "energy", "kWh", lambda x: x * FACTORS["kwh_per_mmbtu"])
+_add(["therm", "therms"], "energy", "kWh", lambda x: x * FACTORS["kwh_per_therm"])
 _add(["%", "%RH", "percent", "pct"], "percent", "%", _ident)
 _add(["ppm"], "concentration", "ppm", _ident)
 

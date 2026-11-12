@@ -141,7 +141,7 @@ def test_policy_short_comparison_fails_unless_relaxed():
 
 def test_known_differences_are_scoped_and_documented():
     allk, stress, edge = known_differences("all"), known_differences("stress_only"), known_differences("edge")
-    assert len(allk) == 22 and set(stress) == {"TRIM-3", "VAV-REHEAT"} and not set(allk) & set(stress)
+    assert len(allk) == 21 and set(stress) == {"TRIM-3", "TRIM-4", "VAV-REHEAT"} and not set(allk) & set(stress)
     assert all(reason for reason in {**allk, **stress, **edge}.values())
     assert set(Policy.default("basic", stress=True).known) == set(allk) | set(stress)
     assert set(Policy.default("basic", stress=False).known) == set(allk)

@@ -14,9 +14,11 @@ from open_fdd.parity.adapters import EngineAdapter, conformance_errors, run_adap
 from open_fdd.parity.dataset import (GENERATOR_VERSION, PROFILES, Dataset, chicago_offset_hours, generate,
                                      published_hashes)
 from open_fdd.parity.imperial import from_imperial, to_imperial
-from open_fdd.parity.policy import Policy, Verdict, compare, known_differences, verdict_from_counts
+from open_fdd.parity.policy import (Policy, Verdict, compare, expected_deltas, known_differences, rule_delta,
+                                    verdict_from_counts)
 from open_fdd.parity.pandas_ref import reference
 
 __all__ = ["Dataset", "EngineAdapter", "GENERATOR_VERSION", "PROFILES", "Policy", "Verdict", "chicago_offset_hours",
-           "compare", "conformance_errors", "from_imperial", "generate", "known_differences", "published_hashes",
+           "compare", "conformance_errors", "expected_deltas", "from_imperial", "generate", "known_differences",
+           "published_hashes", "rule_delta",
            "reference", "run_adapter", "to_imperial", "verdict_from_counts"]

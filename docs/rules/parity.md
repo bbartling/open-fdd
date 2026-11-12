@@ -16,8 +16,8 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 |---|---:|
 | SQL rules | **77** |
 | With a pandas twin | **71** |
-| Match on the synthetic suite | **49** |
-| Known divergence | **22** |
+| Match on the synthetic suite | **50** |
+| Known divergence | **21** |
 | SQL only (no twin) | **6** |
 
 **Units.** Parity is checked in SI. Imperial input is converted to SI at ingest, so SQL on imperial input equals SQL on SI input by
@@ -89,8 +89,8 @@ per-rule imperial parity run.
 | <a id="sv-spike"></a>[SV-SPIKE](sql-cookbook.html#sv-spike) | match |  |
 | <a id="sv-stale"></a>[SV-STALE](sql-cookbook.html#sv-stale) | match |  |
 | <a id="trim-1"></a>[TRIM-1](sql-cookbook.html#trim-1) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="trim-3"></a>[TRIM-3](sql-cookbook.html#trim-3) | match | match; differs only on stress-only data: three differences: (1) pandas reads role hw-reset-request-sum, the SQL contract and NF role is hot-water-reset-request-sum, so the harness gives pandas no input and it skips; (2) SQL faults at request sum <= request_lo, pandas at < request_lo; (3) pandas applies the hydronic-flow gate with a 600 s startup holdoff. Follow-up: align names and comparison with the owner (see #1582) |
-| <a id="trim-4"></a>[TRIM-4](sql-cookbook.html#trim-4) | known divergence | pandas skips (missing roles: reset requests); SQL treats absent requests as zero |
+| <a id="trim-3"></a>[TRIM-3](sql-cookbook.html#trim-3) | match | match; differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run |
+| <a id="trim-4"></a>[TRIM-4](sql-cookbook.html#trim-4) | match | match; differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run |
 | <a id="util-interval"></a>[UTIL-INTERVAL](sql-cookbook.html#util-interval) | SQL only | aggregate or utility analytic, no pandas function |
 | <a id="util-monthly"></a>[UTIL-MONTHLY](sql-cookbook.html#util-monthly) | SQL only | aggregate or utility analytic, no pandas function |
 | <a id="vav-1"></a>[VAV-1](sql-cookbook.html#vav-1) | match | match; differs only on edge data: Two input-handling differences: (1) NULL zone_t cells: SQL drops NULL rows (WHERE zone_t IS NOT NULL) and holds the previous sample's state across the null run, pandas scores a NULL as not faulted; (2) planted out-of-range zone_t (80 degC): the pandas quality layer marks it OUT_OF_RANGE and excludes it, SQL scores the value as given. |
@@ -106,6 +106,46 @@ per-rule imperial parity run.
 | <a id="wx-1"></a>[WX-1](sql-cookbook.html#wx-1) | match | match; differs only on edge data: Gap handling: SQL flags \|oa_t - previous sample\| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only. |
 | <a id="zone-comfort-pct"></a>[ZONE-COMFORT-PCT](sql-cookbook.html#zone-comfort-pct) | SQL only | aggregate or utility analytic, no pandas function |
 
+## Pinned deltas
+
+Each known difference carries its expected delta: the sum over all equipment of the absolute fault-hours difference between SQL and
+pandas (a skipped pandas side counts as 0 h), with a tolerance, for the canonical seed (0) and dataset. `tests/parity/stress.py` fails
+when an observed delta leaves its band, so a known difference cannot grow unnoticed; a rule that matches on a dataset is pinned at 0 h.
+The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, keyed `profile/seed/equips/days`).
+
+| Rule | Scope | 4 equip x 3 d | 8 equip x 7 d (CI stress size) |
+|---|---|---|---|
+| [AHU-SATDEV](#ahu-satdev) | all | 4.5 h &plusmn; 0.01 | 5.6667 h &plusmn; 0.01 |
+| [CHW-1](#chw-1) | all | 0.3333 h &plusmn; 0.01 | 0.5 h &plusmn; 0.01 |
+| [CHW-NOLOAD-1](#chw-noload-1) | all | 3.0833 h &plusmn; 0.01 | 5.1667 h &plusmn; 0.01 |
+| [ECON-3](#econ-3) | all | 11.5 h &plusmn; 0.01 | 24.5833 h &plusmn; 0.01 |
+| [ECON-4](#econ-4) | all | 1.0833 h &plusmn; 0.01 | 2.8333 h &plusmn; 0.01 |
+| [ECON-7](#econ-7) | all | 15.5833 h &plusmn; 0.01 | 30.6667 h &plusmn; 0.01 |
+| [FC13-SAT-HIGH](#fc13-sat-high) | all | 10.0833 h &plusmn; 0.01 | 26.0833 h &plusmn; 0.01 |
+| [FC14](#fc14) | all | 93.75 h &plusmn; 0.01 | 410.083 h &plusmn; 0.01 |
+| [FC5](#fc5) | all | 1.8333 h &plusmn; 0.01 | 3.9167 h &plusmn; 0.01 |
+| [FC6](#fc6) | all | 6.75 h &plusmn; 0.01 | 15.75 h &plusmn; 0.01 |
+| [FC7](#fc7) | all | 3.9167 h &plusmn; 0.01 | 4.5833 h &plusmn; 0.01 |
+| [FC8](#fc8) | edge | - | - |
+| [FC9](#fc9) | edge | - | - |
+| [FCU-HTG-COIL](#fcu-htg-coil) | all | 4.6667 h &plusmn; 0.01 | 5.4167 h &plusmn; 0.01 |
+| [FCU-MODE-CYCLE](#fcu-mode-cycle) | all | 1 h &plusmn; 0.01 | 1.75 h &plusmn; 0.01 |
+| [FCU-VALVE-PASS-CLG](#fcu-valve-pass-clg) | edge | - | - |
+| [HP-1](#hp-1) | all | 6.1667 h &plusmn; 0.01 | 17.0833 h &plusmn; 0.01 |
+| [MECH-OAT-1](#mech-oat-1) | all | 56.1667 h &plusmn; 0.01 | 208.667 h &plusmn; 0.01 |
+| [OA-1](#oa-1) | all | 0.1667 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
+| [OAT-METEO](#oat-meteo) | all | 77 h &plusmn; 0.01 | 359.333 h &plusmn; 0.01 |
+| [SV-RATE](#sv-rate) | all | 108.917 h &plusmn; 0.01 | 468.333 h &plusmn; 0.01 |
+| [TRIM-1](#trim-1) | all | 51.25 h &plusmn; 0.01 | 293.417 h &plusmn; 0.01 |
+| [TRIM-3](#trim-3) | stress-only | 0 h &plusmn; 0.01 | 1.3333 h &plusmn; 0.01 |
+| [TRIM-4](#trim-4) | stress-only | 0 h &plusmn; 0.01 | 1.25 h &plusmn; 0.01 |
+| [VAV-1](#vav-1) | edge | - | - |
+| [VAV-6](#vav-6) | all | 0.3333 h &plusmn; 0.01 | 0.6667 h &plusmn; 0.01 |
+| [VAV-7](#vav-7) | edge | - | - |
+| [VAV-AHU-LEAVE](#vav-ahu-leave) | all | 0.4167 h &plusmn; 0.01 | 1.6667 h &plusmn; 0.01 |
+| [VAV-REHEAT](#vav-reheat) | stress-only | 0 h &plusmn; 0.01 | 0.1667 h &plusmn; 0.01 |
+| [WX-1](#wx-1) | edge | - | - |
+
 Known differences: [KNOWN_DIFFERENCES.md](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/KNOWN_DIFFERENCES.md). Wider SI stress run: `python tests/parity/stress.py --equips 8 --days 7`.
 
 ## Change a rule
@@ -113,7 +153,7 @@ Known differences: [KNOWN_DIFFERENCES.md](https://github.com/bbartling/open-fdd/
 1. SQL: edit `sql/fdd/postgres/rules/<rule>.sql`, then `sql/fdd/registry.yaml` and `sql/fdd/tuning_catalog.json`. New roles go in `role_map.json` and `input_contract.json`. See [Writing SQL rules](../sql-rules.html).
 2. pandas: add the function in `open_fdd/rules/` and register it in `cookbook_catalog.py`. Keep role names, SI units, defaults, confirm time and gating the same as SQL.
 3. Add the fault, healthy, missing-input and boundary cases to the parity dataset.
-4. If the two intentionally differ, add the rule and a reason to `open_fdd/data/parity_known_differences.json`.
+4. If the two intentionally differ, add the rule, a reason and the expected delta (`expected`, fault hours and tolerance per canonical dataset) to `open_fdd/data/parity_known_differences.json`.
 5. Regenerate: `python scripts/nf/gen_rule_docs.py && python scripts/nf/gen_cookbook.py`.
 
 Use the [parity harness](parity-harness.html) to run the same proof on your own database.

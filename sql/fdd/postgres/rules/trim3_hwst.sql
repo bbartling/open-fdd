@@ -28,7 +28,7 @@ base AS (
       WHEN COALESCE(proof_on, 0) = 0 THEN 0
       WHEN hw_supply_t IS NULL THEN 0
       WHEN hw_supply_t > {{HWST_HI}}
-       AND COALESCE(hw_reset_request_sum, 0) <= {{REQUEST_LO}} THEN 1
+       AND hw_reset_request_sum <= {{REQUEST_LO}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
