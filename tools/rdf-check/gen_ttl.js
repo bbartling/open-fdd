@@ -4,7 +4,7 @@
 const fs = require("fs"), vm = require("vm"), path = require("path");
 const [fixture, out, dir = path.join(__dirname, "..", "..", "nf-app", "static"), nfBase = "http://nf.example.test"] = process.argv.slice(2);
 const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
-for (const f of ["nf.js", "model.js"]) vm.runInContext(fs.readFileSync(path.join(dir, f), "utf8"), ctx, { filename: f });
+for (const f of ["paging.js", "nf.js", "model.js"]) vm.runInContext(fs.readFileSync(path.join(dir, f), "utf8"), ctx, { filename: f });
 ctx.records = JSON.parse(fs.readFileSync(fixture, "utf8")).records;
 const r = vm.runInContext(`(() => {
   const of = (t) => records.filter((x) => x.pointType === t);
