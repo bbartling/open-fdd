@@ -31,8 +31,8 @@ to support a new site, tag its points in NF.
 Runs every 20 minutes (`MODE_SCHEDULED`).
 
 - **Location** comes from NF: `GET /api/v1/sites?pageSize=500` (`latitude`, `longitude`, `name`).
-  One site with coordinates is used automatically; with several, set the hook config value `site`
-  to the site id. Set the coordinates in NF (Sites), not in code.
+  One site with coordinates is used automatically; with several, set the app option `site`
+  (NF console, app settings; NF drops hook-level config) to the site id. Set the coordinates in NF (Sites), not in code.
 - **Variables:** `oa_dry_bulb_web`, `oa_rh_web`, `oa_dewpoint_web` (NF points with history).
 - **BACnet mirror:** analog values on NF's own BACnet server, named `WEB OA-T`, `WEB OA-H`,
   `WEB OA-DP`. NF drops hook-level config, so these are app options (set them in the NF console app settings):

@@ -313,15 +313,24 @@ async function nf(promise, what) {
 /** Create the weather AVs on NF's BACnet server if missing, then set their present values. */
 async function mirrorToBacnet(sdk, objects, values, observed, log) {
   const listing = await nf(sdk.http.get('/api/v1/bacnet/local'), 'GetLocalObjects');
-  const have = new Set(
+  const nameOf = (o) => (((o.props || []).find((x) => x.property === 'PROP_OBJECT_NAME') || {}).value || {}).characterString || '';
+  /** instance -> object name ('' when the listing carries no name) */
+  const have = new Map(
     (listing.objects || [])
       .filter((o) => o.objectId && o.objectId.objectType === 'OBJECT_ANALOG_VALUE')
-      .map((o) => o.objectId.instance),
+      .map((o) => [o.objectId.instance, nameOf(o)]),
   );
   const mirrored = {};
   for (const obj of objects) {
     const value = values[obj.label];
     if (!Number.isFinite(value)) continue;
+    const current = have.get(obj.instance);
+    if (current && current !== obj.name) {
+      // an analog value this hook did not create sits on that instance: never overwrite it
+      log(`BACnet av.${obj.instance} is "${current}", not "${obj.name}": left untouched (instance collision; `
+        + 'pick free instances with the app option avInstances)');
+      continue;
+    }
     const objectId = { objectType: 'OBJECT_ANALOG_VALUE', instance: obj.instance };
     const pv = { property: 'PROP_PRESENT_VALUE', value: { real: round2(value) } };
     const desc = { property: 'PROP_DESCRIPTION', value: { characterString: `${obj.description} (obs ${observed})` } };
@@ -563,6 +572,6 @@ async function runOnce({ globalVariables, sdk, config }) {
 // (load the file from the hooks folder of either edition in node and call magnusDewpointF(70, 50)).
 module.exports = Object.assign(
   async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
-  { OFDD_EDITION, magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, avInstances, bacnetObjects, withDeadline, pageAll,
+  { OFDD_EDITION, magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, avInstances, bacnetObjects, mirrorToBacnet, withDeadline, pageAll,
     EXPORTERS, registerExporter, exporterPlan, parseExporters },
 );

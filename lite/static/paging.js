@@ -110,6 +110,16 @@ async function pageAll(fetchPage, opts = {}) {
     throw new PagingError(`${what}: read ${offset} of totalCount ${total} records, then the server returned an empty page; `
       + 'refusing to continue with a partial result');
   }
+  if (total !== null && out.length < total) {
+    // offset paging has no snapshot: an insert between requests shifts a later page, which repeats a record (dropped
+    // by `seen`) while another record is never sent
+    throw new PagingError(`${what}: pages overlapped (${out.length} distinct of totalCount ${total} records; the list `
+      + 'changed while it was read); refusing to continue with a partial result. Retry the read');
+  }
+  if (out.length > maxRecords) {
+    throw new PagingError(`${what}: paging cap reached after ${out.length} records (maxRecords ${maxRecords}, totalCount `
+      + `${total === null ? 'unknown' : total}); refusing to continue with a partial result. Narrow the query`);
+  }
   // the route's own count rides along (not enumerable: the array stays a plain list) for "read N of M" messages
   Object.defineProperty(out, 'totalCount', { value: total, enumerable: false });
   return out;
