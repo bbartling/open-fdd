@@ -25,6 +25,7 @@
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
     "/hooks/lib/paging.js": "hooks/lib/paging.js",
     "/hooks/lib/settings.js": "hooks/lib/settings.js",
+    "/hooks/lib/site-timezone.js": "hooks/lib/site-timezone.js",
     "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
     "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
     "/hooks/schema.js": "hooks/schema.js",

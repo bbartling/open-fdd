@@ -168,7 +168,7 @@ test("weather mirror: this edition's copy of the hook mirrors to the BACnet serv
   const hook = createRequire(import.meta.url)(edition === "full" ? "../hooks/weather.js" : "../../lite/hooks/open_meteo_weather.js");
   assert.equal(hook.OFDD_EDITION, edition);
   const src = readFileSync(new URL(edition === "full" ? "../hooks/weather.js" : "../../lite/hooks/open_meteo_weather.js", import.meta.url), "utf8");
-  assert.match(src, /explicit === undefined \? true :/);
+  assert.match(src, /listed === undefined \? \[\{ id: 'bacnet-av', explicit: false \}\]/, "bacnet-av is the default exporter (when NF's BACnet server is present)");
 });
 
 test("FDD hook result points are outputs: never in All signals, the heat-map dropdown, cards or lanes; no two series share a name", () => {

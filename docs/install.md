@@ -85,18 +85,46 @@ a PostgreSQL client; a `localhost`, `127.0.0.1` or `::1` option names the NF hos
 workstation), or fix the probe by installing the app dependencies. Keep credentials out of the command line.
 Lite, SQLite, and PGlite skip this preflight and never bootstrap the probe.
 
-## Weather hook BACnet mirror
+## Weather hook: on, off, exporters
 
-Full and Lite run the same weather hook, and both mirror the three weather values to analog values on NF's own BACnet
-server by default (the manifests ask for the `normalgw.bacnet.v1/v2.readwrite` API-key scopes for it). The default is
-built in, because NF drops hook-level config and only app **options** reach the hook. To turn it off set the app option
-`bacnetMirror` to `false` (alias `bacnet_mirror`); `avInstances` works the same way.
+Full and Lite run the same weather hook. NF drops hook-level config, so every setting is an app **option** (NF console >
+app settings; or `PATCH /api/v1/apps/<id>` with `updateMask: ["options"]`).
+
+| option | default | meaning |
+|---|---|---|
+| `weather` (alias `weatherEnabled`) | on | `false` = off: no outbound request at all |
+| `exporters` | `bacnet-av` when NF's BACnet server is present | where the values go besides the hook variables: a comma list or JSON array of ids, or `none` |
+| `bacnetMirror` (alias `bacnet_mirror`) | on | `false` removes `bacnet-av` from the list; `true` asks for it by name |
+| `avInstances` | `[1, 2, 3]` | AV instance numbers for the `bacnet-av` exporter |
+| `latitude`, `longitude`, `site` | unset | location override; otherwise NF Sites, then the modeled site |
+
+**Off (air-gapped or IT-restricted site).** Set `weather` to `false` before or after install. The hook then makes no outbound
+request and no NF call, and returns `{skipped: true, reason: "weather disabled"}`; its schedule can stay. `doctor` reports
+"weather disabled" and passes. Rules and charts that read the web outdoor-air temperature (`web_oa_t`) ignore the old weather
+points (they would be stale) and use the equipment's own outside-air sensor (role `oa_t`) when one is tagged: the `fdd` run
+summary has `oat: {weather, web, local, none}` and the log names each equip that fell back. A rule with no outside-air
+temperature at all is skipped with the reason; the OAT-METEO check (BAS sensor against web weather) is skipped because it would
+compare a sensor with itself. On the Timescale engine the local fallback is not available (one role per point), so those rules are
+skipped. The policy everywhere is "web first, else local".
+
+**Back on.** Set `weather` to `true` (or clear it). The next scheduled run (or `run --hook weather`) writes new samples to the same
+variables, so their history continues; nothing else needs a restart.
+
+**Exporters.** The hook variables (`oa_dry_bulb_web`, `oa_rh_web`, `oa_dewpoint_web`, with history) are always written. Each
+exporter is then detected and run. Unset `exporters` means `bacnet-av`, run only if `GET /api/v1/bacnet/configuration`
+answers; when it does not, the run still succeeds and the summary shows `exporters["bacnet-av"] = {status: "skipped", reason}`.
+An exporter you name that is absent or fails makes the run fail after the variables were written. To add another output
+(Modbus, OPC UA, ...) add an object to `EXPORTERS` in `shared/hooks/open_meteo_weather.js` (or `registerExporter`):
+`{ id, detect(sdk, config) -> {available, reason?}, export(sdk, {site, values, observed, config, log}) -> summary }`, where
+`values` holds the three variables in the units above; then name its id in `exporters`.
 
 ## Site timezone
 
 Range pickers, hour labels, and RCx weekly views use the site timezone. Open-FDD takes the first of: the modeled site's
 `tz` or `timezone`, the app option `timezone` (an IANA name such as `America/Chicago`, set in the NF console app
-settings like `latitude` and `longitude`), the NF Sites API `timezone`, the browser zone, then UTC. When it has to
+settings like `latitude` and `longitude`), the NF Sites API `timezone`, the browser zone, then UTC. The `fdd` hook's
+occupancy schedule (VAV-1 `occ_mode`) and the `analytics` weekly runtime use the same order with the host zone in place of the
+browser zone (UTC on real NF); the `fdd` run summary reports `timezones: {site: {zone, source}}`. When the UI has to
 fall back, the label says so, for example `UTC (fallback)`, and `doctor` reports a WARN that names the fix. No point is
 retagged. Keep `windowHours` no longer than the history retention of the timeline points: NF acknowledges an AddData
 batch even when it drops a sample older than the retention, and the timeline watermark does not retry it.

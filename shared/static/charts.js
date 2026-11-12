@@ -134,7 +134,7 @@ function chartTimeZone(siteTz) { return validChartTimeZone(siteTz); }
 // Real NF often has no site `tz`, an empty /api/v1/sites and a container zone of Etc/UTC. Resolution order:
 // model site `tz`/`timezone` -> app option `timezone` -> NF Sites API `timezone` -> browser-local -> UTC.
 // Nothing is retagged; the resolved source is shown next to the zone when it is a fallback.
-const SITE_TZ_SOURCES = { appOption: null, sites: [] };
+const SITE_TZ_SOURCES = { appOption: null, sites: [], weatherOff: false };
 const chartTzLabels = new Map();            // zone -> label shown next to the range pickers
 const knownZone = (z) => {
   const s = String(z ?? "").trim();
@@ -142,29 +142,38 @@ const knownZone = (z) => {
   try { new Intl.DateTimeFormat("en-US", { timeZone: s }); return s; } catch { return null; }
 };
 const isUtcZone = (z) => /^(utc|etc\/utc|etc\/gmt|gmt|z)$/i.test(String(z ?? "").trim());
-/** @param {{appOption?: string|null, sites?: any[]}} s */
+/** @param {{appOption?: string|null, sites?: any[], weatherOff?: boolean}} s */
 function setSiteTimeZoneSources(s = {}) {
   SITE_TZ_SOURCES.appOption = knownZone(s.appOption);
   SITE_TZ_SOURCES.sites = Array.isArray(s.sites) ? s.sites : [];
+  SITE_TZ_SOURCES.weatherOff = !!s.weatherOff;
 }
-/** The app option `timezone` (typed or scalar) from a GET /api/v1/apps listing entry, or null. */
-function appTimeZoneOption(app) {
+/** The raw value of an app option (typed or scalar) from a GET /api/v1/apps listing entry, or undefined. */
+function appOptionRaw(app, name) {
   for (const o of (app && app.options) || []) {
-    if (o && o.name === "timezone") {
-      const v = o.value && typeof o.value === "object" ? Object.values(o.value)[0] : o.value;
-      return knownZone(v);
-    }
+    if (o && o.name === name) return o.value && typeof o.value === "object" ? Object.values(o.value)[0] : o.value;
   }
-  return null;
+  return undefined;
 }
-/** Best-effort read of the two non-model zone sources; a failure just leaves that source empty. */
+/** The app option `timezone` from a GET /api/v1/apps listing entry, or null. */
+function appTimeZoneOption(app) { return knownZone(appOptionRaw(app, "timezone")); }
+/** True when the app option `weather` (alias `weatherEnabled`) is switched OFF (#1552): no web weather is fetched, so stale weather points are not used. */
+function appWeatherOff(app) {
+  return ["weather", "weatherEnabled"].some((n) => ["false", "0", "no", "off"].includes(String(appOptionRaw(app, n) ?? "").trim().toLowerCase()));
+}
+/** Is the web weather switched off in the app options? (set by loadSiteTimeZoneSources / the analytics hook) */
+const weatherDisabled = () => SITE_TZ_SOURCES.weatherOff;
+/** Best-effort read of the non-model zone sources + the weather switch; a failure just leaves that source empty. */
 async function loadSiteTimeZoneSources() {
   const loc = typeof location === "undefined" ? null : location;
   const appId = loc && (String(loc.pathname || "").match(/\/apps\/static\/([^/]+)\//) || [])[1];
-  let appOption = null, sites = [];
-  try { appOption = appId ? appTimeZoneOption(((await api("/api/v1/apps")).applications || []).find((a) => a.id === appId)) : null; } catch { /* no access: leave empty */ }
+  let appOption = null, weatherOff = false, sites = [];
+  try {
+    const app = appId ? ((await api("/api/v1/apps")).applications || []).find((a) => a.id === appId) : null;
+    appOption = appTimeZoneOption(app); weatherOff = appWeatherOff(app);
+  } catch { /* no access: leave empty */ }
   try { sites = ((await api("/api/v1/sites?pageSize=100")).sites || []).filter((s) => s && knownZone(s.timezone)); } catch { /* leave empty */ }
-  setSiteTimeZoneSources({ appOption, sites });
+  setSiteTimeZoneSources({ appOption, sites, weatherOff });
 }
 /**
  * The zone to show and parse for a model site record.

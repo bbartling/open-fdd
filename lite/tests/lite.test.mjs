@@ -225,6 +225,7 @@ test("hook run: location from NF /sites, AVs created at the configured instances
       get: async (url) => {
         calls.push(`GET ${url}`);
         if (url.startsWith("/api/v1/sites")) return { data: { sites: [{ id: "s1", name: "Site One", latitude: 40.5, longitude: -75.25 }] } };
+        if (url === "/api/v1/bacnet/configuration") return { data: { deviceInstance: 54545 } };
         if (url === "/api/v1/bacnet/local") return { data: { objects: [] } };
         throw new Error(`unexpected GET ${url}`);
       },
