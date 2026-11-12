@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "4.5.6"
+version = "4.5.7"
 description = "Open-FDD Python tools: pandas reference FDD rules (SI), Normal Framework data access for AI agents, reports and ECM workbooks."
 readme = "README.md"
 license = { text = "MIT" }
@@ -113,7 +113,7 @@ release = [
 include = ["open_fdd*"]
 
 [tool.setuptools.package-data]
-"open_fdd" = ["data/*.json"]
+"open_fdd" = ["data/*.json", "data/*.sql"]
 "open_fdd.ecm_engineering" = [
     "data/*.xlsx",
     "data/*.json",

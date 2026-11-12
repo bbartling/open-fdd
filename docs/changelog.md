@@ -5,6 +5,10 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.16 - 2026-11-12 (open-fdd 4.5.7 on PyPI)
+
+One shared core schema (`sql/fdd/schema/core.sql`: `fdd.point`, `fdd.rule_result`, `fdd.rule_config`). Timescale schema version 4 copies and drops `openfdd.fdd_results` / `openfdd.retention_log` (see [migrating to 5.0.16](operations/nf/migrate-5.x)). The hook loads history from the SI view `fdd.input_sample`. Input contract version 3 declares that view's signature. FDD results are unchanged.
+
 ## Open-FDD 5.0.15 - 2026-11-11 (open-fdd 4.5.6 on PyPI)
 
 Tidy-up. FDD results are unchanged (parity run: 71 compared, 47 matched, 24 known-divergent, 0 unexpected).

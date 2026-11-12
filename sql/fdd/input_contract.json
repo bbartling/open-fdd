@@ -1,6 +1,36 @@
 {
-  "_doc": "Canonical engine-independent scratch input contract for every rendered FDD rule. SI values are supplied directly; only the NF ingest layer converts. This is scratch DDL, not an operational migration.",
-  "version": 2,
+  "_doc": "Canonical engine-independent scratch input contract for every rendered FDD rule. SI values are supplied directly; only the NF ingest layer converts. The scratch tables are not an operational migration; \"sources\" (version 3) is the signature every application's fdd.input_sample view must expose, joined to fdd.point of sql/fdd/schema/core.sql.",
+  "version": 3,
+  "sources": {
+    "point": {
+      "table": "fdd.point",
+      "definition": "sql/fdd/schema/core.sql",
+      "key": [
+        "site_id",
+        "point_key"
+      ]
+    },
+    "input_sample": {
+      "kind": "view",
+      "name": "fdd.input_sample",
+      "doc": "Long SI samples, NULL values removed. value is in the SI unit of the point's role (fdd.point.unit); the view applies fdd.point.si_scale/si_offset when the store keeps native units. Loaders always filter site_id = $1 AND point_key = ANY($2) AND ts >= $3 AND ts < $4.",
+      "columns": {
+        "site_id": {
+          "type": "text"
+        },
+        "point_key": {
+          "type": "text"
+        },
+        "ts": {
+          "type": "timestamp"
+        },
+        "value": {
+          "type": "double"
+        }
+      },
+      "join": "fdd.point (site_id, point_key)"
+    }
+  },
   "roles": {
     "ahu_sat": {
       "scale": "si:degC",

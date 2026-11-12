@@ -4,6 +4,11 @@
 command/position roles). A downstream app can push that through its own ingest (which converts to SI) and expect
 results identical to the SI run. ``from_imperial`` is the inverse (SI -> imperial -> SI is exact within 1e-9).
 
+Two constant sets exist in Open-FDD: ``open_fdd.units.convert`` (248.84 Pa/inH2O, 0.471947 L/s/CFM: the thresholds were
+converted with them) and the NF ingest table ``nf-app/static/units.js`` / ``open_fdd.nf.units`` (249.0889, 0.4719474),
+which is what the hook applies to native values. ``to_imperial(ds, ingest="nf")`` uses the NF ingest constants, so a
+store that converts with NF's table returns the SI dataset exactly; the default keeps ``open_fdd.units.convert``.
+
 Only roles with a known conversion change: ``si:degC``, ``si:Pa``, ``si:L/s`` and ``fraction`` (0-1 -> 0-100 percent).
 Statuses (0/1), relative humidity, kW, kWh, A, ppm and counts are the same in both systems.
 """
@@ -32,8 +37,24 @@ _UNIT_BY_SYSTEM = {  # series/authorization unit tokens
 }
 
 
-def _convert(ds: Dataset, which: int, target: str) -> Dataset:
+#: The NF ingest table (nf-app/static/units.js): inches of water and CFM differ from open_fdd.units.convert in the 4th digit.
+NF_PA_PER_IN_WC = 249.0889
+NF_LPS_PER_CFM = 0.4719474
+
+
+def _conversions(ingest: str) -> dict:
+    if ingest == "convert":
+        return CONVERSIONS
+    if ingest != "nf":
+        raise ValueError(f"unknown ingest constants {ingest!r}; expected 'convert' or 'nf'")
+    return {**CONVERSIONS,
+            "si:Pa": ("inH2O", lambda p: p / NF_PA_PER_IN_WC, lambda w: w * NF_PA_PER_IN_WC),
+            "si:L/s": ("CFM", lambda q: q / NF_LPS_PER_CFM, lambda c: c * NF_LPS_PER_CFM)}
+
+
+def _convert(ds: Dataset, which: int, target: str, ingest: str = "convert") -> Dataset:
     out = copy.deepcopy(ds)
+    CONVERSIONS = _conversions(ingest)  # noqa: N806 - shadows the module table on purpose
     plan = {col: CONVERSIONS[scale] for col, scale in _SCALES.items() if scale in CONVERSIONS}
     for row in out.history:
         for col, conv in plan.items():
@@ -60,17 +81,17 @@ def _convert(ds: Dataset, which: int, target: str) -> Dataset:
     return out
 
 
-def to_imperial(ds: Dataset) -> Dataset:
-    """A copy of ``ds`` in imperial units (``meta["unit_system"] == "imperial"``)."""
+def to_imperial(ds: Dataset, ingest: str = "convert") -> Dataset:
+    """A copy of ``ds`` in imperial units (``meta["unit_system"] == "imperial"``). ``ingest``: see the module docstring."""
     if ds.meta.get("unit_system") == "imperial":
         raise ValueError("dataset is already imperial")
-    return _convert(ds, 1, "imperial")
+    return _convert(ds, 1, "imperial", ingest)
 
 
-def from_imperial(ds: Dataset) -> Dataset:
-    """Inverse of ``to_imperial``: a copy of ``ds`` back in SI."""
+def from_imperial(ds: Dataset, ingest: str = "convert") -> Dataset:
+    """Inverse of ``to_imperial`` (same ``ingest``): a copy of ``ds`` back in SI."""
     if ds.meta.get("unit_system") != "imperial":
         raise ValueError("dataset is not imperial")
-    out = _convert(ds, 2, "si")
+    out = _convert(ds, 2, "si", ingest)
     out.meta.pop("unit_system", None)
     return out

@@ -325,6 +325,63 @@ class Dataset:
             for n in names:
                 yield row["equipment_id"], n, row["ts"], row.get(n)
 
+    def to_core_rows(self, site_id: str = "parity") -> tuple[list[dict], list[tuple[str, str, int, float]]]:
+        """The dataset as rows of the shared core schema: ``(points, samples)``.
+
+        ``points`` = one ``fdd.point``-shaped dict per history cell that has data (``site_id``, ``point_key`` =
+        ``"<equipment>/<column>"``, ``equipment_id``, ``role`` (the history column), ``kind`` numeric | bool | text,
+        ``unit``) plus the role's ``scale``, and one extra point per sweep series (``point_key`` = its ``series_id``,
+        ``series`` = True, ``role`` = the sensor role). ``unit`` is the unit the stored sample values are in: SI for an
+        SI dataset, the native unit for ``to_imperial(ds)`` (so ``to_imperial(ds).to_core_rows()`` seeds a store that
+        keeps native units and converts at read time); ``si_unit`` is always the SI unit of the role.
+        ``samples`` = long ``(site_id, point_key, ts_ms_utc, value)`` for every non-null cell, in point then row order.
+        Text columns (``occ_mode``) are stored as numbers (a number as is, ``Occupied`` 1, anything else 0): the
+        core's ``fdd.input_sample.value`` is numeric.
+        """
+        scales = _load("role_scales.json")["roles"]
+        model_unit = {(p["equipment_id"], p["column"]): p.get("unit") for p in self.model["points"]}
+        text_cols = {c["name"] for c in self.history_columns if c["type"] == "text"}
+
+        def number(v: Any) -> float | None:
+            if v is None:
+                return None
+            if isinstance(v, str):
+                try:
+                    return float(v)
+                except ValueError:
+                    return 1.0 if v.strip().lower() == "occupied" else 0.0
+            return float(v)
+
+        by_equip: dict[str, list[dict]] = {}
+        for row in self.history:
+            by_equip.setdefault(row["equipment_id"], []).append(row)
+        points: list[dict] = []
+        samples: list[tuple[str, str, int, float]] = []
+
+        def add(point: dict, rows: list[dict], column: str) -> None:
+            got = []
+            for row in rows:
+                v = number(row.get(column))
+                if v is not None:
+                    got.append((site_id, point["point_key"], row["ts"], v))
+            if got:
+                points.append(point)
+                samples.extend(got)
+
+        for eid in sorted(by_equip):
+            for c in self.history_columns:
+                col = c["name"]
+                scale = scales.get(col)
+                kind = "text" if col in text_cols else "bool" if scale == "boolean" else "numeric"
+                add({"site_id": site_id, "point_key": f"{eid}/{col}", "equipment_id": eid, "role": col, "kind": kind,
+                     "unit": model_unit.get((eid, col)), "si_unit": _unit_for(scale), "scale": scale}, by_equip[eid], col)
+        for s in self.series:
+            scale = scales.get(s["role"])
+            add({"site_id": site_id, "point_key": s["series_id"], "equipment_id": s["equipment_id"], "role": s["role"],
+                 "kind": "numeric", "unit": s["unit"], "si_unit": _unit_for(scale), "scale": scale, "series": True},
+                by_equip.get(s["equipment_id"], []), s["role"])
+        return points, samples
+
     def to_engine_input(self) -> dict:
         """The ``input`` object of ``nf-app/hooks/lib/engines.js`` ``load()`` (same keys as synthetic_dataset.js)."""
         return {"historyColumns": self.history_columns, "history": self.history, "weather": self.weather,

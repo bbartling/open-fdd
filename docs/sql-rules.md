@@ -8,6 +8,15 @@ nav_order: 5
 PostgreSQL is the production FDD source. The SQLite pack is generated from it for smaller NF hosts. Keep every rule
 site-neutral and use SI values at the rule boundary.
 
+## Where inputs and results live
+
+Rules read per-run scratch tables (`history`, `weather`, ...) built from the input contract. In the Full edition the
+scratch `history` is built from the view `fdd.input_sample(site_id, point_key, ts, value)` (SI values) joined to
+`fdd.point`, and results are upserted into `fdd.rule_result`; tuning revisions have a table, `fdd.rule_config`. All
+three tables are in `sql/fdd/schema/core.sql`, which every application using Open-FDD shares byte for byte. An
+application provides only its own `fdd.input_sample` view with the signature declared under `sources` in
+`sql/fdd/input_contract.json`.
+
 ## Rule contract
 
 The FDD engine loads a scoped, typed `history` table with one equipment and timestamp per row and one SI column per

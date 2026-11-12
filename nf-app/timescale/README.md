@@ -8,9 +8,10 @@ that only ever touches Open-FDD's own tables (unless you opt a source table in).
 
 | File | Purpose |
 | --- | --- |
-| `adapter_nf.sql` | The ONLY file that knows NF's DDL: view `openfdd.nf_samples(point_uuid text, ts timestamptz, value double precision)` |
-| `install.sql` | Schema `openfdd`: `config`, `fdd_results` hypertable, scoped retention (`retention_scope()`, `enforce_size_cap()`, `retention_preview()`, `retention_log`, `size_cap_job()` + daily job), `history_buckets()`. Re-run to upgrade |
-| `../hooks/lib/timescale.js` | `connect`, `install`, `loadHistory`, `runRules`, `writeResults`, `maybeEnforceCap`, `retentionPreview`, `historyRoute` |
+| `core.sql` | Generated copy of `sql/fdd/schema/core.sql` (`scripts/nf/build_core_schema.py`): `fdd.point`, `fdd.rule_result`, `fdd.rule_config`. Runs first |
+| `adapter_nf.sql` | The ONLY file that knows NF's DDL: views `openfdd.nf_samples(point_uuid text, ts timestamptz, value double precision)` (native units) and `fdd.input_sample(site_id, point_key, ts, value)` (SI, joined to `fdd.point`) |
+| `install.sql` | Schema `openfdd`: `config`, `fdd.rule_result` hypertable, scoped retention (`retention_scope()`, `enforce_size_cap()`, `retention_preview()`, `size_cap_job()` + daily job; last result in `config.retention_last`), `history_buckets()`. v4 copies `openfdd.fdd_results` into `fdd.rule_result` (row-count guarded) and drops it and `retention_log`. Re-run to upgrade |
+| `../hooks/lib/timescale.js` | `connect`, `install`, `pointRows`, `syncPoints`, `loadHistory`, `runRules`, `writeResults`, `maybeEnforceCap`, `retentionPreview`, `historyRoute` |
 | `../hooks/history.js` | On-request hook `history`: long-range bucketed history as JSON (bounded, capped ~200 KB) |
 | `test/` | Docker TimescaleDB, synthetic NF-like seed, `node:test` suites (see below) |
 
@@ -90,7 +91,7 @@ retention (it reports a clear error) until `install.sql` is run once as the inst
 
 `openfdd.enforce_size_cap(max_bytes)` drops the oldest chunks (by chunk end time) **in scope** until the scope's
 `hypertable_size()` total is at or below the cap. **Scope** (`openfdd.retention_scope()`) = every hypertable in schema
-`openfdd` (today `openfdd.fdd_results`) plus the opt-in allowlist. NF's own connector tables and other apps' tables are
+`openfdd` and `fdd` (today `fdd.rule_result`) plus the opt-in allowlist. NF's own connector tables and other apps' tables are
 never touched by default. The newest chunk of every hypertable is never dropped and granularity is one chunk.
 Time dimensions must be timestamp-typed (integer-time hypertables are left alone).
 
@@ -105,7 +106,7 @@ every run; a bad value (unknown name, a regular table, `_timescaledb*`, not an a
 the run drops nothing (not even Open-FDD chunks) and returns `status = refused_allowlist` with the reason.
 Listing a source table makes the cap apply to the combined size, so size the cap for that.
 
-Every run returns an explicit JSON result (also logged to `openfdd.retention_log`):
+Every run returns an explicit JSON result (a real run is also kept in `openfdd.config` key `retention_last`):
 
 | `status` | Meaning |
 | --- | --- |
