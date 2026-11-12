@@ -14,7 +14,7 @@ compared fails). With --no-pandas no pandas verdict is made.
 ``--engines pglite,sqlite,timescale`` adds the Timescale path through the NEW core tables (fdd.point, fdd.input_sample,
 fdd.rule_result; needs PGURL + OPENFDD_TS_TEST_DISPOSABLE=1, see tests/parity/adapters.py). It must agree with PGlite row
 for row, load a history equal to the SI dataset cell for cell, write results idempotently, and reproduce the pinned
-verdict. For the default dataset (4 equips x 3 days, basic, seed 0) the verdict is pinned in tests/parity/baseline.json.
+verdict. The verdicts of the 8 x 7 and 4 x 3 basic datasets are pinned in tests/parity/baseline.json.
 """
 from __future__ import annotations
 
@@ -38,10 +38,10 @@ BASELINE = HERE / "baseline.json"
 
 def baseline_applies(args) -> dict | None:
     """The pinned verdict when this run uses the baseline's dataset arguments, else None."""
-    pinned = json.loads(BASELINE.read_text(encoding="utf-8"))
-    p = pinned["dataset"]
-    same = (args.equips, args.days, args.profile, args.seed) == (p["equips"], p["days"], p["profile"], p["seed"])
-    return pinned["verdict"] if same else None
+    for p in json.loads(BASELINE.read_text(encoding="utf-8"))["datasets"]:
+        if (args.equips, args.days, args.profile, args.seed) == (p["equips"], p["days"], p["profile"], p["seed"]):
+            return p["verdict"]
+    return None
 
 
 def engines_disagree(results: dict, other: str = "sqlite") -> list[str]:

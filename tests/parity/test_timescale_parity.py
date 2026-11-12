@@ -13,8 +13,9 @@ from adapters import NodeEngineAdapter, TimescaleAdapter, timescale_configured
 from open_fdd.parity import Policy, compare, from_imperial, generate, reference, to_imperial
 from stress import BASELINE, engines_disagree
 
-PINNED = json.loads(BASELINE.read_text(encoding="utf-8"))
-ARGS = PINNED["dataset"]
+_BASE = json.loads(BASELINE.read_text(encoding="utf-8"))["datasets"]
+PINNED = next(d for d in _BASE if (d["equips"], d["days"]) == (4, 3))   # the fast size; CI's stress run pins 8 x 7
+ARGS = PINNED
 
 
 @pytest.fixture(scope="module")
@@ -27,8 +28,8 @@ def summary(verdict) -> dict:
 
 
 def test_baseline_file_is_the_documented_verdict():
-    assert PINNED["verdict"] == {"compared": 71, "matched": 47, "known_divergent": 24, "unexpected": 0}
-    assert ARGS == {"equips": 4, "days": 3, "profile": "basic", "seed": 0}
+    assert [d["verdict"] for d in _BASE] == [{"compared": 71, "matched": 47, "known_divergent": 24, "unexpected": 0},
+                                             {"compared": 71, "matched": 49, "known_divergent": 22, "unexpected": 0}]
 
 
 def test_baseline_verdict_on_pglite(ds):

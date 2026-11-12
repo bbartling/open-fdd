@@ -144,4 +144,4 @@ jobs:
           python -m pip install --quiet -e ".[oracle,test]"
           python -m pytest tests/parity/test_timescale_parity.py -q -rs 2>&1 | tee "$RUNNER_TEMP/parity.log"
           if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/parity.log"; then echo "parity tests skipped: failing the lane"; exit 1; fi
-          python tests/parity/stress.py --equips 4 --days 3 --engines pglite,sqlite,timescale
+          python tests/parity/stress.py --equips 8 --days 7 --engines pglite,sqlite,timescale
