@@ -212,6 +212,100 @@
     return new Set(vals.filter((v) => Math.abs(v.mean - mu) / sd >= zCut).map((v) => v.eq));
   }
 
+  // ---- fleet analytics: rogue VAVs and the zone-temperature percentile band --------------------
+  // Every threshold of these two analyses lives in this one block.
+  const ROGUE_OPEN_PCT = 95;         // a damper / reheat valve at or above this position counts as "open"
+  const ROGUE_CLOSED_PCT = 5;        // ... at or below this as "closed"
+  const ROGUE_SHARE = 0.9;           // "always" = in that state for at least 90 % of the assessed samples
+  const ROGUE_MIN_SAMPLES = 12;      // fewer assessed samples than this: no verdict
+  const ZONE_P_LO = 0.1, ZONE_P_HI = 0.9;   // zone temperature band: 10th / 90th percentile across the zones, per time step
+  const ZONE_BAND_MIN_ZONES = 5;     // percentiles across fewer zones mean nothing: plain lines, nothing highlighted
+  const ZONE_ROGUE_TOP = 3;          // highlight at most this many rogue zones above p90, and as many below p10
+  const ZONE_ROGUE_MIN_SHARE = 0.25; // a zone is rogue when it sits outside the band on the same side for >= 25 % of its samples
+  const ZONE_ROGUE_MIN_EXCESS_C = 0.5; // ... and "outside" means beyond the band edge by at least this many delta degC (~1 delta F): a zone that is only
+                                       // always the warmest of a tight fleet is not rogue
+  const ROGUE_ABOVE_COLOR = "#dc2626", ROGUE_BELOW_COLOR = "#2563eb", MUTED_COLOR = "#94a3b8", HEALTHY_COLOR = "#16a34a";
+
+  /** Damper / valve position in percent (0-1 fractions and 0-100 values both work, like the SQL pack). */
+  const posPct = (v) => (finite(v) ? rcxStats.frac(v) * 100 : null);
+
+  /** { n, open, closed, openShare, closedShare } over the finite samples of a position series. */
+  function stuckStats(values) {
+    let n = 0, open = 0, closed = 0;
+    for (const v of values) {
+      const p = posPct(v);
+      if (p == null) continue;
+      n++;
+      if (p >= ROGUE_OPEN_PCT) open++; else if (p <= ROGUE_CLOSED_PCT) closed++;
+    }
+    return { n, open, closed, openShare: n ? open / n : null, closedShare: n ? closed / n : null };
+  }
+
+  /** "Always open" / "always closed" verdict of a position series: { state, share, n } or null (not stuck / too few samples). */
+  function stuckVerdict(values) {
+    const s = stuckStats(values);
+    if (s.n < ROGUE_MIN_SAMPLES) return null;
+    if (s.openShare >= ROGUE_SHARE) return { state: "open", share: s.openShare, n: s.n };
+    if (s.closedShare >= ROGUE_SHARE) return { state: "closed", share: s.closedShare, n: s.n };
+    return null;
+  }
+
+  /**
+   * Rogue VAV findings, ranked (largest share first). devices = [{ id, label, damper: number[], reheat?: number[] }];
+   * a damper and a reheat valve are judged separately -> rows [{ id, label, part: "Damper"|"Reheat valve", state, share, n }].
+   */
+  function rogueVavRows(devices) {
+    const rows = [];
+    for (const d of devices) {
+      for (const [part, vals] of [["Damper", d.damper], ["Reheat valve", d.reheat]]) {
+        if (!vals || !vals.length) continue;
+        const v = stuckVerdict(vals);
+        if (v) rows.push({ id: d.id, label: d.label, part, state: v.state, share: v.share, n: v.n });
+      }
+    }
+    return rows.sort((a, b) => b.share - a.share || a.label.localeCompare(b.label) || a.part.localeCompare(b.part));
+  }
+
+  /** Verdict text of one device for the summary donut: its worst finding ("Damper always open") or "Healthy". */
+  const vavVerdictLabel = (rows, id) => { const r = rows.find((x) => x.id === id); return r ? `${r.part} always ${r.state}` : "Healthy"; };
+
+  /**
+   * 10th / 90th percentile band across zones, per time step. cols = one number[] per zone on a shared grid (null = no
+   * sample). A step with fewer than ZONE_BAND_MIN_ZONES zones reporting has no band (null).
+   */
+  function zoneBand(cols, pLo = ZONE_P_LO, pHi = ZONE_P_HI) {
+    const len = Math.max(0, ...cols.map((c) => c.length));
+    const lo = [], hi = [];
+    for (let i = 0; i < len; i++) {
+      const xs = cols.map((c) => c[i]).filter(finite);
+      if (xs.length < ZONE_BAND_MIN_ZONES) { lo.push(null); hi.push(null); continue; }
+      lo.push(rcxStats.quantile(xs, pLo)); hi.push(rcxStats.quantile(xs, pHi));
+    }
+    return { lo, hi };
+  }
+
+  /**
+   * Rogue zones against the band: the worst above p90 and the worst below p10.
+   * zones = [{ id, label, v: number[] }] on the band's grid. -> { above: [{ id, label, share, n }], below: [...], stats }
+   * (share = fraction of the zone's assessed samples above p90 / below p10; both lists capped at ZONE_ROGUE_TOP, worst first).
+   */
+  function pickRogueZones(zones, band) {
+    const stats = zones.map((z) => {
+      let n = 0, a = 0, b = 0;
+      z.v.forEach((x, i) => {
+        if (!finite(x) || band.lo[i] == null) return;
+        n++;
+        if (x > band.hi[i] + ZONE_ROGUE_MIN_EXCESS_C) a++; else if (x < band.lo[i] - ZONE_ROGUE_MIN_EXCESS_C) b++;
+      });
+      return { id: z.id, label: z.label, n, above: n ? a / n : 0, below: n ? b / n : 0 };
+    });
+    const top = (key) => stats.filter((s) => s.n >= ROGUE_MIN_SAMPLES && s[key] >= ZONE_ROGUE_MIN_SHARE)
+      .sort((x, y) => y[key] - x[key] || x.label.localeCompare(y.label)).slice(0, ZONE_ROGUE_TOP)
+      .map((s) => ({ id: s.id, label: s.label, share: s[key], n: s.n }));
+    const above = top("above"), aboveIds = new Set(above.map((s) => s.id));
+    return { above, below: top("below").filter((s) => !aboveIds.has(s.id)), stats };
+  }
+
   // ---- renderers (ported from rcx-vibe-charts.js; theme-free) ---------------------------
   // Input rows keep the archived shape, with `value` (ms timestamps, no value_f/timestamp_utc).
   const pointTip = (fmtFn) => ({ trigger: "item", formatter: fmtFn });
@@ -317,10 +411,12 @@
     return {
       backgroundColor: "transparent", title: { text: opts.title ?? "Comfort" },
       tooltip: pointTip((p) => `${esc(p.name)}: ${round(p.value, 0)} (${round(p.percent, 1)}%)`),
-      legend: { bottom: 0 }, dataZoom: false,
+      legend: { bottom: 0, type: "scroll" }, dataZoom: false,
+      // radius and centre are percentages of the container (never a fixed size) and the labels are just "{d}%", so the ring and
+      // its labels always fit the frame; names are in the legend.
       series: [{
-        type: "pie", radius: ["45%", "70%"], label: { formatter: "{b}: {d}%" },
-        data: points.map((p, i) => ({ name: String(p.label ?? p.equipment_id ?? `slice ${i}`), value: num(p.value) ?? 0 })),
+        type: "pie", radius: ["34%", "56%"], center: ["50%", "46%"], label: { formatter: "{d}%" }, labelLine: { length: 8, length2: 6 },
+        data: points.map((p, i) => ({ name: String(p.label ?? p.equipment_id ?? `slice ${i}`), value: num(p.value) ?? 0, ...(p.color ? { itemStyle: { color: p.color } } : {}) })),
       }],
     };
   }
@@ -366,6 +462,8 @@
   function frames(el, n, heights = []) {
     const doc = el.ownerDocument;
     if (el.replaceChildren) el.replaceChildren(); else el.textContent = "";
+    // The parent grows to hold every frame: a fixed card height used to clip the second chart (the "cut-off pie").
+    if (el.style) el.style.height = `${Array.from({ length: n }, (_, i) => heights[i] || 340).reduce((a, b) => a + b, 0)}px`;
     return Array.from({ length: n }, (_, i) => {
       const d = doc.createElement("div");
       d.className = "rcx-split";
@@ -385,6 +483,72 @@
   const firstOf = (ctx, eq, roles) => { for (const r of roles) { const p = ctx.first(eq, r); if (p) return p; } return null; };
   const unitsOf = (ctx, pts) => [...new Set(pts.filter(Boolean).map((p) => ctx.unit(p)).filter(Boolean))].join(", ");
   const noData = (what) => `No ${what} history in this window.`;
+
+  /** Zone temperatures with the p10-p90 band; rogue zones in two colours, everything else muted. SI in, display units out. */
+  function zoneBandOption({ title, yTitle, t, zones, band, rogue, toDisp }) {
+    const above = new Map(rogue.above.map((r) => [r.id, r])), below = new Map(rogue.below.map((r) => [r.id, r]));
+    const disp = (vals) => toDisp(t.map((x, i) => [x, vals[i]])).map(([x, v]) => [x, v == null ? null : +v.toFixed(2)]);
+    const series = [];
+    const loD = disp(band.lo), hiD = disp(band.hi);
+    const bandName = `${ZONE_P_LO * 100}th-${ZONE_P_HI * 100}th percentile of all zones`;
+    series.push({ name: "band base", type: "line", stack: "band", symbol: "none", silent: true, lineStyle: { opacity: 0 }, data: loD });
+    series.push({ name: bandName, type: "line", stack: "band", symbol: "none", silent: true, lineStyle: { opacity: 0 }, areaStyle: { opacity: 0.2 },
+      data: loD.map(([x, lo], i) => [x, lo == null || hiD[i][1] == null ? null : +(hiD[i][1] - lo).toFixed(2)]) });
+    const legend = [bandName];
+    for (const z of [...zones].sort((a, b) => a.label.localeCompare(b.label))) {
+      const a = above.get(z.id), b = below.get(z.id);
+      const hot = a || b, color = a ? ROGUE_ABOVE_COLOR : b ? ROGUE_BELOW_COLOR : MUTED_COLOR;
+      const name = a ? `${z.label} (above p90 ${Math.round(a.share * 100)} %)` : b ? `${z.label} (below p10 ${Math.round(b.share * 100)} %)` : z.label;
+      if (hot) legend.push(name);
+      series.push({ name, type: "line", showSymbol: false, connectNulls: false, z: hot ? 5 : 1,
+        lineStyle: { width: hot ? 2.2 : 1, color, opacity: hot ? 1 : 0.45 }, itemStyle: { color }, data: disp(z.v) });
+    }
+    return {
+      backgroundColor: "transparent", title: { text: title },
+      tooltip: { trigger: "axis", valueFormatter: (v) => (finite(v) ? String(+v.toFixed(2)) : "") },
+      legend: { type: "scroll", top: 28, data: legend },
+      grid: { left: 56, right: 24, top: 72, bottom: 56 },
+      xAxis: { type: "time" }, yAxis: { type: "value", name: yTitle || "", scale: true }, series,
+    };
+  }
+
+  /** Ranked bars of the rogue VAV findings (worst first): one row per damper / reheat valve, coloured by open vs closed. */
+  function rogueBarsOption(rows, opts = {}) {
+    if (!rows.length) return null;
+    return {
+      backgroundColor: "transparent", title: { text: opts.title ?? "Rogue VAVs" }, dataZoom: false,
+      tooltip: pointTip((p) => `${esc(p.name)}: ${round(p.value, 0)} % of assessed samples`),
+      grid: { left: 190, right: 32, top: 56, bottom: 36 },
+      xAxis: { type: "value", name: opts.xTitle ?? "% of assessed samples", min: 0, max: 100 },
+      yAxis: { type: "category", inverse: true, data: rows.map((r) => `${r.label} · ${r.part} always ${r.state}`) },
+      series: [{ type: "bar", data: rows.map((r) => ({ value: +(r.share * 100).toFixed(1), itemStyle: { color: r.state === "open" ? ROGUE_ABOVE_COLOR : ROGUE_BELOW_COLOR } })) }],
+    };
+  }
+
+  /**
+   * "AHU on" filter for one card: keep(eq, samples) drops the samples taken while the feeding AHU's fan is off (when the
+   * tab's filter is on and the VAV's AHU and its fan signal are known), and counts what it could and could not filter.
+   */
+  function ahuFilter(ctx, windowSec) {
+    const seen = new Map();                                    // equip id -> { filtered, assumed }
+    return {
+      async keep(eq, samples) {
+        if (!ctx.ahuOn) return samples;
+        const m = await ctx.ahuMask(eq, windowSec);
+        seen.set(eq.id, m ? { filtered: true, assumed: m.assumed, ahu: m.ahu.name, role: m.role } : { filtered: false, assumed: false });
+        return m ? rcxKeepAhuOn(samples, m.on, windowSec * 1e3) : samples;
+      },
+      /** Sentence for the card note ("" when the filter is off). */
+      note() {
+        if (!ctx.ahuOn) return "";
+        const all = [...seen.values()], done = all.filter((x) => x.filtered), assumed = done.filter((x) => x.assumed).length;
+        const roles = [...new Set(done.map((x) => x.role === "fan_status" ? "status" : "command"))].join("/");
+        return ` · AHU on only: ${done.length} of ${all.length} filtered by the feeding AHU's fan ${roles || "signal"}`
+          + (assumed ? `; AHU assumed for ${assumed} (the site has one AHU and no airRef)` : "")
+          + (all.length - done.length ? `; ${all.length - done.length} without a known AHU fan signal left unfiltered` : "");
+      },
+    };
+  }
 
   // One timeseries preset: role (+ optional overlay / return) per equip, all equips on one chart.
   /** @param {{id: string, group: string, title: string, kinds: any, role: string, overlay?: string, ret?: string, extra?: string[], rules?: string[]}} o */
@@ -474,59 +638,138 @@
     return { lo, hi };
   }
 
-  // Zones
+  // Zones. Fleet analytics (pies, rankings, the all-zones band) draw only in the all-devices view.
   rcxView({
     id: "zone_comfort_rank", group: "Zones", title: "Zones — comfort ranking (% time in band)",
-    kinds: ZONES, scope: "site", minEquips: 1, hours: 168,
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, fleet: true, headline: true,
     roles: { required: ["zone_t"], optional: ["zone_air_temp_sp", "cooling_sp", "heating_sp"] },
     render: async (el, ctx) => {
       const want = ctx.equips.map((eq) => ({ eq, t: ctx.first(eq, "zone_t"), sp: ctx.first(eq, "zone_air_temp_sp"), c: ctx.first(eq, "cooling_sp"), h: ctx.first(eq, "heating_sp") }));
-      const { data, step } = await load(ctx, want.flatMap((w) => [w.t, w.sp, w.c, w.h]).filter(Boolean));
+      const { data, step, windowSec } = await load(ctx, want.flatMap((w) => [w.t, w.sp, w.c, w.h]).filter(Boolean));
+      const filt = ahuFilter(ctx, windowSec);
       const rows = [];
       const tot = { inBand: 0, below: 0, above: 0 };
       for (const w of want) {
-        const arr = data.get(w.t.uuid) || [];
+        const arr = await filt.keep(w.eq, data.get(w.t.uuid) || []);
         const { lo, hi } = bandsFor(arr, data, step, w);
         const s = comfortStats(arr.map(([, v]) => v), lo, hi);
         if (s.pct != null) rows.push({ equipment_id: labelOf(w.eq), label: labelOf(w.eq), value: s.pct });
         tot.inBand += s.inBand; tot.below += s.below; tot.above += s.above;
       }
-      const [a, b] = frames(el, 2, [Math.max(260, 40 * rows.length + 100), 300]);
+      const [a, b] = frames(el, 2, [Math.max(260, 40 * rows.length + 100), 320]);
       const okA = draw(a, ctx, rankingBarsOption(rankComfort(rows), { title: "Comfort — % of time in band (worst first)", worstFirst: true, suffix: " %", xTitle: "% in band" }), "rcx_zone_comfort_rank");
       draw(b, ctx, comfortDonutOption([
         { label: "In band", value: tot.inBand }, { label: "Too warm", value: tot.above }, { label: "Too cool", value: tot.below },
       ], { title: "All zones — samples by comfort" }), "rcx_zone_comfort_donut");
-      return okA ? `${rows.length} zone(s) · band = setpoint ±${round(ctx.dispDelta(COMFORT_SP_HALF_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit}, heating..cooling sp, else ${round(ctx.disp(COMFORT_LO_C, TEMP).value, 0)}–${round(ctx.disp(COMFORT_HI_C, TEMP).value, 0)} ${ctx.dispUnit(TEMP)}` : noData("zone temperature");
+      const n = tot.inBand + tot.below + tot.above;
+      if (n) ctx.kpi({ id: "zones-in-band", label: "Zones in comfort band", value: `${round((tot.inBand / n) * 100, 0)} %`, sub: `${rows.length} zones`, order: 10, tone: tot.inBand / n < 0.8 ? "warn" : "ok" });
+      return okA ? `${rows.length} zone(s) · band = setpoint ±${round(ctx.dispDelta(COMFORT_SP_HALF_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit}, heating..cooling sp, else ${round(ctx.disp(COMFORT_LO_C, TEMP).value, 0)}–${round(ctx.disp(COMFORT_HI_C, TEMP).value, 0)} ${ctx.dispUnit(TEMP)}${filt.note()}` : noData("zone temperature");
     },
   });
-  timeseriesPreset({ id: "zone_temps", group: "Zones", title: "Zones — all space temps (timeseries)", kinds: ZONES, role: "zone_t", overlay: "zone_air_temp_sp", rules: ["ZONE-COMFORT-PCT"] });
+
+  // All zone temperatures on one chart with the 10th / 90th percentile band across zones; the worst zones above p90 and
+  // below p10 are drawn in their own colours, every other zone is muted. One zone (single-device view): just its line.
   rcxView({
-    id: "vav_health", group: "VAV", title: "VAV — health (broken / comfort / rogue)",
-    kinds: ZONES, scope: "site", minEquips: 1, hours: 168,
-    roles: { required: ["zone_t"], optional: ["zone_air_temp_sp", "cooling_sp", "heating_sp", "damper_pct", "damper_cmd", "zone_flow", "zone_airflow_sp"] },
+    id: "zone_temps", group: "Zones", title: "Zones — all space temps (10th–90th percentile band)",
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, headline: true,
+    roles: { required: ["zone_t"], optional: [] },
     render: async (el, ctx) => {
-      const want = ctx.equips.map((eq) => ({
-        eq, t: ctx.first(eq, "zone_t"), sp: ctx.first(eq, "zone_air_temp_sp"), c: ctx.first(eq, "cooling_sp"), h: ctx.first(eq, "heating_sp"),
-        dm: firstOf(ctx, eq, ["damper_pct", "damper_cmd"]), f: ctx.first(eq, "zone_flow"), fsp: ctx.first(eq, "zone_airflow_sp"),
-      }));
-      const { data, step, windowSec } = await load(ctx, want.flatMap((w) => [w.t, w.sp, w.c, w.h, w.dm, w.f, w.fsp]).filter(Boolean));
-      const rows = [], tally = new Map();
-      for (const w of want) {
-        const arr = data.get(w.t.uuid) || [];
-        const { lo, hi } = bandsFor(arr, data, step, w);
-        const at = (pt) => { const m = pt ? bucketMap(data.get(pt.uuid) || [], step) : null; return arr.map(([t]) => (m ? m.get(Math.floor(t / step) * step) ?? null : null)); };
-        const st = vavHealthStats({ temp: arr.map(([, v]) => v), lo, hi, damper: at(w.dm), flow: at(w.f), flowSp: at(w.fsp) }, windowSec);
-        const verdict = vavVerdict(st);
-        tally.set(verdict, (tally.get(verdict) || 0) + 1);
-        if (st.anyPct != null) rows.push({ equipment_id: labelOf(w.eq), label: labelOf(w.eq), value: st.anyPct });
+      const want = ctx.equips.map((eq) => ({ eq, y: ctx.first(eq, "zone_t") }));
+      const { data, step, windowSec } = await load(ctx, want.map((w) => w.y));
+      const filt = ahuFilter(ctx, windowSec);
+      const zones = [];
+      for (const w of want) zones.push({ id: w.eq.id, label: labelOf(w.eq), w, arr: await filt.keep(w.eq, data.get(w.y.uuid) || []) });
+      const t = [...new Set(zones.flatMap((z) => z.arr.map(([x]) => Math.floor(x / step) * step)))].sort((a, b) => a - b);
+      if (!t.length) return noData("zone temperature");
+      const idx = new Map(t.map((x, i) => [x, i]));
+      for (const z of zones) { z.v = t.map(() => null); for (const [x, v] of z.arr) z.v[idx.get(Math.floor(x / step) * step)] = v; }
+      const unit = unitsOf(ctx, want.map((w) => w.y)), toDisp = (arr) => ctx.dispSeries(arr, ctx.siUnit(want[0].y));
+      if (zones.length < ZONE_BAND_MIN_ZONES) {
+        const rows = zones.flatMap((z) => toDisp(z.arr).map(([x, v]) => ({ equipment_id: z.label, series: "primary", ts: x, value: v })));
+        const ok = draw(el, ctx, multiEquipmentTimeseriesOption(rows, { title: "Zones — space temps", yTitle: unit }), "rcx_zone_temps");
+        return ok ? `${zones.length} zone(s) · the percentile band needs at least ${ZONE_BAND_MIN_ZONES} zones${filt.note()}` : noData("zone temperature");
       }
-      const [a, b] = frames(el, 2, [Math.max(260, 40 * rows.length + 100), 300]);
-      const ok = draw(a, ctx, vavHealthWorstBarsOption(rows, { title: "Worst zones — % of time with a problem", suffix: " %", xTitle: "% of time" }), "rcx_vav_health_worst");
-      draw(b, ctx, vavHealthDonutOption(["Healthy", "Poor comfort", "Rogue damper", "Broken box"].map((k) => ({ label: k, value: tally.get(k) || 0 })), { title: "VAV health" }), "rcx_vav_health_donut");
-      return ok ? `${want.length} VAV(s) · problem = out of comfort band, damper >= 97.5 % open, or flow > 20 % off setpoint` : noData("VAV");
+      const band = zoneBand(zones.map((z) => z.v));
+      const rogue = pickRogueZones(zones, band);
+      const ok = draw(el, ctx, zoneBandOption({ title: "Zones — all space temps, 10th–90th percentile band", yTitle: unit, t, zones, band, rogue, toDisp }), "rcx_zone_temps_band");
+      if (ok) ctx.kpi({ id: "rogue-zones", label: "Rogue zones", value: String(rogue.above.length + rogue.below.length), sub: `${rogue.above.length} above p90 · ${rogue.below.length} below p10`, order: 30, tone: rogue.above.length + rogue.below.length ? "warn" : "ok" });
+      return ok ? `${zones.length} zones · band = ${ZONE_P_LO * 100}th–${ZONE_P_HI * 100}th percentile across zones per time step · rogue = beyond the band by >= ${round(ctx.dispDelta(ZONE_ROGUE_MIN_EXCESS_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit} on the same side for >= ${ZONE_ROGUE_MIN_SHARE * 100} % of samples (worst ${ZONE_ROGUE_TOP} per side): `
+        + `${rogue.above.length ? `above: ${rogue.above.map((r) => r.label).join(", ")}` : "none above"}; ${rogue.below.length ? `below: ${rogue.below.map((r) => r.label).join(", ")}` : "none below"}${filt.note()}` : noData("zone temperature");
     },
   });
-  timeseriesPreset({ id: "vav_flows", group: "VAV", title: "Zones — zone airflow (timeseries)", kinds: ZONES, role: "zone_flow", overlay: "zone_airflow_sp" });
+
+  // VAV health = rogue VAVs: a damper or reheat valve that sits ~fully open or ~fully closed for (nearly) the whole range.
+  // Comfort lives under Zones only; there is no comfort or airflow verdict here.
+  rcxView({
+    id: "vav_health", group: "VAV", title: "VAV — health (rogue dampers and reheat valves)",
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, fleet: true, headline: true,
+    roles: { required: [], anyOf: ["damper_pct", "damper_cmd", "reheat_valve_pct"], optional: [] },
+    render: async (el, ctx) => {
+      const want = ctx.equips.map((eq) => ({ eq, dm: firstOf(ctx, eq, ["damper_pct", "damper_cmd"]), rh: ctx.first(eq, "reheat_valve_pct") }))
+        .filter((w) => w.dm || w.rh);
+      if (!want.length) return noData("VAV damper or reheat valve");
+      const { data, windowSec } = await load(ctx, want.flatMap((w) => [w.dm, w.rh]).filter(Boolean));
+      const filt = ahuFilter(ctx, windowSec);
+      const devices = [];
+      for (const w of want) {
+        const vals = async (p) => (p ? (await filt.keep(w.eq, data.get(p.uuid) || [])).map(([, v]) => v) : null);
+        devices.push({ id: w.eq.id, label: labelOf(w.eq), damper: await vals(w.dm), reheat: await vals(w.rh) });
+      }
+      const rows = rogueVavRows(devices);
+      const tally = new Map();
+      for (const d of devices) { const k = vavVerdictLabel(rows, d.id); tally.set(k, (tally.get(k) || 0) + 1); }
+      const kinds = ["Healthy", ...new Set(rows.map((r) => `${r.part} always ${r.state}`))];
+      const rogueIds = new Set(rows.map((r) => r.id));
+      ctx.kpi({ id: "rogue-vavs", label: "Rogue VAVs", value: `${rogueIds.size} of ${devices.length}`, sub: "damper / reheat valve stuck", order: 20, tone: rogueIds.size ? "warn" : "ok" });
+      const [a, b] = rows.length ? frames(el, 2, [Math.max(260, 34 * rows.length + 110), 320]) : frames(el, 1, [320]);
+      const kindColor = (k) => (k === "Healthy" ? HEALTHY_COLOR : /open$/.test(k) ? ROGUE_ABOVE_COLOR : ROGUE_BELOW_COLOR);
+      const donut = comfortDonutOption(kinds.map((k) => ({ label: k, value: tally.get(k) || 0, color: kindColor(k) })), { title: "VAV health" });
+      let ok;
+      if (rows.length) {
+        ok = draw(a, ctx, rogueBarsOption(rows, { title: `Rogue VAVs — position ${ROGUE_OPEN_PCT} % or more / ${ROGUE_CLOSED_PCT} % or less` }), "rcx_vav_rogue");
+        draw(b, ctx, donut, "rcx_vav_health_donut");
+      } else ok = draw(a, ctx, donut, "rcx_vav_health_donut");
+      return `${devices.length} VAV(s) · rogue = damper or reheat valve at >= ${ROGUE_OPEN_PCT} % (open) or <= ${ROGUE_CLOSED_PCT} % (closed) for >= ${ROGUE_SHARE * 100} % of assessed samples (at least ${ROGUE_MIN_SAMPLES})`
+        + `${rows.length ? "" : " · none found"}${filt.note()}`;
+    },
+  });
+
+  // Single-VAV (and all-VAV) charts: positions and reheat discharge temperatures. No zone-airflow timeseries.
+  rcxView({
+    id: "vav_positions", group: "VAV", title: "VAV — damper and reheat valve position (timeseries)",
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168,
+    roles: { required: [], anyOf: ["damper_pct", "damper_cmd", "reheat_valve_pct"], optional: [] },
+    render: async (el, ctx) => {
+      const want = ctx.equips.map((eq) => ({ eq, dm: firstOf(ctx, eq, ["damper_pct", "damper_cmd"]), rh: ctx.first(eq, "reheat_valve_pct") })).filter((w) => w.dm || w.rh);
+      if (!want.length) return noData("VAV damper or reheat valve");
+      const { data } = await load(ctx, want.flatMap((w) => [w.dm, w.rh]).filter(Boolean));
+      const rows = [];
+      for (const w of want) {
+        for (const [part, p] of [["damper", w.dm], ["reheat valve", w.rh]]) {
+          if (!p) continue;
+          for (const [t, v] of data.get(p.uuid) || []) if (finite(v)) rows.push({ equipment_id: labelOf(w.eq), series: part, ts: t, value: +(rcxStats.frac(v) * 100).toFixed(1) });
+        }
+      }
+      const ok = draw(el, ctx, multiEquipmentTimeseriesOption(rows, { title: "Damper and reheat valve position", yTitle: "% open" }), "rcx_vav_positions");
+      return ok ? `${want.length} VAV(s) · % open` : noData("VAV damper or reheat valve");
+    },
+  });
+
+  // Reheat (discharge) temperatures: only VAVs that have a reheat valve are drawn.
+  rcxView({
+    id: "vav_reheat_dats", group: "VAV", title: "VAV — reheat discharge temps (timeseries)",
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168,
+    roles: { required: ["vav_discharge_t"], optional: ["reheat_valve_pct"] },
+    render: async (el, ctx) => {
+      const want = ctx.equips.filter((eq) => ctx.first(eq, "reheat_valve_pct")).map((eq) => ({ eq, y: ctx.first(eq, "vav_discharge_t") }));
+      if (!want.length) return "No VAV with a reheat valve and a discharge temperature here.";
+      const { data } = await load(ctx, want.map((w) => w.y));
+      const rows = want.flatMap((w) => ctx.dispSeries(data.get(w.y.uuid) || [], ctx.siUnit(w.y)).map(([t, v]) => ({ equipment_id: labelOf(w.eq), series: "primary", ts: t, value: v })));
+      const unit = unitsOf(ctx, want.map((w) => w.y));
+      const ok = draw(el, ctx, multiEquipmentTimeseriesOption(rows, { title: "Reheat discharge air temperature", yTitle: unit }), "rcx_vav_reheat_dats");
+      return ok ? `${want.length} VAV(s) with reheat${unit ? ` · ${unit}` : ""}` : noData("reheat discharge temperature");
+    },
+  });
 
   // Air handlers
   timeseriesPreset({ id: "ahu_dats", group: "Air handlers", title: "AHU — all DATs / SAT (timeseries)", kinds: AIR, role: "sat", overlay: "sat_sp", rules: ["AHU-SATDEV"] });
@@ -560,12 +803,14 @@
     },
   });
 
-  resetPreset({ id: "ahu_sat_reset_scatter", group: "Air handlers", title: "AHU — SAT vs web dry-bulb (scatter)", kinds: AIR, role: "sat", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
+  resetPreset({ id: "ahu_sat_reset_scatter", group: "Scatter plots", title: "AHU — SAT vs web dry-bulb (scatter)", kinds: AIR, role: "sat", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
 
   // Plant
-  resetPreset({ id: "hw_reset_scatter", group: "Plant", title: "Boiler — HWS vs web dry-bulb (scatter)", kinds: ["boiler"], role: "hw_supply_t", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
-  resetPreset({ id: "chw_reset_scatter", group: "Plant", title: "Chiller — CHWS vs web dry-bulb (scatter)", kinds: CHW, role: "chw_supply_t", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
-  resetPreset({ id: "cw_reset_scatter", group: "Plant", title: "Tower / CW — leave temp vs wet-bulb (dry-bulb fallback)", kinds: [...CHW, "cooling_tower"], role: "cw_supply_t", xRoles: ["web_wb_t", "web_oa_t", "oa_t"], xLabel: "OA wet-bulb / dry-bulb" });
+  // Scatter plots draw wherever their roles exist (no equipment-kind restriction): outdoor-air temperature vs the hot-water
+  // supply temperature (HW reset), and vs the chilled-water supply temperature when a chilled-water system exists.
+  resetPreset({ id: "hw_reset_scatter", group: "Scatter plots", title: "Hot water — HWS vs web dry-bulb (scatter)", kinds: [], role: "hw_supply_t", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
+  resetPreset({ id: "chw_reset_scatter", group: "Scatter plots", title: "Chilled water — CHWS vs web dry-bulb (scatter)", kinds: [], role: "chw_supply_t", xRoles: ["web_oa_t", "oa_t"], xLabel: "OAT" });
+  resetPreset({ id: "cw_reset_scatter", group: "Scatter plots", title: "Tower / CW — leave temp vs wet-bulb (dry-bulb fallback)", kinds: [...CHW, "cooling_tower"], role: "cw_supply_t", xRoles: ["web_wb_t", "web_oa_t", "oa_t"], xLabel: "OA wet-bulb / dry-bulb" });
   timeseriesPreset({ id: "chw_temps_ts", group: "Plant", title: "Chiller — CHW supply / return / ΔT (timeseries)", kinds: CHW, role: "chw_supply_t", ret: "chw_return_t", rules: ["CHW-1"] });
   timeseriesPreset({ id: "cw_temps_ts", group: "Plant", title: "Tower / CW — supply / return / ΔT (timeseries)", kinds: [...CHW, "cooling_tower"], role: "cw_supply_t", ret: "cw_return_t" });
 
@@ -634,10 +879,13 @@
 
   globalThis.rcxPresetMath = {
     DEGREE_DAY_BASE_C, COMFORT_LO_C, COMFORT_HI_C, COMFORT_SP_HALF_C, defaultBand, spHalfWidth, comfortStats, rankComfort, resetFit, pairSeries, bucketMap,
-    vavHealthStats, vavVerdict, dailyMeans, degreeDay, monthlyDegreeDays, isCumulative, dailyEnergy, monthlySum, meterRows, outlierEquipmentIds,
+    vavHealthStats, vavVerdict, stuckStats, stuckVerdict, rogueVavRows, vavVerdictLabel, zoneBand, pickRogueZones, ahuFilter,
+    ROGUE: { OPEN_PCT: ROGUE_OPEN_PCT, CLOSED_PCT: ROGUE_CLOSED_PCT, SHARE: ROGUE_SHARE, MIN_SAMPLES: ROGUE_MIN_SAMPLES },
+    ZONE_BAND: { P_LO: ZONE_P_LO, P_HI: ZONE_P_HI, MIN_ZONES: ZONE_BAND_MIN_ZONES, ROGUE_TOP: ZONE_ROGUE_TOP, ROGUE_MIN_SHARE: ZONE_ROGUE_MIN_SHARE, ROGUE_MIN_EXCESS_C: ZONE_ROGUE_MIN_EXCESS_C },
+    dailyMeans, degreeDay, monthlyDegreeDays, isCumulative, dailyEnergy, monthlySum, meterRows, outlierEquipmentIds,
     options: {
       multiEquipmentTimeseriesOption, oatScatterOption, multiEquipmentBoxOption, rankingBarsOption, comfortDonutOption,
-      meteringChartsOption, vavHealthWorstBarsOption, vavHealthDonutOption,
+      meteringChartsOption, vavHealthWorstBarsOption, vavHealthDonutOption, zoneBandOption, rogueBarsOption,
     },
   };
 })();

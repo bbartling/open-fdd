@@ -37,7 +37,7 @@ interface FddCatalog {
 /** An RCx view definition (rcxView(def)); see the header of static/rcx.js. */
 interface RcxViewDef {
   id: string; group: string; title: string; kinds?: string[];
-  roles?: { required: string[]; optional?: string[] };
+  roles?: { required: string[]; anyOf?: string[]; optional?: string[] };
   scope?: "equip" | "site"; minEquips?: number; hours?: number;
   render: (el: HTMLElement, ctx: RcxContext) => Promise<string | void> | string | void;
   [k: string]: any;
@@ -59,4 +59,10 @@ interface RcxContext {
   dispSeries(arr: any[][], siUnit: string, delta?: boolean): [number, number][];
   unit(p: OfddPoint): string;
   weather: OfddPoint[];
+  /** The tab's "AHU on" filter is active. */
+  ahuOn: boolean;
+  feedingAhu(eq: OfddEquip): { ahu: { rec: NfRecord; id: string; name: string }; assumed: boolean } | null;
+  ahuMask(eq: OfddEquip, windowSec?: number): Promise<{ on: Map<number, boolean>; ahu: { rec: NfRecord; id: string; name: string }; assumed: boolean; role: string } | null>;
+  /** Publish a summary tile for the tab's KPI row. */
+  kpi(tile: { id: string; label: string; value: string; sub?: string; tone?: "warn" | "ok"; order?: number }): void;
 }

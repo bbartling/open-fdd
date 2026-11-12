@@ -14,11 +14,11 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | `static/index.html` | UI tabs: Overview · Charts · FDD · RCx · Points · BACnet Server · Export · Model & RDF (+ `chart.html`, `tree.html`) | NF at `/api/v1/apps/static/open-fdd/` |
 | `static/nf.js`, `static/paging.js` | **Shared with Lite** (`shared/`, copied by `scripts/nf/sync_shared.py`). NF access: login (LAN or Normal Online/Clerk), `api()`, live push stream | browser |
 | `static/model.js` | **Shared with Lite.** Haystack model loader + RDF/Turtle export with time-series refs | browser + FDD hook |
-| `static/fdd.js`, `fdd-catalog.json` | Rule catalog + role binding (NF class, else Haystack markers) | browser + FDD hook |
-| `static/rcx.js` | RCx view registry, binding, shared math, **the fault lane** (`rcxWithFaultLane`) | browser |
-| `static/fdd-plots.js` | Per-rule plot, OAT-METEO, sensor health / sensor faults | browser |
-| `static/rcx-overview.js` | Weekly runtimes, mechanical cooling, economizer, BAS vs web OAT | browser |
-| `static/rcx-presets.js` | The 18 RCx presets + VAV health | browser |
+| `static/fdd.js`, `fdd-catalog.json` | Rule catalog + role binding (NF class, else Haystack markers); rule title + `rule` badge helpers, the FDD tab's heat-map row selection | browser + FDD hook |
+| `static/rcx.js` | RCx view registry (`tab` rcx/fdd, `fleet`, `headline`), binding, VAV→AHU feed (`airRef`) + the "AHU on" filter, KPI tiles, shared math, **the fault lane** (`rcxWithFaultLane`) | browser |
+| `static/fdd-plots.js` | Per-rule plot (signals + bool fault lane) and the FDD sensor validation chart (worst sensor, four SV lanes: Range, Rate, Spike, Stale) | browser |
+| `static/rcx-overview.js` | AHU run hours per day, weekly runtimes, mechanical cooling, economizer, BAS vs web OAT (an FDD-tab chart) | browser |
+| `static/rcx-presets.js` | The RCx presets: zones (10th–90th percentile band, comfort), rogue VAVs, VAV positions / reheat temps, scatter plots | browser |
 | `static/export.js` | Export tab: CSV download (date range, point picker, resolution, display/stored units; pure helpers tested in node) | browser |
 | `static/units.js` | SI math / imperial-or-SI display (`ofddUnits`); the header toggle sets `localStorage["openfdd-units"]` | browser + FDD hook |
 | `static/energy.js` | Demand, monthly energy, degree-day baseline, M&V, EUI / peers | browser |

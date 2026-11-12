@@ -57,13 +57,15 @@ function signal(role, i, t) {
     case "htg_valve_pct": return o && oat(t) < 50 ? Math.min(100, (50 - oat(t)) * 5) : 0;
     case "duct_static": return o || i === 1 ? 1.2 + 0.15 * n(9) - (i === 0 ? 0.35 : 0) : 0.02;
     case "duct_static_sp": return o || i === 1 ? 1.25 : 0;
-    case "zone_t": return 72 + 2.5 * wave(t, 24, i) + (i === 2 ? 4 : 0) + n(10);   // VAV-3 runs hot
+    case "zone_t": return 72 + 2.5 * wave(t, 24, i) + (i === 2 ? 4 : 0) - (i === 5 ? 6 : 0) + n(10);   // VAV-3 runs hot, VAV-6 runs cold
     case "zone_air_temp_sp": return o ? 72 : 76;
     case "cooling_sp": return o ? 74 : 80;
     case "heating_sp": return o ? 70 : 64;
     case "zone_flow": return o ? 450 + 150 * wave(t, 6, i) + 20 * n(11) - (i === 3 ? 300 : 0) : 120;
     case "zone_airflow_sp": return o ? 450 + 150 * wave(t, 6, i) : 120;
-    case "damper_pct": case "damper_cmd": return i === 2 ? 100 : o ? 40 + 30 * wave(t, 6, i) : 15;  // VAV-3 pinned open
+    case "damper_pct": case "damper_cmd": return i === 2 ? 100 : i === 6 ? 0 : o ? 40 + 30 * wave(t, 6, i) : 15;  // VAV-3 pinned open, VAV-7 pinned closed
+    case "reheat_valve_pct": return i === 4 ? 100 : o ? 15 + 25 * (1 + wave(t, 5, i)) : 0;   // VAV-5 reheat stuck open
+    case "vav_discharge_t": return 58 + (signal("reheat_valve_pct", i, t) / 100) * 30 + n(19);
     case "chw_supply_t": return 44 + (o ? 0 : 3) + n(12);
     case "chw_return_t": return signal("chw_supply_t", i, t) + (o ? 4 : 1.5);    // low ΔT → CHW-1
     case "chiller_status": case "chw_pump_status": case "compressor_status": case "chiller_cmd": return o && oat(t) > 55 ? 1 : 0;
@@ -92,7 +94,9 @@ const sites = [
 const equips = [
   { id: "AHU-1", site: 0, markers: "equip,ahu", roles: ["sat", "sat_sp", "mat", "rat", "oa_t", "oa_damper_pct", "fan_cmd", "fan_status", "clg_valve_pct", "htg_valve_pct", "duct_static", "duct_static_sp"] },
   { id: "AHU-2", site: 0, markers: "equip,ahu", roles: ["sat", "sat_sp", "mat", "rat", "oa_t", "oa_damper_pct", "fan_cmd", "fan_status", "clg_valve_pct", "duct_static", "duct_static_sp"] },
-  ...[1, 2, 3, 4].map((n) => ({ id: `VAV-${n}`, site: 0, markers: "equip,vav", roles: ["zone_t", "zone_air_temp_sp", "cooling_sp", "heating_sp", "zone_flow", "zone_airflow_sp", "damper_pct"] })),
+  // VAVs are fed by AHU-1 (odd) / AHU-2 (even) through the Haystack ref airRef, like a real model
+  ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ id: `VAV-${n}`, site: 0, markers: "equip,vav", airRef: n % 2 ? "AHU-1" : "AHU-2",
+    roles: ["zone_t", "zone_air_temp_sp", "cooling_sp", "heating_sp", "zone_flow", "zone_airflow_sp", "damper_pct", "reheat_valve_pct", "vav_discharge_t"] })),
   { id: "CH-1", site: 0, markers: "equip,chiller", roles: ["chw_supply_t", "chw_return_t", "chiller_status", "chiller_cmd", "chw_pump_status", "cw_supply_t", "cw_return_t", "compressor_status"] },
   { id: "CT-1", site: 0, markers: "equip,coolingTower", roles: ["cw_supply_t", "cw_return_t", "tower_fan_cmd"] },
   { id: "BLR-1", site: 0, markers: "equip,boiler", roles: ["hw_supply_t", "hw_return_t", "pump_status"] },
@@ -114,7 +118,7 @@ for (const s of sites) {
 equips.forEach((e, ei) => {
   const site = sites[e.site].id;
   records.push({ uuid: uuidOf(e.id), name: e.id, layer: "model", pointType: "EQUIPMENT",
-    attrs: { id: e.id, dis: e.id, markers: e.markers, siteRef: site } });
+    attrs: { id: e.id, dis: e.id, markers: e.markers, siteRef: site, ...(e.airRef ? { airRef: e.airRef } : {}) } });
   const idx = equips.filter((x) => x.markers === e.markers).indexOf(e);
   for (const role of e.roles) {
     const def = catalog.roles[role];

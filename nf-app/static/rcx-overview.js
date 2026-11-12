@@ -423,11 +423,82 @@
         group: motor.group,
         title: `Weekly runtime: ${motor.title}${motor.signals.length > 1 ? ` (${role.endsWith("_status") ? "status" : "command"})` : ""}`,
         kinds: motor.kinds, scope: "site", hours: 672,
+        // Supply fans are drawn in the RCx tab by "AHU run hours per day" (rcx-fleet.js); these stay registered for the agent analytics.
+        ...(motor.id === "fan" ? { tabHidden: true } : {}),
         roles: { required: [role], optional: ["oa_t", ...motor.signals.filter((r) => r !== role)] },
         render: (el, ctx) => renderWeekly(el, ctx, motor, role),
       });
     });
   }
+
+  // ================= AHU run hours per day ==============================================
+  // Replaces the weekly "Supply fans (command)" bars in the RCx tab: one bar per AHU per calendar day (site time zone),
+  // hours the fan was running, from the fan STATUS when the AHU has one and its COMMAND otherwise (the series name says which).
+
+  /** ms -> Date-only label key (UTC midnight ms of the calendar date in `tz`; UTC when no tz). Cached per quarter hour. */
+  function dayKeyer(tz) {
+    let fmt = null;
+    if (tz) { try { fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }); } catch (e) { fmt = null; } }
+    const cache = new Map();
+    return (ms) => {
+      const q = Math.floor(ms / 900e3);                          // every UTC offset is a multiple of 15 minutes
+      let k = cache.get(q);
+      if (k === undefined) { k = Date.parse(`${fmt ? fmt.format(ms) : new Date(ms).toISOString().slice(0, 10)}T00:00:00Z`); cache.set(q, k); }
+      return k;
+    };
+  }
+
+  /**
+   * Run hours per calendar day from one signal on a time grid (the weekly-runtime integration, bucketed by day).
+   * t = [ms], v = [value|null]; opts = { duty (Bool signal: resampled average = on-fraction), tz, gapMaxSec }.
+   * Interval i is [t[i], t[i+1]) and belongs to the day of t[i]; intervals longer than gapMaxSec are skipped (data gap);
+   * a sample counts as on above 5 % (onWeight). -> [{ day: "YYYY-MM-DD", dayMs, hours, n }] oldest first.
+   */
+  function dailyRuntime(t, v, { duty = false, tz = null, gapMaxSec = GAP_MAX_SEC } = {}) {
+    const m = weeklyRuntime(t, v, { duty, gapMaxSec, weekOf: dayKeyer(tz) });
+    return [...m].map(([dayMs, w]) => ({ day: new Date(dayMs).toISOString().slice(0, 10), dayMs, hours: w.hours, n: w.n }));
+  }
+
+  /** Signal an AHU's run hours are computed from: fan status first, else fan command. */
+  const runSignalOf = (ctx, eq) => {
+    const status = ctx.first(eq, "fan_status"), cmd = ctx.first(eq, "fan_cmd");
+    return status ? { p: status, role: "status" } : cmd ? { p: cmd, role: "command" } : null;
+  };
+
+  rcxView({
+    id: "ahu-runtime-daily", group: "Air handlers", title: "AHU run hours per day",
+    kinds: ["ahu"], scope: "site", hours: 168, headline: true,
+    roles: { required: [], anyOf: ["fan_status", "fan_cmd"], optional: [] },
+    render: async (el, ctx) => {
+      const list = ctx.equips.map((eq) => ({ eq, sig: runSignalOf(ctx, eq) })).filter((x) => x.sig);
+      if (!list.length) return "no AHU here has a fan status or command point";
+      const cols = {};
+      list.forEach((x, i) => { cols[`m${i}`] = x.sig.p; });
+      const g = await ctx.alignedFine(cols, { hours: ctx.hours });
+      const per = list.map((x, i) => ({ ...x, days: dailyRuntime(g.t, g.cols[`m${i}`], { duty: x.sig.p.kind === "Bool", tz: ctx.siteTz }) }));
+      const days = [...new Map(per.flatMap((p) => p.days.map((d) => [d.dayMs, d.day]))).entries()].sort((a, b) => a[0] - b[0]);
+      if (!days.length || !per.some((p) => p.days.some((d) => d.hours > 0))) return "no running time in this window";
+      const series = per.map((p) => {
+        const by = new Map(p.days.map((d) => [d.dayMs, d.hours]));
+        return { name: `${eqName(p.eq)} (${p.sig.role})`, type: "bar", data: days.map(([k]) => (by.has(k) ? +by.get(k).toFixed(2) : null)) };
+      });
+      draw(ctx, el, {
+        title: { text: "AHU fan run hours per day", left: 8, top: 0 },
+        tooltip: { trigger: "axis", valueFormatter: (x) => (isNum(x) ? `${+x.toFixed(1)} h` : "") }, legend: { top: 24, type: "scroll" }, dataZoom: false,
+        grid: baseGrid({ top: 64, bottom: 44 }),
+        xAxis: { type: "category", data: days.map(([, d]) => d), name: `day (${ctx.siteTz || "UTC"})`, nameLocation: "middle", nameGap: 28 },
+        yAxis: { type: "value", name: "run hours / day", min: 0, max: 24 }, series,
+      }, null, "ahu_runtime_daily");
+      const all = per.flatMap((p) => p.days.map((d) => d.hours));
+      ctx.kpi({ id: "ahu-run-hours", label: "AHU run hours / day", value: `${(all.reduce((a, b) => a + b, 0) / all.length).toFixed(1)} h`, sub: `average of ${per.length} AHU${per.length === 1 ? "" : "s"}`, order: 40 });
+      const usedCmd = per.filter((p) => p.sig.role === "command").length;
+      return `on = signal > ${ON * 100}% · integrated on the 5-minute grid · ${per.length - usedCmd} AHU(s) from fan status`
+        + `${usedCmd ? `, ${usedCmd} from fan command (no status point)` : ""} · first and last day may be partial`;
+    },
+  });
+
+  M.dailyRuntime = dailyRuntime;
+  M.dayKeyer = dayKeyer;
 
   // ================= mechanical cooling x OAT bins =====================================
 
@@ -567,8 +638,11 @@
   }
   const BAS_ROLES = { required: ["oa_t", "web_oa_t"], optional: [] };
 
+  // The deviation sits under "Weather" (or the boiler / hot-water plant when that is where the hard-wired outdoor-air
+  // sensor is modelled), never with the air handlers. It is an FDD chart: signals on top, OAT-METEO fault lane at the bottom.
+  const basGroup = (eqs) => (((eqs && eqs[0] && eqs[0].kinds) || []).some((k) => ["boiler", "chwPlant", "chiller"].includes(k)) ? "Boiler / hot-water plant" : "Weather");
   rcxView({
-    id: "bas-vs-web-oat", group: "Weather", title: "BAS vs web outdoor-air temperature",
+    id: "bas-vs-web-oat", group: "Weather", groupOf: basGroup, tab: "fdd", title: "BAS vs web outdoor-air temperature",
     kinds: [], scope: "site", hours: 168, roles: BAS_ROLES,
     render: async (el, ctx) => {
       const d = await basData(ctx);
@@ -585,16 +659,21 @@
           lineStyle: { opacity: 0 }, areaStyle: { opacity: 0.18 }, data: d.rows.map((r) => [r.t, +(2 * half).toFixed(2)]) },
       ];
       const lanes = await faultLanes(ctx, ["OAT-METEO"], ctx.equips);
-      draw(ctx, el, { tooltip: { trigger: "axis" }, legend: { top: 0, data: ["Web OAT", "BAS oa_t", `+-${+half.toFixed(1)} band`] },
-        grid: baseGrid({ bottom: 56 }), xAxis: { type: "time" },
+      draw(ctx, el, { title: { text: fddRuleRich("BAS vs web outdoor-air temperature", "OAT-METEO", eqName(d.eq)), left: 8, top: 0, textStyle: { rich: FDD_RULE_RICH } },
+        tooltip: { trigger: "axis" }, legend: { top: 24, data: ["Web OAT", "BAS oa_t", `+-${+half.toFixed(1)} band`] },
+        grid: baseGrid({ top: 64, bottom: 56 }), xAxis: { type: "time" },
         yAxis: { type: "value", name: unit, scale: true }, series }, lanes, "bas_vs_web_oat");
-      const s = d.stats;
-      return `${eqName(d.eq)} vs web · ${s.n} samples · bias ${ctx.dispDelta(s.bias, TEMP).value.toFixed(2)} ${ctx.dispDelta(0, TEMP).unit} · within band ${(s.withinBand * 100).toFixed(0)}%`;
+      const s = d.stats, lane = lanes[0] && lanes[0].data;
+      const fault = lane && lane.length
+        ? ` · ${lane.approximate ? "approximate: fault" : "confirmed fault"} in ${lane.filter(([, f]) => f === 1).length} of ${lane.filter(([, f]) => f != null).length} ${lane.approximate ? "hourly results" : "assessed samples"}`
+        : " · no OAT-METEO result point yet (lane omitted)";
+      return `${eqName(d.eq)} vs web · ${s.n} samples · bias ${ctx.dispDelta(s.bias, TEMP).value.toFixed(2)} ${ctx.dispDelta(0, TEMP).unit} · within band ${(s.withinBand * 100).toFixed(0)}%${fault}`;
     },
   });
 
   rcxView({
-    id: "bas-vs-web-oat-hist", group: "Weather", title: "BAS vs web outdoor-air deviation",
+    // Registered for the agent analytics; not drawn on a tab (the FDD chart above carries bias and in-band share).
+    id: "bas-vs-web-oat-hist", group: "Weather", groupOf: basGroup, tab: "fdd", tabHidden: true, title: "BAS vs web outdoor-air deviation",
     kinds: [], scope: "site", hours: 168, roles: BAS_ROLES,
     // No fault lane: a histogram has no time axis.
     render: async (el, ctx) => {
