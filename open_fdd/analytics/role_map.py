@@ -301,6 +301,29 @@ def apply_role_map(df: pd.DataFrame, equipment_id: str, role_map: dict[str, dict
     return out
 
 
+def is_flat_role_map(role_map: dict) -> bool:
+    """True for a flat ``{column: role}`` map (the parity dataset / CSV shape) rather than ``{equipment: {role: column}}``."""
+    return bool(role_map) and not any(isinstance(v, dict) for v in role_map.values())
+
+
+def coerce_role_map(role_map: dict, frames: dict, *, equipment_type: str = "AHU") -> dict:
+    """Return the nested ``{equipment: {role: column}}`` map the analytics functions use.
+
+    A nested map is returned unchanged. A flat ``{column: role}`` map is applied to every frame (only the columns that frame
+    has) and each equipment gets ``equipment_type`` (the frame's own ``attrs["equipment_type"]`` wins), so a flat map can never
+    silently match nothing.
+    """
+    if not is_flat_role_map(role_map):
+        return role_map
+    out: dict[str, dict[str, str]] = {}
+    for eq, frame in frames.items():
+        cols = set(getattr(frame, "columns", []))
+        eq_map = {role: col for col, role in role_map.items() if col in cols and isinstance(role, str)}
+        eq_map["equipment_type"] = str((getattr(frame, "attrs", None) or {}).get("equipment_type") or equipment_type)
+        out[eq] = eq_map
+    return out
+
+
 def resolve_role(df: pd.DataFrame, equipment_id: str, role_map: dict, role: str) -> pd.Series | None:
     mapped = apply_role_map(df, equipment_id, role_map)
     if role in mapped.columns:
@@ -317,6 +340,8 @@ __all__ = [
     "DEFAULT_BUILDING_ID",
     "DEFAULT_SITE_ID",
     "apply_role_map",
+    "coerce_role_map",
+    "is_flat_role_map",
     "enrich_role_map_from_equipment",
     "load_role_map",
     "load_role_map_nested",

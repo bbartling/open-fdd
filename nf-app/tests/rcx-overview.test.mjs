@@ -208,6 +208,7 @@ test("weekly-fan view: runtime bars per equip, fault lane last when the SCHED-24
   const { ctx, model, byName } = setup(withResult);
   ctx.series.set(byName("FAN-S").uuid, hourly(48, (i) => (i < 24 ? 1 : 0)));
   ctx.series.set(byName("OAT").uuid, hourly(48, () => 40));
+  ctx.series.set(byName("WX").uuid, hourly(48, () => 40));      // weather outdoor air is preferred over the equip oa_t
   ctx.series.set(byName("SCHED").uuid, hourly(48, (i) => (i > 30 ? 1 : 0)));
   const { note, out } = await renderView(ctx, model, "weekly-fan", 48);
   const o = out.option;

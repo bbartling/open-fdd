@@ -56,8 +56,7 @@ def test_weekly_run_hours_and_mean_oat_match(data, js):
     from open_fdd.analytics.core import motor_run_hours_weekly
 
     _, _, frames, nested = data
-    # the weekly chart averages the equip's own oa_t (the cooling bins prefer web outdoor air): same policy on both sides
-    w = motor_run_hours_weekly(frames, nested, prefer_web_oat=False)
+    w = motor_run_hours_weekly(frames, nested)           # one OAT policy: web outdoor air first, else the equip's own oa_t
     fan = w[(w["plant_group"] == "air") & (w["signal"] == "fan-status")]
     assert set(fan["equipment_id"]) == {"AHU-1", "AHU-2"}
     for _, row in fan.iterrows():
@@ -88,7 +87,7 @@ def test_mech_cooling_bins_match(data, js):
     from open_fdd.analytics.core import mech_cooling_oat_bins
 
     _, _, frames, nested = data
-    b = mech_cooling_oat_bins(frames, nested, prefer_web_oat=True)          # must run: the broken _role_series_unit import is gone
+    b = mech_cooling_oat_bins(frames, nested)          # must run: the broken _role_series_unit import is gone
     assert not b.empty
     ind = b[b["series_kind"] == "individual_device"]
     for eq in ("AHU-1", "AHU-2"):
@@ -98,3 +97,15 @@ def test_mech_cooling_bins_match(data, js):
         for label, hours in zip(jm["labels"], jm["hours"]):
             assert abs(py.get(label, 0.0) - hours) < 0.006, (eq, label)
         assert sum(py.values()) > 0
+
+
+def test_flat_role_map_works_like_the_nested_one(data):
+    """A flat {column: role} map (the dataset's) is coerced, never silently matched against nothing."""
+    from open_fdd.analytics.core import mech_cooling_oat_bins, motor_run_hours_weekly
+
+    ds, _, frames, nested = data
+    flat = dict(ds.role_map)
+    a = motor_run_hours_weekly(frames, flat)
+    b = motor_run_hours_weekly(frames, nested)
+    assert not a.empty and a.reset_index(drop=True).equals(b.reset_index(drop=True))
+    assert not mech_cooling_oat_bins(frames, flat).empty

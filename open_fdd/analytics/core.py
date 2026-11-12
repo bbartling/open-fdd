@@ -817,7 +817,9 @@ def motor_run_hours_weekly(
     on FCU / VAV / other stubs). Overview export leaves this off.
     """
     from open_fdd.analytics.poll import infer_poll_seconds
+    from open_fdd.analytics.role_map import coerce_role_map
 
+    role_map = coerce_role_map(role_map, frames)       # a flat {column: role} map works too
     rows: list[dict[str, Any]] = []
     series_list = discover_plant_motor_series(
         frames, role_map, chw_leave_max_f=chw_leave_max_f
@@ -1705,6 +1707,9 @@ def mech_cooling_oat_bins(
     Never bins CHW cooling-valve open time.
     """
     del include_ahu_chw_valve, clg_valve_thr_pct
+    from open_fdd.analytics.role_map import coerce_role_map
+
+    role_map = coerce_role_map(role_map, frames)       # a flat {column: role} map works too
     devices = _mechanical_cooling_devices(
         frames,
         role_map,

@@ -343,7 +343,7 @@
   async function weeklyData(ctx, eqs, role) {
     const wx = weatherOat(ctx);
     const cols = {};
-    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = ctx.first(eq, "oa_t") || wx; });
+    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });   // one OAT policy: weather first, else the equip oa_t
     const [g, sites] = await Promise.all([ctx.alignedFine(cols, { hours: ctx.hours }), siteSchedules(ctx, eqs)]);
     const perEq = eqs.map((eq, i) => {
       const site = sites.get(siteOf(eq));

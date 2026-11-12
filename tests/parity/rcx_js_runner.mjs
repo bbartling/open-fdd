@@ -17,11 +17,12 @@ const M = vm.runInContext("rcxOverviewMath", ctx);
 const input = JSON.parse(readFileSync(0, "utf8"));
 const out = {};
 for (const [id, e] of Object.entries(input.equips)) {
-  const weekly = M.weeklyRuntime(e.t, e.fan, { duty: false, gapMaxSec: 3600, oat: e.oat });
+  // one OAT policy (app and pandas): web outdoor air first, else the equip's own oa_t
+  const oat = e.web.some((v) => v != null) ? e.web : e.oat;
+  const weekly = M.weeklyRuntime(e.t, e.fan, { duty: false, gapMaxSec: 3600, oat });
   out[id] = {
     weekly: Object.fromEntries([...weekly].map(([k, w]) => [String(k), { hours: w.hours, oat: w.oat, partial: w.partial }])),
-    // the app's policy: weekly runtime averages the equip's own oa_t; the cooling bins prefer weather (web) outdoor air, else oa_t
-    mech: M.mechBins(e.t, e.comp, e.web.some((v) => v != null) ? e.web : e.oat, { duty: false, gapMaxSec: 3600 }),
+    mech: M.mechBins(e.t, e.comp, oat, { duty: false, gapMaxSec: 3600 }),
   };
 }
 process.stdout.write(JSON.stringify(out));
