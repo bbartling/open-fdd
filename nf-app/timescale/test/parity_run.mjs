@@ -209,7 +209,7 @@ try {
         const walk = (n) => { nodes.push(n); (n.Plans || []).forEach(walk); };
         walk(plan0[0].Plan);
         const scans = nodes.filter((n) => /^_hyper_/.test(n["Relation Name"] || ""));
-        indexOk = scans.length > 0 && scans.every((n) => /Index/.test(n["Node Type"]));
+        indexOk = scans.length > 0 && nodes.some((n) => /Index/.test(n["Node Type"])) && scans.every((n) => !/^Seq Scan/.test(n["Node Type"]));
       } finally { await db.query("ROLLBACK"); }
     }
   }

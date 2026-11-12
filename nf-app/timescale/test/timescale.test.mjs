@@ -195,7 +195,8 @@ test("fdd.input_sample applies the point's scale and uses NF's (point_id, time) 
     walk(plan[0].Plan);
     const dataScans = nodes.filter((n) => /^_hyper_/.test(n["Relation Name"] || ""));
     assert.ok(dataScans.length > 0, "the data chunks are scanned");
-    assert.ok(dataScans.every((n) => /Index/.test(n["Node Type"])), `no sequential scan of NF's data: ${dataScans.map((n) => n["Node Type"])}`);
+    assert.ok(nodes.some((n) => /Index/.test(n["Node Type"])), "an index (or bitmap index) scan is used");
+    assert.ok(dataScans.every((n) => !/^Seq Scan/.test(n["Node Type"])), `no sequential scan of NF's data: ${dataScans.map((n) => n["Node Type"])}`);
   } finally { await db.query("ROLLBACK"); }
   await db.query("DELETE FROM fdd.point WHERE site_id = 'ix'");
 });
@@ -254,6 +255,7 @@ test("upgrade v3 -> v4 refuses on a row-count mismatch and leaves both tables un
   assert.ok((await db.query("SELECT to_regclass('openfdd.retention_log') AS b")).rows[0].b, "retention_log kept");
   await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'fixture'");
   assert.equal((await ts.install(db)).schemaVersion, 4, "after the conflict is cleared the upgrade completes");
+  assert.equal((await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'fixture'")).rowCount, 2, "the completed upgrade copied exactly the two legacy rows");
 });
 
 test("syncPoints mirrors the bound points and drops the equipment's unbound ones; writeResults is an idempotent upsert", { skip }, async () => {
