@@ -425,7 +425,7 @@ const vars = { byLabel: (l) => ({ uuid: "u-" + l, write: async () => {} }) };
 test("weather: coordinates from the app options (strings) beat NF Sites and the model, and the source says so",
   withOpenMeteo(async (urls) => {
     const http = wxHttp({ sites: [{ id: "x", latitude: 10, longitude: 20 }], model: [{ pointType: "SITE", name: "m", attrs: { id: "m", latitude: 30, longitude: 40 } }] });
-    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: { latitude: "43.0731", longitude: "-89.4012", engine: "timescale" } });
+    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: { bacnetMirror: false, latitude: "43.0731", longitude: "-89.4012", engine: "timescale" } });
     assert.match(urls[0], /latitude=43\.0731&longitude=-89\.4012/);
     assert.match(out.coords_source, /app setting/);
     assert.deepEqual(http.calls, [], "no Sites call when the settings have coordinates");
@@ -433,9 +433,9 @@ test("weather: coordinates from the app options (strings) beat NF Sites and the 
 
 test("weather: blank app options fall through to NF Sites, then to the modeled site",
   withOpenMeteo(async (urls) => {
-    const a = await weather({ globalVariables: vars, sdk: { http: wxHttp({ sites: [{ id: "s", latitude: 10, longitude: 20 }] }), logEvent() {} }, config: { latitude: "", longitude: "" } });
+    const a = await weather({ globalVariables: vars, sdk: { http: wxHttp({ sites: [{ id: "s", latitude: 10, longitude: 20 }] }), logEvent() {} }, config: { bacnetMirror: false, latitude: "", longitude: "" } });
     assert.equal(a.coords_source, "nf sites api");
-    const b = await weather({ globalVariables: vars, sdk: { http: wxHttp({ sites: [{ id: "s", latitude: 0, longitude: 0 }], model: [{ pointType: "SITE", name: "m", attrs: { id: "m", latitude: 30, longitude: 40 } }] }), logEvent() {} }, config: {} });
+    const b = await weather({ globalVariables: vars, sdk: { http: wxHttp({ sites: [{ id: "s", latitude: 0, longitude: 0 }], model: [{ pointType: "SITE", name: "m", attrs: { id: "m", latitude: 30, longitude: 40 } }] }), logEvent() {} }, config: { bacnetMirror: false } });
     assert.match(b.coords_source, /haystack model/);
     assert.equal(urls.length, 2);
   }));
@@ -481,7 +481,7 @@ test("weather: SITE beyond 500 with stubbed Open-Meteo (paging + app-option fall
         throw new Error("unexpected " + p);
       },
     };
-    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: {} });
+    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: { bacnetMirror: false } });
     assert.equal(out.site, "late-site");
     assert.match(out.coords_source, /haystack model/);
     assert.match(urls[0], /latitude=41\.8&longitude=-87\.6/);
@@ -503,7 +503,7 @@ test("weather: failing page 2 of model during run fails loudly (not missing coor
       },
     };
     await assert.rejects(
-      weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: {} }),
+      weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: { bacnetMirror: false } }),
       /HTTP 503 model page 2/,
     );
   }));
@@ -525,7 +525,7 @@ test("weather: slow model page under MODEL_LOOKUP budget still succeeds with stu
         throw new Error("unexpected " + p);
       },
     };
-    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: {} });
+    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: { bacnetMirror: false } });
     assert.equal(out.site, "slow");
     assert.match(urls[0], /latitude=33\.7&longitude=-84\.4/);
   }));

@@ -89,10 +89,10 @@ Lite, SQLite, and PGlite skip this preflight and never bootstrap the probe.
 
 ## Weather hook BACnet mirror
 
-Full and Lite run the same weather hook. Lite mirrors the three weather values to analog values on NF's own BACnet server
-by default; Full does not. The default is part of the edition (built in), because NF drops hook-level config and only app
-**options** reach the hook. To change it set the app option `bacnetMirror` to `true` or `false` (alias `bacnet_mirror`);
-`avInstances` works the same way.
+Full and Lite run the same weather hook, and both mirror the three weather values to analog values on NF's own BACnet
+server by default (the manifests ask for the `normalgw.bacnet.v1/v2.readwrite` API-key scopes for it). The default is
+built in, because NF drops hook-level config and only app **options** reach the hook. To turn it off set the app option
+`bacnetMirror` to `false` (alias `bacnet_mirror`); `avInstances` works the same way.
 
 ## Site timezone
 

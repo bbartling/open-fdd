@@ -25,9 +25,8 @@
  * `site` to the site id. Otherwise the run fails naming where to set them.
  * The answer's coords_source says which one was used.
  *
- * BACnet mirror (default ON in the Lite edition, OFF in Full; the edition is written into each copy by
- * scripts/nf/sync_shared.py). NF drops hook-level config, so the default cannot live in app.json; the app OPTION
- * `bacnetMirror` (true/false; alias `bacnet_mirror`) overrides it either way. When on, the hook also creates (once) and
+ * BACnet mirror (default ON in both editions: NF drops hook-level config, so the default cannot live in app.json). The
+ * app OPTION `bacnetMirror` (true/false; alias `bacnet_mirror`) overrides it either way: `false` turns it off. When on, the hook also creates (once) and
  * updates three analog-value objects on NF's own BACnet server so any BACnet client can read the same numbers. The AV instance numbers come from the config value `avInstances`
  * (default [1, 2, 3], in the order oa_dry_bulb_web, oa_rh_web, oa_dewpoint_web).
  *
@@ -43,7 +42,7 @@
  * nf-app/hooks/weather.js and lite/hooks/open_meteo_weather.js). Uses Node's built-in https module plus the
  * dependency-free ./lib/paging.js and ./lib/settings.js (also shared): no npm install needed.
  */
-// Written per edition by scripts/nf/sync_shared.py: 'lite' mirrors to NF's BACnet server by default, 'full' does not.
+// Written per edition by scripts/nf/sync_shared.py ('full' / 'lite'); informational: both editions mirror to NF's BACnet server by default.
 const OFDD_EDITION = /** @type {string} */ ('lite');
 const https = require('https');
 const { pageAll, listAll } = require('./lib/paging.js');
@@ -339,7 +338,7 @@ async function runOnce({ globalVariables, sdk, config }) {
   config = settings.normalizeConfig(config);
   const wanted = config.site;
   const explicit = config.bacnetMirror !== undefined ? config.bacnetMirror : config.bacnet_mirror;
-  const mirror = explicit === undefined ? OFDD_EDITION === 'lite' : explicit === true || explicit === 'true';
+  const mirror = explicit === undefined ? true : explicit === true || explicit === 'true';
   const instances = mirror ? avInstances(config) : null; // validate before any network call
   // 1) the hook settings / app options latitude + longitude (an explicit override), 2) NF Sites, 3) the modeled SITE
   let site = coordsFromConfig(config);

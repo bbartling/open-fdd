@@ -78,7 +78,7 @@ test("weather (full): hook falls back to the model site when /api/v1/sites has n
   };
   try {
     const vars = { byLabel: (l) => ({ uuid: "u-" + l, write: async () => {} }) };
-    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: {} });
+    const out = await weather({ globalVariables: vars, sdk: { http, logEvent() {} }, config: { bacnetMirror: false } });
     assert.match(url, /latitude=43\.07&longitude=-89\.4/);
     assert.equal(out.site, "s1");
     assert.match(out.coords_source, /model/);
