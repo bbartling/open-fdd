@@ -270,8 +270,6 @@ test("FC1 on declared-% fan commands: Timescale == PGlite for 1 %, 2 % and 99 %"
     const n = await ts.loadHistory(db, { pack, equipId: equip, siteId: "s", ...scaled(r2u, units).args, from, to, stepSec: STEP });
     assert.equal(n.rows, 288);
     const tsFc1 = (await ts.runRules(db, pack, ["FC1"])).results.FC1;
-    const authorized = (await db.query("SELECT * FROM pg_temp.authorized_series")).rows;
-    const equipment = (await db.query("SELECT * FROM pg_temp.equipment")).rows;
     const fan = (await db.query("SELECT max(fan_cmd) AS m FROM pg_temp.history")).rows[0].m;
     assert.ok(Math.abs(fan - pct / 100) < 1e-12, `${pct} % reaches SQL as ${pct / 100} (got ${fan})`);
 
@@ -292,7 +290,7 @@ test("FC1 on declared-% fan commands: Timescale == PGlite for 1 %, 2 % and 99 %"
     const eng = await createEngine({ kind: "pglite", pack });
     let liteFc1;
     try {
-      await eng.load({ historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })), history: hist, weather: [], authorizedSeries: authorized, equipment });
+      await eng.load({ historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })), history: hist, weather: [] });
       liteFc1 = await eng.query("FC1");
     } finally { await eng.close(); }
     assert.deepEqual(diffRows(tsFc1, liteFc1), [], `FC1 differs between engines at ${pct} %`);
@@ -333,13 +331,11 @@ test("valve (VAV-3) and unitless command: Timescale == PGlite, unitless role is 
     const n = await ts.loadHistory(db, { pack, equipId: equip, siteId: "s", ...args, from, to, stepSec: STEP });
     assert.equal(n.rows, 288);
     const tsRes = (await ts.runRules(db, pack, ["VAV-3"])).results["VAV-3"];
-    const authorized = (await db.query("SELECT * FROM pg_temp.authorized_series")).rows;
-    const equipment = (await db.query("SELECT * FROM pg_temp.equipment")).rows;
     const hist = (await db.query("SELECT * FROM pg_temp.history ORDER BY timestamp_utc")).rows.map(({ timestamp_utc, ...x }) => ({ ...x, ts: timestamp_utc.getTime() }));
     const eng = await createEngine({ kind: "pglite", pack });
     let liteRes;
     try {
-      await eng.load({ historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })), history: hist, weather: [], authorizedSeries: authorized, equipment });
+      await eng.load({ historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })), history: hist, weather: [] });
       liteRes = await eng.query("VAV-3");
     } finally { await eng.close(); }
     assert.deepEqual(diffRows(tsRes, liteRes), [], `VAV-3 differs between engines at ${label}`);
@@ -371,8 +367,7 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
   assert.equal(new Set(sensorHistory.filter((row) => row.sensor_role === "sat").map((row) => row.series_id)).size, 2);
   const input = {
     historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })),
-    history: hist, weather, sensorHistory, authorizedSeries: await q("SELECT * FROM pg_temp.authorized_series"),
-    equipment: await q("SELECT * FROM pg_temp.equipment"),
+    history: hist, weather, sensorHistory,
   };
   const eng = await createEngine({ kind: "pglite", pack });
   let matched = 0, bothError = 0, withFault = 0, timelines = 0;

@@ -16,8 +16,7 @@
  *   historyColumns: [{ name, type: "double" | "text" }],      // columns present in `history` rows
  *   history:   [{ equipment_id, ts /* epoch ms *\/, <col>: number | string | null }],
  *   weather:   [{ ts, oa_t, web_oa_t, web_oa_dp }],
- *   authorizedSeries: [{ site_id, equipment_id, role, unit }],
- *   equipment: [{ building_id, equipment_id }],
+ *   sensorHistory?: [{ equipment_id, series_id, sensor_role, unit, ts, value }],   // long-form sweep input (SI values)
  *   utilityInterval?: [{ ts, kwh }], utilityMonthly?: [{ billing_period, kwh }]   // optional
  * }
  * Contract columns (pack.contract) that are not listed exist as typed NULL columns.
@@ -113,7 +112,7 @@ const HELPERS = {
 
 const TABLE_INPUT_KEY = {
   history: "history", weather: "weather", utility_interval: "utilityInterval",
-  utility_monthly: "utilityMonthly", authorized_series: "authorizedSeries", equipment: "equipment",
+  utility_monthly: "utilityMonthly",
   sensor_history: "sensorHistory",
 };
 // Which input key feeds a contract column (timestamp_utc is fed from `ts`, epoch ms).

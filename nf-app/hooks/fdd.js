@@ -306,8 +306,6 @@ function buildInput({ equipId, siteId, roles, hist, grid, pack, si, occ }) {
     historyColumns: contract.map((c) => ({ name: c.name, type: c.type })),
     history,
     weather,
-    authorizedSeries: Object.entries(roles).map(([role, p]) => ({ site_id: siteId, equipment_id: equipId, role, unit: si.unit[role] != null ? si.unit[role] : (p.units || '') })),
-    equipment: [{ building_id: siteId, equipment_id: equipId }],
   };
 }
 

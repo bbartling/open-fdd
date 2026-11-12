@@ -30,7 +30,7 @@ def render_ddl(contract: dict) -> str:
         "-- Scratch contract only; do not execute as an operational migration.",
         "-- Supply SI values directly: degC, Pa, L/s, kW, kWh, A, ppm, count.",
         "-- Fraction commands are 0-1; boolean samples are 0/1; relative humidity is 0-100 %RH.",
-        "-- Metadata tables provide the scoped series authorization/equipment joins used by SV rules.",
+        "-- Only relations a rendered rule reads are declared (contract version 2 dropped authorized_series / equipment).",
     ]
     for table, columns in contract["_normalized_tables"].items():
         ddl_columns = ", ".join(f'"{column["name"]}" {postgres_type(column["type"])}' for column in columns)

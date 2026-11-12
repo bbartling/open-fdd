@@ -103,7 +103,8 @@ test("fdd hook: binds, reads the 5-min grid, runs runnable pack rules, writes re
   // only the roles the runnable rules use are read (OAT is bound but no rule here needs it)
   assert.deepEqual(Object.keys(seen.input.history[0]).sort(), ["equipment_id", "fan_cmd", "fan_status", "ts"]);
   assert.equal(seen.input.history[0].ts % (STEP * 1e3), 0);
-  assert.deepEqual(seen.input.authorizedSeries.map((a) => a.role).sort(), ["fan_cmd", "fan_status"]);
+  assert.equal(seen.input.authorizedSeries, undefined, "authorized_series is not a contract relation any more (no rule reads it)");
+  assert.equal(seen.input.equipment, undefined);
   assert.ok(seen.closed);
   // two records (automation + model) per result, same deterministic uuid
   const cmd = http.writes.points.filter((r) => r.uuid === hook.resultUuid(hook.resultKey(MODEL[1], "site-a", "AHU-1"), "CMD-1"));
@@ -153,7 +154,7 @@ test("fdd hook: BACnet export plan keeps instances by name and skips used ones",
   assert.deepEqual([by["VAV-9"].instance, by["VAV-9"].count, by["VAV-9"].description], [1003, 0, "Open-FDD: no faults"]);
 });
 
-test("fdd hook: history is converted to SI by each point's unit (°F -> °C), declared SI in authorized_series", async () => {
+test("fdd hook: history is converted to SI by each point's unit (°F -> °C), values reach the engine in SI", async () => {
   const extra = [
     pt("u-ZNT", "ZN-T", ["zone", "air", "temp", "sensor"], { equipRef: "AHU-1", class: "zone-air-temp-sensor" }), // no unit
     pt("u-DSP", "DSP", ["duct", "static", "pressure", "sensor"], { equipRef: "AHU-1", class: "discharge-air-pressure-sensor", unit: "inH2O" }),
@@ -168,10 +169,6 @@ test("fdd hook: history is converted to SI by each point's unit (°F -> °C), de
   assert.ok(Math.abs(row.oa_t - (55 - 32) * 5 / 9) < 1e-9, `oa_t ${row.oa_t} is 55 °F = 12.778 °C`);
   assert.ok(Math.abs(row.duct_static - 1.5 * 249.0889) < 1e-6, "1.5 inH2O in Pa");
   assert.equal(row.zone_t, undefined, "temperature point without a unit is skipped, not guessed");
-  const unit = Object.fromEntries(seen.input.authorizedSeries.map((a) => [a.role, a.unit]));
-  assert.equal(unit.oa_t, "°C");
-  assert.equal(unit.duct_static, "Pa");
-  assert.equal(unit.zone_t, undefined);
   assert.equal(logs.filter((l) => /zone_t.*no unit/.test(l)).length, 1, "logged once: " + logs.join(" / "));
 });
 
@@ -518,8 +515,6 @@ test("fdd hook: a declared-% command reaches the engine as a fraction (1 % -> 0.
   await hook.runFdd({ sdk: { http, logEvent() {} }, config: { dryRun: true }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
   assert.equal(seen.input.history[0].fan_cmd, 0.01, "u-FANC is 1 and declares %");
   assert.ok(seen.input.history.every((r) => r.fan_status === 0 || r.fan_status === 1));
-  const unit = Object.fromEntries(seen.input.authorizedSeries.map((a) => [a.role, a.unit]));
-  assert.deepEqual([unit.fan_cmd, unit.fan_status], ["fraction", "bool"]);
 });
 
 test("fdd hook: a UNITLESS command point is skipped and logged; rules that need it are not assessed", async () => {

@@ -1,6 +1,6 @@
 {
   "_doc": "Canonical engine-independent scratch input contract for every rendered FDD rule. SI values are supplied directly; only the NF ingest layer converts. This is scratch DDL, not an operational migration.",
-  "version": 1,
+  "version": 2,
   "roles": {
     "ahu_sat": {
       "scale": "si:degC",
@@ -644,32 +644,6 @@
         "kwh": {
           "type": "double",
           "role": "kwh"
-        }
-      }
-    },
-    "authorized_series": {
-      "columns": {
-        "site_id": {
-          "type": "text"
-        },
-        "equipment_id": {
-          "type": "text"
-        },
-        "role": {
-          "type": "text"
-        },
-        "unit": {
-          "type": "text"
-        }
-      }
-    },
-    "equipment": {
-      "columns": {
-        "building_id": {
-          "type": "text"
-        },
-        "equipment_id": {
-          "type": "text"
         }
       }
     },

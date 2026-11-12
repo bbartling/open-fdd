@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
-const { buildDataset } = require("../hooks/lib/synthetic_dataset.js");
+const { buildDataset } = require("./fixtures/synthetic_dataset.js");
 
 const rulesDir = new URL("../rules/", import.meta.url);
 const readPack = (name) => JSON.parse(readFileSync(new URL(name, rulesDir), "utf8"));
@@ -74,7 +74,7 @@ test("dataset covers every contract column (typed NULL for the rest) on both eng
   assert.equal(input.history.length, 2 * 864 - 40);
   assert.ok(Object.keys(pgPack.contract.history).length > 60);
   assert.deepEqual(Object.keys(pgPack.contract).sort(),
-    ["authorized_series", "equipment", "history", "sensor_history", "utility_interval", "utility_monthly", "weather"]);
+    ["history", "sensor_history", "utility_interval", "utility_monthly", "weather"]);
 });
 
 test("every rule runs without error on both engines", () => {
@@ -371,7 +371,7 @@ test("FAULT-ELAPSED-HOURS: a non-default comfort band changes fault_samples, hou
       await e.load({
         historyColumns: p.contract.history.filter((c) => c.name !== "equipment_id" && c.name !== "timestamp_utc").map((c) => ({ name: c.name, type: c.type })),
         history: grid.map((ts, i) => ({ equipment_id: "Z", ts, zone_t: 16 + (14 * i) / 287 })),
-        weather: [], authorizedSeries: [{ site_id: "s", equipment_id: "Z", role: "zone_t", unit: "°C" }], equipment: [{ building_id: "s", equipment_id: "Z" }],
+        weather: [],
       });
       return (await e.query("FAULT-ELAPSED-HOURS"))[0];
     } finally { await e.close(); }

@@ -26,10 +26,15 @@ def test_every_role_has_a_typed_history_column_and_scale():
 def test_contract_declares_metadata_relations_and_every_rule_relation():
     contract = load_contract()
     assert set(contract) == {
-        "history", "weather", "utility_interval", "utility_monthly", "authorized_series", "equipment", "sensor_history",
+        "history", "weather", "utility_interval", "utility_monthly", "sensor_history",
     }
-    assert {"site_id", "equipment_id", "role", "unit"} <= {c["name"] for c in contract["authorized_series"]}
-    assert {"building_id", "equipment_id"} <= {c["name"] for c in contract["equipment"]}
+    # every declared relation is read by some rule, and no rule reads a relation the contract does not declare
+    # (authorized_series / equipment were dropped in contract version 2: 0 of 77 rules read them)
+    all_sql = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "sql/fdd/postgres/rules").glob("*.sql"))
+    for table in ("authorized_series", "equipment"):
+        assert not re.search(rf"\b(from|join)\s+{table}\b", all_sql, re.I), table
+    for table in contract:
+        assert re.search(rf"\b(from|join)\s+{table}\b", all_sql, re.I), f"no rule reads {table}"
 
     sv_sql = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "sql/fdd/postgres/rules").glob("sv_*.sql"))
     assert sv_sql.count("sensor_series AS (") == 5

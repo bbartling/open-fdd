@@ -19,7 +19,7 @@ _SQL_TYPES = {"double": "DOUBLE PRECISION", "text": "VARCHAR", "timestamp": "tim
 def load_source() -> dict:
     """Return the canonical contract after checking role and relation consistency."""
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
-    if contract.get("version") != 1:
+    if contract.get("version") != 2:
         raise ValueError(f"unsupported input contract version: {contract.get('version')!r}")
     roles = contract.get("roles")
     tables = contract.get("tables")
@@ -67,7 +67,7 @@ def load_source() -> dict:
     for role, spec in roles.items():
         if history[role].get("role") != role:
             raise ValueError(f"history.{role} must point to its declared role")
-    required_tables = {"history", "weather", "utility_interval", "utility_monthly", "authorized_series", "equipment", "sensor_history"}
+    required_tables = {"history", "weather", "utility_interval", "utility_monthly", "sensor_history"}
     if missing_tables := sorted(required_tables - set(normalized)):
         raise ValueError(f"input contract is missing required tables: {missing_tables}")
     return {**contract, "_normalized_tables": normalized}
