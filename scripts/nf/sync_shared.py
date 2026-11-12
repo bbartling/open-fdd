@@ -9,11 +9,17 @@ a copy is missing, hand-edited or stale. Edit shared/..., run this script, commi
     shared/paging.js                        -> {nf-app,lite}/hooks/lib/paging.js, {nf-app,lite}/static/paging.js
     shared/hooks/settings.js                -> {nf-app,lite}/hooks/lib/settings.js
     shared/hooks/open_meteo_weather.js      -> nf-app/hooks/weather.js, lite/hooks/open_meteo_weather.js   (edition constant substituted: 'full' / 'lite')
-    shared/static/<file>                    -> {nf-app,lite}/static/<file>      (nf.js, model.js, theme-init.js, tree.css, version.js)
+    shared/static/<file>                    -> {nf-app,lite}/static/<file>
+        the dashboard shell: app-core.js (top bar, equip pickers, tab router, Overview, Charts, Points, BACnet Server,
+        Model & RDF, live loop), charts.js (chart catalog, range / history helpers), theme.js (light / dark + ECharts
+        themes), chart-page.js (chart.html), tree.js (tree.html), base.css (CSS base); and nf.js, model.js,
+        theme-init.js, tree.css, version.js
     shared/types/shapes.d.ts                -> {nf-app,lite}/types/shapes.d.ts
 
-Edition-specific files (app.js, charts.js, index.html, ...) stay in their own tree: they are genuinely different code
-(Full has the FDD / RCx / SPARQL / export tabs and the theme.js chart layer, Lite the lite-theme.js one).
+Edition-specific files stay in their own tree: app.js (Lite: starts the shell; Full: registers the FDD / RCx / Export
+tabs, units toggle and Run FDD through the ofddTabs / ofddWire registries of app-core.js), index.html / chart.html /
+tree.html (script lists differ: Full loads the ES-module ECharts, Lite the UMD build), style.css (edition rules on top
+of base.css), and everything only Full has (fdd*.js, rcx*.js, energy.js, export.js, sparql.js, units.js, ...).
 
     python scripts/nf/sync_shared.py            # write the copies
     python scripts/nf/sync_shared.py --check    # exit 1 when a copy is missing or differs from its source
@@ -34,7 +40,8 @@ SHARED: dict[str, list[str]] = {
     "shared/hooks/open_meteo_weather.js": ["nf-app/hooks/weather.js", "lite/hooks/open_meteo_weather.js"],
     "shared/types/shapes.d.ts": [f"{app}/types/shapes.d.ts" for app in BOTH],
 }
-for _name in ("nf.js", "model.js", "theme-init.js", "tree.css", "version.js"):
+for _name in ("nf.js", "model.js", "theme-init.js", "tree.css", "version.js",
+              "app-core.js", "charts.js", "theme.js", "chart-page.js", "tree.js", "base.css"):
     SHARED[f"shared/static/{_name}"] = [f"{app}/static/{_name}" for app in BOTH]
 
 

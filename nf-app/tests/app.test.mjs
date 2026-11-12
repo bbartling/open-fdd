@@ -224,7 +224,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     fetchRange: readRange,
     ofddChart: () => ({ setOption: (o) => { chartOption = o; } }),
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   const h = 3600e3;
   const point = (uuid, name, equipRef, tags, attrs = {}, value = 0, history = []) => ({ uuid, name, dis: name, equipRef, siteRef: attrs.siteRef || "site-fixture", tags, value,
     latest: { ts: "2026-01-01T00:00:00Z" }, history, rec: { attrs: { ...attrs } } });
@@ -384,7 +384,7 @@ test("161 fault lanes render an option using the real chunked All history path",
     },
     ofddChart: () => ({ setOption: (built) => { option = built; } }),
   });
-  for (const file of ["paging.js", "nf.js", "model.js", "charts.js", "app.js"]) {
+  for (const file of ["paging.js", "nf.js", "model.js", "charts.js", "app-core.js", "app.js"]) {
     vm.runInContext(readFileSync(new URL(`../static/${file}`, import.meta.url), "utf8"), ctx, { filename: file });
   }
   ctx.renderRangeControl = () => {};
@@ -426,7 +426,7 @@ test("point history honors the same mixed-output boundary as FDD plots", async (
     },
     ofddChart: () => ({}), ofddRender: (_chart, option) => { plotted = option.series[0].data; },
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   const current = { uuid: "legacy", dis: "legacy output", name: "legacy output", kind: "Number", tags: [], rec: { attrs: {
     unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
   } } };
@@ -453,7 +453,7 @@ test("RCx ignores superseded range resolutions and failures", async () => {
     rcxPlan: () => ({ ready: [], missing: [] }),
     resolveChartSelection: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   ctx.testModel = { sites: [{ name: "Site", attrs: { id: "site-a" } }], equips: [], points: [] };
   vm.runInContext('model = testModel; scope.site = "site-a"', ctx);
 
@@ -484,7 +484,7 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
     renderRangeControl: () => {}, loadCatalog: async () => ({}), equipRules: () => [{ rule: { id: "SV-RANGE", description: "sensor bounds" }, bound: {} }],
     resolveChartSelection: () => new Promise((_resolve, reject) => { rejectRange = reject; }),
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   ctx.testModel = { equips: [{ name: "AHU-1", attrs: { id: "AHU-1", siteRef: "site-a" } }],
     points: [{ name: "SAT", equipRef: "AHU-1", siteRef: "site-a", tags: ["his"] }] };
   vm.runInContext('model = testModel; scope.site = "site-a"', ctx);

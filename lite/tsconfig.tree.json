@@ -1,5 +1,5 @@
 {
   // static/tree.html
   "extends": "./tsconfig.base.json",
-  "files": ["types/globals.d.ts", "types/shapes.d.ts", "static/theme-init.js", "static/lite-theme.js", "static/paging.js", "static/nf.js", "static/tree.js"]
+  "files": ["types/globals.d.ts", "types/shapes.d.ts", "static/theme-init.js", "static/paging.js", "static/nf.js", "static/theme.js", "static/tree.js"]
 }

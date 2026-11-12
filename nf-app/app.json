@@ -10,6 +10,8 @@
         "scopes": [
           "normalgw.hpl.v1.readwrite",
           "normalgw.hpl.v2.readwrite",
+          "normalgw.bacnet.v1.readwrite",
+          "normalgw.bacnet.v2.readwrite",
           "normalgw.ontology.v1.readonly",
           "normalgw.automation.v1.readonly"
         ]
@@ -34,7 +36,9 @@
     "/package.json": "package.json",
     "/rules/pack-postgres.json": "rules/pack-postgres.json",
     "/rules/pack-sqlite.json": "rules/pack-sqlite.json",
+    "/static/app-core.js": "static/app-core.js",
     "/static/app.js": "static/app.js",
+    "/static/base.css": "static/base.css",
     "/static/chart-page.js": "static/chart-page.js",
     "/static/chart.html": "static/chart.html",
     "/static/charts.js": "static/charts.js",

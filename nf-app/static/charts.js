@@ -1,11 +1,13 @@
-// Chart catalog for the Open-FDD app. Each chart says which points it needs (by tags), which
+// GENERATED COPY of shared/static/charts.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
+// Chart catalog for the Open-FDD pages (both editions; source: shared/static/charts.js). Each chart says which points it needs (by tags), which
 // ranges it offers and how NF should resample them, so only one small request goes
 // out per chart and nothing is fetched for charts that aren't on screen.
 //
 // NF resamples server side: /api/v1/point/data?...&window=<s>s&method=AVERAGE|MIN|MAX
 // returns one value per window (7 days of one sensor: 916 KB raw vs 14 KB hourly).
-// Used by the Charts tab (app.js) and the standalone chart.html. Needs nf.js, model.js and
-// theme.js: options here are theme-free (colors come from the registered ECharts themes).
+// Used by the Charts tab (app-core.js) and the standalone chart.html. Needs nf.js, model.js and
+// theme.js: options here are theme-free (colors come from the registered ECharts themes). units.js is optional
+// (Full only): without it the display helpers show values and units as NF stores them.
 
 const unitLabel = (u) => u || "";
 
@@ -30,20 +32,54 @@ const legend = { top: 0 };
 // Sensors first, temps first, then setpoints; ties by label.
 const rank = (p) => (has(p, "sensor") ? 0 : 2) + (isTemp(p) ? 0 : 1);
 
-/** Point sets for a site (and optionally one equip): cards/charts, status, weather. */
+/** Equip scope value that selects the weather points instead of an equipment (A8: weather is its own category). */
+const WEATHER_SCOPE = "__weather__";
+const WEATHER_LABEL = "Weather";
+/** A weather-service point (marker `weather` or a `weatherStationRef`): never one of an equip's own sensors. */
+const isWeatherPoint = (p) => has(p, "weather") || !!p.weatherStationRef;
+
+/**
+ * Point sets for a site (and optionally one equip, or WEATHER_SCOPE): cards/charts (numeric sensors + setpoints),
+ * numeric (every numeric trended point, commands included), status (Bool), weather, and equipNames (id -> label).
+ */
 function pointSets(model, site, equip) {
-  const equipIds = model.equips.filter((e) => (e.attrs || {}).siteRef === site).map(idOf);
-  const inScope = (p) => p.equipRef && (equip ? p.equipRef === equip : equipIds.includes(p.equipRef));
+  const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === site);
+  const equipIds = equips.map(idOf);
   const tagged = model.points.filter((p) => p.siteRef === site && has(p, "point"));
-  const equipPts = tagged.filter(inScope);
+  const weather = tagged.filter(isWeatherPoint).sort((a, b) => a.name.localeCompare(b.name));
+  const inScope = (p) => !isWeatherPoint(p) && p.equipRef && (equip ? p.equipRef === equip : equipIds.includes(p.equipRef));
+  const equipPts = equip === WEATHER_SCOPE ? weather : tagged.filter(inScope);
+  const trended = (p) => p.kind === "Number" && has(p, "his") && !has(p, "spare");
   return {
-    cards: equipPts
-      .filter((p) => p.kind === "Number" && has(p, "his") && !has(p, "spare") && (has(p, "sensor") || has(p, "sp")))
+    // weather points are cards whether or not the station tagged them `sensor`
+    cards: equipPts.filter((p) => trended(p) && (equip === WEATHER_SCOPE || has(p, "sensor") || has(p, "sp")))
       .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
+    numeric: equipPts.filter(trended).sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)),
     status: equipPts.filter((p) => p.kind === "Bool" && !has(p, "spare"))
-      .sort((a, b) => a.equipRef.localeCompare(b.equipRef) || a.name.localeCompare(b.name)),
-    weather: tagged.filter((p) => has(p, "weather")).sort((a, b) => a.name.localeCompare(b.name)),
+      .sort((a, b) => (a.equipRef || "").localeCompare(b.equipRef || "") || a.name.localeCompare(b.name)),
+    weather,
+    equipNames: Object.fromEntries(equips.map((e) => [idOf(e), (e.attrs || {}).dis || e.name])),
   };
+}
+
+/** Where a point sits, for labels: its equip's name, "Weather" for weather points. */
+function pointOwner(p, c) {
+  if (isWeatherPoint(p)) return WEATHER_LABEL;
+  return (c && c.equipNames && c.equipNames[p.equipRef]) || p.equipRef || "";
+}
+/** Series / option label from the model (dis, else the marker name), prefixed with the equip when `points` span several. */
+function pointLabel(p, c, points) {
+  const base = p.dis || p.name || "";
+  if (!base) return "";
+  const owners = new Set((points || []).map((x) => pointOwner(x, c)));
+  const owner = pointOwner(p, c);
+  return owners.size > 1 && owner && !base.startsWith(owner) ? `${owner} · ${base}` : base;
+}
+/** Dropdown options of a catalog chart picker: label = dis + unit, from the model (A5). */
+function pickOptions(def, c) {
+  const pts = def.pick ? def.pick(c) : [];
+  return pts.map((p) => ({ value: p.uuid, label: `${pointLabel(p, c, pts)}${dispUnit(p) ? ` (${dispUnit(p)})` : ""}` }))
+    .filter((o) => o.label);
 }
 
 // Outside air temp + humidity sensors on one equip, found by markers.
@@ -80,6 +116,12 @@ const HISTORY_UUID_BATCH = 40;
 // A chart range is stored as absolute instants in the page URL. Date-time inputs are
 // formatted and parsed in the site's IANA timezone, not the browser's local timezone.
 const RANGE_PRESETS = Object.freeze({ "1h": 1, "24h": 24, "1w": 168 });
+// The ONE default range for every history view (Overview, Charts, Points, FDD, RCx, chart.html, export): the last 7 days.
+// "All" and the other presets stay selectable; anything without a range in the page URL starts here.
+const DEFAULT_RANGE_PRESET = "1w";
+const DEFAULT_RANGE_HOURS = RANGE_PRESETS[DEFAULT_RANGE_PRESET];
+/** A fresh state for the default range. @returns {{preset: string, fromMs?: number, toMs?: number}} */
+const defaultChartRange = () => ({ preset: DEFAULT_RANGE_PRESET });
 const validChartTimeZone = (tz) => {
   try { new Intl.DateTimeFormat("en-US", { timeZone: tz || "UTC" }); return tz || "UTC"; }
   catch { return "UTC"; }
@@ -147,17 +189,18 @@ function resolveSiteTimeZone(siteRec, opts = {}) {
   return { zone, source, fallback, label };
 }
 const scheduleApi = () => /** @type {any} */ (globalThis).ofddSchedule;
+/** @returns {{preset: string, fromMs?: number, toMs?: number}} */
 function getChartRangeState(key) {
   const q = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
-  const preset = q.get(`range.${key}`) || "all";
+  const preset = q.get(`range.${key}`) || DEFAULT_RANGE_PRESET;
   if (preset === "custom") {
     const fromRaw = q.get(`from.${key}`), toRaw = q.get(`to.${key}`), fromMs = Number(fromRaw), toMs = Number(toRaw);
     if (fromRaw && toRaw && Number.isSafeInteger(fromMs) && Number.isSafeInteger(toMs)
       && Number.isFinite(new Date(fromMs).getTime()) && Number.isFinite(new Date(toMs).getTime()) && fromMs < toMs)
       return { preset, fromMs, toMs };
-    return { preset: "all" };
+    return defaultChartRange();
   }
-  return { preset: Object.hasOwn(RANGE_PRESETS, preset) || preset === "all" ? preset : "all" };
+  return { preset: Object.hasOwn(RANGE_PRESETS, preset) || preset === "all" ? preset : DEFAULT_RANGE_PRESET };
 }
 function setChartRangeState(key, state, { push = true } = {}) {
   const url = new URL(location.href), q = url.searchParams;
@@ -173,7 +216,7 @@ function resolveChartRange(state, { nowMs = Date.now(), oldestMs = null } = {}) 
   if (state?.preset === "custom" && Number.isFinite(state.fromMs) && Number.isFinite(state.toMs) && state.fromMs < state.toMs)
     return { fromMs: state.fromMs, toMs: state.toMs };
   if (state?.preset === "all") return { fromMs: Number.isFinite(oldestMs) ? oldestMs : nowMs, toMs: nowMs };
-  const hours = RANGE_PRESETS[state?.preset] || 24;
+  const hours = RANGE_PRESETS[state?.preset] || DEFAULT_RANGE_HOURS;
   return { fromMs: nowMs - hours * 3600e3, toMs: nowMs };
 }
 
@@ -461,7 +504,7 @@ const lineSeries = (p, data, extra = {}) => ({
 });
 
 // ---- the catalog --------------------------------------------------------------------
-// ctx = { cards, status, weather } from pointSets(). Each entry:
+// ctx = { cards, numeric, status, weather, equipNames } from pointSets(). Each entry:
 //   applies(ctx)      chart makes sense for these points (else hidden)
 //   ranges / range    offered + default hours
 //   pick(ctx)         optional: points for a picker; build gets opt.point
@@ -486,34 +529,7 @@ const CHARTS = [
     },
   },
   {
-    id: "weather", title: "Weather vs outside air", desc: "Weather-service values next to the equip's outside air sensors",
-    ranges: [24, 48, 168], range: 48,
-    applies: (c) => c.weather.length > 0,
-    async build(c, hours) {
-      const pair = rhPair(c.cards) || [];
-      const s = await fetchChartDisplay(c, [...pair, ...c.weather], hours);
-      const tUnit = dispUnit([...pair, ...c.weather].find((p) => !isRH(p)) || { units: "°F" });
-      const line = (p, axis, dashed) => ({
-        name: p.name, type: "line", yAxisIndex: axis, data: s.get(p.uuid), showSymbol: dashed, symbolSize: 4,
-        step: dashed ? "end" : false, smooth: !dashed, lineStyle: { width: dashed ? 2 : 1.4, type: dashed ? "dashed" : "solid" },
-      });
-      return {
-        hint: "dashed = weather service, solid = bench sensors",
-        option: {
-          tooltip, legend,
-          grid: { left: 50, right: 50, top: 36, bottom: 60 },
-          xAxis: { type: "time", ...axisStyle },
-          yAxis: [
-            { type: "value", scale: true, name: tUnit, ...axisStyle },
-            { type: "value", scale: true, name: "%RH", position: "right", ...axisStyle, splitLine: { show: false } },
-          ],
-          series: [...pair.map((p) => line(p, isRH(p) ? 1 : 0, false)), ...c.weather.map((p) => line(p, isRH(p) ? 1 : 0, true))],
-        },
-      };
-    },
-  },
-  {
-    id: "heatmap", title: "Hour-of-day heatmap", desc: "One sensor's hourly average, day by day",
+    id: "heatmap", title: "Hour-of-day heatmap", desc: "One sensor's hourly average, day by day (pick the sensor)",
     ranges: [72, 168], range: 168,
     applies: (c) => c.cards.length > 0,
     pick: (c) => c.cards,
@@ -647,27 +663,74 @@ const CHARTS = [
     },
   },
   {
-    id: "other", title: "Other signals", desc: "Non-temperature, non-humidity sensors (pressure, position, …)",
+    id: "other", title: "Other signals", desc: "Every numeric signal of the equip, one y-axis per unit; on/off points in a lane below",
     ranges: [6, 24, 72, 168], range: 24,
-    applies: (c) => c.cards.some((p) => !isTemp(p) && !isRH(p)),
+    applies: (c) => signalSets(c).lines.length > 0,
     async build(c, hours) {
-      const others = c.cards.filter((p) => !isTemp(p) && !isRH(p)).slice(0, 2);
-      const s = await fetchChartDisplay(c, others, hours);
+      const { lines, lanes } = signalSets(c);
+      const [s, sb] = await Promise.all([
+        fetchChartDisplay(c, lines, hours),
+        lanes.length ? fetchChartSeries(c, lanes, hours, { method: "MAX" }) : new Map(),
+      ]);
+      const data = (p) => (s.get(p.uuid) || sb.get(p.uuid) || []);
+      const labelOf = (p) => pointLabel(p, c, [...lines, ...lanes]);
       return {
-        hint: `${windowLabel(s.windowSec)} averages`,
-        option: {
-          tooltip, legend, grid: { left: 50, right: 50, top: 36, bottom: 60 },
-          xAxis: { type: "time", ...axisStyle },
-          yAxis: others.map((p, i) => ({
-            type: "value", scale: true, name: dispUnit(p), position: i ? "right" : "left",
-            ...axisStyle, splitLine: { show: !i },
-          })),
-          series: others.map((p, i) => lineSeries(p, s.get(p.uuid), { yAxisIndex: i, smooth: false, areaStyle: { opacity: 0.08 } })),
-        },
+        hint: `${lines.length} numeric signal${lines.length === 1 ? "" : "s"} on ${signalAxes(lines).length} axis(es)`
+          + `${lanes.length ? ` · ${lanes.length} on/off in the lane below` : ""} · ${windowLabel(s.windowSec)} averages`,
+        option: signalsOption(signalAxes(lines), lanes, data, labelOf),
       };
     },
   },
 ];
+
+/** The numeric lines and on/off lanes of `c`. A point without any model label is omitted, never named "Sensor N". */
+function signalSets(c) {
+  const labelled = (p) => !!(p.dis || p.name);
+  return { lines: (c.numeric || c.cards || []).filter(labelled), lanes: (c.status || []).filter(labelled) };
+}
+/** Group points by display unit, in first-seen order: [{ unit, points }] (one y-axis each). */
+function signalAxes(points) {
+  const by = new Map();
+  for (const p of points) {
+    const unit = dispUnit(p) || "";
+    if (!by.has(unit)) by.set(unit, []);
+    by.get(unit).push(p);
+  }
+  return [...by].map(([unit, pts]) => ({ unit, points: pts }));
+}
+/**
+ * The "Other signals" option: one value axis per unit (axis name = unit; left / right alternating, extra ones offset),
+ * and, when there are on/off points, a bottom grid with one step lane per point. `data(p)` -> [[ms, v], ...].
+ */
+function signalsOption(axes, lanes, data, labelOf) {
+  const nLeft = Math.ceil(axes.length / 2), nRight = Math.floor(axes.length / 2), W = 54;
+  const laneH = lanes.length ? Math.min(160, 16 * lanes.length + 10) : 0;
+  const left = (lanes.length ? 110 : 50) + W * Math.max(0, nLeft - 1), right = 20 + W * nRight;
+  const bottom = 56 + (laneH ? laneH + 22 : 0);
+  const series = [];
+  axes.forEach((ax, i) => ax.points.forEach((p) => series.push({
+    name: labelOf(p), type: "line", yAxisIndex: i, showSymbol: false, smooth: false, lineStyle: { width: 1.4 },
+    emphasis: { focus: "series" }, data: data(p) })));
+  lanes.forEach((p, i) => series.push({
+    name: labelOf(p), type: "line", xAxisIndex: 1, yAxisIndex: axes.length, showSymbol: false, step: "end",
+    lineStyle: { width: 1.2 }, areaStyle: { opacity: 0.25, origin: i },
+    // [t, lane position, raw 0/1]: the tooltip shows the last dimension
+    data: data(p).map(([t, v]) => [t, i + (v > 0.5 ? 0.8 : 0), v > 0.5 ? 1 : 0]) }));
+  return {
+    tooltip, legend: { type: "scroll", top: 0 }, axisPointer: { link: [{ xAxisIndex: "all" }] },
+    grid: [{ left, right, top: 56, bottom }, ...(laneH ? [{ left, right, height: laneH, bottom: 44 }] : [])],
+    xAxis: [{ type: "time", gridIndex: 0, ...axisStyle, axisLabel: { show: !laneH } },
+      ...(laneH ? [{ type: "time", gridIndex: 1, ...axisStyle }] : [])],
+    yAxis: [...axes.map((ax, i) => ({
+      type: "value", scale: true, name: ax.unit || "unitless", gridIndex: 0, position: i % 2 ? "right" : "left",
+      offset: W * Math.floor(i / 2), ...axisStyle, splitLine: { show: i === 0 },
+    })), ...(laneH ? [{
+      type: "value", gridIndex: 1, min: 0, max: lanes.length, interval: 1, splitLine: { show: false }, axisTick: { show: false },
+      axisLabel: { width: 90, overflow: "truncate", fontSize: 10, formatter: (v) => (lanes[v] ? labelOf(lanes[v]) : "") },
+    }] : [])],
+    series,
+  };
+}
 
 const chartDef = (id) => CHARTS.find((c) => c.id === id);
 const rangeLabel = (h) => (h < 48 ? `${h}h` : `${h / 24}d`);

@@ -1,12 +1,13 @@
-// chart.html: one catalog chart per window (charts.js), chosen by the query string.
-// Needs nf.js, model.js and charts.js loaded first.
+// GENERATED COPY of shared/static/chart-page.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
+// chart.html (both editions; source: shared/static/chart-page.js): one catalog chart per window (charts.js), chosen by the query string.
+// Needs nf.js, model.js, theme.js and charts.js loaded first.
 
 /** @param {string} id @returns {AnyEl} */
 const $ = (id) => /** @type {AnyEl} */ (document.getElementById(id));
 const q = new URLSearchParams(location.search);
 const sel = { id: q.get("c") || CHARTS[0].id, site: q.get("site") || "", equip: q.get("equip") || "",
   hours: Number(q.get("h")) || 0, point: q.get("point") || "" };
-let model, ctx, def, chart, rangeState = getChartRangeState("lite.chart"), siteTz = "UTC";
+let model, ctx, def;
 
 function setLive(ok, txt) {
   $("liveDot").classList.toggle("bad", !ok);
@@ -14,27 +15,39 @@ function setLive(ok, txt) {
 }
 
 function syncUrl() {
-  const u = new URL(location.href), q = u.searchParams;
-  q.set("c", def.id); q.set("site", sel.site); q.set("h", String(sel.hours));
-  if (sel.equip) q.set("equip", sel.equip); else q.delete("equip");
-  if (def.pick && sel.point) q.set("point", sel.point); else q.delete("point");
-  history.replaceState(null, "", u);
+  const u = new URLSearchParams({ c: def.id, site: sel.site, h: String(sel.hours) });
+  if (sel.equip) u.set("equip", sel.equip);
+  if (def.pick && sel.point) u.set("point", sel.point);
+  const range = getChartRangeState("charts");
+  u.set("range.charts", range.preset);
+  if (range.preset === "custom") { u.set("from.charts", String(range.fromMs)); u.set("to.charts", String(range.toMs)); }
+  history.replaceState(null, "", `?${u}`);
 }
 
 async function draw() {
-  renderRangeControl($("range"), { key: "lite.chart", state: rangeState, siteTz,
-    onChange: (next) => { rangeState = next; draw().catch((e) => setLive(false, e.message)); } });
+  const state = getChartRangeState("charts"), site = model.sites.find((s) => idOf(s) === sel.site);
+  const siteTz = resolveSiteTimeZone(site).zone;
+  renderRangeControl($("range"), { key: "charts", state, siteTz, onChange: () => draw() });
+  const baseCtx = pointSets(model, sel.site, sel.equip);
+  const candidate = def.pick ? def.pick(baseCtx) : [...baseCtx.cards, ...baseCtx.status, ...baseCtx.weather];
+  setLive(true, "loading history range…");
   syncUrl();
   try {
-    const hint = await drawChart(chart, def, ctx, rangeState, { point: sel.point });
+    const range = await resolveChartSelection(candidate, state, { siteTz });
+    const ctx = { ...baseCtx, range, siteTz };
+    const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
+    const hint = await drawChart(ofddChart($("chart")), def, ctx, hours, { point: sel.point, range, siteTz });
     if (hint != null) $("hint").textContent = hint;
     setLive(true, `updated ${new Date().toLocaleTimeString()}`);
   } catch (e) {
+    $("hint").textContent = `Could not load this range: ${e.message}`;
     setLive(false, e.message);
   }
 }
 
 async function main() {
+  // The unit toggle (Full only, units.js) lives in the dashboard; follow it when it changes.
+  window.addEventListener("storage", (e) => { if (e.key === "openfdd-units") draw(); });
   await initAuth();
   await loadSiteTimeZoneSources();
   model = await loadModel();
@@ -42,36 +55,23 @@ async function main() {
   ctx = pointSets(model, sel.site, sel.equip);
   def = chartDef(sel.id);
   if (!def || !def.applies(ctx)) throw new Error(`chart "${sel.id}" has no matching tagged points here`);
+  if (!sel.hours) sel.hours = def.range;
   const site = model.sites.find((s) => idOf(s) === sel.site);
-  siteTz = resolveSiteTimeZone(site).zone;
-  ctx.siteTz = siteTz;
-  if (!q.has("range.lite.chart") && sel.hours > 0) {
-    rangeState = { preset: "custom", fromMs: Date.now() - sel.hours * 3600e3, toMs: Date.now() };
-    setChartRangeState("lite.chart", rangeState, { push: false });
-  }
   const equip = model.equips.find((e) => idOf(e) === sel.equip);
-  document.title = `${def.title} · Open-FDD Lite`;
+  document.title = `${def.title} · ${document.documentElement.dataset.product || "Open-FDD"}`;
   $("title").textContent = `⚡ ${def.title}`;
   $("sub").textContent = `${site?.name ?? sel.site} · ${equip ? (equip.attrs || {}).dis || equip.name : "all equips"} · ${def.desc}`;
   if (def.pick) {
     const opts = def.pick(ctx);
     if (!opts.some((p) => p.uuid === sel.point)) sel.point = def.defaultPick(ctx);
-    $("pick").innerHTML = opts.map((p) => `<option value="${p.uuid}">${esc(p.name)}</option>`).join("");
+    $("pick").innerHTML = pickOptions(def, ctx).map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("");
     $("pick").value = sel.point;
     $("pick").hidden = false;
     $("pick").onchange = () => { sel.point = $("pick").value; draw(); };
   }
-  chart = echarts.init($("chart"), null, { renderer: "canvas" });
-  window.addEventListener("resize", () => chart.resize());
+  window.addEventListener("popstate", () => draw());
+  onThemeChange(draw);
   await draw();
-  window.addEventListener("popstate", () => {
-    const restored = new URLSearchParams(location.search), candidate = restored.get("point") || "";
-    const opts = def.pick ? def.pick(ctx) : [];
-    sel.point = opts.some((p) => p.uuid === candidate) ? candidate : (def.pick ? def.defaultPick(ctx) : "");
-    if (def.pick) $("pick").value = sel.point;
-    rangeState = getChartRangeState("lite.chart");
-    draw();
-  });
   setInterval(() => { if (!document.hidden) draw(); }, 5 * 60e3);
 }
 

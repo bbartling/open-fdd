@@ -15,15 +15,18 @@
   Everything is rendered from the Haystack model (model.js): SITE / EQUIPMENT /
   DEVICE records and point markers + refs. BACnet server objects come from
   /api/v1/bacnet/local. Code: nf.js (NF access) → model.js (Haystack) → charts.js
-  (chart catalog, NF-resampled history) → app.js (tabs). chart.html = one chart per window.
+  (chart catalog, NF-resampled history) → app-core.js (the dashboard shell shared with the Full edition; top bar = the
+  site only, each tab has its own equip picker) → app.js (starts it). chart.html = one chart per window.
 -->
 <script src="theme-init.js"></script>
-<script src="lite-theme.js"></script>
 <script src="vendor/echarts.min.js"></script>  <!-- ECharts 6.1.0, served by NF: no internet needed -->
 <script src="paging.js"></script>
 <script src="nf.js"></script>
 <script src="model.js"></script>
+<script src="theme.js"></script>
 <script src="charts.js"></script>
+<script src="app-core.js"></script>
+<link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -34,7 +37,6 @@
   </div>
   <div class="spacer"></div>
   <label class="scope">site <select id="sitePick"></select></label>
-  <label class="scope">equip <select id="equipPick"></select></label>
   <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
   <span class="pill" id="clock"></span>
   <button class="btn" id="themeToggle" type="button">☾ dark</button>
@@ -53,7 +55,8 @@
   <!-- Overview: live cards + equipment status -->
   <section class="tab on" id="tab-overview">
     <div class="stats" id="summary"></div>
-    <section class="panel spark-range-panel"><h2>History window <span class="hint">overview sparklines · sampled to stay compact</span></h2><div id="sparkRange"></div></section>
+    <div id="overviewRangeControl"></div>
+    <p id="overviewRangeStatus" class="hint" role="status"></p>
     <section class="cards" id="cards"></section>
     <section class="panel">
       <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
@@ -73,7 +76,8 @@
         <span class="hint" id="chartHint"></span>
         <a class="btn" id="chartOpen" target="_blank" rel="noopener" title="open this chart in its own window">open in new window ↗</a>
       </h2>
-      <div id="chartRange"></div>
+      <div id="chartRangeControl"></div>
+      <p id="chartRangeStatus" class="hint" role="status"></p>
       <div class="chart tall" id="chartHost"></div>
     </section>
   </section>
@@ -92,8 +96,9 @@
       </table></div>
     </section>
     <section class="panel">
-      <h2>History <span class="hint" id="histHint">click a point above</span></h2>
-      <div id="histRange"></div>
+      <h2>History <span class="hint" id="histHint">click a point above</span>
+      </h2>
+      <div id="histRangeControl"></div><p id="histRangeStatus" class="hint" role="status"></p>
       <div class="chart short" id="histChart"></div>
     </section>
   </section>
