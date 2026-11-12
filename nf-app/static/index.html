@@ -98,6 +98,10 @@
   <!-- FDD: which Open-FDD rules each equip can run, with inputs bound by Haystack class/markers -->
   <section class="tab" id="tab-fdd">
     <div class="stats" id="fddStats"></div>
+    <section class="panel">
+      <h2>Equipment <select id="fddEquip" aria-label="FDD equipment filter"></select>
+        <span class="hint" id="fddMode"></span></h2>
+    </section>
     <section class="panel" id="fddPlotPanel" hidden>
       <h2><span id="fddPlotTitle">Rule plot</span> <span class="hint" id="fddPlotNote"></span>
         <button class="btn" id="fddPlotClose">Close</button></h2>
@@ -109,12 +113,19 @@
         <label class="hint"><input type="checkbox" id="fddFaultedOnly"> faulted sensors only</label></h2>
       <div id="fddRangeControl"></div>
       <p id="fddRangeStatus" class="hint" role="status"></p>
+      <label class="hint"><input type="checkbox" id="fddHeatAll"> all rows (default: the most-faulted)</label>
+      <p class="hint" id="fddHeatNote"></p>
       <div class="chart" id="fddLanes"></div>
       <div class="tablewrap"><table class="bac">
         <thead><tr><th>Rule</th><th>Equip</th><th>Latest</th><th>Run</th></tr></thead>
         <tbody id="fddResultRows"></tbody>
       </table></div>
     </section>
+    <section class="panel">
+      <h2>FDD charts <span class="hint">signals on top, bool fault lane at the bottom</span></h2>
+      <div id="fddChartsRangeControl"></div><p id="fddChartsRangeStatus" class="hint" role="status"></p>
+    </section>
+    <div id="fddBody"></div>
     <section class="panel">
       <h2>Rule inputs <span class="hint" id="fddHint">rules from sql/fdd/registry.yaml · inputs found by NF class or Haystack markers</span>
         <label class="hint"><input type="checkbox" id="fddRunnableOnly"> runnable only</label>
@@ -133,8 +144,15 @@
     <section class="panel">
       <h2>Retro-commissioning <span class="hint" id="rcxHint">views draw when their roles bind on the equips in scope</span>
       </h2>
+      <div class="rcx-controls">
+        <label class="hint">Devices <select id="rcxEquip" aria-label="RCx device filter"></select></label>
+        <button class="btn" id="rcxAhuOn" type="button" aria-pressed="false" title="Only times the feeding AHU's fan is running">AHU on</button>
+        <span class="hint" id="rcxAhuNote"></span>
+      </div>
+      <p class="hint" id="rcxMode"></p>
       <div id="rcxRangeControl"></div><p id="rcxRangeStatus" class="hint" role="status"></p>
     </section>
+    <div class="kpis" id="rcxKpis"></div>
     <div id="rcxBody"></div>
     <section class="panel">
       <details id="rcxMissingBox"><summary>Not available here <span class="count" id="nRcxMissing"></span></summary>

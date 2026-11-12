@@ -235,3 +235,28 @@ tr.clickable:hover td { background: var(--panel2); }
 /* app version (version.js) */
 .app-version { font-size: 12px; color: var(--muted, #64748b); text-decoration: none; margin-left: 10px; align-self: center; }
 .app-version:hover { text-decoration: underline; }
+
+/* ---- FDD/RCx (tabs "fdd" and "rcx": rule badges, KPI tiles, headline row, device filter) ---------------- */
+:root { --rule-bg: #ede9fe; --rule-text: #5b21b6; --rule-line: #c4b5fd; }
+[data-theme="dark"] { --rule-bg: #2b2350; --rule-text: #d6c8ff; --rule-line: #5b4b9a; }
+/* a rule id is a badge, never plain text: "VAV-1" must not read like an equipment called VAV 1 */
+.rule-badge { display: inline-flex; align-items: baseline; gap: 4px; padding: 0 6px 0 5px; border-radius: 5px; vertical-align: baseline;
+  background: var(--rule-bg); color: var(--rule-text); border: 1px solid var(--rule-line); white-space: nowrap; }
+.rule-badge i { font-style: normal; font-size: 9px; text-transform: uppercase; letter-spacing: .06em; opacity: .8; }
+.rule-badge .rule-id { font-size: 11px; }
+.rule-title { font-weight: 600; }
+.rcx-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 6px 0; }
+.rcx-controls select, #fddEquip { font: inherit; padding: 5px 8px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; max-width: 280px; }
+#rcxAhuOn[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.kpis:empty { display: none; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+.kpi-label { color: var(--muted); font-size: 12px; }
+.kpi-value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi-sub { color: var(--muted); font-size: 11px; }
+.kpi-warn { border-color: var(--hot); }
+.kpi-warn .kpi-value { color: var(--hot); }
+.kpi-ok .kpi-value { color: var(--good); }
+.rcx-headline .rcx-grid { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
+.rcx-grid.one-col { grid-template-columns: 1fr; }
+@media (max-width: 640px) { .rcx-headline .rcx-grid { grid-template-columns: 1fr; } }

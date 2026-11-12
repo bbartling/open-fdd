@@ -231,11 +231,37 @@ async function renderCharts() {
 }
 
 // ---- FDD tab --------------------------------------------------------------------------
-// Which rules from the catalog each equip in scope can run (fdd.js binds inputs by tags).
-const fddEquipsInScope = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
+// Which rules from the catalog each equip in the FDD tab can run (fdd.js binds inputs by tags). The tab has its own
+// equipment filter (fddUi.equip, "" = all equipment); the header only picks the site.
+const fddEquipsInScope = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!fddUi.equip || idOf(e) === fddUi.equip));
 const renderScopedFddResults = () => renderFddResults(fddEquipsInScope(), fddCatalog?.sensor_sweep_roles);
+
+/** Fill a tab's equipment picker ("" = all) from the site's equips; drops a selection that left the site. */
+function fillEquipPicker(selectId, ui, allLabel) {
+  const el = $(selectId);
+  if (!el) return;
+  const opts = fddEquipOptions(model, scope.site);
+  if (ui.equip && !opts.some((o) => o.id === ui.equip)) ui.equip = "";
+  el.innerHTML = `<option value="">${esc(allLabel)}</option>${opts.map((o) => `<option value="${esc(o.id)}"${o.id === ui.equip ? " selected" : ""}>${esc(o.label)}</option>`).join("")}`;
+}
+
+let viewTabsWired = false;
+/** One-time wiring of the FDD / RCx tab controls (equipment filter, heat-map rows, "AHU on"). */
+function wireViewTabs() {
+  if (viewTabsWired) return;
+  viewTabsWired = true;
+  const fail = (e) => setLive(false, e.message);
+  const on = (id, event, fn) => { const el = $(id); if (el) el[event] = fn; };
+  on("fddEquip", "onchange", (e) => { fddUi.equip = e.target.value; renderFdd().catch(fail); });
+  on("fddHeatAll", "onchange", (e) => { fddUi.heatAll = e.target.checked; renderScopedFddResults().catch(fail); });
+  on("rcxEquip", "onchange", (e) => { rcxUi.equip = e.target.value; renderRcx().catch(fail); });
+  on("rcxAhuOn", "onclick", () => { rcxUi.ahuOn = !rcxUi.ahuOn; renderRcx().catch(fail); });
+}
+
 async function renderFdd() {
   const catalog = await loadCatalog();
+  wireViewTabs();
+  fillEquipPicker("fddEquip", fddUi, "All equipment");
   const equips = fddEquipsInScope();
   const rows = equips.flatMap((e) => equipRules(e, model, catalog).map((r) => ({ ...r, equip: e })));
   const runnable = rows.filter((r) => r.runnable);
@@ -254,13 +280,14 @@ async function renderFdd() {
     return `<span class="tag ${cls} ${optional ? "opt" : ""}" title="${esc(title)}">${esc(label)}</span>`;
   };
   $("fddRows").innerHTML = rows.filter((r) => !only || r.runnable).map((r) => `<tr class="clickable" data-rule="${esc(r.rule.id)}" data-equip="${esc(idOf(r.equip))}" title="plot this rule">
-      <td><span class="rule-id">${esc(r.rule.id)}</span><div class="sub">${esc(r.rule.description)}</div></td>
+      <td>${fddRuleCellHtml(r.rule)}<div class="sub">${esc(r.rule.description)}</div></td>
       <td class="sub">${esc((r.equip.attrs || {}).dis || r.equip.name)}</td>
       <td><div class="tags">${r.required.map((x) => chip(x, r.bound[x], false)).join("")}${r.optional.map((x) => chip(x, r.bound[x], true)).join("")}</div></td>
       <td>${r.runnable ? `<span class="ok">✓ can run</span>`
         : !r.pointInputs ? `<span class="sub">uses utility/meter data, not points</span>`
         : `<span class="warn">needs ${esc(r.missing.join(", "))}</span>`}</td>
     </tr>`).join("") || `<tr><td colspan="4" class="sub">No rules apply to the equips in scope.</td></tr>`;
+  renderViewTab("fdd").catch((e) => setLive(false, e.message));      // FDD charts load in parallel with the fault table
   await renderScopedFddResults();
 }
 
@@ -302,7 +329,7 @@ async function showRulePlot(ruleId, equipId) {
   renderRangeControl($("fddPlotRangeControl"), { key: "rulePlot", state: rangeState, siteTz,
     onChange: () => showRulePlot(ruleId, equipId).catch((e) => ($("fddPlotRangeStatus").textContent = `Could not load this range: ${e.message}`)) });
   $("fddPlotPanel").hidden = false;
-  $("fddPlotTitle").textContent = `${ruleId} · ${equipLabel(equipRec)}`;
+  $("fddPlotTitle").innerHTML = `${fddRuleCellHtml(row.rule)} <span class="sub">· ${esc(equipLabel(equipRec))}</span>`;
   $("fddPlotNote").textContent = row.rule.description || "";
   $("fddPlotRangeStatus").textContent = "Resolving range…";
   $("fddPlotPanel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -377,6 +404,7 @@ async function renderFddResults(equips, sweepRoles = {}) {
   };
   const statusOf = (p) => attrsOf(p).fddStatus || (latestOf(p) == null ? "not-assessed" : has(p, "fault") && latestOf(p) > 0 ? "fault" : "ok");
   const faulted = (p) => statusOf(p) === "fault" || (statusOf(p) !== "not-assessed" && statusOf(p) !== "stale" && has(p, "fault") && latestOf(p) > 0);
+  const ruleCell = (id) => fddRuleCellHtml(fddRuleOf(fddCatalog, id));
   const sweeps = new Set(results.filter((p) => /^SV-/.test(ruleRefOf(p))).map(ruleRefOf));
   const rows = [];
   for (const ruleId of sweeps) {
@@ -394,7 +422,7 @@ async function renderFddResults(equips, sweepRoles = {}) {
         const groupId = `${ruleId}|${equipId}`;
         const v = latestOf(summary), status = statusOf(summary), hot = faulted(summary);
         rows.push(`<tr class="clickable fdd-summary-row" data-rule="${esc(ruleId)}" data-equip="${esc(equipId)}">
-          <td>${sensors.length ? `<button class="fdd-expand" type="button" data-expand="${esc(groupId)}" aria-expanded="${fddExpandedGroups.has(groupId)}" title="Show sensor results">${fddExpandedGroups.has(groupId) ? "▾" : "▸"}</button> ` : ""}<span class="rule-id">${esc(ruleId)}</span><div class="sub">equipment summary</div></td>
+          <td>${sensors.length ? `<button class="fdd-expand" type="button" data-expand="${esc(groupId)}" aria-expanded="${fddExpandedGroups.has(groupId)}" title="Show sensor results">${fddExpandedGroups.has(groupId) ? "▾" : "▸"}</button> ` : ""}${ruleCell(ruleId)}<div class="sub">equipment summary</div></td>
           <td class="sub">${esc(equipName(equipId))}</td><td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${resultValue(summary, v)}</td>
           <td class="sub">${esc(when(summary))}${covered(summary)}</td></tr>`);
       }
@@ -405,7 +433,7 @@ async function renderFddResults(equips, sweepRoles = {}) {
         const role = attrsOf(p).roleRef || "sensor";
         const hidden = !fddExpandedGroups.has(groupId);
         rows.push(`<tr class="clickable fdd-sensor-row" data-rule="${esc(ruleId)}" data-equip="${esc(equipId)}" data-sensor="${esc(attrsOf(p).sensorRef || "")}"${hidden ? " hidden" : ""}>
-          <td><span class="rule-id">${esc(ruleId)}</span><div class="sub">${esc(role)}</div></td><td class="sub">${esc(sensorNameOf(p))}<div class="sub">${esc(equipName(equipId))}</div></td>
+          <td>${ruleCell(ruleId)}<div class="sub">${esc(role)}</div></td><td class="sub">${esc(sensorNameOf(p))}<div class="sub">${esc(equipName(equipId))}</div></td>
           <td class="${hot ? "warn" : status === "ok" ? "ok" : "sub"}">${esc(status)} · ${resultValue(p, v)}</td>
           <td class="sub">${esc(when(p))}${covered(p)}</td></tr>`);
       }
@@ -414,7 +442,7 @@ async function renderFddResults(equips, sweepRoles = {}) {
   for (const p of results.filter((x) => !sweeps.has(ruleRefOf(x)))) {
     const v = latestOf(p);
     const hot = has(p, "fault") && v > 0;
-    rows.push(`<tr class="clickable" data-rule="${esc(ruleRefOf(p))}" data-equip="${esc(p.equipRef)}" title="plot this rule"><td><span class="rule-id">${esc(ruleRefOf(p))}</span></td><td class="sub">${esc(equipName(p.equipRef))}</td>
+    rows.push(`<tr class="clickable" data-rule="${esc(ruleRefOf(p))}" data-equip="${esc(p.equipRef)}" title="plot this rule"><td>${ruleCell(ruleRefOf(p))}</td><td class="sub">${esc(equipName(p.equipRef))}</td>
       <td class="${hot ? "warn" : "ok"}">${resultValue(p, v)}</td><td class="sub">${esc(when(p))}</td></tr>`);
   }
   $("fddResultRows").innerHTML = rows.join("");
@@ -457,23 +485,32 @@ async function renderFddResults(equips, sweepRoles = {}) {
     const excluded = sensorRef && roleRef && assessable && !assessable.includes(roleRef);
     return filtered.get(p.uuid).length > 0 || (statusOf(p) !== "stale" && !excluded);
   });
-  const buckets = [...new Set(faults.flatMap((p) => filtered.get(p.uuid).map(([t]) => t)))].sort((a, b) => a - b);
+  // Which faults happen most: rows sorted by fault time; by default only the top rows (or the selected equip's), the
+  // "all rows" box widens it. Fault time (minutes) = fault hours, or fault % of each bucket.
+  const faultMinutes = (p) => filtered.get(p.uuid).reduce((a, [, v]) => a + (attrsOf(p).fddOutput === "fault_hours" ? v * 60 : (v / 100) * (windowSec / 60)), 0);
+  const heat = fddHeatRows(faults.map((p) => ({ key: p.uuid, p, equip: p.equipRef, faultTime: faultMinutes(p) })), { selectedEquip: fddUi.equip, showAll: fddUi.heatAll });
+  const shown = heat.rows.map((r) => r.p);
+  const heatNote = $("fddHeatNote");
+  if (heatNote) heatNote.textContent = heat.trimmed ? `Showing the ${shown.length} most-faulted of ${heat.total} rows (sorted by fault time). Tick "all rows" or pick an equipment to see more.` : `${shown.length} row${shown.length === 1 ? "" : "s"}, sorted by fault time.`;
+  const buckets = [...new Set(shown.flatMap((p) => filtered.get(p.uuid).map(([t]) => t)))].sort((a, b) => a - b);
   el.hidden = !buckets.length;
   if (!buckets.length) {
     rangeStatus.textContent = "No fault history in this range.";
     return;
   }
   // On normal rerenders keep the chart's DOM intact so ofddChart() can reuse its instance.
-  const label = (p) => `${ruleRefOf(p)} · ${attrsOf(p).roleRef ? `${attrsOf(p).roleRef} · ${sensorNameOf(p)}` : equipName(p.equipRef)}`;
-  el.style.height = `${Math.max(160, 26 * faults.length + 70)}px`;
+  const whoOf = (p) => (attrsOf(p).roleRef ? `${attrsOf(p).roleRef} · ${sensorNameOf(p)}` : equipName(p.equipRef));
+  const titleOf = (p) => fddRuleTitle(fddRuleOf(fddCatalog, ruleRefOf(p)));
+  const label = (p) => fddRuleRich(titleOf(p), ruleRefOf(p), whoOf(p));
+  el.style.height = `${Math.max(160, 26 * shown.length + 70)}px`;
   // Heatmaps need category axes: one column per history bucket.
   const units = (p) => dispUnit(p) || (attrsOf(p).fddOutput === "fault_hours" ? "h" : "%");
   const col = new Map(buckets.map((t, i) => [t, i]));
-  const row = new Map(faults.map((p, i) => [p.uuid, i]));
+  const row = new Map(shown.map((p, i) => [p.uuid, i]));
   const axisTime = new Intl.DateTimeFormat(undefined, { timeZone: siteTz, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   const detailTime = new Intl.DateTimeFormat(undefined, { timeZone: siteTz, year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
   const unitGroups = new Map();
-  for (const p of faults) {
+  for (const p of shown) {
     const unit = units(p);
     if (!unitGroups.has(unit)) unitGroups.set(unit, []);
     unitGroups.get(unit).push(p);
@@ -487,10 +524,10 @@ async function renderFddResults(equips, sweepRoles = {}) {
       text: [`${formatFaultNumber(max)} ${unit}`, `0 ${unit}`], inRange: { color: ["rgba(239,68,68,0.05)", FAULT_LANE.lineStyle.color] } };
   });
   ofddChart(el).setOption({
-    tooltip: { formatter: (x) => { const p = faults[x.value[1]], unit = units(p); return `${esc(label(p))}<br>${esc(detailTime.format(buckets[x.value[0]]))}: ${formatFaultNumber(x.value[2])} ${esc(unit)}`; } },
-    grid: { left: 200, right: 20, top: 10, bottom: 70 },
+    tooltip: { formatter: (x) => { const p = shown[x.value[1]], unit = units(p); return `${esc(titleOf(p))} ${fddRuleBadgeHtml(ruleRefOf(p))} · ${esc(whoOf(p))}<br>${esc(detailTime.format(buckets[x.value[0]]))}: ${formatFaultNumber(x.value[2])} ${esc(unit)}`; } },
+    grid: { left: 10, right: 20, top: 10, bottom: 70, containLabel: true },
     xAxis: { type: "category", data: buckets.map((t) => axisTime.format(t)), splitArea: { show: false } },
-    yAxis: { type: "category", data: faults.map(label), inverse: true },
+    yAxis: { type: "category", data: shown.map(label), inverse: true, axisLabel: { rich: FDD_RULE_RICH, width: 380, overflow: "truncate" } },
     visualMap: visualMaps,
     series: heatSeries,
   }, true);
@@ -783,73 +820,118 @@ function download(name, text, type) {
 }
 
 // ---- RCx tab ----------------------------------------------------------------------------
-// Views come from rcx-*.js modules (rcxView registry in rcx.js). One card per bound equip
-// (scope "equip") or one per site (scope "site"); each card renders on its own so one
-// failing view never blanks the tab.
-let rcxRun = 0;
-async function renderRcx() {
-  const run = ++rcxRun;
+// ---- RCx and FDD chart tabs ----------------------------------------------------------------
+// Both tabs draw rcxView() cards from rcx-*.js / fdd-plots.js; a view's `tab` says where it lives ("rcx" default, "fdd").
+// Each tab has its own equipment filter. "" = all devices: fleet analytics (pies, rankings, the all-zones band) are drawn
+// there and headline views (view.headline) go in a row at the top. One device selected: only that device's own charts.
+// Each card renders on its own so one failing view never blanks the tab.
+const viewTabRuns = { rcx: 0, fdd: 0 };
+const VIEW_TABS = {
+  rcx: { ui: () => rcxUi, body: "rcxBody", range: "rcxRangeControl", status: "rcxRangeStatus", key: "rcx", mode: "rcxMode", kpis: "rcxKpis" },
+  fdd: { ui: () => fddUi, body: "fddBody", range: "fddChartsRangeControl", status: "fddChartsRangeStatus", key: "fddCharts", mode: "fddMode", kpis: null },
+};
+
+/** "AHU on" button + the VAV -> AHU note (airRef links, assumed single-AHU feed, unknown). */
+function renderAhuControl(siteEquips, catalog) {
+  const btn = $("rcxAhuOn"), note = $("rcxAhuNote");
+  if (!btn || !note) return;
+  const kinds = (e) => equipKinds(e, catalog);
+  const hasAhu = siteEquips.some((e) => kinds(e).includes("ahu"));
+  btn.hidden = note.hidden = !hasAhu;
+  if (!hasAhu) return;
+  btn.setAttribute("aria-pressed", String(rcxUi.ahuOn));
+  btn.classList.toggle("active", rcxUi.ahuOn);
+  const vavs = siteEquips.filter((e) => kinds(e).includes("vav")), feeds = rcxAirFeedMap(siteEquips, kinds);
+  const linked = [...feeds.values()].filter((f) => !f.assumed).length, assumed = feeds.size - linked;
+  note.textContent = (rcxUi.ahuOn ? "Only times the feeding AHU's fan is running. " : "Restrict the analytics to times the feeding AHU is running. ")
+    + (vavs.length ? `VAV → AHU: ${linked} by airRef${assumed ? `, ${assumed} assumed (the site has one AHU and no airRef)` : ""}${vavs.length - feeds.size ? `, ${vavs.length - feeds.size} unknown` : ""}.` : "");
+}
+
+async function renderViewTab(tab) {
+  const T = VIEW_TABS[tab], ui = T.ui(), run = ++viewTabRuns[tab];
   const catalog = await loadCatalog();
-  const equips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && (!scope.equip || idOf(e) === scope.equip));
-  const rangeState = getChartRangeState("rcx"), siteTz = siteTimeZone();
-  renderRangeControl($("rcxRangeControl"), { key: "rcx", state: rangeState, siteTz,
+  wireViewTabs();
+  const siteEquips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site);
+  fillEquipPicker(`${tab}Equip`, ui, tab === "rcx" ? "All devices" : "All equipment");
+  const equips = siteEquips.filter((e) => !ui.equip || idOf(e) === ui.equip), single = !!ui.equip;
+  if (tab === "rcx") renderAhuControl(siteEquips, catalog);
+  const rangeState = getChartRangeState(T.key), siteTz = siteTimeZone();
+  renderRangeControl($(T.range), { key: T.key, state: rangeState, siteTz,
     onChange: () => {
-      const pending = renderRcx(), requested = rcxRun;
-      pending.catch((e) => { if (requested === rcxRun) $("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`; });
+      const pending = renderViewTab(tab), requested = viewTabRuns[tab];
+      pending.catch((e) => { if (requested === viewTabRuns[tab]) $(T.status).textContent = `Could not load this range: ${e.message}`; });
     } });
   const rangePoints = model.points.filter((p) => p.siteRef === scope.site && has(p, "his")
-    && (!scope.equip || p.equipRef === scope.equip || p.weatherStationRef));
+    && (!ui.equip || p.equipRef === ui.equip || p.weatherStationRef));
   let range;
   try { range = await resolveChartSelection(rangePoints, rangeState, { siteTz }); }
   catch (e) {
-    if (run === rcxRun) $("rcxRangeStatus").textContent = `Could not load this range: ${e.message}`;
+    if (run === viewTabRuns[tab]) $(T.status).textContent = `Could not load this range: ${e.message}`;
     throw e;
   }
-  if (run !== rcxRun) return;
+  if (run !== viewTabRuns[tab]) return;
   const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
-  const hoursFor = (_view) => hours;
-  $("rcxRangeStatus").textContent = "Loading history…";
-  const { ready, missing } = rcxPlan(equips, model, catalog);
+  $(T.status).textContent = "Loading history…";
+  const { ready, missing } = rcxPlan(equips, model, catalog, { tab, single });
   const cards = ready.flatMap(({ view, equips: eqs }) => (view.scope === "site" ? [{ view, eqs }] : eqs.map((eq) => ({ view, eqs: [eq] }))));
-  $("nRcx").textContent = String(cards.length);
-  $("nRcxMissing").textContent = String(missing.length);
-  $("rcxMissing").innerHTML = missing.map(({ view, roles }) => `<tr><td>${esc(view.title)}<div class="sub">${esc(view.group)}</div></td>
-    <td class="sub">${roles.length ? esc(roles.join(", ")) : `equipment kind: ${esc(view.kinds.join(" / "))}`}</td></tr>`).join("");
-  const groups = [...new Set(cards.map((c) => c.view.group))];
-  $("rcxBody").innerHTML = groups.map((g, gi) => `<section class="panel"><h2>${esc(g)}</h2><div class="rcx-grid">${
-    cards.map((c, i) => [c, i]).filter(([c]) => c.view.group === g).map(([c, i]) => `<div class="rcx-card">
+  const groupOf = (c) => (c.view.groupOf ? c.view.groupOf(c.eqs) : c.view.group);
+  if (tab === "rcx") {
+    $("nRcx").textContent = String(cards.length);
+    $("nRcxMissing").textContent = String(missing.length);
+    $("rcxMissing").innerHTML = missing.filter(({ view }) => !view.tabHidden).map(({ view, roles }) => `<tr><td>${esc(view.title)}<div class="sub">${esc(view.group)}</div></td>
+      <td class="sub">${roles.length ? esc(roles.join(", ")) : `equipment kind: ${esc(view.kinds.join(" / "))}`}</td></tr>`).join("");
+  }
+  if ($(T.mode)) {
+    const who = single ? (fddEquipOptions(model, scope.site).find((o) => o.id === ui.equip) || { label: ui.equip }).label : "";
+    $(T.mode).textContent = single ? `Single device: ${who}. Only this device's own charts are shown; fleet analytics are in the all-devices view.`
+      : "All devices: fleet analytics and one chart per view across every device.";
+  }
+  const sections = [];
+  if (tab === "rcx" && cards.some((c) => c.view.headline)) sections.push({ title: "Headline", cls: " rcx-headline", cards: cards.filter((c) => c.view.headline) });
+  const rest = cards.filter((c) => tab !== "rcx" || !c.view.headline);
+  for (const g of [...new Set(rest.map(groupOf))]) sections.push({ title: g, cls: "", cards: rest.filter((c) => groupOf(c) === g) });
+  $(T.body).innerHTML = sections.map((sec) => `<section class="panel${sec.cls}"><h2>${esc(sec.title)}</h2><div class="rcx-grid${tab === "fdd" ? " one-col" : ""}">${
+    sec.cards.map((c) => `<div class="rcx-card">
       <h3>${esc(c.view.title)}${c.view.scope === "equip" ? ` <span class="sub">· ${esc(c.eqs[0].name)}</span>` : ""}</h3>
-      <div class="chart" id="rcx-${i}"></div><div class="sub note" id="rcx-note-${i}"></div></div>`).join("")}</div></section>`).join("")
-    || `<section class="panel"><p class="sub">No RCx view has its inputs on the equips in scope yet — see "Not available here".</p></section>`;
+      <div class="chart" id="${tab}-${cards.indexOf(c)}"></div><div class="sub note" id="${tab}-note-${cards.indexOf(c)}"></div></div>`).join("")}</div></section>`).join("")
+    || `<section class="panel"><p class="sub">No ${tab === "rcx" ? "RCx" : "FDD"} chart has its inputs on the equipment in scope yet.</p></section>`;
+  const kpis = [], maskCache = new Map();
+  if (T.kpis && $(T.kpis)) $(T.kpis).innerHTML = "";
   for (const [i, c] of cards.entries()) {
-    if (run !== rcxRun) return;                      // a newer render (range/scope change) took over
-    const el = $(`rcx-${i}`);
+    if (run !== viewTabRuns[tab]) return;                      // a newer render (range/scope change) took over
+    const el = $(`${tab}-${i}`);
     try {
-      const note = await c.view.render(el, rcxContext(c.view, c.eqs, hoursFor(c.view), model, catalog, range, siteTz));
-      if (run !== rcxRun) return;
+      const ctx = rcxContext(c.view, c.eqs, hours, model, catalog, range, siteTz, { ahuOn: ui.ahuOn, kpis, maskCache });
+      const note = await c.view.render(el, ctx);
+      if (run !== viewTabRuns[tab]) return;
       el.classList.add("rendered");
-      if (note) $(`rcx-note-${i}`).textContent = note;
-      // Fault lanes (rcxWithFaultLane) add grids under the signals: give each lane its own room
-      // instead of squeezing the signal plot.
+      if (note) $(`${tab}-note-${i}`).textContent = note;
+      if (T.kpis && $(T.kpis) && kpis.length) $(T.kpis).innerHTML = rcxKpiHtml(kpis);
+      // Fault lanes (rcxWithFaultLane) add grids under the signals: give each lane its own room instead of squeezing the
+      // signal plot, unless the view already sized its chart for them (fdd-plots.js marks those with data-sized).
       const inst = window.echarts && echarts.getInstanceByDom(el);
-      const lanes = inst ? (inst.getOption().series || []).filter((s) => s.lineStyle && s.lineStyle.color === FAULT_LANE.lineStyle.color && s.step).length : 0;
+      const lanes = inst && !(el.dataset && el.dataset.sized) ? (inst.getOption().series || []).filter((s) => s.lineStyle && s.lineStyle.color === FAULT_LANE.lineStyle.color && s.step).length : 0;
       if (lanes) { el.style.height = `${el.clientHeight + 34 * lanes}px`; inst.resize(); }
-      // Drew nothing (inputs present but no usable data / not enough equips): list it with the
-      // other unavailable views instead of leaving an empty box on the page.
+      // Drew nothing (inputs present but no usable data / not enough equips): list it with the other unavailable
+      // views instead of leaving an empty box on the page.
       if (!el.querySelector("canvas, svg")) {
         /** @type {HTMLElement} */ (el.closest(".rcx-card")).hidden = true;
-        const who = c.view.scope === "equip" ? ` · ${c.eqs[0].name}` : "";
-        $("rcxMissing").insertAdjacentHTML("beforeend", `<tr><td>${esc(c.view.title + who)}<div class="sub">${esc(c.view.group)}</div></td>
-          <td class="sub">${esc(note || "no data in this range")}</td></tr>`);
-        $("nRcxMissing").textContent = String($("rcxMissing").rows.length);
-        $("nRcx").textContent = String(Number($("nRcx").textContent) - 1);
+        if (tab === "rcx") {
+          const who = c.view.scope === "equip" ? ` · ${c.eqs[0].name}` : "";
+          $("rcxMissing").insertAdjacentHTML("beforeend", `<tr><td>${esc(c.view.title + who)}<div class="sub">${esc(groupOf(c))}</div></td>
+            <td class="sub">${esc(note || "no data in this range")}</td></tr>`);
+          $("nRcxMissing").textContent = String($("rcxMissing").rows.length);
+          $("nRcx").textContent = String(Number($("nRcx").textContent) - 1);
+        }
       }
     } catch (e) {
-      if (run === rcxRun) $(`rcx-note-${i}`).textContent = `could not draw: ${e.message}`;
+      if (run === viewTabRuns[tab]) $(`${tab}-note-${i}`).textContent = `could not draw: ${e.message}`;
     }
   }
-  if (run === rcxRun) $("rcxRangeStatus").textContent = "";
+  if (run === viewTabRuns[tab]) $(T.status).textContent = "";
 }
+
+function renderRcx() { return renderViewTab("rcx"); }
 
 // ---- display units: imperial | si (units.js, localStorage "openfdd-units") -------------------
 function syncUnitsToggle() {

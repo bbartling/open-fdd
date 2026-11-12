@@ -16,6 +16,13 @@ const load = (...files) => {
   return ctx;
 };
 
+// Globals app.js takes from fdd.js / rcx.js (the page loads those first); the stubbed app.js contexts below get the real ones.
+const sharedFdd = () => {
+  const c = vm.createContext({ console });
+  vm.runInContext(readFileSync(new URL("fdd.js", dir), "utf8"), c, { filename: "fdd.js" });
+  return vm.runInContext("({ fddUi, FDD_RULE_RICH, fddRuleTitle, fddRuleOf, fddRuleCellHtml, fddRuleBadgeHtml, fddRuleRich, fddHeatRows, fddEquipOptions, rcxUi: { equip: '', ahuOn: false } })", c);
+};
+
 // A small Haystack model in NF's point/query shape: one site, one equip, one device, points.
 const rec = (name, pointType, attrs, latest) => ({ uuid: `u-${name}`, name, pointType, attrs, latestValue: latest });
 const FIXTURE = {
@@ -199,6 +206,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     return { series: new Map(points.map((p) => [p.uuid, p.history || []])), windowSec: 3600 };
   };
   const ctx = vm.createContext({
+    ...sharedFdd(),
     console,
     document: { getElementById: (id) => el(id) },
     location: { pathname: "/apps/static/open-fdd/" },
@@ -276,6 +284,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   ], points: [...results, percentResult, mixedResult, otherSiteResult, vavResult, ...inputs] };
   vm.runInContext("model = testModel", ctx);
   vm.runInContext('scope.site = "site-fixture"', ctx);
+  ctx.fddUi.heatAll = true;
   const initial = vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddRangeStatus").textContent, /Loading fault history/);
   assert.equal(el("fddLanes").attrs["aria-busy"], "true");
@@ -312,13 +321,13 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   assert.ok(hCells.some((x) => x[2] === 2.25), "current h value remains from the shared mixed-history fixture");
   assert.ok(hCells.some((x) => x[2] === 0), "assessed-zero cells remain visible");
   assert.ok(hCells.every((x) => x[2] != null), "missing samples are not displayed as zeros");
-  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-1")), "empty stale sensor lane is collapsed");
+  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-1}")), "empty stale sensor lane is collapsed");
   assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.includes("duct_static")), "empty excluded-role lane is collapsed");
-  assert.ok(chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-2")), "assessed-zero peer stays visible");
+  assert.ok(chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-2}")), "assessed-zero peer stays visible");
   assert.ok(hCells.every((x) => x[2] !== 18 && x[2] !== 95 && x[2] !== 80), "pre-boundary % history is excluded");
   const hRow = chartOption.yAxis.data.findIndex((x) => x.includes("SV-RANGE") && x.includes("sensor-5"));
   assert.match(chartOption.tooltip.formatter({ value: [1, hRow, 2] }), /2 h/);
-  const percentRow = chartOption.yAxis.data.findIndex((x) => x.startsWith("FC1"));
+  const percentRow = chartOption.yAxis.data.findIndex((x) => x.includes("rule FC1"));
   assert.match(chartOption.tooltip.formatter({ value: [0, percentRow, 30] }), /30 %/);
 
   el("fddFaultedOnly").checked = true;
@@ -331,11 +340,11 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   html = el("fddResultRows").innerHTML;
   assert.match(html, /stale/);
   assert.match(html, /not-assessed/);
-  vm.runInContext('scope.equip = "VAV-A"', ctx);
+  ctx.fddUi.equip = "VAV-A";
   await vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddResultRows").innerHTML, /data-equip="VAV-A"/);
   assert.doesNotMatch(el("fddResultRows").innerHTML, /SV-RANGE/);
-  vm.runInContext('scope.equip = "AHU-A"', ctx);
+  ctx.fddUi.equip = "AHU-A";
   await vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddResultRows").innerHTML, /SV-RANGE/);
   el("fddLanes").textContent = "echarts canvas marker";
@@ -366,7 +375,9 @@ test("161 fault lanes render an option using the real chunked All history path",
   const requests = [];
   let option = null;
   const ctx = vm.createContext({
+    ...sharedFdd(),
     console, URL, URLSearchParams, TextDecoder,
+    fddCatalog: null,
     document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" },
     has: (p, tag) => p.tags.includes(tag), idOf: (e) => e.id,
     latestOf: (p) => p.latest?.double, esc: (s) => String(s ?? "").replace(/[&<>\"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]),
@@ -396,6 +407,10 @@ test("161 fault lanes render an option using the real chunked All history path",
   });
   ctx.testModel = { equips: [{ id: "equip-1", name: "equip-1", attrs: { siteRef: "site-1" } }], points };
   vm.runInContext('model = testModel; scope.site = "site-1"', ctx);
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  assert.equal(option.yAxis.data.length, 12, "the heat map defaults to the most-faulted rows only");
+  assert.match(el("fddHeatNote").textContent, /12 most-faulted of 161/);
+  ctx.fddUi.heatAll = true;
   await vm.runInContext("renderFddResults(model.equips)", ctx);
   assert.ok(requests.length > 1, "the rendered lanes read history in multiple bounded requests");
   assert.equal(option.yAxis.data.length, 161);
@@ -445,6 +460,8 @@ test("RCx ignores superseded range resolutions and failures", async () => {
   };
   const pending = [];
   const ctx = vm.createContext({
+    ...sharedFdd(),
+    esc: (x) => String(x ?? ""), fddEquipOptions: () => [],
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
     idOf: (r) => (r.attrs || {}).id || r.name,
     has: (p, marker) => (p.tags || []).includes(marker),
@@ -478,6 +495,8 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
   };
   let rejectRange;
   const ctx = vm.createContext({
+    ...sharedFdd(),
+    esc: (x) => String(x ?? ""), fddCatalog: null,
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
     idOf: (r) => (r.attrs || {}).id || r.name, has: (p, marker) => (p.tags || []).includes(marker),
     equipLabel: (e) => e.name, chartTimeZone: () => "UTC", resolveSiteTimeZone: () => ({ zone: "UTC" }), getChartRangeState: () => ({ preset: "custom" }),
