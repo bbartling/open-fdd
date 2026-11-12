@@ -1,9 +1,10 @@
 ---
-title: Migrating to 5.0.16 (schema v4)
-parent: Operations
+title: Upgrading to 5.0.16
+parent: Normal Framework
+nav_order: 2
 ---
 
-# Migrating to 5.0.16 (Timescale schema version 4)
+# Upgrading to 5.0.16
 
 Applies to Full installations that use the Timescale engine. Lite and the `sqlite` / `pglite` engines have no persistent
 tables and need nothing.

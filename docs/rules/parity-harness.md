@@ -1,13 +1,17 @@
 ---
 title: Parity harness
-nav_order: 11
+parent: Rules
+nav_order: 5
 ---
 
-# Parity harness (`open_fdd.parity`)
+# Parity harness
 
-The parity harness is a versioned part of the PyPI package. Any app that runs the Open-FDD rule SQL on its own
+The parity harness is a versioned part of the `open-fdd` package (`open_fdd.parity`). Any app that runs the Open-FDD rule SQL on its own
 database can use it to prove that the SQL result equals the pandas reference on the same data. It is stdlib plus
 pandas: `pip install open-fdd[oracle]` is all a third-party adapter needs. All values are SI.
+
+Older PyPI releases (4.5.4 and earlier) do not include it: install from git until a later release is published,
+`pip install "open-fdd[oracle] @ git+https://github.com/bbartling/open-fdd"`.
 
 ```python
 from open_fdd.parity import generate, reference, compare, Policy, run_adapter

@@ -1,9 +1,10 @@
 ---
 title: Writing SQL rules
-nav_order: 5
+parent: Rules
+nav_order: 6
 ---
 
-# Write a SQL rule
+# Writing SQL rules
 
 PostgreSQL is the production FDD source. The SQLite pack is generated from it for smaller NF hosts. Keep every rule
 site-neutral and use SI values at the rule boundary.
@@ -75,5 +76,6 @@ python scripts/nf/gen_rule_docs.py --check
 python scripts/nf/gen_cookbook.py --check
 ```
 
-The generated [rule catalog](fdd-rules.html) is the compact index. The [SQL cookbook](rules/sql-cookbook.html)
-contains the rendered rule SQL, parameters, roles, and outputs. See [Units](units.html) for the conversion boundary.
+The [rule catalog](rules/) is the compact index. The [SQL cookbook](rules/sql-cookbook.html) lists parameters, roles, units
+and outputs and links each SQL file. See the [units convention](rules/sql-cookbook.html#units-convention) for the conversion boundary.
+To run a rule on your own database see [Using SQL rules outside Open-FDD](rules/borrowing-sql.html).

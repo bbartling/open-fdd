@@ -71,7 +71,7 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 
 The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
 
-`sql/fdd/schema/core.sql` is the shared core schema (`fdd.point`, `fdd.rule_result`, `fdd.rule_config`): the NF app installs it, and downstream applications vendor it byte for byte (it ships in the wheel as `open_fdd/data/core.sql`). Schema version 4 (5.0.16) replaced `openfdd.fdd_results` and `openfdd.retention_log` with it; see [`docs/operations/nf/migrate-5.x.md`](../docs/operations/nf/migrate-5.x.md).
+`sql/fdd/schema/core.sql` is the shared core schema (`fdd.point`, `fdd.rule_result`, `fdd.rule_config`): the NF app installs it, and downstream applications vendor it byte for byte (it ships in the wheel as `open_fdd/data/core.sql`). Schema version 4 (5.0.16) replaced `openfdd.fdd_results` and `openfdd.retention_log` with it; see [`docs/upgrade-5x.md`](../docs/upgrade-5x.md).
 
 ## Constraints
 

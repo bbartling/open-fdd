@@ -1,9 +1,10 @@
 ---
 title: API reference
-nav_order: 11
+parent: Normal Framework
+nav_order: 1
 ---
 
-# NF API reference
+# API reference
 
 Open-FDD uses the Normal Framework API. Results are ordinary NF points. This page describes generic read routes and
 the Open-FDD result shape. Use the NF documentation for routes not listed here.
@@ -45,7 +46,7 @@ and exposes current values. The supported pager uses `pageOffset` with `totalCou
 ### GET /api/v1/equipment/classes
 
 Returns the NF class vocabulary. The result can be paged. Query parameters accepted by the installed NF version are
-authoritative. Open-FDD uses classes and Haystack markers to bind points to named roles. See [Modeling](modeling.html).
+authoritative. Open-FDD uses classes and Haystack markers to bind points to named roles. See the [data model](modeling.html).
 
 ## Point history
 
@@ -57,7 +58,7 @@ NF. Open-FDD uses averages for signals and maxima for fault timelines.
 
 Use bounded requests. Batch point ids and split long ranges into time chunks. The app limits request URL size and
 pages range reads where supported. A missing timestamp means no sample. It is not a zero. The NF API and the
-[Python client](python-tools.html) provide the response envelopes for your NF release.
+[Python client](https://github.com/bbartling/open-fdd/blob/master/docs/python-tools.md) provide the response envelopes for your NF release.
 
 ## Open-FDD result points
 

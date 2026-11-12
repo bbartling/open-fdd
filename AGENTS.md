@@ -16,12 +16,12 @@ find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`
 | `nf-app/` | The full app: `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
 | `lite/` | Open-FDD Lite: the no-FDD edition for 1 GB boxes (Raspberry Pi) |
 | `sql/fdd/` | The FDD math (77 Postgres rules, registry, role map). Packs in `nf-app/rules/` are generated from it |
-| `scripts/nf/` | `build_rule_catalog.py`, `build_sql_pack.py`, `gen_rule_docs.py`, `hooks/nf_app_sync.py` (deploy), `tools/` (read-only NF checks: LAN vs portal, history, BACnet wire validation) |
+| `scripts/nf/` | `build_rule_catalog.py`, `build_sql_pack.py`, `gen_rule_docs.py`, `gen_cookbook.py`, `hooks/nf_app_sync.py` (deploy), `tools/` (read-only NF checks: LAN vs portal, history, BACnet wire validation) |
 | `deploy/nf-caddy/` | Optional Caddy front door |
 | `open_fdd/`, `tests/parity/` | PyPI pandas reference rules and the pandas == SQL parity tests |
 | `tools/rdf-check/` | Turtle export checker |
 | `tools/bacnet-scan/` | Read-only BACnet/IP site scanner (CSV + RDF); run it on a PC, never on the NF box |
-| `docs/operations/nf/` | NF runbooks: Lite or full, Caddy front door, NF upgrade, Haystack tagging, BACnet validation, NF gotchas |
+| `docs/operations/nf/` | NF runbooks (internal, not published): Caddy front door, NF upgrade, Haystack tagging, BACnet validation, NF gotchas |
 | `docs/` | GitHub Pages site (Jekyll, Just the Docs) |
 
 ## Rules
@@ -42,7 +42,32 @@ find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`
    release at least two weeks old, in both `nf-app/static/nf.js` and `lite/static/nf.js`.
 5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs; the SQLite pack must match Postgres.
 6. **Small PR slices** (one concern each, easy for a small model to review). Update the docs page that describes
-   what you changed; `docs/fdd-rules.md` is generated.
+   what you changed; `docs/rules/*.md` is generated. See Docs style below.
+
+## Docs style (published site)
+
+The GitHub Pages site is five short sections, rules first. `scripts/check_pages.py` enforces this in CI.
+
+| # | Section | Holds |
+|---|---|---|
+| 1 | **Rules** | SQL and pandas cookbooks, using SQL rules outside Open-FDD, parity and the parity harness, writing SQL rules |
+| 2 | **Data model** | Haystack roles bind points to rule inputs; SI units; RDF and SPARQL |
+| 3 | **Lite vs Full** | The two NF app editions, charts and export |
+| 4 | **Normal Framework** | Short install and usage notes that link to the official NF docs; API reference |
+| 5 | **Legacy** | One paragraph: earlier deployments are unsupported |
+
+- **No new top-level pages without the owner's approval.** Put new material in an existing page, or in the repo
+  (excluded from the site in `docs/_config.yml`). Internal material (prompts, plans, scratch notes, runbooks) never
+  ships: keep it under `docs/prompts/`, `plans/`, `scratch/`, `operations/` or `migration/`.
+- Short, plain, professional English. No recaps, no filler intros or closings, and do not repeat what another page
+  says: link to it. Prefer tables and short examples. Aim for 300-800 words a page; the checker's budget is 800
+  prose words (tables and code do not count). Rule cookbooks are generated, structured reference.
+- Every rule entry states the SI unit of each input, threshold and numeric output. Units come from
+  `sql/fdd/input_contract.json`, `open_fdd/data/units.json` and `sql/fdd/tuning_catalog.json` through
+  `scripts/nf/docs_units.py`. Edit the generators (`gen_rule_docs.py`, `gen_cookbook.py`), never the generated pages.
+- A page that moves or is removed leaves a "Page moved" stub; add it to `REDIRECTS` in `scripts/check_pages.py`
+  and run `python3 scripts/check_pages.py --write-redirects`.
+- No customer or company names, no stale version numbers, no dead links (`scripts/check_links.py`).
 
 ## Tests to run before a PR
 
@@ -50,8 +75,8 @@ find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`
 node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
 (cd nf-app && npm ci && npm run typecheck)
 python3 scripts/nf/build_rule_catalog.py --check && python3 scripts/nf/build_sql_pack.py --check
-python3 scripts/nf/gen_rule_docs.py --check
-python3 scripts/check_links.py
+python3 scripts/nf/gen_rule_docs.py --check && python3 scripts/nf/gen_cookbook.py --check
+python3 scripts/check_links.py && python3 scripts/check_pages.py
 ```
 
 Local development needs no NF box: `node nf-app/dev/mock-nf.mjs`, then open
@@ -76,7 +101,7 @@ minutes, so reload with `?v=N` after a deploy.
 - Never commit secrets: NF passwords, API keys, tokens, `auth.caddy`, certificates, private hostnames.
 - Never pass an existing point uuid to `POST /api/v1/bacnet/local` (it overwrites that point).
 - Never reintroduce Rust, GHCR images, a second historian or a second auth system; NF owns those.
-- Never edit generated files by hand (`fdd-catalog.json`, `rules/pack-*.json`, `docs/fdd-rules.md`).
+- Never edit generated files by hand (`fdd-catalog.json`, `rules/pack-*.json`, `docs/rules/index.md`, `docs/rules/sql-cookbook.md`, `docs/rules/pandas-cookbook.md`, `docs/rules/parity.md`).
 
 ## Live patching a box (last resort)
 
