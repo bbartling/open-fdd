@@ -105,7 +105,7 @@ def test_timescale_through_the_core_tables_reproduces_the_verdict(ds):
     assert raw["history_mismatches"] == [], "history == SI dataset cell for cell (1e-9 relative)"
     assert raw["factor"]["factor_mismatches"] == []
     assert raw["stored"]["after"] == raw["stored"]["before"] > 0, "re-running writes no new rows"
-    assert raw["index_ok"] is True, "the loader query can use NF's (point_id, time) index"
+    assert raw["index_ok"] is True, f"the loader query can use NF's (point_id, time) index: {raw.get('index_plan')}"
     assert engines_disagree({"pglite": pg_rows, "timescale": ts_rows}, "timescale") == []
     verdict = compare(ts_rows, reference(ds), Policy.default(ARGS["profile"], stress=True))
     assert summary(verdict) == PINNED["verdict"], verdict.summary()

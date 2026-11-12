@@ -153,7 +153,7 @@ try {
   const history_mismatches = [];
   const results = {};
   const written = [];
-  let indexOk = null;
+  let indexOk = null, indexPlan = [];
   timing.install_ms = Date.now() - t0;
   t0 = Date.now();
   const ruleIds = Object.keys(pack.rules);
@@ -201,6 +201,7 @@ try {
         walk(plan0[0].Plan);
         const scans = nodes.filter((n) => /^_hyper_/.test(n["Relation Name"] || ""));
         indexOk = scans.length > 0 && nodes.some((n) => /Index/.test(n["Node Type"])) && scans.every((n) => !/^Seq Scan/.test(n["Node Type"]));
+        indexPlan = nodes.map((n) => `${n["Node Type"]}${n["Relation Name"] ? " " + n["Relation Name"] : ""}${n["Index Name"] ? " [" + n["Index Name"] + "]" : ""}`);
       } finally { await db.query("ROLLBACK"); }
     }
   }
@@ -256,7 +257,7 @@ try {
 
   writeFileSync(outFile, JSON.stringify({
     results, errors, timing, memory: { rss_peak_mb: Math.round(process.memoryUsage().rss / 1048576) },
-    history_mismatches, written: written.length, stored: { before, after }, index_ok: indexOk, signature_ok: signatureOk,
+    history_mismatches, written: written.length, stored: { before, after }, index_ok: indexOk, index_plan: indexPlan, signature_ok: signatureOk,
     schema_version: installed.schemaVersion, factor: factorCheck(),
   }));
   console.log(`wrote ${outFile}: ${written.length} rows, ${stored.length} stored, history mismatches ${history_mismatches.length}`);
