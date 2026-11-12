@@ -45,7 +45,7 @@ results = run_all(next(iter(frames.values())))
 ```
 
 Frames contain SI values mapped to Haystack roles. The pandas rules are reference implementations. The production
-engine is SQL. See [Writing pandas rules](pandas-rules.html) and [parity](rules/parity.html).
+engine is SQL. See [parity](rules/parity.html).
 
 The package also provides ECM workbooks, reports, anomaly screening, and RDF readers. Use the CLI help for command
 options. Source and installation extras are in the repository's pyproject.toml.

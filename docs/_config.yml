@@ -35,6 +35,9 @@ gh_edit_branch: "master"
 gh_edit_source: docs
 gh_edit_view_mode: "tree"
 
+# Internal material never ships: agent prompts, plans, scratch notes, runbooks and migration records stay in the repo.
+# Pages cut from the site (python-tools, development, plot-spec, changelog, install, security) stay as repo docs; the
+# removed URLs are "Page moved" stubs (scripts/check_pages.py --write-redirects). scripts/check_pages.py enforces this list.
 exclude:
   - Gemfile
   - Gemfile.lock
@@ -42,22 +45,23 @@ exclude:
   - .sass-cache
   - .jekyll-cache
   - prompts/**
+  - plans/**
+  - scratch/**
+  - internal/**
+  - private/**
+  - operations/**/*.md
+  - operations/*.md
+  - migration/**/*.md
+  - migration/*.md
+  - architecture/**/*.md
+  - architecture/*.md
   - lite.md
-  - operations/nf/index.md
-  - operations/nf/lite-vs-full.md
-  - operations/nf/haystack-tagging.md
-  - operations/nf/front-door-caddy.md
-  - operations/nf/nf-upgrade-compose.md
-  - operations/nf/bacnet-validate.md
-  - operations/nf/migrate-5.0.10.md
-  - operations/nf/migrate-5.0.11.md
-  - operations/nf/nf-gotchas.md
-  - operations/nf/PORT_NOTES.md
-  - migration/nf-plugin/PLAN.md
-  - migration/nf-plugin/STATUS.md
-  - migration/nf-plugin/NF_FEATURES.md
-  - migration/nf-plugin/ARCHIVE_MAP.md
-  - architecture/adr-014-open-fdd-as-nf-plugin.md
+  - install.md
+  - security.md
+  - python-tools.md
+  - development.md
+  - plot-spec.md
+  - changelog.md
 
 mermaid:
   version: "10.9.1"

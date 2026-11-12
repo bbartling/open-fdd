@@ -1,30 +1,22 @@
 ---
 title: Home
 nav_order: 1
+nav_exclude: true
 permalink: /
 ---
 
 # Open-FDD
 
-Open-FDD is a fault-detection and retro-commissioning app for the Normal Framework (NF). It reads NF's modeled
-equipment, points, and history and writes its results as ordinary NF points.
+Open-FDD is a fault-detection and retro-commissioning app for the [Normal Framework](https://docs.normal.dev/) (NF). It reads NF's
+modeled equipment, points and history, runs SQL fault rules in SI units, and writes results as ordinary NF points.
 
-## Editions
-
-| Edition | Use |
+| Section | What is in it |
 |---|---|
-| Full | SQL fault rules, charts, export, RDF/SPARQL, and scheduled FDD and weather hooks |
-| Lite | Dashboard, charts, export, RDF, and weather for smaller hosts, without FDD or Timescale |
+| [Rules](rules/) | SQL and pandas rule cookbooks with units per rule, using the SQL rules outside Open-FDD, parity |
+| [Data model](modeling.html) | How Haystack tags and roles bind points to rule inputs; SI units; RDF and SPARQL |
+| [Lite vs Full](editions.html) | The two NF app editions, charts and CSV export |
+| [Normal Framework](normal-framework.html) | Install, upgrade, security and the API, linking to the NF docs |
+| [Legacy](legacy.html) | Unsupported earlier deployments |
 
-## Guides
-
-- [Install the NF app](install.html) covers Full and Lite, supported install routes, hooks, and upgrades.
-- [Modeling](modeling.html) explains how to tag equipment and points so roles bind.
-- [Writing SQL rules](sql-rules.html) and [writing pandas rules](pandas-rules.html).
-- [API reference](fdd-data-access.html) covers point metadata, results, and history.
-- [FDD rule catalog](fdd-rules.html) lists production rules and defaults.
-- [Charts](charts.html), [export](export.html), and [RDF/SPARQL](rdf-sparql.html).
-- [Plot spec](plot-spec.html) is the shared description of which series and fault strips a plot shows.
-
-Find the source and full release history on [Open-FDD on GitHub](https://github.com/bbartling/open-fdd) and its
+Source and release history: [GitHub](https://github.com/bbartling/open-fdd) and
 [releases](https://github.com/bbartling/open-fdd/releases).

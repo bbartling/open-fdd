@@ -1,9 +1,10 @@
 ---
-title: Charts
-nav_order: 12
+title: Charts and export
+parent: Lite vs Full
+nav_order: 1
 ---
 
-# Charts
+# Charts and export
 
 Open-FDD has three chart surfaces. **Charts** plots selected point histories. **RCx** offers registered views for
 equipment and sites. **FDD** plots rule results and sensor history.
@@ -14,7 +15,7 @@ Date-time controls display the modeled site's timezone. Saved instants remain un
 
 History loads in bounded chunks and displays a loading state and a visible error if a request fails. The UI merges the
 chunks before drawing. Long ranges therefore do not require one oversized API request. NF still resamples history to
-the requested interval. Use [Export](export.html) for a CSV.
+the requested interval. Use [Export](#export) for a CSV.
 
 ## Faults lane
 
@@ -23,8 +24,15 @@ Zero means assessed and healthy. A missing time is unknown, not healthy. A senso
 rule assesses. Old excluded result points are not deleted.
 
 RCx views declare required and optional roles. The tab draws views whose required roles bind to equipment and lists
-the rest with missing inputs. See [Modeling](modeling.html) and [FDD rules](fdd-rules.html).
+the rest with missing inputs. See the [data model](modeling.html) and [rules](rules/).
 
 For contributors, register chart views with rcxView in nf-app/static and add them to nf-app/rcx-parity.json. The
 fault lane helper is rcxWithFaultLane in nf-app/static/rcx.js. The chart range helpers and tests are in
 nf-app/static/charts.js and nf-app/tests.
+
+## Export
+
+The Export tab downloads selected point history as CSV (UTF-8 with a byte-order mark). Choose points, a date range, a resolution and
+display or stored units. Resolutions include the raw trend interval and coarser buckets; NF does the resampling. Long ranges are fetched
+in bounded chunks and assembled in the browser, and a cell limit applies: reduce the range or points if it is hit. For automation use the NF
+point-data API in the [API reference](fdd-data-access.html). The code is `nf-app/static/export.js`.

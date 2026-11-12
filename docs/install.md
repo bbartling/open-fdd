@@ -1,19 +1,17 @@
 ---
-title: Install the NF app
-nav_order: 2
+title: NF app install reference
 ---
 
-# Install Open-FDD on NF
+# NF app install reference
+
+The full installer runbook. Not published on the site: the site has the short [Normal Framework](normal-framework.html) page.
 
 Open-FDD is an app for the Normal Framework (NF). It reads the modeled site, equipment, points, and history from NF.
 It does not need a separate login or historian. Choose Full for FDD and larger hosts, or Lite for smaller hosts.
 
 ## Choose Full or Lite
 
-| Edition | App id | Includes | Typical resources |
-|---|---|---|---|
-| Full | `open-fdd` | SQL FDD, charts, export, RDF/SPARQL, and FDD, weather, and SPARQL hooks | SQLite on smaller hosts, PGlite or Timescale on larger hosts |
-| Lite | `open-fdd-lite` | dashboard, charts, export, weather hook, and RDF | about 1 GB RAM, without FDD or Timescale |
+See [Lite vs Full](editions.html). App ids: Full `open-fdd` (`nf-app/app.json`), Lite `open-fdd-lite` (`lite/app.json`).
 
 Do not install both editions on a constrained box. Build, test, and run installer commands from a PC. NF runs the
 installed app and hooks.
@@ -106,7 +104,7 @@ batch even when it drops a sample older than the retention, and the timeline wat
 ## Model and verify
 
 Tag sites, equipment, points, and units in NF. Open-FDD has no per-site configuration. Points need history for charts
-and rules. The FDD page lists missing required roles. See [Modeling](modeling.html) and [Units](units.html).
+and rules. The FDD page lists missing required roles. See the [data model](modeling.html).
 
 After install, verify the following.
 
@@ -139,12 +137,12 @@ write to HVAC controllers or other field devices.
 ## Further help
 
 - [NF gotchas](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-gotchas.md) documents NF-specific behaviors and workarounds.
-- [Modeling](modeling.html) covers classes, markers, roles, and point units.
+- The [data model](modeling.html) covers classes, markers, roles, and point units.
 - [API reference](fdd-data-access.html) covers NF points, results, and history.
 - [Timescale guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale) covers schema, roles, and retention.
 - [Development](development.html) covers the local mock, tests, and generated packs.
 
-## 10. Troubleshooting
+## Troubleshooting
 
 Run `doctor` from the release checkout with the protected console environment file.
 

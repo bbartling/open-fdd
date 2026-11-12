@@ -25,7 +25,7 @@ python3 scripts/nf/gen_cookbook.py --check
 
 Run the Node tests with `node --test` against the test files in nf-app/tests and lite/tests. Run the pandas/SQL parity
 suite with `python -m pytest tests/parity -q`. Use the
-[SQL rules guide](sql-rules.html) and [pandas rules guide](pandas-rules.html) for rule-specific workflows.
+[SQL rules guide](sql-rules.html) and [parity](rules/parity.html) for rule-specific workflows.
 
 The repository also contains the Lite app, NF installer, Timescale schema, RDF checker, and Python package. Start with
 AGENTS.md and openfdd_agent_spec/README.md for contributor rules and architecture.
