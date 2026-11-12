@@ -508,3 +508,40 @@ def test_doctor_warns_only_when_latest_fdd_run_skipped_units(monkeypatch, tmp_pa
     assert sync.cmd_doctor(console, manifest) == 0
     output = capsys.readouterr().out
     assert ("[WARN] fdd units: roles skipped by unit: 1 (zone_flow 1)" in output) is warn
+
+
+@pytest.mark.parametrize(("options", "disabled"), [
+    ([{"name": "weather", "value": {"boolean": False}}], True),
+    ([{"name": "weather", "value": {"string": "false"}}], True),
+    ([{"name": "weatherEnabled", "value": {"string": "off"}}], True),
+    ([{"name": "weather", "value": {"boolean": True}}], False),
+    ([], False),
+])
+def test_doctor_reports_weather_disabled_not_a_failure(monkeypatch, tmp_path, capsys, options, disabled):
+    """#1552: weather off is a first-class state. The weather hook's last run failed (it could not reach the internet),
+    which is exactly why it was switched off: doctor says "weather disabled" and passes."""
+    hook = {"id": "weather", "entryPoint": "/hooks/weather.js"}
+    failed = {"state": "STATE_FAILED", "results": {"g": {"error": {"message": "getaddrinfo ENOTFOUND api.open-meteo.com"}}}}
+    console = SimpleNamespace(
+        apps=lambda: [{"id": "open-fdd", "hooks": [hook], "options": options}],
+        call=lambda *_: {"runs": [failed]},
+        read_file=lambda *_: b'{"version":"5.0.10"}',
+        probe=lambda *_: (200, {}),
+    )
+    monkeypatch.setattr(sync, "version_info", lambda *_: {"version": "5.0.10"})
+    monkeypatch.setattr(sync, "fdd_freshness", lambda *_: ("pass", "fresh"))
+    monkeypatch.setattr(sync, "find_drift", lambda *_: {})
+    monkeypatch.setattr(sync, "hand_edit_line", lambda *_: ("PASS", "hand edits", "none"))
+    monkeypatch.setattr(sync, "weather_coords_source", lambda *_: ("pass", "coords ok"))
+    manifest = {"application": {"id": "open-fdd"}, "_dir": tmp_path, "hooks": [hook]}
+    code = sync.cmd_doctor(console, manifest)
+    output = capsys.readouterr().out
+    if disabled:
+        assert code == 0, output
+        assert "[PASS] hook weather: weather disabled" in output
+        assert "[PASS] weather: weather disabled" in output
+        assert "weather coords" not in output
+        assert not sync.weather_enabled({"options": options})
+    else:
+        assert "weather disabled" not in output
+        assert sync.weather_enabled({"options": options})

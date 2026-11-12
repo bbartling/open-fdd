@@ -3,6 +3,11 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## Unreleased
+
+- **FDD outputs change for sites that set the `timezone` app option (#1587).** The `fdd` hook's occupancy schedule (the VAV-1 `occ_mode` synthesis) and the `analytics` hook's weekly runtime now resolve the site time zone in the dashboard's order: model site `tz`/`timezone`, then the `timezone` app option, then NF Sites, then the host zone, then UTC. Before, the hook used the model `tz` or the host zone, which is UTC on real NF, so a site that had only set the option (or NF Sites) was evaluated in UTC and its occupied hours were shifted by the UTC offset. After upgrading, such a site's VAV-1 fault timeline and `fddOccSource` results move to site-local 07:00-17:00 (and shift an hour across DST); sites with a model `tz` are unchanged. The run summary reports `timezones: {site: {zone, source, fallback}}` and the log names the source.
+- **Weather is optional, and outputs are pluggable (#1552).** App option `weather: false` (alias `weatherEnabled`) switches the weather hook off: no outbound request and no NF call, the hook returns `{skipped: true, reason: "weather disabled"}`, and `doctor` reports "weather disabled" instead of a failure. With it off (or when no weather point is bound) the `fdd` hook feeds the equipment's own outside-air sensor to the rules that read `web_oa_t` ("web first, else local", as RCx already did); a rule with no outside-air temperature skips with a reason, and OAT-METEO is skipped. Stale weather points are ignored while it is off (FDD, RCx, degree days). The BACnet mirror is now one exporter of a list (`exporters` option, interface in `docs/install.md`): hook variables are always written, and `bacnet-av` runs by default only when NF's BACnet server answers `GET /api/v1/bacnet/configuration`. **Behaviour change:** a site with no BACnet server no longer gets a failed weather run; the exporter is skipped and the summary says why.
+
 ## 5.0.16 — 2026-11-12 (app) / open-fdd 4.5.7 (PyPI)
 
 One small shared core schema. FDD results are unchanged (parity at the 8 equipment x 7 days stress size: compared=71 matched=47 known-divergent=24 unexpected=0; 4 x 3 gives 49/22; both pinned in `tests/parity/baseline.json`).
@@ -100,7 +105,6 @@ Follow-up to 5.0.6 CodeRabbit review:
 2. **Credential redaction:** `redact` replaces the known `connectionString` before userinfo masking. Bare passwords of length ≥ 3 are replaced; shorter ones are not (avoids mangling diagnostics such as `connection refused`), while short passwords inside a connection string are still covered by the connectionString replace.
 3. **Weather model lookup:** later-page and first-page non-404 point/query failures propagate (not an empty layer); the paginated model-site lookup uses a 45s deadline; the whole-run deadline and NF `invokeTimeout` are 120s so lookup + Open-Meteo fetch + writes still fit.
 4. **Doctor Sites paging:** the Sites adapter forwards `pageToken` as well as `pageOffset`.
-
 
 ## 5.0.6 — 2026-11-09 (app) / open-fdd 4.5.3 (PyPI)
 

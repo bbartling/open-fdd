@@ -1325,6 +1325,16 @@ def option_coords(app: dict | None) -> tuple[float, float] | None:
     return None if (la == 0 and lo == 0) or abs(la) > 90 or abs(lo) > 180 else (la, lo)
 
 
+def weather_enabled(app: dict | None) -> bool:
+    """Is the web weather fetch ON? The app options `weather` / `weatherEnabled` set to false turn it off (#1552).
+    Same rule as shared/hooks/settings.js weatherEnabled(): either one saying false wins, unset = on."""
+    for name in ("weather", "weatherEnabled"):
+        v = option_scalar(app, name)
+        if v is not None and str(v).strip().lower() in ("false", "0", "no", "off"):
+            return False
+    return True
+
+
 def weather_coords_source(c, app: dict | None = None) -> tuple[str, str]:
     """('pass'|'fail', text): where the weather hook would get its coordinates, in the hook's own order:
     the app options latitude + longitude, NF Sites, then the modeled Haystack site."""
@@ -1930,6 +1940,10 @@ def hand_edit_line(drift: dict) -> tuple[str, str, str]:
                                   "(--save-remote DIR keeps the box copies first)")
 
 
+# hook ids of the weather hook in the two editions (Full: weather, Lite: open-meteo-weather)
+WEATHER_HOOK_IDS = ("weather", "open-meteo-weather")
+
+
 def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -> int:
     app_id = m["application"]["id"]
     bad = 0
@@ -1983,6 +1997,9 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
             line("WARN", f"hook {h['id']}", f"could not read runs ({e})")
             continue
         last = (runs.get("runs") or [None])[0]
+        if h["id"] in WEATHER_HOOK_IDS and not weather_enabled(a):
+            line("PASS", f"hook {h['id']}", "weather disabled (app option weather=false): no outbound fetch is made")
+            continue
         if not last:
             line("PASS" if h.get("mode") == ON_REQUEST else "WARN", f"hook {h['id']}", "never run")
             continue
@@ -1997,8 +2014,13 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         if h["id"] == "fdd" and (unit_skips := fdd_unit_skip_text(last)):
             line("WARN", "fdd units", unit_skips)
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
-        lvl, text = weather_coords_source(c, a)
-        line("PASS" if lvl == "pass" else "FAIL", "weather coords", text)
+        if not weather_enabled(a):
+            line("PASS", "weather", "weather disabled (app option weather=false): no outbound request, no coordinates needed; "
+                 "rules that read web OAT use the equip's own outside-air sensor when tagged, else skip. "
+                 "Set weather=true (or clear it) to turn it back on")
+        else:
+            lvl, text = weather_coords_source(c, a)
+            line("PASS" if lvl == "pass" else "FAIL", "weather coords", text)
     lvl, text = timezone_source(c, a)
     line(lvl.upper(), "timezone", text)
     fdd_def = next((h for h in a.get("hooks", []) if h.get("id") == "fdd"), None)

@@ -422,7 +422,7 @@
   const outsideAirPoint = (ctx, siteRef) => {
     const pool = ctx.model.points.filter((p) => has(p, "point") && p.siteRef === siteRef);
     const b = bindRoles(["oa_t", "web_oa_t"], pool, ctx.catalog);
-    return b.oa_t[0] || b.web_oa_t[0] || null;
+    return b.oa_t[0] || (typeof weatherDisabled === "function" && weatherDisabled() ? null : b.web_oa_t[0]) || null;
   };
 
   const meterPoint = (ctx, eq) => {

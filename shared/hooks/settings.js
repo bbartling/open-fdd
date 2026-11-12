@@ -13,6 +13,11 @@
  *   latitude     number  weather: site latitude when neither NF Sites nor the model has one
  *   longitude    number
  *   site         string  weather: which NF site when several have coordinates
+ *   weather      bool    weather: false = OFF: no outbound HTTP at all, the hook returns {skipped, reason: "weather disabled"}
+ *                        (alias weatherEnabled; default on; see weatherEnabled() below)
+ *   exporters    string  weather: where the values go besides the hook variables: "bacnet-av" (default when NF's BACnet
+ *                        server is present), a comma list or a JSON array, "none" = variables only
+ *   timezone     string  IANA zone for the site when the model site has none (fdd occupancy schedule, charts; #1587)
  *
  * Options cannot hold nested objects, so `timescale` arrives as a STRING; this module turns the scalar form into
  * the object form the code wants. An object (a test, or a future NF that does store hook config) passes through.
@@ -22,7 +27,7 @@
 /** Options whose value is an object/array in the code but arrives as a JSON string in NF options. */
 const JSON_OPTIONS = ['timescale', 'history', 'bacnet', 'equips'];
 const NUMBER_OPTIONS = ['windowHours', 'latitude', 'longitude', 'writeRetryMs'];
-const BOOLEAN_OPTIONS = ['dryRun', 'bacnetMirror', 'bacnet_mirror'];
+const BOOLEAN_OPTIONS = ['dryRun', 'bacnetMirror', 'bacnet_mirror', 'weather', 'weatherEnabled'];
 
 /** NF typed values, e.g. { string: "x" } / { signed: 24 } / { boolean: true } (as GetApplications shows an option). */
 const TYPED_KEYS = ['string', 'signed', 'unsigned', 'double', 'real', 'boolean'];
@@ -119,6 +124,19 @@ function normalizeConfig(raw) {
 }
 
 /**
+ * Is the web weather fetch ON? Default yes. The app option `weather` (alias `weatherEnabled`) set to false turns it off
+ * (a normalized config: booleans already converted). Either one saying false wins. Used by the weather hook (no HTTP
+ * when off), the fdd hook (stale weather points are not bound; local OAT fallback) and kept in step with `doctor`
+ * (scripts/nf/hooks/nf_app_sync.py weather_enabled).
+ * @param {any} config
+ * @returns {boolean}
+ */
+function weatherEnabled(config) {
+  const c = config || {};
+  return !(toBool(c.weather) === false || toBool(c.weatherEnabled) === false);
+}
+
+/**
  * `text` with the connection's secrets removed (password, password inside a URL), for logs and error messages.
  * @param {any} text
  * @param {any} [conn] the timescale settings object, when known
@@ -146,4 +164,4 @@ function redact(text, conn) {
   return s;
 }
 
-module.exports = { normalizeConfig, parseTimescale, requireTimescale, redact, unwrapTyped, TIMESCALE_WHERE };
+module.exports = { weatherEnabled, normalizeConfig, parseTimescale, requireTimescale, redact, unwrapTyped, TIMESCALE_WHERE };

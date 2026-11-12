@@ -63,6 +63,8 @@
 //   engine        "auto" | "sqlite" | "pglite" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
+//   weather       false = web weather is OFF (#1552): weather points are ignored (they are stale leftovers), rules that read
+//                 web_oa_t use the equip's own outside-air sensor when tagged, else skip with a reason (alias weatherEnabled)
 //   timezone      IANA zone (e.g. America/Chicago) for the occupancy schedule when the model site has no tz (#1587)
 //   equips        list of equip ids to limit a run to (default: every equip)
 //   dryRun        true → compute and log, write nothing
@@ -92,6 +94,7 @@ function loadShared() {
   const get = (n) => vm.runInContext(n, ctx);
   return {
     toPoint: get('toPoint'), idOf: get('idOf'), has: get('has'), equipRules: get('equipRules'),
+    bindRoles: get('bindRoles'), equipPool: get('equipPool'),
     ENTITY_TYPES: get('ENTITY_TYPES'),
     catalog: JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8')),
   };
@@ -529,6 +532,46 @@ function timelineRecords({ equipRec, siteId, rule, shared, windowHours, key, run
   ];
 }
 
+// ---- outside-air temperature policy (#1552): web weather first, else the equip's local sensor ----------------------
+/**
+ * The same OAT policy as the RCx charts ("web first, else local"), applied to the rules that read `web_oa_t`:
+ *   - web weather bound (a point tagged `weather`) -> used, nothing changes;
+ *   - none bound but the equip has its own tagged outside-air temperature (role oa_t) -> that sensor feeds web_oa_t
+ *     (not on the timescale engine: fdd.point keys one role per point);
+ *   - none of either -> the rule is skipped with a reason that says why (only when weather is switched OFF; with weather
+ *     on but nothing bound yet the rule keeps its old behaviour).
+ * A rule that lists BOTH oa_t and web_oa_t (OAT-METEO) compares the two, so a local fallback would compare a sensor with
+ * itself: it is skipped when weather is off. Mutates the rows of equipRules(); returns what it did.
+ * @param {any[]} rows @param {{ localOat?: any, weatherOn: boolean, canSubstitute: boolean }} o
+ * @returns {{ source: 'web' | 'local' | 'none', local: any, skipped: string[] }}
+ */
+function applyOatPolicy(rows, { localOat, weatherOn, canSubstitute }) {
+  const out = { source: /** @type {'web' | 'local' | 'none'} */ ('none'), local: null, skipped: /** @type {string[]} */ ([]) };
+  if (rows.some((r) => (r.bound.web_oa_t || []).length)) out.source = 'web';
+  for (const r of rows) {
+    const roles = [...r.required, ...r.optional];
+    if (!roles.includes('web_oa_t') || (r.bound.web_oa_t || []).length) continue;
+    const compares = roles.includes('oa_t');
+    if (!compares && localOat && canSubstitute) {
+      r.bound.web_oa_t = [localOat];
+      r.oatLocal = true;
+      r.missing = r.required.filter((x) => !(r.bound[x] || []).length);
+      r.pointInputs = true;
+      r.runnable = r.missing.length === 0;
+      out.local = localOat;
+      if (out.source === 'none') out.source = 'local';
+      continue;
+    }
+    if (weatherOn) continue;                                   // nothing bound yet: old behaviour
+    r.runnable = false;
+    r.skipReason = compares
+      ? 'needs web weather to compare with the equip outside-air sensor, and weather is disabled (app option weather=false)'
+      : `needs an outside-air temperature: weather is disabled (app option weather=false) and ${localOat ? 'the local sensor cannot be used on the timescale engine' : 'this equip has no outside-air temperature sensor tagged'}`;
+    out.skipped.push(r.rule.id);
+  }
+  return out;
+}
+
 // ---- occupancy for rules whose occ_mode is optional and unbound -------------------------------------
 const scheduleLib = require('../static/schedule.js');
 const siteTz = require('./lib/site-timezone.js');
@@ -707,6 +750,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   for (let t = from; t < to; t += step * 1e3) grid.push(t);
 
   const model = await loadModel(http, shared);
+  const weatherOn = settings.weatherEnabled(config);
+  if (!weatherOn) model.points = model.points.filter((p) => !shared.has(p, 'weather'));   // stale after the hook was switched off
   const modelProblem = modelProblemOf(model);
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
@@ -714,6 +759,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
     sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 },
     // site time zone used for the occupancy schedule, per site, with where it came from (#1587)
+    // outside-air temperature policy (#1552): web weather first, else the equip's own sensor
+    oat: { weather: weatherOn ? 'on' : 'off', web: 0, local: 0, none: 0, local_points: /** @type {{site: string, equip: string, point: string}[]} */ ([]) },
     timezones: /** @type {Record<string, {zone: string, source: string, fallback: boolean}>} */ ({}),
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
     eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {},
@@ -744,8 +791,18 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
       };
       try {
         const bound = shared.equipRules(equipRec, model, shared.catalog).filter((r) => pack.rules[r.rule.id]);
+        if (bound.some((r) => [...r.required, ...r.optional].includes('web_oa_t'))) {
+          const localOat = shared.bindRoles(['oa_t'], shared.equipPool(equipRec, model), shared.catalog).oa_t[0] || null;
+          const oat = applyOatPolicy(bound, { localOat, weatherOn, canSubstitute: kind !== 'timescale' });
+          summary.oat[oat.source]++;
+          if (oat.local) {
+            summary.oat.local_points.push({ site: siteId, equip: equipId, point: oat.local.name });
+            log(`${equipId}: no web weather bound, using the local outside-air sensor "${oat.local.name}" for web_oa_t`);
+          }
+          if (oat.skipped.length) log(`${equipId}: ${oat.skipped.join(', ')} skipped: no outside-air temperature (weather disabled)`);
+        }
         for (const r of bound) {
-          if (!r.runnable) reasons.set(r.rule.id, `required roles missing (${r.missing.length ? r.missing.join(', ') : 'no input role is bound'})`);
+          if (!r.runnable) reasons.set(r.rule.id, r.skipReason || `required roles missing (${r.missing.length ? r.missing.join(', ') : 'no input role is bound'})`);
         }
         let runnable = bound.filter((r) => r.runnable);
         const hadResults = Object.keys(pack.rules).some((id) => model.results.has(resultUuid(key, id)));
@@ -764,7 +821,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const assessableRoles = shared.catalog.sensor_sweep_roles?.[r.rule.id];
           if (!Array.isArray(assessableRoles)) throw new Error(`fdd catalog has no assessable-role list for ${r.rule.id}`);
           for (const [role, points] of Object.entries(r.bound || {})) {
-            if (!assessableRoles.includes(role)) continue;
+            if (!assessableRoles.includes(role) || (r.oatLocal && role === 'web_oa_t')) continue;
             for (const point of points || []) {
               let sensor = sweepSensors.find((s) => s.point.uuid === point.uuid);
               if (!sensor) { sensor = { role, point, ruleIds: new Set() }; sweepSensors.push(sensor); }
@@ -1190,4 +1247,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { applyOatPolicy, runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });

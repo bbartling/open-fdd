@@ -282,7 +282,8 @@ function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = 
     dispSystem: () => (rcxUnits() ? rcxUnits().displaySystem() : "si"),
     dispSeries: rcxDispSeries,
     unit: (p) => rcxDisp(0, rcxSiUnit(p)).unit,
-    weather: model.points.filter((p) => has(p, "weather") && has(p, "point") && p.siteRef === site),
+    // weather switched off (app option `weather`: false) -> its points are stale leftovers: RCx falls back to the equip oa_t
+    weather: typeof weatherDisabled === "function" && weatherDisabled() ? [] : model.points.filter((p) => has(p, "weather") && has(p, "point") && p.siteRef === site),
   };
 }
 

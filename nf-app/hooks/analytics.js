@@ -415,8 +415,9 @@ async function handle({ sdk, args = {}, config = {}, now = () => Date.now() }) {
     if (!Object.prototype.hasOwnProperty.call(TOOLS, tool)) throw new ToolError(`args.tool must be one of ${Object.keys(TOOLS).join(', ')}`);
     const http = readOnlyHttp(sdk.http);
     const nowMs = now();
+    const cfg = settings.normalizeConfig(config);
     const nfSites = (await siteTz.loadNfSites(http)).sites;
-    const g = loadSandbox(http, nowMs, { appOption: siteTz.knownZone(siteTz.optionOf(settings.normalizeConfig(config))), sites: nfSites });
+    const g = loadSandbox(http, nowMs, { appOption: siteTz.knownZone(siteTz.optionOf(cfg)), sites: nfSites, weatherOff: !settings.weatherEnabled(cfg) });
     const model = await loadModel(http, g);
     const out = await TOOLS[tool]({ g, model, http, now: nowMs }, args);
     result = { ok: true, tool, ms: now() - t0, ...out };

@@ -40,7 +40,9 @@ Runs every 20 minutes (`MODE_SCHEDULED`).
   | key | default | meaning |
   |---|---|---|
   | `site` | `""` | NF site id, only needed when several sites have coordinates |
-  | `bacnetMirror` | on (both editions; no setting needed) | `false` skips the BACnet objects (alias `bacnet_mirror`) |
+  | `weather` | on | `false` = off: no outbound request, the hook returns `{skipped: true, reason: "weather disabled"}` |
+  | `exporters` | `bacnet-av` when NF's BACnet server is present | `none` = hook variables only; see [install reference](../docs/install.md) |
+  | `bacnetMirror` | on (both editions; no setting needed) | `false` removes `bacnet-av` from the exporters (alias `bacnet_mirror`) |
   | `avInstances` | `[1, 2, 3]` | AV instance numbers for temp, RH, dewpoint (three distinct integers; an array or `"1,2,3"`) |
 
   The `bacnet_object` attrs on the global variables in `app.json` are informational labels. If you
