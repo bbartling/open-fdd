@@ -159,6 +159,7 @@ try {
   const ruleIds = Object.keys(pack.rules);
   const errors = {};
   const runTs = new Date(TO.getTime());
+  const accumulated = new Set();
   for (const equip of equips) {
     const { plan, args } = planFor(equip);
     await ts.syncPoints(db, { siteId: SITE, equipId: equip, rows: ts.pointRows({ pack, ...args }) });
@@ -180,22 +181,12 @@ try {
     }
     for (const t of got.keys()) if (!want.has(t)) history_mismatches.push(`${equip}: extra loaded row @${t}`);
 
-    // site-level weather from the dataset (outside the core tables)
-    await db.query("DELETE FROM pg_temp.weather");
-    const wcols = pack.contract.weather.map((c) => c.name).filter((n) => n !== "timestamp_utc");
-    if (input.weather.length) {
-      await db.query(
-        `INSERT INTO pg_temp.weather (timestamp_utc, ${wcols.map((c) => `"${c}"`).join(", ")})
-         SELECT to_timestamp((r->>'ts')::float8 / 1000.0), ${wcols.map((c) => `(r->>'${c}')::double precision`).join(", ")}
-         FROM jsonb_array_elements($1::jsonb) r`, [JSON.stringify(input.weather)]);
-    }
-
-    const run = await ts.runRules(db, pack, ruleIds);
-    Object.assign(errors, Object.fromEntries(Object.entries(run.errors).map(([k, v]) => [`timescale ${k}`, v])));
-    for (const [rid, rows] of Object.entries(run.results)) {
-      for (const row of rows) {
-        written.push(ts.toResultRow({ runTs, equip, site: SITE, ruleId: rid, row, windowStart: FROM, windowEnd: TO, pollSeconds: STEP }));
-      }
+    // keep this equipment's loaded tables: the rules run ONCE over every equipment, as the PGlite adapter runs them
+    // (site-level inputs such as weather and web reference columns are shared across equipment in some rules)
+    for (const t of ["history", "sensor_history"]) {
+      if (!pack.contract[t]) continue;
+      if (!accumulated.has(t)) { await db.query(`CREATE TEMP TABLE parity_all_${t} AS SELECT * FROM pg_temp.${t} WITH NO DATA`); accumulated.add(t); }
+      await db.query(`INSERT INTO pg_temp.parity_all_${t} SELECT * FROM pg_temp.${t}`);
     }
     if (indexOk === null && loaded.rows) {
       await db.query("BEGIN");
@@ -213,6 +204,28 @@ try {
       } finally { await db.query("ROLLBACK"); }
     }
   }
+  // one rule run over all equipment: history / sensor_history = the per-equipment loads, weather = the dataset's site rows
+  for (const t of accumulated) {
+    await db.query(`DELETE FROM pg_temp.${t}`);
+    await db.query(`INSERT INTO pg_temp.${t} SELECT * FROM pg_temp.parity_all_${t}`);
+  }
+  await db.query("DELETE FROM pg_temp.weather");
+  const wcols = pack.contract.weather.map((c) => c.name).filter((n) => n !== "timestamp_utc");
+  if (input.weather.length) {
+    await db.query(
+      `INSERT INTO pg_temp.weather (timestamp_utc, ${wcols.map((c) => `"${c}"`).join(", ")})
+       SELECT to_timestamp((r->>'ts')::float8 / 1000.0), ${wcols.map((c) => `(r->>'${c}')::double precision`).join(", ")}
+       FROM jsonb_array_elements($1::jsonb) r`, [JSON.stringify(input.weather)]);
+  }
+  await db.query("ANALYZE pg_temp.history");
+  const run = await ts.runRules(db, pack, ruleIds);
+  Object.assign(errors, Object.fromEntries(Object.entries(run.errors).map(([k, v]) => [`timescale ${k}`, v])));
+  for (const [rid, rows] of Object.entries(run.results)) {
+    for (const row of rows) {
+      const equip = row.equipment_id || "";
+      written.push(ts.toResultRow({ runTs, equip, site: SITE, ruleId: rid, row, windowStart: FROM, windowEnd: TO, pollSeconds: STEP }));
+    }
+  }
   timing.rules_ms = Date.now() - t0;
 
   // write, count, write again: an upsert on the primary key adds nothing
@@ -224,7 +237,7 @@ try {
 
   // read the results BACK from fdd.rule_result, in the row shape of the rule's output columns
   const stored = (await db.query(
-    "SELECT equipment_id, rule_id, subject_key, role, fault_hours, covered_hours, fault_pct, metrics FROM fdd.rule_result WHERE site_id = $1 ORDER BY equipment_id, rule_id, subject_key", [SITE])).rows;
+    "SELECT equipment_id, rule_id, subject_key, role, fault_hours, covered_hours, fault_pct, metrics, diagnostics FROM fdd.rule_result WHERE site_id = $1 ORDER BY equipment_id, rule_id, subject_key", [SITE])).rows;
   for (const r of stored) {
     const cols = pack.rules[r.rule_id].output_columns || [];
     const sweep = cols.includes("series_id");
@@ -235,7 +248,7 @@ try {
       else if (c === "series_id") row[c] = pointOfUuid.get(r.subject_key)?.point_key ?? r.subject_key;
       else if (c === "sensor_role") row[c] = r.role;
       else if (c === "fault_hours" || c === "covered_hours" || c === "fault_pct") row[c] = r[c];
-      else row[c] = r.metrics[c] ?? null;
+      else row[c] = r.metrics[c] ?? (r.diagnostics && r.diagnostics.outputs ? r.diagnostics.outputs[c] : undefined) ?? null;
     }
     (results[r.rule_id] ||= []).push(row);
   }

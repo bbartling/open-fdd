@@ -346,7 +346,7 @@ const RESULT_KEY = ["site_id", "equipment_id", "rule_id", "subject_key", "window
 
 /**
  * One fdd.rule_result row (core.sql) from a rule's output row: fault_pct / fault_hours / covered_hours when present;
- * other numeric outputs and the sweep's per-role hours go to metrics. status: fault_hours > 0 FAULT, = 0 PASS, not
+ * other numeric outputs and the sweep's per-role hours go to metrics, text outputs to diagnostics.outputs. status: fault_hours > 0 FAULT, = 0 PASS, not
  * assessable (NULL) INCONCLUSIVE. subject_key = the swept sensor's point uuid ('' = equipment level). Both window ends
  * are required (window_end > window_start); rule_hash / config_hash '' when the caller has none.
  */
@@ -355,7 +355,12 @@ function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale
   if (windowStart == null || windowEnd == null) throw new Error("toResultRow: windowStart and windowEnd are required");
   const known = new Set(["equipment_id", "series_id", "sensor_role", "fault_pct", "fault_hours", "covered_hours"]);
   const metrics = {};
-  for (const [k, v] of Object.entries(row)) if (!known.has(k) && typeof v === "number" && Number.isFinite(v)) metrics[k] = v;
+  const outputs = {};   // text outputs of the rule (e.g. a status column) survive the round trip in diagnostics.outputs
+  for (const [k, v] of Object.entries(row)) {
+    if (known.has(k)) continue;
+    if (typeof v === "number" && Number.isFinite(v)) metrics[k] = v;
+    else if (typeof v === "string") outputs[k] = v;
+  }
   if (row.sensor_fault_hours) metrics.sensor_fault_hours = row.sensor_fault_hours;
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   const sensorNotAssessed = typeof row.series_id === "string" && !(num(row.covered_hours) > 0);
@@ -367,7 +372,7 @@ function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale
     status: faultHours == null ? "INCONCLUSIVE" : faultHours > 0 ? "FAULT" : "PASS",
     reason: faultHours != null ? null : sensorNotAssessed ? "sensor not assessed (no covered time)" : "rule reports no fault_hours",
     fault_hours: faultHours, covered_hours: num(row.covered_hours), fault_pct: num(row.fault_pct), role: row.sensor_role || null,
-    engine, metrics, diagnostics: {}, created_at: iso(runTs),
+    engine, metrics, diagnostics: Object.keys(outputs).length ? { outputs } : {}, created_at: iso(runTs),
   };
 }
 
