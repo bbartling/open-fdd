@@ -27,7 +27,7 @@ function load(seriesData = {}) {
     ofddRender: (chart, option, name) => { chart.rendered = { option, name }; ctx.last = chart; },
   });
   ctx.units = "imperial";
-  for (const f of ["units.js", "model.js", "fdd.js", "rcx.js", "fdd-plots.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  for (const f of ["units.js", "model.js", "fdd.js", "rcx.js", "plot-spec-data.js", "fdd-plots.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   ctx.calls = calls;
   ctx.get = (name) => vm.runInContext(name, ctx);
   return ctx;
@@ -243,6 +243,7 @@ test("sensor fault view: the worst sensor of the scope, always the four SV lanes
   assert.deepEqual(o.series.slice(1).map((s) => s.xAxisIndex), [1, 2, 3, 4]);
   assert.match(o.title.text, /bad/);
   assert.match(o.title.subtext, /Worst of 2 sensors/, "the title says which sensor this is and why");
+  assert.match(o.title.text, /estimated in browser/);
   assert.ok(o.legend && o.legend.top != null, "legend is drawn");
   assert.match(note, /bad/);
   const range = o.series.find((s) => s.name === "SV Range").data, rate = o.series.find((s) => s.name === "SV Rate").data;
@@ -263,19 +264,58 @@ test("sensor fault view: a clean sensor still shows all four lanes (nothing flag
   assert.ok(o.series.slice(1).every((s) => s.data.length === 8 && s.data.every(([, f]) => f === 0)));
 });
 
-test("sweep lanes: stale = a run of hours without samples; rate and spike are per hour; null before the first sample", () => {
+const LIM = { lo: -50, hi: 60, spike_delta: 20, rate_per_h: 3.333333, stale_s: 7200 };
+test("sweep lanes (estimate): stale = a run of hours without samples; range, rate and spike use the given limits; null before the first sample", () => {
   const ctx = load();
   const arr = [[0, 20], [H, 20.5], [5 * H, 21], [6 * H, 21.2]];                       // gap of 3 empty hours (2..4)
-  const lanes = plain(ctx.fddPlotSweepLanes(arr, "temp", { firstMs: -2 * H, lastMs: 6 * H }));
+  const lanes = plain(ctx.fddPlotSweepLanes(arr, LIM, { firstMs: -2 * H, lastMs: 6 * H }));
   assert.deepEqual(Object.keys(lanes), ["SV-RANGE", "SV-RATE", "SV-SPIKE", "SV-STALE"]);
   assert.deepEqual(lanes["SV-STALE"].map(([t, f]) => [t / H, f]).filter(([, f]) => f === 1).map(([t]) => t), [2, 3, 4]);
   assert.equal(lanes["SV-STALE"][0][1], null, "before the first sample there is no verdict");
   assert.equal(lanes["SV-RANGE"][2][1], 0);
   assert.equal(lanes["SV-RANGE"][4][1], null, "an hour without a sample has no range verdict");
-  const jump = plain(ctx.fddPlotSweepLanes([[0, 20], [H, 30]], "temp"));               // +10 degC in one hour
-  assert.equal(jump["SV-RATE"][1][1], 1);
-  assert.equal(plain(ctx.fddPlotSweepLanes([[0, 20], [H, 21]], "temp"))["SV-RATE"][1][1], 0);
+  const jump = plain(ctx.fddPlotSweepLanes([[0, 20], [H, 30]], LIM));                  // +10 degC in one hour: a rate fault, not a spike (< 20)
+  assert.deepEqual([jump["SV-RATE"][1][1], jump["SV-SPIKE"][1][1]], [1, 0]);
+  assert.equal(plain(ctx.fddPlotSweepLanes([[0, 20], [H, 45]], LIM))["SV-SPIKE"][1][1], 1);
+  assert.equal(plain(ctx.fddPlotSweepLanes([[0, 20], [H, 99]], LIM))["SV-RANGE"][1][1], 1);
+  assert.equal(plain(ctx.fddPlotSweepLanes([[0, 20], [H, 21]], LIM))["SV-RATE"][1][1], 0);
+  const noRate = plain(ctx.fddPlotSweepLanes([[0, 20], [H, 30]], { ...LIM, rate_per_h: null }));
+  assert.equal(noRate["SV-RATE"][1][1], 0, "a limit the file leaves null gives that lane no verdict");
   assert.equal(ctx.fddPlotWorstSensor([{ k: "a", score: 1 }, { k: "b", score: 3 }, { k: "c", score: 3 }]).k, "b");
+});
+
+test("sweep limits come from open_fdd/data/sensor_sweep_limits.json: per-role entry, else the quantity fallback", () => {
+  const ctx = load();
+  const doc = JSON.parse(readFileSync(new URL("../../open_fdd/data/sensor_sweep_limits.json", import.meta.url), "utf8"));
+  assert.deepEqual(plain(ctx.get("ofddPlotSpecData").sweep_limits), doc, "plot-spec-data.js carries the file verbatim");
+  const oa = plain(ctx.fddPlotSweepLimits("outside-air-temp", "temp"));
+  const entry = doc.roles.find((r) => r.role === "outside-air-temp");
+  assert.deepEqual([oa.lo, oa.hi, oa.spike_delta, oa.rate_per_h, oa.stale_s, oa.source], [entry.lo, entry.hi, entry.spike_delta, entry.rate_per_h, doc.defaults.stale_s, "role"]);
+  const hw = plain(ctx.fddPlotSweepLimits("hot-water-supply-temp", "temp"));
+  assert.ok(hw.hi > 90, "hot water is judged by its own band (no air-sensor limit, no skip)");
+  const fb = plain(ctx.fddPlotSweepLimits("no-such-role", "pct"));
+  assert.deepEqual([fb.lo, fb.hi, fb.spike_delta, fb.rate_per_h, fb.source], [0, 100, 25, null, "quantity"]);
+  assert.equal(ctx.fddPlotSweepLimits("x", "bool"), null);
+});
+
+test("sensor fault view: with FDD hook results the four lanes ARE the hook's timelines; no browser thresholds", async () => {
+  const a = pt("a", "calm"), b = pt("b", "stuck");
+  const res = (id, rule, sensor, extra = {}) => pt(id, id, { tags: ["fdd", "fault"], latest: { double: extra.v ?? 0 }, rec: { attrs: { ruleRef: rule, sensorRef: sensor, fddSummary: "sensor" } } });
+  const tl = (id, rule, sensor) => pt(id, id, { tags: ["fault_timeline"], rec: { attrs: { ruleRef: rule, sensorRef: sensor } } });
+  const points = [a, b, res("ra", "SV-RANGE", "a"), res("rb", "SV-RANGE", "b", { v: 2 }), res("rb2", "SV-STALE", "b", { v: 1 }),
+    tl("tb-range", "SV-RANGE", "b"), tl("tb-stale", "SV-STALE", "b")];
+  const hist = Array.from({ length: 6 }, (_, i) => [i * H, 70]);                       // flat, in range: a browser estimate would flag nothing
+  const ctx = load({ a: hist, b: hist, "tb-range": [[0, 0], [H, 1], [2 * H, 1]], "tb-stale": [[3 * H, 1]] });
+  const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-fault");
+  const eq = { id: "AHU-1", name: "AHU-1", bound: { sat: [a], oa_t: [b] } };
+  const note = await view.render({ style: {} }, ctx.rcxContext(view, [eq], 24, { points }, catalog));
+  const o = plain(ctx.last.rendered.option);
+  assert.match(o.title.text, /stuck/); assert.match(o.title.text, /FDD hook results/);
+  assert.deepEqual(o.series.slice(1).map((s) => s.name), ["SV Range", "SV Rate", "SV Spike", "SV Stale"]);
+  assert.deepEqual(o.series[1].data.filter(([, f]) => f != null), [[0, 0], [H, 1], [2 * H, 1]], "the hook's SV-RANGE timeline, as written (gaps between samples stay gaps)");
+  assert.deepEqual(o.series[2].data.map(([, f]) => f), [null, null], "SV-RATE not written: an empty lane, still drawn");
+  assert.deepEqual(o.series[4].data, [[3 * H, 1]]);
+  assert.match(note, /from the FDD hook/);
 });
 
 test("health states are still available as a pure helper (heat map option)", () => {

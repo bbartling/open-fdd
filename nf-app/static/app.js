@@ -255,7 +255,7 @@ function wireViewTabs() {
   on("fddEquip", "onchange", (e) => { fddUi.equip = e.target.value; renderFdd().catch(fail); });
   on("fddHeatAll", "onchange", (e) => { fddUi.heatAll = e.target.checked; renderScopedFddResults().catch(fail); });
   on("rcxEquip", "onchange", (e) => { rcxUi.equip = e.target.value; renderRcx().catch(fail); });
-  on("rcxAhuOn", "onclick", () => { rcxUi.ahuOn = !rcxUi.ahuOn; renderRcx().catch(fail); });
+  on("rcxAhuOn", "onclick", (e) => { rcxUi.ahuOn = e.currentTarget.getAttribute("aria-pressed") !== "true"; renderRcx().catch(fail); });
 }
 
 async function renderFdd() {
@@ -527,7 +527,7 @@ async function renderFddResults(equips, sweepRoles = {}) {
     tooltip: { formatter: (x) => { const p = shown[x.value[1]], unit = units(p); return `${esc(titleOf(p))} ${fddRuleBadgeHtml(ruleRefOf(p))} · ${esc(whoOf(p))}<br>${esc(detailTime.format(buckets[x.value[0]]))}: ${formatFaultNumber(x.value[2])} ${esc(unit)}`; } },
     grid: { left: 10, right: 20, top: 10, bottom: 70, containLabel: true },
     xAxis: { type: "category", data: buckets.map((t) => axisTime.format(t)), splitArea: { show: false } },
-    yAxis: { type: "category", data: shown.map(label), inverse: true, axisLabel: { rich: FDD_RULE_RICH, width: 380, overflow: "truncate" } },
+    yAxis: { type: "category", data: shown.map(label), inverse: true, axisLabel: { rich: FDD_RULE_RICH, width: 460, overflow: "truncate" } },
     visualMap: visualMaps,
     series: heatSeries,
   }, true);
@@ -831,20 +831,27 @@ const VIEW_TABS = {
   fdd: { ui: () => fddUi, body: "fddBody", range: "fddChartsRangeControl", status: "fddChartsRangeStatus", key: "fddCharts", mode: "fddMode", kpis: null },
 };
 
-/** "AHU on" button + the VAV -> AHU note (airRef links, assumed single-AHU feed, unknown). */
+/**
+ * "AHU on" button + the VAV -> AHU note. The filter defaults to ON whenever a feeding AHU is known (airRef, or the site's only
+ * AHU assumed) and to OFF when the feed is unknown; a click makes the choice explicit (rcxUi.ahuOn true/false).
+ * Returns the effective setting.
+ */
 function renderAhuControl(siteEquips, catalog) {
   const btn = $("rcxAhuOn"), note = $("rcxAhuNote");
-  if (!btn || !note) return;
   const kinds = (e) => equipKinds(e, catalog);
+  const feeds = siteEquips.length ? rcxAirFeedMap(siteEquips, kinds) : new Map();
+  const on = rcxUi.ahuOn == null ? feeds.size > 0 : !!rcxUi.ahuOn;
+  if (!btn || !note) return on;
   const hasAhu = siteEquips.some((e) => kinds(e).includes("ahu"));
   btn.hidden = note.hidden = !hasAhu;
-  if (!hasAhu) return;
-  btn.setAttribute("aria-pressed", String(rcxUi.ahuOn));
-  btn.classList.toggle("active", rcxUi.ahuOn);
-  const vavs = siteEquips.filter((e) => kinds(e).includes("vav")), feeds = rcxAirFeedMap(siteEquips, kinds);
+  if (!hasAhu) return on;
+  btn.setAttribute("aria-pressed", String(on));
+  btn.classList.toggle("active", on);
+  const vavs = siteEquips.filter((e) => kinds(e).includes("vav"));
   const linked = [...feeds.values()].filter((f) => !f.assumed).length, assumed = feeds.size - linked;
-  note.textContent = (rcxUi.ahuOn ? "Only times the feeding AHU's fan is running. " : "Restrict the analytics to times the feeding AHU is running. ")
+  note.textContent = (on ? "Only times the feeding AHU's fan is running" : "All times") + (rcxUi.ahuOn == null ? (on ? " (on because the feeding AHU is known). " : " (the feeding AHU is unknown). ") : ". ")
     + (vavs.length ? `VAV → AHU: ${linked} by airRef${assumed ? `, ${assumed} assumed (the site has one AHU and no airRef)` : ""}${vavs.length - feeds.size ? `, ${vavs.length - feeds.size} unknown` : ""}.` : "");
+  return on;
 }
 
 async function renderViewTab(tab) {
@@ -854,7 +861,7 @@ async function renderViewTab(tab) {
   const siteEquips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site);
   fillEquipPicker(`${tab}Equip`, ui, tab === "rcx" ? "All devices" : "All equipment");
   const equips = siteEquips.filter((e) => !ui.equip || idOf(e) === ui.equip), single = !!ui.equip;
-  if (tab === "rcx") renderAhuControl(siteEquips, catalog);
+  const ahuOn = tab === "rcx" ? renderAhuControl(siteEquips, catalog) : false;
   const rangeState = getChartRangeState(T.key), siteTz = siteTimeZone();
   renderRangeControl($(T.range), { key: T.key, state: rangeState, siteTz,
     onChange: () => {
@@ -883,15 +890,17 @@ async function renderViewTab(tab) {
   }
   if ($(T.mode)) {
     const who = single ? (fddEquipOptions(model, scope.site).find((o) => o.id === ui.equip) || { label: ui.equip }).label : "";
-    $(T.mode).textContent = single ? `Single device: ${who}. Only this device's own charts are shown; fleet analytics are in the all-devices view.`
-      : "All devices: fleet analytics and one chart per view across every device.";
+    $(T.mode).textContent = tab === "fdd"
+      ? (single ? `Single equipment: ${who}.` : "All equipment in scope.")
+      : (single ? `Single device: ${who}. Only this device's own charts are shown; fleet analytics are in the all-devices view.`
+        : "All devices: fleet analytics and one chart per view across every device.");
   }
   const sections = [];
   if (tab === "rcx" && cards.some((c) => c.view.headline)) sections.push({ title: "Headline", cls: " rcx-headline", cards: cards.filter((c) => c.view.headline) });
   const rest = cards.filter((c) => tab !== "rcx" || !c.view.headline);
   for (const g of [...new Set(rest.map(groupOf))]) sections.push({ title: g, cls: "", cards: rest.filter((c) => groupOf(c) === g) });
   $(T.body).innerHTML = sections.map((sec) => `<section class="panel${sec.cls}"><h2>${esc(sec.title)}</h2><div class="rcx-grid${tab === "fdd" ? " one-col" : ""}">${
-    sec.cards.map((c) => `<div class="rcx-card">
+    sec.cards.map((c) => `<div class="rcx-card${c.view.wide ? " rcx-wide" : ""}">
       <h3>${esc(c.view.title)}${c.view.scope === "equip" ? ` <span class="sub">· ${esc(c.eqs[0].name)}</span>` : ""}</h3>
       <div class="chart" id="${tab}-${cards.indexOf(c)}"></div><div class="sub note" id="${tab}-note-${cards.indexOf(c)}"></div></div>`).join("")}</div></section>`).join("")
     || `<section class="panel"><p class="sub">No ${tab === "rcx" ? "RCx" : "FDD"} chart has its inputs on the equipment in scope yet.</p></section>`;
@@ -901,7 +910,7 @@ async function renderViewTab(tab) {
     if (run !== viewTabRuns[tab]) return;                      // a newer render (range/scope change) took over
     const el = $(`${tab}-${i}`);
     try {
-      const ctx = rcxContext(c.view, c.eqs, hours, model, catalog, range, siteTz, { ahuOn: ui.ahuOn, kpis, maskCache });
+      const ctx = rcxContext(c.view, c.eqs, hours, model, catalog, range, siteTz, { ahuOn, kpis, maskCache, dropTitle: tab === "rcx" });
       const note = await c.view.render(el, ctx);
       if (run !== viewTabRuns[tab]) return;
       el.classList.add("rendered");

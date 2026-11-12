@@ -662,7 +662,7 @@
         { label: "In band", value: tot.inBand }, { label: "Too warm", value: tot.above }, { label: "Too cool", value: tot.below },
       ], { title: "All zones — samples by comfort" }), "rcx_zone_comfort_donut");
       const n = tot.inBand + tot.below + tot.above;
-      if (n) ctx.kpi({ id: "zones-in-band", label: "Zones in comfort band", value: `${round((tot.inBand / n) * 100, 0)} %`, sub: `${rows.length} zones`, order: 10, tone: tot.inBand / n < 0.8 ? "warn" : "ok" });
+      if (n) ctx.kpi({ id: "zones-in-band", label: "Zones in comfort band", value: `${round((tot.inBand / n) * 100, 0)} %`, sub: `${rows.length} zones${ctx.ahuOn ? " · while AHU on" : ""}`, order: 10, tone: tot.inBand / n < 0.8 ? "warn" : "ok" });
       return okA ? `${rows.length} zone(s) · band = setpoint ±${round(ctx.dispDelta(COMFORT_SP_HALF_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit}, heating..cooling sp, else ${round(ctx.disp(COMFORT_LO_C, TEMP).value, 0)}–${round(ctx.disp(COMFORT_HI_C, TEMP).value, 0)} ${ctx.dispUnit(TEMP)}${filt.note()}` : noData("zone temperature");
     },
   });
@@ -671,7 +671,7 @@
   // below p10 are drawn in their own colours, every other zone is muted. One zone (single-device view): just its line.
   rcxView({
     id: "zone_temps", group: "Zones", title: "Zones — all space temps (10th–90th percentile band)",
-    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, headline: true,
+    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, headline: true, wide: true,
     roles: { required: ["zone_t"], optional: [] },
     render: async (el, ctx) => {
       const want = ctx.equips.map((eq) => ({ eq, y: ctx.first(eq, "zone_t") }));
@@ -692,7 +692,7 @@
       const band = zoneBand(zones.map((z) => z.v));
       const rogue = pickRogueZones(zones, band);
       const ok = draw(el, ctx, zoneBandOption({ title: "Zones — all space temps, 10th–90th percentile band", yTitle: unit, t, zones, band, rogue, toDisp }), "rcx_zone_temps_band");
-      if (ok) ctx.kpi({ id: "rogue-zones", label: "Rogue zones", value: String(rogue.above.length + rogue.below.length), sub: `${rogue.above.length} above p90 · ${rogue.below.length} below p10`, order: 30, tone: rogue.above.length + rogue.below.length ? "warn" : "ok" });
+      if (ok) ctx.kpi({ id: "rogue-zones", label: "Rogue zones", value: String(rogue.above.length + rogue.below.length), sub: `${rogue.above.length} above p90 · ${rogue.below.length} below p10${ctx.ahuOn ? " · while AHU on" : ""}`, order: 30, tone: rogue.above.length + rogue.below.length ? "warn" : "ok" });
       return ok ? `${zones.length} zones · band = ${ZONE_P_LO * 100}th–${ZONE_P_HI * 100}th percentile across zones per time step · rogue = beyond the band by >= ${round(ctx.dispDelta(ZONE_ROGUE_MIN_EXCESS_C, TEMP).value, 1)} ${ctx.dispDelta(0, TEMP).unit} on the same side for >= ${ZONE_ROGUE_MIN_SHARE * 100} % of samples (worst ${ZONE_ROGUE_TOP} per side): `
         + `${rogue.above.length ? `above: ${rogue.above.map((r) => r.label).join(", ")}` : "none above"}; ${rogue.below.length ? `below: ${rogue.below.map((r) => r.label).join(", ")}` : "none below"}${filt.note()}` : noData("zone temperature");
     },
@@ -720,7 +720,7 @@
       for (const d of devices) { const k = vavVerdictLabel(rows, d.id); tally.set(k, (tally.get(k) || 0) + 1); }
       const kinds = ["Healthy", ...new Set(rows.map((r) => `${r.part} always ${r.state}`))];
       const rogueIds = new Set(rows.map((r) => r.id));
-      ctx.kpi({ id: "rogue-vavs", label: "Rogue VAVs", value: `${rogueIds.size} of ${devices.length}`, sub: "damper / reheat valve stuck", order: 20, tone: rogueIds.size ? "warn" : "ok" });
+      ctx.kpi({ id: "rogue-vavs", label: "Rogue VAVs", value: `${rogueIds.size} of ${devices.length}`, sub: `damper / reheat valve stuck${ctx.ahuOn ? " · while AHU on" : ""}`, order: 20, tone: rogueIds.size ? "warn" : "ok" });
       const [a, b] = rows.length ? frames(el, 2, [Math.max(260, 34 * rows.length + 110), 320]) : frames(el, 1, [320]);
       const kindColor = (k) => (k === "Healthy" ? HEALTHY_COLOR : /open$/.test(k) ? ROGUE_ABOVE_COLOR : ROGUE_BELOW_COLOR);
       const donut = comfortDonutOption(kinds.map((k) => ({ label: k, value: tally.get(k) || 0, color: kindColor(k) })), { title: "VAV health" });

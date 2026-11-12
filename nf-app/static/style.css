@@ -260,3 +260,5 @@ tr.clickable:hover td { background: var(--panel2); }
 .rcx-headline .rcx-grid { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
 .rcx-grid.one-col { grid-template-columns: 1fr; }
 @media (max-width: 640px) { .rcx-headline .rcx-grid { grid-template-columns: 1fr; } }
+.rcx-wide { grid-column: 1 / -1; }
+.rcx-wide .chart { height: 420px; }

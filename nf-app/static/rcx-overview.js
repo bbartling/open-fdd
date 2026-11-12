@@ -280,7 +280,7 @@
   // motor_weekly_runtime.sql). A view requires one signal; the later-signal view only draws
   // equips that lack the preferred one, so no equip is counted twice.
   const MOTORS = [
-    { id: "fan", title: "Supply fans", group: "Air handlers", kinds: ["ahu"], signals: ["fan_status", "fan_cmd"], faults: ["SCHED-247"] },
+    { id: "fan", title: "AHU supply fans", group: "Air handlers", kinds: ["ahu"], signals: ["fan_status", "fan_cmd"], faults: ["SCHED-247"] },
     { id: "pump", title: "Pumps", group: "Plant", kinds: ["boiler", "chwPlant", "chiller"], signals: ["pump_status"] },
     { id: "chw-pump", title: "Chilled-water pumps", group: "Plant", kinds: ["chiller", "chwPlant"], signals: ["chw_pump_status", "chw_pump_cmd"] },
     { id: "cw-pump", title: "Condenser-water pumps", group: "Plant", kinds: ["chiller", "chwPlant", "cooling_tower"], signals: ["cw_pump_cmd"] },
@@ -423,8 +423,9 @@
         group: motor.group,
         title: `Weekly runtime: ${motor.title}${motor.signals.length > 1 ? ` (${role.endsWith("_status") ? "status" : "command"})` : ""}`,
         kinds: motor.kinds, scope: "site", hours: 672,
-        // Supply fans are drawn in the RCx tab by "AHU run hours per day" (rcx-fleet.js); these stay registered for the agent analytics.
-        ...(motor.id === "fan" ? { tabHidden: true } : {}),
+        // Every motor's weekly bars are replaced in the RCx tab by the daily run-hours chart below; these stay registered for the
+        // agent analytics and the parity map.
+        tabHidden: true,
         roles: { required: [role], optional: ["oa_t", ...motor.signals.filter((r) => r !== role)] },
         render: (el, ctx) => renderWeekly(el, ctx, motor, role),
       });
@@ -459,43 +460,57 @@
     return [...m].map(([dayMs, w]) => ({ day: new Date(dayMs).toISOString().slice(0, 10), dayMs, hours: w.hours, n: w.n }));
   }
 
-  /** Signal an AHU's run hours are computed from: fan status first, else fan command. */
-  const runSignalOf = (ctx, eq) => {
-    const status = ctx.first(eq, "fan_status"), cmd = ctx.first(eq, "fan_cmd");
-    return status ? { p: status, role: "status" } : cmd ? { p: cmd, role: "command" } : null;
+  /** Signal a motor's run hours are computed from: the first of motor.signals that binds (status before command). */
+  const runSignalOf = (ctx, eq, motor) => {
+    for (const role of motor.signals) {
+      const p = ctx.first(eq, role);
+      if (p) return { p, role, label: role.endsWith("_status") ? "status" : "command" };
+    }
+    return null;
   };
 
-  rcxView({
-    id: "ahu-runtime-daily", group: "Air handlers", title: "AHU run hours per day",
-    kinds: ["ahu"], scope: "site", hours: 168, headline: true,
-    roles: { required: [], anyOf: ["fan_status", "fan_cmd"], optional: [] },
-    render: async (el, ctx) => {
-      const list = ctx.equips.map((eq) => ({ eq, sig: runSignalOf(ctx, eq) })).filter((x) => x.sig);
-      if (!list.length) return "no AHU here has a fan status or command point";
-      const cols = {};
-      list.forEach((x, i) => { cols[`m${i}`] = x.sig.p; });
-      const g = await ctx.alignedFine(cols, { hours: ctx.hours });
-      const per = list.map((x, i) => ({ ...x, days: dailyRuntime(g.t, g.cols[`m${i}`], { duty: x.sig.p.kind === "Bool", tz: ctx.siteTz }) }));
-      const days = [...new Map(per.flatMap((p) => p.days.map((d) => [d.dayMs, d.day]))).entries()].sort((a, b) => a[0] - b[0]);
-      if (!days.length || !per.some((p) => p.days.some((d) => d.hours > 0))) return "no running time in this window";
-      const series = per.map((p) => {
-        const by = new Map(p.days.map((d) => [d.dayMs, d.hours]));
-        return { name: `${eqName(p.eq)} (${p.sig.role})`, type: "bar", data: days.map(([k]) => (by.has(k) ? +by.get(k).toFixed(2) : null)) };
-      });
-      draw(ctx, el, {
-        title: { text: "AHU fan run hours per day", left: 8, top: 0 },
-        tooltip: { trigger: "axis", valueFormatter: (x) => (isNum(x) ? `${+x.toFixed(1)} h` : "") }, legend: { top: 24, type: "scroll" }, dataZoom: false,
-        grid: baseGrid({ top: 64, bottom: 44 }),
-        xAxis: { type: "category", data: days.map(([, d]) => d), name: `day (${ctx.siteTz || "UTC"})`, nameLocation: "middle", nameGap: 28 },
-        yAxis: { type: "value", name: "run hours / day", min: 0, max: 24 }, series,
-      }, null, "ahu_runtime_daily");
-      const all = per.flatMap((p) => p.days.map((d) => d.hours));
-      ctx.kpi({ id: "ahu-run-hours", label: "AHU run hours / day", value: `${(all.reduce((a, b) => a + b, 0) / all.length).toFixed(1)} h`, sub: `average of ${per.length} AHU${per.length === 1 ? "" : "s"}`, order: 40 });
-      const usedCmd = per.filter((p) => p.sig.role === "command").length;
-      return `on = signal > ${ON * 100}% · integrated on the 5-minute grid · ${per.length - usedCmd} AHU(s) from fan status`
-        + `${usedCmd ? `, ${usedCmd} from fan command (no status point)` : ""} · first and last day may be partial`;
-    },
-  });
+  /**
+   * One daily run-hours chart for a motor family: grouped bars, one series per equip, "<equip> (status|command)"
+   * (status wins; the command is used for equips that have no status point). Plant motors get one chart per family.
+   */
+  function dailyRuntimeView(motor, id, extra = {}) {
+    rcxView({
+      id, group: motor.group, title: `${motor.title}: run hours per day`,
+      kinds: motor.kinds, scope: "site", hours: 168, ...extra,
+      roles: { required: [], anyOf: motor.signals, optional: [] },
+      render: async (el, ctx) => {
+        const list = ctx.equips.map((eq) => ({ eq, sig: runSignalOf(ctx, eq, motor) })).filter((x) => x.sig);
+        if (!list.length) return `no equipment here has ${motor.signals.join(" or ")}`;
+        const cols = {};
+        list.forEach((x, i) => { cols[`m${i}`] = x.sig.p; });
+        const g = await ctx.alignedFine(cols, { hours: ctx.hours });
+        const per = list.map((x, i) => ({ ...x, days: dailyRuntime(g.t, g.cols[`m${i}`], { duty: x.sig.p.kind === "Bool", tz: ctx.siteTz }) }));
+        const days = [...new Map(per.flatMap((p) => p.days.map((d) => [d.dayMs, d.day]))).entries()].sort((a, b) => a[0] - b[0]);
+        if (!days.length || !per.some((p) => p.days.some((d) => d.hours > 0))) return "no running time in this window";
+        const series = per.map((p) => {
+          const by = new Map(p.days.map((d) => [d.dayMs, d.hours]));
+          return { name: `${eqName(p.eq)} (${p.sig.label})`, type: "bar", data: days.map(([k]) => (by.has(k) ? +by.get(k).toFixed(2) : null)) };
+        });
+        draw(ctx, el, {
+          title: { text: `${motor.title}: run hours per day`, left: 8, top: 0 },
+          tooltip: { trigger: "axis", valueFormatter: (x) => (isNum(x) ? `${+x.toFixed(1)} h` : "") }, legend: { top: 24, type: "scroll" }, dataZoom: false,
+          grid: baseGrid({ top: 64, bottom: 44 }),
+          xAxis: { type: "category", data: days.map(([, d]) => d), name: `day (${ctx.siteTz || "UTC"})`, nameLocation: "middle", nameGap: 28 },
+          yAxis: { type: "value", name: "run hours / day", min: 0, max: 24 }, series,
+        }, null, `${motor.id.replace(/-/g, "_")}_runtime_daily`);
+        if (motor.id === "fan") {
+          const all = per.flatMap((p) => p.days.map((d) => d.hours));
+          ctx.kpi({ id: "ahu-run-hours", label: "AHU run hours / day", value: `${(all.reduce((a, b) => a + b, 0) / all.length).toFixed(1)} h`, sub: `average of ${per.length} AHU${per.length === 1 ? "" : "s"}`, order: 40 });
+        }
+        const usedCmd = per.filter((p) => p.sig.label === "command").length;
+        return `on = signal > ${ON * 100}% · integrated on the 5-minute grid · ${per.length - usedCmd} from status`
+          + `${usedCmd ? `, ${usedCmd} from command (no status point)` : ""} · first and last day may be partial`;
+      },
+    });
+  }
+
+  dailyRuntimeView(MOTORS[0], "ahu-runtime-daily", { headline: true });
+  for (const motor of MOTORS.slice(1)) dailyRuntimeView(motor, `runtime-daily-${motor.id}`);
 
   M.dailyRuntime = dailyRuntime;
   M.dayKeyer = dayKeyer;
@@ -506,17 +521,17 @@
    * Cooling hours per OAT bin per equip on the FINE grid (shared by the chart and the agent analytics hook).
    * toDisp only relabels the bins. -> { per: [{ eq, bins: { labels, hours } }], wx } or { error } (no OAT point at all).
    */
-  async function mechData(ctx, role, toDisp) {
+  async function mechData(ctx, role, toDisp, pick = null) {
     const wx = weatherOat(ctx);
     const cols = {};
-    ctx.equips.forEach((eq, i) => { cols[`a${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
+    ctx.equips.forEach((eq, i) => { cols[`a${i}`] = pick ? pick(eq) : ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
     if (!Object.keys(cols).some((k) => k[0] === "o" && cols[k])) return { error: "needs an outdoor-air temperature (weather point or oa_t)", per: [], wx };
     const g = await ctx.alignedFine(cols, { hours: ctx.hours });   // fine grid: a short low-OAT event must not vanish
     const per = ctx.equips.map((eq, i) => {
       const op = cols[`o${i}`];
       // a slow weather series (20 min) is carried as-of onto the 5 min device rows, bounded by its own cadence
       const oat = op ? M.asOfFill(g.t, g.cols[`o${i}`], Math.max(M.webMaxAgeMs(g.t, g.cols[`o${i}`]), g.windowSec * 1e3)) : null;
-      return oat ? { eq, bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
+      return oat && cols[`a${i}`] ? { eq, col: cols[`a${i}`], bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
         { toDisp, duty: cols[`a${i}`].kind === "Bool", gapMaxSec: GAP_MAX_SEC }) } : null;
     }).filter(Boolean);
     return { per, wx };
@@ -525,7 +540,7 @@
   for (const role of ["compressor_status", "chiller_status", "chiller_cmd"]) {
     rcxView({
       id: `mech-cooling-${role.split("_").slice(0, -1).join("-")}-${role.split("_").pop()}`,
-      group: "Plant",
+      group: "Plant", tabHidden: true,          // superseded on the tab by "mech-cooling-hours" (one chart, one series per equip)
       title: `Mechanical cooling hours by outdoor air (${role.replace("_", " ")})`,
       kinds: [], scope: "site", hours: 720,
       roles: { required: [role], optional: ["oa_t"] },
@@ -548,6 +563,35 @@
       },
     });
   }
+
+  // One chart for all equipment: per equip the cooling signal is the chiller status, else the compressor status, else the
+  // chiller command (status preferred, command only when there is no status), and the series says which.
+  const MECH_ORDER = ["chiller_status", "compressor_status", "chiller_cmd"];
+  rcxView({
+    id: "mech-cooling-hours", group: "Plant", title: "Mechanical cooling hours by outdoor air",
+    kinds: [], scope: "site", hours: 720,
+    roles: { required: [], anyOf: MECH_ORDER, optional: ["oa_t"] },
+    render: async (el, ctx) => {
+      const roleOf = new Map();
+      const pick = (eq) => { for (const r of MECH_ORDER) { const p = ctx.first(eq, r); if (p) { roleOf.set(p.uuid, r); return p; } } return null; };
+      const res = await mechData(ctx, null, (c) => ctx.disp(c, TEMP).value, pick);
+      if (res.error) return res.error;
+      const { per, wx } = res;
+      if (!per.length) return "no outdoor-air data";
+      const unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
+      const how = (p) => (roleOf.get(p.col.uuid).endsWith("_cmd") ? "command" : "status");
+      const series = per.map((p) => ({ name: `${eqName(p.eq)} (${how(p)})`, type: "bar", stack: "hours", data: p.bins.hours.map((h) => (h > 0 ? h : null)) }));
+      if (!per.some((p) => p.bins.hours.some((h) => h > 0))) return "cooling never ran in this window";
+      draw(ctx, el, {
+        title: { text: "Mechanical cooling hours by outdoor air", left: 8, top: 0 },
+        tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 24, type: "scroll" }, dataZoom: false,
+        grid: baseGrid({ top: 64, bottom: 44 }),
+        xAxis: { type: "category", data: labels, name: `OAT bin ${unit}`, nameLocation: "middle", nameGap: 28 },
+        yAxis: { type: "value", name: "hours" }, series,
+      }, null, "mech_cooling_hours");
+      return `${wx ? "web" : "equip"} outdoor-air temperature · on = signal > ${ON * 100}% · one signal per equip: status, else command`;
+    },
+  });
 
   // ================= economizer ========================================================
 

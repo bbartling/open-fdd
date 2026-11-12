@@ -391,30 +391,42 @@
   const sensorsOf = (ctx, eq) => SENSOR_ROLES.map((role) => ({ role, p: ctx.first(eq, role) })).filter((s) => s.p);
 
   // ---- sensor sweep lanes: SV Range, Rate, Spike, Stale (always all four) ----------------------
-  // Heuristics used when the lanes are computed in the browser from hourly aggregates (SI units). The FDD hook
-  // writes the authoritative per-sensor results (table above the chart); these keep the chart useful before it ran.
+  // Open-FDD owns the sweep science. The chart shows the FDD hook's own per-sensor results (timeline points of SV-RANGE,
+  // SV-RATE, SV-SPIKE, SV-STALE) whenever the hook has written any. Only without hook results it ESTIMATES the lanes in the
+  // browser, from hourly aggregates, with the SI sweep limits of open_fdd/data/sensor_sweep_limits.json (plot-spec-data.js,
+  // key sweep_limits), and the chart says "estimated in browser". No threshold below is invented here.
   const SWEEP_LANES = [
     { rule: "SV-RANGE", name: "SV Range" }, { rule: "SV-RATE", name: "SV Rate" },
     { rule: "SV-SPIKE", name: "SV Spike" }, { rule: "SV-STALE", name: "SV Stale" },
   ];
-  // Rate of change per hour that no real sensor of the family sustains (temp = catalog SV-RATE steady_fault_per_hour,
-  // degC/h; the other families are scaled to their plausibility span: %RH, Pa).
-  const SWEEP_RATE_PER_H = { temp: 3.333333, pct: 25, pressure: 250 };
-  const SWEEP_STALE_HOURS = 2;      // = catalog SV-STALE stale_hours
-  // The temp plausibility limits (-40..65.6 degC) are for air sensors; heating water runs well above them, so no range lane verdict there.
-  const HOT_WATER_ROLES = new Set(["hw_supply_t", "hw_return_t"]);
+  const SWEEP_QUANTITY = { temp: "absolute_temperature", pct: "relative_humidity", pressure: "air_pressure" };
 
   /**
-   * The four sweep lane masks for one sensor on an hourly grid: { "SV-RANGE", "SV-RATE", "SV-SPIKE", "SV-STALE" },
-   * each [[ms, 1|0|null]] (null = no verdict: before the first sample, or no sample in that hour). arr = [[ms, v]]
-   * hourly (SI), family = unit family of the sensor, opts = { firstMs, lastMs, staleHours, ratePerH, bounds }.
-   * RANGE outside the family's plausibility limits; RATE |dv/dt| above ratePerH between consecutive samples;
-   * SPIKE |v - mean| > 4 std (fddPlotSensorMasks); STALE >= staleHours consecutive hours without a sample after the first.
+   * Sweep limits (SI) of one sensor from the limits file: { lo, hi, spike_delta, rate_per_h, stale_s } (a field is null when
+   * the file has no value: that lane then has no verdict). Per-role entry first (catalog role name, e.g. "outside-air-temp"),
+   * else the quantity fallback of the unit family; null when neither exists.
    */
-  function fddPlotSweepLanes(arr, family, opts = {}) {
-    const staleHours = opts.staleHours ?? SWEEP_STALE_HOURS;
-    const ratePerH = opts.ratePerH ?? SWEEP_RATE_PER_H[family] ?? null;
-    const bounds = opts.bounds !== undefined ? opts.bounds : (SENSOR_LIMITS[family] || null);
+  function fddPlotSweepLimits(roleName, family, doc) {
+    const d = doc || (globalThis.ofddPlotSpecData && globalThis.ofddPlotSpecData.sweep_limits);
+    if (!d) return null;
+    const def = d.defaults || {}, entry = (d.roles || []).find((r) => r.role === roleName);
+    const fb = (d.quantity_fallback || {})[SWEEP_QUANTITY[family]];
+    const src = entry || fb;
+    if (!src) return null;
+    const rate = entry ? entry.rate_per_h : (family === "temp" ? def.rate_per_h : null);
+    return { lo: src.lo, hi: src.hi, spike_delta: src.spike_delta, rate_per_h: rate == null ? null : rate, stale_s: def.stale_s ?? null, source: entry ? "role" : "quantity" };
+  }
+
+  /**
+   * The four sweep lane masks of one sensor ESTIMATED from an hourly series: { "SV-RANGE", "SV-RATE", "SV-SPIKE", "SV-STALE" },
+   * each [[ms, 1|0|null]] (null = no verdict: before the first sample, or no sample in that hour). arr = [[ms, v]] (SI),
+   * limits = fddPlotSweepLimits(...), opts = { firstMs, lastMs }.
+   * RANGE outside [lo, hi]; SPIKE |step to the previous sample| > spike_delta; RATE |step| per hour > rate_per_h; STALE a run of
+   * >= stale_s of hours without any sample after the first. A limit the file leaves null gives that lane no verdict (0 / ok).
+   */
+  function fddPlotSweepLanes(arr, limits, opts = {}) {
+    const lim = limits || {};
+    const staleHours = finite(lim.stale_s) ? lim.stale_s / 3600 : Infinity;
     const pts = (arr || []).filter(([, v]) => finite(v)).map(([t, v]) => [hourFloor(t), v]);
     const out = Object.fromEntries(SWEEP_LANES.map((l) => [l.rule, []]));
     if (!pts.length) return out;
@@ -424,7 +436,6 @@
     for (let t = first; t <= last; t += HOUR) grid.push(t);
     const at = new Map(pts);
     const vals = grid.map((t) => (at.has(t) ? at.get(t) : null));
-    const base = fddPlotSensorMasks(vals, { bounds, flatlineWindow: 1e9 });          // flatline is not a sweep lane here
     const firstIdx = vals.findIndex(finite);
     const stale = grid.map(() => 0);
     for (let i = firstIdx; i < grid.length;) {
@@ -436,13 +447,15 @@
     }
     let prev = null;
     grid.forEach((t, i) => {
-      const v = vals[i], has = finite(v);
-      const rate = has && prev && ratePerH != null && Math.abs(v - prev.v) / ((t - prev.t) / HOUR) > ratePerH ? 1 : 0;
+      const v = vals[i], has = finite(v), pre = i < firstIdx;
+      const step = has && prev ? Math.abs(v - prev.v) : null;
+      const range = finite(lim.lo) && finite(lim.hi) && (v < lim.lo || v > lim.hi) ? 1 : 0;
+      const spike = step != null && finite(lim.spike_delta) && step > lim.spike_delta ? 1 : 0;
+      const rate = step != null && finite(lim.rate_per_h) && step / ((t - prev.t) / HOUR) > lim.rate_per_h ? 1 : 0;
       if (has) prev = { t, v };
-      const pre = i < firstIdx;
-      out["SV-RANGE"].push([t, pre || !has ? null : base["SV-RANGE"][i]]);
+      out["SV-RANGE"].push([t, pre || !has ? null : range]);
       out["SV-RATE"].push([t, pre || !has ? null : rate]);
-      out["SV-SPIKE"].push([t, pre || !has ? null : base["SV-SPIKE"][i]]);
+      out["SV-SPIKE"].push([t, pre || !has ? null : spike]);
       out["SV-STALE"].push([t, pre ? null : stale[i]]);
     });
     return out;
@@ -454,48 +467,86 @@
   /** Pick the sensor with the most sweep faults. cands = [{ score, ... }]; ties keep the first. */
   const fddPlotWorstSensor = (cands) => cands.reduce((w, c) => (!w || c.score > w.score ? c : w), null);
 
+  /** Index of the hook's per-sensor sweep results: Map(sensor point uuid -> latest fault output summed over the four rules). */
+  function fddPlotHookSensors(model) {
+    const rules = new Set(SWEEP_LANES.map((l) => l.rule)), out = new Map();
+    for (const r of (model && model.points) || []) {
+      const a = (r.rec && r.rec.attrs) || {};
+      if (!rules.has(a.ruleRef) || !a.sensorRef || !has(r, "fdd") || !has(r, "fault")) continue;
+      const v = Number(r.latest && (r.latest.double ?? r.latest.real));
+      out.set(String(a.sensorRef), (out.get(String(a.sensorRef)) || 0) + (Number.isFinite(v) && v > 0 ? v : 0));
+    }
+    return out;
+  }
+
   rcxView({
     id: "fdd-sensor-fault", group: "Sensors", title: "Sensor validation: the sensor with the most sweep faults",
     tab: "fdd", roles: { required: [], optional: SENSOR_ROLES }, scope: "site", minEquips: 1, hours: 168,
     async render(el, ctx) {
       const cands = ctx.equips.flatMap((eq) => sensorsOf(ctx, eq).map((s) => ({ eq, ...s })));
       if (!cands.length) return "No temperature, humidity or pressure sensor roles are bound on the equipment in scope.";
-      const data = await ctx.series(cands.map((s) => s.p), { windowSec: 3600 });
+      const hook = fddPlotHookSensors(ctx.model);
+      const hooked = cands.filter((c) => hook.has(String(c.p.uuid)));
       const bounds = ctx.range && ctx.range.resolvedBounds;
       const span = bounds && Number.isFinite(bounds.fromMs) && Number.isFinite(bounds.toMs) ? { firstMs: bounds.fromMs, lastMs: bounds.toMs - 1 } : {};
-      const ranked = [];
-      for (const c of cands) {
-        const arr = data.get(c.p.uuid) || [];
-        if (!arr.length) continue;
-        const lanes = fddPlotSweepLanes(arr, unitFamily(c.p), { ...span, ...(HOT_WATER_ROLES.has(c.role) ? { bounds: null } : {}) });
-        ranked.push({ ...c, arr, lanes, score: fddPlotSweepScore(lanes) });
+      let worst, lanes, scored, source;
+      if (hooked.length) {
+        // the hook's results: the sensor with the largest fault output, its four timelines as written by the hook
+        source = "FDD hook results";
+        scored = hooked.length;
+        worst = hooked.reduce((w, c) => (!w || hook.get(String(c.p.uuid)) > hook.get(String(w.p.uuid)) ? c : w), null);
+        const data = await ctx.series([worst.p], { windowSec: 3600 });
+        worst.arr = data.get(worst.p.uuid) || [];
+        if (!worst.arr.length) return "No history in this range.";
+        const t0 = worst.arr[0][0], t1 = worst.arr[worst.arr.length - 1][0];
+        lanes = {};
+        for (const l of SWEEP_LANES) {
+          const lane = await rcxFaultData(ctx.model, worst.eq, l.rule, ctx.hours, { sensorRef: worst.p.uuid, range: ctx.range, siteTz: ctx.siteTz });
+          lanes[l.rule] = lane.length ? [...lane] : [[t0, null], [t1, null]];     // a rule the hook has not written yet: an empty lane, still drawn
+        }
+        worst.score = fddPlotSweepScore(lanes);
+      } else {
+        source = "estimated in browser";
+        const data = await ctx.series(cands.map((s) => s.p), { windowSec: 3600 });
+        const ranked = [];
+        for (const c of cands) {
+          const arr = data.get(c.p.uuid) || [];
+          if (!arr.length) continue;
+          const roleName = ctx.catalog && ctx.catalog.roles && ctx.catalog.roles[c.role] ? ctx.catalog.roles[c.role].name : c.role;
+          const l = fddPlotSweepLanes(arr, fddPlotSweepLimits(roleName, unitFamily(c.p)), span);
+          ranked.push({ ...c, arr, lanes: l, score: fddPlotSweepScore(l) });
+        }
+        worst = fddPlotWorstSensor(ranked);
+        if (!worst) return "No history in this range.";
+        scored = ranked.length;
+        lanes = worst.lanes;
       }
-      const worst = fddPlotWorstSensor(ranked);
-      if (!worst) return "No history in this range.";
       const label = `${worst.p.dis || worst.p.name} (${equipName(worst.eq.rec || worst.eq)})`;
-      const hours = worst.lanes["SV-RANGE"].map(([t]) => t);
+      const hours = [...new Set(worst.arr.map(([t]) => hourFloor(t)))].sort((a, b) => a - b);
       const y = new Map(worst.arr.map(([t, v]) => [hourFloor(t), v]));
       const disp = ctx.dispSeries(hours.map((t) => [t, y.has(t) ? y.get(t) : null]), ctx.siUnit(worst.p));
       const built = fddPlotSensorFaultOption({
-        title: `Sensor validation · ${label}`, name: label, yTitle: ctx.unit(worst.p),
+        title: `Sensor validation · ${label} · ${source}`, name: label, yTitle: ctx.unit(worst.p),
         t: disp.map(([t]) => t), y: disp.map(([, v]) => v), nLanes: SWEEP_LANES.length,
       });
       if (!built) return "No history in this range.";
       built.option.legend = { top: 40, type: "scroll" };
-      built.option.title.subtext = `Worst of ${ranked.length} sensor${ranked.length === 1 ? "" : "s"} in scope: ${worst.score} flagged sample${worst.score === 1 ? "" : "s"} across the four sweep lanes`;
+      built.option.title.subtext = `Worst of ${scored} sensor${scored === 1 ? "" : "s"} in scope (${source}): ${worst.score} flagged sample${worst.score === 1 ? "" : "s"} across the four sweep lanes`;
       built.option.title.subtextStyle = { fontSize: 11 };
       built.option.grid[0].top += 28;
       delete built.option.grid[0].height;           // the signal grid stretches between the title and the lanes: the chart fills its pane
       built.heightPx = 84 + 250 + SWEEP_LANES.length * 34 + 70;
-      built.option = rcxWithFaultLane(built.option, SWEEP_LANES.map((l) => ({ name: l.name, data: worst.lanes[l.rule] })));
+      built.option = rcxWithFaultLane(built.option, SWEEP_LANES.map((l) => ({ name: l.name, data: lanes[l.rule] })));
       draw(el, built, `sensor_fault_${worst.p.name}`);
-      return `${label}: ${worst.score} flagged samples · lanes: ${SWEEP_LANES.map((l) => l.name).join(", ")} · computed in the browser from hourly aggregates (the FDD hook's per-sensor results are in the table above)`;
+      return `${label}: ${worst.score} flagged samples · lanes: ${SWEEP_LANES.map((l) => l.name).join(", ")} · `
+        + (source === "FDD hook results" ? "from the FDD hook's per-sensor timelines"
+          : "estimated in browser from hourly aggregates with the limits of sensor_sweep_limits.json (the FDD hook has no sweep results yet)");
     },
   });
 
   Object.assign(globalThis, {
     fddRulePlot, fddPlotMaskLanes, fddPlotExpandRoles, fddPlotRuleOption, fddPlotOatOption, fddPlotHealthStates,
     fddPlotHealthOption, fddPlotSensorMasks, fddPlotSensorFaultOption, fddPlotUnitFamily: unitFamily, fddPlotLimits: SENSOR_LIMITS,
-    fddPlotSweepLanes, fddPlotSweepScore, fddPlotWorstSensor, FDD_SWEEP_LANES: SWEEP_LANES,
+    fddPlotSweepLanes, fddPlotSweepLimits, fddPlotHookSensors, fddPlotSweepScore, fddPlotWorstSensor, FDD_SWEEP_LANES: SWEEP_LANES,
   });
 })();

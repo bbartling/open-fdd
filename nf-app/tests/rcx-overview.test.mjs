@@ -445,7 +445,7 @@ test("ahu-runtime-daily view: hours per day per AHU from fan status, labelled; c
   assert.deepEqual(arr(o.xAxis.data), ["2026-10-26", "2026-10-27"]);
   assert.equal(o.yAxis.max, 24);
   assert.equal(kpis[0].id, "ahu-run-hours"); assert.equal(kpis[0].value, "8.0 h");
-  assert.match(note, /from fan status/);
+  assert.match(note, /from status/);
   assert.ok(!views(ctx).some((x) => x.id === "weekly-fan" && !x.tabHidden), "the weekly fan bars are not drawn on the RCx tab any more");
   assert.equal(view(ctx, "weekly-fan-cmd").tabHidden, true);
   // an AHU with only a command point: same chart, labelled "command"
@@ -453,7 +453,7 @@ test("ahu-runtime-daily view: hours per day per AHU from fan status, labelled; c
   noStatus.ctx.series.set(noStatus.byName("FAN-C").uuid, hourly(48, (i) => (i % 24 >= 6 && i % 24 < 12 ? 1 : 0)));
   const r = await renderView(noStatus.ctx, noStatus.model, "ahu-runtime-daily", 48);
   assert.deepEqual(arr(r.out.option.series, (s) => [s.name, arr(s.data)]), [["AHU-1 (command)", [6, 6]]]);
-  assert.match(r.note, /from fan command \(no status point\)/);
+  assert.match(r.note, /from command \(no status point\)/);
   // no fan point at all: the AHU does not bind (listed as missing "fan_status or fan_cmd")
   const none = setup(POINTS.filter((p) => !/^FAN/.test(p.name)));
   assert.equal(none.ctx.rcxBind(view(none.ctx, "ahu-runtime-daily"), none.model.equips, none.model, catalog).length, 0);
@@ -468,4 +468,29 @@ test("BAS vs web OAT is an FDD-tab chart (signals + OAT-METEO fault lane) under 
   assert.equal(v.groupOf([{ kinds: ["boiler"] }]), "Boiler / hot-water plant", "a hard-wired OA sensor on the boiler sits under the plant");
   assert.equal(view(ctx, "bas-vs-web-oat-hist").tabHidden, true);
   assert.equal(ctx.rcxPlan([AHU], { points: [] , equips: [AHU], sites: [] }, catalog, { tab: "rcx" }).ready.some((r) => r.view.id === "bas-vs-web-oat"), false);
+});
+
+test("plant motors: one daily run-hours chart per family (status else command), the weekly and per-signal cooling views are not drawn", async () => {
+  const { ctx } = setup();
+  const vs = views(ctx), byId = Object.fromEntries(vs.map((v) => [v.id, v]));
+  for (const v of vs.filter((x) => /^weekly-/.test(x.id))) assert.equal(v.tabHidden, true, `${v.id} stays registered for agents only`);
+  for (const id of ["runtime-daily-pump", "runtime-daily-chw-pump", "runtime-daily-cw-pump", "runtime-daily-compressor", "runtime-daily-chiller", "runtime-daily-tower-fan"]) {
+    assert.equal(byId[id].group, "Plant", id); assert.ok(!byId[id].tabHidden);
+  }
+  assert.deepEqual(Array.from(byId["runtime-daily-chiller"].roles.anyOf), ["chiller_status", "chiller_cmd"], "status before command");
+  for (const id of ["mech-cooling-compressor-status", "mech-cooling-chiller-status", "mech-cooling-chiller-cmd"]) assert.equal(byId[id].tabHidden, true);
+  assert.ok(byId["mech-cooling-hours"] && !byId["mech-cooling-hours"].tabHidden, "one cooling-hours chart, not three");
+  // a chiller with both status and command is drawn once, from the status; labelled
+  const CH = rec("CH-1", "EQUIPMENT", { id: "CH-1", siteRef: "s", markers: "equip,chiller" });
+  const chp = (n, m, extra = {}) => rec(n, "POINT", { siteRef: "s", equipRef: "CH-1", markers: `point,his,${m}`, kind: "Bool", unit: "", ...extra });
+  const mk = setup([chp("CH-S", "chiller,run,sensor"), chp("CH-C", "chiller,run,cmd"), rec("WX2", "POINT", { siteRef: "s", weatherStationRef: "w", markers: "point,weather,outside,air,temp,his", kind: "Number", unit: "°F" })]);
+  mk.model.equips = [CH];
+  mk.ctx.series.set(mk.byName("CH-S").uuid, hourly(48, (i) => (i < 12 ? 1 : 0)));
+  mk.ctx.series.set(mk.byName("CH-C").uuid, hourly(48, () => 1));
+  mk.ctx.series.set(mk.byName("WX2").uuid, hourly(48, () => 75));
+  const r = await renderView(mk.ctx, mk.model, "runtime-daily-chiller", 48);
+  assert.deepEqual(arr(r.out.option.series, (x) => [x.name, arr(x.data)]), [["CH-1 (status)", [12, 0]]]);
+  const c = await renderView(mk.ctx, mk.model, "mech-cooling-hours", 48);
+  assert.deepEqual(arr(c.out.option.series, (x) => x.name), ["CH-1 (status)"]);
+  assert.ok(c.out.option.series[0].data.some((h) => h > 0));
 });

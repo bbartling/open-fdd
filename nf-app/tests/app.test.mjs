@@ -517,3 +517,34 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
   assert.equal(element("fddPlotRangeStatus").textContent, "Could not load this range: range lookup failed");
   assert.equal(element("fddPlotNote").textContent, "could not draw: range lookup failed");
 });
+
+test("AHU on defaults to ON when a feeding AHU is known (airRef or the only AHU) and OFF when unknown; a click is explicit", () => {
+  const elements = new Map();
+  const el = (id) => { if (!elements.has(id)) elements.set(id, { textContent: "", hidden: true, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, classList: { toggle() {} } }); return elements.get(id); };
+  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" }, esc: (x) => String(x ?? "") });
+  for (const f of ["paging.js", "nf.js", "model.js", "fdd.js", "rcx.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  vm.runInContext(readFileSync(new URL("app.js", dir), "utf8"), ctx, { filename: "app.js" });
+  const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
+  const eq = (name, markers, extra = {}) => ({ uuid: `u-${name}`, name, attrs: { id: name, siteRef: "s", markers, ...extra } });
+  const ui = vm.runInContext("rcxUi", ctx);
+  const run = (equips) => { ui.ahuOn = null; return vm.runInContext("renderAhuControl", ctx)(equips, catalog); };
+  assert.equal(run([eq("A1", "equip,ahu"), eq("V1", "equip,vav", { airRef: "A1" })]), true, "airRef known");
+  assert.equal(run([eq("A1", "equip,ahu"), eq("V1", "equip,vav")]), true, "the only AHU is assumed");
+  assert.equal(run([eq("A1", "equip,ahu"), eq("A2", "equip,ahu"), eq("V1", "equip,vav")]), false, "two AHUs, no airRef: unknown");
+  assert.match(el("rcxAhuNote").textContent, /feeding AHU is unknown/);
+  ui.ahuOn = false;
+  assert.equal(vm.runInContext("renderAhuControl", ctx)([eq("A1", "equip,ahu"), eq("V1", "equip,vav", { airRef: "A1" })], catalog), false, "an explicit choice wins");
+});
+
+test("every card chart: x labels hide overlaps; the ECharts title is dropped when the card has a heading", () => {
+  const ctx = vm.createContext({ console });
+  vm.runInContext(readFileSync(new URL("rcx.js", dir), "utf8").replace(/^const /gm, "var "), ctx, { filename: "rcx.js" });
+  const t = (o, drop) => JSON.parse(JSON.stringify(vm.runInContext("rcxTidyOption", ctx)(o, drop)));
+  const o = { title: { text: "X", left: 8 }, legend: { top: 28 }, grid: { top: 72 }, xAxis: { type: "time" }, series: [] };
+  assert.equal(t(o, false).title.text, "X");
+  assert.equal(t(o, false).xAxis.axisLabel.hideOverlap, true);
+  const d = t(o, true);
+  assert.equal(d.title, undefined);
+  assert.deepEqual([d.legend.top, d.grid.top], [4, 48], "the empty title band is given back");
+  assert.equal(t({ title: { text: "X", subtext: "why" }, xAxis: [{ type: "time" }, { type: "time", axisLabel: { show: false } }] }, true).title.subtext, "why");
+});

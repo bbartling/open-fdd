@@ -11,8 +11,8 @@
 
 const RCX_VIEWS = [];
 
-/** RCx tab state: equip = the tab's own device filter ("" = all devices), ahuOn = the "AHU on" filter. */
-const rcxUi = { equip: "", ahuOn: false };
+/** RCx tab state: equip = the tab's own device filter ("" = all devices), ahuOn = the "AHU on" filter (null = automatic: on when the feeding AHU is known). */
+const rcxUi = { equip: "", ahuOn: null };
 
 /**
  * Register a view.
@@ -145,17 +145,41 @@ const RCX_FINE_MAX_SAMPLES = 9000;     // per series per request (NF caps at ~10
 const rcxChartConfig = new WeakMap();
 const rcxChartOriginalSetOption = new WeakMap();
 
-function rcxSiteChart(el, siteTz, range) {
+/**
+ * Shared look of every card chart: x labels never overlap (hideOverlap), and `dropTitle` removes the ECharts title when
+ * the card already has a heading with the same text (a subtext, if any, stays). A title-less legend/grid moves up by the
+ * title's room so the chart does not keep an empty band.
+ */
+function rcxTidyOption(option, dropTitle) {
+  if (!option || typeof option !== "object") return option;
+  const out = { ...option };
+  const arr = (x) => (x == null ? [] : Array.isArray(x) ? x : [x]);
+  if (out.xAxis) out.xAxis = (Array.isArray(out.xAxis) ? out.xAxis : [out.xAxis]).map((a) => ({ ...a, axisLabel: { hideOverlap: true, ...(a.axisLabel || {}) } }));
+  if (Array.isArray(option.xAxis) === false && option.xAxis) out.xAxis = out.xAxis[0];
+  if (dropTitle && out.title && !Array.isArray(out.title) && out.title.text) {
+    const { text, ...rest } = out.title;
+    out.title = rest.subtext ? rest : undefined;
+    if (!rest.subtext) {
+      const up = (v) => (typeof v === "number" && v >= 24 ? v - 24 : v);
+      if (out.legend && !Array.isArray(out.legend)) out.legend = { ...out.legend, top: up(out.legend.top) };
+      if (out.grid) out.grid = Array.isArray(out.grid) ? out.grid.map((g) => ({ ...g, top: up(g.top) })) : { ...out.grid, top: up(out.grid.top) };
+    }
+  }
+  return out;
+}
+
+function rcxSiteChart(el, siteTz, range, dropTitle = false) {
   const chart = ofddChart(el);
   if (!chart || typeof chart.setOption !== "function") return chart;
-  rcxChartConfig.set(chart, { siteTz: chartTimeZone(siteTz), range });
+  rcxChartConfig.set(chart, { siteTz: chartTimeZone(siteTz), range, dropTitle });
   if (!rcxChartOriginalSetOption.has(chart)) {
     const original = chart.setOption.bind(chart);
     rcxChartOriginalSetOption.set(chart, original);
     chart.setOption = (option, ...args) => {
       const cfg = rcxChartConfig.get(chart);
+      const tidy = rcxTidyOption(option, cfg.dropTitle);
       const styled = typeof chartOptionSiteTime === "function"
-        ? chartOptionSiteTime(option, cfg.siteTz) : option;
+        ? chartOptionSiteTime(tidy, cfg.siteTz) : tidy;
       // Keep explicit view extents (for example a week bucket whose start precedes a short
       // selected interval). The input series itself is already fetched for cfg.range.
       const bounds = cfg.range?.resolvedBounds;
@@ -250,7 +274,7 @@ function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = 
   return {
     view, equips, hours, model, catalog, first, series, aligned, alignedFine, range, siteTz,
     ahuOn: !!extra.ahuOn, feedingAhu, ahuMask, kpi: (tile) => { if (extra.kpis) extra.kpis.push(tile); },
-    chart: (el) => rcxSiteChart(el, siteTz, range),
+    chart: (el) => rcxSiteChart(el, siteTz, range, !!extra.dropTitle),
     siUnit: rcxSiUnit,
     disp: rcxDisp,
     dispDelta: rcxDispDelta,
