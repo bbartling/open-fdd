@@ -29,7 +29,7 @@ def summary(verdict) -> dict:
 
 def test_baseline_file_is_the_documented_verdict():
     assert [d["verdict"] for d in _BASE] == [{"compared": 71, "matched": 47, "known_divergent": 24, "unexpected": 0},
-                                             {"compared": 71, "matched": 49, "known_divergent": 22, "unexpected": 0}]
+                                             {"compared": 71, "matched": 50, "known_divergent": 21, "unexpected": 0}]
 
 
 def test_baseline_verdict_on_pglite(ds):
@@ -63,7 +63,7 @@ def test_core_rows_describe_the_dataset(ds):
 
 
 def test_imperial_round_trip_is_exact_with_the_nf_ingest_constants(ds):
-    back = from_imperial(to_imperial(ds, ingest="nf"), ingest="nf")
+    back = from_imperial(to_imperial(ds))
     for a, b in zip(ds.history, back.history):
         for k, v in a.items():
             w = b[k]

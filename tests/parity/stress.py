@@ -5,10 +5,11 @@
                                   [--engines pglite,sqlite[,timescale]] [--out report.json]
 
 generate (open_fdd.parity, alternating healthy / fault-injected equipment, 5-minute grid) -> SQL adapters (PGlite and
-SQLite) -> reference (pandas twins via open_fdd.rules) -> compare (shipped Policy and known-difference list). Prints:
+SQLite) -> reference (pandas twins via open_fdd.rules) -> compare (shipped Policy and known-difference list; on a canonical dataset each known difference must also stay inside
+its pinned delta band, see parity_known_differences.json). Prints:
 rows, per-engine runtime, SQL-side RSS, Python-side peak RSS, pandas runtime, how many rules match, which differ, and
 which SQL rules have NO pandas twin. Exit code 1 if an SQL engine errors, the two SQL engines disagree, a rule diverges
-from pandas without being in the known-difference list, or fewer rules were compared than have a pandas twin (zero
+from pandas without being in the known-difference list or leaves its pinned delta band, or fewer rules were compared than have a pandas twin (zero
 compared fails). With --no-pandas no pandas verdict is made.
 
 ``--engines pglite,sqlite,timescale`` adds the Timescale path through the NEW core tables (fdd.point, fdd.input_sample,
@@ -75,8 +76,10 @@ def main() -> int:
     ap.add_argument("--no-pandas", action="store_true", help="SQL engines only (fast; for large --equips/--days)")
     ap.add_argument("--out", type=Path, default=None, help="write the JSON report here")
     args = ap.parse_args()
+    if not args.no_pandas and "pglite" not in args.engines.split(","):
+        ap.error("the pandas verdict compares the pglite engine's rows: add pglite to --engines, or pass --no-pandas")
 
-    policy = Policy.default(args.profile, stress=True)
+    policy = Policy.default(args.profile, stress=True, dataset=f"{args.profile}/{args.seed}/{args.equips}/{args.days}")
     ds = generate(args.seed, args.equips, args.days, args.profile)
 
     results, errors, timing, memory = {}, {}, {}, {}
@@ -140,6 +143,7 @@ def main() -> int:
             "rules_without_pandas_twin": no_twin,
         })
         rep["verdict"] = v.to_dict()
+        rep["known_difference_deltas_h"] = {r: round(d, 4) for r, d in sorted(v.deltas.items())}
         ok = ok and v.ok
         pinned = baseline_applies(args)
         if pinned is not None:
@@ -154,6 +158,8 @@ def main() -> int:
         rep["python_peak_rss_mb"] = round(h.peak_rss_mb(), 1)
     print(json.dumps(rep, indent=2, ensure_ascii=False))
     if not args.no_pandas:
+        for line in v.pin_violations:
+            print(f"pinned delta out of band: {line}")
         print(v.summary(ok))
     if args.out:
         args.out.write_text(json.dumps(rep, indent=2, ensure_ascii=False), encoding="utf-8")

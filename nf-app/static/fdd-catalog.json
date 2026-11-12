@@ -2896,14 +2896,14 @@
     "boiler"
    ],
    "required_roles": [
-    "hw_supply_t"
+    "hw_supply_t",
+    "hw_reset_request_sum"
    ],
    "optional_roles": [
     "pump_status",
     "chiller_status",
     "chw_flow",
-    "chw_pump_cmd",
-    "hw_reset_request_sum"
+    "chw_pump_cmd"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
@@ -2926,14 +2926,14 @@
     "chwPlant"
    ],
    "required_roles": [
-    "chw_supply_t"
+    "chw_supply_t",
+    "chw_reset_request_sum"
    ],
    "optional_roles": [
     "pump_status",
     "chiller_status",
     "chw_flow",
-    "chw_pump_cmd",
-    "chw_reset_request_sum"
+    "chw_pump_cmd"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,

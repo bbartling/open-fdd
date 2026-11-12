@@ -7,10 +7,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-PA_PER_IN_WC = 248.84
-LPS_PER_CFM = 0.471947
-KPA_PER_PSI = 6.894757
-LPS_PER_GPM = 0.0630902
+from open_fdd.nf.units import FACTORS as _FACTORS
+
+# One canonical table (open_fdd/data/unit_factors.json = the NF ingest values), shared with open_fdd.nf.units and
+# nf-app/static/units.js.
+PA_PER_IN_WC = _FACTORS["pa_per_in_wc"]
+LPS_PER_CFM = _FACTORS["lps_per_cfm"]
+KPA_PER_PSI = round(_FACTORS["pa_per_psi"] / 1000.0, 9)
+LPS_PER_GPM = _FACTORS["lps_per_gpm"]
 
 def normalize_unit_token(unit: str | None) -> str:
     if unit is None:

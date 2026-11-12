@@ -23,6 +23,8 @@ Row shape per rule = the rule's ``output_columns`` in ``sql/fdd/tuning_catalog.j
 """
 from __future__ import annotations
 
+import math
+
 from typing import Iterable, Protocol, Sequence, runtime_checkable
 
 from open_fdd.parity.dataset import Dataset
@@ -76,9 +78,12 @@ def conformance_errors(adapter: EngineAdapter, dataset: Dataset, rule_ids: Itera
             if not isinstance(r, dict) or "equipment_id" not in r:
                 problems.append(f"{rid}: row without equipment_id: {r!r}")
                 break
-            fh = r.get("fault_hours")
-            if fh is not None and (isinstance(fh, bool) or not isinstance(fh, (int, float))):
-                problems.append(f"{rid}: fault_hours must be a number or None, got {fh!r}")
+            if "fault_hours" not in r:
+                problems.append(f"{rid}: row without fault_hours (use None for not assessed): {r!r}")
+                break
+            fh = r["fault_hours"]
+            if fh is not None and (isinstance(fh, bool) or not isinstance(fh, (int, float)) or not math.isfinite(fh)):
+                problems.append(f"{rid}: fault_hours must be a finite number or None, got {fh!r}")
                 break
     extra = sorted(set(rows) - set(wanted))
     if extra:

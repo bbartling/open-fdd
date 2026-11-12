@@ -290,6 +290,11 @@ def read_parity() -> tuple[dict, dict, set]:
     raise RuntimeError("NO_TWIN not found in tests/parity/test_parity.py")
 
 
+def read_pins() -> dict[str, dict[str, dict]]:
+    """``{rule: {dataset key: {"hours", "tol"}}}`` expected deltas of the known-difference list (see open_fdd.parity.policy)."""
+    return {d["rule"]: d.get("expected", {}) for d in _load(KNOWN_DIFFS)["differences"]}
+
+
 def parity_status(rid: str, known: dict, no_twin: set) -> str:
     if rid in no_twin:
         return "SQL only"

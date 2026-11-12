@@ -14,6 +14,8 @@
   "duct_static": "duct-static-pressure",
   "duct_static_sp": "duct-static-pressure-sp",
   "static_reset_request": "vav-pressure-request-sum",
+  "hw_reset_request_sum": "hot-water-reset-request-sum",
+  "chw_reset_request_sum": "chilled-water-reset-request-sum",
   "cooling_coil_entering_temp": "cooling-coil-entering-temp",
   "cooling_coil_leaving_temp": "cooling-coil-leaving-temp",
   "heating_coil_entering_temp": "heating-coil-entering-temp",

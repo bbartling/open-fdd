@@ -2,6 +2,6 @@
   "_doc": "The pandas == SQL verdicts pinned for two dataset sizes (basic profile, seed 0, Policy.default('basic', stress=True)). Every engine path (PGlite, SQLite, Timescale through the core tables, a downstream app's own database) must reproduce them; a change here is a deliberate decision, not a drift. The 8 x 7 run is the CI stress size (the longer window adds the stress_only differences).",
   "datasets": [
     {"equips": 8, "days": 7, "profile": "basic", "seed": 0, "verdict": {"compared": 71, "matched": 47, "known_divergent": 24, "unexpected": 0}},
-    {"equips": 4, "days": 3, "profile": "basic", "seed": 0, "verdict": {"compared": 71, "matched": 49, "known_divergent": 22, "unexpected": 0}}
+    {"equips": 4, "days": 3, "profile": "basic", "seed": 0, "verdict": {"compared": 71, "matched": 50, "known_divergent": 21, "unexpected": 0}}
   ]
 }

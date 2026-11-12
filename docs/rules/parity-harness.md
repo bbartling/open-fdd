@@ -103,13 +103,13 @@ the same dataset and the same pinned verdict:
 1. Apply the vendored `core.sql` (compare its bytes with `open_fdd/data/core.sql` from the installed wheel) and define
    your `fdd.input_sample` view with the signature under `sources` in `input_contract.json`.
 2. `points, samples = ds.to_core_rows()` gives `fdd.point` rows and long `(site_id, point_key, ts_ms, value)` samples in SI.
-   `to_imperial(ds, ingest="nf").to_core_rows()` gives the same in native units (`unit` per point, `si_unit` the SI unit):
-   seed those to prove a read-time conversion (`si_scale` / `si_offset`). `to_imperial(ds)` uses `open_fdd.units.convert`
-   (248.84 Pa per inH2O, 0.471947 L/s per CFM); the NF ingest table uses 249.0889 and 0.4719474: use the table your ingest uses.
+   `to_imperial(ds).to_core_rows()` gives the same in native units (`unit` per point, `si_unit` the SI unit):
+   seed those to prove a read-time conversion (`si_scale` / `si_offset`). `to_imperial(ds)` converts with the one canonical table (`open_fdd/data/unit_factors.json`: 249.0889 Pa per inH2O,
+   0.4719474 L/s per CFM, the NF ingest values), so an ingest that uses NF's table returns the SI dataset exactly.
 3. Load through your real ingest path, build the `history` scratch table from `fdd.point` + `fdd.input_sample`, run the pack,
    write `fdd.rule_result` through your product code and read the rows BACK from it as the adapter's result.
 4. Assert: the loaded `history` equals `ds.history` cell for cell (1e-9 relative); the verdict equals
-   `tests/parity/baseline.json` (`compared=71 matched=47 known-divergent=24 unexpected=0` for 8 equipment x 7 days, 49/22 for 4 x 3; see the file); a second run writes zero new rows (the upsert key is the primary key).
+   `tests/parity/baseline.json` (`compared=71 matched=47 known-divergent=24 unexpected=0` for 8 equipment x 7 days, 50/21 for 4 x 3; see the file); a second run writes zero new rows (the upsert key is the primary key).
 
 The in-repo reference is `TimescaleAdapter` (`tests/parity/adapters.py`, runner `nf-app/timescale/test/parity_run.mjs`);
 `python tests/parity/stress.py --engines pglite,sqlite,timescale` runs it against a disposable TimescaleDB

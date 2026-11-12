@@ -1,0 +1,16 @@
+{
+  "_doc": "The one canonical source of the multiplicative unit-conversion factors (declared unit -> SI). Read by open_fdd/nf/units.py, open_fdd/units/convert.py and open_fdd/parity/imperial.py; scripts/nf/build_unit_factors.py writes the same numbers into the generated block of nf-app/static/units.js and checks that the ingest aliases in units.json carry them. These are the NF ingest values: the ingest table is what converts native values, so everything else uses it. Edit here, then run: python scripts/nf/build_unit_factors.py",
+  "version": 1,
+  "factors": {
+    "pa_per_in_wc": {"value": 249.0889, "alias": "inH2O", "si": "Pa"},
+    "pa_per_psi": {"value": 6894.757, "alias": "psi", "si": "Pa"},
+    "lps_per_cfm": {"value": 0.4719474, "alias": "cfm", "si": "L/s"},
+    "lps_per_gpm": {"value": 0.0630902, "alias": "gpm", "si": "L/s"},
+    "kw_per_btuh": {"value": 0.00029307107, "alias": "Btu/h", "si": "kW"},
+    "kw_per_ton": {"value": 3.5168525, "alias": "ton", "si": "kW"},
+    "kw_per_hp": {"value": 0.7456999, "alias": "hp", "si": "kW"},
+    "kwh_per_kbtu": {"value": 0.29307107, "alias": "kBtu", "si": "kWh"},
+    "kwh_per_mmbtu": {"value": 293.07107, "alias": "MMBtu", "si": "kWh"},
+    "kwh_per_therm": {"value": 29.307107, "alias": "therm", "si": "kWh"}
+  }
+}
