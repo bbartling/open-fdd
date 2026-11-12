@@ -63,6 +63,7 @@
 //   engine        "auto" | "sqlite" | "pglite" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
+//   timezone      IANA zone (e.g. America/Chicago) for the occupancy schedule when the model site has no tz (#1587)
 //   equips        list of equip ids to limit a run to (default: every equip)
 //   dryRun        true → compute and log, write nothing
 //   bacnet        { enabled: true, firstInstance: 1000 } → fault count per equip as an AV on
@@ -530,21 +531,28 @@ function timelineRecords({ equipRec, siteId, rule, shared, windowHours, key, run
 
 // ---- occupancy for rules whose occ_mode is optional and unbound -------------------------------------
 const scheduleLib = require('../static/schedule.js');
-const hostTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
+const siteTz = require('./lib/site-timezone.js');
 
 /**
- * { source: 'schedule' | 'default', label, tz, at(ms) -> occupied } for a site. NF schedules are read once per run
- * (cache.schedules) and never written. Timezone: the site record's tz / timezone, else the host's.
+ * { source: 'schedule' | 'default', label, tz, tz_source, at(ms) -> occupied } for a site. NF schedules are read once
+ * per run (cache.schedules) and never written. Timezone (#1587), the dashboard's order: the model site's tz / timezone,
+ * then the app option `timezone`, then NF Sites, then the host zone (UTC on real NF), then UTC; `tz_source` says which.
  */
-async function siteOccupancy({ http, model, shared, siteId, cache }) {
+async function siteOccupancy({ http, model, shared, siteId, cache, config }) {
   if (!cache.schedules) cache.schedules = scheduleLib.loadSchedules(async (p) => { const r = await http.get(p); return r && r.data; });
   const schedules = await cache.schedules;
   const site = model.sites.find((x) => shared.idOf(x) === siteId);
-  const sa = (site && site.attrs) || {};
-  const tz = sa.tz || sa.timezone || hostTz();
-  const picked = scheduleLib.pickSiteSchedule(schedules, { sites: model.sites, points: model.points }, siteId);
-  const sched = picked || scheduleLib.defaultSchedule(tz);
-  return { source: picked ? 'schedule' : 'default', label: sched.label, tz, at: (ms) => scheduleLib.occupied(sched, ms, tz) };
+  if (!cache.nfSites) cache.nfSites = siteTz.loadNfSites(http);
+  const nf = await cache.nfSites;
+  const z = siteTz.resolveSiteTimeZone(site, { config, sites: nf.sites });
+  // the schedule label names the zone from the site record: hand it the resolved one
+  const sites = z.source === 'model site' || !site ? model.sites
+    : model.sites.map((x) => (x === site ? { ...x, attrs: { ...(x.attrs || {}), tz: z.zone } } : x));
+  const picked = scheduleLib.pickSiteSchedule(schedules, { sites, points: model.points }, siteId);
+  const sched = picked || scheduleLib.defaultSchedule(z.zone);
+  const tz = z.zone;
+  return { source: picked ? 'schedule' : 'default', label: sched.label, tz, tz_source: z.source, tz_fallback: z.fallback,
+    tz_ignored: z.ignored, tz_sites_error: nf.error, at: (ms) => scheduleLib.occupied(sched, ms, tz) };
 }
 
 /** Model record of a previously published result, flagged stale: nothing else about it changes. */
@@ -705,6 +713,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
     sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 },
+    // site time zone used for the occupancy schedule, per site, with where it came from (#1587)
+    timezones: /** @type {Record<string, {zone: string, source: string, fallback: boolean}>} */ ({}),
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
     eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {},
     window: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), hours: windowHours },
@@ -786,10 +796,13 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         let occ = null;               // synthesized occupancy: a runnable rule has occ_mode optional and no point is bound
         if (kind !== 'timescale' && !roles.occ_mode && runnable.some((r) => r.optional.includes('occ_mode'))) {
           try {
-            occ = await siteOccupancy({ http, model, shared, siteId, cache: occCache });
+            occ = await siteOccupancy({ http, model, shared, siteId, cache: occCache, config });
             if (!occCache.logged.has(siteId)) {
               occCache.logged.add(siteId);
-              log(`${siteId || 'site'}: occ_mode synthesized from ${occ.source} (${occ.label}, ${occ.tz})`);
+              log(`${siteId || 'site'}: occ_mode synthesized from ${occ.source} (${occ.label}, ${occ.tz}, zone from ${occ.tz_source})`);
+              if (occ.tz_ignored) log(`${siteId || 'site'}: ${occ.tz_ignored}`);
+              if (occ.tz_sites_error) log(`${siteId || 'site'}: NF Sites unavailable for the time zone (${occ.tz_sites_error})`);
+              summary.timezones[siteId || ''] = { zone: occ.tz, source: occ.tz_source, fallback: occ.tz_fallback };
             }
           } catch (e) { log(`${equipId}: occupancy schedule unavailable (${errText(e)}); occ_mode not synthesized`); }
         }

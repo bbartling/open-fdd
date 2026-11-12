@@ -428,3 +428,83 @@ test("VAV-2 keeps its required occ_mode: no point, not run (nothing synthesized 
   assert.equal(resultRec(w, "site-a", "VAV-2", "VAV-9"), undefined);
   assert.equal(timelineRec(w, "site-a", "VAV-2", "VAV-9"), undefined);
 });
+
+// ---- 6. the site time zone of the occupancy schedule: model tz > app option > NF Sites > host > UTC (#1587) ----------
+// The two-site fixture crosses the US DST end (Sun 2026-11-01). Both sites lose their model `tz`: site-a then relies on the
+// app option / NF Sites, site-b keeps its own tz (the model always wins).
+/** `base` with the model `tz` removed from the sites in `strip`, an optional NF Sites list on GET /api/v1/sites. */
+function tzHttp(base, { strip = [], nfSites = null }) {
+  return {
+    writes: base.writes,
+    async post(p, body) {
+      const r = await base.post(p, body);
+      if (p !== "/api/v1/point/query" || body.layer !== "model") return r;
+      return { data: { points: r.data.points.map((x) => {
+        if (x.pointType !== "SITE" || !strip.includes(x.attrs.id)) return x;
+        const { tz, ...attrs } = x.attrs;
+        return { ...x, attrs };
+      }) } };
+    },
+    async get(p) {
+      if (p.startsWith("/api/v1/sites")) {
+        if (!nfSites) throw new Error("HTTP 404");
+        return { data: { sites: nfSites, totalCount: nfSites.length } };
+      }
+      return base.get(p);
+    },
+  };
+}
+const TZ_NOW = () => wall(2026, 11, 3, 20, 0, "America/Chicago");
+/** Timeline samples of VAV-9's VAV-1 rule on `site` for a run with these settings. */
+async function vavRun(site, { strip = [], nfSites = null, config = {} }) {
+  const nowMs = TZ_NOW();
+  const { equip, http: base } = vavSetup(site, { nowMs });
+  const http = tzHttp(base, { strip, nfSites });
+  const { summary, logs } = await runHook(nowMs, { http, config: { windowHours: 168, equips: ["VAV-9"], ...config } });
+  assert.equal(summary.errors, 0, logs.join("\n"));
+  const w = written(http);
+  return { summary, logs, samples: w.data.get(timelineRec(w, site.id, "VAV-1", "VAV-9").uuid) };
+}
+/** First confirmed (value 1) sample of the local day y-m-d in `tz`, as "HH:MM" local. */
+const firstConfirmed = (samples, tz, ymd) => {
+  const hit = samples.find(([t, v]) => v === 1 && new Date(t).toLocaleDateString("en-CA", { timeZone: tz }) === ymd);
+  return hit ? new Date(hit[0]).toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit" }) : null;
+};
+
+test("app option timezone: occupancy stays 07:00-17:00 local across the DST week; no option falls back to UTC", async () => {
+  const withOpt = await vavRun(A, { strip: ["site-a"], config: { timezone: "America/Chicago" } });
+  // Fri 10-30 is CDT (UTC-5), Mon 11-02 is CST (UTC-6): the first confirmed fault is at the same LOCAL time on both
+  const before = firstConfirmed(withOpt.samples, "America/Chicago", "2026-10-30");
+  assert.match(before, /^07:/, "right after the 07:00 start of occupancy");
+  assert.equal(firstConfirmed(withOpt.samples, "America/Chicago", "2026-11-02"), before);
+  assert.deepEqual(withOpt.summary.timezones["site-a"], { zone: "America/Chicago", source: "app option", fallback: false });
+  assert.ok(withOpt.logs.some((l) => /zone from app option/.test(l)), withOpt.logs.join("\n"));
+  // the same results as when the model site carries the tz (the old behaviour for such a site)
+  const model = await vavRun(A, { strip: [] });
+  assert.deepEqual(withOpt.samples, model.samples);
+  assert.equal(model.summary.timezones["site-a"].source, "model site");
+  // no option, no model tz, no NF Sites zone, host UTC on real NF: UTC, reported as a fallback; results differ
+  const none = await vavRun(A, { strip: ["site-a"] });
+  assert.equal(none.summary.timezones["site-a"].zone === "UTC" || none.summary.timezones["site-a"].source === "host", true);
+  if (none.summary.timezones["site-a"].zone === "UTC") {
+    assert.deepEqual(none.summary.timezones["site-a"], { zone: "UTC", source: "none", fallback: true });
+    assert.notDeepEqual(none.samples, withOpt.samples, "occupied hours differ when the zone is missing");
+    assert.match(firstConfirmed(none.samples, "UTC", "2026-10-30"), /^07:/, "occupied hours follow the UTC clock");
+  }
+});
+
+test("the model tz wins over the app option (site-b keeps New_York); NF Sites sits between the option and the host", async () => {
+  const b = await vavRun(B, { strip: [], config: { timezone: "America/Chicago" } });
+  assert.deepEqual(b.summary.timezones["site-b"], { zone: "America/New_York", source: "model site", fallback: false });
+  const nf = await vavRun(A, { strip: ["site-a"], nfSites: [{ id: "site-a", name: "site-a", timezone: "America/Chicago" }] });
+  assert.deepEqual(nf.summary.timezones["site-a"], { zone: "America/Chicago", source: "NF Sites API", fallback: false });
+  const both = await vavRun(A, { strip: ["site-a"], config: { timezone: "America/Denver" }, nfSites: [{ id: "site-a", timezone: "America/Chicago" }] });
+  assert.equal(both.summary.timezones["site-a"].zone, "America/Denver", "the app option beats NF Sites");
+  assert.equal(both.summary.timezones["site-a"].source, "app option");
+});
+
+test("an invalid timezone option is skipped and named in the log, never used", async () => {
+  const r = await vavRun(A, { strip: ["site-a"], config: { timezone: "Mars/Olympus" } });
+  assert.notEqual(r.summary.timezones["site-a"].zone, "Mars/Olympus");
+  assert.ok(r.logs.some((l) => /not an IANA zone name/.test(l)), r.logs.join("\n"));
+});
