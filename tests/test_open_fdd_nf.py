@@ -269,7 +269,7 @@ def test_client_info_and_sites(client):
 
 def test_load_model(model):
     assert {s["name"] for s in model.sites} == {"site-north", "site-south"}
-    assert len(model.equips) == 12 and not model.devices
+    assert len(model.equips) == 16 and not model.devices
     north = [p for p in model.points if p.site_ref == "site-north"]
     south = [p for p in model.points if p.site_ref == "site-south"]
     assert north and south and not (set(p.uuid for p in north) & set(p.uuid for p in south))
