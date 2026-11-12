@@ -10,7 +10,8 @@ nav_order: 18
 Tidy-up. FDD results are unchanged (parity run: 71 compared, 47 matched, 24 known-divergent, 0 unexpected).
 
 - **Breaking (contract):** SQL input contract version 2 drops the scratch tables `authorized_series` and `equipment`: no rule reads them and the hooks no longer fill them. Rule SQL is unchanged.
-- **One shared source** (`shared/`, copied by `scripts/nf/sync_shared.py`, `--check` in CI) for the files Full and Lite had hand-copied, including the weather hook and a single pager. Hook ids are unchanged; the BACnet mirror default is built into each edition (Lite on, Full off) and the `bacnetMirror` app option overrides it.
+- **One shared source** (`shared/`, copied by `scripts/nf/sync_shared.py`, `--check` in CI) for the files Full and Lite had hand-copied, including the weather hook and a single pager. Hook ids are unchanged; the BACnet mirror is on by default in both editions and the `bacnetMirror: false` app option turns it off.
+- **UI:** Full and Lite share one dashboard shell (`shared/static/app-core.js`, charts, theme). The top bar shows only the site; each tab has its own equip picker with a separate Weather entry. Every history view opens on the last 7 days. Charts: "Weather vs outside air" removed, hour-of-day heat map gets a sensor dropdown, "Other signals" shows all numeric signals with one y-axis per unit plus an on/off lane.
 - **Docs:** `sql/fdd/tuning_storage.sql` is documented as the tuning storage contract, `openfdd.fdd_results` as the integration output, and the hooks and tables each edition creates are listed in one table.
 - Removed a stray dev patch; moved a test-only fixture out of `hooks/lib`.
 

@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/static/tree.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 // tree.html: read-only view of NF's own BACnet server (left) and the Haystack
 // model tree (right). Needs nf.js and theme.js loaded first. Nothing here writes to NF.
 

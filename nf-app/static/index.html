@@ -6,7 +6,9 @@
 <title>Open-FDD</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https: 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!--
-  Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js.
+  Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js. Top bar = the site only; each tab that
+  needs an equip has its own picker (app-core.js adds it). app-core.js is the dashboard shell shared with Lite;
+  app.js adds the Full-only tabs (FDD, RCx, Export).
   NF static plugin: served by Normal from the app's static/ folder at
   /api/v1/apps/static/<app-id>/ — same origin as the console, so the page
   calls /api/v1/* directly (LAN or portal tunnel, whichever you opened).
@@ -34,8 +36,10 @@
 <script defer src="rcx-presets.js"></script>
 <script defer src="energy.js"></script>
 <script defer src="export.js"></script>
+<script defer src="app-core.js"></script>
 <script defer src="app.js"></script>
 <script defer src="sparql.js"></script>
+<link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -46,7 +50,6 @@
   </div>
   <div class="spacer"></div>
   <label class="scope">site <select id="sitePick"></select></label>
-  <label class="scope">equip <select id="equipPick"></select></label>
   <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
   <span class="pill" id="clock"></span>
   <button class="btn" id="unitsToggle" type="button" title="Display units">°F · imperial</button>
@@ -86,7 +89,7 @@
     </section>
     <section class="panel">
       <h2><span id="chartTitle">–</span>
-        <select id="chartPick" class="hidden"></select>
+        <select id="chartPick" hidden></select>
         <span class="hint" id="chartHint"></span>
         <a class="btn" id="chartOpen" target="_blank" rel="noopener" title="open this chart in its own window">open in new window ↗</a>
       </h2>

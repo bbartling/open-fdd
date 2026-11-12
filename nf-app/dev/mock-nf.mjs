@@ -2,6 +2,7 @@
 // Mock Normal Framework for developing / testing the Open-FDD app on any PC (no NF box needed).
 //
 //   node nf-app/dev/mock-nf.mjs [port]          → http://127.0.0.1:8765/api/v1/apps/static/open-fdd/
+//   MOCK_STATIC=lite/static node nf-app/dev/mock-nf.mjs 8766    → the same mock serving the Lite pages
 //
 // Serves nf-app/static at the NF app URL and answers the NF API calls the app makes
 // (point/query, point/data with server-side resampling, schedules (read-only), platform/info, bacnet/*, hook runs)
@@ -16,10 +17,10 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const STATIC = path.join(HERE, "..", "static");
+const STATIC = process.env.MOCK_STATIC ? path.resolve(process.env.MOCK_STATIC) : path.join(HERE, "..", "static");   // MOCK_STATIC=lite/static serves the Lite pages
 const APP_PREFIX = "/api/v1/apps/static/open-fdd/";
 const PORT = Number(process.argv[2]) || 8765;
-const catalog = JSON.parse(fs.readFileSync(path.join(STATIC, "fdd-catalog.json"), "utf8"));
+const catalog = JSON.parse(fs.readFileSync(path.join(HERE, "..", "static", "fdd-catalog.json"), "utf8"));
 const DAYS = 8;
 // MOCK_PROFILE=real-nf reproduces what real NF 3.10 gives a site with nothing configured (#1584): the model site
 // has no tz, /api/v1/sites is empty, platform/info reports the container zone (Etc/UTC). MOCK_APP_TIMEZONE sets the

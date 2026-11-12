@@ -52,7 +52,7 @@ The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hoo
 | Hook | Edition | Mode | Caller | Reads / writes |
 |---|---|---|---|---|
 | `fdd` | Full | scheduled hourly (+ run-now) | dashboard (run-now, runs), installer, `export.js`, `rcx.js` | reads NF points + history; writes result points (and `openfdd.fdd_results` with the Timescale engine) |
-| `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; Lite also mirrors them to 3 BACnet AVs (`bacnetMirror`) |
+| `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; both editions mirror them to 3 BACnet AVs by default (`bacnetMirror:false` turns it off) |
 | `sparql` | Full | on request | agents and docs (the browser runs the same engine in `static/sparql.js`) | read-only |
 | `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
 | `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
