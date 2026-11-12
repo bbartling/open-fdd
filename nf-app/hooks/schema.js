@@ -42,13 +42,26 @@ async function handle({ sdk, config: rawConfig = {}, client: given }) {
     return done({ ok: installed >= ts.SCHEMA_VERSION && coreOk, installed, required: ts.SCHEMA_VERSION, core_ok: coreOk });
   } catch (e) {
     let text = settings.redact((e && e.message) || e, conn);
-    for (const v of conn ? [conn.host, conn.user, conn.database] : []) {     // a driver error may name the endpoint
+    for (const v of endpointParts(conn)) {     // a driver error may name the endpoint
       if (v && String(v).length > 2) text = text.split(String(v)).join('***');
     }
     return done({ ok: false, required: ts.SCHEMA_VERSION, error: text });
   } finally {
     if (client && !given) { try { await client.end(); } catch (_) { /* nothing to report */ } }
   }
+}
+
+/** Host, user and database of a connection, from its fields or its postgres:// URL (for redacting driver errors). */
+function endpointParts(/** @type {any} */ conn) {
+  if (!conn || typeof conn !== 'object') return [];
+  const out = [conn.host, conn.user, conn.database];
+  if (conn.connectionString) {
+    try {
+      const u = new URL(String(conn.connectionString));
+      out.push(u.hostname, decodeURIComponent(u.username), decodeURIComponent(u.pathname.replace(/^\//, '')));
+    } catch (_) { /* not a URL: the fields above only */ }
+  }
+  return out.filter(Boolean).map(String).sort((x, y) => y.length - x.length);
 }
 
 /** NF hook entry point; handle exported for tests. */

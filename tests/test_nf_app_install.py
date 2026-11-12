@@ -716,7 +716,7 @@ def tz_out(tmp_path, capsys, *, model=None, option=None, sites=None):
 
 def test_doctor_warns_when_the_zone_would_fall_back_to_utc(tmp_path, capsys):
     out = tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {"id": "s"}}])
-    assert out.startswith("[WARN] timezone: UTC fallback") and "app option" in out and "America/Chicago" in out
+    assert out.startswith("[WARN] timezone: browser-zone or UTC fallback") and "app option" in out and "America/Chicago" in out
 
 
 def test_doctor_timezone_pass_from_model_option_or_nf_sites(tmp_path, capsys):
@@ -728,7 +728,7 @@ def test_doctor_timezone_pass_from_model_option_or_nf_sites(tmp_path, capsys):
 
 def test_doctor_names_an_invalid_timezone_option(tmp_path, capsys):
     out = tz_out(tmp_path, capsys, model=[{"pointType": "SITE", "attrs": {}}], option="Central Time")
-    assert out.startswith("[WARN] timezone: UTC fallback") and "'Central Time' is not an IANA zone name" in out
+    assert out.startswith("[WARN] timezone: browser-zone or UTC fallback") and "'Central Time' is not an IANA zone name" in out
 
 
 # ---------------------------------------------------------------- bootstrapping the schema probe on an upgrade (#1593)
@@ -969,6 +969,20 @@ def test_an_older_probe_that_checks_an_older_schema_is_refreshed(forbid_psql, tm
     out = capsys.readouterr().out
     assert "checks schema 2, this release needs 3" in out and "Timescale schema version 3" in out
     assert sorted(nf.written[:5]) == sorted([*sync.PROBE_FILES, "/static/version.json"])
+
+
+def test_skip_hooks_never_replaces_an_older_schema_hook(forbid_psql, tmp_path, capsys):
+    """--skip-hooks leaves every hook definition alone, the older schema hook included: the install stops instead."""
+    m = boot_manifest(tmp_path)
+    nf = old_box(m, [{"ok": True, "installed": 2, "required": 2}, OK3], probe_hook=True)
+    hooks_before = [dict(h) for h in nf.hooks] if hasattr(nf, "hooks") else None
+    assert install_on(nf, m, "--skip-hooks") != 0
+    out = capsys.readouterr().out
+    assert "older schema hook definition" in out
+    assert not nf.written, "nothing was written"
+    assert not [p for mt, p in nf.log if mt == "POST" and p.endswith("/hooks")], "no hook definition was posted"
+    if hooks_before is not None:
+        assert [dict(h) for h in nf.hooks] == hooks_before
 
 
 def test_doctor_warns_that_install_will_bootstrap_a_missing_probe(forbid_psql, tmp_path, capsys):

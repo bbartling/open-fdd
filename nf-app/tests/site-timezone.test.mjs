@@ -128,3 +128,29 @@ for (const edition of ["full", "lite"]) {
     assert.equal(p.get("resolveSiteTimeZone")({ attrs: { id: "zzz" } }, { browser: false }).label, "UTC (fallback)", "two sites, no match: no guess");
   });
 }
+
+// CodeRabbit follow-ups (5.0.16): a stalled optional zone read must not hold the page, and a lone Sites API record
+// is not lent to an unmatched site of a multi-site model.
+for (const edition of ["full", "lite"]) {
+  test(`${edition}: a stalled /api/v1/apps or /api/v1/sites read falls back instead of hanging`, async () => {
+    const p = page(edition, bare, "America/Denver");
+    vm.runInContext("TZ_READ_TIMEOUT_MS", p);                       // defined
+    p.setTimeout = setTimeout; p.clearTimeout = clearTimeout;
+    p.api = () => new Promise(() => {});                           // never answers
+    vm.runInContext("api = globalThis.api", p);
+    const t0 = Date.now();
+    await vm.runInContext("loadSiteTimeZoneSources", p).call(null);
+    assert.ok(Date.now() - t0 < 8000, "returned after the bound");
+    assert.equal(p.get("resolveSiteTimeZone")({ attrs: {} }).label, "America/Denver (browser fallback)");
+  });
+
+  test(`${edition}: one Sites API record is not given to an unmatched site when the model has several sites`, () => {
+    const p = page(edition, bare);
+    p.get("setSiteTimeZoneSources")({ sites: [{ id: "x", timezone: "America/New_York" }] });
+    p.get("noteModelSiteCount")(1);
+    assert.equal(p.get("resolveSiteTimeZone")({ attrs: { id: "a" } }, { browser: false }).zone, "America/New_York");
+    p.get("noteModelSiteCount")(2);
+    assert.equal(p.get("resolveSiteTimeZone")({ attrs: { id: "a" } }, { browser: false }).label, "UTC (fallback)");
+    assert.equal(p.get("resolveSiteTimeZone")({ attrs: { id: "x" } }, { browser: false }).zone, "America/New_York", "a matched site still uses it");
+  });
+}

@@ -134,7 +134,19 @@ function chartTimeZone(siteTz) { return validChartTimeZone(siteTz); }
 // Real NF often has no site `tz`, an empty /api/v1/sites and a container zone of Etc/UTC. Resolution order:
 // model site `tz`/`timezone` -> app option `timezone` -> NF Sites API `timezone` -> browser-local -> UTC.
 // Nothing is retagged; the resolved source is shown next to the zone when it is a fallback.
-const SITE_TZ_SOURCES = { appOption: null, sites: [], weatherOff: false };
+// modelSites: SITE records in the loaded model (null until loadModel ran); a lone Sites API record is only
+// borrowed for an unmatched site when the model is not known to hold several sites.
+const SITE_TZ_SOURCES = { appOption: null, sites: [], weatherOff: false, modelSites: null };
+/** Called by loadModel with the number of modeled sites. */
+function noteModelSiteCount(n) { SITE_TZ_SOURCES.modelSites = Number.isFinite(n) ? n : null; }
+/** The optional zone reads must not hold the page: give up after `ms` and use the remaining fallbacks. */
+const TZ_READ_TIMEOUT_MS = 5000;
+function boundedRead(p, ms = TZ_READ_TIMEOUT_MS) {
+  if (typeof setTimeout !== "function") return p;
+  let t;
+  return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error("timed out")), ms); })])
+    .finally(() => clearTimeout(t));
+}
 const chartTzLabels = new Map();            // zone -> label shown next to the range pickers
 const knownZone = (z) => {
   const s = String(z ?? "").trim();
@@ -168,11 +180,16 @@ async function loadSiteTimeZoneSources() {
   const loc = typeof location === "undefined" ? null : location;
   const appId = loc && (String(loc.pathname || "").match(/\/apps\/static\/([^/]+)\//) || [])[1];
   let appOption = null, weatherOff = false, sites = [];
+  // both reads run together, each bounded; a failure or a timeout just leaves that source empty
+  const [appsR, sitesR] = await Promise.allSettled([
+    appId ? boundedRead(api("/api/v1/apps")) : Promise.resolve(null),
+    boundedRead(api("/api/v1/sites?pageSize=100")),
+  ]);
   try {
-    const app = appId ? ((await api("/api/v1/apps")).applications || []).find((a) => a.id === appId) : null;
+    const app = appsR.status === "fulfilled" && appsR.value ? (appsR.value.applications || []).find((a) => a.id === appId) : null;
     appOption = appTimeZoneOption(app); weatherOff = appWeatherOff(app);
-  } catch { /* no access: leave empty */ }
-  try { sites = ((await api("/api/v1/sites?pageSize=100")).sites || []).filter((s) => s && knownZone(s.timezone)); } catch { /* leave empty */ }
+  } catch { /* malformed: leave empty */ }
+  try { sites = sitesR.status === "fulfilled" ? ((sitesR.value || {}).sites || []).filter((s) => s && knownZone(s.timezone)) : []; } catch { sites = []; }
   setSiteTimeZoneSources({ appOption, sites, weatherOff });
 }
 /**
@@ -185,7 +202,7 @@ function resolveSiteTimeZone(siteRec, opts = {}) {
   const a = (siteRec && siteRec.attrs) || {};
   const names = [a.id, a.name, a.dis, siteRec && siteRec.name].filter(Boolean).map(String);
   const fromApi = (SITE_TZ_SOURCES.sites.find((s) => [s.id, s.name].filter(Boolean).map(String).some((n) => names.includes(n)))
-    || (SITE_TZ_SOURCES.sites.length === 1 ? SITE_TZ_SOURCES.sites[0] : null) || {}).timezone;
+    || (SITE_TZ_SOURCES.sites.length === 1 && !(SITE_TZ_SOURCES.modelSites > 1) ? SITE_TZ_SOURCES.sites[0] : null) || {}).timezone;
   let browser = null;
   if (opts.browser !== false) {
     try { browser = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { browser = null; }

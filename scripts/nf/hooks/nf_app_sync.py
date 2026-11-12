@@ -1411,8 +1411,8 @@ def timezone_source(c, app: dict | None = None) -> tuple[str, str]:
         api_sites = []
     if any(s.get("timezone") for s in api_sites):
         return "pass", "NF Sites API has a timezone (used when the model site has no tz and no app option is set)"
-    return "warn", ("UTC fallback (no site tz on the modeled site, no app option, no NF Sites timezone): range pickers and "
-                    "hour labels show UTC" + bad + '. Set the app option "timezone" to an IANA zone such as America/Chicago '
+    return "warn", ("browser-zone or UTC fallback (no site tz on the modeled site, no app option, no NF Sites timezone): "
+                    "range pickers and hour labels show the viewer's browser zone, or UTC when that is UTC" + bad + '. Set the app option "timezone" to an IANA zone such as America/Chicago '
                     "(NF console > app settings); no points need retagging")
 
 
@@ -1721,8 +1721,9 @@ def bootstrap_schema_probe(c, m: dict, a, app: dict, app_id: str, clock=time.mon
     paths = list(PROBE_FILES)
     if "/package.json" in m["files"] and "/package.json" not in listed:
         paths.insert(0, "/package.json")      # no dependency list on the box at all: the probe needs pg from it
-    if not has_probe_hook(app) and getattr(a, "skip_hooks", False):
-        return "FAIL", probe_cannot_run("--skip-hooks leaves the schema hook unregistered")
+    if getattr(a, "skip_hooks", False):    # bootstrap would (re)register the schema hook: never under --skip-hooks
+        return "FAIL", probe_cannot_run("--skip-hooks leaves the schema hook unregistered" if not has_probe_hook(app)
+                                        else "--skip-hooks leaves the older schema hook definition in place")
     if guard_pushed_files(c, m, getattr(a, "force", False), getattr(a, "save_remote", None), only=set(paths)):
         return "DRIFT", ""
     print("install: bootstrapping the schema probe (" + ", ".join(paths) + " and the schema hook only)")

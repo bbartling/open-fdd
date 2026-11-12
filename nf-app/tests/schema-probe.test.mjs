@@ -76,3 +76,12 @@ test("an unparsable option is reported without echoing it", async () => {
   const r = await schema.handle({ sdk: sdk(), config: { engine: "timescale", timescale: "not json or url s3cret" } });
   assert.equal(r.ok, false); assert.ok(!JSON.stringify(r).includes("s3cret"));
 });
+
+test("a postgres:// option: host, user and database from the URL are redacted from a driver error", async () => {
+  const s = sdk();
+  const config = { engine: "timescale", timescale: "postgres://fdduser:s3cret-pw@db.internal:5432/fdddb" };
+  const r = await schema.handle({ sdk: s, config, client: fakeClient(3, "getaddrinfo ENOTFOUND db.internal for fdduser on fdddb") });
+  assert.equal(r.ok, false);
+  const all = JSON.stringify(r) + s.logs.join("\n");
+  for (const v of ["db.internal", "fdduser", "fdddb", "s3cret-pw"]) assert.ok(!all.includes(v), `${v} never leaves the hook`);
+});
