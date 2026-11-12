@@ -353,6 +353,40 @@
     return { perEq, sites };
   }
 
+  // ---- min-run-hours threshold: default from the schedule, user override kept in localStorage per site ----------------
+  const DEFAULT_MIN_RUN_HOURS = 50;                 // Mon-Fri 07-17: the calendar used when a site has no schedule
+  const minRunKey = (site, motorId) => `openfdd-min-run-hours:${site || "site"}:${motorId}`;
+  function readMinRun(key) {
+    try { const v = Number(globalThis.localStorage && globalThis.localStorage.getItem(key)); return Number.isFinite(v) && v > 0 && globalThis.localStorage.getItem(key) !== "" ? v : null; }
+    catch (e) { return null; }
+  }
+  function writeMinRun(key, v) {
+    try { if (v == null) globalThis.localStorage.removeItem(key); else globalThis.localStorage.setItem(key, String(v)); } catch (e) { /* storage blocked: the override lasts for this view only */ }
+  }
+  /** Number box above the chart (inside its card): sets / clears the override, then redraws the chart. No-op without a DOM. */
+  function minRunControl(el, { key, value, def, custom, onChange }) {
+    const doc = el.ownerDocument;
+    if (!doc || !doc.createElement || !el.parentNode) return;
+    const prev = el.parentNode.querySelector && el.parentNode.querySelector(`.rcx-thresh[data-for="${el.id}"]`);
+    if (prev) prev.remove();
+    const box = doc.createElement("div");
+    box.className = "rcx-thresh"; box.dataset.for = el.id;
+    const label = doc.createElement("label"); label.textContent = "Min run hours / week ";
+    const input = doc.createElement("input");
+    input.type = "number"; input.min = "1"; input.max = "168"; input.step = "1"; input.value = String(+value.toFixed(1));
+    input.addEventListener("change", () => {
+      const v = Number(input.value);
+      writeMinRun(key, Number.isFinite(v) && v > 0 ? v : null);
+      onChange();
+    });
+    label.appendChild(input);
+    const reset = doc.createElement("button");
+    reset.type = "button"; reset.className = "btn"; reset.textContent = `Reset (${+def.toFixed(1)})`; reset.hidden = !custom;
+    reset.addEventListener("click", () => { writeMinRun(key, null); onChange(); });
+    box.append(label, reset);
+    el.parentNode.insertBefore(box, el);
+  }
+
   async function renderWeekly(el, ctx, motor, role) {
     const preferred = motor.signals.slice(0, motor.signals.indexOf(role));
     const eqs = ctx.equips.filter((eq) => !preferred.some((r) => ctx.first(eq, r)));
@@ -371,12 +405,14 @@
       const name = sites.size > 1 ? `${eqName(p.eq)} · ${siteOf(p.eq)}` : eqName(p.eq);
       if (!p.site) return [{ name, type: "bar", data: bars((w) => w.hours) }];
       return [
-        { name: `${name} · in schedule`, type: "bar", stack: `eq${i}`, itemStyle: color, data: bars((w) => w.inHours) },
-        { name: `${name} · after hours`, type: "bar", stack: `eq${i}`, itemStyle: { ...color, decal: AFTER_HOURS_DECAL }, data: bars((w) => w.afterHours) },
+        { name, type: "bar", stack: `eq${i}`, itemStyle: color, data: bars((w) => w.inHours) },
+        { name: `${name} (after hours)`, type: "bar", stack: `eq${i}`, itemStyle: { ...color, decal: AFTER_HOURS_DECAL }, data: bars((w) => w.afterHours) },
       ];
     });
-    // Schedule reference: hours per ISO week as a step line (holiday weeks step down), one per site.
+    // Schedule reference: hours per ISO week as a step line (holiday weeks step down), one per site. This is the default
+    // min-run-hours (bare-minimum occupied hours per week): the site schedule's hours, else the 50 h/week calendar.
     const S = sched(), refs = [];
+    let defaultMin = DEFAULT_MIN_RUN_HOURS;
     if (S) {
       for (const site of new Set(perEq.map((p) => p.site).filter(Boolean))) {
         const ks = [...new Set(perEq.filter((p) => p.site === site).flatMap((p) => [...p.weeks.keys()]))].sort((a, b) => a - b);
@@ -384,25 +420,35 @@
         const infos = ks.map((k) => S.weeklyScheduleInfo(site.schedule, k, site.tz));
         const end = site.tz ? S.localWeekStartMs(ks[ks.length - 1] + 8 * 86400e3, site.tz) : ks[ks.length - 1] + WEEK_MS;
         const label = infos[0].label + (sites.size > 1 ? ` · ${site.siteRef}` : "");
+        if (!refs.length) defaultMin = infos[0].hours;
         refs.push({ site, label, end });
         series.push({ id: `schedule-ref:${site.siteRef}`, name: label, type: "line", step: "end", showSymbol: false, z: 5,
           lineStyle: { width: 2, type: "dashed" }, data: [...ks.map((k, i) => [k, infos[i].hours]), [end, infos[infos.length - 1].hours]] });
       }
     }
+    // The user's override (per site, kept in localStorage) adds its own flat line on top of the schedule default.
+    const siteRef = siteOf(perEq[0].eq), key = minRunKey(siteRef, motor.id), override = readMinRun(key);
+    const xEnd = Math.max(starts[starts.length - 1] + WEEK_MS, ...refs.map((r) => r.end));
+    if (override != null) {
+      series.push({ id: `min-run:${motor.id}`, name: `Min run ${+override.toFixed(1)} h/week (set by you)`, type: "line", showSymbol: false, z: 6,
+        lineStyle: { width: 2, type: "dashed", color: "#dc2626" }, data: [[starts[0], override], [xEnd, override]] });
+    }
+    minRunControl(el, { key, value: override != null ? override : defaultMin, def: defaultMin, custom: override != null, onChange: () => renderWeekly(el, ctx, motor, role) });
     // mean OAT while on: averaged in degC, shown in the display system
     const oatMeans = ctx.dispSeries(starts.map((k) => [k, rcxStats.mean(perEq.map((p) => p.weeks.get(k)?.oat))]).filter(([, v]) => v != null), TEMP)
       .map(([k, v]) => [k, +v.toFixed(1)]);
     const oatUnit = ctx.dispUnit(TEMP);
     if (oatMeans.length) {
-      series.push(lineS(`Avg OAT ${oatUnit} (while on)`, oatMeans, { yAxisIndex: 1, showSymbol: true, symbolSize: 7,
+      series.push(lineS(`Avg OAT ${oatUnit}`, oatMeans, { yAxisIndex: 1, showSymbol: true, symbolSize: 7,
         lineStyle: { width: 2, type: "dotted" } }));
     }
-    const xMin = starts[0], xMax = Math.max(starts[starts.length - 1] + WEEK_MS, ...refs.map((r) => r.end));
+    const xMin = starts[0], xMax = xEnd;
     const tzs = [...new Set([...sites.values()].map((s) => s.tz || "UTC"))], tzLabel = tzs.length <= 1 ? tzs[0] || "UTC" : "site local";
     const option = {
-      tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 0 },
-      grid: baseGrid({ right: oatMeans.length ? 56 : 24 }),
-      xAxis: { type: "time", min: xMin, max: xMax, name: `week of (${tzLabel})` },
+      title: { text: `${motor.title}: weekly runtime`, left: 8, top: 0 },
+      tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 24, type: "scroll", formatter: (n) => (n.length > 30 ? `${n.slice(0, 28)}…` : n) },
+      grid: baseGrid({ top: 80, bottom: 44, right: oatMeans.length ? 56 : 24 }),
+      xAxis: { type: "time", min: xMin, max: xMax, name: `week of (${tzLabel})`, nameLocation: "middle", nameGap: 28 },
       yAxis: [{ type: "value", name: "Run hours" },
         ...(oatMeans.length ? [{ type: "value", name: oatUnit, position: "right", scale: true, splitLine: { show: false } }] : [])],
       series,
@@ -413,7 +459,9 @@
     ofddRender(ctx.chart(el), out, `${motor.id}_weekly_runtime`);
     return `ISO weeks (${tzLabel}), ${starts.length} shown; ${partial.size ? `${partial.size} partial (under 6 days of data); ` : ""}`
       + `on = signal > ${ON * 100}%${role.endsWith("_status") ? " (status)" : " (command)"}`
-      + (refs.length ? `; hatched = after-hours run time; line = ${refs.map((r) => r.label).join(", ")}` : "");
+      + (perEq.some((p) => p.site) ? "; hatched = after-hours run time" : "")
+      + `; dashed line = min run hours/week (schedule${override != null ? ", or the value you set" : ""}); dotted = average outdoor-air temperature while on`
+      + (refs.length ? `; ${refs.map((r) => r.label).join(", ")}` : "");
   }
 
   for (const motor of MOTORS) {
@@ -423,9 +471,6 @@
         group: motor.group,
         title: `Weekly runtime: ${motor.title}${motor.signals.length > 1 ? ` (${role.endsWith("_status") ? "status" : "command"})` : ""}`,
         kinds: motor.kinds, scope: "site", hours: 672,
-        // Every motor's weekly bars are replaced in the RCx tab by the daily run-hours chart below; these stay registered for the
-        // agent analytics and the parity map.
-        tabHidden: true,
         roles: { required: [role], optional: ["oa_t", ...motor.signals.filter((r) => r !== role)] },
         render: (el, ctx) => renderWeekly(el, ctx, motor, role),
       });
@@ -510,7 +555,8 @@
   }
 
   dailyRuntimeView(MOTORS[0], "ahu-runtime-daily", { headline: true });
-  for (const motor of MOTORS.slice(1)) dailyRuntimeView(motor, `runtime-daily-${motor.id}`);
+  // Plant motors are drawn by their weekly charts (same clean style, min-run line); the daily versions stay registered only.
+  for (const motor of MOTORS.slice(1)) dailyRuntimeView(motor, `runtime-daily-${motor.id}`, { tabHidden: true });
 
   M.dailyRuntime = dailyRuntime;
   M.dayKeyer = dayKeyer;
@@ -564,32 +610,33 @@
     });
   }
 
-  // One chart for all equipment: per equip the cooling signal is the chiller status, else the compressor status, else the
-  // chiller command (status preferred, command only when there is no status), and the series says which.
-  const MECH_ORDER = ["chiller_status", "compressor_status", "chiller_cmd"];
+  // One chart per equip (hours per fixed SI outdoor-air bin). The proof is type-dispatched per equip: a status first (chiller
+  // status, compressor status, DX cooling status), else a command (chiller, compressor, DX cooling command), and the chart
+  // says which. AHU / RTU DX run roles bind too; a chilled-water valve is never proof (its hours belong to the plant).
+  const MECH_STATUS = ["chiller_status", "compressor_status", "dx_cooling"];
+  const MECH_CMD = ["chiller_cmd", "compressor_cmd", "dx_cool_cmd"];
   rcxView({
     id: "mech-cooling-hours", group: "Plant", title: "Mechanical cooling hours by outdoor air",
-    kinds: [], scope: "site", hours: 720,
-    roles: { required: [], anyOf: MECH_ORDER, optional: ["oa_t"] },
+    kinds: [], scope: "equip", hours: 720,
+    roles: { required: [], anyOf: [...MECH_STATUS, ...MECH_CMD], optional: ["oa_t"] },
     render: async (el, ctx) => {
       const roleOf = new Map();
-      const pick = (eq) => { for (const r of MECH_ORDER) { const p = ctx.first(eq, r); if (p) { roleOf.set(p.uuid, r); return p; } } return null; };
+      const pick = (eq) => { for (const r of [...MECH_STATUS, ...MECH_CMD]) { const p = ctx.first(eq, r); if (p) { roleOf.set(p.uuid, r); return p; } } return null; };
       const res = await mechData(ctx, null, (c) => ctx.disp(c, TEMP).value, pick);
       if (res.error) return res.error;
       const { per, wx } = res;
       if (!per.length) return "no outdoor-air data";
-      const unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
-      const how = (p) => (roleOf.get(p.col.uuid).endsWith("_cmd") ? "command" : "status");
-      const series = per.map((p) => ({ name: `${eqName(p.eq)} (${how(p)})`, type: "bar", stack: "hours", data: p.bins.hours.map((h) => (h > 0 ? h : null)) }));
-      if (!per.some((p) => p.bins.hours.some((h) => h > 0))) return "cooling never ran in this window";
+      const p = per[0], unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
+      const role = roleOf.get(p.col.uuid), how = MECH_STATUS.includes(role) ? "status" : "command";
+      if (!p.bins.hours.some((h) => h > 0)) return "cooling never ran in this window";
       draw(ctx, el, {
-        title: { text: "Mechanical cooling hours by outdoor air", left: 8, top: 0 },
-        tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 24, type: "scroll" }, dataZoom: false,
+        title: { text: `Mechanical cooling hours by outdoor air · ${eqName(p.eq)}`, left: 8, top: 0 },
+        tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? `${+v.toFixed(1)} h` : "") }, legend: { top: 24 }, dataZoom: false,
         grid: baseGrid({ top: 64, bottom: 44 }),
         xAxis: { type: "category", data: labels, name: `OAT bin ${unit}`, nameLocation: "middle", nameGap: 28 },
-        yAxis: { type: "value", name: "hours" }, series,
-      }, null, "mech_cooling_hours");
-      return `${wx ? "web" : "equip"} outdoor-air temperature · on = signal > ${ON * 100}% · one signal per equip: status, else command`;
+        yAxis: { type: "value", name: "hours" }, series: [{ name: `cooling on (${how})`, type: "bar", data: p.bins.hours.map((h) => (h > 0 ? h : null)) }],
+      }, null, `mech_cooling_${eqName(p.eq)}`);
+      return `${wx ? "web" : "equip"} outdoor-air temperature · ${how} proof (${role.replace(/_/g, " ")}) > ${ON * 100}% · fixed SI bins (shown in ${unit})`;
     },
   });
 

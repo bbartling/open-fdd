@@ -25,11 +25,22 @@ function roleScore(p, role, def) {
 
 const fillsRole = (p, role, def) => roleScore(p, role, def) > 0;
 
+/**
+ * Roles only the RCx charts use (no FDD rule reads them, so they are not in the rule catalog or the SQL input contract):
+ * the DX cooling proof an AHU / RTU can carry for the mechanical-cooling hours chart (the pandas DX_RUN_ROLES set).
+ * Bound by Haystack markers exactly like a catalog role.
+ */
+const FDD_EXTRA_ROLES = {
+  compressor_cmd: { name: "compressor-cmd", classes: [], markers: ["compressor", "run", "cmd"], scale: "fraction" },
+  dx_cool_cmd: { name: "dx-cool-cmd", classes: [], markers: ["dx", "cool", "cmd"], scale: "fraction" },
+  dx_cooling: { name: "dx-cooling", classes: [], markers: ["dx", "cool", "sensor"], scale: "boolean" },
+};
+
 /** Points (from `pool`) that fill each role, best match first (class before markers). */
 function bindRoles(roles, pool, catalog) {
   const out = {};
   for (const role of roles) {
-    const def = catalog.roles[role];
+    const def = catalog.roles[role] || FDD_EXTRA_ROLES[role];
     out[role] = !def ? [] : pool
       .map((p) => [roleScore(p, role, def), p])
       .filter(([s]) => s > 0)

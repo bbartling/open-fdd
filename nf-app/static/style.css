@@ -262,3 +262,5 @@ tr.clickable:hover td { background: var(--panel2); }
 @media (max-width: 640px) { .rcx-headline .rcx-grid { grid-template-columns: 1fr; } }
 .rcx-wide { grid-column: 1 / -1; }
 .rcx-wide .chart { height: 420px; }
+.rcx-thresh { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.rcx-thresh input { width: 70px; font: inherit; padding: 3px 6px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }

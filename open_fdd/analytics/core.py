@@ -20,7 +20,11 @@ from open_fdd.analytics.si_thresholds import (
     MECH_OAT_BIN_EDGES_C,
     MECH_OAT_BIN_LABELS,
 )
-from open_fdd.analytics.runtime_intervals import hours_under_mask, interval_durations
+from open_fdd.analytics.runtime_intervals import (
+    ELAPSED_MAX_GAP_SECONDS,
+    hours_under_mask,
+    interval_durations,
+)
 from open_fdd.analytics.site_model import normalize_equipment_type, resolve_equipment_type
 
 # Plant groups for weekly motor charts.
@@ -803,7 +807,10 @@ def motor_run_hours_weekly(
     """Weekly on-hours per motor, split by plant_group (air / boiler / chiller).
 
     Columns: week_start, week_label, equipment_id, signal, motor_kind, plant_group,
-    label, hours, avg_oat_f (mean OAT while that motor was on in the week).
+    label, hours, avg_oat_c (mean OAT, degC, while that motor was on in the week), partial_week.
+
+    Hours integrate interval durations (the interval to the next sample, counted only when 0 < dt <= 3600 s; a longer gap
+    is unknown, not clipped), not ``poll_seconds`` per row. A week is partial when its observed span is under 6 days.
 
     ``include_all_mapped`` keeps the same weekly math and also emits every mapped
     fan or pump family that plant discovery omitted (pumps on air handlers, fans
@@ -845,19 +852,25 @@ def motor_run_hours_weekly(
             idx = on.index
         if not isinstance(idx, pd.DatetimeIndex) or len(on) == 0:
             continue
-        hours = on * (poll / 3600.0)
+        dur = interval_durations(
+            idx, nominal_seconds=poll, max_gap_seconds=ELAPSED_MAX_GAP_SECONDS, preserve_row_order=True
+        )
+        dur.index = idx
+        hours = on * (dur / 3600.0)
         hours.index = idx
         weekly = hours.resample("W-MON", label="left", closed="left").sum()
         oat = oat_by_eq.get(eq_id)
         oat_on = None
         if oat is not None:
             oat_aligned = oat.reindex(idx)
-            oat_on = oat_aligned.where(on > 0.05)
+            oat_on = oat_aligned.where((on > 0.05) & (dur > 0))     # the intervals that were counted
         weekly_oat = (
             oat_on.resample("W-MON", label="left", closed="left").mean()
             if oat_on is not None
             else None
         )
+        seen = pd.Series(idx, index=idx).resample("W-MON", label="left", closed="left")
+        span_days = ((seen.max() - seen.min()).dt.total_seconds() / 86400.0).to_dict()
         for ts, h in weekly.items():
             if pd.isna(h) or float(h) <= 0:
                 continue
@@ -866,7 +879,7 @@ def motor_run_hours_weekly(
                 week = week.tz_convert("UTC").tz_localize(None)
             avg_oat = None
             if weekly_oat is not None and ts in weekly_oat.index and pd.notna(weekly_oat.loc[ts]):
-                avg_oat = round(float(weekly_oat.loc[ts]), 1)
+                avg_oat = float(weekly_oat.loc[ts])
             rows.append(
                 {
                     "week_start": week.normalize(),
@@ -877,7 +890,8 @@ def motor_run_hours_weekly(
                     "plant_group": spec["plant_group"],
                     "label": spec["label"],
                     "hours": round(float(h), 2),
-                    "avg_oat_f": avg_oat,
+                    "avg_oat_c": avg_oat,
+                    "partial_week": bool(span_days.get(ts, 0.0) < 6.0),
                 }
             )
     cols = [
@@ -889,7 +903,8 @@ def motor_run_hours_weekly(
         "plant_group",
         "label",
         "hours",
-        "avg_oat_f",
+        "avg_oat_c",
+        "partial_week",
     ]
     if not rows:
         return pd.DataFrame(columns=cols)
@@ -1397,9 +1412,9 @@ def _mechanical_cooling_devices(
             devices.append(base)
             continue
 
-        durations = interval_durations(run.index, nominal_seconds=poll)
+        durations = interval_durations(run.index, nominal_seconds=poll, max_gap_seconds=ELAPSED_MAX_GAP_SECONDS)
         valid_elapsed = float(durations.sum() / 3600.0)
-        runtime = hours_under_mask(run, nominal_seconds=poll)
+        runtime = hours_under_mask(run, nominal_seconds=poll, max_gap_seconds=ELAPSED_MAX_GAP_SECONDS)
         compressor_based = True
         tech = _cooling_technology(et, compressor_based=True)
         included = True
@@ -1502,13 +1517,22 @@ def mech_cooling_coverage(
     )
 
 
+def _role_series_unit(df: pd.DataFrame, role: str) -> str:
+    """Declared unit of a role column (``df.attrs["role_units"]``); SI degC when nothing is declared.
+
+    Since 5.0.0 history is stored in SI, so a frame that declares no unit is already in degC. (This replaces the import of
+    ``cookbook_catalog._role_series_unit``, which no longer exists.)
+    """
+    units = (getattr(df, "attrs", None) or {}).get("role_units") or {}
+    return str(units.get(role) or "degC")
+
+
 def _normalize_abs_temp_to_storage_c(
     series: pd.Series,
     df: pd.DataFrame,
     role: str,
 ) -> pd.Series:
     """Convert one absolute temperature series to canonical storage °C once."""
-    from open_fdd.rules.cookbook_catalog import _role_series_unit
     from open_fdd.units.convert import normalize_unit_token
 
     s = pd.to_numeric(series, errors="coerce")
@@ -1519,7 +1543,6 @@ def _normalize_abs_temp_to_storage_c(
 
 
 def _series_declared_imperial_f(df: pd.DataFrame, role: str) -> bool:
-    from open_fdd.rules.cookbook_catalog import _role_series_unit
     from open_fdd.units.convert import normalize_unit_token
 
     tok = normalize_unit_token(_role_series_unit(df, role))
@@ -1559,7 +1582,9 @@ def _bin_runtime_rows(
 ) -> list[dict[str, Any]]:
     """Attribute interval durations under mask into OAT bins."""
     aligned_mask = mask.groupby(level=0).max().sort_index().fillna(False).astype(bool)
-    durations = interval_durations(aligned_mask.index, nominal_seconds=nominal_seconds)
+    durations = interval_durations(
+        aligned_mask.index, nominal_seconds=nominal_seconds, max_gap_seconds=ELAPSED_MAX_GAP_SECONDS
+    )
     oat_aligned = (
         oat.groupby(level=0).max().sort_index().reindex(durations.index)
         if isinstance(oat.index, pd.DatetimeIndex)

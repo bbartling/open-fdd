@@ -700,10 +700,10 @@ def motor_weekly_runtime_chart(
                 marker_color=RAINBOW_PALETTE[i % len(RAINBOW_PALETTE)],
             )
         )
-    if show_avg_oat and "avg_oat_f" in weekly_df.columns:
+    if show_avg_oat and "avg_oat_c" in weekly_df.columns:
         oat_by_week = (
-            weekly_df.dropna(subset=["avg_oat_f"])
-            .groupby("week_label", sort=False)["avg_oat_f"]
+            weekly_df.dropna(subset=["avg_oat_c"])
+            .groupby("week_label", sort=False)["avg_oat_c"]
             .mean()
         )
         oat_y = [float(oat_by_week[w]) if w in oat_by_week.index else None for w in week_labels]
@@ -712,7 +712,7 @@ def motor_weekly_runtime_chart(
                 go.Scatter(
                     x=week_labels,
                     y=oat_y,
-                    name="Avg OAT °F (while on)",
+                    name="Avg OAT °C (while on)",
                     mode="lines+markers",
                     yaxis="y2",
                     line=dict(color="#333333", width=2, dash="dot"),
@@ -738,9 +738,9 @@ def motor_weekly_runtime_chart(
         margin=dict(l=50, r=60, t=80, b=80),
         xaxis=dict(tickangle=-45),
     )
-    if show_avg_oat and "avg_oat_f" in weekly_df.columns:
+    if show_avg_oat and "avg_oat_c" in weekly_df.columns:
         layout_kwargs["yaxis2"] = dict(
-            title="Avg OAT °F",
+            title="Avg OAT °C",
             overlaying="y",
             side="right",
             showgrid=False,

@@ -58,6 +58,7 @@ async function render(ctx, id, equips, hours = HOURS) {
   assert.equal(ctx.rendered.length, before + 1);
   return { note, option: ctx.rendered[ctx.rendered.length - 1].option, bound };
 }
+const inSchedule = (option) => option.series.filter((s) => s.type === "bar" && s.stack && !(s.itemStyle && s.itemStyle.decal));
 const bySuffix = (option, suffix) => option.series.filter((s) => s.type === "bar" && s.name.endsWith(suffix));
 const dataAt = (s, ms) => { const d = s.data.find(([k]) => k === ms); return d ? d[1] : 0; };
 
@@ -67,7 +68,7 @@ for (const [siteRef, S] of [["site-a", A], ["site-b", B]]) {
     const ctx = load();
     ctx.anchorMs = S.endMs;
     const { option, note } = await render(ctx, "weekly-fan", siteEquips(siteRef));
-    const [inS] = bySuffix(option, " · in schedule"), [after] = bySuffix(option, " · after hours");
+    const [inS] = inSchedule(option), [after] = bySuffix(option, " (after hours)");
     assert.ok(inS && after, "one solid in-schedule and one after-hours stack per equip");
     assert.ok(after.itemStyle.decal, "after-hours is hatched");
     assert.equal(inS.stack, after.stack, "same stack = a split of the total");
@@ -89,7 +90,7 @@ for (const [siteRef, S] of [["site-a", A], ["site-b", B]]) {
 test("site-a: the planted pulse is 70/60 h after hours in week 1, the holiday adds 10 h after hours in week 2", async () => {
   const ctx = load();
   const { option } = await render(ctx, "weekly-fan", siteEquips("site-a"));
-  const [after] = bySuffix(option, " · after hours");
+  const [after] = bySuffix(option, " (after hours)");
   near(dataAt(after, A.weekStarts[0]), 70 / 60, "week 1 after-hours (14 samples x 5 min)");
   near(dataAt(after, A.weekStarts[1]), 10, "week 2 after-hours = the holiday");
   near(dataAt(after, A.weekStarts[2]), 0, "week 3");
@@ -97,7 +98,7 @@ test("site-a: the planted pulse is 70/60 h after hours in week 1, the holiday ad
   // site-b: none
   ctx.anchorMs = B.endMs;
   const b = await render(ctx, "weekly-fan", siteEquips("site-b"));
-  for (const ms of B.weekStarts) near(dataAt(bySuffix(b.option, " · after hours")[0], ms), 0, "site-b after hours");
+  for (const ms of B.weekStarts) near(dataAt(bySuffix(b.option, " (after hours)")[0], ms), 0, "site-b after hours");
 });
 
 // ---- schedule reference line ---------------------------------------------------------------------------
@@ -136,11 +137,11 @@ test("two sites with the same AHU-1 in one chart get separate stacks, legend nam
   const { option } = await render(ctx, "weekly-fan", fx.model.equips);
   const names = arr(option.series, (s) => s.name);
   assert.deepEqual(names.filter((n) => /AHU-1/.test(n)).sort(), [
-    "AHU-1 · site-a · after hours", "AHU-1 · site-a · in schedule", "AHU-1 · site-b · after hours", "AHU-1 · site-b · in schedule"]);
+    "AHU-1 · site-a", "AHU-1 · site-a (after hours)", "AHU-1 · site-b", "AHU-1 · site-b (after hours)"]);
   assert.equal(new Set(names).size, names.length, "no two series share a legend name");
   assert.deepEqual(names.filter((n) => /^schedule /.test(n)).sort(), [
     "schedule 50 h/week (America/Chicago, NF schedule \"site-a occupancy\") · site-a", "schedule 50 h/week (default) · site-b"]);
-  const sa = option.series.find((s) => s.name === "AHU-1 · site-a · after hours"), sb = option.series.find((s) => s.name === "AHU-1 · site-b · after hours");
+  const sa = option.series.find((s) => s.name === "AHU-1 · site-a (after hours)"), sb = option.series.find((s) => s.name === "AHU-1 · site-b (after hours)");
   near(dataAt(sa, A.weekStarts[1]), 10, "site-a holiday");
   near(dataAt(sb, B.weekStarts[1]), 0, "site-b has none");
 });
@@ -149,7 +150,7 @@ test("two sites with the same AHU-1 in one chart get separate stacks, legend nam
 test("null fan_status gap: not 'off' (no after-hours), not covered (the long interval counts for nothing)", async () => {
   const ctx = load();
   const { option } = await render(ctx, "weekly-fan", siteEquips("site-a"));
-  const [inS] = bySuffix(option, " · in schedule"), [after] = bySuffix(option, " · after hours");
+  const [inS] = inSchedule(option), [after] = bySuffix(option, " (after hours)");
   const w = TRUTH["site-a"].weeks[2], gap = TRUTH["site-a"].planted.fanStatusGap;
   assert.equal(gap.samples, 36);
   near(dataAt(inS, A.weekStarts[2]) + dataAt(after, A.weekStarts[2]), w.runHours, "week 3 run hours");

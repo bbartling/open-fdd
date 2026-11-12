@@ -78,7 +78,7 @@ test("every view uses real catalog roles and kinds, unique ids, valid scope/grou
   assert.ok(vs.length >= 12);
   assert.equal(new Set(vs.map((v) => v.id)).size, vs.length);
   for (const v of vs) {
-    for (const r of [...v.roles.required, ...(v.roles.anyOf || []), ...v.roles.optional]) assert.ok(catalog.roles[r], `${v.id}: role ${r}`);
+    for (const r of [...v.roles.required, ...(v.roles.anyOf || []), ...v.roles.optional]) assert.ok(catalog.roles[r] || ctx.get("FDD_EXTRA_ROLES")[r], `${v.id}: role ${r}`);
     for (const k of v.kinds) assert.ok(catalog.equipment_kinds[k], `${v.id}: kind ${k}`);
     assert.ok(["equip", "site"].includes(v.scope));
     assert.ok(["Air handlers", "Weather", "Plant"].includes(v.group), `${v.id}: group ${v.group}`);
@@ -213,7 +213,7 @@ test("weekly-fan view: runtime bars per equip, fault lane last when the SCHED-24
   const o = out.option;
   // one stack per equip: in-schedule + after-hours bars add up to the 24 hourly intervals while on
   const bars = o.series.filter((s) => s.type === "bar");
-  assert.deepEqual(arr(bars, (b) => b.name), ["AHU-1 · in schedule", "AHU-1 · after hours"]);
+  assert.deepEqual(arr(bars, (b) => b.name), ["AHU-1", "AHU-1 (after hours)"]);
   const sum = (b) => b.data.reduce((a, [, h]) => a + h, 0);
   assert.equal(sum(bars[0]) + sum(bars[1]), 24);
   assert.equal(sum(bars[0]), 10);                                // no NF schedule, no site tz: default Mon-Fri 07-17 (UTC) = 10 h of Monday
@@ -446,8 +446,7 @@ test("ahu-runtime-daily view: hours per day per AHU from fan status, labelled; c
   assert.equal(o.yAxis.max, 24);
   assert.equal(kpis[0].id, "ahu-run-hours"); assert.equal(kpis[0].value, "8.0 h");
   assert.match(note, /from status/);
-  assert.ok(!views(ctx).some((x) => x.id === "weekly-fan" && !x.tabHidden), "the weekly fan bars are not drawn on the RCx tab any more");
-  assert.equal(view(ctx, "weekly-fan-cmd").tabHidden, true);
+  assert.ok(!view(ctx, "weekly-fan").tabHidden && !view(ctx, "weekly-fan-cmd").tabHidden, "the weekly AHU runtime chart is back on the tab (daily stays as the headline)");
   // an AHU with only a command point: same chart, labelled "command"
   const noStatus = setup(POINTS.filter((p) => p.name !== "FAN-S"));
   noStatus.ctx.series.set(noStatus.byName("FAN-C").uuid, hourly(48, (i) => (i % 24 >= 6 && i % 24 < 12 ? 1 : 0)));
@@ -470,16 +469,28 @@ test("BAS vs web OAT is an FDD-tab chart (signals + OAT-METEO fault lane) under 
   assert.equal(ctx.rcxPlan([AHU], { points: [] , equips: [AHU], sites: [] }, catalog, { tab: "rcx" }).ready.some((r) => r.view.id === "bas-vs-web-oat"), false);
 });
 
-test("plant motors: one daily run-hours chart per family (status else command), the weekly and per-signal cooling views are not drawn", async () => {
+test("plant motors keep their weekly charts (the daily ones are registered only); cooling hours are one chart per equip", async () => {
   const { ctx } = setup();
   const vs = views(ctx), byId = Object.fromEntries(vs.map((v) => [v.id, v]));
-  for (const v of vs.filter((x) => /^weekly-/.test(x.id))) assert.equal(v.tabHidden, true, `${v.id} stays registered for agents only`);
+  for (const v of vs.filter((x) => /^weekly-/.test(x.id))) assert.ok(!v.tabHidden, `${v.id} is drawn`);
   for (const id of ["runtime-daily-pump", "runtime-daily-chw-pump", "runtime-daily-cw-pump", "runtime-daily-compressor", "runtime-daily-chiller", "runtime-daily-tower-fan"]) {
-    assert.equal(byId[id].group, "Plant", id); assert.ok(!byId[id].tabHidden);
+    assert.equal(byId[id].group, "Plant", id); assert.equal(byId[id].tabHidden, true, `${id}: the weekly chart replaces it`);
   }
   assert.deepEqual(Array.from(byId["runtime-daily-chiller"].roles.anyOf), ["chiller_status", "chiller_cmd"], "status before command");
   for (const id of ["mech-cooling-compressor-status", "mech-cooling-chiller-status", "mech-cooling-chiller-cmd"]) assert.equal(byId[id].tabHidden, true);
-  assert.ok(byId["mech-cooling-hours"] && !byId["mech-cooling-hours"].tabHidden, "one cooling-hours chart, not three");
+  assert.equal(byId["mech-cooling-hours"].scope, "equip", "one chart per equip");
+  assert.deepEqual(Array.from(byId["mech-cooling-hours"].roles.anyOf), ["chiller_status", "compressor_status", "dx_cooling", "chiller_cmd", "compressor_cmd", "dx_cool_cmd"], "statuses before commands; no CHW valve");
+  // AHU / RTU DX proof binds (by markers, no catalog role needed)
+  const RTU = rec("RTU-1", "EQUIPMENT", { id: "RTU-1", siteRef: "s", markers: "equip,ahu,rtu" });
+  const dx = setup([rec("DX", "POINT", { siteRef: "s", equipRef: "RTU-1", markers: "point,his,dx,cool,cmd", kind: "Bool", unit: "" }),
+    rec("CV", "POINT", { siteRef: "s", equipRef: "RTU-1", markers: "point,his,cool,valve,cmd", class: "chilled-water-cool-valve-cmd", kind: "Number", unit: "%" })]);
+  dx.model.equips = [RTU];
+  const bound = dx.ctx.rcxBind(view(dx.ctx, "mech-cooling-hours"), [RTU], dx.model, catalog);
+  assert.equal(bound.length, 1);
+  assert.deepEqual(arr(bound[0].bound.dx_cool_cmd, (p) => p.rec.name), ["DX"]);
+  const valveOnly = setup([rec("CV", "POINT", { siteRef: "s", equipRef: "RTU-1", markers: "point,his,cool,valve,cmd", class: "chilled-water-cool-valve-cmd", kind: "Number", unit: "%" })]);
+  valveOnly.model.equips = [RTU];
+  assert.equal(valveOnly.ctx.rcxBind(view(valveOnly.ctx, "mech-cooling-hours"), [RTU], valveOnly.model, catalog).length, 0, "a CHW valve is never cooling proof");
   // a chiller with both status and command is drawn once, from the status; labelled
   const CH = rec("CH-1", "EQUIPMENT", { id: "CH-1", siteRef: "s", markers: "equip,chiller" });
   const chp = (n, m, extra = {}) => rec(n, "POINT", { siteRef: "s", equipRef: "CH-1", markers: `point,his,${m}`, kind: "Bool", unit: "", ...extra });
@@ -491,6 +502,33 @@ test("plant motors: one daily run-hours chart per family (status else command), 
   const r = await renderView(mk.ctx, mk.model, "runtime-daily-chiller", 48);
   assert.deepEqual(arr(r.out.option.series, (x) => [x.name, arr(x.data)]), [["CH-1 (status)", [12, 0]]]);
   const c = await renderView(mk.ctx, mk.model, "mech-cooling-hours", 48);
-  assert.deepEqual(arr(c.out.option.series, (x) => x.name), ["CH-1 (status)"]);
+  assert.deepEqual(arr(c.out.option.series, (x) => x.name), ["cooling on (status)"]);
+  assert.match(c.note, /status proof \(chiller status\)/);
   assert.ok(c.out.option.series[0].data.some((h) => h > 0));
+});
+
+test("weekly chart: min-run-hours control defaults to the schedule hours, a per-site override adds its own line and survives a reload", async () => {
+  const store = new Map();
+  const { ctx, model, byName } = setup();
+  ctx.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+  ctx.series.set(byName("FAN-S").uuid, hourly(48, (i) => (i < 24 ? 1 : 0)));
+  const made = [];
+  const node = () => { const n = { dataset: {}, style: {}, listeners: {}, children: [], addEventListener(e, f) { this.listeners[e] = f; }, append(...c) { this.children.push(...c); }, appendChild(c) { this.children.push(c); }, remove() {} }; made.push(n); return n; };
+  const mkEl = () => ({ id: "chart-1", ownerDocument: { createElement: node }, parentNode: { querySelector: () => null, insertBefore() {} } });
+  const v = view(ctx, "weekly-fan"), bound = ctx.rcxBind(v, model.equips, model, catalog);
+  const run = async () => { made.length = 0; const el = mkEl(); const note = await v.render(el, ctx.rcxContext(v, bound, 48, model, catalog)); return { el, note, option: ctx.rendered[ctx.rendered.length - 1].option }; };
+  let r = await run();
+  assert.ok(!r.option.series.some((s) => /^min-run:/.test(s.id || "")), "no override: only the schedule line");
+  const input = made.find((n) => n.type === "number");
+  assert.equal(input.value, "50", "the box shows the schedule default (50 h/week calendar)");
+  input.value = "60"; input.listeners.change();                                   // the user sets 60 h/week
+  assert.equal(store.get("openfdd-min-run-hours:s:fan"), "60", "persisted per site (and motor family)");
+  r = await run();
+  const line = r.option.series.find((s) => s.id === "min-run:fan");
+  assert.equal(line.name, "Min run 60 h/week (set by you)");
+  assert.deepEqual(arr(line.data, (d) => d[1]), [60, 60]);
+  assert.equal(made.find((n) => n.type === "number").value, "60");
+  assert.match(r.note, /dashed line = min run hours\/week/);
+  const legend = r.option.series.map((s) => s.name).filter((n) => /Avg OAT/.test(n));
+  assert.ok(legend.every((n) => n.length < 20), "short legend names");
 });
