@@ -40,6 +40,24 @@ print(rows, {e: v["pandas"] for e, v in ref["FC1"].items()})
 
 The [standalone DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) includes executable pandas-versus-SQL assertions for FC1, FC2 and CMD-1, plus SPARQL point discovery joined to a DuckDB long-form historian. Both scripts run locally without an NF server. Follow its README for PowerShell or Linux setup.
 
+## From CSV or a pandas DataFrame to a validated SQL rule
+
+For a local, no-server walkthrough, use the [DuckDB tutorial README](https://github.com/bbartling/open-fdd/blob/master/tutorials/duckdb_sql_parity/README.md). From the repo root on Windows PowerShell:
+
+```powershell
+uv venv --python 3.12
+uv pip install --python .venv/Scripts/python.exe -e ".[oracle]" duckdb rdflib matplotlib
+.\\.venv\\Scripts\\python.exe tutorials/duckdb_sql_parity/explore_data.py
+.\\.venv\\Scripts\\python.exe tutorials/duckdb_sql_parity/compare_rules.py
+.\\.venv\\Scripts\\python.exe tutorials/duckdb_sql_parity/sparql_samples.py
+```
+
+- **Explore**: display DataFrame head, descriptive statistics, missing-value summary, and interactive Matplotlib plots (no PNG files written).
+- **Compare**: generate one deterministic AHU dataset, load its history into an in-memory DuckDB `history` table, execute FC1/FC2/CMD-1 SQL extracted from `nf-app/rules/pack-postgres.json`, and independently execute `open_fdd.parity.reference(...)` for the pandas results. The script exits nonzero for missing or unequal fault-hour results (tolerance 1e-6 h).
+- **Discover**: use RDFLib SPARQL over example point metadata and query the matching long-form samples with DuckDB.
+
+**Important:** `pack-postgres.json` and `pack-sqlite.json` are **generated deployment artifacts**, not the SQL authoring source. To customize or add a rule, start with [Writing SQL rules](../sql-rules.html), edit `sql/fdd/postgres/rules/*.sql` and metadata, then regenerate and test the packs. DuckDB support varies by SQL dialect and PostgreSQL-only `fdd.*` functions.
+
 ## Setup by database
 
 | Database | Rule SQL | Shims |
