@@ -191,6 +191,7 @@ test("FDD catalog covers every registry rule and only names NF classes", () => {
   }
   for (const [role, def] of Object.entries(catalog.roles)) {
     for (const c of def.classes) assert.ok(nf.has(c), `${role}: ${c} is not an NF class`);
+    if (role === catalog.run_proof.role) continue;   // resolved from the model (own proof, feeding equipment), never class- or marker-bound
     assert.ok(def.classes.length || def.markers.length, `${role} cannot match anything`);
   }
 });

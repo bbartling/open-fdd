@@ -66,6 +66,7 @@
     "/static/rcx.js": "static/rcx.js",
     "/static/role-limits.js": "static/role-limits.js",
     "/static/rule-tuning.js": "static/rule-tuning.js",
+    "/static/run-proof.js": "static/run-proof.js",
     "/static/schedule.js": "static/schedule.js",
     "/static/sparql.js": "static/sparql.js",
     "/static/style.css": "static/style.css",

@@ -90,13 +90,13 @@ const PGLITE_MIN_BYTES = 3.5 * 1024 ** 3;
 /** model.js + fdd.js run unchanged in a sandbox: one binding implementation for UI and hook. */
 function loadShared() {
   const ctx = vm.createContext({ console });
-  for (const f of ['model.js', 'fdd.js']) {
+  for (const f of ['model.js', 'fdd.js', 'run-proof.js']) {
     vm.runInContext(fs.readFileSync(path.join(STATIC, f), 'utf8'), ctx, { filename: f });
   }
   const get = (n) => vm.runInContext(n, ctx);
   return {
     toPoint: get('toPoint'), idOf: get('idOf'), has: get('has'), equipRules: get('equipRules'),
-    bindRoles: get('bindRoles'), equipPool: get('equipPool'),
+    bindRoles: get('bindRoles'), equipPool: get('equipPool'), resolveRunProof: get('resolveRunProof'),
     ENTITY_TYPES: get('ENTITY_TYPES'),
     catalog: JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8')),
   };
@@ -906,7 +906,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
     oat: { weather: weatherOn ? 'on' : 'off', web: 0, local: 0, none: 0, local_points: /** @type {{site: string, equip: string, point: string}[]} */ ([]) },
     timezones: /** @type {Record<string, {zone: string, source: string, fallback: boolean}>} */ ({}),
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
-    eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {},
+    eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {}, no_run_proof: 0,
     window: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), hours: windowHours },
     source_freshness: { engine: kind, newest_sample: null, age_minutes: null, nf_latest: isoOrNull(newestLatest(model.points)), nf_latest_age_minutes: null } };
   let sourceNewest = null;                               // newest input sample the engine could see (ms)
@@ -959,6 +959,13 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           continue;
         }
         let roles = roleInputs(runnable);
+        // Run proof (#1608): ONE resolved point (own status, own command, or the feeding equipment's), fed to the rules as the
+        // history column run_proof. None found = gated rules are SKIPPED no_run_proof (SQL returns covered_hours 0).
+        let proof = { found: false };
+        if (runnable.some((r) => r.rule.run_proof === 'gated')) {
+          proof = shared.resolveRunProof(equipRec, model, shared.catalog);
+          if (proof.found && proof.point) roles.run_proof = proof.point;
+        }
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
         const sweepSensors = [];
         for (const r of runnable) {
@@ -984,6 +991,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }
           runnable = runnable.filter((r) => !r.required.some((x) => si.skipped.has(x)));
           roles = roleInputs(runnable);
+          if (proof.found && proof.point) roles.run_proof = proof.point;
           for (const x of si.skipped) delete roles[x];
           if (!runnable.length) {
             skip('unit-unusable', `unit unusable (role ${bad}: unknown or missing unit on the point)`);
@@ -1073,6 +1081,11 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const row = equipmentResult(packRule, ruleRows, equipId,
             Object.fromEntries(ruleSensors.map((sensor) => [sensor.point.uuid, sensor.point.dis || sensor.point.name || sensor.point.uuid])));
           const out = resultValue(packRule, row);
+          const noProof = r.rule.run_proof === 'gated' && !roles.run_proof;
+          if (noProof && out.status === 'not-assessed') {
+            out.reason = `${shared.catalog.run_proof.skip_reason}: no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound`;
+            summary.no_run_proof++;
+          }
           const sensorFaultHours = row && row.sensor_fault_hours;
           const perSensor = row && row.sensor_rows || [];
           const sensorById = new Map(ruleSensors.map((sensor) => [sensor.point.uuid, {
@@ -1088,6 +1101,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             for (const sensorRow of perSensor) {
               const sensor = sensorById.get(sensorRow.series_id) || { series_id: sensorRow.series_id, sensor_role: sensorRow.sensor_role, name: sensorRow.series_id };
               const sensorOut = resultValue(packRule, sensorRow);
+              if (noProof && sensorOut.status === 'not-assessed') sensorOut.reason = out.reason;
               summary.sensor_results.total++;
               summary.sensor_results[sensorOut.status]++;
               const sensorUuid = sensorResultUuid(key, r.rule.id, sensor.series_id);
@@ -1111,7 +1125,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           records.push(...resultRecords({ equipRec, siteId, rule: r.rule, out, shared, windowHours, key, runIso, occSource,
             sensorFaultHours, previous: model.results.get(uuid), outputSince: new Date(to).toISOString() }));
           if (out.status !== 'not-assessed') values.push({ uuid, value: out.value });
-          if (out.kind === 'fault' && !config.dryRun && engine.timeline && pack.rules[r.rule.id].timeline_sql) {
+          if (out.kind === 'fault' && !noProof && !config.dryRun && engine.timeline && pack.rules[r.rule.id].timeline_sql) {
             try {
               const timelineRows = await engine.timeline(r.rule.id, tunedHere ? { sql: tunedHere.sql, timeline_sql: tunedHere.timeline_sql } : undefined);
               const sensorTimelineRows = timelineRows?.some((x) => x.series_id) ? timelineRows : null;

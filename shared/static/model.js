@@ -60,6 +60,7 @@ const HS_NS = {
   phIoT: "https://project-haystack.org/def/phIoT/",
   phIct: "https://project-haystack.org/def/phIct/",
   ref: "https://brickschema.org/schema/Brick/ref#",
+  brick: "https://brickschema.org/schema/Brick#",
   schema: "https://schema.org/",
 };
 const TAG_LIB = {
@@ -146,7 +147,14 @@ function modelToTurtle(model, base, opts = {}) {
   }
   for (const e of model.equips) {
     const a = e.attrs || {};
-    entity(subjectOf(e), "phIoT:equip", e.name, markersOf(e), refsOf(a.siteRef, [["phIoT:siteRef", "site", a.siteRef]]));
+    // Run-proof links (#1608): the refs and feeds the run-proof resolution follows (sql/fdd/run_proof.json)
+    const links = (v) => (Array.isArray(v) ? v : String(v || "").split(",")).map((x) => String(x).trim().replace(/^@/, "")).filter(Boolean);
+    entity(subjectOf(e), "phIoT:equip", e.name, markersOf(e), refsOf(a.siteRef, [
+      ["phIoT:siteRef", "site", a.siteRef],
+      ...["airRef", "chilledWaterRef", "hotWaterRef"].filter((r) => a[r]).map((r) => [`phIoT:${r}`, "equip", String(a[r]).trim().replace(/^@/, "")]),
+      ...links(a.isFedBy).map((id) => ["brick:isFedBy", "equip", id]),
+      ...links(a.feeds).map((id) => ["brick:feeds", "equip", id]),
+    ]));
   }
   for (const d of model.devices) {
     const a = d.attrs || {};

@@ -281,7 +281,8 @@
         `rule ${ruleId} does not apply to equip kind ${kinds[0] || "none"}`, catalog);
     }
     const required = [...new Set(rule.required_roles || [])];
-    const optional = [...new Set(rule.optional_roles || [])].filter((r) => !required.includes(r));
+    const resolved = catalog.run_proof && catalog.run_proof.role;   // run_proof is resolved from the model, never plotted as an input
+    const optional = [...new Set(rule.optional_roles || [])].filter((r) => !required.includes(r) && r !== resolved);
     const roles = [...required, ...optional];
     const bound = bindRoles([...roles, ECON_EXTRA_ROLE], equipPool(equipRec, model), catalog);
     if (ECON_RULE_PATTERN.test(String(ruleId).trim().toUpperCase()) && !roles.includes(ECON_EXTRA_ROLE) && bound[ECON_EXTRA_ROLE].length) roles.push(ECON_EXTRA_ROLE);

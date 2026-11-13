@@ -419,7 +419,8 @@ def build_rule_spec(model: Mapping[str, Any], rule_id: str, equip: Any, window: 
         return _finish("rule", rule_id, None, site, [equip_rec], win, [], [], set(), reason, catalog)
 
     required = list(dict.fromkeys(rule.get("required_roles") or []))
-    optional = [r for r in dict.fromkeys(rule.get("optional_roles") or []) if r not in required]
+    resolved = (catalog.get("run_proof") or {}).get("role")      # run_proof is resolved from the model, never plotted as an input
+    optional = [r for r in dict.fromkeys(rule.get("optional_roles") or []) if r not in required and r != resolved]
     roles = required + optional
     pool = _equip_pool(equip_rec, model)
     bound = _bind_roles(roles + [ECON_EXTRA_ROLE], pool, catalog)
