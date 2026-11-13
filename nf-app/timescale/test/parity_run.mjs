@@ -38,6 +38,7 @@ const planOnly = process.argv.includes("--plan-only");
 const input = JSON.parse(readFileSync(arg("in"), "utf8"));
 const outFile = arg("out");
 const SITE = input.site_id;
+const INGEST = input.ingest || "native";
 const STEP = input.step_seconds;
 const FROM = new Date(input.window.from_ms);
 const TO = new Date(input.window.to_ms);
@@ -86,6 +87,10 @@ function factorCheck() {
     if (plan.skipped.size) skipped[equip] = [...plan.skipped];
     const rows = ts.pointRows({ pack, ...args });
     for (const r of rows) {
+      if (INGEST === "si" && (r.si_scale !== 1 || r.si_offset !== 0)) {
+        bad.push(`${r.point_key}: expected identity scale (1, 0) for SI ingest, got (${r.si_scale}, ${r.si_offset})`);
+        break;
+      }
       const p = pointOfUuid.get(r.point_key);
       const [tsList, vals] = input.samples[p.point_key];
       const si = siByEquip.get(equip);
@@ -273,7 +278,7 @@ try {
   for (const rid of ruleIds) results[rid] ||= [];
 
   writeFileSync(outFile, JSON.stringify({
-    results, errors, timing, memory: { rss_peak_mb: Math.round(process.memoryUsage().rss / 1048576) },
+    ingest: INGEST, results, errors, timing, memory: { rss_peak_mb: Math.round(process.memoryUsage().rss / 1048576) },
     history_mismatches, loaded_history, written: written.length, stored: { before, after }, index_ok: indexOk, index_plan: indexPlan, signature_ok: signatureOk,
     schema_version: installed.schemaVersion, factor: factorCheck(),
   }));

@@ -363,6 +363,11 @@
    }
   },
   {
+   "rule": "FC3",
+   "scope": "edge",
+   "reason": "Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows)."
+  },
+  {
    "rule": "FC8",
    "scope": "edge",
    "reason": "Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas."

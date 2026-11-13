@@ -8,7 +8,7 @@
 <!--
   Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js. Top bar = the site only; each tab that
   needs an equip has its own picker (app-core.js adds it). app-core.js is the dashboard shell shared with Lite;
-  app.js adds the Full-only tabs (FDD, RCx, Export).
+  app.js adds the Full-only tabs (FDD with inline Tuners, RCx, Export).
   NF static plugin: served by Normal from the app's static/ folder at
   /api/v1/apps/static/<app-id>/ — same origin as the console, so the page
   calls /api/v1/* directly (LAN or portal tunnel, whichever you opened).
@@ -37,6 +37,7 @@
 <script defer src="energy.js"></script>
 <script defer src="export.js"></script>
 <script defer src="role-limits.js"></script>
+<script defer src="rule-tuning.js"></script>
 <script defer src="tuning.js"></script>
 <script defer src="app-core.js"></script>
 <script defer src="app.js"></script>
@@ -65,7 +66,6 @@
   <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
   <button data-tab="export">Export</button>
-  <button data-tab="tuning">Tuning</button>
   <button data-tab="model">Model &amp; RDF</button>
 </nav>
 
@@ -81,6 +81,13 @@
     <section class="panel">
       <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
       <div class="chips" id="chips"></div>
+    </section>
+    <section class="panel" id="overviewIoPanel">
+      <h2>Equipment I/O <span class="hint" id="overviewIoHint">all modeled points on the selected equipment</span></h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Point</th><th>Role / type</th><th class="num">Latest value</th><th>Unit</th><th>Updated</th><th>History</th><th>Status</th></tr></thead>
+        <tbody id="overviewIoRows"></tbody>
+      </table></div>
     </section>
   </section>
 
@@ -111,6 +118,7 @@
         <button class="btn" id="fddPlotClose">Close</button></h2>
       <div id="fddPlotRangeControl"></div><p id="fddPlotRangeStatus" class="hint" role="status"></p>
       <div class="chart" id="fddPlot"></div>
+      <section class="tuners-panel" id="fddTunersPanel"></section>
     </section>
     <section class="panel" id="fddResultsPanel" hidden>
       <h2>Faults <span class="hint" id="fddResultsHint">written by the open-fdd hook · sensor sweeps show per-sensor results</span>
@@ -209,59 +217,16 @@
   <!-- Export: CSV download of point history (export.js) -->
   <section class="tab" id="tab-export">
     <section class="panel">
-      <h2>Export CSV <span class="hint">history for the points in the site / equip scope above, resampled by NF · opens in Excel</span></h2>
+      <h2>Export CSV <span class="hint">joined device I/O and published FDD results in stored units · opens in Excel</span></h2>
       <div id="exRangeControl"></div><p id="exRangeStatus" class="hint" role="status"></p>
-      <div class="exform">
-        <label>Resolution <select id="exRes"></select></label>
-        <label>Units <select id="exUnits">
-          <option value="display">As displayed</option>
-          <option value="stored">As stored in NF</option>
-        </select></label>
-      </div>
       <div class="exbar">
-        <input type="search" id="exFilter" placeholder="filter points (all words must match)">
-        <button class="btn" id="exAll" type="button">Select all shown</button>
-        <button class="btn" id="exNone" type="button">Select none shown</button>
-        <span class="hint" id="exShown"></span>
-      </div>
-      <div class="exlist" id="exList"></div>
-      <div class="exbar">
-        <button class="btn primary" id="exGo" type="button">Export CSV</button>
+        <button class="btn primary" id="exGo" type="button">Download CSV</button>
         <span class="hint" id="exSummary"></span>
       </div>
-      <div class="sub" id="exStatus"></div>
-      <p class="sub">Columns: <code>timestamp</code> (local time), <code>timestamp_utc</code>, then one column per point as
-        <code>equip point [unit]</code>. Boolean / fault points use the window maximum, everything else the average. 1 day windows follow UTC days.</p>
-    </section>
-  </section>
-
-  <!-- Tuning: sweep role limits per site / equipment (tuning.js, hooks/tuning.js; #1589) -->
-  <section class="tab" id="tab-tuning">
-    <section class="panel">
-      <h2>Sensor sweep limits <span class="hint">stored in SI, edited in display units · applied by the next FDD run · Timescale required</span></h2>
-      <div class="exform">
-        <label>Scope <select id="tunScope"></select></label>
-        <label>Chart <select id="tunQuantity">
-          <option value="absolute_temperature">Temperature bands</option>
-          <option value="relative_humidity">Humidity bands</option>
-          <option value="air_pressure">Pressure bands</option>
-          <option value="volume_flow">Flow bands</option>
-          <option value="power">Power bands</option>
-        </select></label>
-        <label>Note <input id="tunNote" maxlength="200" placeholder="why (stored with the revision)"></label>
-      </div>
-      <div class="chart" id="tunChart" style="height:360px"></div>
-      <div class="tablewrap"><table class="tun-table" id="tunRows"></table></div>
-      <div class="exbar">
-        <button class="btn" id="tunPreview" type="button">Preview</button>
-        <button class="btn primary" id="tunSave" type="button">Save revision</button>
-        <button class="btn" id="tunReset" type="button">Reset to defaults</button>
-        <span class="hint" id="tunStatus" role="status"></span>
-      </div>
-      <p class="sub">Precedence: shipped defaults, then the site, then the equipment. Each cell shows its source and the SI value
-        that is stored. Saving validates the whole set first (low below high, positive tolerances); history keeps every revision.</p>
-      <h2>History</h2>
-      <ul id="tunHistory"></ul>
+      <div class="sub" id="exStatus" role="status"></div>
+      <p class="sub">Columns: <code>timestamp</code> (site local time), <code>timestamp_utc</code>, then one column per modeled I/O point and FDD result as <code>equip point [unit]</code>.
+        Values use NF stored units and raw history types (<code>true</code>/<code>false</code> for Boolean points, <code>0</code>/<code>1</code> for fault timelines, blank when missing or unassessed).
+        Exact source timestamps are joined when possible; denser ranges fall back to aligned buckets with explicit resolution disclosure.</p>
     </section>
   </section>
 

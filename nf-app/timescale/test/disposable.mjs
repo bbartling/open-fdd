@@ -48,7 +48,7 @@ export function guarded(client, token) {
     raw: client,
     async query(...args) {
       // transaction control is not DDL, and the guard query itself would fail inside an aborted transaction
-      if (!(typeof args[0] === "string" && /^(BEGIN|COMMIT|ROLLBACK)$/.test(args[0]))) await assertDisposable(client, token);
+      if (!(typeof args[0] === "string" && /^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT \w+|ROLLBACK TO SAVEPOINT \w+|RELEASE SAVEPOINT \w+)$/.test(args[0]))) await assertDisposable(client, token);
       return client.query(...args);
     },
   };

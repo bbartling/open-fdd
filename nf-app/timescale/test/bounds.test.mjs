@@ -178,3 +178,29 @@ test("engine timescale without config.timescale fails visibly (no silent fallbac
   assert.equal(ts.requireConfig({ host: "h" }).host, "h");
   assert.ok(ts.requireConfig({ connectionString: "postgres://x" }));
 });
+
+test("optional pgweb sidecar stays off by default, private, TLS + basic_auth, read-only", () => {
+  const baseCompose = readFileSync(new URL("../../../deploy/nf-caddy/docker-compose.yml", import.meta.url), "utf8");
+  const pgCompose = readFileSync(new URL("../../../deploy/nf-caddy/docker-compose.pgweb.yml", import.meta.url), "utf8");
+  const pgCaddy = readFileSync(new URL("../../../deploy/nf-caddy/pgweb.caddy", import.meta.url), "utf8");
+  const pgTls = readFileSync(new URL("../../../deploy/nf-caddy/Caddyfile.tls.pgweb", import.meta.url), "utf8");
+  const pgGrants = readFileSync(new URL("../../../deploy/nf-caddy/pgweb-grants.sql", import.meta.url), "utf8");
+  const routes = readFileSync(new URL("../../../deploy/nf-caddy/routes.caddy", import.meta.url), "utf8");
+
+  assert.doesNotMatch(baseCompose, /pgweb/, "default compose does not run pgweb");
+  assert.doesNotMatch(routes, /pgweb/, "default routes do not expose pgweb");
+  assert.match(pgCompose, /profiles:\s*\["pgweb"\]/);
+  assert.match(pgCompose, /--readonly/);
+  assert.match(pgCompose, /--lock-session/);
+  assert.match(pgCompose, /PGWEB_DATABASE_URL=/);
+  // pgweb service must not publish any host port
+  const pgBlock = pgCompose.split(/^  pgweb:/m)[1] || "";
+  assert.doesNotMatch(pgBlock, /^\s+ports:/m, "pgweb must not publish a host port");
+  assert.match(pgCaddy, /@pgweb path \/pgweb \/pgweb\/\*/);
+  assert.match(pgCaddy, /basic_auth/);
+  assert.match(pgTls, /tls \/certs\/server\.crt \/certs\/server\.key/);
+  assert.match(pgTls, /import \/etc\/caddy\/pgweb\.caddy/);
+  assert.match(pgGrants, /default_transaction_read_only = on/);
+  assert.match(pgGrants, /statement_timeout = '10s'/);
+  assert.doesNotMatch(pgGrants, /(INSERT|UPDATE|DELETE|TRUNCATE|ALTER TABLE|CREATE TABLE)/i);
+});

@@ -910,3 +910,91 @@ test("maybeEnforceCap: job present -> skipped; no job -> once a day, scoped", { 
   const pv = await ts.retentionPreview(db, 1);
   assert.equal(pv.dry_run, true);
 });
+
+test("openfdd_rt least-privilege role can read views and write fdd tables, never public.data (#1606)", { skip }, async () => {
+  await seed();
+  await ts.install(db);
+  const { rows: pr } = await db.query("SELECT id::text AS id FROM public.points WHERE name = 'AHU-1/sat'");
+  const ptId = pr[0].id;
+  await ts.syncPoints(db, { siteId: "s1", equipId: "AHU-1", rows: ts.pointRows({ pack, siteId: "s1", equipId: "AHU-1", roleToUuid: { sat: ptId }, unitsByUuid: { [ptId]: "degF" } }) });
+  const dbName = (await db.query("SELECT current_database() AS d")).rows[0].d;
+  const role = `openfdd_rt_${Math.random().toString(16).slice(2, 10)}`;
+  await db.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`);
+  try {
+    await db.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
+    await db.query(`GRANT SELECT ON public.data, public.points, public.instances TO ${role}`);
+    await db.query(`GRANT USAGE ON SCHEMA openfdd TO ${role}`);
+    await db.query(`GRANT SELECT ON openfdd.nf_samples TO ${role}`);
+    await db.query(`GRANT SELECT, INSERT, UPDATE ON openfdd.config TO ${role}`);
+    await db.query(`GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA openfdd TO ${role}`);
+    await db.query(`GRANT USAGE, CREATE ON SCHEMA fdd TO ${role}`);
+    await db.query(`GRANT SELECT ON fdd.input_sample TO ${role}`);
+    await db.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON fdd.point, fdd.rule_result, fdd.rule_config TO ${role}`);
+    await db.query(`GRANT TEMP ON DATABASE "${dbName}" TO ${role}`);
+
+    const invokerRows = (await db.query(
+      `SELECT c.relname, c.reloptions FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE (n.nspname = 'openfdd' AND c.relname = 'nf_samples') OR (n.nspname = 'fdd' AND c.relname = 'input_sample')`
+    )).rows;
+    assert.equal(invokerRows.length, 2);
+    for (const r of invokerRows) {
+      assert.ok((r.reloptions || []).includes("security_invoker=true"), `${r.relname} sets security_invoker=true`);
+    }
+
+    await db.query("BEGIN");
+    try {
+      await db.query(`SET LOCAL ROLE ${role}`);
+      const n1 = (await db.query("SELECT count(*)::int AS n FROM openfdd.nf_samples WHERE point_uuid = $1", [ptId])).rows[0].n;
+      const n2 = (await db.query("SELECT count(*)::int AS n FROM fdd.input_sample WHERE site_id = 's1'")).rows[0].n;
+      assert.ok(n1 > 0 && n2 > 0, "runtime role reads both adapter views");
+
+      const deny = async (sql, params = []) => {
+        await db.query("SAVEPOINT sp");
+        await assert.rejects(db.query(sql, params), /permission denied|cannot (insert into|update|delete from) (column "\w+" of )?view/i);
+        await db.query("ROLLBACK TO SAVEPOINT sp");
+        await db.query("RELEASE SAVEPOINT sp");
+      };
+      await deny("INSERT INTO public.data (point_id, time, value) VALUES ($1::uuid, '2026-10-15T00:00:00Z', 99)", [ptId]);
+      await deny("UPDATE public.data SET value = 99 WHERE point_id = $1::uuid AND time = '2026-10-05T10:00:00Z'", [ptId]);
+      await deny("DELETE FROM public.data WHERE point_id = $1::uuid AND time = '2026-10-05T10:00:00Z'", [ptId]);
+      await deny("INSERT INTO openfdd.nf_samples (point_uuid, ts, value) VALUES ($1, '2026-10-15T00:00:00Z', 99)", [ptId]);
+      await deny("UPDATE openfdd.nf_samples SET value = 99 WHERE point_uuid = $1 AND ts = '2026-10-05T10:00:00Z'", [ptId]);
+      await deny("DELETE FROM openfdd.nf_samples WHERE point_uuid = $1 AND ts = '2026-10-05T10:00:00Z'", [ptId]);
+      await deny("UPDATE fdd.input_sample SET value = 20 WHERE site_id = 's1' AND point_key = $1", [ptId]);
+      await deny("DELETE FROM fdd.input_sample WHERE site_id = 's1' AND point_key = $1", [ptId]);
+
+      await db.query(
+        "INSERT INTO fdd.rule_config (site_id, rule_id, scope_key, revision, parameters, active, created_by) VALUES ('s1', 'FC1', 'site', 1, '{}', true, 'test')"
+      );
+      await db.query("DELETE FROM fdd.rule_config WHERE site_id = 's1' AND rule_id = 'FC1'");
+    } finally {
+      await db.query("ROLLBACK");
+    }
+  } finally {
+    await db.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${role}; REVOKE ALL ON SCHEMA public FROM ${role}; REVOKE ALL ON ALL TABLES IN SCHEMA openfdd FROM ${role}; REVOKE ALL ON ALL FUNCTIONS IN SCHEMA openfdd FROM ${role}; REVOKE ALL ON SCHEMA openfdd FROM ${role}; REVOKE ALL ON ALL TABLES IN SCHEMA fdd FROM ${role}; REVOKE ALL ON SCHEMA fdd FROM ${role}; REVOKE ALL ON DATABASE "${dbName}" FROM ${role}; DROP ROLE ${role}`);
+    await db.query("DELETE FROM fdd.point WHERE site_id = 's1'");
+  }
+});
+
+test("upgrade v3 -> v4 rolls back cleanly on transaction abort (#1606)", { skip }, async () => {
+  await makeV3(`
+    INSERT INTO openfdd.fdd_results (run_ts, equip, site, rule_id, fault_pct, fault_hours, covered_hours, engine, window_start, window_end, sensor_ref) VALUES
+      ('2026-10-12T00:00:00Z', 'rb-eq', 's1', 'FC1', 10, 2, 24, 'timescale', '2026-10-11T00:00:00Z', '2026-10-12T00:00:00Z', '');
+    INSERT INTO openfdd.retention_log (status, dry_run, result) VALUES ('under_cap', false, '{}');`);
+  await db.query("BEGIN");
+  try {
+    await ts.install(db);
+    await db.query("SELECT 1 / 0");
+    assert.fail("expected division by zero");
+  } catch (e) {
+    assert.match(e.message, /division by zero/);
+    await db.query("ROLLBACK");
+  }
+  assert.equal(await ts.schemaVersion(db), 3, "rollback restores v3");
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM openfdd.fdd_results")).rows[0].n, 1);
+  assert.ok((await db.query("SELECT to_regclass('openfdd.retention_log') AS b")).rows[0].b);
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_result WHERE equipment_id = 'rb-eq'")).rows[0].n, 0);
+  // complete the upgrade cleanly afterward so subsequent tests see v4
+  assert.equal((await ts.install(db)).schemaVersion, 4);
+  await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'rb-eq'");
+});

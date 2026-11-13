@@ -16,14 +16,8 @@
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--panel2); }
 
-/* ---- Export tab ---------------------------------------------------------------------- */
-.exform { display: flex; flex-wrap: wrap; gap: 12px 18px; margin: 6px 0 10px; }
-.exform label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
-.exform input, .exform select { font: inherit; padding: 5px 8px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+/* ---- Export tab & action bars -------------------------------------------------------- */
 .exbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 8px 0; }
-.exbar input[type=search] { flex: 1 1 260px; max-width: 420px; }
-.exlist { max-height: 320px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; columns: 2 320px; }
-.ex-row { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; font-size: 13px; break-inside: avoid; }
 
 /* app version (version.js) */
 .app-version { font-size: 12px; color: var(--muted, #64748b); text-decoration: none; margin-left: 10px; align-self: center; }
@@ -63,3 +57,21 @@ tr.clickable:hover td { background: var(--panel2); }
 .tun-table input { font: inherit; width: 7em; padding: 3px 6px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
 .tun-table input.src-site { border-color: var(--accent, #3b82f6); }
 .tun-table input.src-equipment { border-color: var(--warn, #f59e0b); }
+/* Inline FDD Tuners inside #fddPlotPanel (5.0.17) */
+.tuners-panel { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.tuners-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.tuners-head h3 { margin: 0; font-size: 14px; }
+.tuners-scope { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.tuners-scope select, .tuners-scope input { font: inherit; padding: 4px 8px; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+.tuners-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
+.tun-card { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.tun-card.src-site { border-color: var(--accent, #3b82f6); }
+.tun-card.src-equipment { border-color: var(--warn, #f59e0b); }
+.tun-card label { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.tun-card input[type="number"], .tun-card select { font: inherit; padding: 4px 6px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; width: 100%; box-sizing: border-box; }
+.tun-card-check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+.tun-banner { padding: 8px 10px; border-radius: 8px; font-size: 12px; margin: 8px 0; background: color-mix(in srgb, var(--warn, #f59e0b) 14%, var(--panel2)); border: 1px solid var(--warn, #f59e0b); color: var(--text); }
+.tun-banner.err { background: color-mix(in srgb, var(--hot) 14%, var(--panel2)); border-color: var(--hot); }
+.tuners-subhead { margin: 12px 0 6px; font-size: 13px; color: var(--muted); }
+.tun-history { margin-top: 8px; font-size: 12px; }
+.tun-history ul { margin: 6px 0 0; padding-left: 18px; }

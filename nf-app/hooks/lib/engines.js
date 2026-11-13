@@ -369,6 +369,7 @@ async function createTimescale(pack, opts = {}) {
     resultRow: (a) => ts.toResultRow({ engine: "timescale", pollSeconds: pack.poll_seconds, ruleHash: ruleHash(pack, a.ruleId), ...a }),
     /** Active role-limit override revisions (fdd.rule_config SV-LIMITS) of every site (#1589). */
     roleLimitOverrides: () => ts.activeRoleLimitOverrides(client),
+    ruleConfigOverrides: () => ts.activeRuleConfigs(client),
     writeResults: (rows) => ts.writeResults(client, rows),
     maybeEnforceCap: () => ts.maybeEnforceCap(client),
     async close() { if (owned) await client.end(); },

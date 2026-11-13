@@ -262,8 +262,9 @@ test("export locks before resolving its range and restores state when that looku
     globalThis.ofddUnits = { displaySystem: () => "si", display: () => ({ unit: "" }) };
     globalThis.esc = (x) => String(x);
     globalThis.resolveChartSelection = () => new Promise((resolve, reject) => gates.push({ resolve, reject }));
-    const point = { uuid: "p1", tags: ["point", "his"], siteRef: "site-a", kind: "Number", units: "", dis: "point", equipRef: "" };
-    X.render({ model: { sites: [{ name: "site-a", attrs: { id: "site-a" } }], equips: [], points: [point] }, scope: { site: "site-a", equip: "" } });
+    const equip = { name: "AHU-1", attrs: { id: "eq-1", siteRef: "site-a", dis: "AHU-1", markers: "ahu,equip" } };
+    const point = { uuid: "p1", tags: ["point", "his"], siteRef: "site-a", kind: "Number", units: "", dis: "point", equipRef: "eq-1" };
+    X.render({ model: { sites: [{ name: "site-a", attrs: { id: "site-a" } }], equips: [equip], points: [point] }, scope: { site: "site-a", equip: "eq-1" } });
     await new Promise(setImmediate);
     gates[0].resolve({ resolvedBounds: { fromMs: 1000, toMs: 3600e3 } });
     await new Promise(setImmediate);
@@ -282,5 +283,154 @@ test("export locks before resolving its range and restores state when that looku
       if (prior.had) globalThis[key] = prior.value;
       else delete globalThis[key];
     }
+  }
+});
+
+import { readFileSync } from "node:fs";
+
+test("methodFor handles fault_timeline, ruleRef, String and Enum correctly", () => {
+  assert.equal(X.methodFor({ kind: "Number", tags: ["point", "his", "fault_timeline"] }), "MAX");
+  assert.equal(X.methodFor({ kind: "Number", tags: ["point", "his"], rec: { attrs: { ruleRef: "VAV-1" } } }), "MAX");
+  assert.equal(X.methodFor({ kind: "String", tags: ["point", "his"] }), "LAST");
+  assert.equal(X.methodFor({ kind: "Enum", tags: ["point", "his"] }), "LAST");
+});
+
+test("exportCandidates isolates single equip, separates per-sensor faults, includes current-only, rejects site-wide fail-open", () => {
+  const model = {
+    sites: [{ name: "Site A", attrs: { id: "site-a" } }],
+    equips: [
+      { name: "AHU-1", attrs: { id: "ahu-1", siteRef: "site-a", dis: "AHU-1", markers: "ahu,equip" } },
+      { name: "AHU-2", attrs: { id: "ahu-2", siteRef: "site-a", dis: "AHU-2", markers: "ahu,equip" } },
+    ],
+    devices: [],
+    points: [
+      { uuid: "sat", name: "SAT", dis: "Supply Air Temp", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
+      { uuid: "sat-2", name: "SAT2", dis: "Supply Air Temp", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
+      { uuid: "mode", name: "Mode", dis: "Mode", kind: "String", units: "", tags: ["point", "his"], siteRef: "site-a", equipRef: "ahu-1" },
+      { uuid: "fan", name: "Fan", dis: "Fan Status", kind: "Bool", units: "", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-1" },
+      { uuid: "cur-only", name: "CurOnly", dis: "Manual Override", kind: "Bool", units: "", tags: ["point", "cmd"], siteRef: "site-a", equipRef: "ahu-1" },
+      { uuid: "oat-w", name: "OAT", dis: "Weather OAT", kind: "Number", units: "°F", tags: ["point", "weather", "his"], siteRef: "site-a", weatherStationRef: "ws-1" },
+      { uuid: "wrong-eq", name: "Other", dis: "Other SAT", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-a", equipRef: "ahu-2" },
+      { uuid: "wrong-site", name: "BadSite", dis: "Bad Site", kind: "Number", units: "°F", tags: ["point", "sensor", "his"], siteRef: "site-b", equipRef: "ahu-1" },
+      { uuid: "tl-1", name: "TL1", dis: "SV-RANGE timeline", kind: "Number", units: "", tags: ["point", "his", "fault_timeline"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: "sat" } } },
+      { uuid: "tl-2", name: "TL2", dis: "SV-RANGE timeline", kind: "Number", units: "", tags: ["point", "his", "fault_timeline"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", sensorRef: "sat-2" } } },
+      { uuid: "sum-1", name: "SUM1", dis: "SV-RANGE", kind: "Number", units: "h", tags: ["point", "his", "fdd", "fault"], siteRef: "site-a", equipRef: "ahu-1", rec: { attrs: { ruleRef: "SV-RANGE", fddOutput: "fault_hours", fddOutputSince: "2026-11-05T12:15:00Z" } } },
+    ],
+  };
+
+  assert.equal(X.exportCandidates(model, { site: "site-a", equip: "" }).columns.length, 0, "must never fail open to site");
+  assert.equal(X.exportCandidates(model, { site: "site-a", equip: "__weather__" }).columns.length, 0);
+
+  const inv = X.exportCandidates(model, { site: "site-a", equip: "ahu-1" });
+  assert.equal(inv.equipLabel, "AHU-1");
+  assert.equal(inv.ioPoints.length, 5);
+  assert.equal(inv.fddPoints.length, 3);
+  assert.equal(inv.currentOnly.length, 1);
+  assert.equal(inv.currentOnly[0].uuid, "cur-only");
+  assert.ok(!inv.columns.some((c) => ["oat-w", "wrong-eq", "wrong-site"].includes(c.uuid)));
+  assert.equal(inv.fddPoints.filter((c) => c.lane === "fault_timeline").length, 2);
+  assert.equal(inv.fddPoints.find((c) => c.uuid === "sum-1").fddOutputSinceMs, Date.parse("2026-11-05T12:15:00Z"));
+});
+
+test("collectJoined + toJoinedCsv join exact raw timestamps, preserve types/0/false, neutralize formulas, enforce fddOutputSince", async () => {
+  const columns = [
+    { uuid: "sat", equip: "AHU-1", dis: "SAT", unit: "°F", kind: "Number", historyAvailable: true, point: { uuid: "sat", kind: "Number", tags: ["point", "his"] } },
+    { uuid: "mode", equip: "AHU-1", dis: "Mode", unit: "", kind: "String", historyAvailable: true, point: { uuid: "mode", kind: "String", tags: ["point", "his"] } },
+    { uuid: "fan", equip: "AHU-1", dis: "Fan", unit: "", kind: "Bool", historyAvailable: true, point: { uuid: "fan", kind: "Bool", tags: ["point", "his"] } },
+    { uuid: "cur", equip: "AHU-1", dis: "CurOnly", unit: "", kind: "Bool", historyAvailable: false, point: { uuid: "cur", kind: "Bool", tags: ["point"] } },
+    { uuid: "sum", equip: "AHU-1", dis: "SV-RANGE · fault_hours", unit: "h", kind: "Number", historyAvailable: true, fddOutputSinceMs: t(12, 15), point: { uuid: "sum", kind: "Number", tags: ["point", "his", "fdd"] } },
+  ];
+  const apiFn = async (url) => {
+    assert.ok(!url.includes("window="), "raw join must omit window=");
+    return {
+      data: [
+        { uuid: "sat", values: [{ ts: new Date(t(12)).toISOString(), double: 0 }, { ts: new Date(t(12, 15)).toISOString(), double: 72.5 }] },
+        { uuid: "mode", values: [{ ts: new Date(t(12)).toISOString(), characterString: "=CMD()" }, { ts: new Date(t(12, 15)).toISOString(), characterString: "COOL" }] },
+        { uuid: "fan", values: [{ ts: new Date(t(12)).toISOString(), boolean: false }, { ts: new Date(t(12, 15)).toISOString(), boolean: true }] },
+        { uuid: "sum", values: [{ ts: new Date(t(12)).toISOString(), double: 99 }, { ts: new Date(t(12, 15)).toISOString(), double: 0.25 }] },
+      ],
+    };
+  };
+  const joined = await X.collectJoined({ columns, startMs: t(12), endMs: t(12, 30), apiFn });
+  assert.equal(joined.mode, "raw");
+  const { csv, rows } = X.toJoinedCsv({ columns, data: joined.data, startMs: t(12), endMs: t(12, 30), mode: joined.mode });
+  assert.equal(rows, 2);
+  const lines = csv.slice(1).split("\r\n");
+  assert.equal(lines[1], `${X.localIso(t(12))},2026-11-05T12:00:00.000Z,0,'=CMD(),false,,`, "pre-fddOutputSince sample dropped, 0/false/formula preserved, current-only blank");
+  assert.equal(lines[2], `${X.localIso(t(12, 15))},2026-11-05T12:15:00.000Z,72.5,COOL,true,,0.25`);
+});
+
+test("collectJoined subdivides chunks hitting 10k sample cap and falls back to aligned buckets with empty gaps", async () => {
+  const col = { uuid: "p1", equip: "AHU-1", dis: "SAT", unit: "°F", kind: "Number", historyAvailable: true, point: { uuid: "p1", kind: "Number", tags: ["point", "his"] } };
+  const tl = { uuid: "tl", equip: "AHU-1", dis: "TL", unit: "0/1", kind: "Number", historyAvailable: true, point: { uuid: "tl", kind: "Number", tags: ["point", "his", "fault_timeline"] } };
+  let rawCalls = 0, bucketCalls = 0;
+  const many = Array.from({ length: 10000 }, (_, i) => ({ ts: new Date(t(12) + i * 10).toISOString(), double: 70 }));
+  const apiFn = async (url) => {
+    if (!url.includes("window=")) {
+      rawCalls++;
+      return { data: [{ uuid: "p1", values: many }] };
+    }
+    bucketCalls++;
+    const q = new URL(url, "http://x").searchParams;
+    const ids = q.getAll("uuids");
+    if (ids.includes("tl")) assert.equal(q.get("method"), "MAX");
+    return { data: ids.map((u) => ({ uuid: u, values: [{ ts: new Date(t(12)).toISOString(), double: u === "tl" ? 1 : 71 }] })) };
+  };
+  const res = await X.collectJoined({ columns: [col, tl], startMs: t(12), endMs: t(12, 15), apiFn });
+  assert.ok(rawCalls >= 2, "subdivided after 10k hit");
+  assert.ok(bucketCalls >= 2, "fell back to aligned buckets");
+  assert.equal(res.mode, "bucketed");
+  const { rows, csv } = X.toJoinedCsv({ columns: [col, tl], data: res.data, startMs: t(12), endMs: t(12, 15), windowSec: res.windowSec, mode: res.mode });
+  assert.equal(rows, 3, "emits aligned 5-min grid rows including missing gaps");
+  assert.match(csv, /2026-11-05T12:10:00\.000Z,,/);
+});
+
+test("collectJoined fills older uncovered range from Timescale and surfaces truncation loudly", async () => {
+  const startMs = Date.UTC(2026, 10, 1, 0, 0);
+  const midMs = Date.UTC(2026, 10, 4, 0, 0);
+  const endMs = Date.UTC(2026, 10, 5, 0, 0);
+  const cols = [
+    { uuid: "sat", equip: "AHU-1", dis: "SAT", unit: "°F", kind: "Number", historyAvailable: true, point: { uuid: "sat", kind: "Number", tags: ["point", "his"] } },
+    { uuid: "mode", equip: "AHU-1", dis: "Mode", unit: "", kind: "String", historyAvailable: true, point: { uuid: "mode", kind: "String", tags: ["point", "his"] } },
+  ];
+  const apiFn = async () => ({
+    data: [{ uuid: "sat", values: [{ ts: new Date(midMs).toISOString(), double: 72 }] }],
+  });
+  const timescaleFn = async ({ uuids, fromMs, toMs }) => {
+    assert.deepEqual(uuids, ["sat"]);
+    assert.equal(fromMs, startMs);
+    assert.equal(toMs, midMs);
+    return {
+      ok: true,
+      bucket: "5 minutes",
+      rows: [{ point_uuid: "sat", bucket: new Date(startMs).toISOString(), avg: 68.5, max: 69, n: 1 }],
+    };
+  };
+  const res = await X.collectJoined({ columns: cols, startMs, endMs, apiFn, timescaleFn });
+  assert.equal(res.mode, "mixed");
+  assert.equal(res.timescaleUsed, true);
+  assert.deepEqual(res.timescaleSkippedCols, ["Mode"]);
+  assert.equal(res.data.get("sat").get(startMs), 68.5);
+  assert.equal(res.data.get("sat").get(midMs), 72);
+
+  await assert.rejects(
+    X.collectJoined({
+      columns: cols,
+      startMs,
+      endMs,
+      apiFn,
+      timescaleFn: async () => ({ ok: true, truncated: true, rows: [] }),
+    }),
+    /truncated|limit/i,
+  );
+});
+
+test("Export HTML has single-device simplified controls and no checkbox/filter/unit clutter", () => {
+  const html = readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
+  assert.match(html, /id="exGo"[^>]*>Download CSV</);
+  assert.match(html, /id="exRangeControl"/);
+  assert.match(html, /id="exSummary"/);
+  for (const oldId of ["exRes", "exUnits", "exFilter", "exAll", "exNone", "exList"]) {
+    assert.ok(!html.includes(`id="${oldId}"`), `removed legacy #${oldId}`);
   }
 });

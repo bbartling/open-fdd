@@ -105,8 +105,22 @@ results from its `/runs?include_results=true` route. The browser/app uses the sc
 weather. The SPARQL hook is on request. A successful HTTP response means NF accepted the run. Inspect run status and
 results before treating it as complete.
 
-## Timescale copy
+## Schema ownership and data flow
 
-Full installations using Timescale also store a run-level copy in `fdd.rule_result` (the shared core schema,
-`sql/fdd/schema/core.sql`; it replaced `openfdd.fdd_results` in 5.0.16). It is not the source of truth. NF result points and their histories remain the normal API surface. See the
-[Timescale setup guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
+```mermaid
+flowchart LR
+  S[NF Sites & Equipment] --> P[NF Points / ref:hasTimeseriesId]
+  P --> T[Trends: NF API & public.data]
+  T -->|SI view| I[fdd.input_sample]
+  I --> R[SQL Rule Pack]
+  C[fdd.rule_config SI Tuning] --> R
+  R --> RES[fdd.rule_result & NF Result Points]
+```
+
+| Owner | Relations | Role |
+|---|---|---|
+| Normal Framework | `public.instances`, `public.points`, `public.data` | Source model and native telemetry (`openfdd_rt` has `SELECT` only) |
+| Open-FDD app | `fdd.point`, `fdd.rule_result`, `fdd.rule_config`, `openfdd.config` | Bound-point mirror, SI fault results, inline tuning revisions, scoped retention |
+| Open-FDD adapter | `openfdd.nf_samples`, `fdd.input_sample` | Read-only `security_invoker` views converting native units to SI |
+
+Full installations using Timescale store SI run results in `fdd.rule_result` (`sql/fdd/schema/core.sql`), while NF result points remain the primary API surface. Optional read-only SQL browsing (`pgweb` via `deploy/nf-caddy/docker-compose.pgweb.yml`) stays off by default on a private network behind Caddy TLS + auth using a `SELECT`-only role. See the [Timescale setup guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).

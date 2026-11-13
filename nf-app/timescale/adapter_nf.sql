@@ -18,7 +18,7 @@
 --   * one data table per layer              -> UNION ALL the layer views
 CREATE SCHEMA IF NOT EXISTS openfdd;
 
-CREATE OR REPLACE VIEW openfdd.nf_samples AS
+CREATE OR REPLACE VIEW openfdd.nf_samples WITH (security_invoker = true) AS
 SELECT d.point_id::text         AS point_uuid,
        d."time"::timestamptz    AS ts,
        d.value::double precision AS value
@@ -40,7 +40,7 @@ BEGIN
     v_join := 'd.point_id::text = p.point_key';
   END IF;
   EXECUTE format($v$
-    CREATE OR REPLACE VIEW fdd.input_sample AS
+    CREATE OR REPLACE VIEW fdd.input_sample WITH (security_invoker = true) AS
     SELECT p.site_id::text                                        AS site_id,
            p.point_key::text                                      AS point_key,
            d."time"::timestamptz                                  AS ts,

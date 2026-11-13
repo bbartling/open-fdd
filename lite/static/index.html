@@ -62,6 +62,13 @@
       <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
       <div class="chips" id="chips"></div>
     </section>
+    <section class="panel" id="overviewIoPanel">
+      <h2>Equipment I/O <span class="hint" id="overviewIoHint">all modeled points on the selected equipment</span></h2>
+      <div class="tablewrap"><table class="bac">
+        <thead><tr><th>Point</th><th>Role / type</th><th class="num">Latest value</th><th>Unit</th><th>Updated</th><th>History</th><th>Status</th></tr></thead>
+        <tbody id="overviewIoRows"></tbody>
+      </table></div>
+    </section>
   </section>
 
   <!-- Charts: pick one; only that chart's points are fetched (resampled by NF) -->

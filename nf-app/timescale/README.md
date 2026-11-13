@@ -64,7 +64,7 @@ Stop and delete the container: `docker compose -f nf-app/timescale/test/docker-c
 | --- | --- | --- |
 | Purpose | create / upgrade schema `openfdd`, register or alter the daily job, create the `timescaledb` extension if missing | read NF history, run rules, write results, answer `history` |
 | NF's `data` / `points` / `instances` | `SELECT` (adapter view) | `SELECT` only |
-| Schema `openfdd` | owner / `CREATE` | `USAGE` + `SELECT, INSERT, UPDATE, DELETE` on its tables, `EXECUTE` on its functions (write on schema `openfdd` only) |
+| Schema `openfdd` | owner / `CREATE` | `USAGE` + `SELECT` on `openfdd.nf_samples`, `SELECT, INSERT, UPDATE` on `openfdd.config`, `EXECUTE` on its functions |
 | Schema `fdd` (the pack's helper SQL) | `CREATE` | `USAGE, CREATE` on schema `fdd` (pre-create it as installer) |
 | Database | `CREATE` | `TEMP` (rules run on TEMP tables) |
 | Other apps' tables | nothing | nothing |
@@ -76,12 +76,19 @@ Example grants (installer connected to the NF database, runtime role `openfdd_rt
 GRANT USAGE ON SCHEMA public TO openfdd_rt;
 GRANT SELECT ON public.data, public.points, public.instances TO openfdd_rt;
 GRANT USAGE ON SCHEMA openfdd TO openfdd_rt;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA openfdd TO openfdd_rt;
+GRANT SELECT ON openfdd.nf_samples TO openfdd_rt;
+GRANT SELECT, INSERT, UPDATE ON openfdd.config TO openfdd_rt;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA openfdd TO openfdd_rt;
 CREATE SCHEMA IF NOT EXISTS fdd;
 GRANT USAGE, CREATE ON SCHEMA fdd TO openfdd_rt;
+GRANT SELECT ON fdd.input_sample TO openfdd_rt;
+GRANT SELECT, INSERT, UPDATE, DELETE ON fdd.point, fdd.rule_result, fdd.rule_config TO openfdd_rt;
 GRANT TEMP ON DATABASE nf TO openfdd_rt;
 ```
+
+Both `openfdd.nf_samples` and `fdd.input_sample` use `WITH (security_invoker = true)` and `openfdd_rt` receives
+`SELECT` only on those views (never `ALL TABLES IN SCHEMA openfdd` or write grants on the views), so `openfdd_rt`
+cannot mutate `public.data` directly or through an auto-updatable view.
 
 The retention job runs as the job owner (the installer), not as the runtime role. A runtime role without install
 rights still works for rules and history; if the schema is older than this release the hook refuses to run

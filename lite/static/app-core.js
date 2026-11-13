@@ -46,11 +46,65 @@ let activeTab = "overview";
 const mk = (id) => ofddChart($(id));
 
 // ---- scope: which points each tab shows, decided by tags --------------------------
+const OVERVIEW_EQUIP_KEY = "openfdd.overview.equip";
+let overviewSelection = { site: "", equipId: "", mode: "auto", reason: "" };
+const deliberateAllTabs = new Set();
+
+function loadOverviewEquipMap() {
+  try {
+    if (typeof localStorage === "undefined") return {};
+    const raw = JSON.parse(localStorage.getItem(OVERVIEW_EQUIP_KEY) || "{}");
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  } catch { return {}; }
+}
+function saveOverviewEquipForSite(site, equipId) {
+  try {
+    if (typeof localStorage === "undefined" || !site) return;
+    const map = loadOverviewEquipMap();
+    if (equipId) map[site] = equipId;
+    else delete map[site];
+    localStorage.setItem(OVERVIEW_EQUIP_KEY, JSON.stringify(map));
+  } catch { /* private mode */ }
+}
+
 const siteEquips = () => model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site);
 const siteEquipIds = () => siteEquips().map(idOf);
 const taggedOnSite = () => model.points.filter((p) => p.siteRef === scope.site && has(p, "point"));
-const scopedSets = () => pointSets(model, scope.site, scope.equip);
 const equipLabelOf = (e) => (e.attrs || {}).dis || e.name;
+const eligibleSingleEquips = (m, site) => sortOverviewEquips((m?.equips || []).filter((e) => (e.attrs || {}).siteRef === site && isOverviewEligibleEquip(e)));
+
+/** @param {any} m @param {string} site @param {{ forceAuto?: boolean, nowMs?: number }} [opts] */
+function resolveOverviewSelection(m, site, { forceAuto = false, nowMs } = {}) {
+  const equips = eligibleSingleEquips(m, site);
+  if (!equips.length) {
+    return { site, equipId: "", mode: "empty", reason: "No eligible equipment modeled on this site." };
+  }
+  const validIds = new Set(equips.map(idOf));
+  if (!forceAuto) {
+    const saved = loadOverviewEquipMap()[site];
+    if (saved && validIds.has(saved)) {
+      return { site, equipId: saved, mode: "manual", reason: "Manual selection (saved for this site)." };
+    }
+    if (overviewSelection.site === site && overviewSelection.equipId && validIds.has(overviewSelection.equipId)) {
+      return overviewSelection;
+    }
+  }
+  const auto = autoSelectOverviewEquip(m, site, nowMs === undefined ? {} : { nowMs });
+  return { site, equipId: auto.equipId, mode: "auto", reason: auto.reason };
+}
+
+const overviewEquipId = () => (overviewSelection.site === scope.site ? overviewSelection.equipId : "");
+const exportEquipId = () => {
+  const singleIds = new Set(eligibleSingleEquips(model, scope.site).map(idOf));
+  if (scope.equip && scope.equip !== WEATHER_SCOPE && singleIds.has(scope.equip)) return scope.equip;
+  return overviewEquipId();
+};
+const activeEquipScope = () => {
+  if (activeTab === "overview") return overviewEquipId();
+  if (activeTab === "export") return exportEquipId();
+  return scope.equip;
+};
+const scopedSets = () => pointSets(model, scope.site, activeEquipScope());
 
 /**
  * Entries of the equip pickers for one site: every equip, plus "Weather" as its own entry when the site has weather
@@ -74,18 +128,51 @@ function ensureScopeBars() {
     bar.className = "scopebar"; label.className = "scope"; pick.className = "equip-pick";
     pick.setAttribute("aria-label", "equip");
     label.append("equip ", pick); bar.append(label);
+    if (name === "overview") {
+      const autoBtn = document.createElement("button");
+      autoBtn.type = "button";
+      autoBtn.className = "btn overview-auto-btn";
+      autoBtn.id = "overviewAutoBtn";
+      autoBtn.textContent = "Auto";
+      autoBtn.title = "Return to automatic temperature-based equipment selection";
+      const reason = document.createElement("span");
+      reason.className = "overview-scope-reason";
+      reason.id = "overviewScopeReason";
+      bar.append(autoBtn, reason);
+    }
     tab.prepend(bar);
   }
 }
 
-function fillPickers() {
+function fillPickers(opts = {}) {
   $("sitePick").innerHTML = model.sites.map((s) => `<option value="${esc(idOf(s))}">${esc(s.name)}</option>`).join("");
   $("sitePick").value = scope.site;
   ensureScopeBars();
+  overviewSelection = resolveOverviewSelection(model, scope.site, opts);
   const choices = equipChoices(model, scope.site);
   if (!choices.some((c) => c.value === scope.equip)) scope.equip = "";
-  const html = choices.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
-  document.querySelectorAll(".equip-pick").forEach((/** @type {AnyEl} */ sel) => { sel.innerHTML = html; sel.value = scope.equip; });
+  const singleEquips = eligibleSingleEquips(model, scope.site);
+  const singleHtml = singleEquips.length
+    ? singleEquips.map((e) => `<option value="${esc(idOf(e))}">${esc(equipLabelOf(e))}</option>`).join("")
+    : `<option value="">no equipment</option>`;
+  const multiHtml = choices.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
+  document.querySelectorAll(".equip-pick").forEach((/** @type {AnyEl} */ sel) => {
+    const tabId = sel.closest(".tab")?.id?.replace(/^tab-/, "") || "";
+    if (tabId === "overview") {
+      sel.innerHTML = singleHtml;
+      sel.value = overviewSelection.equipId || "";
+    } else if (tabId === "export") {
+      sel.innerHTML = singleHtml;
+      sel.value = exportEquipId() || "";
+    } else {
+      sel.innerHTML = multiHtml;
+      sel.value = scope.equip;
+    }
+  });
+  const autoBtn = $("overviewAutoBtn");
+  if (autoBtn) autoBtn.disabled = overviewSelection.mode !== "manual";
+  const reasonEl = $("overviewScopeReason");
+  if (reasonEl) reasonEl.textContent = overviewSelection.reason || "";
 }
 
 async function applyScope() {
@@ -98,6 +185,7 @@ async function applyScope() {
   renderSummary();
   renderCards();
   renderChips();
+  renderOverviewIo();
   renderTab(activeTab);
   startStream();
   setLive(true, `live · ${new Date().toLocaleTimeString()}`);
@@ -157,11 +245,13 @@ function renderSummary() {
 }
 
 function renderCards() {
-  const ctx = { equipNames: scopedSets().equipNames };
+  const sets = scopedSets();
+  const ctx = { equipNames: sets.equipNames };
+  const eq = activeEquipScope();
   $("cards").innerHTML = points.map((p, i) => `
     <div class="card" id="card-${i}" title="${esc(p.tags.join(" "))}">
       <div class="name">${esc(p.name)}</div>
-      <div class="desc">${esc(scope.equip ? p.dis : `${pointOwner(p, ctx)} · ${p.dis}`)}</div>
+      <div class="desc">${esc(eq ? p.dis : `${pointOwner(p, ctx)} · ${p.dis}`)}</div>
       <div class="val"><span id="val-${i}">–</span><small>${esc(unitLabel(dispUnit(p)))}</small></div>
       <div class="delta" id="delta-${i}">&nbsp;</div>
       <div class="spark" id="spark-${i}"></div>
@@ -206,7 +296,40 @@ function renderChips() {
     const on = !!latestOf(p);
     return `<span class="chip ${on ? "on" : ""}" title="${esc(p.dis)}&#10;${esc(p.tags.join(" "))}">
       <span class="led"></span>${esc(p.name)}<span class="state">${on ? "on" : "off"}</span></span>`;
-  }).join("") : `<span class="sub">No Bool points tagged on an equip.</span>`;
+  }).join("") : `<span class="sub">No Bool points tagged on this equipment.</span>`;
+}
+
+function renderOverviewIo() {
+  const tbody = $("overviewIoRows");
+  const hint = $("overviewIoHint");
+  if (!tbody) return;
+  const eqId = overviewEquipId();
+  if (!eqId) {
+    if (hint) hint.textContent = "no equipment modeled on this site";
+    tbody.innerHTML = `<tr><td colspan="7" class="sub">No modeled equipment is available on this site.</td></tr>`;
+    return;
+  }
+  const inv = scopedEquipmentInventory(model, scope.site, eqId);
+  const siteTz = siteTimeZone();
+  const fmtTs = (ts) => {
+    if (!ts) return "–";
+    const ms = parseTs(ts);
+    return Number.isFinite(ms) ? new Date(ms).toLocaleString(undefined, { timeZone: siteTz }) : ts;
+  };
+  const label = inv.equip ? equipLabelOf(inv.equip) : eqId;
+  if (hint) {
+    const gapNote = inv.gaps.length ? ` · ${inv.gaps.length} point${inv.gaps.length === 1 ? "" : "s"} skipped (missing siteRef)` : "";
+    hint.textContent = `${label} · ${inv.ioPoints.length} I/O point${inv.ioPoints.length === 1 ? "" : "s"}${inv.fddPoints.length ? ` · ${inv.fddPoints.length} FDD output${inv.fddPoints.length === 1 ? "" : "s"} excluded` : ""}${gapNote}`;
+  }
+  tbody.innerHTML = inv.ioPoints.length ? inv.ioPoints.map((row) => `<tr>
+    <td>${esc(row.label)}<div class="sub mono">${esc(row.uuid)}</div></td>
+    <td>${esc(row.roleLabel)}</td>
+    <td class="num">${esc(row.formattedValue)}</td>
+    <td>${esc(row.unit || "–")}</td>
+    <td class="sub">${esc(fmtTs(row.updatedTs))}</td>
+    <td class="sub">${row.historyAvailable ? "trended" : "current-only"}</td>
+    <td><span class="io-badge ${esc(row.status)}">${esc(row.status)}</span></td>
+  </tr>`).join("") : `<tr><td colspan="7" class="sub">No modeled I/O points belong to ${esc(label)}.</td></tr>`;
 }
 
 // ---- Charts tab -----------------------------------------------------------------------
@@ -595,12 +718,16 @@ function renderTab(name) {
 }
 
 function showTab(name) {
+  if (name === "tuning") name = "fdd";
+  if (name === "tuning") name = "fdd";
   if (!$(`tab-${name}`)) name = "overview";
   activeTab = name;
   document.querySelectorAll("#tabs button").forEach((/** @type {HTMLElement} */ b) => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === `tab-${name}`));
   // Keep the tab in the URL hash so a link opens straight on it.
   if (location.hash !== `#${name}`) window.history.replaceState(null, "", `#${name}`);
+  ({ cards: points, weather: variables, status: statusPts } = scopedSets());
+  if (name === "overview") { renderCards(); renderChips(); renderOverviewIo(); }
   renderTab(name);
 }
 
@@ -635,7 +762,10 @@ function onUpdate(u) {
   // NF pushes one batch per poll; coalesce the redraw.
   clearTimeout(uiTimer);
   uiTimer = setTimeout(() => {
-    if (activeTab === "overview") changed.forEach((k) => updateCard(k, true));
+    if (activeTab === "overview") {
+      changed.forEach((k) => updateCard(k, true));
+      renderOverviewIo();
+    }
     changed.clear();
     renderChips();
     if (activeTab === "points") renderPoints();
@@ -669,6 +799,7 @@ async function refreshLive() {
     }
     statusPts = scopedSets().status;
     renderChips();
+    if (activeTab === "overview") renderOverviewIo();
     if (activeTab === "points") renderPoints();
     if (activeTab === "bacnet") renderBacnet().catch((e) => ($("bacHint").textContent = `BACnet server: ${e.message}`));
     setLive(true, `${streamUp ? "live (push)" : "polling"} · ${new Date().toLocaleTimeString()}`);
@@ -692,12 +823,40 @@ function showErr(e) {
 
 function wireControls() {
   $("tabs").onclick = (ev) => { const b = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("button")); if (b) showTab(b.dataset.tab); };
-  $("sitePick").onchange = () => { scope.site = $("sitePick").value; scope.equip = ""; fillPickers(); applyScope().catch(showErr); };
-  // The equip pickers sit inside their tabs (one per tab, kept in step): one delegated handler.
+  $("sitePick").onchange = () => {
+    scope.site = $("sitePick").value;
+    scope.equip = "";
+    deliberateAllTabs.clear();
+    overviewSelection = { site: "", equipId: "", mode: "auto", reason: "" };
+    fillPickers();
+    applyScope().catch(showErr);
+  };
+  // Overview Auto button: drop the site's saved override and re-run temperature-based auto-selection.
+  document.addEventListener("click", (ev) => {
+    const btn = /** @type {HTMLElement} */ (ev.target).closest?.("#overviewAutoBtn");
+    if (!btn) return;
+    saveOverviewEquipForSite(scope.site, "");
+    fillPickers({ forceAuto: true });
+    if (!deliberateAllTabs.size && overviewSelection.equipId) scope.equip = overviewSelection.equipId;
+    applyScope().catch(showErr);
+  });
+  // The equip pickers sit inside their tabs: Overview persists its own single-equip pick per site and never wipes deliberate All on FDD/RCx.
   document.addEventListener("change", (ev) => {
     const sel = /** @type {HTMLElement} */ (ev.target).closest?.(".equip-pick");
     if (!sel) return;
-    scope.equip = /** @type {AnyEl} */ (sel).value;
+    const val = /** @type {AnyEl} */ (sel).value;
+    const tabId = sel.closest(".tab")?.id?.replace(/^tab-/, "") || "";
+    if (tabId === "overview") {
+      if (val) {
+        saveOverviewEquipForSite(scope.site, val);
+        overviewSelection = { site: scope.site, equipId: val, mode: "manual", reason: "Manual selection (saved for this site)." };
+        if (!deliberateAllTabs.has("fdd") && !deliberateAllTabs.has("rcx")) scope.equip = val;
+      }
+    } else {
+      if (val === "") deliberateAllTabs.add(tabId);
+      else deliberateAllTabs.delete(tabId);
+      scope.equip = val;
+    }
     fillPickers();
     applyScope().catch(showErr);
   });
@@ -743,6 +902,7 @@ async function main() {
   scope.site = idOf(model.sites[0]);
   fillPickers();
   activeTab = (location.hash || "#overview").slice(1);
+  if (activeTab === "tuning") activeTab = "fdd";
   if (!$(`tab-${activeTab}`)) activeTab = "overview";
   document.querySelectorAll("#tabs button").forEach((/** @type {HTMLElement} */ b) => b.classList.toggle("on", b.dataset.tab === activeTab));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === `tab-${activeTab}`));

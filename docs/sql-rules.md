@@ -58,13 +58,9 @@ and database type. Use °C for temperature, Pa for pressure, L/s for flow, kW fo
 0–100 scale, fractions on 0–1, and status values on 0–1. SI conversion occurs at ingest. Rules contain SI thresholds
 and never convert values.
 
-## Tuning today
+## Tuning
 
-Use `python sql/fdd/render_rule.py SV-RANGE --params '{"confirm_min":10}'` to render SQL with a validated
-override. The Full NF app uses the defaults baked into the generated packs. Its rule view shows bindings and
-opens plots. Editing a shipped default requires rebuilding the packs and deploying the resulting revision.
-The sweep catalog records the role limits in SI. The current render controls cover timing and scale factors,
-while the range and spike templates still carry their base limits.
+In the Full edition, each rule view on the **FDD** tab embeds inline **Tuners** for per-rule parameters and sensor-sweep role limits (`SV-LIMITS`). Operators edit in display units (°F, Δ°F, inH2O, cfm, gpm) with reversible boundary conversion, preview the validated override, and save append-only SI revisions in `fdd.rule_config` scoped to `site` or `site:<site>:equip:<equip>`. Rollback restores only the selected rule's fields without disturbing sibling overrides. From the CLI, `python sql/fdd/render_rule.py SV-RANGE --params '{"confirm_min":10}'` renders standalone SQL.
 
 ## Verification
 

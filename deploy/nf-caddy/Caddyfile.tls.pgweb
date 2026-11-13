@@ -1,0 +1,17 @@
+# TLS front door with optional read-only pgweb sidecar (Full edition only; never used on Lite).
+{
+	auto_https off
+	admin off
+}
+
+:{$TLS_PORT:443} {
+	bind {$LAN_IP}
+	tls /certs/server.crt /certs/server.key
+	import /etc/caddy/pgweb.caddy
+	import /etc/caddy/routes.caddy
+}
+
+:80 {
+	bind {$LAN_IP}
+	redir https://{host}{uri} permanent
+}

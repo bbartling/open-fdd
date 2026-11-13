@@ -41,6 +41,7 @@ SHARED: dict[str, list[str]] = {
     "shared/hooks/settings.js": [f"{app}/hooks/lib/settings.js" for app in BOTH],
     "shared/hooks/site-timezone.js": ["nf-app/hooks/lib/site-timezone.js"],
     "shared/role-limits.js": ["nf-app/hooks/lib/role-limits.js", "nf-app/static/role-limits.js"],
+    "shared/rule-tuning.js": ["nf-app/hooks/lib/rule-tuning.js", "nf-app/static/rule-tuning.js"],
     "shared/hooks/open_meteo_weather.js": ["nf-app/hooks/weather.js", "lite/hooks/open_meteo_weather.js"],
     "shared/types/shapes.d.ts": [f"{app}/types/shapes.d.ts" for app in BOTH],
 }

@@ -49,11 +49,11 @@ test("top bar: only the site (picker), the live pill, clock, units and theme; no
   assert.ok(!/equipPick/.test(text("app-core.js")), "no code still looks for the old top-bar equip picker");
 });
 
-test("each tab that needs an equip gets its own equip picker (the shell adds it), Full adds FDD / RCx / Export / Tuning", () => {
+test("each tab that needs an equip gets its own equip picker (the shell adds it), Full adds FDD / RCx / Export", () => {
   const core = text("app-core.js"), app = text("app.js");
   assert.match(core, /ofddEquipScoped = new Set\(\["overview", "charts", "points"\]\)/);
   assert.match(core, /className = "equip-pick"/);
-  if (edition === "full") assert.match(app, /for \(const tab of \["fdd", "rcx", "export", "tuning"\]\) ofddEquipScoped\.add\(tab\)/);
+  if (edition === "full") assert.match(app, /for \(const tab of \["fdd", "rcx", "export"\]\) ofddEquipScoped\.add\(tab\)/);
   else assert.ok(!/renderFdd|renderRcx|ofddTabs|ofddExport/.test(app), "Lite carries no FDD / RCx / export code");
 });
 

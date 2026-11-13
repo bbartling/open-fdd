@@ -1,0 +1,9 @@
+# Optional read-only pgweb route (Full edition only; mounted by docker-compose.pgweb.yml).
+# Always behind HTTPS + basic_auth: anonymous requests receive 401.
+@pgweb path /pgweb /pgweb/*
+handle @pgweb {
+	basic_auth {
+		import /etc/caddy/auth.caddy
+	}
+	reverse_proxy pgweb:8081
+}
