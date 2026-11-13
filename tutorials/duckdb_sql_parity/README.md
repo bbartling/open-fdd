@@ -29,13 +29,11 @@ Run `explore_data.py` before the parity comparison. It prints
 `DataFrame.describe(include="number")`, missing-value counts, equipment/time
 coverage and a DuckDB GROUP BY over the in-memory pandas DataFrame.
 
-It saves two files in `duckdb-tutorial-output/` (relative to the working
-directory): `history_describe.csv` and `ahu_history.png`. The image shows
-supply-air temperature (°C) and duct-static pressure (Pa) for both AHUs
-against UTC time, in **separate axes** to avoid mixing units.
-Change the output location with `--output-dir PATH`. Plots are generated
-headlessly, so the example also works in CI. The seeded input is synthetic
-and stays in memory; only the summary CSV and PNG are written.
+The Matplotlib figure opens directly on your desktop using `plt.show()`;
+two stacked time-series axes show supply-air temperature (°C) and duct-static
+pressure (Pa) for both AHUs. No PNG, CSV, database, or other output file is
+created. The DataFrame and DuckDB connection live only in RAM. On CI, the
+noninteractive `Agg` backend runs the plotting code without opening a window.
 
 ## Lesson 1: prove your borrowed SQL matches pandas
 
