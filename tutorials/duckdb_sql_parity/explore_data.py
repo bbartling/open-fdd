@@ -1,28 +1,19 @@
-"""Inspect seeded FDD history in RAM and save an AHU time-series plot.
+"""Inspect seeded FDD history in RAM and display an AHU time-series plot.
 
 Run from a repo checkout after installing the tutorial dependencies:
     python tutorials/duckdb_sql_parity/explore_data.py
 """
 from __future__ import annotations
 
-import argparse
 import io
-from pathlib import Path
 
 import duckdb
-import matplotlib
-matplotlib.use("Agg")  # Works on CI and machines without a display server.
 import matplotlib.pyplot as plt
 import pandas as pd
 from open_fdd.parity import generate
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=Path("duckdb-tutorial-output"),
-                        help="Directory for the PNG and summary CSV (default: ./duckdb-tutorial-output)")
-    args = parser.parse_args()
-
     ds = generate(seed=0, equips=2, days=3, profile="basic")
     df = pd.DataFrame(ds.to_engine_input()["history"])
     df["timestamp_utc"] = pd.to_datetime(df.pop("ts"), unit="ms", utc=True)
@@ -53,11 +44,6 @@ def main() -> None:
     print("\n=== DuckDB SQL query over DataFrame ===")
     print(result.to_string(index=False))
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    csv_path = args.output_dir / "history_describe.csv"
-    plot_path = args.output_dir / "ahu_history.png"
-    summary.to_csv(csv_path)
-
     # Plot measurable series individually, without mixing Pa and degrees C on one axis.
     columns = [("sat", "Supply air temperature (°C)"),
                ("duct_static", "Duct static pressure (Pa)")]
@@ -75,10 +61,10 @@ def main() -> None:
     fig.suptitle("Open-FDD seeded 5-minute AHU history (2 AHUs × 3 days)")
     fig.autofmt_xdate()
     fig.tight_layout()
-    fig.savefig(plot_path, dpi=140)
+    # Show only on an interactive desktop. Nothing is saved to disk.
+    # CI sets MPLBACKEND=Agg so show() is a no-op there.
+    plt.show()
     plt.close(fig)
-    print(f"\nSaved numeric summary: {csv_path.resolve()}")
-    print(f"Saved time-series plot: {plot_path.resolve()}")
 
 
 if __name__ == "__main__":
