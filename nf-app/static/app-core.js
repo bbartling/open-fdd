@@ -73,6 +73,7 @@ const taggedOnSite = () => model.points.filter((p) => p.siteRef === scope.site &
 const equipLabelOf = (e) => (e.attrs || {}).dis || e.name;
 const eligibleSingleEquips = (m, site) => sortOverviewEquips((m?.equips || []).filter((e) => (e.attrs || {}).siteRef === site && isOverviewEligibleEquip(e)));
 
+/** @param {any} m @param {string} site @param {{ forceAuto?: boolean, nowMs?: number }} [opts] */
 function resolveOverviewSelection(m, site, { forceAuto = false, nowMs } = {}) {
   const equips = eligibleSingleEquips(m, site);
   if (!equips.length) {
