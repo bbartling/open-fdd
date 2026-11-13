@@ -2,8 +2,17 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- vav7_min_airflow.sql — three pandas branches: under-min, fixed-high flow, high min SP.
 -- Rolling windows use poll-derived {{FIXED_FLOW_ROWS}} (1h sample count), matching pandas.
-WITH h AS (
+WITH rp AS (
+  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
+  SELECT equipment_id,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+  FROM history
+  GROUP BY equipment_id
+),
+h AS (
   SELECT
+    run_proof,
     equipment_id,
     timestamp_utc,
     zone_flow,
@@ -40,6 +49,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN zone_flow IS NULL THEN 0
       WHEN min_flow_sp IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} AND zone_flow < min_flow_sp THEN 1
@@ -118,8 +128,8 @@ final AS (
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
-  SUM(held_seconds) / 3600.0 AS covered_hours,
-  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS fault_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(held_seconds) / 3600.0 END AS covered_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE 100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) END AS fault_pct
 FROM final
 GROUP BY equipment_id;

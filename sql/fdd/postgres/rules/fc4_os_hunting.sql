@@ -6,7 +6,20 @@
 -- entered more than DELTA_OS_MAX times.
 -- Operating states: 1 = min OA / heating, 2 = economizer, 3 = mechanical cooling
 -- (0 = fan off, not counted).
-WITH h AS (
+WITH rp AS (
+  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
+  SELECT equipment_id,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+  FROM history
+  GROUP BY equipment_id
+),
+rps AS (
+  SELECT equipment_id, timestamp_utc, MAX(run_proof) AS run_proof
+  FROM history
+  GROUP BY equipment_id, timestamp_utc
+),
+h AS (
   SELECT
     equipment_id,
     timestamp_utc,
@@ -18,7 +31,7 @@ WITH h AS (
       ELSE fan_cmd
     END AS fan,
     CASE
-      WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 1
+      WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
       ELSE 1
@@ -69,12 +82,14 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN entries_min_oa > {{DELTA_OS_MAX}} THEN 1
       WHEN entries_econ > {{DELTA_OS_MAX}} THEN 1
       WHEN entries_mech > {{DELTA_OS_MAX}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM hourly
+  LEFT JOIN rps USING (equipment_id, timestamp_utc)
 ),
 elapsed_hold AS (
   -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:
@@ -145,17 +160,17 @@ final AS (
 )
 SELECT
   f.equipment_id,
-  CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN NULL ELSE CASE
+    WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
     ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
-  END AS fault_hours,
-  SUM(f.held_seconds) / 3600.0 AS covered_hours,
-  CASE
-    WHEN {{REQUIRE_OPERATIONAL_GATE}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+  END END AS fault_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN 0.0 ELSE SUM(f.held_seconds) / 3600.0 END AS covered_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN NULL ELSE CASE
+    WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
     ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
-  END AS fault_pct
+  END END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
 GROUP BY f.equipment_id;

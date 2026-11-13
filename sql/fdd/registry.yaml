@@ -3,6 +3,8 @@
 
 rules:
   - rule_id: FAN-RUNTIME-HOURS
+    run_proof: exempt
+    run_proof_note: "measures the equipment runtime itself"
     sql_file: fan_runtime_hours.sql
     pandas_function: null
     description: Fan running hours where fan_cmd > 5% (normalized 0-1)
@@ -16,6 +18,8 @@ rules:
 
   - rule_id: VAV-1
     equipment_kinds: [vav, zone_other, heatpump, baseboard]
+    run_proof: exempt
+    run_proof_note: "zone comfort band while occupied; independent of the air handler running"
     sql_file: vav1_comfort_fault.sql
     pandas_function: vav1
     description: Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2; no occupancy model or schedule → NOT_ASSESSED_NO_OCCUPANCY
@@ -101,6 +105,8 @@ rules:
 
   - rule_id: VAV-2
     equipment_kinds: [vav, zone_other, heatpump, baseboard]
+    run_proof: exempt
+    run_proof_note: "night setback runs while the air handler is off by design"
     sql_file: vav2_night_setback.sql
     pandas_function: vav2
     description: Night setback miss — unoccupied zone above heating setback
@@ -164,6 +170,8 @@ rules:
         sql_placeholder: CONFIRM_SECONDS
 
   - rule_id: AVG-ZONE-TEMP
+    run_proof: exempt
+    run_proof_note: "zone statistic, not an equipment fault"
     sql_file: avg_zone_temp.sql
     pandas_function: null
     description: Average zone temperature per equipment
@@ -202,6 +210,8 @@ rules:
         sql_placeholder: ZONE_T_HI
 
   - rule_id: ZONE-COMFORT-PCT
+    run_proof: exempt
+    run_proof_note: "zone comfort statistic, not an equipment fault"
     sql_file: zone_comfort_pct.sql
     pandas_function: null
     description: Percent of samples in comfort band
@@ -237,6 +247,8 @@ rules:
         sql_placeholder: ZONE_T_HI
 
   - rule_id: FAULT-ELAPSED-HOURS
+    run_proof: exempt
+    run_proof_note: "aggregates fault flags of other rules"
     sql_file: fault_elapsed_hours.sql
     pandas_function: null
     description: Comfort fault sample count → hours
@@ -271,6 +283,8 @@ rules:
 
   - rule_id: OAT-METEO
     equipment_kinds: [ahu]
+    run_proof: exempt
+    run_proof_note: "compares two outside-air sources; no running equipment is judged"
     sql_file: oat_meteo_fault.sql
     pandas_function: oat_vs_meteo
     description: Equipment OAT vs weather-staged wx OAT
@@ -327,11 +341,12 @@ rules:
   - rule_id: FC13-SAT-HIGH
     equipment_kinds: [ahu]
     aliases: [FC13]
+    run_proof: gated
     sql_file: sat_high_fault.sql
     pandas_function: fc13
     description: SAT above setpoint at full cooling
     required_roles: [sat, sat_sp, clg_valve_pct, oa_damper_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -359,8 +374,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -368,7 +383,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -452,11 +467,12 @@ rules:
 
   - rule_id: ECON-2
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: economizer_fault.sql
     pandas_function: econ2
     description: Economizing when outdoor air unfavorable
     required_roles: [oa_t, oa_damper_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -484,8 +500,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -493,7 +509,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       econ2_oat_hi:
         label: OAT high cutoff
         default: 17.222222
@@ -527,11 +543,12 @@ rules:
 
   - rule_id: FC1
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc1_duct_static_low.sql
     pandas_function: fc1
     description: Duct static below SP at full fan
     required_roles: [duct_static, duct_static_sp, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -559,8 +576,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -568,7 +585,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -622,11 +639,12 @@ rules:
 
   - rule_id: FC2
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc2_mat_low.sql
     pandas_function: fc2
     description: Mixed air below envelope
     required_roles: [mat, oa_t, rat, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -654,8 +672,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -663,7 +681,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       mode_delay_min:
         label: Mode delay after fan-on
         default: 10.0
@@ -737,11 +755,12 @@ rules:
 
   - rule_id: FC3
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc3_mat_high.sql
     pandas_function: fc3
     description: Mixed air above envelope
     required_roles: [mat, oa_t, rat, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -769,8 +788,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -778,7 +797,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       mode_delay_min:
         label: Mode delay after fan-on
         default: 10.0
@@ -852,11 +871,12 @@ rules:
 
   - rule_id: FC7
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc7_sat_low_heating.sql
     pandas_function: fc7
     description: SAT low while heating at full
     required_roles: [sat, sat_sp, htg_valve_pct]
-    optional_roles: [fan_cmd, fan_status]
+    optional_roles: [fan_cmd, fan_status, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -885,8 +905,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -894,7 +914,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       mode_delay_min:
         label: Mode delay after fan-on
         default: 10.0
@@ -948,11 +968,12 @@ rules:
 
   - rule_id: FC8
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc8_sat_mat_econ.sql
     pandas_function: fc8
     description: SAT vs MAT while economizing
     required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -980,8 +1001,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -989,7 +1010,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -1093,11 +1114,12 @@ rules:
 
   - rule_id: FC9
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc9_oa_sat_sp_econ.sql
     pandas_function: fc9
     description: OAT high vs SAT SP while economizing
     required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1125,8 +1147,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1134,7 +1156,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -1228,11 +1250,12 @@ rules:
 
   - rule_id: FC10
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc10_mat_oa_clg.sql
     pandas_function: fc10
     description: MAT-OAT delta while cooling and economizing
     required_roles: [mat, oa_t, oa_damper_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1260,8 +1283,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1269,7 +1292,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -1353,11 +1376,12 @@ rules:
 
   - rule_id: FC11
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc11_oa_sat_sp_clg.sql
     pandas_function: fc11
     description: OAT low vs SAT SP while cooling and economizing
     required_roles: [oa_t, sat_sp, oa_damper_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1385,8 +1409,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1394,7 +1418,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -1488,11 +1512,12 @@ rules:
 
   - rule_id: FC12
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc12_sat_mat_clg.sql
     pandas_function: fc12
     description: SAT above MAT while cooling
     required_roles: [sat, mat, oa_damper_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1520,8 +1545,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1529,7 +1554,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -1643,11 +1668,12 @@ rules:
 
   - rule_id: ECON-1
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: econ1_stuck_closed.sql
     pandas_function: econ1
     description: Economizer stuck closed when OAT favorable
     required_roles: [fan_cmd, oa_damper_pct, oa_t]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1675,8 +1701,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1684,7 +1710,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       econ1_oat_min:
         label: Favorable OAT
         default: 12.777778
@@ -1708,11 +1734,12 @@ rules:
 
   - rule_id: ECON-4
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: econ4_low_oa_frac.sql
     pandas_function: econ4
     description: Low estimated OA fraction
     required_roles: [mat, rat, oa_t, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -1740,8 +1767,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1749,7 +1776,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       oa_min_pct:
         label: Min OA fraction
         default: 21.0
@@ -1785,12 +1812,13 @@ rules:
 
   - rule_id: SV-RANGE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump, meter]
+    run_proof: gated
     sql_file: sv_range.sql
     pandas_function: null
     description: Sensor out of hard range
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow, kwh, electric_kw, electric_kwh]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow, kwh, electric_kw, electric_kwh, run_proof]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
@@ -1818,8 +1846,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1827,7 +1855,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -1881,12 +1909,13 @@ rules:
 
   - rule_id: SV-FLATLINE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
+    run_proof: gated
     sql_file: sv_flatline.sql
     pandas_function: null
     description: Sensor flatline (stuck)
     required_roles: []
     # Pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow, run_proof]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
@@ -1914,8 +1943,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -1923,7 +1952,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -1967,12 +1996,13 @@ rules:
 
   - rule_id: SV-SPIKE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
+    run_proof: gated
     sql_file: sv_spike.sql
     pandas_function: null
     description: Sensor rate-of-change spike
     required_roles: []
     # Pandas SENSOR_LIMITS catalog (temps + humidity + duct static).
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, duct_static, fan_status, fan_cmd, pump_status, chw_pump_cmd, chiller_status, zone_flow, run_proof]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
@@ -2000,8 +2030,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2009,7 +2039,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       spike_scale_pressure:
         label: Spike scale pressure
         default: 1.0
@@ -2073,13 +2103,14 @@ rules:
 
   - rule_id: SV-STALE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
+    run_proof: gated
     sql_file: sv_stale.sql
     pandas_function: null
     description: Stale data (no fresh samples)
     # Pandas gate is `always` (sensor sweep); do not require fan_cmd.
     # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
     required_roles: []
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, run_proof]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
@@ -2087,6 +2118,16 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
+      require_run_proof:
+        label: Require run proof
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        kind: boolean
+        frontend_control: slider
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -2131,11 +2172,12 @@ rules:
   - rule_id: SV-RATE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
     aliases: [SV-SLEW]
+    run_proof: gated
     sql_file: sv_rate.sql
     pandas_function: null
     description: Context-aware sensor rate of change
     required_roles: []
-    optional_roles: [oa_t, mat, zone_t, rat, sat]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, run_proof]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
@@ -2143,6 +2185,16 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
+      require_run_proof:
+        label: Require run proof
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        kind: boolean
+        frontend_control: slider
+        sql_placeholder: REQUIRE_RUN_PROOF
       sensor_span:
         label: Sensor span
         default: 100.0
@@ -2196,11 +2248,12 @@ rules:
 
   - rule_id: PID-HUNT-1
     equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
+    run_proof: gated
     sql_file: pid_hunt_1.sql
     pandas_function: null
     description: Suspected control-output hunting
     required_roles: []
-    optional_roles: [oa_damper_pct, clg_valve_pct, htg_valve_pct, damper_pct, loop_enabled, fan_status, fan_cmd]
+    optional_roles: [oa_damper_pct, clg_valve_pct, htg_valve_pct, damper_pct, loop_enabled, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2228,8 +2281,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2237,7 +2290,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 0.0
@@ -2321,11 +2374,12 @@ rules:
 
   - rule_id: FC4
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc4_os_hunting.sql
     pandas_function: null
     description: PID hunting (operating-state oscillation)
     required_roles: [oa_damper_pct, clg_valve_pct, fan_cmd]
-    optional_roles: [fan_status]
+    optional_roles: [fan_status, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2353,8 +2407,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2362,7 +2416,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -2406,11 +2460,12 @@ rules:
 
   - rule_id: FC5
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc5_sat_cold_heating.sql
     pandas_function: null
     description: SAT cold when heating commanded (GL36 D)
     required_roles: [sat, mat, htg_valve_pct, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2438,8 +2493,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2447,7 +2502,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       mode_delay_min:
         label: Mode delay after fan-on
         default: 10.0
@@ -2531,11 +2586,12 @@ rules:
 
   - rule_id: FC6
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc6_oa_frac_mismatch.sql
     pandas_function: null
     description: Estimated OA fraction mismatch
     required_roles: [mat, rat, oa_t, fan_cmd, vav_total_flow]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2563,8 +2619,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2572,7 +2628,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       oat_rat_delta_min:
         label: Min |OAT-RAT|
         default: 2.777777778
@@ -2636,11 +2692,12 @@ rules:
 
   - rule_id: FC14
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc14_chw_coil_dt_inactive.sql
     pandas_function: null
     description: CHW coil ΔT when inactive (GL36 L)
     required_roles: [clg_valve_pct]
-    optional_roles: [cooling_coil_entering_temp, cooling_coil_leaving_temp, mat, sat, oa_damper_pct, fan_status, fan_cmd]
+    optional_roles: [cooling_coil_entering_temp, cooling_coil_leaving_temp, mat, sat, oa_damper_pct, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2678,8 +2735,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2687,7 +2744,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -2791,11 +2848,12 @@ rules:
 
   - rule_id: FC15
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: fc15_hw_coil_dt_inactive.sql
     pandas_function: null
     description: HW coil ΔT when inactive (GL36 M)
     required_roles: []
-    optional_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, mat, sat, htg_valve_pct, clg_valve_pct, fan_status, fan_cmd]
+    optional_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, mat, sat, htg_valve_pct, clg_valve_pct, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2833,8 +2891,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2842,7 +2900,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -2956,11 +3014,12 @@ rules:
 
   - rule_id: AHU-SATDEV
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: ahu_satdev.sql
     pandas_function: null
     description: SAT deviation from setpoint
     required_roles: [sat, sat_sp]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2988,8 +3047,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -2997,7 +3056,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -3021,6 +3080,8 @@ rules:
 
   - rule_id: AHU-DUCTHI
     equipment_kinds: [ahu]
+    run_proof: exempt
+    run_proof_note: "evaluates when the fan is proven on OR the duct static itself shows pressure; a proof gate would hide high static with a failed status"
     sql_file: ahu_ducthi.sql
     pandas_function: null
     description: Duct static pressure high
@@ -3096,11 +3157,12 @@ rules:
 
   - rule_id: AHU-SIMUL
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: ahu_simul.sql
     pandas_function: null
     description: Heating and cooling simultaneous
     required_roles: [htg_valve_pct, clg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3128,8 +3190,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3137,7 +3199,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -3161,11 +3223,12 @@ rules:
 
   - rule_id: ECON-3
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: econ3_mech_without_econ.sql
     pandas_function: null
     description: Mech cooling without integrated economizer
     required_roles: [oa_damper_pct, clg_valve_pct]
-    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3193,8 +3256,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3202,7 +3265,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -3266,11 +3329,12 @@ rules:
 
   - rule_id: ECON-5
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: econ5_preheat_over.sql
     pandas_function: null
     description: Preheat over-conditioning
     required_roles: [preheat_leave_t, sat_sp, oa_t, htg_valve_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3298,8 +3362,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3307,7 +3371,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -3341,11 +3405,12 @@ rules:
 
   - rule_id: ECON-6
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: econ6_econ_freezing.sql
     pandas_function: null
     description: Economizing in freezing weather
     required_roles: [oa_damper_pct]
-    optional_roles: [web_oa_t, fan_status, fan_cmd]
+    optional_roles: [web_oa_t, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3373,8 +3438,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3382,7 +3447,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -3416,11 +3481,12 @@ rules:
 
   - rule_id: ECON-7
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: econ7_ok_not_economizing.sql
     pandas_function: null
     description: Economizer OK but not economizing
     required_roles: [oa_damper_pct, clg_valve_pct]
-    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3448,8 +3514,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3457,7 +3523,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -3521,6 +3587,8 @@ rules:
 
   - rule_id: MECH-OAT-1
     equipment_kinds: [ahu, chiller, heatpump]
+    run_proof: exempt
+    run_proof_note: "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
     sql_file: mech_oat_1.sql
     pandas_function: null
     description: Mechanical cooling below 15.6 °C web OAT
@@ -3556,6 +3624,8 @@ rules:
 
   - rule_id: CMD-1
     equipment_kinds: [ahu]
+    run_proof: exempt
+    run_proof_note: "command versus status mismatch: the proof is the signal"
     sql_file: cmd1_fan_mismatch.sql
     pandas_function: null
     description: Fan cmd/status mismatch
@@ -3580,11 +3650,12 @@ rules:
 
   - rule_id: OA-1
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: oa1_low_oa_frac.sql
     pandas_function: null
     description: Low OA fraction
     required_roles: [mat, rat, oa_t, fan_cmd]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3612,8 +3683,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3621,7 +3692,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -3655,11 +3726,12 @@ rules:
 
   - rule_id: DMP-1
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: dmp1_oa_damper_leak.sql
     pandas_function: null
     description: OA damper leakage
     required_roles: [oa_damper_pct, oa_t, mat]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3687,8 +3759,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3696,7 +3768,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -3720,11 +3792,12 @@ rules:
 
   - rule_id: VLV-1
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: vlv1_clg_valve_leak.sql
     pandas_function: null
     description: Cooling valve leakage
     required_roles: [clg_valve_pct, sat, sat_sp, mat]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3752,8 +3825,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3761,7 +3834,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -3795,11 +3868,12 @@ rules:
 
   - rule_id: VAV-3
     equipment_kinds: [vav]
+    run_proof: gated
     sql_file: vav3_excessive_reheat.sql
     pandas_function: null
     description: Excessive reheat during warm weather
     required_roles: [oa_t, reheat_valve_pct, zone_flow]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3827,8 +3901,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3836,7 +3910,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -3880,11 +3954,12 @@ rules:
 
   - rule_id: VAV-4
     equipment_kinds: [vav]
+    run_proof: gated
     sql_file: vav4_damper_full_open.sql
     pandas_function: null
     description: Damper stuck at full open
     required_roles: [damper_pct, zone_flow]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3912,8 +3987,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -3921,7 +3996,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -3965,11 +4040,12 @@ rules:
 
   - rule_id: VAV-5
     equipment_kinds: [vav]
+    run_proof: gated
     sql_file: vav5_airflow_bias.sql
     pandas_function: null
     description: Airflow sensor bias
     required_roles: [zone_flow, damper_pct]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3997,8 +4073,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4006,7 +4082,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -4040,11 +4116,12 @@ rules:
 
   - rule_id: VAV-6
     equipment_kinds: [vav]
+    run_proof: gated
     sql_file: vav6_reheat_free_cool.sql
     pandas_function: vav6
     description: Reheat when cooling available
     required_roles: [oa_t, reheat_valve_pct]
-    optional_roles: [clg_available]
+    optional_roles: [clg_available, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4072,8 +4149,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4081,7 +4158,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       free_cool_oat:
         label: Free-cool OAT
         default: 18.333333333
@@ -4115,11 +4192,12 @@ rules:
 
   - rule_id: VAV-REHEAT
     equipment_kinds: [vav]
+    run_proof: gated
     sql_file: vav_reheat.sql
     pandas_function: null
     description: Reheat valve stuck / no temp rise
     required_roles: [reheat_valve_pct, vav_discharge_t, vav_inlet_t, zone_flow]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4147,8 +4225,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4156,7 +4234,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -4200,11 +4278,12 @@ rules:
 
   - rule_id: VAV-AHU-LEAVE
     equipment_kinds: [vav]
+    run_proof: gated
     sql_file: vav_ahu_leave.sql
     pandas_function: null
     description: VAV leave vs parent AHU SAT (fedBy)
     required_roles: [vav_discharge_t, ahu_sat, zone_flow]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4212,6 +4291,16 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
+      require_run_proof:
+        label: Require run proof
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        kind: boolean
+        frontend_control: slider
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -4245,11 +4334,12 @@ rules:
 
   - rule_id: VAV-7
     equipment_kinds: [vav]
+    run_proof: gated
     sql_file: vav7_min_airflow.sql
     pandas_function: null
     description: Min airflow / fixed high flow
     required_roles: [zone_flow]
-    optional_roles: [min_flow_sp, fan_status, fan_cmd]
+    optional_roles: [min_flow_sp, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4277,8 +4367,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4286,7 +4376,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -4350,11 +4440,12 @@ rules:
 
   - rule_id: RESET-1
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: reset1_sat_oa_reset.sql
     pandas_function: reset1
     description: SAT reset not tracking outdoor air
     required_roles: [sat_sp, oa_t]
-    optional_roles: [fan_status, fan_cmd]
+    optional_roles: [fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4382,8 +4473,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4391,7 +4482,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       reset_err:
         label: Reset error
         default: 1.666667
@@ -4445,6 +4536,8 @@ rules:
 
   - rule_id: CHW-NOLOAD-1
     equipment_kinds: [chiller, chwPlant]
+    run_proof: exempt
+    run_proof_note: "no-load detection with its own mechanical-cooling proof and a 30 min confirmation that must see off samples"
     sql_file: chw_noload_1.sql
     pandas_function: null
     description: Chiller running with no building load
@@ -4510,11 +4603,12 @@ rules:
 
   - rule_id: CHW-1
     equipment_kinds: [chiller, chwPlant]
+    run_proof: gated
     sql_file: chw1_low_dt.sql
     pandas_function: chw1
     description: Low chilled-water ΔT
     required_roles: [chw_supply_t, chw_return_t]
-    optional_roles: [chw_pump_cmd, pump_status, chiller_status, chiller_current, chiller_amps, chiller_power, chw_flow]
+    optional_roles: [chw_pump_cmd, pump_status, chiller_status, chiller_current, chiller_amps, chiller_power, chw_flow, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4542,8 +4636,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4551,7 +4645,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -4575,11 +4669,12 @@ rules:
 
   - rule_id: CHW-2
     equipment_kinds: [chiller, chwPlant]
+    run_proof: gated
     sql_file: chw2_dp_low.sql
     pandas_function: null
     description: DP below SP at max pump speed
     required_roles: [chw_dp, chw_dp_sp, chw_pump_cmd]
-    optional_roles: [pump_status, chiller_status, chw_flow]
+    optional_roles: [pump_status, chiller_status, chw_flow, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4607,8 +4702,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4616,7 +4711,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -4650,11 +4745,12 @@ rules:
 
   - rule_id: CHW-3
     equipment_kinds: [chiller, chwPlant]
+    run_proof: gated
     sql_file: chw3_supply_band.sql
     pandas_function: null
     description: Plant supply temp outside deadband
     required_roles: [chw_supply_t, chw_supply_sp, chw_pump_cmd]
-    optional_roles: [pump_status, chiller_status, chw_flow]
+    optional_roles: [pump_status, chiller_status, chw_flow, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4682,8 +4778,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4691,7 +4787,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -4715,11 +4811,12 @@ rules:
 
   - rule_id: CHW-4
     equipment_kinds: [chiller, chwPlant]
+    run_proof: gated
     sql_file: chw4_flow_high.sql
     pandas_function: null
     description: Flow high at max pump
     required_roles: [chw_flow, chw_pump_cmd]
-    optional_roles: [pump_status, chiller_status]
+    optional_roles: [pump_status, chiller_status, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4747,8 +4844,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4756,7 +4853,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -4790,11 +4887,12 @@ rules:
 
   - rule_id: CW-OPT-1
     equipment_kinds: [chiller, cooling_tower, chwPlant]
+    run_proof: gated
     sql_file: cw_opt_1.sql
     pandas_function: null
     description: Condenser water not optimized vs wet-bulb
     required_roles: [cw_supply_t, web_wb_t]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4822,8 +4920,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4831,7 +4929,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -4865,11 +4963,12 @@ rules:
 
   - rule_id: CW-APR-1
     equipment_kinds: [chiller, cooling_tower, chwPlant]
+    run_proof: gated
     sql_file: cw_apr_1.sql
     pandas_function: null
     description: High CW approach at full tower fan
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4897,8 +4996,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4906,7 +5005,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -4940,11 +5039,12 @@ rules:
 
   - rule_id: CW-FAN-1
     equipment_kinds: [chiller, cooling_tower, chwPlant]
+    run_proof: gated
     sql_file: cw_fan_1.sql
     pandas_function: null
     description: Excess tower fan energy vs wet-bulb limit
     required_roles: [cw_supply_t, web_wb_t, tower_fan_cmd]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -4972,8 +5072,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -4981,7 +5081,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 900.0
@@ -5025,11 +5125,12 @@ rules:
 
   - rule_id: HP-1
     equipment_kinds: [heatpump]
+    run_proof: gated
     sql_file: hp1_discharge_cold.sql
     pandas_function: null
     description: Discharge cold when heating
     required_roles: [sat, zone_t, fan_cmd]
-    optional_roles: [compressor_status, fan_status]
+    optional_roles: [compressor_status, fan_status, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5057,8 +5158,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -5066,7 +5167,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -5100,6 +5201,8 @@ rules:
 
   - rule_id: WX-1
     equipment_kinds: [weather]
+    run_proof: exempt
+    run_proof_note: "weather-source sanity; no running equipment is judged"
     sql_file: wx1_oa_spike.sql
     pandas_function: null
     description: OA temperature spike
@@ -5134,11 +5237,12 @@ rules:
 
   - rule_id: TRIM-1
     equipment_kinds: [ahu]
+    run_proof: gated
     sql_file: trim1_duct_static.sql
     pandas_function: null
     description: Duct static trim advisory
     required_roles: [duct_static]
-    optional_roles: [duct_static_sp, static_reset_request, fan_status, fan_cmd]
+    optional_roles: [duct_static_sp, static_reset_request, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5166,8 +5270,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -5175,7 +5279,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 1800.0
@@ -5209,11 +5313,12 @@ rules:
 
   - rule_id: TRIM-3
     equipment_kinds: [boiler]
+    run_proof: gated
     sql_file: trim3_hwst.sql
     pandas_function: null
     description: HWST trim advisory
     required_roles: [hw_supply_t, hw_reset_request_sum]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5241,8 +5346,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -5250,7 +5355,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 1800.0
@@ -5284,11 +5389,12 @@ rules:
 
   - rule_id: TRIM-4
     equipment_kinds: [chiller, chwPlant]
+    run_proof: gated
     sql_file: trim4_chw_reset.sql
     pandas_function: null
     description: CHW plant reset advisory
     required_roles: [chw_supply_t, chw_reset_request_sum]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5316,8 +5422,8 @@ rules:
         kind: duration_minutes
         frontend_control: slider
         sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
+      require_run_proof:
+        label: Require run proof
         default: 1.0
         min: 0.0
         max: 1.0
@@ -5325,7 +5431,7 @@ rules:
         unit: bool
         kind: boolean
         frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
+        sql_placeholder: REQUIRE_RUN_PROOF
       confirm_seconds:
         label: Confirm time
         default: 1800.0
@@ -5359,6 +5465,8 @@ rules:
 
   - rule_id: SCHED-1
     equipment_kinds: [ahu, zone_other]
+    run_proof: exempt
+    run_proof_note: "runtime outside the schedule: the proof is the signal"
     sql_file: sched1_unoccupied_runtime.sql
     pandas_function: sched1
     aliases: [excess_runtime]
@@ -5408,6 +5516,8 @@ rules:
 
   - rule_id: SCHED-247
     equipment_kinds: [ahu, vav, zone_other, chiller, boiler, heatpump]
+    run_proof: exempt
+    run_proof_note: "always-on detection: the proof is the signal and off samples must be seen"
     sql_file: sched247_always_on.sql
     pandas_function: _sched247
     description: Always-on fan or pump runtime
@@ -5443,6 +5553,8 @@ rules:
 
   - rule_id: FCU-SENSOR-NULL
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_sensor_null.sql
     pandas_function: fcu_sensor_null
     description: Own zone setpoint present but zone temperature null for at least 90% of window
@@ -5467,6 +5579,8 @@ rules:
         sql_placeholder: NULL_FRACTION
   - rule_id: FCU-HTG-COIL
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_htg_coil.sql
     pandas_function: fcu_htg_coil
     description: Fan-on heating coil under-delivery
@@ -5501,6 +5615,8 @@ rules:
         sql_placeholder: COIL_DELTA
   - rule_id: FCU-CLG-COIL
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_clg_coil.sql
     pandas_function: fcu_clg_coil
     description: Fan-on cooling coil under-delivery
@@ -5525,6 +5641,8 @@ rules:
         sql_placeholder: VALVE_OPEN
   - rule_id: FCU-VALVE-PASS-HTG
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_valve_pass_htg.sql
     pandas_function: fcu_valve_pass_htg
     description: Heating valve passing with both commands shut
@@ -5549,6 +5667,8 @@ rules:
         sql_placeholder: PASS_DELTA
   - rule_id: FCU-VALVE-PASS-CLG
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_valve_pass_clg.sql
     pandas_function: fcu_valve_pass_clg
     description: Cooling valve passing with both commands shut
@@ -5573,6 +5693,8 @@ rules:
         sql_placeholder: PASS_DELTA
   - rule_id: FCU-DAMPER-POS
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_damper_pos.sql
     pandas_function: fcu_damper_pos
     description: Damper feedback more than 15 points below command
@@ -5607,6 +5729,8 @@ rules:
         sql_placeholder: POSITION_ERROR
   - rule_id: FCU-CO2-DAMPER
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_co2_damper.sql
     pandas_function: fcu_co2_damper
     description: High valid CO2 with low outdoor-air damper command
@@ -5641,6 +5765,8 @@ rules:
         sql_placeholder: DAMPER_LOW
   - rule_id: FCU-DEADBAND
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_deadband.sql
     pandas_function: fcu_deadband
     description: Heating/cooling pass-through setpoint deadband below 1 C
@@ -5664,6 +5790,8 @@ rules:
         sql_placeholder: DEADBAND
   - rule_id: FCU-MODE-CYCLE
     equipment_kinds: [zone_other, general, ahu]
+    run_proof: exempt
+    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     sql_file: fcu_mode_cycle.sql
     pandas_function: fcu_mode_cycle
     description: Four or more heat/cool valve mode changes in window
@@ -5698,6 +5826,8 @@ rules:
 
   - rule_id: UTIL-MONTHLY
     equipment_kinds: [meter, ahu, heatpump]
+    run_proof: exempt
+    run_proof_note: "utility meter data, no running equipment"
     sql_file: util_monthly_fault.sql
     pandas_function: null
     description: BAS monthly kWh vs utility monthly bills (% deviation)
@@ -5723,6 +5853,8 @@ rules:
 
   - rule_id: UTIL-INTERVAL
     equipment_kinds: [meter, ahu, heatpump]
+    run_proof: exempt
+    run_proof_note: "utility meter data, no running equipment"
     sql_file: util_interval_fault.sql
     pandas_function: null
     description: BAS 15m vs utility interval (MAE threshold)

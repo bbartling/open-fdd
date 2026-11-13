@@ -256,6 +256,10 @@
       "scale": "fraction",
       "type": "double"
     },
+    "run_proof": {
+      "scale": "boolean",
+      "type": "double"
+    },
     "sa_h": {
       "scale": "percent_rh",
       "type": "double"
@@ -633,6 +637,10 @@
         "zone_t": {
           "type": "double",
           "role": "zone_t"
+        },
+        "run_proof": {
+          "type": "double",
+          "role": "run_proof"
         }
       }
     },

@@ -2,7 +2,15 @@
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- econ7_ok_not_economizing.sql — Economizer OK but not economizing
 -- Web DB+DP: prefer equipment web_oa_*; else weather sidecar. Never BAS oa_t.
-WITH wx AS (
+WITH rp AS (
+  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
+  SELECT equipment_id,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+  FROM history
+  GROUP BY equipment_id
+),
+wx AS (
   SELECT
     timestamp_utc,
     MAX(web_oa_t) AS wx_web_oa_t,
@@ -12,6 +20,7 @@ WITH wx AS (
 ),
 h AS (
   SELECT
+    run_proof,
     h.equipment_id,
     h.timestamp_utc,
     COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
@@ -34,6 +43,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN web_oa_t IS NULL OR web_oa_dp IS NULL OR oa_d IS NULL OR clg IS NULL THEN 0
       WHEN web_oa_t >= {{ECON7_DB_MIN}} AND web_oa_t < {{ECON7_DB_MAX}} AND web_oa_dp < {{ECON7_DP_MAX}}
@@ -105,8 +115,8 @@ final AS (
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
-  SUM(held_seconds) / 3600.0 AS covered_hours,
-  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS fault_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(held_seconds) / 3600.0 END AS covered_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE 100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) END AS fault_pct
 FROM final
 GROUP BY equipment_id;

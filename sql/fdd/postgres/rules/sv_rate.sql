@@ -1,15 +1,16 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Sensor-series input and output are keyed by the bound point UUID, not the role.
-WITH base_proof AS (
+WITH rp AS (
+  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
+  SELECT equipment_id,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+  FROM history
+  GROUP BY equipment_id
+),
+base_proof AS (
   SELECT h.*,
-    CASE
-      WHEN h.fan_status IS NOT NULL THEN CASE WHEN h.fan_status > 0.05 THEN 1 ELSE 0 END
-      WHEN h.fan_cmd IS NOT NULL THEN CASE WHEN h.fan_cmd > 0.01 THEN 1 ELSE 0 END
-      WHEN h.zone_flow IS NOT NULL THEN CASE WHEN h.zone_flow > 23.597350 THEN 1 ELSE 0 END
-      WHEN h.pump_status IS NOT NULL THEN CASE WHEN h.pump_status > 0.05 THEN 1 ELSE 0 END
-      WHEN h.chw_pump_cmd IS NOT NULL THEN CASE WHEN h.chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
-      WHEN h.chiller_status IS NOT NULL THEN CASE WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END
-      ELSE 1 END AS energized
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN h.run_proof > 0.05 THEN 1 ELSE 0 END AS energized
   FROM history h
 ),
 equipment_summary AS (
@@ -29,10 +30,13 @@ sensor_rows AS (
   SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,
     CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch
       THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,
+    COALESCE(bp.energized, 1) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
     fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
+  LEFT JOIN base_proof bp
+    ON bp.equipment_id = s.equipment_id AND bp.timestamp_utc = s.timestamp_utc
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
@@ -79,7 +83,7 @@ lagged AS (
 ),
 base AS (
   SELECT lagged.*,
-    CAST(CASE WHEN over_rate = 1 AND previous_over_rate = 1 THEN 1 ELSE 0 END AS INT) AS raw_fault,
+    CAST(CASE WHEN over_rate = 1 AND previous_over_rate = 1 AND energized = 1 THEN 1 ELSE 0 END AS INT) AS raw_fault,
     CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0
          WHEN next_epoch - epoch_seconds > {{MAX_GAP_HOURS}} * 3600.0 THEN 0.0
          ELSE next_epoch - epoch_seconds END AS held_seconds
@@ -120,8 +124,8 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
-  COALESCE(scored.covered_hours, 0.0) AS covered_hours
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id) = 1 THEN NULL ELSE CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END END AS fault_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id) = 1 THEN 0.0 ELSE COALESCE(scored.covered_hours, 0.0) END AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
 ORDER BY ss.equipment_id, ss.series_id;

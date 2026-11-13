@@ -121,7 +121,12 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
     values = json.loads((ROOT / 'runtime_defaults.json').read_text())
     controls = parameter_controls if parameter_controls is not None else rule['parameters']
     chosen = {k: d['default'] for k,d in controls.items()}
-    for key,value in (overrides or {}).items():
+    overrides = dict(overrides or {})
+    # #1608: require_operational_gate is the old name of require_run_proof (kept as an alias; the new name wins)
+    if 'require_operational_gate' in overrides and 'require_operational_gate' not in controls and 'require_run_proof' in controls:
+        legacy = overrides.pop('require_operational_gate')
+        overrides.setdefault('require_run_proof', legacy)
+    for key,value in overrides.items():
         if key not in controls:
             raise ValueError(f'Unknown tuner {key} for {rule_id}; use catalog keys (confirm_min is minutes)')
         if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value):
@@ -136,11 +141,11 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
         if key != 'confirm_min':
             values[d['sql_placeholder']] = chosen[key]
     # Apply legacy masters only when explicitly overridden; preserve explicit per-sensor choices.
-    if 'mix_tol' in (overrides or {}):
+    if 'mix_tol' in overrides:
         for key in ('eps_mat','eps_oat','eps_rat','eps_sat'):
-            if key not in (overrides or {}):
+            if key not in overrides:
                 values[key.upper()] = chosen['mix_tol']
-    if 'supply_tol' in (overrides or {}):
+    if 'supply_tol' in overrides:
         values['EPS_SAT'] = chosen['supply_tol']
     values['MODE_DELAY_MIN'] = max(values.get('MODE_DELAY_MIN',0), values.get('STARTUP_DELAY_MIN',0))
     values['POLL_SECONDS'] = poll_seconds

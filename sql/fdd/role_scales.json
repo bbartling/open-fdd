@@ -57,6 +57,7 @@
   "rat": "si:degC",
   "reheat_valve_pct": "fraction",
   "return_fan": "fraction",
+  "run_proof": "boolean",
   "sa_h": "percent_rh",
   "sat": "si:degC",
   "sat_sp": "si:degC",

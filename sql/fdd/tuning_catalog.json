@@ -40,7 +40,9 @@
         "fan_cmd"
       ],
       "rule_id": "FAN-RUNTIME-HOURS",
-      "sql_file": "fan_runtime_hours.sql"
+      "sql_file": "fan_runtime_hours.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "measures the equipment runtime itself"
     },
     {
       "confirm_seconds": 900,
@@ -187,7 +189,9 @@
         "zone_t"
       ],
       "rule_id": "VAV-1",
-      "sql_file": "vav1_comfort_fault.sql"
+      "sql_file": "vav1_comfort_fault.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "zone comfort band while occupied; independent of the air handler running"
     },
     {
       "confirm_seconds": 900,
@@ -299,7 +303,9 @@
         "occ_mode"
       ],
       "rule_id": "VAV-2",
-      "sql_file": "vav2_night_setback.sql"
+      "sql_file": "vav2_night_setback.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "night setback runs while the air handler is off by design"
     },
     {
       "confirm_seconds": 0,
@@ -372,7 +378,9 @@
         "zone_t"
       ],
       "rule_id": "AVG-ZONE-TEMP",
-      "sql_file": "avg_zone_temp.sql"
+      "sql_file": "avg_zone_temp.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "zone statistic, not an equipment fault"
     },
     {
       "confirm_seconds": 0,
@@ -444,7 +452,9 @@
         "zone_t"
       ],
       "rule_id": "ZONE-COMFORT-PCT",
-      "sql_file": "zone_comfort_pct.sql"
+      "sql_file": "zone_comfort_pct.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "zone comfort statistic, not an equipment fault"
     },
     {
       "confirm_seconds": 0,
@@ -518,7 +528,9 @@
         "zone_t"
       ],
       "rule_id": "FAULT-ELAPSED-HOURS",
-      "sql_file": "fault_elapsed_hours.sql"
+      "sql_file": "fault_elapsed_hours.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "aggregates fault flags of other rules"
     },
     {
       "confirm_seconds": 900,
@@ -612,7 +624,9 @@
         "oa_t"
       ],
       "rule_id": "OAT-METEO",
-      "sql_file": "oat_meteo_fault.sql"
+      "sql_file": "oat_meteo_fault.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "compares two outside-air sources; no running equipment is judged"
     },
     {
       "aliases": [
@@ -630,7 +644,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -772,18 +787,18 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -814,7 +829,7 @@
         "MODE_DELAY_ROWS_PRECEDING",
         "OA_DAMPER_ECON_LOW",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -825,7 +840,8 @@
         "oa_damper_pct"
       ],
       "rule_id": "FC13-SAT-HIGH",
-      "sql_file": "sat_high_fault.sql"
+      "sql_file": "sat_high_fault.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -842,7 +858,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -909,18 +926,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -945,7 +962,8 @@
         "CONFIRM_ROWS",
         "ECON2_DAMPER",
         "ECON2_OAT_HI",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -954,7 +972,8 @@
         "oa_damper_pct"
       ],
       "rule_id": "ECON-2",
-      "sql_file": "economizer_fault.sql"
+      "sql_file": "economizer_fault.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -967,7 +986,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -1064,18 +1084,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -1104,7 +1124,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1114,7 +1134,8 @@
         "fan_cmd"
       ],
       "rule_id": "FC1",
-      "sql_file": "fc1_duct_static_low.sql"
+      "sql_file": "fc1_duct_static_low.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -1127,7 +1148,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -1254,18 +1276,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -1295,7 +1317,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1306,7 +1328,8 @@
         "fan_cmd"
       ],
       "rule_id": "FC2",
-      "sql_file": "fc2_mat_low.sql"
+      "sql_file": "fc2_mat_low.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -1319,7 +1342,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -1446,18 +1470,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -1487,7 +1511,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1498,7 +1522,8 @@
         "fan_cmd"
       ],
       "rule_id": "FC3",
-      "sql_file": "fc3_mat_high.sql"
+      "sql_file": "fc3_mat_high.sql",
+      "run_proof": "gated"
     },
     {
       "blocker": "htg_valve_pct missing on some AHUs — Python and SQL both skip",
@@ -1515,7 +1540,8 @@
       ],
       "optional_roles": [
         "fan_cmd",
-        "fan_status"
+        "fan_status",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -1612,18 +1638,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -1651,7 +1677,7 @@
         "HTG_FULL_MIN",
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1661,7 +1687,8 @@
         "htg_valve_pct"
       ],
       "rule_id": "FC7",
-      "sql_file": "fc7_sat_low_heating.sql"
+      "sql_file": "fc7_sat_low_heating.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -1674,7 +1701,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -1831,18 +1859,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -1889,7 +1917,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1900,7 +1928,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "FC8",
-      "sql_file": "fc8_sat_mat_econ.sql"
+      "sql_file": "fc8_sat_mat_econ.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -1916,7 +1945,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -2073,18 +2103,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -2115,7 +2145,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -2126,7 +2156,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "FC9",
-      "sql_file": "fc9_oa_sat_sp_econ.sql"
+      "sql_file": "fc9_oa_sat_sp_econ.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -2141,7 +2172,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -2283,18 +2315,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -2324,7 +2356,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -2335,7 +2367,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "FC10",
-      "sql_file": "fc10_mat_oa_clg.sql"
+      "sql_file": "fc10_mat_oa_clg.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -2351,7 +2384,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -2508,18 +2542,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -2550,7 +2584,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -2561,7 +2595,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "FC11",
-      "sql_file": "fc11_oa_sat_sp_clg.sql"
+      "sql_file": "fc11_oa_sat_sp_clg.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -2578,7 +2613,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -2750,18 +2786,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -2808,7 +2844,7 @@
         "MIX_TOL",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -2819,7 +2855,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "FC12",
-      "sql_file": "fc12_sat_mat_clg.sql"
+      "sql_file": "fc12_sat_mat_clg.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -2836,7 +2873,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -2903,18 +2941,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -2939,7 +2977,8 @@
         "CONFIRM_ROWS",
         "ECON1_DAMPER_MAX",
         "ECON1_OAT_MIN",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -2949,7 +2988,8 @@
         "oa_t"
       ],
       "rule_id": "ECON-1",
-      "sql_file": "econ1_stuck_closed.sql"
+      "sql_file": "econ1_stuck_closed.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -2966,7 +3006,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -3033,18 +3074,18 @@
           "step": 0.055556,
           "unit": "degC_delta"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -3069,7 +3110,8 @@
         "CONFIRM_ROWS",
         "OAT_RAT_DELTA_MIN",
         "OA_MIN_PCT",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -3080,7 +3122,8 @@
         "fan_cmd"
       ],
       "rule_id": "ECON-4",
-      "sql_file": "econ4_low_oa_frac.sql"
+      "sql_file": "econ4_low_oa_frac.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -3121,7 +3164,8 @@
         "chiller_status",
         "kwh",
         "electric_kw",
-        "electric_kwh"
+        "electric_kwh",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -3206,18 +3250,18 @@
           "step": 0.1,
           "unit": "x"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -3260,13 +3304,15 @@
         "POLL_SECONDS",
         "RANGE_SCALE_HUMIDITY",
         "RANGE_SCALE_PRESSURE",
-        "RANGE_SCALE_TEMPERATURE"
+        "RANGE_SCALE_TEMPERATURE",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SV-RANGE",
-      "sql_file": "sv_range.sql"
+      "sql_file": "sv_range.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -3302,7 +3348,8 @@
         "fan_cmd",
         "pump_status",
         "chw_pump_cmd",
-        "chiller_status"
+        "chiller_status",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -3372,18 +3419,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -3424,13 +3471,15 @@
         "FLATLINE_SECONDS",
         "FLATLINE_TOL",
         "MAX_SILENCE_HOURS",
-        "MAX_SILENCE_SECONDS"
+        "MAX_SILENCE_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SV-FLATLINE",
-      "sql_file": "sv_flatline.sql"
+      "sql_file": "sv_flatline.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -3466,7 +3515,8 @@
         "fan_cmd",
         "pump_status",
         "chw_pump_cmd",
-        "chiller_status"
+        "chiller_status",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -3506,18 +3556,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -3619,7 +3669,7 @@
         "MAX_SILENCE_SECONDS",
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE",
+        "REQUIRE_RUN_PROOF",
         "SPIKE_SCALE_HUMIDITY",
         "SPIKE_SCALE_PRESSURE",
         "SPIKE_SCALE_TEMPERATURE"
@@ -3628,7 +3678,8 @@
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SV-SPIKE",
-      "sql_file": "sv_spike.sql"
+      "sql_file": "sv_spike.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -3655,7 +3706,8 @@
         "chw_return_t",
         "hw_supply_t",
         "hw_return_t",
-        "oa_h"
+        "oa_h",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -3724,6 +3776,21 @@
           "sql_placeholder": "MAX_SILENCE_HOURS",
           "step": 0.25,
           "unit": "h"
+        },
+        "require_run_proof": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "require_run_proof",
+          "kind": "boolean",
+          "label": "Require run proof",
+          "max": 1.0,
+          "min": 0.0,
+          "step": 1.0,
+          "unit": "bool",
+          "sql_placeholder": "REQUIRE_RUN_PROOF"
         }
       },
       "parity_status": "sql_screening",
@@ -3731,6 +3798,7 @@
         "CONFIRM_ROWS",
         "MAX_SILENCE_HOURS",
         "MAX_SILENCE_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "STALE_SECONDS",
         "STALE_TOL"
       ],
@@ -3738,7 +3806,8 @@
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SV-STALE",
-      "sql_file": "sv_stale.sql"
+      "sql_file": "sv_stale.sql",
+      "run_proof": "gated"
     },
     {
       "aliases": [
@@ -3765,7 +3834,8 @@
         "mat",
         "zone_t",
         "rat",
-        "sat"
+        "sat",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -3849,6 +3919,21 @@
           "sql_placeholder": "STEADY_FAULT_PER_HOUR",
           "step": 0.277778,
           "unit": "degC_delta_per_h"
+        },
+        "require_run_proof": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "require_run_proof",
+          "kind": "boolean",
+          "label": "Require run proof",
+          "max": 1.0,
+          "min": 0.0,
+          "step": 1.0,
+          "unit": "bool",
+          "sql_placeholder": "REQUIRE_RUN_PROOF"
         }
       },
       "parity_status": "sql_screening",
@@ -3856,6 +3941,7 @@
         "CONFIRM_ROWS",
         "MAX_GAP_HOURS",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "SENSOR_SPAN",
         "STEADY_FAULT_PER_HOUR"
       ],
@@ -3863,7 +3949,8 @@
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SV-RATE",
-      "sql_file": "sv_rate.sql"
+      "sql_file": "sv_rate.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 0,
@@ -3890,7 +3977,8 @@
         "damper_pct",
         "loop_enabled",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -4002,18 +4090,18 @@
           "step": 5.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -4072,6 +4160,7 @@
         "MINIMUM_REVERSALS",
         "MINIMUM_SPAN_PCT",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "TOTAL_VARIATION_FAULT_PCT",
         "WINDOW_ROWS",
         "WINDOW_ROWS_PRECEDING"
@@ -4080,7 +4169,8 @@
       "priority": "P0",
       "required_roles": [],
       "rule_id": "PID-HUNT-1",
-      "sql_file": "pid_hunt_1.sql"
+      "sql_file": "pid_hunt_1.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 3600,
@@ -4095,7 +4185,8 @@
         "ahu"
       ],
       "optional_roles": [
-        "fan_status"
+        "fan_status",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -4177,18 +4268,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -4215,7 +4306,7 @@
         "FAN_ON_MIN",
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -4225,7 +4316,8 @@
         "fan_cmd"
       ],
       "rule_id": "FC4",
-      "sql_file": "fc4_os_hunting.sql"
+      "sql_file": "fc4_os_hunting.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -4240,7 +4332,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -4382,18 +4475,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -4423,7 +4516,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -4434,7 +4527,8 @@
         "fan_cmd"
       ],
       "rule_id": "FC5",
-      "sql_file": "fc5_sat_cold_heating.sql"
+      "sql_file": "fc5_sat_cold_heating.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -4447,7 +4541,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -4559,18 +4654,18 @@
           "step": 0.277777778,
           "unit": "degC"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -4600,7 +4695,7 @@
         "MODE_DELAY_ROWS_PRECEDING",
         "OAT_RAT_DELTA_MIN",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -4612,7 +4707,8 @@
         "vav_total_flow"
       ],
       "rule_id": "FC6",
-      "sql_file": "fc6_oa_frac_mismatch.sql"
+      "sql_file": "fc6_oa_frac_mismatch.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -4636,7 +4732,8 @@
         "sat",
         "oa_damper_pct",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -4823,18 +4920,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -4864,7 +4961,7 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -4872,7 +4969,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "FC14",
-      "sql_file": "fc14_chw_coil_dt_inactive.sql"
+      "sql_file": "fc14_chw_coil_dt_inactive.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -4897,7 +4995,8 @@
         "htg_valve_pct",
         "clg_valve_pct",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -5099,18 +5198,18 @@
           "step": 1.0,
           "unit": "min"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -5141,13 +5240,14 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_OPERATIONAL_GATE"
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
       "required_roles": [],
       "rule_id": "FC15",
-      "sql_file": "fc15_hw_coil_dt_inactive.sql"
+      "sql_file": "fc15_hw_coil_dt_inactive.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -5164,7 +5264,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -5201,18 +5302,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -5251,6 +5352,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "SAT_DEV_ERR"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -5260,7 +5362,8 @@
         "sat_sp"
       ],
       "rule_id": "AHU-SATDEV",
-      "sql_file": "ahu_satdev.sql"
+      "sql_file": "ahu_satdev.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -5390,7 +5493,9 @@
         "fan_cmd"
       ],
       "rule_id": "AHU-DUCTHI",
-      "sql_file": "ahu_ducthi.sql"
+      "sql_file": "ahu_ducthi.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "evaluates when the fan is proven on OR the duct static itself shows pressure; a proof gate would hide high static with a failed status"
     },
     {
       "confirm_seconds": 300,
@@ -5407,7 +5512,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -5444,18 +5550,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -5494,6 +5600,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "VALVE_OPEN_PCT"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -5503,7 +5610,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "AHU-SIMUL",
-      "sql_file": "ahu_simul.sql"
+      "sql_file": "ahu_simul.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -5522,7 +5630,8 @@
         "web_oa_t",
         "web_oa_dp",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -5634,18 +5743,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -5673,7 +5782,8 @@
         "ECON3_DB_MAX",
         "ECON3_DB_MIN",
         "ECON3_DP_MAX",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -5682,7 +5792,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "ECON-3",
-      "sql_file": "econ3_mech_without_econ.sql"
+      "sql_file": "econ3_mech_without_econ.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -5699,7 +5810,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -5766,18 +5878,18 @@
           "step": 0.055556,
           "unit": "degC_delta"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -5802,7 +5914,8 @@
         "CONFIRM_ROWS",
         "HTG_OPEN_MIN",
         "POLL_SECONDS",
-        "PREHEAT_OVER"
+        "PREHEAT_OVER",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -5813,7 +5926,8 @@
         "htg_valve_pct"
       ],
       "rule_id": "ECON-5",
-      "sql_file": "econ5_preheat_over.sql"
+      "sql_file": "econ5_preheat_over.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -5831,7 +5945,8 @@
       "optional_roles": [
         "web_oa_t",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -5898,18 +6013,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -5934,7 +6049,8 @@
         "CONFIRM_ROWS",
         "ECON6_DAMPER_MAX",
         "ECON6_OAT_MAX",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -5942,7 +6058,8 @@
         "oa_damper_pct"
       ],
       "rule_id": "ECON-6",
-      "sql_file": "econ6_econ_freezing.sql"
+      "sql_file": "econ6_econ_freezing.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -5961,7 +6078,8 @@
         "web_oa_t",
         "web_oa_dp",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -6073,18 +6191,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -6112,7 +6230,8 @@
         "ECON7_DB_MAX",
         "ECON7_DB_MIN",
         "ECON7_DP_MAX",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -6121,7 +6240,8 @@
         "clg_valve_pct"
       ],
       "rule_id": "ECON-7",
-      "sql_file": "econ7_ok_not_economizing.sql"
+      "sql_file": "econ7_ok_not_economizing.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -6186,7 +6306,9 @@
         "web_oa_t"
       ],
       "rule_id": "MECH-OAT-1",
-      "sql_file": "mech_oat_1.sql"
+      "sql_file": "mech_oat_1.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
     },
     {
       "confirm_seconds": 600,
@@ -6230,7 +6352,9 @@
         "fan_status"
       ],
       "rule_id": "CMD-1",
-      "sql_file": "cmd1_fan_mismatch.sql"
+      "sql_file": "cmd1_fan_mismatch.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "command versus status mismatch: the proof is the signal"
     },
     {
       "confirm_seconds": 900,
@@ -6247,7 +6371,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -6314,18 +6439,18 @@
           "step": 0.055556,
           "unit": "degC_delta"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -6350,7 +6475,8 @@
         "CONFIRM_ROWS",
         "MIN_OA_FRAC",
         "OAT_RAT_GUARD",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -6361,7 +6487,8 @@
         "fan_cmd"
       ],
       "rule_id": "OA-1",
-      "sql_file": "oa1_low_oa_frac.sql"
+      "sql_file": "oa1_low_oa_frac.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -6378,7 +6505,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -6430,18 +6558,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -6465,7 +6593,8 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "LEAK_DELTA",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -6475,7 +6604,8 @@
         "mat"
       ],
       "rule_id": "DMP-1",
-      "sql_file": "dmp1_oa_damper_leak.sql"
+      "sql_file": "dmp1_oa_damper_leak.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -6492,7 +6622,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -6544,18 +6675,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -6595,6 +6726,7 @@
         "CONFIRM_ROWS",
         "MAT_LEAK_DELTA",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "SAT_ERR"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -6606,7 +6738,8 @@
         "mat"
       ],
       "rule_id": "VLV-1",
-      "sql_file": "vlv1_clg_valve_leak.sql"
+      "sql_file": "vlv1_clg_valve_leak.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -6623,7 +6756,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -6705,18 +6839,18 @@
           "step": 0.02,
           "unit": "frac"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -6742,7 +6876,8 @@
         "FLOW_ON_MIN",
         "POLL_SECONDS",
         "REHEAT_OAT",
-        "REHEAT_PCT"
+        "REHEAT_PCT",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -6752,7 +6887,8 @@
         "zone_flow"
       ],
       "rule_id": "VAV-3",
-      "sql_file": "vav3_excessive_reheat.sql"
+      "sql_file": "vav3_excessive_reheat.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -6769,7 +6905,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -6836,18 +6973,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -6888,6 +7025,7 @@
         "FLOW_ON_MIN",
         "FULL_OPEN_PCT",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "SUSTAIN_HOURS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -6897,7 +7035,8 @@
         "zone_flow"
       ],
       "rule_id": "VAV-4",
-      "sql_file": "vav4_damper_full_open.sql"
+      "sql_file": "vav4_damper_full_open.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -6914,7 +7053,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -6981,18 +7121,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -7017,7 +7157,8 @@
         "CONFIRM_ROWS",
         "DAMPER_CLOSED_MAX",
         "FLOW_BIAS",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7026,7 +7167,8 @@
         "damper_pct"
       ],
       "rule_id": "VAV-5",
-      "sql_file": "vav5_airflow_bias.sql"
+      "sql_file": "vav5_airflow_bias.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -7042,7 +7184,8 @@
         "vav"
       ],
       "optional_roles": [
-        "clg_available"
+        "clg_available",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -7109,18 +7252,18 @@
           "step": 0.05,
           "unit": "frac"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -7145,7 +7288,8 @@
         "CONFIRM_ROWS",
         "FREE_COOL_OAT",
         "POLL_SECONDS",
-        "REHEAT_PCT"
+        "REHEAT_PCT",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7154,7 +7298,8 @@
         "reheat_valve_pct"
       ],
       "rule_id": "VAV-6",
-      "sql_file": "vav6_reheat_free_cool.sql"
+      "sql_file": "vav6_reheat_free_cool.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -7171,7 +7316,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -7253,18 +7399,18 @@
           "step": 0.05,
           "unit": "frac"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -7290,7 +7436,8 @@
         "FLOW_ON_MIN",
         "MIN_RISE",
         "POLL_SECONDS",
-        "REHEAT_CMD"
+        "REHEAT_CMD",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7301,7 +7448,8 @@
         "zone_flow"
       ],
       "rule_id": "VAV-REHEAT",
-      "sql_file": "vav_reheat.sql"
+      "sql_file": "vav_reheat.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -7314,7 +7462,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -7365,6 +7514,21 @@
           "sql_placeholder": "FLOW_ON_MIN",
           "step": 2.359735,
           "unit": "L_per_s"
+        },
+        "require_run_proof": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "require_run_proof",
+          "kind": "boolean",
+          "label": "Require run proof",
+          "max": 1.0,
+          "min": 0.0,
+          "step": 1.0,
+          "unit": "bool",
+          "sql_placeholder": "REQUIRE_RUN_PROOF"
         }
       },
       "parity_status": "sql_screening",
@@ -7372,7 +7536,8 @@
         "CONFIRM_ROWS",
         "DELTA",
         "FLOW_ON_MIN",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7382,7 +7547,8 @@
         "zone_flow"
       ],
       "rule_id": "VAV-AHU-LEAVE",
-      "sql_file": "vav_ahu_leave.sql"
+      "sql_file": "vav_ahu_leave.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -7400,7 +7566,8 @@
       "optional_roles": [
         "min_flow_sp",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -7512,18 +7679,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -7552,7 +7719,8 @@
         "FIXED_FLOW_ROWS_PRECEDING",
         "FLOW_ON_MIN",
         "HIGH_MIN_FLOW_SP",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7560,7 +7728,8 @@
         "zone_flow"
       ],
       "rule_id": "VAV-7",
-      "sql_file": "vav7_min_airflow.sql"
+      "sql_file": "vav7_min_airflow.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -7577,7 +7746,8 @@
       ],
       "optional_roles": [
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -7614,18 +7784,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -7709,6 +7879,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "RESET_ERR",
         "RESET_OAT_REF",
         "RESET_SAT_AT_REF",
@@ -7721,7 +7892,8 @@
         "oa_t"
       ],
       "rule_id": "RESET-1",
-      "sql_file": "reset1_sat_oa_reset.sql"
+      "sql_file": "reset1_sat_oa_reset.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 1800,
@@ -7835,7 +8007,9 @@
       "priority": "P0",
       "required_roles": [],
       "rule_id": "CHW-NOLOAD-1",
-      "sql_file": "chw_noload_1.sql"
+      "sql_file": "chw_noload_1.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "no-load detection with its own mechanical-cooling proof and a 30 min confirmation that must see off samples"
     },
     {
       "confirm_seconds": 900,
@@ -7857,7 +8031,8 @@
         "chiller_current",
         "chiller_amps",
         "chiller_power",
-        "chw_flow"
+        "chw_flow",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -7909,18 +8084,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -7944,7 +8119,8 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "MIN_DT",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7953,7 +8129,8 @@
         "chw_return_t"
       ],
       "rule_id": "CHW-1",
-      "sql_file": "chw1_low_dt.sql"
+      "sql_file": "chw1_low_dt.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -8033,18 +8210,18 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -8069,7 +8246,8 @@
         "CONFIRM_ROWS",
         "DP_MARGIN",
         "POLL_SECONDS",
-        "PUMP_HI"
+        "PUMP_HI",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -8079,7 +8257,11 @@
         "chw_pump_cmd"
       ],
       "rule_id": "CHW-2",
-      "sql_file": "chw2_dp_low.sql"
+      "sql_file": "chw2_dp_low.sql",
+      "run_proof": "gated",
+      "optional_roles": [
+        "run_proof"
+      ]
     },
     {
       "confirm_seconds": 300,
@@ -8129,18 +8311,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -8179,6 +8361,7 @@
       "placeholders": [
         "CONFIRM_ROWS",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "SP_BAND"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -8189,7 +8372,11 @@
         "chw_pump_cmd"
       ],
       "rule_id": "CHW-3",
-      "sql_file": "chw3_supply_band.sql"
+      "sql_file": "chw3_supply_band.sql",
+      "run_proof": "gated",
+      "optional_roles": [
+        "run_proof"
+      ]
     },
     {
       "confirm_seconds": 300,
@@ -8269,18 +8456,18 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -8305,7 +8492,8 @@
         "CONFIRM_ROWS",
         "FLOW_HI",
         "POLL_SECONDS",
-        "PUMP_HI"
+        "PUMP_HI",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -8314,7 +8502,11 @@
         "chw_pump_cmd"
       ],
       "rule_id": "CHW-4",
-      "sql_file": "chw4_flow_high.sql"
+      "sql_file": "chw4_flow_high.sql",
+      "run_proof": "gated",
+      "optional_roles": [
+        "run_proof"
+      ]
     },
     {
       "confirm_seconds": 900,
@@ -8334,7 +8526,8 @@
         "pump_status",
         "chiller_status",
         "chw_flow",
-        "chw_pump_cmd"
+        "chw_pump_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -8401,18 +8594,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -8437,7 +8630,8 @@
         "CONFIRM_ROWS",
         "CW_APPROACH",
         "CW_SLACK",
-        "POLL_SECONDS"
+        "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -8446,7 +8640,8 @@
         "web_wb_t"
       ],
       "rule_id": "CW-OPT-1",
-      "sql_file": "cw_opt_1.sql"
+      "sql_file": "cw_opt_1.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -8466,7 +8661,8 @@
         "pump_status",
         "chiller_status",
         "chw_flow",
-        "chw_pump_cmd"
+        "chw_pump_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -8518,18 +8714,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -8569,6 +8765,7 @@
         "APPROACH_MAX",
         "CONFIRM_ROWS",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "TOWER_FAN_HI"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -8579,7 +8776,8 @@
         "tower_fan_cmd"
       ],
       "rule_id": "CW-APR-1",
-      "sql_file": "cw_apr_1.sql"
+      "sql_file": "cw_apr_1.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 900,
@@ -8599,7 +8797,8 @@
         "pump_status",
         "chiller_status",
         "chw_flow",
-        "chw_pump_cmd"
+        "chw_pump_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -8666,18 +8865,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -8718,6 +8917,7 @@
         "CW_APPROACH",
         "EXCESS_BEYOND_APPROACH",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "TOWER_FAN_HI"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -8728,7 +8928,8 @@
         "tower_fan_cmd"
       ],
       "rule_id": "CW-FAN-1",
-      "sql_file": "cw_fan_1.sql"
+      "sql_file": "cw_fan_1.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 600,
@@ -8745,7 +8946,8 @@
       ],
       "optional_roles": [
         "compressor_status",
-        "fan_status"
+        "fan_status",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -8797,18 +8999,18 @@
           "step": 1.0,
           "unit": "pct"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -8848,6 +9050,7 @@
         "CONFIRM_ROWS",
         "MIN_SAT",
         "POLL_SECONDS",
+        "REQUIRE_RUN_PROOF",
         "ZONE_COLD"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -8858,7 +9061,8 @@
         "fan_cmd"
       ],
       "rule_id": "HP-1",
-      "sql_file": "hp1_discharge_cold.sql"
+      "sql_file": "hp1_discharge_cold.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 300,
@@ -8917,7 +9121,9 @@
         "oa_t"
       ],
       "rule_id": "WX-1",
-      "sql_file": "wx1_oa_spike.sql"
+      "sql_file": "wx1_oa_spike.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "weather-source sanity; no running equipment is judged"
     },
     {
       "confirm_seconds": 1800,
@@ -8936,7 +9142,8 @@
         "duct_static_sp",
         "static_reset_request",
         "fan_status",
-        "fan_cmd"
+        "fan_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -9003,18 +9210,18 @@
           "step": 0.5,
           "unit": "count"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -9039,7 +9246,8 @@
         "CONFIRM_ROWS",
         "DUCT_HI",
         "POLL_SECONDS",
-        "REQUEST_LO"
+        "REQUEST_LO",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -9047,7 +9255,8 @@
         "duct_static"
       ],
       "rule_id": "TRIM-1",
-      "sql_file": "trim1_duct_static.sql"
+      "sql_file": "trim1_duct_static.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 1800,
@@ -9066,7 +9275,8 @@
         "pump_status",
         "chiller_status",
         "chw_flow",
-        "chw_pump_cmd"
+        "chw_pump_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -9133,18 +9343,18 @@
           "step": 0.5,
           "unit": "count"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -9169,7 +9379,8 @@
         "CONFIRM_ROWS",
         "HWST_HI",
         "POLL_SECONDS",
-        "REQUEST_LO"
+        "REQUEST_LO",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -9177,7 +9388,8 @@
         "hw_supply_t"
       ],
       "rule_id": "TRIM-3",
-      "sql_file": "trim3_hwst.sql"
+      "sql_file": "trim3_hwst.sql",
+      "run_proof": "gated"
     },
     {
       "confirm_seconds": 1800,
@@ -9196,7 +9408,8 @@
         "pump_status",
         "chiller_status",
         "chw_flow",
-        "chw_pump_cmd"
+        "chw_pump_cmd",
+        "run_proof"
       ],
       "output_columns": [
         "equipment_id",
@@ -9263,18 +9476,18 @@
           "step": 0.5,
           "unit": "count"
         },
-        "require_operational_gate": {
+        "require_run_proof": {
           "control": "slider",
           "default": 1.0,
           "effect": "no_op",
           "effect_in_sql": false,
           "frontend_control": "slider",
-          "key": "require_operational_gate",
+          "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require operational gate",
+          "label": "Require run proof",
           "max": 1.0,
           "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
         },
@@ -9299,7 +9512,8 @@
         "CHW_LO",
         "CONFIRM_ROWS",
         "POLL_SECONDS",
-        "REQUEST_LO"
+        "REQUEST_LO",
+        "REQUIRE_RUN_PROOF"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -9307,7 +9521,8 @@
         "chw_supply_t"
       ],
       "rule_id": "TRIM-4",
-      "sql_file": "trim4_chw_reset.sql"
+      "sql_file": "trim4_chw_reset.sql",
+      "run_proof": "gated"
     },
     {
       "aliases": [
@@ -9390,7 +9605,9 @@
         "fan_status"
       ],
       "rule_id": "SCHED-1",
-      "sql_file": "sched1_unoccupied_runtime.sql"
+      "sql_file": "sched1_unoccupied_runtime.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "runtime outside the schedule: the proof is the signal"
     },
     {
       "confirm_seconds": 3600,
@@ -9458,7 +9675,9 @@
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SCHED-247",
-      "sql_file": "sched247_always_on.sql"
+      "sql_file": "sched247_always_on.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "always-on detection: the proof is the signal and off samples must be seen"
     },
     {
       "confirm_seconds": 0,
@@ -9523,7 +9742,9 @@
         "zone_air_temp_sp"
       ],
       "rule_id": "FCU-SENSOR-NULL",
-      "sql_file": "fcu_sensor_null.sql"
+      "sql_file": "fcu_sensor_null.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 900,
@@ -9610,7 +9831,9 @@
         "htg_valve_pct"
       ],
       "rule_id": "FCU-HTG-COIL",
-      "sql_file": "fcu_htg_coil.sql"
+      "sql_file": "fcu_htg_coil.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 900,
@@ -9681,7 +9904,9 @@
         "htg_valve_pct"
       ],
       "rule_id": "FCU-CLG-COIL",
-      "sql_file": "fcu_clg_coil.sql"
+      "sql_file": "fcu_clg_coil.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 900,
@@ -9752,7 +9977,9 @@
         "clg_valve_pct"
       ],
       "rule_id": "FCU-VALVE-PASS-HTG",
-      "sql_file": "fcu_valve_pass_htg.sql"
+      "sql_file": "fcu_valve_pass_htg.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 900,
@@ -9823,7 +10050,9 @@
         "clg_valve_pct"
       ],
       "rule_id": "FCU-VALVE-PASS-CLG",
-      "sql_file": "fcu_valve_pass_clg.sql"
+      "sql_file": "fcu_valve_pass_clg.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 900,
@@ -9910,7 +10139,9 @@
         "damper_pct"
       ],
       "rule_id": "FCU-DAMPER-POS",
-      "sql_file": "fcu_damper_pos.sql"
+      "sql_file": "fcu_damper_pos.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 900,
@@ -9997,7 +10228,9 @@
         "damper_cmd"
       ],
       "rule_id": "FCU-CO2-DAMPER",
-      "sql_file": "fcu_co2_damper.sql"
+      "sql_file": "fcu_co2_damper.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 0,
@@ -10060,7 +10293,9 @@
         "heating_sp"
       ],
       "rule_id": "FCU-DEADBAND",
-      "sql_file": "fcu_deadband.sql"
+      "sql_file": "fcu_deadband.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 0,
@@ -10139,7 +10374,9 @@
         "clg_valve_pct"
       ],
       "rule_id": "FCU-MODE-CYCLE",
-      "sql_file": "fcu_mode_cycle.sql"
+      "sql_file": "fcu_mode_cycle.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
     },
     {
       "confirm_seconds": 0,
@@ -10203,7 +10440,9 @@
       "priority": "P1",
       "required_roles": [],
       "rule_id": "UTIL-MONTHLY",
-      "sql_file": "util_monthly_fault.sql"
+      "sql_file": "util_monthly_fault.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "utility meter data, no running equipment"
     },
     {
       "confirm_seconds": 0,
@@ -10267,7 +10506,9 @@
       "priority": "P1",
       "required_roles": [],
       "rule_id": "UTIL-INTERVAL",
-      "sql_file": "util_interval_fault.sql"
+      "sql_file": "util_interval_fault.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "utility meter data, no running equipment"
     }
   ]
 }

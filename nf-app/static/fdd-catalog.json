@@ -5,7 +5,8 @@
   "sql/fdd/role_map.json",
   "sql/fdd/input_contract.json",
   "open_fdd/data/sensor_sweep_roles.json",
-  "nf-app/rules/role_overrides.json"
+  "nf-app/rules/role_overrides.json",
+  "sql/fdd/run_proof.json"
  ],
  "equipment_kinds": {
   "ahu": [
@@ -720,6 +721,12 @@
    ],
    "scale": "fraction"
   },
+  "run_proof": {
+   "name": "run-proof",
+   "classes": [],
+   "markers": [],
+   "scale": "boolean"
+  },
   "sa_h": {
    "name": "supply-air-humidity",
    "classes": [
@@ -1017,6 +1024,50 @@
    "sat"
   ]
  },
+ "run_proof": {
+  "version": 1,
+  "role": "run_proof",
+  "column": "run-proof",
+  "threshold": 0.05,
+  "skip_reason": "no_run_proof",
+  "own": {
+   "status": [
+    "fan_status",
+    "pump_status",
+    "chw_pump_status",
+    "chiller_status",
+    "compressor_status"
+   ],
+   "command": [
+    "fan_cmd",
+    "chw_pump_cmd",
+    "cw_pump_cmd",
+    "tower_fan_cmd"
+   ]
+  },
+  "feeders": {
+   "refs": [
+    "airRef",
+    "chilledWaterRef",
+    "hotWaterRef"
+   ],
+   "links": [
+    "isFedBy",
+    "feeds"
+   ],
+   "max_hops": 1
+  },
+  "rdf": {
+   "brick_ns": "https://brickschema.org/schema/Brick#",
+   "predicates": {
+    "airRef": "ph:airRef",
+    "chilledWaterRef": "ph:chilledWaterRef",
+    "hotWaterRef": "ph:hotWaterRef",
+    "isFedBy": "brick:isFedBy",
+    "feeds": "brick:feeds"
+   }
+  }
+ },
  "rules": [
   {
    "id": "FAN-RUNTIME-HOURS",
@@ -1030,7 +1081,9 @@
    "optional_roles": [],
    "unmapped_roles": [],
    "confirm_seconds": 0,
-   "parameters": {}
+   "parameters": {},
+   "run_proof": "exempt",
+   "run_proof_note": "measures the equipment runtime itself"
   },
   {
    "id": "VAV-1",
@@ -1059,7 +1112,9 @@
     "zone_t_hi": 23.888888889,
     "require_occupied": 1.0,
     "confirm_seconds": 900
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "zone comfort band while occupied; independent of the air handler running"
   },
   {
    "id": "VAV-2",
@@ -1085,7 +1140,9 @@
     "require_operational_gate": 1.0,
     "setback_hi": 20.0,
     "confirm_seconds": 900
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "night setback runs while the air handler is off by design"
   },
   {
    "id": "AVG-ZONE-TEMP",
@@ -1102,7 +1159,9 @@
    "parameters": {
     "zone_t_lo": 20.0,
     "zone_t_hi": 24.444444444
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "zone statistic, not an equipment fault"
   },
   {
    "id": "ZONE-COMFORT-PCT",
@@ -1119,7 +1178,9 @@
    "parameters": {
     "zone_t_lo": 20.0,
     "zone_t_hi": 24.444444444
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "zone comfort statistic, not an equipment fault"
   },
   {
    "id": "FAULT-ELAPSED-HOURS",
@@ -1136,7 +1197,9 @@
    "parameters": {
     "zone_t_lo": 20.0,
     "zone_t_hi": 24.444444
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "aggregates fault flags of other rules"
   },
   {
    "id": "OAT-METEO",
@@ -1159,7 +1222,9 @@
     "confirm_seconds": 900,
     "web_cadence_seconds": 1200,
     "web_asof_margin_seconds": 300
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "compares two outside-air sources; no running equipment is judged"
   },
   {
    "id": "FC13-SAT-HIGH",
@@ -1177,14 +1242,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "eps_sat": 0.638888889,
@@ -1193,7 +1259,8 @@
     "clg_full_min": 0.9,
     "oa_damper_econ_low": 0.05,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "ECON-2",
@@ -1209,18 +1276,20 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "econ2_oat_hi": 17.222222,
     "econ2_damper": 0.42,
     "confirm_seconds": 300
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC1",
@@ -1237,20 +1306,22 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "eps_dsp": 29.8608,
     "eps_vfd_spd": 0.13,
     "confirm_seconds": 300
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC2",
@@ -1268,14 +1339,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_rat": 0.638888889,
@@ -1283,7 +1355,8 @@
     "eps_mat": 0.638888889,
     "mix_tol": 0.638888889,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC3",
@@ -1301,14 +1374,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "mode_delay_min": 10.0,
     "eps_rat": 0.638888889,
     "eps_oat": 0.638888889,
@@ -1316,7 +1390,8 @@
     "mix_tol": 0.638888889,
     "fan_on_min": 0.01,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC7",
@@ -1333,20 +1408,22 @@
    ],
    "optional_roles": [
     "fan_cmd",
-    "fan_status"
+    "fan_status",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
     "htg_full_min": 0.9,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC8",
@@ -1364,14 +1441,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "supply_tol": 0.638888889,
@@ -1382,7 +1460,8 @@
     "econ_min_pos": 0.05,
     "clg_inactive_max": 0.1,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC9",
@@ -1400,14 +1479,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "eps_sat": 0.638888889,
@@ -1417,7 +1497,8 @@
     "econ_min_pos": 0.05,
     "clg_inactive_max": 0.1,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC10",
@@ -1435,14 +1516,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "eps_oat": 0.638888889,
@@ -1451,7 +1533,8 @@
     "mix_tol": 0.638888889,
     "clg_on_min": 0.01,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC11",
@@ -1469,14 +1552,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "eps_sat": 0.638888889,
@@ -1486,7 +1570,8 @@
     "delta_supply_fan": 0.305555556,
     "clg_on_min": 0.01,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC12",
@@ -1504,14 +1589,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "supply_tol": 0.638888889,
@@ -1523,7 +1609,8 @@
     "clg_on_min": 0.01,
     "econ_min_pos": 0.05,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "ECON-1",
@@ -1540,17 +1627,19 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "econ1_oat_min": 12.777778,
     "econ1_damper_max": 0.05
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "ECON-4",
@@ -1568,18 +1657,20 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "oa_min_pct": 21.0,
     "oat_rat_delta_min": 1.222222,
     "confirm_seconds": 600
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "SV-RANGE",
@@ -1621,20 +1712,22 @@
     "zone_flow",
     "kwh",
     "electric_kw",
-    "electric_kwh"
+    "electric_kwh",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "range_scale_temperature": 1.0,
     "range_scale_humidity": 1.0,
     "range_scale_pressure": 1.0,
     "max_silence_hours": 0.5
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "SV-FLATLINE",
@@ -1671,19 +1764,21 @@
     "pump_status",
     "chw_pump_cmd",
     "chiller_status",
-    "zone_flow"
+    "zone_flow",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "flatline_tol": 0.055556,
     "flatline_hours": 1.0,
     "max_silence_hours": 0.5
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "SV-SPIKE",
@@ -1717,21 +1812,23 @@
     "pump_status",
     "chw_pump_cmd",
     "chiller_status",
-    "zone_flow"
+    "zone_flow",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "spike_scale_pressure": 1.0,
     "spike_scale_humidity": 1.0,
     "spike_scale_temperature": 1.0,
     "confirm_seconds": 300.0,
     "spike_scale": 1.0,
     "max_silence_hours": 0.5
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "SV-STALE",
@@ -1762,16 +1859,19 @@
     "ra_h",
     "zone_rh",
     "ma_h",
-    "sa_h"
+    "sa_h",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "stale_hours": 2.0,
     "max_silence_hours": 0.5,
     "stale_tol": 0.027778
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "SV-RATE",
@@ -1793,17 +1893,20 @@
     "mat",
     "zone_t",
     "rat",
-    "sat"
+    "sat",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
+    "require_run_proof": 1.0,
     "sensor_span": 100.0,
     "max_gap_hours": 1.0,
     "confirm_seconds": 600.0,
     "persistence_min": 10.0,
     "steady_fault_per_hour": 3.333333
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "PID-HUNT-1",
@@ -1826,14 +1929,15 @@
     "damper_pct",
     "loop_enabled",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 0.0,
     "window_hours": 1.0,
     "change_deadband_pct": 1.0,
@@ -1842,7 +1946,8 @@
     "minimum_equivalent_cycles": 2.5,
     "minimum_reversals": 4.0,
     "minimum_coverage_pct": 80.0
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC4",
@@ -1858,19 +1963,21 @@
     "fan_cmd"
    ],
    "optional_roles": [
-    "fan_status"
+    "fan_status",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 3600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "confirm_seconds": 3600.0,
     "delta_os_max": 5.0
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC5",
@@ -1888,14 +1995,15 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
@@ -1904,7 +2012,8 @@
     "mix_tol": 0.638888889,
     "htg_on_min": 0.01,
     "delta_supply_fan": 0.305555556
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC6",
@@ -1923,21 +2032,23 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "oat_rat_delta_min": 2.777777778,
     "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_airflow": 0.15,
     "confirm_seconds": 600.0,
     "min_flow_design": 2359.735
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC14",
@@ -1957,7 +2068,8 @@
     "sat",
     "oa_damper_pct",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -1965,7 +2077,7 @@
     "clg_on_min": 0.01,
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "htg_on_min": 0.01,
@@ -1976,7 +2088,8 @@
     "clg_inactive_max": 0.01,
     "confirm_seconds": 600.0,
     "mix_tol": 0.638888889
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "FC15",
@@ -1995,7 +2108,8 @@
     "htg_valve_pct",
     "clg_valve_pct",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
@@ -2003,7 +2117,7 @@
     "htg_on_min": 0.01,
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "fan_on_min": 0.01,
     "mode_delay_min": 10.0,
     "eps_hclt": 0.638888889,
@@ -2015,7 +2129,8 @@
     "clg_inactive_max": 0.01,
     "confirm_seconds": 600.0,
     "mix_tol": 0.638888889
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "AHU-SATDEV",
@@ -2031,17 +2146,19 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "sat_dev_err": 2.777778
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "AHU-DUCTHI",
@@ -2069,7 +2186,9 @@
     "confirm_seconds": 300.0,
     "duct_high_margin": 62.21,
     "pressure_on_min": 49.768
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "evaluates when the fan is proven on OR the duct static itself shows pressure; a proof gate would hide high static with a failed status"
   },
   {
    "id": "AHU-SIMUL",
@@ -2085,17 +2204,19 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "valve_open_pct": 0.1
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "ECON-3",
@@ -2113,21 +2234,23 @@
     "web_oa_t",
     "web_oa_dp",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "econ3_db_min": 15.555556,
     "econ3_db_max": 22.222222,
     "econ3_dp_max": 15.555556,
     "econ3_damper_hi": 0.9,
     "clg_open_min": 0.01
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "ECON-5",
@@ -2145,18 +2268,20 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "preheat_over": 1.222222,
     "htg_open_min": 0.01
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "ECON-6",
@@ -2172,18 +2297,20 @@
    "optional_roles": [
     "web_oa_t",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "econ6_oat_max": -3.888889,
     "econ6_damper_max": 0.25
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "ECON-7",
@@ -2201,21 +2328,23 @@
     "web_oa_t",
     "web_oa_dp",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "econ7_db_min": 1.666667,
     "econ7_db_max": 22.222222,
     "econ7_dp_max": 15.555556,
     "econ7_damper_min": 0.5,
     "clg_open_min": 0.05
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "MECH-OAT-1",
@@ -2239,7 +2368,9 @@
    "parameters": {
     "confirm_seconds": 600.0,
     "mech_oat_max": 15.555556
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
   },
   {
    "id": "CMD-1",
@@ -2258,7 +2389,9 @@
    "confirm_seconds": 600,
    "parameters": {
     "confirm_seconds": 600.0
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "command versus status mismatch: the proof is the signal"
   },
   {
    "id": "OA-1",
@@ -2276,18 +2409,20 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "min_oa_frac": 0.15,
     "oat_rat_guard": 1.222222
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "DMP-1",
@@ -2304,17 +2439,19 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "leak_delta": 1.111111
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VLV-1",
@@ -2332,18 +2469,20 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "sat_err": 1.111111,
     "mat_leak_delta": 1.111111
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VAV-3",
@@ -2360,19 +2499,21 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "reheat_oat": 25.555555556,
     "reheat_pct": 0.52,
     "flow_on_min": 11.798675
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VAV-4",
@@ -2388,19 +2529,21 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "full_open_pct": 0.975,
     "flow_on_min": 11.798675,
     "sustain_hours": 1.5
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VAV-5",
@@ -2416,18 +2559,20 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "flow_bias": 23.59735,
     "damper_closed_max": 0.1
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VAV-6",
@@ -2442,18 +2587,20 @@
     "reheat_valve_pct"
    ],
    "optional_roles": [
-    "clg_available"
+    "clg_available",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "free_cool_oat": 18.333333333,
     "reheat_pct": 0.25,
     "confirm_seconds": 900.0
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VAV-REHEAT",
@@ -2471,19 +2618,21 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "reheat_cmd": 0.3,
     "min_rise": 1.666666667,
     "flow_on_min": 11.798675
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VAV-AHU-LEAVE",
@@ -2500,15 +2649,18 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "delta": 4.444444444,
     "flow_on_min": 11.798675
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "VAV-7",
@@ -2524,21 +2676,23 @@
    "optional_roles": [
     "min_flow_sp",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "high_min_flow_sp": 117.98675,
     "flow_on_min": 11.798675,
     "fixed_flow_hours": 1.0,
     "fixed_flow_max_std": 7.079205,
     "fixed_flow_min_mean": 94.3894
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "RESET-1",
@@ -2554,20 +2708,22 @@
    ],
    "optional_roles": [
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "reset_err": 1.666667,
     "reset_sat_at_ref": 11.111111,
     "reset_slope": 0.25,
     "reset_oat_ref": 18.333333,
     "confirm_seconds": 900.0
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "CHW-NOLOAD-1",
@@ -2595,7 +2751,9 @@
     "require_operational_gate": 1.0,
     "confirm_seconds": 1800.0,
     "load_sat_hi": 0.5
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "no-load detection with its own mechanical-cooling proof and a 30 min confirmation that must see off samples"
   },
   {
    "id": "CHW-1",
@@ -2617,17 +2775,19 @@
     "chiller_current",
     "chiller_amps",
     "chiller_power",
-    "chw_flow"
+    "chw_flow",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "min_dt": 2.222222
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "CHW-2",
@@ -2646,18 +2806,20 @@
    "optional_roles": [
     "pump_status",
     "chiller_status",
-    "chw_flow"
+    "chw_flow",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "dp_margin": 15168.465,
     "pump_hi": 0.87
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "CHW-3",
@@ -2676,17 +2838,19 @@
    "optional_roles": [
     "pump_status",
     "chiller_status",
-    "chw_flow"
+    "chw_flow",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "sp_band": 1.222222
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "CHW-4",
@@ -2703,18 +2867,20 @@
    ],
    "optional_roles": [
     "pump_status",
-    "chiller_status"
+    "chiller_status",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "flow_hi": 69.39922,
     "pump_hi": 0.87
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "CW-OPT-1",
@@ -2734,18 +2900,20 @@
     "pump_status",
     "chiller_status",
     "chw_flow",
-    "chw_pump_cmd"
+    "chw_pump_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "cw_approach": 3.888889,
     "cw_slack": 1.111111
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "CW-APR-1",
@@ -2766,18 +2934,20 @@
     "pump_status",
     "chiller_status",
     "chw_flow",
-    "chw_pump_cmd"
+    "chw_pump_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "approach_max": 4.444444,
     "tower_fan_hi": 0.95
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "CW-FAN-1",
@@ -2798,19 +2968,21 @@
     "pump_status",
     "chiller_status",
     "chw_flow",
-    "chw_pump_cmd"
+    "chw_pump_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "cw_approach": 3.888889,
     "excess_beyond_approach": 2.777778,
     "tower_fan_hi": 0.95
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "HP-1",
@@ -2827,18 +2999,20 @@
    ],
    "optional_roles": [
     "compressor_status",
-    "fan_status"
+    "fan_status",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "min_sat": 29.444444,
     "zone_cold": 20.555556
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "WX-1",
@@ -2857,7 +3031,9 @@
    "parameters": {
     "confirm_seconds": 300.0,
     "spike_limit": 8.888889
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "weather-source sanity; no running equipment is judged"
   },
   {
    "id": "TRIM-1",
@@ -2874,18 +3050,20 @@
     "duct_static_sp",
     "static_reset_request",
     "fan_status",
-    "fan_cmd"
+    "fan_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 1800.0,
     "duct_hi": 335.934,
     "request_lo": 1.0
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "TRIM-3",
@@ -2903,18 +3081,20 @@
     "pump_status",
     "chiller_status",
     "chw_flow",
-    "chw_pump_cmd"
+    "chw_pump_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 1800.0,
     "hwst_hi": 71.111111,
     "request_lo": 1.0
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "TRIM-4",
@@ -2933,18 +3113,20 @@
     "pump_status",
     "chiller_status",
     "chw_flow",
-    "chw_pump_cmd"
+    "chw_pump_cmd",
+    "run_proof"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
     "minimum_active_coverage_pct": 5.0,
     "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
+    "require_run_proof": 1.0,
     "confirm_seconds": 1800.0,
     "chw_lo": 7.222222,
     "request_lo": 1.0
-   }
+   },
+   "run_proof": "gated"
   },
   {
    "id": "SCHED-1",
@@ -2968,7 +3150,9 @@
     "confirm_seconds": 1800.0,
     "comfort_low": 21.111111,
     "comfort_high": 23.888889
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "runtime outside the schedule: the proof is the signal"
   },
   {
    "id": "SCHED-247",
@@ -2995,7 +3179,9 @@
    "parameters": {
     "confirm_seconds": 3600.0,
     "always_on_pct": 0.95
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "always-on detection: the proof is the signal and off samples must be seen"
   },
   {
    "id": "FCU-SENSOR-NULL",
@@ -3017,7 +3203,9 @@
    "confirm_seconds": 0,
    "parameters": {
     "null_fraction": 0.9
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-HTG-COIL",
@@ -3047,7 +3235,9 @@
    "parameters": {
     "valve_open": 0.8,
     "coil_delta": 3.0
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-CLG-COIL",
@@ -3076,7 +3266,9 @@
    "confirm_seconds": 900,
    "parameters": {
     "valve_open": 0.8
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-VALVE-PASS-HTG",
@@ -3105,7 +3297,9 @@
    "confirm_seconds": 900,
    "parameters": {
     "pass_delta": 3.0
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-VALVE-PASS-CLG",
@@ -3134,7 +3328,9 @@
    "confirm_seconds": 900,
    "parameters": {
     "pass_delta": 3.0
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-DAMPER-POS",
@@ -3164,7 +3360,9 @@
    "parameters": {
     "command_min": 0.15,
     "position_error": 0.15
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-CO2-DAMPER",
@@ -3194,7 +3392,9 @@
    "parameters": {
     "co2_high_ppm": 1000,
     "damper_low": 0.1
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-DEADBAND",
@@ -3215,7 +3415,9 @@
    "confirm_seconds": 0,
    "parameters": {
     "deadband": 1
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "FCU-MODE-CYCLE",
@@ -3237,7 +3439,9 @@
    "parameters": {
     "mode_valve_min": 0.1,
     "mode_changes": 4
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
    "id": "UTIL-MONTHLY",
@@ -3258,7 +3462,9 @@
    "confirm_seconds": 0,
    "parameters": {
     "util_pct_err": 10.0
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "utility meter data, no running equipment"
   },
   {
    "id": "UTIL-INTERVAL",
@@ -3279,7 +3485,9 @@
    "confirm_seconds": 0,
    "parameters": {
     "util_interval_mae": 5.0
-   }
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "utility meter data, no running equipment"
   }
  ]
 }

@@ -67,5 +67,6 @@
   "chiller_power": "chiller-power",
   "chiller_amps": "chiller-amps",
   "chiller_current": "chiller-current",
-  "pump_status": "pump-status"
+  "pump_status": "pump-status",
+  "run_proof": "run-proof"
 }

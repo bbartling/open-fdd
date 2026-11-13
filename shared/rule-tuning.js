@@ -118,7 +118,9 @@
       throw new Error(`${ruleId || 'rule'} override: params must be an object`);
     }
     const out = {};
-    for (const [key, raw] of Object.entries(doc.params)) {
+    for (const [rawKey, raw] of Object.entries(doc.params)) {
+      // #1608: require_operational_gate is the old name of require_run_proof (an alias, like in render_rule.py)
+      const key = rawKey === 'require_operational_gate' && controls && has(controls, 'require_run_proof') && !has(controls, rawKey) ? 'require_run_proof' : rawKey;
       if (!controls || !has(controls, key)) {
         throw new Error(`${ruleId ? ruleId + '.' : ''}${key} is not a tunable SQL parameter`);
       }
