@@ -10,7 +10,7 @@ From the root of a cloned `open-fdd` repository:
 
 ```powershell
 uv venv --python 3.12
-uv pip install --python .venv/Scripts/python.exe -e ".[oracle]" duckdb rdflib
+uv pip install --python .venv/Scripts/python.exe -e ".[oracle]" duckdb rdflib matplotlib
 .\.venv\Scripts\python.exe tutorials/duckdb_sql_parity/compare_rules.py
 .\.venv\Scripts\python.exe tutorials/duckdb_sql_parity/sparql_samples.py
 ```
@@ -21,6 +21,19 @@ The parity script locates the SQL pack relative to its own file.
 
 On Linux/macOS, replace `.venv/Scripts/python.exe` with `.venv/bin/python`.
 `uv pip install` does **not** require pip to be preinstalled in the venv.
+
+## First: inspect the data in RAM and plot the AHUs
+
+Run `explore_data.py` before the parity comparison. It prints
+`DataFrame.head()`, `DataFrame.info(memory_usage="deep")`,
+`DataFrame.describe(include="number")`, missing-value counts, equipment/time
+coverage and a DuckDB GROUP BY over the in-memory pandas DataFrame.
+
+The Matplotlib figure opens directly on your desktop using `plt.show()`;
+two stacked time-series axes show supply-air temperature (°C) and duct-static
+pressure (Pa) for both AHUs. No PNG, CSV, database, or other output file is
+created. The DataFrame and DuckDB connection live only in RAM. On CI, the
+noninteractive `Agg` backend runs the plotting code without opening a window.
 
 ## Lesson 1: prove your borrowed SQL matches pandas
 
