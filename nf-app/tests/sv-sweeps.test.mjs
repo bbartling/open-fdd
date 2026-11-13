@@ -257,3 +257,83 @@ test("a non-SI sample starts a fresh per-sensor confirmation segment", async () 
   assert.ok(around(sweepScore(out, "SV-RANGE", "series-sat"), 2 / 60),
     `unit boundary must reset the streak: ${sweepScore(out, "SV-RANGE", "series-sat")} h`);
 });
+
+test("three same-role SI sensors isolate fault, healthy zero, insufficient history, operating gate, and row order", async () => {
+  // Two temperature sensors on role 'sat' (one faulted, one healthy), plus a third sensor with only 1 sample at window end (insufficient history).
+  // Equipment is off (fan_status = 0) for minutes 0..30 and on (fan_status = 1) for minutes 35..180.
+  const history = [];
+  for (let minute = 0; minute <= 180; minute += 5) {
+    history.push({
+      equipment_id: "eq-1",
+      ts: START + minute * 60_000,
+      sat: 22.0,
+      fan_status: minute >= 35 ? 1 : 0,
+    });
+  }
+  const sensorHistory = [];
+  for (let i = 0; i < history.length; i++) {
+    const row = history[i];
+    const minute = i * 5;
+    sensorHistory.push({
+      equipment_id: "eq-1",
+      series_id: "sat-healthy",
+      sensor_role: "sat",
+      unit: "°C",
+      ts: row.ts,
+      value: 22.0 + (i % 3) * 0.25,
+    });
+    // Out of range during fan_status = 0 (minutes 0..30) must NOT score when gated,
+    // while minutes 60..150 (fan_status = 1) trigger SV-RANGE, SV-FLATLINE, SV-SPIKE, and SV-RATE.
+    let faultVal = 22.0 + (i % 3) * 0.25;
+    if (minute <= 30) faultVal = 75.0;
+    else if (minute === 50 || minute === 60) faultVal = 75.0;
+    else if (minute === 55) faultVal = 20.0;
+    else if (minute >= 65 && minute <= 150) faultVal = 75.0;
+    sensorHistory.push({
+      equipment_id: "eq-1",
+      series_id: "sat-fault",
+      sensor_role: "sat",
+      unit: "°C",
+      ts: row.ts,
+      value: faultVal,
+    });
+  }
+  sensorHistory.push({
+    equipment_id: "eq-1",
+    series_id: "sat-short",
+    sensor_role: "sat",
+    unit: "°C",
+    ts: START + 180 * 60_000,
+    value: 75.0,
+  });
+
+  const ordered = { history, sensorHistory, equipment: [{ building_id: "site-1", equipment_id: "eq-1" }] };
+  const reversed = {
+    history: [...history].reverse(),
+    sensorHistory: [...sensorHistory].reverse(),
+    equipment: ordered.equipment,
+  };
+  const outA = await queryBoth(ordered, ALL_SWEEPS);
+  const outB = await queryBoth(reversed, ALL_SWEEPS);
+
+  const bySeries = (rows) => Object.fromEntries(rows.map((r) => [r.series_id, r]));
+  for (const rule of ALL_SWEEPS) {
+    assert.deepEqual(
+      [...outA[rule]].sort((a, b) => a.series_id.localeCompare(b.series_id)),
+      [...outB[rule]].sort((a, b) => a.series_id.localeCompare(b.series_id)),
+      `${rule}: reordered input rows must produce identical per-sensor output`
+    );
+    const rows = bySeries(outA[rule]);
+    assert.deepEqual(Object.keys(rows).sort(), ["sat-fault", "sat-healthy", "sat-short"], rule);
+    assert.equal(rows["sat-healthy"].fault_hours, 0, `${rule}: healthy peer must preserve explicit 0`);
+    assert.ok(Number(rows["sat-healthy"].covered_hours) > 0, `${rule}: healthy peer must be covered`);
+    assert.equal(rows["sat-short"].covered_hours, 0, `${rule}: single-sample sensor has 0 coverage`);
+    assert.equal(rows["sat-short"].fault_hours, null, `${rule}: insufficient history stays NULL (not 0)`);
+  }
+  const rangeFault = bySeries(outA["SV-RANGE"])["sat-fault"].fault_hours;
+  assert.ok(around(rangeFault, 100 / 60), `SV-RANGE must respect fan_status gate (got ${rangeFault} h)`);
+  assert.ok(bySeries(outA["SV-SPIKE"])["sat-fault"].fault_hours > 0, "SV-SPIKE faults on sat-fault");
+  assert.ok(bySeries(outA["SV-FLATLINE"])["sat-fault"].fault_hours > 0, "SV-FLATLINE faults on sat-fault");
+  assert.ok(bySeries(outA["SV-RATE"])["sat-fault"].fault_hours > 0, "SV-RATE faults on sat-fault");
+  assert.equal(bySeries(outA["SV-STALE"])["sat-fault"].fault_hours, 0, "SV-STALE stays 0 when value changes at min 60 and min 155");
+});

@@ -6,39 +6,20 @@ nav_order: 1
 
 # Charts and export
 
-Open-FDD has three chart surfaces. **Charts** plots selected point histories. **RCx** offers registered views for
-equipment and sites. **FDD** plots rule results and sensor history.
+Open-FDD has four chart and data surfaces. **Overview** opens on a single modeled equipment item and lists all of its modeled I/O points (including current-only and Boolean/Enum/String points). **Charts** plots selected point histories, **RCx** renders equipment and site diagnostics, and **FDD** plots rule results, sensor history, and inline Tuners.
 
-Every chart surface (Overview, Charts, Points, FDD, RCx and the one-chart window) opens on the **last 7 days** by default.
-Choose 1 hour, 24 hours, 1 week, or All, or set a custom start and end. The selected range is kept in the page URL so reload and browser navigation restore it.
-Date-time controls display the modeled site's timezone. Saved instants remain unambiguous.
+When no saved selection exists for a site, **Overview** picks a landing equipment item from fresh, model-bound outside-air temperature (local BAS OAT first, then site weather OAT): below 12 °C opens a boiler or heating-water plant, 12–24 °C opens an RTU, and 24 °C or above opens a chiller or chilled-water plant, falling back deterministically if absent. Manual equipment choices save per exact site ID and stay pinned across live weather refreshes.
 
-The top bar holds only the site. Each tab that needs an equip (Overview, Charts, Points, FDD, RCx, Export) has its own
-equip picker at its top, with weather listed as its own **Weather** entry: weather points are never shown as an equip's
-own sensors. On the Charts tab the hour-of-day heat map has a sensor dropdown (the equip's numeric sensors, labelled
-with name and unit), and **All signals** plots every numeric signal of the selected equip (the first equip when none is selected) with one y-axis per unit and the
-on/off points in a lane underneath.
-
-History loads in bounded chunks and displays a loading state and a visible error if a request fails. The UI merges the
-chunks before drawing. Long ranges therefore do not require one oversized API request. NF still resamples history to
-the requested interval. Use [Export](#export) for a CSV.
+Every chart surface defaults to the **last 7 days** (1 hour, 24 hours, 1 week, All, or custom bounds kept in the URL and displayed in the site timezone). History loads in bounded chunks; in the **Full** edition, ranges extending before NF's in-memory retention fall back to the scoped Timescale `history` hook for numeric and Boolean points (non-numeric `String`/`Enum` exclusions and bucket intervals are disclosed).
 
 ## Faults lane
 
-Faults appear as a linked 0/1 lane at the bottom of a chart. The signal and fault lanes share zoom and tooltip time.
-Zero means assessed and healthy. A missing time is unknown, not healthy. A sensor series appears only for roles the
-rule assesses. Old excluded result points are not deleted.
+Faults appear as a linked 0/1 lane at the bottom of a chart. Zero means assessed and healthy; missing intervals are unknown, never healthy. A sensor series appears only for roles the rule assesses, and stale excluded result points stay hidden without deleting NF history.
 
-RCx views declare required and optional roles. The tab draws views whose required roles bind to equipment and lists
-the rest with missing inputs. See the [data model](modeling.html) and [rules](rules/).
-
-For contributors, register chart views with rcxView in nf-app/static and add them to nf-app/rcx-parity.json. The
-fault lane helper is rcxWithFaultLane in nf-app/static/rcx.js. The chart range helpers (the default range is the last 7 days: `DEFAULT_RANGE_PRESET`) live in
-shared/static/charts.js (copied to both editions) and are tested in nf-app/tests.
+RCx views declare required and optional roles in `nf-app/rcx-parity.json` (using `rcxView` and `rcxWithFaultLane`). See the [data model](modeling.html) and [rules](rules/).
 
 ## Export
 
-The Export tab downloads selected point history as CSV (UTF-8 with a byte-order mark). Choose points, a date range, a resolution and
-display or stored units. Resolutions include the raw trend interval and coarser buckets; NF does the resampling. Long ranges are fetched
-in bounded chunks and assembled in the browser, and a cell limit applies: reduce the range or points if it is hit. For automation use the NF
-point-data API in the [API reference](fdd-data-access.html). The code is `nf-app/static/export.js`.
+The **Export** tab downloads a single UTF-8 CSV (with BOM) for one selected equipment item over the chosen range (default **24 hours**). Each download joins all modeled I/O points and distinct FDD summary, fault-timeline, and per-sensor fault columns by timestamp, keeps `0`/`false`/`String`/`Enum` values intact, escapes spreadsheet-formula prefixes, and enforces a 200,000-cell / 20 MiB cap with no silent partial downloads.
+
+By default Export reads raw NF `/api/v1/point/data` timestamps (subdividing any batch that hits NF's 10,000-sample cap), falls back to aligned buckets with empty gaps preserved when raw density exceeds the cell cap, and fills older uncovered spans from the Full Timescale `history` hook. For automation use the API in [API reference](fdd-data-access.html).

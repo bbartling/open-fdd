@@ -552,46 +552,72 @@ async function historyRoute(client, args = {}, limits = {}) {
   };
 }
 
-// ---------------------------------------------------------------- sweep role-limit overrides (#1589, fdd.rule_config)
+// ---------------------------------------------------------------- persisted rule tuning (#1589 & 5.0.17, fdd.rule_config)
 
 const LIMITS_RULE_ID = "SV-LIMITS";
 
-/** Active SV-LIMITS revisions, all sites: [{ site_id, scope_key, revision, parameters }] (read-only). */
-async function activeRoleLimitOverrides(client, siteId) {
-  const args = [LIMITS_RULE_ID];
-  let where = "rule_id = $1 AND active";
-  if (siteId != null) { args.push(siteId); where += " AND site_id = $2"; }
-  const { rows } = await client.query(`SELECT site_id, scope_key, revision, parameters FROM fdd.rule_config WHERE ${where} ORDER BY site_id, scope_key`, args);
-  return rows.map((r) => ({ site_id: r.site_id, scope_key: r.scope_key, revision: Number(r.revision), parameters: r.parameters }));
+/** Active revisions in fdd.rule_config, filtered by optional ruleId / siteId: [{ site_id, rule_id, scope_key, revision, parameters }].
+ * @param {any} client
+ * @param {{ siteId?: string | null, ruleId?: string | null }} [opts]
+ */
+async function activeRuleConfigs(client, { siteId = null, ruleId = null } = {}) {
+  const args = [];
+  const conds = ["active"];
+  if (ruleId != null) { args.push(ruleId); conds.push(`rule_id = $${args.length}`); }
+  if (siteId != null) { args.push(siteId); conds.push(`site_id = $${args.length}`); }
+  const { rows } = await client.query(
+    `SELECT site_id, rule_id, scope_key, revision, parameters FROM fdd.rule_config WHERE ${conds.join(" AND ")} ORDER BY site_id, rule_id, scope_key`,
+    args,
+  );
+  return rows.map((r) => ({ site_id: r.site_id, rule_id: r.rule_id, scope_key: r.scope_key, revision: Number(r.revision), parameters: r.parameters }));
 }
 
-/** Revision history (newest first) of one scope: [{ revision, active, created_at, created_by, parameters }]. */
-async function roleLimitHistory(client, siteId, scopeKey, limit = 50) {
+/** Revision history (newest first) of one (siteId, ruleId, scopeKey): [{ revision, active, created_at, created_by, parameters }]. */
+async function ruleConfigHistory(client, siteId, ruleId, scopeKey, limit = 50) {
   const { rows } = await client.query(
     `SELECT revision, active, created_at, created_by, parameters FROM fdd.rule_config
       WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 ORDER BY revision DESC LIMIT $4`,
-    [siteId, LIMITS_RULE_ID, scopeKey, Math.max(1, Math.min(500, Number(limit) || 50))]);
+    [siteId, ruleId, scopeKey, Math.max(1, Math.min(500, Number(limit) || 50))],
+  );
   return rows.map((r) => ({ revision: Number(r.revision), active: r.active, created_at: iso(r.created_at), created_by: r.created_by, parameters: r.parameters }));
 }
 
 /**
- * Append a new ACTIVE revision for (site, SV-LIMITS, scope) in one transaction (the previous active one is kept, inactive).
- * The caller validated `parameters` (role-limits.js); this only stores. Returns the new revision number.
+ * Append a new ACTIVE revision for (siteId, ruleId, scopeKey) inside an advisory-locked transaction.
+ * When expectedRevision is provided (0 for none active yet, >= 1 for the current active revision),
+ * rejects concurrent overwrites with err.code = "revision_conflict".
  */
-async function appendRoleLimitRevision(client, { siteId, scopeKey, parameters, createdBy }) {
+async function appendRuleConfigRevision(client, { siteId, ruleId, scopeKey, parameters, createdBy, expectedRevision = null }) {
+  if (!ruleId || typeof ruleId !== "string") throw new Error("ruleId is required");
   if (!scopeKey || (scopeKey !== "site" && !scopeKey.startsWith("equip:"))) throw new Error('scope must be "site" or "equip:<equipment id>"');
   await client.query("BEGIN");
   try {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${siteId}|${LIMITS_RULE_ID}|${scopeKey}`]);
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${siteId}|${ruleId}|${scopeKey}`]);
+    const activeRes = await client.query(
+      "SELECT revision FROM fdd.rule_config WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 AND active ORDER BY revision DESC LIMIT 1",
+      [siteId, ruleId, scopeKey],
+    );
+    const currentActive = activeRes.rows.length ? Number(activeRes.rows[0].revision) : 0;
+    if (expectedRevision !== null && expectedRevision !== undefined) {
+      const exp = Number(expectedRevision);
+      if (!Number.isInteger(exp) || exp < 0) throw new Error("expected_revision must be a non-negative integer");
+      if (exp !== currentActive) {
+        const err = /** @type {any} */ (new Error(`revision conflict on ${ruleId} (${scopeKey}): active revision is ${currentActive}, expected ${exp}; reload and retry`));
+        err.code = "revision_conflict";
+        err.activeRevision = currentActive;
+        throw err;
+      }
+    }
     const { rows } = await client.query(
       "SELECT coalesce(max(revision), 0) + 1 AS rev FROM fdd.rule_config WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3",
-      [siteId, LIMITS_RULE_ID, scopeKey]);
+      [siteId, ruleId, scopeKey],
+    );
     const rev = Number(rows[0].rev);
     await client.query("UPDATE fdd.rule_config SET active = false WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 AND active",
-      [siteId, LIMITS_RULE_ID, scopeKey]);
+      [siteId, ruleId, scopeKey]);
     await client.query(
       "INSERT INTO fdd.rule_config (site_id, rule_id, scope_key, revision, parameters, active, created_by) VALUES ($1, $2, $3, $4, $5::jsonb, true, $6)",
-      [siteId, LIMITS_RULE_ID, scopeKey, rev, JSON.stringify(parameters), String(createdBy || "open-fdd")]);
+      [siteId, ruleId, scopeKey, rev, JSON.stringify(parameters), String(createdBy || "open-fdd")]);
     await client.query("COMMIT");
     return rev;
   } catch (e) {
@@ -601,15 +627,23 @@ async function appendRoleLimitRevision(client, { siteId, scopeKey, parameters, c
 }
 
 /** The parameters of one stored revision (null when it does not exist). */
-async function roleLimitRevision(client, siteId, scopeKey, revision) {
+async function ruleConfigRevision(client, siteId, ruleId, scopeKey, revision) {
   const { rows } = await client.query(
     "SELECT parameters FROM fdd.rule_config WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 AND revision = $4",
-    [siteId, LIMITS_RULE_ID, scopeKey, Number(revision)]);
+    [siteId, ruleId, scopeKey, Number(revision)],
+  );
   return rows.length ? rows[0].parameters : null;
 }
+
+const activeRoleLimitOverrides = (client, siteId) => activeRuleConfigs(client, { siteId, ruleId: LIMITS_RULE_ID });
+const roleLimitHistory = (client, siteId, scopeKey, limit = 50) => ruleConfigHistory(client, siteId, LIMITS_RULE_ID, scopeKey, limit);
+const appendRoleLimitRevision = (client, { siteId, scopeKey, parameters, createdBy, expectedRevision = null }) =>
+  appendRuleConfigRevision(client, { siteId, ruleId: LIMITS_RULE_ID, scopeKey, parameters, createdBy, expectedRevision });
+const roleLimitRevision = (client, siteId, scopeKey, revision) => ruleConfigRevision(client, siteId, LIMITS_RULE_ID, scopeKey, revision);
 
 module.exports = {
   connect, install, coreOk, schemaVersion, requireConfig, SCHEMA_VERSION, SQL_FILES, pointRows, syncPoints, loadHistory, runRules, toResultRow, writeResults,
   maybeEnforceCap, retentionPreview, historyRoute, siFactors, newestSample,
-  LIMITS_RULE_ID, activeRoleLimitOverrides, roleLimitHistory, appendRoleLimitRevision, roleLimitRevision,
+  LIMITS_RULE_ID, activeRuleConfigs, ruleConfigHistory, appendRuleConfigRevision, ruleConfigRevision,
+  activeRoleLimitOverrides, roleLimitHistory, appendRoleLimitRevision, roleLimitRevision,
 };

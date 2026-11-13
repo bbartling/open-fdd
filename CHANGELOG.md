@@ -7,6 +7,13 @@ Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) 
 
 (nothing yet)
 
+## 5.0.17 — 2026-11-13 (app) / open-fdd 4.5.8 (PyPI)
+
+- **Overview single-equipment landing & full I/O inventory:** Overview defaults to one modeled equipment selected from fresh, model-bound OAT (`<12 °C` boiler/heating-water, `12–24 °C` RTU, `>=24 °C` chiller/CHW; local BAS OAT preferred over weather), saves manual selections per exact site ID, and displays all modeled I/O including current-only, `Bool`, `Enum`, and `String` points.
+- **Inline FDD Tuners (Tuning tab removed):** Rule tuning for per-rule parameters and `SV-LIMITS` sensor sweeps moves inline into the **FDD** tab (`#tuning` redirects to `#fdd`), preserving sibling overrides, supporting reversible display-unit conversion and optimistic concurrency, and isolating revision numbers across sites in `hooks/fdd.js`.
+- **Single-equipment joined CSV export & Full Timescale history:** Export downloads one joined UTF-8 CSV for the selected equipment (raw timestamps with 10,000-sample subdivision, aligned-bucket fallback preserving empty gaps, Full Timescale long-range backfill, preserved `0`/`false`/`String`/`Enum`, formula-injection escaping, 200k-cell / 20 MiB guard). Full charts also route pre-retention history through the scoped `hooks/history` Timescale path.
+- **Per-sensor sweep isolation, 5-engine parity & docs (#1601, #1606):** Isolated per-sensor sweeps and verified five-engine SI parity (`pglite`, `sqlite`, `duckdb`, `postgres`, `timescale`), documented `SV-RATE` qualification, DuckDB + Parquet replay, published SI fixture sizes, `#1606` schema ownership/data flow, and added an optional TLS/auth-protected read-only `pgweb` sidecar in `deploy/nf-caddy`.
+
 ## 5.0.16 — 2026-11-12 (app) / open-fdd 4.5.7 (PyPI)
 One small shared core schema, the 5.0.16 UI pass, optional weather and pluggable outputs, NF-native install bundles, and
 parity hardening. Parity at the 8 equipment x 7 days stress size: compared=71 matched=47 known-divergent=24 unexpected=0, every

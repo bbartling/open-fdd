@@ -36,6 +36,43 @@ print(rows, {e: v["pandas"] for e, v in ref["FC1"].items()})
 
 `open_fdd.parity` is missing from the older PyPI releases (4.5.4 and earlier). Until a later release is published, install from git: `pip install "open-fdd[oracle] @ git+https://github.com/bbartling/open-fdd"`.
 
+## Parquet replay (DuckDB)
+
+`open-fdd nf pull --out history.parquet` exports NF history directly to Parquet (with `pyarrow`), and DuckDB queries `.parquet` files natively via `read_parquet(...)` with no database server:
+
+```python
+import json, duckdb, pandas as pd
+from open_fdd.parity import generate, reference
+
+ds = generate(seed=0, equips=2, days=3, profile="basic")
+pack = json.load(open("nf-app/rules/pack-postgres.json"))
+hist = pd.DataFrame(ds.to_engine_input()["history"])
+hist["timestamp_utc"] = pd.to_datetime(hist.pop("ts"), unit="ms", utc=True)
+
+con = duckdb.connect()
+con.execute("SET TimeZone = 'UTC'")
+con.register("hist_df", hist)
+con.execute("COPY hist_df TO '/tmp/history.parquet' (FORMAT PARQUET)")
+con.execute("CREATE TABLE history AS SELECT * FROM read_parquet('/tmp/history.parquet')")
+
+ref = reference(ds)
+for eq, fh, _cov, _pct in con.execute(pack["rules"]["FC1"]["sql"]).fetchall():
+    assert abs(fh - ref["FC1"][eq]["pandas"]) < 1e-6  # deliberately shifting fh raises AssertionError
+```
+
+## Published SI fixture sizes
+
+`open_fdd.parity.generate(seed=0, equips, days, profile)` produces deterministic SI tables on a 5-minute grid:
+
+| Profile | Size (`equips x days`) | `history` rows | `sensor_history` rows | `weather` rows | Content hash prefix |
+|---|---|---:|---:|---:|---|
+| `basic` | `2 x 3` | 1,728 | 25,920 | 216 | `c75a43e4dc93` |
+| `basic` | `4 x 3` | 3,456 | 51,840 | 216 | `608fd164bfa0` |
+| `basic` | `8 x 7` | 16,128 | 241,920 | 504 | `7e2801387b73` |
+| `edge` | `2 x 3` | 1,705 | 25,575 | 216 | `60ed33ab47d3` |
+| `edge` | `4 x 3` | 3,403 | 51,045 | 216 | `998f2b5c0d4e` |
+| `edge` | `8 x 7` | 16,069 | 241,035 | 504 | `ed82a649d58e` |
+
 ## Runnable DuckDB and SPARQL tutorial
 
 The [standalone DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) includes executable pandas-versus-SQL assertions for FC1, FC2 and CMD-1, plus SPARQL point discovery joined to a DuckDB long-form historian. Both scripts run locally without an NF server. Follow its README for PowerShell or Linux setup.

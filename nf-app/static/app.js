@@ -92,7 +92,11 @@ async function showRulePlot(ruleId, equipId) {
   const historyPoints = model.points.filter((p) => p.siteRef === scope.site && p.equipRef === equipId && has(p, "his"));
   renderRangeControl($("fddPlotRangeControl"), { key: "rulePlot", state: rangeState, siteTz,
     onChange: () => showRulePlot(ruleId, equipId).catch((e) => ($("fddPlotRangeStatus").textContent = `Could not load this range: ${e.message}`)) });
+  activeRulePlot = { ruleId, equipId };
   $("fddPlotPanel").hidden = false;
+  if (typeof ofddTuning !== "undefined" && ofddTuning && ofddTuning.renderInline) {
+    ofddTuning.renderInline({ site: scope.site, equip: equipId, equipLabel: equipLabel(equipRec), ruleId, bound: row.bound, catalog });
+  }
   $("fddPlotTitle").innerHTML = `${fddRuleCellHtml(row.rule)} <span class="sub">· ${esc(equipLabel(equipRec))}</span>`;
   $("fddPlotNote").textContent = row.rule.description || "";
   $("fddPlotRangeStatus").textContent = "Resolving range…";
@@ -127,6 +131,7 @@ const fddResults = (equipIds) => model.points
 
 let faultHistoryRead = 0;
 let fddPlotRead = 0;
+let activeRulePlot = null;
 
 /** Faults panel: latest result rows and the selected range of each fault lane. */
 async function renderFddResults(equips, sweepRoles = {}) {
@@ -431,14 +436,73 @@ function setUnits(sys) {
   syncUnitsToggle();
   renderCards();                 // unit labels sit in the card markup
   renderTab(activeTab);
+  if (activeTab === "fdd" && activeRulePlot && $("fddPlotPanel") && !$("fddPlotPanel").hidden) {
+    showRulePlot(activeRulePlot.ruleId, activeRulePlot.equipId).catch(() => {});
+  }
 }
 
 // ---- registering this edition's tabs with the shell ---------------------------------------
 ofddTabs.fdd = () => renderFdd();
 ofddTabs.rcx = () => renderRcx();
-ofddTabs.export = () => ofddExport.render({ model, scope });
-ofddTabs.tuning = () => ofddTuning.render({ model, scope });
-for (const tab of ["fdd", "rcx", "export", "tuning"]) ofddEquipScoped.add(tab);     // these get an equip picker too
+const timescaleHistoryState = { disabled: false, reason: "" };
+async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
+  if (timescaleHistoryState.disabled) {
+    return { ok: true, skipped: true, reason: timescaleHistoryState.reason || "timescale unavailable" };
+  }
+  const cleanIds = [...new Set((uuids || []).map((u) => String(u || "").trim()).filter(Boolean))];
+  if (!cleanIds.length) return { ok: true, skipped: true, reason: "no numeric uuids" };
+  const body = {
+    args: {
+      uuids: JSON.stringify(cleanIds),
+      from: new Date(fromMs).toISOString(),
+      to: new Date(toMs).toISOString(),
+      ...(bucket ? { bucket: String(bucket) } : {}),
+    },
+  };
+  let pid;
+  try {
+    const started = await api(`/api/v1/apps/${APP_ID}/hooks/history`, body);
+    pid = started && started.pid;
+  } catch (e) {
+    const msg = String((e && e.message) || e);
+    if (/HTTP (401|403|404)/.test(msg)) {
+      timescaleHistoryState.disabled = true;
+      timescaleHistoryState.reason = msg;
+      return { ok: false, error: msg, status: Number((msg.match(/HTTP (\d+)/) || [])[1] || 0) };
+    }
+    throw e;
+  }
+  const deadline = Date.now() + 25e3;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 400));
+    const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/history/runs?page_size=5&include_results=true`)).runs || [];
+    const hit = runs.find((r) => r.pid === pid || (r.run && r.run.pid === pid));
+    if (!hit) continue;
+    const status = String(hit.status || hit.state || "").toUpperCase();
+    if (status === "STATE_RUNNING" || status === "STATE_PENDING" || status === "RUNNING" || status === "PENDING") continue;
+    const rawOut = hit.result ?? hit.output ?? (Array.isArray(hit.logs) ? hit.logs.at(-1) : null);
+    let parsed = rawOut;
+    if (typeof rawOut === "string") {
+      try { parsed = JSON.parse(rawOut); } catch { parsed = null; }
+    }
+    if (parsed && typeof parsed === "object") {
+      if (parsed.skipped && /timescale not configured/i.test(String(parsed.reason || ""))) {
+        timescaleHistoryState.disabled = true;
+        timescaleHistoryState.reason = parsed.reason;
+      }
+      return parsed;
+    }
+    if (status.includes("FAIL") || status.includes("ERROR")) {
+      return { ok: false, error: hit.error || "history hook failed" };
+    }
+    return { ok: false, error: "history hook returned no structured result" };
+  }
+  return { ok: false, error: "history hook timed out waiting for result" };
+}
+if (typeof globalThis !== "undefined") globalThis.ofddTimescaleHistory = queryTimescaleHistory;
+
+ofddTabs.export = () => ofddExport.render({ model, scope: { ...scope, equip: exportEquipId() }, timescaleHistory: queryTimescaleHistory });
+for (const tab of ["fdd", "rcx", "export"]) ofddEquipScoped.add(tab);     // these get an equip picker too
 
 ofddWire.push(() => {
   $("fddRunnableOnly").onchange = () => renderFdd().catch((e) => setLive(false, e.message));
@@ -459,7 +523,7 @@ ofddWire.push(() => {
       if (tr) showRulePlot(tr.dataset.rule, tr.dataset.equip).catch(plotErr);
     };
   }
-  $("fddPlotClose").onclick = () => { $("fddPlotPanel").hidden = true; };
+  $("fddPlotClose").onclick = () => { $("fddPlotPanel").hidden = true; activeRulePlot = null; };
   $("fddRunNow").onclick = () => runFddNow().catch((e) => ($("fddRunState").textContent = `could not start: ${e.message}`));
   $("unitsToggle").onclick = () => setUnits(unitSystem() === "si" ? "imperial" : "si");
   syncUnitsToggle();

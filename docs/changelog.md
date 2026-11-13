@@ -5,6 +5,13 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.17 - 2026-11-13 (open-fdd 4.5.8 on PyPI)
+
+- **Overview single-equipment landing & I/O inventory:** Overview opens on one equipment chosen from fresh, model-bound OAT (`<12 °C` heating, `12–24 °C` RTU, `>=24 °C` cooling, local BAS OAT first then weather) with manual picks saved per site ID, showing all modeled I/O including current-only points.
+- **Inline FDD Tuners:** Per-rule parameters and `SV-LIMITS` sweep thresholds live inline inside the FDD tab (removing the standalone Tuning tab), with SI storage in `fdd.rule_config`, scoped rollback, and multi-site revision isolation.
+- **Single-equipment joined CSV & Full Timescale history:** Export joins one equipment's I/O and FDD columns by timestamp (raw 10k-safe subdivision, bucketed fallback, Full Timescale long-range backfill, preserved `0`/`false`/`String`/`Enum`, formula escaping); Full charts route older history beyond NF retention through the scoped `history` hook.
+- **Per-sensor sweep isolation, engine matrix & `pgweb` (#1601, #1606):** Per-sensor sweep results keep duplicate-label sensors distinct, five-engine parity (`pglite`, `sqlite`, `duckdb`, `postgres`, `timescale`) and `SV-RATE` qualification are covered in CI, and an optional read-only `pgweb` sidecar behind Caddy TLS/auth is available in `deploy/nf-caddy`.
+
 ## Open-FDD 5.0.16 - 2026-11-12 (open-fdd 4.5.7 on PyPI)
 
 One shared core schema (`sql/fdd/schema/core.sql`: `fdd.point`, `fdd.rule_result`, `fdd.rule_config`). Timescale schema version 4 copies and drops `openfdd.fdd_results` / `openfdd.retention_log` (see [migrating to 5.0.16](upgrade-5x.html)). The hook loads history from the SI view `fdd.input_sample`. Input contract version 3 declares that view's signature. FDD results are unchanged unless you save tuning.

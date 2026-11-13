@@ -627,3 +627,80 @@ test("fdd writes: dryRun sends no write requests", async () => {
   assert.deepEqual(summary.requests, { metadata: 0, data: 0 });
   assert.equal(http.writes.calls.points + http.writes.calls.data, 0);
 });
+
+test("sweep publishing handles duplicate display labels and reordered point discovery", async () => {
+  const dupA = pt("u-sat-dup-1", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
+    equipRef: "AHU-1", class: "discharge-air-temp-sensor", unit: "°C",
+  });
+  const dupB = pt("u-sat-dup-2", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
+    equipRef: "AHU-1", class: "discharge-air-temp-sensor", unit: "°C",
+  });
+  const shortC = pt("u-sat-short", "Supply Air Temp", ["discharge", "air", "temp", "sensor"], {
+    equipRef: "AHU-1", class: "discharge-air-temp-sensor", unit: "°C",
+  });
+  const pack = {
+    ...PACK,
+    rules: {
+      "SV-RANGE": {
+        sql: "-",
+        output_columns: ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"],
+      },
+    },
+  };
+  const makeEngine = () => async () => ({
+    kind: "sqlite",
+    async load() {},
+    async query() {
+      return [
+        { equipment_id: "AHU-1", series_id: "u-sat-dup-1", sensor_role: "sat", fault_hours: 3.5, covered_hours: 24 },
+        { equipment_id: "AHU-1", series_id: "u-sat-dup-2", sensor_role: "sat", fault_hours: 0, covered_hours: 24 },
+        { equipment_id: "AHU-1", series_id: "u-sat-short", sensor_role: "sat", fault_hours: null, covered_hours: 0 },
+      ];
+    },
+    async timeline() {
+      return [
+        { equipment_id: "AHU-1", series_id: "u-sat-dup-1", sensor_role: "sat", ts_epoch: NOW / 1000, confirmed: 1, held_seconds: 300 },
+        { equipment_id: "AHU-1", series_id: "u-sat-dup-2", sensor_role: "sat", ts_epoch: NOW / 1000, confirmed: 0, held_seconds: 300 },
+      ];
+    },
+    async close() {},
+  });
+
+  const runWithOrder = async (orderedPoints) => {
+    const http = fakeHttp([], {
+      "u-sat-dup-1": () => 75,
+      "u-sat-dup-2": () => 22,
+      "u-sat-short": () => 22,
+    }, { model: MODEL, points: orderedPoints });
+    const summary = await hook.runFdd({ sdk: { http, logEvent() {} }, pack, createEngine: makeEngine(), now: NOW });
+    return { http, summary };
+  };
+
+  const first = await runWithOrder([dupA, dupB, shortC]);
+  const reordered = await runWithOrder([shortC, dupB, dupA]);
+
+  const sensorPointsA = first.http.writes.points.filter((p) => p.layer === "model" && p.attrs.fddSummary === "sensor");
+  const sensorPointsB = reordered.http.writes.points.filter((p) => p.layer === "model" && p.attrs.fddSummary === "sensor");
+  assert.equal(sensorPointsA.length, 3);
+  assert.deepEqual(
+    sensorPointsA.map((p) => [p.uuid, p.attrs.sensorRef, p.attrs.fddStatus, p.attrs.fddCoverageHours]).sort(),
+    sensorPointsB.map((p) => [p.uuid, p.attrs.sensorRef, p.attrs.fddStatus, p.attrs.fddCoverageHours]).sort()
+  );
+  assert.equal(new Set(sensorPointsA.map((p) => p.uuid)).size, 3, "duplicate labels must produce 3 distinct result UUIDs");
+
+  const dataByUuid = Object.fromEntries(first.http.writes.data.map((d) => [d.uuid, d.values[0].real]));
+  const pFault = sensorPointsA.find((p) => p.attrs.sensorRef === "u-sat-dup-1");
+  const pHealthy = sensorPointsA.find((p) => p.attrs.sensorRef === "u-sat-dup-2");
+  const pShort = sensorPointsA.find((p) => p.attrs.sensorRef === "u-sat-short");
+  assert.equal(dataByUuid[pFault.uuid], 3.5);
+  assert.equal(dataByUuid[pHealthy.uuid], 0, "healthy same-role sensor keeps explicit zero");
+  assert.equal(pShort.attrs.fddStatus, "not-assessed");
+  assert.equal(Object.hasOwn(dataByUuid, pShort.uuid), false, "insufficient-history sensor writes no numeric value");
+
+  const equipUuid = hook.resultUuid(hook.resultKey(MODEL[1], "site-a", "AHU-1"), "SV-RANGE");
+  assert.equal(dataByUuid[equipUuid], 3.5, "equipment aggregate derives from max assessed per-sensor result");
+  assert.deepEqual(
+    first.http.writes.points.filter((p) => p.layer === "model" && /(^|,)fault_timeline(,|$)/.test(p.attrs.markers)).map((p) => p.uuid).sort(),
+    reordered.http.writes.points.filter((p) => p.layer === "model" && /(^|,)fault_timeline(,|$)/.test(p.attrs.markers)).map((p) => p.uuid).sort()
+  );
+});

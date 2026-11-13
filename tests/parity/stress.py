@@ -2,25 +2,23 @@
 """Stress / report mode of the SI parity suite: a thin CLI over open_fdd.parity.
 
     python tests/parity/stress.py --equips 20 --days 14 [--profile basic|edge] [--seed N] [--no-pandas]
-                                  [--engines pglite,sqlite[,timescale]] [--out report.json]
+                                  [--engines pglite,sqlite[,duckdb][,postgres][,timescale]] [--out report.json]
 
-generate (open_fdd.parity, alternating healthy / fault-injected equipment, 5-minute grid) -> SQL adapters (PGlite and
-SQLite) -> reference (pandas twins via open_fdd.rules) -> compare (shipped Policy and known-difference list; on a canonical dataset each known difference must also stay inside
-its pinned delta band, see parity_known_differences.json). Prints:
-rows, per-engine runtime, SQL-side RSS, Python-side peak RSS, pandas runtime, how many rules match, which differ, and
-which SQL rules have NO pandas twin. Exit code 1 if an SQL engine errors, the two SQL engines disagree, a rule diverges
-from pandas without being in the known-difference list or leaves its pinned delta band, or fewer rules were compared than have a pandas twin (zero
-compared fails). With --no-pandas no pandas verdict is made.
+generate (open_fdd.parity, alternating healthy / fault-injected equipment, 5-minute grid) -> SQL adapters (PGlite,
+SQLite, DuckDB, PostgreSQL, TimescaleDB) -> reference (pandas twins via open_fdd.rules) -> compare (shipped Policy
+and known-difference list; on a canonical dataset each known difference must also stay inside its pinned delta band,
+see parity_known_differences.json). Exit code 1 if an SQL engine errors, any two SQL engines disagree, a rule diverges
+from pandas without being in the known-difference list or leaves its pinned delta band, or fewer rules were compared
+than have a pandas twin. With --no-pandas no pandas verdict is made.
 
-``--engines pglite,sqlite,timescale`` adds the Timescale path through the NEW core tables (fdd.point, fdd.input_sample,
-fdd.rule_result; needs PGURL + OPENFDD_TS_TEST_DISPOSABLE=1, see tests/parity/adapters.py). It must agree with PGlite row
-for row, load a history equal to the SI dataset cell for cell, write results idempotently, and reproduce the pinned
-verdict. The verdicts of the 8 x 7 and 4 x 3 basic datasets are pinned in tests/parity/baseline.json.
+``--engines ...,timescale`` defaults to ``ingest="si"`` (loads the exact same SI fixture through ``fdd.point`` /
+``fdd.input_sample`` / ``fdd.rule_result`` with identity conversion so it must agree with PGlite row-for-row).
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -29,7 +27,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import harness as h  # noqa: E402
-from adapters import NodeEngineAdapter, TimescaleAdapter  # noqa: E402
+from adapters import ADAPTERS, NodeEngineAdapter  # noqa: E402
 from open_fdd.parity import Policy, compare, generate, known_differences, reference  # noqa: E402
 from open_fdd.parity.pandas_ref import twin_rule_ids  # noqa: E402
 
@@ -45,24 +43,54 @@ def baseline_applies(args) -> dict | None:
     return None
 
 
-def engines_disagree(results: dict, other: str = "sqlite") -> list[str]:
-    """Row-level differences between the PGlite results and ``other`` (sqlite or timescale); empty = they agree."""
-    bad = []
-    for rule, rows in results["pglite"].items():
-        left = {h.sql_result_key(r): r for r in rows}
-        right = {h.sql_result_key(r): r for r in results[other].get(rule, [])}
+def _index_rows(rows: list[dict], engine: str, rule: str, bad: list[str]) -> dict[str, dict]:
+    indexed: dict[str, dict] = {}
+    for row in rows:
+        key = h.sql_result_key(row)
+        if key in indexed:
+            bad.append(f"{rule}.{key}: duplicate key in {engine}")
+        else:
+            indexed[key] = row
+    return indexed
+
+
+def engines_disagree(results: dict, other: str = "sqlite", ref_engine: str = "pglite") -> list[str]:
+    """Row-level differences between ``ref_engine`` and ``other``; empty list means exact SI agreement."""
+    bad: list[str] = []
+    left_rules = results.get(ref_engine, {})
+    right_rules = results.get(other, {})
+    if set(left_rules) != set(right_rules):
+        missing = sorted(set(left_rules) - set(right_rules))
+        extra = sorted(set(right_rules) - set(left_rules))
+        bad.append(f"rule sets differ ({ref_engine}-only={missing[:5]}, {other}-only={extra[:5]})")
+
+    for rule in sorted(set(left_rules) & set(right_rules)):
+        left = _index_rows(left_rules[rule], ref_engine, rule, bad)
+        right = _index_rows(right_rules[rule], other, rule, bad)
         if left.keys() != right.keys():
-            bad.append(f"{rule}: row keys differ (pglite-only={sorted(left.keys() - right.keys())[:3]}, "
-                       f"sqlite-only={sorted(right.keys() - left.keys())[:3]})")
+            bad.append(
+                f"{rule}: row keys differ ({ref_engine}-only={sorted(left.keys() - right.keys())[:3]}, "
+                f"{other}-only={sorted(right.keys() - left.keys())[:3]})"
+            )
         for key in sorted(left.keys() & right.keys()):
             r, o = left[key], right[key]
-            for k, v in r.items():
-                w = o.get(k)
-                if isinstance(v, (int, float)) and isinstance(w, (int, float)):
+            if set(r) != set(o):
+                bad.append(f"{rule}.{key}: columns differ ({sorted(set(r) - set(o))}, {sorted(set(o) - set(r))})")
+            for k in sorted(set(r) & set(o)):
+                v, w = r.get(k), o.get(k)
+                if isinstance(v, float) and not math.isfinite(v):
+                    bad.append(f"{rule}.{key}.{k}: nonfinite in {ref_engine} ({v})")
+                    continue
+                if isinstance(w, float) and not math.isfinite(w):
+                    bad.append(f"{rule}.{key}.{k}: nonfinite in {other} ({w})")
+                    continue
+                if (v is None) != (w is None):
+                    bad.append(f"{rule}.{key}.{k}: null vs value ({v!r} vs {w!r})")
+                elif isinstance(v, (int, float)) and isinstance(w, (int, float)) and not isinstance(v, bool) and not isinstance(w, bool):
                     if abs(v - w) > 1e-9 + 1e-6 * max(abs(v), abs(w)):
-                        bad.append(f"{rule}.{key}.{k}")
+                        bad.append(f"{rule}.{key}.{k}: {v} vs {w}")
                 elif v != w:
-                    bad.append(f"{rule}.{key}.{k}")
+                    bad.append(f"{rule}.{key}.{k}: {v!r} vs {w!r}")
     return bad
 
 
@@ -76,8 +104,15 @@ def main() -> int:
     ap.add_argument("--no-pandas", action="store_true", help="SQL engines only (fast; for large --equips/--days)")
     ap.add_argument("--out", type=Path, default=None, help="write the JSON report here")
     args = ap.parse_args()
-    if not args.no_pandas and "pglite" not in args.engines.split(","):
-        ap.error("the pandas verdict compares the pglite engine's rows: add pglite to --engines, or pass --no-pandas")
+
+    engine_list = [e.strip() for e in args.engines.split(",") if e.strip()]
+    unknown = [e for e in engine_list if e not in ADAPTERS]
+    if unknown:
+        ap.error(f"unknown engine(s) {unknown}; expected subset of {sorted(ADAPTERS)}")
+    if not engine_list:
+        ap.error("--engines cannot be empty")
+    if not args.no_pandas and "pglite" not in engine_list and len(engine_list) == 1:
+        pass
 
     policy = Policy.default(args.profile, stress=True, dataset=f"{args.profile}/{args.seed}/{args.equips}/{args.days}")
     ds = generate(args.seed, args.equips, args.days, args.profile)
@@ -85,8 +120,8 @@ def main() -> int:
     results, errors, timing, memory = {}, {}, {}, {}
     t0 = time.time()
     ts_raw = ts_ad = None
-    for kind in args.engines.split(","):
-        ad = TimescaleAdapter() if kind == "timescale" else NodeEngineAdapter(kind)
+    for kind in engine_list:
+        ad = ADAPTERS[kind]()
         ad.load(ds)
         try:
             results[kind] = ad.run()
@@ -104,30 +139,48 @@ def main() -> int:
     rep = {
         "profile": args.profile, "seed": args.seed, "dataset_hash": ds.content_hash(),
         "equips": args.equips, "days": args.days, "rows": len(ds.history),
+        "engines": engine_list,
         "sql_wall_s": round(sql_wall, 2), "sql_timing_ms": timing, "sql_memory_mb": memory, "sql_errors": errors,
     }
     ok = not errors
 
-    if {"pglite", "sqlite"} <= set(results):
-        bad = engines_disagree(results)
-        rep["pglite_vs_sqlite_mismatches"] = bad
+    ref_sql_engine = "pglite" if "pglite" in results else engine_list[0]
+    engine_mismatches = {}
+    for kind in engine_list:
+        if kind == ref_sql_engine:
+            continue
+        if kind == "timescale" and ts_raw is not None and ts_raw.get("ingest") == "native":
+            continue
+        bad = engines_disagree(results, kind, ref_engine=ref_sql_engine)
+        engine_mismatches[f"{ref_sql_engine}_vs_{kind}"] = bad
         ok = ok and not bad
+    rep["engine_mismatches"] = engine_mismatches
+    if {"pglite", "sqlite"} <= set(results):
+        rep["pglite_vs_sqlite_mismatches"] = engine_mismatches.get("pglite_vs_sqlite", [])
 
     if ts_raw is not None:
-        # like for like: PGlite on the SI cells the fdd.input_sample view produced (last-bit differences can move a sample
-        # that sits exactly on a threshold); the plain PGlite-vs-Timescale differences are reported as threshold ties
-        pg_same = None
-        if "pglite" in results:
-            same = NodeEngineAdapter("pglite")
-            same.load(ts_ad.loaded_dataset(ds))
-            try:
-                pg_same = same.run()
-            finally:
-                same.close()
+        ingest_mode = ts_raw.get("ingest", "native")
+        if ingest_mode == "si":
+            ts_vs_pg = engine_mismatches.get("pglite_vs_timescale", []) if "pglite" in results else ["no pglite run to compare"]
+            tie_only = []
+        else:
+            pg_same = None
+            if "pglite" in results:
+                same = NodeEngineAdapter("pglite")
+                same.load(ts_ad.loaded_dataset(ds))
+                try:
+                    pg_same = same.run()
+                finally:
+                    same.close()
+            ts_vs_pg = (
+                engines_disagree({"pglite": pg_same, "timescale": results["timescale"]}, "timescale", ref_engine="pglite")
+                if pg_same is not None else ["no pglite run to compare"]
+            )
+            tie_only = engines_disagree(results, "timescale", ref_engine="pglite") if "pglite" in results else []
         checks = {
-            "timescale_vs_pglite_mismatches": (engines_disagree({"pglite": pg_same, "timescale": results["timescale"]}, "timescale")
-                                               if pg_same is not None else ["no pglite run to compare"]),
-            "threshold_ties_vs_si_dataset": engines_disagree(results, "timescale") if "pglite" in results else [],
+            "ingest": ingest_mode,
+            "timescale_vs_pglite_mismatches": ts_vs_pg,
+            "threshold_ties_vs_si_dataset": tie_only,
             "history_cell_mismatches": ts_raw["history_mismatches"],
             "native_unit_factor_mismatches": ts_raw["factor"]["factor_mismatches"],
             "rerun_added_rows": ts_raw["stored"]["after"] - ts_raw["stored"]["before"],
@@ -142,7 +195,7 @@ def main() -> int:
     if not args.no_pandas:
         t1 = time.time()
         ref = reference(ds)
-        v = compare(results["pglite"], ref, policy)
+        v = compare(results[ref_sql_engine], ref, policy)
         twins, no_twin = twin_rule_ids()
         rep["pandas_s"] = round(time.time() - t1, 2)
         listed_all = set(known_differences("all"))
@@ -162,17 +215,28 @@ def main() -> int:
             got = {k: v.to_dict()[k] for k in pinned}
             rep["baseline"] = {"pinned": pinned, "got": got, "ok": got == pinned}
             ok = ok and got == pinned
-        if "timescale" in results:
-            vt = compare(results["timescale"], ref, policy)
-            rep["verdict_timescale"] = vtd = vt.to_dict()
-            # Timescale reproduces PGlite's verdict. A pinned delta may move only for a rule whose Timescale rows differ
-            # from PGlite on the SI dataset purely through threshold ties (the like-for-like check above is clean)
-            tie_rules = {t.split(":")[0].split(".")[0] for t in rep["timescale"]["threshold_ties_vs_si_dataset"]}
-            vtd["pin_violations_threshold_ties"] = [p for p in vt.pin_violations if p.split(":")[0] in tie_rules]
-            untied = [p for p in vt.pin_violations if p.split(":")[0] not in tie_rules]
-            same_verdict = all(vtd[k] == v.to_dict()[k] for k in ("compared", "matched", "known_divergent", "unexpected",
-                                                                     "unexpected_rules"))
-            ok = ok and same_verdict and not untied   # PGlite's own pins are enforced through v.ok above
+
+        verdict_by_engine = {ref_sql_engine: v.to_dict()}
+        for kind in engine_list:
+            if kind == ref_sql_engine:
+                continue
+            ve = compare(results[kind], ref, policy)
+            ved = ve.to_dict()
+            verdict_by_engine[kind] = ved
+            if kind == "timescale" and ts_raw is not None and ts_raw.get("ingest") == "native":
+                tie_rules = {t.split(":")[0].split(".")[0] for t in rep["timescale"]["threshold_ties_vs_si_dataset"]}
+                ved["pin_violations_threshold_ties"] = [p for p in ve.pin_violations if p.split(":")[0] in tie_rules]
+                untied = [p for p in ve.pin_violations if p.split(":")[0] not in tie_rules]
+                same_verdict = all(ved[k] == v.to_dict()[k] for k in ("compared", "matched", "known_divergent", "unexpected",
+                                                                         "unexpected_rules"))
+                ok = ok and same_verdict and not untied
+            else:
+                same_verdict = all(ved[k] == v.to_dict()[k] for k in ("compared", "matched", "known_divergent", "unexpected",
+                                                                         "unexpected_rules"))
+                ok = ok and ve.ok and same_verdict
+        rep["verdict_by_engine"] = verdict_by_engine
+        if "timescale" in verdict_by_engine:
+            rep["verdict_timescale"] = verdict_by_engine["timescale"]
     else:
         rep["python_peak_rss_mb"] = round(h.peak_rss_mb(), 1)
     print(json.dumps(rep, indent=2, ensure_ascii=False))

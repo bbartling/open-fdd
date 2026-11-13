@@ -1,5 +1,5 @@
 # pandas == SQL parity: the open_fdd pandas oracle must agree with the SQL FDD pack
-# (sql/fdd) on synthetic SI data; plus a stress report.
+# (sql/fdd) across PGlite, SQLite, DuckDB, and standalone PostgreSQL on synthetic SI data.
 name: pandas == SQL parity
 
 on:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   parity:
-    name: pandas oracle vs SQL pack
+    name: pandas oracle vs SQL pack (PGlite + SQLite + DuckDB)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -28,16 +28,64 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install oracle (pandas) and nf-app dependencies
+      - name: Install oracle (pandas), DuckDB, and nf-app dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[oracle,test,rdf]"
+          python -m pip install -e ".[oracle,test,rdf,duckdb]"
           cd nf-app && npm ci
 
-      # pandas oracle vs the SQL pack (SQLite + PGlite), all in SI. Known divergences are pinned
-      # in tests/parity (KNOWN_DIVERGENT, with reasons); the test fails if that set changes.
-      - name: Python tests (pandas == SQL parity, NF agent tools, deploy tool)
-        run: python -m pytest tests -q
+      # pandas oracle vs the SQL pack (PGlite + SQLite + DuckDB), all in SI. Known divergences are pinned
+      # in open_fdd/data/parity_known_differences.json; the test fails if that set changes.
+      - name: Python tests (pandas == SQL parity, engine matrix, NF agent tools, deploy tool)
+        run: |
+          set -o pipefail
+          python -m pytest tests -q -k "not test_postgres_4x3_basic_and_edge_parity and not test_timescale_through_the_core_tables and not test_timescale_native_unit_ingestion"
 
-      - name: SI stress report (8 equips x 7 days)
-        run: python tests/parity/stress.py --equips 8 --days 7
+      - name: SI stress matrix (4x3 basic, 8x7 basic, 4x3 edge across PGlite, SQLite, DuckDB)
+        run: |
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile basic
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 8 --days 7 --profile basic
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile edge
+
+  postgres:
+    name: standalone PostgreSQL parity (no Timescale)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      pg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: example
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install oracle (pandas), DuckDB, Postgres driver, and nf-app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[oracle,test,rdf,duckdb,postgres]"
+          cd nf-app && npm ci
+
+      - name: Standalone PostgreSQL parity tests & stress (fail on skip)
+        env:
+          OPENFDD_PG_TEST_DISPOSABLE: "1"
+          POSTGRES_TEST_URL: postgres://postgres:example@localhost:5432/postgres
+        run: |
+          set -o pipefail
+          python -m pytest tests/parity/test_engine_matrix.py -q -rs 2>&1 | tee "$RUNNER_TEMP/pg-parity.log"
+          if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/pg-parity.log"; then echo "Postgres parity tests skipped: failing the lane"; exit 1; fi
+          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 4 --days 3 --profile basic
+          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 4 --days 3 --profile edge

@@ -1,0 +1,55 @@
+# Optional opt-in read-only pgweb sidecar (Full edition only; never used on Lite).
+# Off by default. Enable explicitly only on Full Timescale boxes over TLS:
+#   docker compose -f docker-compose.yml -f docker-compose.pgweb.yml --profile pgweb up -d
+services:
+  caddy:
+    network_mode: !reset ""
+    ports:
+      - "${LAN_IP:?Set LAN_IP}:${TLS_PORT:-443}:443"
+      - "${LAN_IP:?Set LAN_IP}:80:80"
+    environment:
+      - NF_UPSTREAM=${NF_UPSTREAM:-host.docker.internal:8090}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile.tls.pgweb:/etc/caddy/Caddyfile:ro
+      - ./pgweb.caddy:/etc/caddy/pgweb.caddy:ro
+      - ./routes.caddy:/etc/caddy/routes.caddy:ro
+      - ./auth.caddy:/etc/caddy/auth.caddy:ro
+      - ./certs/server.crt:/certs/server.crt:ro
+      - ./certs/server.key:/certs/server.key:ro
+      - caddy_logs:/var/log/caddy
+    networks:
+      - pgweb_private
+
+  pgweb:
+    image: sosedoff/pgweb:0.16.2
+    profiles: ["pgweb"]
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    command:
+      - "--bind=0.0.0.0"
+      - "--listen=8081"
+      - "--prefix=pgweb/"
+      - "--readonly"
+      - "--lock-session"
+    environment:
+      - PGWEB_DATABASE_URL=${PGWEB_DATABASE_URL:?Set PGWEB_DATABASE_URL with the SELECT-only openfdd_ro role}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - pgweb_private
+    mem_limit: 96m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  pgweb_private:
+    driver: bridge

@@ -59,7 +59,7 @@ per-rule imperial parity run.
 | <a id="fc14"></a>[FC14](sql-cookbook.html#fc14) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
 | <a id="fc15"></a>[FC15](sql-cookbook.html#fc15) | match |  |
 | <a id="fc2"></a>[FC2](sql-cookbook.html#fc2) | match |  |
-| <a id="fc3"></a>[FC3](sql-cookbook.html#fc3) | match |  |
+| <a id="fc3"></a>[FC3](sql-cookbook.html#fc3) | match | match; differs only on edge data: Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows). |
 | <a id="fc4"></a>[FC4](sql-cookbook.html#fc4) | match |  |
 | <a id="fc5"></a>[FC5](sql-cookbook.html#fc5) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
 | <a id="fc6"></a>[FC6](sql-cookbook.html#fc6) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
@@ -123,6 +123,7 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [ECON-7](#econ-7) | all | 15.5833 h &plusmn; 0.01 | 30.6667 h &plusmn; 0.01 |
 | [FC13-SAT-HIGH](#fc13-sat-high) | all | 10.0833 h &plusmn; 0.01 | 26.0833 h &plusmn; 0.01 |
 | [FC14](#fc14) | all | 93.75 h &plusmn; 0.01 | 410.083 h &plusmn; 0.01 |
+| [FC3](#fc3) | edge | - | - |
 | [FC5](#fc5) | all | 1.8333 h &plusmn; 0.01 | 3.9167 h &plusmn; 0.01 |
 | [FC6](#fc6) | all | 6.75 h &plusmn; 0.01 | 15.75 h &plusmn; 0.01 |
 | [FC7](#fc7) | all | 3.9167 h &plusmn; 0.01 | 4.5833 h &plusmn; 0.01 |

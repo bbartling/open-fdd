@@ -65,6 +65,251 @@ function pointSets(model, site, equip) {
   };
 }
 
+
+const latestScalar = (p) => {
+  const l = p && p.latest;
+  if (!l || typeof l !== "object") return null;
+  for (const k of ["real", "double", "unsigned", "signed", "enumerated", "boolean", "characterString"]) {
+    if (l[k] !== undefined && l[k] !== null) return l[k];
+  }
+  return null;
+};
+
+function normalizeTempToC(value, unit) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const u = String(unit ?? "").trim().toLowerCase().replace(/°/g, "").replace(/\s+/g, "");
+  if (u === "c" || u === "degc" || u === "celsius") return value;
+  if (u === "f" || u === "degf" || u === "fahrenheit") return (value - 32) / 1.8;
+  if (u === "k" || u === "kelvin") return value - 273.15;
+  return null;
+}
+
+const equipHasAny = (e, ...m) => {
+  const tags = Array.isArray(e?.tags) ? e.tags : (typeof markersOf === "function" ? markersOf(e) : []);
+  return m.some((x) => tags.includes(x));
+};
+const isOverviewEligibleEquip = (e) => !!e && !equipHasAny(e, "weather", "weatherStation");
+
+function overviewEquipClass(e) {
+  if (!e) return "other";
+  const a = e.attrs || {};
+  const m = new Set(markersOf(e).map((x) => x.toLowerCase()));
+  const txt = [e.name, a.dis, a.equipType, a.class].filter(Boolean).join(" ");
+  if (m.has("boiler") || (m.has("hot") && m.has("water")) || (m.has("heating") && (m.has("water") || m.has("plant")))
+    || m.has("hwplant") || /\b(boiler|hw[-_\s]?plant|hot[-_\s]?water)\b/i.test(txt)) return "boiler";
+  if (m.has("chiller") || (m.has("chilled") && m.has("water")) || m.has("chwplant")
+    || /\b(chiller|chw[-_\s]?plant|chilled[-_\s]?water)\b/i.test(txt)) return "chiller";
+  if (m.has("rtu") || m.has("rooftop") || /\brtu\b/i.test(txt)) return "rtu";
+  if (m.has("ahu") || /\bahu\b/i.test(txt)) return "ahu";
+  return "other";
+}
+
+function isSystemRootEquip(e) {
+  const a = (e && e.attrs) || {};
+  const m = new Set(markersOf(e).map((x) => x.toLowerCase()));
+  return m.has("plant") || m.has("system") || m.has("root") || !a.equipRef;
+}
+
+function sortOverviewEquips(equips) {
+  const label = (e) => String((e.attrs || {}).dis || e.name || idOf(e) || "");
+  return [...equips].sort((a, b) => (Number(isSystemRootEquip(b)) - Number(isSystemRootEquip(a)))
+    || label(a).localeCompare(label(b)) || String(idOf(a)).localeCompare(String(idOf(b))));
+}
+
+function inspectOverviewOatC(model, site, opts = {}) {
+  const nowMs = opts.nowMs ?? Date.now();
+  const maxBasAgeMs = opts.maxBasAgeMs ?? 30 * 60e3;
+  const maxWeatherAgeMs = opts.maxWeatherAgeMs ?? 2 * 3600e3;
+  const weatherOff = opts.weatherOff ?? weatherDisabled();
+  const equips = (model?.equips || []).filter((e) => (e.attrs || {}).siteRef === site && isOverviewEligibleEquip(e));
+  const equipIds = new Set(equips.map(idOf));
+  const evalPoint = (p, maxAgeMs) => {
+    const tsRaw = p?.latest?.ts;
+    if (!tsRaw) return { ok: false, reason: "missing" };
+    const ts = parseTs(tsRaw);
+    if (!Number.isFinite(ts) || nowMs - ts > maxAgeMs || ts - nowMs > 5 * 60e3) return { ok: false, reason: "stale" };
+    const raw = latestScalar(p);
+    const tempC = normalizeTempToC(raw, p.units);
+    if (tempC == null) return { ok: false, reason: "untyped" };
+    return { ok: true, tempC, ts, point: p };
+  };
+  const basCandidates = (model?.points || []).filter((p) => p.siteRef === site
+    && has(p, "point", "outside", "air", "temp", "sensor")
+    && !isWeatherPoint(p) && !isFddResult(p) && !has(p, "spare")
+    && (!p.equipRef || equipIds.has(p.equipRef)));
+  let localReason = "none";
+  if (opts.configuredOatUuid) {
+    const picked = basCandidates.find((p) => p.uuid === opts.configuredOatUuid);
+    if (picked) {
+      const ev = evalPoint(picked, maxBasAgeMs);
+      if (ev.ok) return { result: { tempC: ev.tempC, source: "local", point: picked, label: picked.dis || picked.name }, reason: "local" };
+      localReason = ev.reason;
+    } else localReason = "configured missing";
+  } else if (basCandidates.length) {
+    const evaluated = basCandidates.map((p) => evalPoint(p, maxBasAgeMs));
+    const valid = evaluated.filter((x) => x.ok);
+    if (valid.length === 1 && basCandidates.length === 1) {
+      const p = valid[0].point;
+      return { result: { tempC: valid[0].tempC, source: "local", point: p, label: p.dis || p.name }, reason: "local" };
+    }
+    if (valid.length === 1 && basCandidates.length > 1) {
+      const p = valid[0].point;
+      return { result: { tempC: valid[0].tempC, source: "local", point: p, label: p.dis || p.name }, reason: "local" };
+    }
+    localReason = valid.length > 1 ? "ambiguous" : (evaluated.find((x) => !x.ok)?.reason || "unavailable");
+  }
+  let wxReason = weatherOff ? "disabled" : "none";
+  if (!weatherOff) {
+    const wxCandidates = (model?.points || []).filter((p) => p.siteRef === site && has(p, "point")
+      && isWeatherPoint(p) && has(p, "outside", "air", "temp")
+      && !has(p, "dewPoint", "wetBulb", "spare"));
+    if (wxCandidates.length) {
+      const evaluated = wxCandidates.map((p) => evalPoint(p, maxWeatherAgeMs));
+      const valid = evaluated.filter((x) => x.ok);
+      if (valid.length === 1) {
+        const p = valid[0].point;
+        return { result: { tempC: valid[0].tempC, source: "weather", point: p, label: p.dis || p.name }, reason: "weather" };
+      }
+      wxReason = valid.length > 1 ? "ambiguous" : (evaluated.find((x) => !x.ok)?.reason || "unavailable");
+    }
+  }
+  return { result: null, reason: `local:${localReason}, weather:${wxReason}` };
+}
+
+function resolveOverviewOatC(model, site, opts = {}) {
+  return inspectOverviewOatC(model, site, opts).result;
+}
+
+function autoSelectOverviewEquip(model, site, opts = {}) {
+  const equips = sortOverviewEquips((model?.equips || []).filter((e) => (e.attrs || {}).siteRef === site && isOverviewEligibleEquip(e)));
+  if (!equips.length) return { equipId: "", equip: null, reason: "No eligible equipment modeled on this site", oat: null, band: null, fallback: true };
+  const oatInfo = inspectOverviewOatC(model, site, opts);
+  const oat = oatInfo.result;
+  const pickByClass = (cls) => equips.find((e) => overviewEquipClass(e) === cls) || null;
+  const labelOf = (e) => (e.attrs || {}).dis || e.name || idOf(e);
+  if (oat) {
+    const targetCls = oat.tempC < 12 ? "boiler" : oat.tempC < 24 ? "rtu" : "chiller";
+    const band = oat.tempC < 12 ? "< 12 °C" : oat.tempC < 24 ? "12–24 °C" : ">= 24 °C";
+    const clsName = targetCls === "boiler" ? "boiler/heating-water" : targetCls === "rtu" ? "RTU" : "chiller/chilled-water";
+    const match = pickByClass(targetCls);
+    if (match) {
+      return {
+        equipId: idOf(match), equip: match, oat, band, fallback: false,
+        reason: `Auto-selected ${labelOf(match)} (${clsName}; OAT ${oat.tempC.toFixed(1)} °C from ${oat.source === "local" ? "local BAS" : "site weather"})`,
+      };
+    }
+    for (const fb of ["rtu", "ahu"]) {
+      const hit = pickByClass(fb);
+      if (hit) {
+        return {
+          equipId: idOf(hit), equip: hit, oat, band, fallback: true,
+          reason: `Auto-selected ${labelOf(hit)} (no ${clsName} for OAT ${oat.tempC.toFixed(1)} °C; fallback ${fb.toUpperCase()})`,
+        };
+      }
+    }
+    return {
+      equipId: idOf(equips[0]), equip: equips[0], oat, band, fallback: true,
+      reason: `Auto-selected ${labelOf(equips[0])} (no ${clsName}, RTU, or AHU for OAT ${oat.tempC.toFixed(1)} °C)`,
+    };
+  }
+  for (const fb of ["rtu", "ahu"]) {
+    const hit = pickByClass(fb);
+    if (hit) {
+      return {
+        equipId: idOf(hit), equip: hit, oat: null, band: null, fallback: true,
+        reason: `Auto-selected ${labelOf(hit)} (OAT ${oatInfo.reason}; fallback ${fb.toUpperCase()})`,
+      };
+    }
+  }
+  return {
+    equipId: idOf(equips[0]), equip: equips[0], oat: null, band: null, fallback: true,
+    reason: `Auto-selected ${labelOf(equips[0])} (OAT ${oatInfo.reason}; first eligible equip)`,
+  };
+}
+
+function scopedEquipmentInventory(model, site, equipId, opts = {}) {
+  const nowMs = opts.nowMs ?? Date.now();
+  const maxAgeMs = opts.maxAgeMs ?? 30 * 60e3;
+  if (!site || !equipId || equipId === WEATHER_SCOPE) return { equip: null, points: [], ioPoints: [], fddPoints: [], gaps: [] };
+  const equip = (model?.equips || []).find((e) => idOf(e) === equipId && (e.attrs || {}).siteRef === site && isOverviewEligibleEquip(e)) || null;
+  if (!equip) return { equip: null, points: [], ioPoints: [], fddPoints: [], gaps: [] };
+
+  const devEquipRefs = new Map();
+  for (const d of model?.devices || []) {
+    if ((d.attrs || {}).siteRef !== site) continue;
+    const did = idOf(d);
+    if (!devEquipRefs.has(did)) devEquipRefs.set(did, new Set());
+    if ((d.attrs || {}).equipRef) devEquipRefs.get(did).add((d.attrs || {}).equipRef);
+  }
+  for (const p of model?.points || []) {
+    if (p.siteRef === site && p.deviceRef && p.equipRef) {
+      if (!devEquipRefs.has(p.deviceRef)) devEquipRefs.set(p.deviceRef, new Set());
+      devEquipRefs.get(p.deviceRef).add(p.equipRef);
+    }
+  }
+  const unambiguousDevIds = new Set();
+  for (const [did, refs] of devEquipRefs) {
+    if (refs.size === 1 && refs.has(equipId)) unambiguousDevIds.add(did);
+  }
+
+  const gaps = [];
+  const ioPoints = [];
+  const fddPoints = [];
+  const groupRank = { sensor: 0, setpoint: 1, command: 2, status: 3, other: 4 };
+  for (const p of model?.points || []) {
+    if (!has(p, "point") || has(p, "spare") || isWeatherPoint(p)) continue;
+    const belongs = p.equipRef === equipId || (!p.equipRef && p.deviceRef && unambiguousDevIds.has(p.deviceRef));
+    if (!belongs) continue;
+    if (p.siteRef !== site) {
+      gaps.push({ point: p, reason: p.siteRef ? `siteRef=${p.siteRef}` : "missing siteRef" });
+      continue;
+    }
+    if (isFddResult(p)) {
+      fddPoints.push(p);
+      continue;
+    }
+    const group = has(p, "sp") ? "setpoint" : has(p, "cmd") ? "command" : p.kind === "Bool" ? "status" : has(p, "sensor") ? "sensor" : "other";
+    const raw = latestScalar(p);
+    const ts = p.latest?.ts || "";
+    const tsMs = ts ? parseTs(ts) : NaN;
+    const stale = !ts || !Number.isFinite(tsMs) || (nowMs - tsMs > maxAgeMs);
+    const historyAvailable = has(p, "his");
+    let formattedValue = "–";
+    let unit = "";
+    if (raw != null) {
+      if (typeof raw === "boolean" || (p.kind === "Bool" && (raw === 0 || raw === 1))) {
+        formattedValue = raw ? "on" : "off";
+      } else if (typeof raw === "number" && Number.isFinite(raw)) {
+        if (p.kind === "Enum" || has(p, "enum")) formattedValue = String(raw);
+        else {
+          formattedValue = fmt(dispVal(p, raw), isRH(p) || isTemp(p) ? 1 : 2);
+          unit = unitLabel(dispUnit(p));
+        }
+      } else {
+        formattedValue = String(raw);
+      }
+    } else if (p.kind === "Number") {
+      unit = unitLabel(dispUnit(p));
+    }
+    const status = raw == null ? "missing" : stale ? "stale" : !historyAvailable ? "current-only" : "trended";
+    ioPoints.push({
+      point: p,
+      uuid: p.uuid,
+      label: p.dis || p.name || p.uuid,
+      group,
+      roleLabel: p.cls ? `${p.cls} (${group})` : group,
+      rawValue: raw,
+      formattedValue,
+      unit,
+      updatedTs: ts,
+      historyAvailable,
+      status,
+    });
+  }
+  ioPoints.sort((a, b) => (groupRank[a.group] - groupRank[b.group]) || a.label.localeCompare(b.label) || String(a.uuid).localeCompare(String(b.uuid)));
+  return { equip, points: ioPoints.map((x) => x.point), ioPoints, fddPoints, gaps };
+}
+
 /** Where a point sits, for labels: its equip's name, "Weather" for weather points. */
 function pointOwner(p, c) {
   if (isWeatherPoint(p)) return WEATHER_LABEL;
@@ -219,17 +464,19 @@ function resolveSiteTimeZone(siteRec, opts = {}) {
 }
 const scheduleApi = () => /** @type {any} */ (globalThis).ofddSchedule;
 /** @returns {{preset: string, fromMs?: number, toMs?: number}} */
-function getChartRangeState(key) {
+function getChartRangeState(key, opts = {}) {
+  const fallback = opts.defaultPreset && (Object.hasOwn(RANGE_PRESETS, opts.defaultPreset) || opts.defaultPreset === "all")
+    ? opts.defaultPreset : DEFAULT_RANGE_PRESET;
   const q = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
-  const preset = q.get(`range.${key}`) || DEFAULT_RANGE_PRESET;
+  const preset = q.get(`range.${key}`) || fallback;
   if (preset === "custom") {
     const fromRaw = q.get(`from.${key}`), toRaw = q.get(`to.${key}`), fromMs = Number(fromRaw), toMs = Number(toRaw);
     if (fromRaw && toRaw && Number.isSafeInteger(fromMs) && Number.isSafeInteger(toMs)
       && Number.isFinite(new Date(fromMs).getTime()) && Number.isFinite(new Date(toMs).getTime()) && fromMs < toMs)
       return { preset, fromMs, toMs };
-    return defaultChartRange();
+    return { preset: fallback };
   }
-  return { preset: Object.hasOwn(RANGE_PRESETS, preset) || preset === "all" ? preset : DEFAULT_RANGE_PRESET };
+  return { preset: Object.hasOwn(RANGE_PRESETS, preset) || preset === "all" ? preset : fallback };
 }
 function setChartRangeState(key, state, { push = true } = {}) {
   const url = new URL(location.href), q = url.searchParams;
@@ -461,6 +708,44 @@ async function fetchRange(list, state, { method = "AVERAGE", windowSec = null, m
       endMs: chunk.toMs, fromMs: chunk.fromMs });
     for (const p of list) series.get(p.uuid).push(...(got.get(p.uuid) || []));
   }
+  let earliestNfMs = Infinity;
+  for (const values of series.values()) {
+    for (const [ts] of values) if (ts < earliestNfMs) earliestNfMs = ts;
+  }
+  const tsFn = typeof globalThis.ofddTimescaleHistory === "function" ? globalThis.ofddTimescaleHistory : null;
+  let timescaleFallback = null;
+  const fillUntil = Number.isFinite(earliestNfMs) ? earliestNfMs : bounds.toMs;
+  if (tsFn && list.length && fillUntil - bounds.fromMs > Math.max(effectiveWindowSec * 2000, 3600e3)) {
+    const numericUuids = list.filter((p) => p.kind !== "String" && p.kind !== "Enum").map((p) => p.uuid);
+    if (numericUuids.length) {
+      const bucket = effectiveWindowSec <= 300 ? "5 minutes"
+        : effectiveWindowSec <= 900 ? "15 minutes"
+        : effectiveWindowSec <= 3600 ? "1 hour"
+        : effectiveWindowSec <= 21600 ? "6 hours"
+        : "1 day";
+      try {
+        const tsRes = await tsFn({ uuids: numericUuids, fromMs: bounds.fromMs, toMs: fillUntil, windowSec: effectiveWindowSec, bucket, method });
+        if (tsRes && tsRes.ok && !tsRes.skipped && Array.isArray(tsRes.rows) && tsRes.rows.length) {
+          const valKey = method === "MAX" ? "max" : method === "MIN" ? "min" : "avg";
+          for (const row of tsRes.rows) {
+            const arr = series.get(row.point_uuid);
+            const t = row.bucket ? Date.parse(row.bucket) : NaN;
+            const v = row[valKey] ?? row.avg;
+            if (arr && Number.isFinite(t) && v != null && Number.isFinite(Number(v))) arr.push([t, Number(v)]);
+          }
+          timescaleFallback = {
+            used: true,
+            bucket: tsRes.bucket || bucket,
+            coarsened: !!tsRes.coarsened,
+            truncated: !!tsRes.truncated,
+            rows: tsRes.rows.length,
+          };
+        }
+      } catch (_) {
+        // Leave NF series intact when Timescale fallback is unavailable on this deployment.
+      }
+    }
+  }
   for (const [uuid, values] of series) {
     const byTimestamp = new Map();
     for (const [timestamp, value] of values) byTimestamp.set(timestamp, value);
@@ -472,7 +757,7 @@ async function fetchRange(list, state, { method = "AVERAGE", windowSec = null, m
     series.set(uuid, values.filter(([t]) => t < bounds.toMs).map(([t, v]) => [Math.max(t, bounds.fromMs), v]));
   }
   return { series, windowSec: effectiveWindowSec, fromMs: bounds.fromMs, toMs: bounds.toMs,
-    timeZone: chartTimeZone(siteTz) };
+    timeZone: chartTimeZone(siteTz), timescaleFallback };
 }
 
 /** Catalog chart fetcher: retain fetchSeries' Map shape while honoring the active range. */

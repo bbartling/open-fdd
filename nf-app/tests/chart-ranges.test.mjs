@@ -137,3 +137,30 @@ test("custom range includes clipped edge buckets and sends exact endpoints", asy
   assert.equal(Date.parse(q.get("to")), toMs);
   assert.deepEqual(Array.from(result.series.get("p1"), (x) => Array.from(x)), [[fromMs, 3]]);
 });
+
+test("fetchRange fills older uncovered range from Full Timescale fallback when registered", async () => {
+  const c = context();
+  const toMs = Date.parse("2026-11-10T00:00:00Z");
+  const fromMs = toMs - 10 * 86400e3;
+  const nfStart = toMs - 2 * 86400e3;
+  c.api = async () => ({
+    data: [{ uuid: "p1", values: [{ ts: new Date(nfStart).toISOString(), double: 72 }] }],
+  });
+  let tsCalls = 0;
+  c.ofddTimescaleHistory = async ({ uuids, fromMs: tf, toMs: tt }) => {
+    tsCalls++;
+    assert.deepEqual(uuids, ["p1"]);
+    assert.equal(tf, fromMs);
+    assert.equal(tt, nfStart);
+    return { ok: true, bucket: "1 hour", rows: [{ point_uuid: "p1", bucket: new Date(fromMs).toISOString(), avg: 66.5, max: 67, n: 1 }] };
+  };
+  const out = await c.get("fetchRange")(
+    [{ uuid: "p1", kind: "Number" }, { uuid: "s1", kind: "String" }],
+    { preset: "custom", fromMs, toMs },
+    { nowMs: toMs },
+  );
+  assert.equal(tsCalls, 1);
+  assert.equal(out.timescaleFallback.used, true);
+  assert.equal(out.series.get("p1")[0][1], 66.5);
+  assert.equal(out.series.get("p1").at(-1)[1], 72);
+});

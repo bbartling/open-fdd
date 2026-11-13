@@ -222,3 +222,12 @@ footer { color: var(--muted); font-size: 12px; text-align: center; padding-botto
 .scopebar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 12px; }
 .scopebar .scope { font-size: 13px; }
 tr.grouprow td { background: var(--panel2); color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+
+/* ---- Overview single-equip landing & I/O inventory ---- */
+.overview-auto-btn { padding: 4px 10px; font-size: 12px; }
+.overview-scope-reason { color: var(--muted); font-size: 12px; }
+.io-badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: var(--panel2); border: 1px solid var(--line); }
+.io-badge.trended { border-color: var(--good); color: var(--good); }
+.io-badge.current-only { border-color: var(--accent); color: var(--accent); }
+.io-badge.stale { border-color: var(--warm); color: var(--warm); }
+.io-badge.missing { border-color: var(--hot); color: var(--hot); }

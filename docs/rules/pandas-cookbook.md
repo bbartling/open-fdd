@@ -884,7 +884,7 @@ Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [match](parity.html#fc3)
+**Parity** [match](parity.html#fc3); differs only on edge data: Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows).
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 

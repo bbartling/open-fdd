@@ -431,6 +431,90 @@ def role_limit_templates(pg_rules):
     return {"version": 1, "rule_config_id": "SV-LIMITS", "shipped": shipped, "allowlists": allow, "rules": rules}
 
 
+
+
+def rule_tuning_templates(catalog, pg_rules):
+    """Rule-level parameter templates for all rules (5.0.17; Full edition, Timescale engine).
+    Keeps numeric {{PLACEHOLDER}} tokens unexpanded (and role-limit fragments as __OFDD_SV_*__ sentinels
+    on sweep rules) so shared/rule-tuning.js can re-render any rule from persisted fdd.rule_config overrides.
+    Verifies byte-identical reproduction of pack SQL and timeline_sql under default parameters."""
+    runtime_defaults = json.loads((SQL_DIR / "runtime_defaults.json").read_text(encoding="utf-8"))
+    sweep_roles = json.loads(render_rule.SWEEP_ROLE_SOURCE.read_text(encoding="utf-8"))
+    role_map = json.loads(render_rule.ROLE_MAP_SOURCE.read_text(encoding="utf-8"))
+    inverse = {name: role for role, name in role_map.items()}
+    shipped = json.loads((ROOT / "open_fdd" / "data" / "sensor_sweep_limits.json").read_text(encoding="utf-8"))
+    limits = render_rule.sweep_catalog.load_role_limits(shipped)
+    rules = {}
+    for r in catalog:
+        rid = r["rule_id"]
+        sql = (SQL_DIR / "postgres" / "rules" / r["sql_file"]).read_text(encoding="utf-8")
+        if "{{ASSESSABLE_ROLES}}" in sql:
+            names = sweep_roles[rid]
+            allowed = ", ".join("'" + inverse[name].replace("'", "''") + "'" for name in names)
+            sql = sql.replace("{{ASSESSABLE_ROLES}}", allowed)
+            fkey = render_rule.FRAGMENT_KEYS[rid]
+            sql = sql.replace("{{" + fkey + "}}", render_rule.sentinel(fkey))
+        tl = build_timeline_pg(sql) if pg_rules[rid]["timeline_sql"] else None
+        controls = {}
+        for k, d in r["parameters"].items():
+            if not d.get("effect_in_sql", True):
+                continue
+            item = {
+                "key": k,
+                "kind": d["kind"],
+                "label": d["label"],
+                "min": d["min"],
+                "max": d["max"],
+                "step": d["step"],
+                "unit": d["unit"],
+                "default": d["default"],
+                "sql_placeholder": d["sql_placeholder"],
+            }
+            if d.get("description"):
+                item["description"] = d["description"]
+            controls[k] = item
+        # Roundtrip check against pg_rules[rid] with defaults + shipped limits
+        vals = dict(runtime_defaults)
+        for k, d in r["parameters"].items():
+            if k != "confirm_min":
+                vals[d["sql_placeholder"]] = d["default"]
+        vals["MODE_DELAY_MIN"] = max(vals.get("MODE_DELAY_MIN", 0), vals.get("STARTUP_DELAY_MIN", 0))
+        vals["POLL_SECONDS"] = POLL_SECONDS
+        confirm_min = r["parameters"]["confirm_min"]["default"]
+        vals["CONFIRM_SECONDS"] = confirm_min * 60
+        vals["CONFIRM_ROWS"] = max(1, -(-int(vals["CONFIRM_SECONDS"]) // POLL_SECONDS))
+        import math
+        vals["CONFIRM_ROWS"] = max(1, math.ceil(vals["CONFIRM_SECONDS"] / POLL_SECONDS))
+        for k, v in list(vals.items()):
+            if k.endswith("_HOURS") and v > 0:
+                p = k[:-6]
+                vals[p + "_SECONDS"] = round(v * 3600)
+                rows = max(6 if p == "FIXED_FLOW" else 1, math.ceil(v * 3600 / POLL_SECONDS))
+                vals[p + "_ROWS"] = rows
+                vals[p + "_ROWS_PRECEDING"] = rows - 1
+                vals[p + "_MIN_PERIODS"] = max(3, rows // 2)
+        for p in ("MODE_DELAY", "STARTUP_DELAY"):
+            rows = max(1, math.ceil(vals.get(p + "_MIN", 0) * 60 / POLL_SECONDS))
+            vals[p + "_ROWS"] = rows
+            vals[p + "_ROWS_PRECEDING"] = rows - 1
+        if "WEB_CADENCE_SECONDS" in vals and "WEB_ASOF_MARGIN_SECONDS" in vals:
+            vals["WEB_ASOF_BOUND_SECONDS"] = round(vals["WEB_CADENCE_SECONDS"] + vals["WEB_ASOF_MARGIN_SECONDS"])
+        def _fill_tmpl(tmpl_text):
+            if tmpl_text is None:
+                return None
+            out = tmpl_text
+            if rid in render_rule.FRAGMENT_KEYS:
+                fkey = render_rule.FRAGMENT_KEYS[rid]
+                frag = render_rule._sweep_fragments({"rule_id": rid}, limits, inverse, set(sweep_roles[rid]))[fkey]
+                out = out.replace(render_rule.sentinel(fkey), frag)
+            return render_rule._PLACEHOLDER.sub(lambda m: render_rule._format_value(vals[m[1]]), out)
+        if _fill_tmpl(sql) != pg_rules[rid]["sql"]:
+            raise SystemExit(f"rule_tuning_templates sql mismatch for {rid}")
+        if _fill_tmpl(tl) != pg_rules[rid]["timeline_sql"]:
+            raise SystemExit(f"rule_tuning_templates timeline_sql mismatch for {rid}")
+        rules[rid] = {"sql": sql, "timeline_sql": tl, "controls": controls}
+    return {"version": 1, "runtime_defaults": runtime_defaults, "rules": rules}
+
 def build():
     catalog = json.loads((SQL_DIR / "tuning_catalog.json").read_text(encoding="utf-8"))["rules"]
     contract = parse_contract()
@@ -477,7 +561,8 @@ def build():
                                "timeline_reason": "" if tl_lite else tl_reason}
     head = {"poll_seconds": POLL_SECONDS}
     pg_pack = {**head, "dialect": "postgres", "helpers_sql": helpers, "contract": contract, "rules": pg_rules,
-               "role_limit_templates": role_limit_templates(pg_rules)}
+               "role_limit_templates": role_limit_templates(pg_rules),
+               "rule_tuning_templates": rule_tuning_templates(catalog, pg_rules)}
     lite_pack = {**head, "dialect": "sqlite", "helpers_sql": "", "helper_functions": sorted(HELPER_FUNCTIONS),
                  "contract": contract, "rules": lite_rules, "skipped": skipped, "notes": notes}
     if column_fixes:

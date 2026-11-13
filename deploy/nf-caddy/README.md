@@ -181,3 +181,22 @@ files public. Pick one:
 
 More (why not NF's built-in TLS, adding a route, verify checklist, clients, roll back):
 [NF operations: front door](../../docs/operations/nf/front-door-caddy.md).
+
+## Optional read-only `pgweb` sidecar (Full edition only)
+
+Full boxes running TimescaleDB can opt in to a read-only `pgweb` inspector behind TLS and Caddy basic auth. It is
+**off by default** and **excluded from Lite**.
+
+- `pgweb` sits on a private bridge network (`pgweb_private`) with no published host ports, runs `--readonly --lock-session`,
+  and connects with a fixed `PGWEB_DATABASE_URL` using a dedicated `SELECT`-only role (`pgweb-grants.sql`, which locks
+  `default_transaction_read_only = on` and `statement_timeout = '10s'`).
+- Caddy serves `/pgweb/*` only on HTTPS (`Caddyfile.tls.pgweb`) behind `basic_auth` (`pgweb.caddy`); anonymous requests
+  get `401`, and `:80` redirects to HTTPS.
+- Because switching Caddy off `network_mode: host` puts it in a bridge network, set `NF_UPSTREAM=host.docker.internal:8090`
+  (or the NF host bridge IP if Envoy binds loopback only).
+
+```bash
+psql "$PGURL" -v ON_ERROR_STOP=1 -f pgweb-grants.sql   # after creating openfdd_ro with a strong password
+# add PGWEB_DATABASE_URL=postgres://openfdd_ro:<password>@host.docker.internal:5432/nf?sslmode=disable to .env
+docker compose -f docker-compose.yml -f docker-compose.pgweb.yml --profile pgweb up -d
+```
