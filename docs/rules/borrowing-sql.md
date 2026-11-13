@@ -71,6 +71,11 @@ uv pip install --python .venv/Scripts/python.exe -e ".[oracle]" duckdb rdflib ma
 
 ## Beginner's database guide: which tables do I actually need?
 
+![Open-FDD Database Schema: persistent tables, input view, composite primary keys, Timescale result hypertable, and rule scratch inputs](../assets/open-fdd-database-schema.svg)
+
+The diagram is drawn directly from `sql/fdd/schema/core.sql`, `sql/fdd/input_contract.json`, and the NF Full hypertable declaration in `nf-app/timescale/install.sql`. Boxes show **actual** keys, not assumed foreign-key constraints. `fdd.rule_result` is a Timescale hypertable **only after the Full edition installer converts it**.
+
+
 **PK (primary key)** means the column(s) that uniquely identify a row. **FK (foreign key)** means a database-enforced link from one table to another. An *ordinary join* uses matching columns but is not necessarily an FK. Open-FDD's three core tables have **composite PKs** (more than one column), but **do not declare FK constraints** between them.
 
 ### Open-FDD Full (Normal Framework + TimescaleDB)
