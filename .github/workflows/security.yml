@@ -37,9 +37,49 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: gitleaks/gitleaks-action@v2
+      # Pin the scan to the commit SHAs from this workflow event rather than
+      # asking an action to recalculate a moving PR's head via the GitHub API.
+      - name: Resolve immutable commit range
+        id: range
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          EVENT_HEAD: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git fetch --no-tags origin "$PR_BASE" "$PR_HEAD"
+            base="$(git merge-base "$PR_BASE" "$PR_HEAD")"
+            head="$PR_HEAD"
+          elif [[ "$EVENT_NAME" == "push" && -n "$PUSH_BEFORE" && ! "$PUSH_BEFORE" =~ ^0+$ ]]; then
+            git fetch --no-tags origin "$PUSH_BEFORE" "$EVENT_HEAD"
+            base="$PUSH_BEFORE"
+            head="$EVENT_HEAD"
+          else
+            # Manual and scheduled runs must scan actual history, not silently skip.
+            echo "log_opts=--all" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git cat-file -e "$base^{commit}"
+          git cat-file -e "$head^{commit}"
+          echo "log_opts=$base..$head" >> "$GITHUB_OUTPUT"
+
+      # Use the CLI so a PR updated during a scan cannot change its range.
+      # Preserve full-history checks for scheduled/manual runs.
+      - name: Scan committed changes for secrets
+        env:
+          LOG_OPTS: ${{ steps.range.outputs.log_opts }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --network none \
+            -v "$PWD:/repo:ro" -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.24.3 \
+            git --config /repo/.gitleaks.toml --redact --verbose \
+            --log-opts="$LOG_OPTS" /repo
 
   zap-baseline:
     name: ZAP baseline (mock NF server)
