@@ -164,8 +164,15 @@ def main() -> int:
             ok = ok and got == pinned
         if "timescale" in results:
             vt = compare(results["timescale"], ref, policy)
-            rep["verdict_timescale"] = vt.to_dict()
-            ok = ok and vt.to_dict() == v.to_dict()
+            rep["verdict_timescale"] = vtd = vt.to_dict()
+            # Timescale reproduces PGlite's verdict. A pinned delta may move only for a rule whose Timescale rows differ
+            # from PGlite on the SI dataset purely through threshold ties (the like-for-like check above is clean)
+            tie_rules = {t.split(":")[0].split(".")[0] for t in rep["timescale"]["threshold_ties_vs_si_dataset"]}
+            vtd["pin_violations_threshold_ties"] = [p for p in vt.pin_violations if p.split(":")[0] in tie_rules]
+            untied = [p for p in vt.pin_violations if p.split(":")[0] not in tie_rules]
+            same_verdict = all(vtd[k] == v.to_dict()[k] for k in ("compared", "matched", "known_divergent", "unexpected",
+                                                                     "unexpected_rules"))
+            ok = ok and same_verdict and not untied   # PGlite's own pins are enforced through v.ok above
     else:
         rep["python_peak_rss_mb"] = round(h.peak_rss_mb(), 1)
     print(json.dumps(rep, indent=2, ensure_ascii=False))

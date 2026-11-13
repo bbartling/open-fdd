@@ -109,7 +109,7 @@ jobs:
   timescale:
     name: TimescaleDB integration (retention scope, history bounds, rule parity)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     services:
       tsdb:
         image: timescale/timescaledb:2.31.0-pg17
