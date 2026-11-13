@@ -31,6 +31,13 @@ function hashCode(s) { let h = 7; for (let k = 0; k < s.length; k++) h = (h * 31
 
 /** Value of history column `col` for equipment index e at step i (hour-of-day h, occupied flag occ). */
 function signal(col, e, i, h, occ, step) {
+  if (col === "run_proof") {
+    // the resolved run proof (#1608): every fourth unit (index 3 mod 4) has NO proof bound (NULL: gated rules are SKIPPED
+    // no_run_proof); index 2 mod 4 is fed by unit 0 (its proof is that unit's fan status, like a VAV fed by an AHU); every
+    // other unit proves itself by its own fan status
+    if (e % 4 === 3) return null;
+    return signal("fan_status", e % 4 === 2 ? 0 : e, i, h, occ, step);
+  }
   const v = baseSignal(col, e, i, h, occ, step);
   if (e !== 1 || v === null) return v;
   // fault-injection windows on the sick unit (per day): A = hot, hard-working coil/fan; B = closed dampers, mixed = outdoor air

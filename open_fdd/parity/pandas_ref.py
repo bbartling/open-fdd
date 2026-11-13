@@ -74,6 +74,8 @@ def equip_frame(ds: Dataset, equip: str, ingest: str = "sorted"):
     # an all-NULL column is a missing role (SQL carries it as typed NULL); weather may then supply web_* roles
     df = df.loc[:, df.notna().any()]
     df.attrs["equipment_id"] = equip
+    if any(c["name"] == "run_proof" for c in ds.history_columns):
+        df.attrs["run_proof_resolved"] = True   # the dataset carries the resolved proof column (NULL = none bound)
     df.attrs["role_units"] = {rmap.get(k, k): u for k, u in ds.units.items() if u}
     return df
 

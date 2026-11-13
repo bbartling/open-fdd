@@ -83,11 +83,11 @@
    "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns",
    "expected": {
     "basic/0/8/7": {
-     "hours": 30.6667,
+     "hours": 27.6667,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 15.5833,
+     "hours": 14.8333,
      "tol": 0.01
     }
    }
@@ -113,11 +113,11 @@
    "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
    "expected": {
     "basic/0/8/7": {
-     "hours": 410.0833,
+     "hours": 292.9167,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 93.75,
+     "hours": 62.5,
      "tol": 0.01
     }
    }
@@ -203,11 +203,11 @@
    "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
    "expected": {
     "basic/0/8/7": {
-     "hours": 17.0833,
+     "hours": 3.0,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 6.1667,
+     "hours": 2.9167,
      "tol": 0.01
     }
    }
@@ -263,11 +263,11 @@
    "reason": "documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances",
    "expected": {
     "basic/0/8/7": {
-     "hours": 468.3333,
+     "hours": 199.25,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 108.9167,
+     "hours": 44.0,
      "tol": 0.01
     }
    }
@@ -278,11 +278,11 @@
    "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
    "expected": {
     "basic/0/8/7": {
-     "hours": 293.4167,
+     "hours": 107.9167,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 51.25,
+     "hours": 18.6667,
      "tol": 0.01
     }
    }
@@ -293,7 +293,7 @@
    "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
    "expected": {
     "basic/0/8/7": {
-     "hours": 1.25,
+     "hours": 0.9167,
      "tol": 0.01
     },
     "basic/0/4/3": {
@@ -308,11 +308,11 @@
    "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
    "expected": {
     "basic/0/8/7": {
-     "hours": 0.6667,
+     "hours": 3.6667,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 0.3333,
+     "hours": 1.25,
      "tol": 0.01
     }
    }
@@ -323,11 +323,11 @@
    "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
    "expected": {
     "basic/0/8/7": {
-     "hours": 1.6667,
+     "hours": 1.3333,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 0.4167,
+     "hours": 0.3333,
      "tol": 0.01
     }
    }
@@ -338,7 +338,7 @@
    "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
    "expected": {
     "basic/0/8/7": {
-     "hours": 1.3333,
+     "hours": 0.9167,
      "tol": 0.01
     },
     "basic/0/4/3": {

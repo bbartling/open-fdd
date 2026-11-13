@@ -29,7 +29,7 @@ from open_fdd.parity._fdlibm import sin as _sin  # V8's sin, bit for bit (math.s
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 #: Bump when ``generate`` changes its output for any (profile, seed, equips, days). Published hashes are per version.
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 
 PROFILES = ("basic", "edge")
 EDGE_FEATURES = ("nulls", "planted", "gap", "jitter", "duplicates", "out_of_order")
@@ -105,6 +105,13 @@ class _Signals:
         return v
 
     def signal(self, col, e, i, h, occ, step):
+        if col == "run_proof":
+            # the resolved run proof (#1608): every fourth unit (index 3 mod 4) has NO proof bound (NULL: gated rules are
+            # SKIPPED no_run_proof); index 2 mod 4 is fed by unit 0 (its proof is that unit's fan status, like a VAV fed by
+            # an AHU); every other unit proves itself by its own fan status
+            if e % 4 == 3:
+                return None
+            return self.signal("fan_status", 0 if e % 4 == 2 else e, i, h, occ, step)
         v = self.base(col, e, i, h, occ, step)
         if e != 1 or v is None:
             return v
