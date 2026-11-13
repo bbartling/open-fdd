@@ -52,7 +52,7 @@ function loadSharedUi(opts = {}) {
   ctx.onThemeChange = noop;
   ctx.streamUpdates = () => noop;
   for (const f of ["model.js", "charts.js", "app-core.js"]) {
-    const code = fs.readFileSync(path.join("/tmp/ofdd-work/open-fdd/shared/static", f), "utf8");
+    const code = fs.readFileSync(path.join(new URL("../../shared/static", import.meta.url).pathname, f), "utf8");
     vm.runInContext(code, ctx, { filename: f });
   }
   return { ctx, storage };

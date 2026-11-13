@@ -17,6 +17,7 @@ than have a pandas twin. With --no-pandas no pandas verdict is made.
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal
 import json
 import math
 import sys
@@ -78,6 +79,9 @@ def engines_disagree(results: dict, other: str = "sqlite", ref_engine: str = "pg
                 bad.append(f"{rule}.{key}: columns differ ({sorted(set(r) - set(o))}, {sorted(set(o) - set(r))})")
             for k in sorted(set(r) & set(o)):
                 v, w = r.get(k), o.get(k)
+                # psycopg returns NUMERIC as Decimal; compare it as the SI float the other engines return
+                v = float(v) if isinstance(v, Decimal) else v
+                w = float(w) if isinstance(w, Decimal) else w
                 if isinstance(v, float) and not math.isfinite(v):
                     bad.append(f"{rule}.{key}.{k}: nonfinite in {ref_engine} ({v})")
                     continue

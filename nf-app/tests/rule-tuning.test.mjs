@@ -36,7 +36,7 @@ test("pack rule_tuning_templates and plot-spec-data rule_tuning are clean (zero 
 
 test("JS renderRuleSql matches Python sql/fdd/render_rule.py byte-for-byte with overrides", () => {
   const root = new URL("../..", import.meta.url).pathname;
-  const pyBin = "/tmp/ofdd-work/venv/bin/python3";
+  const pyBin = process.env.OPENFDD_PYTHON || "python3";
   const cases = [
     { ruleId: "VAV-1", params: { confirm_min: 15, zone_t_hi: 26.5, require_occupied: 0 } },
     { ruleId: "FC1", params: { eps_dsp: 75, confirm_min: 20 } },
@@ -50,11 +50,7 @@ test("JS renderRuleSql matches Python sql/fdd/render_rule.py byte-for-byte with 
   for (const c of cases) {
     const pyScript = `import json, os, sys; sys.path.insert(0, ${JSON.stringify(root)}); sys.path.insert(0, os.path.join(${JSON.stringify(root)}, "scripts", "nf")); from sql.fdd.render_rule import render; from build_sql_pack import build_timeline_pg; sql = render(${JSON.stringify(c.ruleId)}, overrides=${JSON.stringify(c.params)}); tl = build_timeline_pg(sql) if ${tplRoot.rules[c.ruleId].timeline_sql ? "True" : "False"} else None; print(json.dumps({"sql": sql, "timeline_sql": tl}))`;
     let pyOut;
-    try {
-      pyOut = JSON.parse(execFileSync(pyBin, ["-c", pyScript], { encoding: "utf8" }));
-    } catch {
-      pyOut = JSON.parse(execFileSync("python3", ["-c", pyScript], { encoding: "utf8" }));
-    }
+    pyOut = JSON.parse(execFileSync(pyBin, ["-c", pyScript], { encoding: "utf8" }));
     const ruleTpl = tplRoot.rules[c.ruleId];
     const merged = RT.mergeRuleParams(ruleTpl.controls, { version: 1, params: c.params }, null, c.ruleId);
     const values = RT.resolvePlaceholders(tplRoot.runtime_defaults, ruleTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
