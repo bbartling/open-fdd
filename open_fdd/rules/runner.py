@@ -17,8 +17,10 @@ from open_fdd.rules.base import (
     not_applicable,
     params_fingerprint,
     skipped,
+    skipped_no_run_proof,
 )
 from open_fdd.rules.operational_gate import RULE_GATES, resolve_operational_mask, should_skip_equipment_off
+from open_fdd.run_proof import run_proof_gate_on, run_proof_gated_ids
 from open_fdd.analytics.site_model import normalize_equipment_type, resolve_equipment_type
 
 
@@ -355,6 +357,14 @@ def _params_for_rule(rule: cb.CookbookRule, params_by_rule: dict[str, dict]) -> 
     else:
         p.setdefault("require_operational_gate", 0.0)
     overrides = dict(params_by_rule.get(rule.id, {}))
+    # #1608: require_operational_gate is the old name of require_run_proof; either one switches the whole gate
+    legacy = overrides.get("require_operational_gate")
+    if "require_run_proof" not in overrides and legacy is not None:
+        overrides["require_run_proof"] = legacy
+    if "require_run_proof" in overrides and "require_operational_gate" not in overrides:
+        overrides["require_operational_gate"] = overrides["require_run_proof"]
+    if rule.id in run_proof_gated_ids():
+        p.setdefault("require_run_proof", 1.0)
     p.update(overrides)
     for source in params_by_rule.values():
         if isinstance(source, dict) and "occupancy_schedule" in source:
@@ -524,6 +534,16 @@ def run_cookbook_rule(
             params=params,
             gate_enabled=require_operational_gates,
         )
+        if gate_meta.get("missing_proof") and run_proof_gate_on(rule.id, params, require_operational_gates):
+            # the hydronic proof roles are absent: the resolved run proof (own or feeding equipment) is the proof
+            from open_fdd.run_proof import derive_run_proof, proof_on
+
+            rp_series, rp_src = derive_run_proof(d)
+            if rp_series is not None:
+                active = proof_on(rp_series)
+                gate_meta = {**gate_meta, "missing_proof": False, "gate_applied": True, "gate_source": rp_src,
+                             "active_sample_count": int(active.sum()),
+                             "active_coverage_pct": round(100.0 * float(active.mean()), 1) if len(active) else 0.0}
         if gate_meta.get("missing_proof"):
             return skipped(
                 rule.id,
@@ -568,6 +588,19 @@ def run_cookbook_rule(
                 params_fingerprint=fp,
             )
 
+        proof_ok = None
+        if run_proof_gate_on(rule.id, params, require_operational_gates):
+            # #1608: the one run-proof gate. No proof bound or resolvable -> SKIPPED no_run_proof, never a silent PASS.
+            from open_fdd.run_proof import derive_run_proof, proof_on
+
+            proof, proof_src = derive_run_proof(d)
+            if proof is None:
+                return skipped_no_run_proof(
+                    rule.id, equipment_id, site_id=sid, building_id=bid, equipment_type=eq_type,
+                    params_fingerprint=fp,
+                )
+            proof_ok = proof_on(proof)
+            gate_meta = {**gate_meta, "run_proof_source": proof_src}
         if rule.id == "ECON-3":
             raw = econ3_compute(d, params, poll_seconds, wx_ok)
         elif rule.id == "OAT-METEO":
@@ -579,6 +612,8 @@ def run_cookbook_rule(
         else:
             raw = rule.compute(d, params, poll_seconds)
         raw = raw.reindex(d.index).fillna(False).astype(bool)
+        if proof_ok is not None and not rule.sensor_sweep:
+            raw = raw & proof_ok.reindex(d.index).fillna(False)      # off samples never count (sweeps gate inside)
         metrics: dict[str, Any] = {**dict(gate_meta), **weather_source_metrics(d)}
         sweep_result = None
         metrics["quality"] = quality.summary()

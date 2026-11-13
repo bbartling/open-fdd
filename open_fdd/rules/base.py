@@ -17,6 +17,7 @@ RuleStatus = Literal[
     "FAULT",
     "SKIPPED_MISSING_ROLES",
     "SKIPPED_EQUIPMENT_OFF",
+    "SKIPPED_NO_RUN_PROOF",
     "NOT_APPLICABLE_EQUIPMENT_TYPE",
     "NOT_ASSESSED_NO_OCCUPANCY",
     "ERROR",
@@ -169,6 +170,33 @@ def skipped(
         fault_hours=None,
         fault_pct=None,
         notes=notes or msg,
+        params_fingerprint=params_fingerprint,
+    )
+
+
+def skipped_no_run_proof(
+    rule_id: str,
+    equipment_id: str,
+    *,
+    site_id: str = "",
+    building_id: str = "",
+    equipment_type: str = "UNKNOWN",
+    params_fingerprint: str = "",
+) -> RuleResult:
+    """Gate on, no run proof bound or resolvable (#1608): never a silent PASS. Core store: status SKIPPED, reason no_run_proof."""
+    return RuleResult(
+        rule_id=rule_id,
+        equipment_id=equipment_id,
+        site_id=site_id,
+        building_id=building_id,
+        equipment_type=equipment_type,
+        status="SKIPPED_NO_RUN_PROOF",
+        applicable=False,
+        missing_roles=["run-proof"],
+        fault_hours=None,
+        fault_pct=None,
+        metrics={"skip_reason": "no_run_proof"},
+        notes="SKIPPED (no_run_proof): no status or command of this equipment, or of the equipment feeding it, is bound.",
         params_fingerprint=params_fingerprint,
     )
 

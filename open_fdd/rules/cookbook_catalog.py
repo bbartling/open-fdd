@@ -443,6 +443,13 @@ def _flatline_energized(d: pd.DataFrame) -> pd.Series:
     return energized
 
 
+def _sweep_energized(d: pd.DataFrame, p: dict) -> pd.Series:
+    """Run-proof gate of the SV sweeps (#1608): one resolved ``run-proof`` signal, the same one the SQL sweeps read."""
+    from open_fdd.run_proof import sweep_gate_mask
+
+    return sweep_gate_mask(d, p)
+
+
 def _sweep_segments(d: pd.DataFrame, masks: dict[str, pd.Series], poll: float, p: dict) -> dict[str, list[dict]]:
     max_silence = _f(p, "max_silence_hours", 0.5)
     return {
@@ -709,7 +716,7 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     units_map = _units_map(d)
     # SQL's range query gates each ordinary sample on the point-priority
     # energized signal. Long-silence tails are added later and remain ungated.
-    energized = _flatline_energized(d)
+    energized = _sweep_energized(d, p)
     limits = _sweep_limits(d)
     for role in SWEEP_SENSOR_ROLES:
         if role not in d.columns:
@@ -745,7 +752,7 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     # SV-FLATLINE SQL always requires an energized proof for ordinary samples;
     # preserve the legacy pandas-only knob in the catalog, but do not let it
     # diverge from SQL. Silence intervals are still accounted independently.
-    gate = _flatline_energized(d)
+    gate = _sweep_energized(d, p)
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
     limits = _sweep_limits(d)
@@ -777,8 +784,8 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     max_silence_seconds = max_silence * 3600.0
     per_role: dict[str, pd.Series] = {}
     units_map = _units_map(d)
-    require_gate = _f(p, "require_operational_gate", 1.0) >= 0.5
-    energized = _flatline_energized(d)
+    require_gate = _f(p, "require_run_proof", _f(p, "require_operational_gate", 1.0)) >= 0.5
+    energized = _sweep_energized(d, p)
     coverage_pct = 100.0 * float(energized.mean()) if len(energized) else 0.0
     gate_ok = (not require_gate) or coverage_pct >= _f(p, "minimum_active_coverage_pct", 5.0)
     limits = _sweep_limits(d)
@@ -827,6 +834,7 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if r in d.columns and sweep_assessable_role(r, None, units_map, rule_id="SV-STALE", limits=limits)
     ]
     per_role: dict[str, pd.Series] = {}
+    energized = _sweep_energized(d, p)
     for role in present:
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
@@ -838,6 +846,7 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
             tolerance=role_tol,
             max_silence_hours=max_silence,
             poll=poll,
+            gate=energized.reindex(s.index).fillna(False),
         )
     return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-STALE")
 

@@ -409,6 +409,9 @@ def sv_rate_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     sensor_span = p.get("sensor_span")
     override = p.get("profile_override") or None
 
+    from open_fdd.run_proof import sweep_gate_mask
+
+    gate = sweep_gate_mask(d2, p)      # #1608: off samples never count (same run-proof signal as the SQL sweep)
     point_evidence: list[dict[str, Any]] = []
     for role in RATEABLE_ROLES:
         if role not in d2.columns or not d2[role].notna().any():
@@ -454,6 +457,9 @@ def sv_rate_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
             ev["override_error"] = override_error
         dt_h = ev.pop("dt_hours", None)
         fm = ev.get("fault_mask")
+        if isinstance(fm, pd.Series):
+            fm = fm & gate.reindex(fm.index).fillna(False)
+            ev["fault_mask"] = fm
         if isinstance(fm, pd.Series) and isinstance(dt_h, pd.Series):
             fault_hours_raw = float(dt_h.where(fm.reindex(dt_h.index).fillna(False), 0.0).fillna(0.0).sum())
         elif isinstance(fm, pd.Series):

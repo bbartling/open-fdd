@@ -279,6 +279,7 @@ def rule_result_chart(
     if result.confirmed_fault is None and result.status in {
         "SKIPPED_MISSING_ROLES",
         "SKIPPED_EQUIPMENT_OFF",
+        "SKIPPED_NO_RUN_PROOF",
         "NOT_APPLICABLE_EQUIPMENT_TYPE",
         "ERROR",
     }:
