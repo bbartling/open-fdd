@@ -66,7 +66,7 @@ async function runFddNow() {
     const { pid } = await api(`/api/v1/apps/${APP_ID}/hooks/fdd`, {});
     for (let i = 0; i < 60; i++) {
       await new Promise((ok) => setTimeout(ok, 2000));
-      const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/fdd/runs?page_size=5&include_results=true`)).runs || [];
+      const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/fdd/runs?page_size=5&include_results=true&include_logs=true`)).runs || [];
       const run = runs.find((r) => r.pid === pid);
       if (!run || ["STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED"].includes(run.state)) { state.textContent = `running… ${2 * (i + 1)} s`; continue; }
       const events = Object.values(run.results || {}).flatMap((g) => g.events || []);
@@ -476,7 +476,7 @@ async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
   const deadline = Date.now() + 25e3;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 400));
-    const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/history/runs?page_size=5&include_results=true`)).runs || [];
+    const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/history/runs?page_size=5&include_results=true&include_logs=true`)).runs || [];
     const hit = runs.find((r) => r.pid === pid || (r.run && r.run.pid === pid));
     if (!hit) continue;
     const status = String(hit.status || hit.state || "").toUpperCase();

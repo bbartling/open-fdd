@@ -566,7 +566,8 @@ test("Full Timescale history: StartHook gets a flat string-map body and the answ
   assert.equal(start.body.args, undefined, "no {args: ...} wrapper (NF answers 500)");
   assert.deepEqual(JSON.parse(JSON.stringify(start.body)), { uuids: '["p1"]', from: "2026-09-01T00:00:00.000Z", to: "2026-11-01T00:00:00.000Z", bucket: "1 day" });
   for (const v of Object.values(start.body)) assert.equal(typeof v, "string");
+  assert.ok(calls.slice(1).every((x) => /include_logs=true/.test(x.path)), "run polls ask for the event lines (include_logs)");
   assert.equal(res.ok, true);
-  assert.equal(res.rows.length, 1);
+  assert.equal(res.rows.length, 1)
   assert.equal(res.rows[0].avg, 20.5);
 });
