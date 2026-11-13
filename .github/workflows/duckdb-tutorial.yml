@@ -24,7 +24,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install tutorial dependencies
-        run: python -m pip install -e ".[oracle]" duckdb "rdflib>=7.0"
+        run: python -m pip install -e ".[oracle]" duckdb "rdflib>=7.0" matplotlib
+      - name: Verify in-memory DataFrame exploration and plots
+        run: python tutorials/duckdb_sql_parity/explore_data.py --output-dir /tmp/openfdd-eda
       - name: Verify SQL versus pandas equivalence
         run: python tutorials/duckdb_sql_parity/compare_rules.py
       - name: Verify SPARQL metadata to DuckDB samples
