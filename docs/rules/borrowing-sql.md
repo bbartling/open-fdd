@@ -69,6 +69,53 @@ uv pip install --python .venv/Scripts/python.exe -e ".[oracle]" duckdb rdflib ma
 
 `DATE_TRUNC('hour', timestamp_utc)` follows the session time zone, so always set UTC.
 
+## Beginner's database guide: which tables do I actually need?
+
+**PK (primary key)** means the column(s) that uniquely identify a row. **FK (foreign key)** means a database-enforced link from one table to another. An *ordinary join* uses matching columns but is not necessarily an FK. Open-FDD's three core tables have **composite PKs** (more than one column), but **do not declare FK constraints** between them.
+
+### Open-FDD Full (Normal Framework + TimescaleDB)
+
+The [canonical core schema](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/schema/core.sql) defines these **real persistent tables**, shared with other Open-FDD integrations. The source of historian samples is application-owned; it is **not** a fourth core table.
+
+| Object | What it means in building terms | Primary key / relationship | When it is needed |
+|---|---|---|---|
+| `fdd.point` — table | Point directory: AHU SAT, fan status, duct static, etc., mapped to equipment, role, and SI units | **PK:** (`site_id`, `point_key`) | Full NF or an app managing point bindings |
+| `fdd.input_sample` — **view**, not a core table | Reads timestamped historian values; columns `site_id`, `point_key`, `ts`, `value` | No declared PK/FK: join to `fdd.point` on (`site_id`, `point_key`) | Full NF or an adapter exposing samples |
+| `fdd.rule_result` — table | Saves assessed rule windows, `PASS`/`FAULT` status, fault hours, and diagnostics | **PK:** (`site_id`, `equipment_id`, `rule_id`, `subject_key`, `window_start`, `window_end`, `rule_hash`, `config_hash`) | Persisting results in the Full edition |
+| `fdd.rule_config` — table | Stores tuned settings and revision history | **PK:** (`site_id`, `rule_id`, `scope_key`, `revision`) | When you need saved settings |
+| `history` — per-run scratch table | Wide, prepared readings: one equipment + UTC timestamp per row, one SI column per sensor role | Logical row identity: (`equipment_id`, `timestamp_utc`); see input contract, **not a declared persistent PK** | Running most equipment-based SQL rules |
+| `weather`, `sensor_history`, utility tables — scratch inputs | Additional weather, sensor-sweep, or utility data | Rule-specific; see input contract | Only when the selected SQL rule uses them |
+
+The Full edition builds its scratch inputs from the point directory and `fdd.input_sample` view, executes SQL, and writes results to `fdd.rule_result`. **Do not treat `result_id` as a unique PK or FK target:** the schema explicitly uses the composite result key, which also supports Timescale hypertables.
+
+### Minimal setup outside Open-FDD
+
+You do **not** need to install Normal Framework, reproduce the Full database, or create all of the core tables just to test a borrowed rule.
+
+1. Pick a rule in the [SQL cookbook](sql-cookbook.html); note its **required roles** and any extra input tables.
+2. Prepare a `history` table or DuckDB DataFrame with `equipment_id`, UTC `timestamp_utc`, and exactly the role columns the SQL references, using the canonical names and SI units in the [input contract](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/input_contract.json).
+3. Obtain the rendered SQL from `nf-app/rules/pack-postgres.json` (or the SQLite pack), execute it with the appropriate database dialect and any required helpers, and inspect `fault_hours` / `covered_hours`.
+4. If a pandas twin exists, run the [parity comparison](parity-harness.html) on **the same input data** before relying on the rule in another application.
+
+For example, the following is **illustrative** source data for a rule needing SAT readings; it is not a complete input for every rule:
+
+```sql
+-- Example historian input, not the canonical schema migration.
+CREATE TABLE history (
+    equipment_id TEXT NOT NULL,
+    timestamp_utc TIMESTAMPTZ NOT NULL,
+    sat DOUBLE PRECISION,
+    PRIMARY KEY (equipment_id, timestamp_utc)
+);
+-- Example only: real rules may require several additional SI role columns.
+```
+
+The example PK is a **recommended local design choice**, not a PK defined for the generated Open-FDD scratch table. In production, keep one canonical point key per site, make timestamps unambiguous and UTC, de-duplicate history consistently, and never convert missing sensor values to zero. Convert native engineering units to SI before SQL rule execution.
+
+### Simple relationship example
+
+`fdd.point` holds a point such as `SAT-1` on `AHU-1`. A row in `fdd.input_sample` with the same (`site_id`, `point_key`) provides its reading and UTC timestamp. The loader maps its role (for example `sat`) into the wide `history` column. The rule calculates a fault result for `AHU-1`. The Full edition stores that finding in `fdd.rule_result`. These are **application-level joins and mappings**, not declared SQL foreign-key constraints.
+
 ## Input contract
 
 Create the tables from `sql/fdd/input_contract.sql` (scratch DDL generated from `sql/fdd/input_contract.json`) and fill them yourself.
