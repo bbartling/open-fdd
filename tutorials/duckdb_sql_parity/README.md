@@ -10,7 +10,7 @@ From the root of a cloned `open-fdd` repository:
 
 ```powershell
 uv venv --python 3.12
-uv pip install --python .venv/Scripts/python.exe -e ".[oracle]" duckdb rdflib
+uv pip install --python .venv/Scripts/python.exe -e ".[oracle]" duckdb rdflib matplotlib
 .\.venv\Scripts\python.exe tutorials/duckdb_sql_parity/compare_rules.py
 .\.venv\Scripts\python.exe tutorials/duckdb_sql_parity/sparql_samples.py
 ```
@@ -21,6 +21,21 @@ The parity script locates the SQL pack relative to its own file.
 
 On Linux/macOS, replace `.venv/Scripts/python.exe` with `.venv/bin/python`.
 `uv pip install` does **not** require pip to be preinstalled in the venv.
+
+## First: inspect the data in RAM and plot the AHUs
+
+Run `explore_data.py` before the parity comparison. It prints
+`DataFrame.head()`, `DataFrame.info(memory_usage="deep")`,
+`DataFrame.describe(include="number")`, missing-value counts, equipment/time
+coverage and a DuckDB GROUP BY over the in-memory pandas DataFrame.
+
+It saves two files in `duckdb-tutorial-output/` (relative to the working
+directory): `history_describe.csv` and `ahu_history.png`. The image shows
+supply-air temperature (°C) and duct-static pressure (Pa) for both AHUs
+against UTC time, in **separate axes** to avoid mixing units.
+Change the output location with `--output-dir PATH`. Plots are generated
+headlessly, so the example also works in CI. The seeded input is synthetic
+and stays in memory; only the summary CSV and PNG are written.
 
 ## Lesson 1: prove your borrowed SQL matches pandas
 
