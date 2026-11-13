@@ -36,6 +36,10 @@ print(rows, {e: v["pandas"] for e, v in ref["FC1"].items()})
 
 `open_fdd.parity` is missing from the older PyPI releases (4.5.4 and earlier). Until a later release is published, install from git: `pip install "open-fdd[oracle] @ git+https://github.com/bbartling/open-fdd"`.
 
+## Runnable DuckDB and SPARQL tutorial
+
+The [standalone DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) includes executable pandas-versus-SQL assertions for FC1, FC2 and CMD-1, plus SPARQL point discovery joined to a DuckDB long-form historian. Both scripts run locally without an NF server. Follow its README for PowerShell or Linux setup.
+
 ## Setup by database
 
 | Database | Rule SQL | Shims |
