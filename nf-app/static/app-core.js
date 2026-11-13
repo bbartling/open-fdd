@@ -73,7 +73,7 @@ const taggedOnSite = () => model.points.filter((p) => p.siteRef === scope.site &
 const equipLabelOf = (e) => (e.attrs || {}).dis || e.name;
 const eligibleSingleEquips = (m, site) => sortOverviewEquips((m?.equips || []).filter((e) => (e.attrs || {}).siteRef === site && isOverviewEligibleEquip(e)));
 
-function resolveOverviewSelection(m, site, { forceAuto = false } = {}) {
+function resolveOverviewSelection(m, site, { forceAuto = false, nowMs } = {}) {
   const equips = eligibleSingleEquips(m, site);
   if (!equips.length) {
     return { site, equipId: "", mode: "empty", reason: "No eligible equipment modeled on this site." };
@@ -88,7 +88,7 @@ function resolveOverviewSelection(m, site, { forceAuto = false } = {}) {
       return overviewSelection;
     }
   }
-  const auto = autoSelectOverviewEquip(m, site);
+  const auto = autoSelectOverviewEquip(m, site, nowMs === undefined ? {} : { nowMs });
   return { site, equipId: auto.equipId, mode: "auto", reason: auto.reason };
 }
 

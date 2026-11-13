@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 
@@ -52,7 +53,7 @@ function loadSharedUi(opts = {}) {
   ctx.onThemeChange = noop;
   ctx.streamUpdates = () => noop;
   for (const f of ["model.js", "charts.js", "app-core.js"]) {
-    const code = fs.readFileSync(path.join(new URL("../../shared/static", import.meta.url).pathname, f), "utf8");
+    const code = fs.readFileSync(path.join(fileURLToPath(new URL("../../shared/static", import.meta.url)), f), "utf8");
     vm.runInContext(code, ctx, { filename: f });
   }
   return { ctx, storage };
