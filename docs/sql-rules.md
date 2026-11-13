@@ -9,6 +9,17 @@ nav_order: 6
 PostgreSQL is the production FDD source. The SQLite pack is generated from it for smaller NF hosts. Keep every rule
 site-neutral and use SI values at the rule boundary.
 
+## Choose your rule workflow
+
+| Goal | Start here |
+|---|---|
+| Extend a shipped rule or add a new SQL fault rule | Follow the source, registry, build, and test steps below |
+| Run existing SQL in another application | [Using SQL rules outside Open-FDD](rules/borrowing-sql.html) |
+| Execute SQL in DuckDB and independently compare fault hours to pandas | [Runnable DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) |
+| Understand which rules have matching pandas equivalents | [Parity catalog](rules/parity.html) and [parity harness](rules/parity-harness.html) |
+
+A **SQL-only rule is supported** (not every shipped SQL rule has a pandas twin), but do not label a new rule as parity-verified unless its independent pandas implementation exists and passes tests. The DuckDB example currently proves FC1, FC2, and CMD-1 on its seeded basic data; it does **not** mean every PostgreSQL rule executes unmodified in DuckDB.
+
 ## Where inputs and results live
 
 Rules read per-run scratch tables (`history`, `weather`, ...) built from the input contract. In the Full edition the
@@ -45,7 +56,7 @@ requirements explicit in the SQL.
    python3 scripts/nf/gen_cookbook.py
    ```
 
-5. Add a deterministic fixture that exercises the fault and healthy path. Check output columns, missing-data behavior,
+5. Add a deterministic fixture that exercises the fault and healthy path. If you want a pandas twin, implement the corresponding independent rule under `open_fdd/rules/` and register it; do not reuse the SQL output as the pandas oracle. Check output columns, missing-data behavior,
    confirmation edges, operational gating, and relevant timeline rows.
 6. Run the focused engine and parity tests below. Document a deliberate difference in
    `sql/fdd/KNOWN_DIFFERENCES.md` and the parity registry.
