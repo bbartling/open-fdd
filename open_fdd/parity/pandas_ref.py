@@ -102,8 +102,9 @@ def weather_on_grid(out, step_seconds: int):
     return out.reindex(out.index.union(grid)).ffill(limit=int(25 * 60 / step_seconds)).reindex(grid)
 
 
-def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0):
-    """``(fault_hours | None, status, RuleResult)`` of one rule on one equipment frame."""
+def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0, params: dict | None = None):
+    """``(fault_hours | None, status, RuleResult)`` of one rule on one equipment frame (``params``: extra parameters, e.g.
+    ``{"require_run_proof": 0}`` for the ungated twin)."""
     from open_fdd.rules import RULES_BY_ID
     from open_fdd.rules.base import hours_true
     from open_fdd.rules.runner import run_cookbook_rule
@@ -111,7 +112,7 @@ def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0):
     rule = RULES_BY_ID[PANDAS_ID.get(rule_id, rule_id)]
     kind = rule.equipment_kinds[0] if rule.equipment_kinds else "ahu"
     df.attrs["equipment_type"] = kind.upper()  # type-dispatched proofs (mechanical cooling, ...) need it
-    params = {"confirm_min": _confirm_min().get(rule_id, 0.0)}
+    params = {"confirm_min": _confirm_min().get(rule_id, 0.0), **(params or {})}
     res = run_cookbook_rule(rule, df.copy(), equipment_id=df.attrs["equipment_id"], equipment_kind=kind,
                             poll_seconds=poll_seconds, params_by_rule={rule.id: params},
                             weather=None if weather is None else weather.copy(), require_operational_gates=True)
@@ -123,14 +124,16 @@ def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0):
     return res.fault_hours, str(res.status), res
 
 
-def reference(ds: Dataset, rules: Iterable[str] | None = None, ingest: str = "sorted") -> dict[str, dict[str, dict]]:
-    """Run the pandas twin of every (or each given) SQL rule on every equipment of ``ds``."""
+def reference(ds: Dataset, rules: Iterable[str] | None = None, ingest: str = "sorted",
+              params: dict | None = None) -> dict[str, dict[str, dict]]:
+    """Run the pandas twin of every (or each given) SQL rule on every equipment of ``ds`` (``params``: extra parameters for
+    every rule, e.g. ``{"require_run_proof": 0}``)."""
     frames = {e["equipment_id"]: equip_frame(ds, e["equipment_id"], ingest) for e in ds.equipment}
-    return reference_from_frames(frames, weather_frame(ds), float(ds.step_seconds), rules)
+    return reference_from_frames(frames, weather_frame(ds), float(ds.step_seconds), rules, params)
 
 
 def reference_from_frames(frames: Mapping[str, Any], weather, poll_seconds: float,
-                          rules: Iterable[str] | None = None) -> dict[str, dict[str, dict]]:
+                          rules: Iterable[str] | None = None, params: dict | None = None) -> dict[str, dict[str, dict]]:
     """``reference`` for frames built elsewhere (``{equipment_id: frame}``; e.g. by the SPARQL data client): the same
     pandas twin of every SQL rule, run the same way, so any difference comes from the frames alone."""
     twins, _ = twin_rule_ids()
@@ -147,7 +150,7 @@ def reference_from_frames(frames: Mapping[str, Any], weather, poll_seconds: floa
                 # fresh copy per run: rules stash evidence/units in df.attrs and must not leak into each other
                 df = frames[e].copy()
                 df.attrs = copy.deepcopy(frames[e].attrs)
-                ph, status, res = pandas_rule_result(rule, df, weather, poll_seconds)
+                ph, status, res = pandas_rule_result(rule, df, weather, poll_seconds, params)
             except Exception as exc:  # noqa: BLE001 - reported, not hidden
                 ph, status, res = None, f"ERROR {type(exc).__name__}: {exc}", None
             item = {"pandas": None if ph is None else float(ph), "status": status}

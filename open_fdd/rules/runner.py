@@ -357,12 +357,11 @@ def _params_for_rule(rule: cb.CookbookRule, params_by_rule: dict[str, dict]) -> 
     else:
         p.setdefault("require_operational_gate", 0.0)
     overrides = dict(params_by_rule.get(rule.id, {}))
-    # #1608: require_operational_gate is the old name of require_run_proof; either one switches the whole gate
+    # #1608: require_operational_gate is the old name of require_run_proof. The old name still switches everything off
+    # (the rule's own gate too, as it always did); the new name switches only the run-proof gate.
     legacy = overrides.get("require_operational_gate")
     if "require_run_proof" not in overrides and legacy is not None:
         overrides["require_run_proof"] = legacy
-    if "require_run_proof" in overrides and "require_operational_gate" not in overrides:
-        overrides["require_operational_gate"] = overrides["require_run_proof"]
     if rule.id in run_proof_gated_ids():
         p.setdefault("require_run_proof", 1.0)
     p.update(overrides)

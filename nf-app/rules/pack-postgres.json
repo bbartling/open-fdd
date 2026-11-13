@@ -2118,6 +2118,17 @@
       "unit": "degC",
       "default": 17.222222,
       "sql_placeholder": "ECON2_OAT_HI"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -3179,6 +3190,17 @@
       "unit": "degC",
       "default": 12.777778,
       "sql_placeholder": "ECON1_OAT_MIN"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -3218,6 +3240,17 @@
       "unit": "degC_delta",
       "default": 1.222222,
       "sql_placeholder": "OAT_RAT_DELTA_MIN"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -3269,6 +3302,17 @@
       "default": 1.0,
       "sql_placeholder": "RANGE_SCALE_TEMPERATURE"
      },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
+     },
      "max_silence_hours": {
       "key": "max_silence_hours",
       "kind": "dimensionless",
@@ -3318,6 +3362,17 @@
       "unit": "degC",
       "default": 0.055556,
       "sql_placeholder": "FLATLINE_TOL"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "max_silence_hours": {
       "key": "max_silence_hours",
@@ -3606,6 +3661,17 @@
       "unit": "pct",
       "default": 20.0,
       "sql_placeholder": "MINIMUM_SPAN_PCT"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "total_variation_fault_pct": {
       "key": "total_variation_fault_pct",
@@ -4149,6 +4215,17 @@
       "default": 10.0,
       "sql_placeholder": "CONFIRM_SECONDS"
      },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
+     },
      "sat_dev_err": {
       "key": "sat_dev_err",
       "kind": "temperature_difference",
@@ -4215,6 +4292,17 @@
       "unit": "min",
       "default": 5.0,
       "sql_placeholder": "CONFIRM_SECONDS"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "valve_open_pct": {
       "key": "valve_open_pct",
@@ -4298,6 +4386,17 @@
       "unit": "degC",
       "default": 15.555556,
       "sql_placeholder": "ECON3_DP_MAX"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4337,6 +4436,17 @@
       "unit": "degC_delta",
       "default": 1.222222,
       "sql_placeholder": "PREHEAT_OVER"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4376,6 +4486,17 @@
       "unit": "degC",
       "default": -3.888889,
       "sql_placeholder": "ECON6_OAT_MAX"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4448,6 +4569,17 @@
       "unit": "degC",
       "default": 15.555556,
       "sql_placeholder": "ECON7_DP_MAX"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4532,6 +4664,17 @@
       "unit": "degC_delta",
       "default": 1.222222,
       "sql_placeholder": "OAT_RAT_GUARD"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4560,6 +4703,17 @@
       "unit": "degC_delta",
       "default": 1.111111,
       "sql_placeholder": "LEAK_DELTA"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4588,6 +4742,17 @@
       "unit": "degC_delta",
       "default": 1.111111,
       "sql_placeholder": "MAT_LEAK_DELTA"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "sat_err": {
       "key": "sat_err",
@@ -4649,6 +4814,17 @@
       "unit": "frac",
       "default": 0.52,
       "sql_placeholder": "REHEAT_PCT"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4688,6 +4864,17 @@
       "unit": "frac",
       "default": 0.975,
       "sql_placeholder": "FULL_OPEN_PCT"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "sustain_hours": {
       "key": "sustain_hours",
@@ -4738,6 +4925,17 @@
       "unit": "L_per_s",
       "default": 23.59735,
       "sql_placeholder": "FLOW_BIAS"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4777,6 +4975,17 @@
       "unit": "frac",
       "default": 0.25,
       "sql_placeholder": "REHEAT_PCT"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4827,6 +5036,17 @@
       "unit": "frac",
       "default": 0.3,
       "sql_placeholder": "REHEAT_CMD"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4949,6 +5169,17 @@
       "unit": "L_per_s",
       "default": 117.98675,
       "sql_placeholder": "HIGH_MIN_FLOW_SP"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -4966,6 +5197,17 @@
       "unit": "min",
       "default": 15.0,
       "sql_placeholder": "CONFIRM_SECONDS"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "reset_err": {
       "key": "reset_err",
@@ -5066,6 +5308,17 @@
       "unit": "degC",
       "default": 2.222222,
       "sql_placeholder": "MIN_DT"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -5105,6 +5358,17 @@
       "unit": "frac",
       "default": 0.87,
       "sql_placeholder": "PUMP_HI"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -5122,6 +5386,17 @@
       "unit": "min",
       "default": 5.0,
       "sql_placeholder": "CONFIRM_SECONDS"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "sp_band": {
       "key": "sp_band",
@@ -5172,6 +5447,17 @@
       "unit": "frac",
       "default": 0.87,
       "sql_placeholder": "PUMP_HI"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -5211,6 +5497,17 @@
       "unit": "degC",
       "default": 1.111111,
       "sql_placeholder": "CW_SLACK"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -5239,6 +5536,17 @@
       "unit": "min",
       "default": 15.0,
       "sql_placeholder": "CONFIRM_SECONDS"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "tower_fan_hi": {
       "key": "tower_fan_hi",
@@ -5290,6 +5598,17 @@
       "default": 2.777778,
       "sql_placeholder": "EXCESS_BEYOND_APPROACH"
      },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
+     },
      "tower_fan_hi": {
       "key": "tower_fan_hi",
       "kind": "fraction",
@@ -5328,6 +5647,17 @@
       "unit": "degC",
       "default": 29.444444,
       "sql_placeholder": "MIN_SAT"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
      "zone_cold": {
       "key": "zone_cold",
@@ -5406,6 +5736,17 @@
       "unit": "count",
       "default": 1.0,
       "sql_placeholder": "REQUEST_LO"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -5445,6 +5786,17 @@
       "unit": "count",
       "default": 1.0,
       "sql_placeholder": "REQUEST_LO"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },
@@ -5484,6 +5836,17 @@
       "unit": "count",
       "default": 1.0,
       "sql_placeholder": "REQUEST_LO"
+     },
+     "require_run_proof": {
+      "key": "require_run_proof",
+      "kind": "boolean",
+      "label": "Require run proof",
+      "min": 0.0,
+      "max": 1.0,
+      "step": 1.0,
+      "unit": "bool",
+      "default": 1.0,
+      "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
     }
    },

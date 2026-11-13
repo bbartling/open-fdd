@@ -847,8 +847,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": true,
       "delete_python_candidate": false,
@@ -929,8 +928,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -2862,8 +2861,7 @@
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": true,
       "delete_python_candidate": false,
@@ -2944,8 +2942,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -2995,8 +2993,7 @@
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": true,
       "delete_python_candidate": false,
@@ -3077,8 +3074,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -3129,8 +3126,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -3253,8 +3249,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -3318,8 +3314,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -3422,8 +3417,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -3956,8 +3951,7 @@
       "confirm_seconds": 0,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -4093,8 +4087,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -5253,8 +5247,7 @@
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -5305,8 +5298,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -5501,8 +5494,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -5553,8 +5545,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -5617,8 +5609,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -5746,8 +5737,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -5799,8 +5790,7 @@
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -5881,8 +5871,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -5933,8 +5923,7 @@
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -6016,8 +6005,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -6065,8 +6054,7 @@
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -6194,8 +6182,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -6360,8 +6348,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -6442,8 +6429,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -6494,8 +6481,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -6561,8 +6547,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -6611,8 +6597,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -6678,8 +6663,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -6745,8 +6730,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -6842,8 +6826,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -6894,8 +6878,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -6976,8 +6959,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -7042,8 +7025,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -7124,8 +7106,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -7174,8 +7156,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": true,
       "delete_python_candidate": false,
@@ -7255,8 +7236,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -7305,8 +7286,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -7402,8 +7382,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -7554,8 +7534,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -7682,8 +7661,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -7735,8 +7714,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": true,
       "delete_python_candidate": false,
@@ -7787,8 +7765,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8015,8 +7993,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -8087,8 +8064,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8136,8 +8113,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -8213,8 +8189,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8267,8 +8243,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -8314,8 +8289,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8382,8 +8357,7 @@
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -8459,8 +8433,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8512,8 +8486,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -8597,8 +8570,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8647,8 +8620,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -8717,8 +8689,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8783,8 +8755,7 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -8868,8 +8839,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -8935,8 +8906,7 @@
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -9002,8 +8972,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -9129,8 +9099,7 @@
       "confirm_seconds": 1800,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -9213,8 +9182,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -9262,8 +9231,7 @@
       "confirm_seconds": 1800,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -9346,8 +9314,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
@@ -9395,8 +9363,7 @@
       "confirm_seconds": 1800,
       "controls_without_sql_effect": [
         "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
+        "startup_delay_min"
       ],
       "dashboard_wired": false,
       "delete_python_candidate": false,
@@ -9479,8 +9446,8 @@
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
