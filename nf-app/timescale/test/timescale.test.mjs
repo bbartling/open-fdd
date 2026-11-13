@@ -950,7 +950,7 @@ test("openfdd_rt least-privilege role can read views and write fdd tables, never
 
       const deny = async (sql, params = []) => {
         await db.query("SAVEPOINT sp");
-        await assert.rejects(db.query(sql, params), /permission denied|cannot (insert into|update|delete from) view/i);
+        await assert.rejects(db.query(sql, params), /permission denied|cannot (insert into|update|delete from) (column "\w+" of )?view/i);
         await db.query("ROLLBACK TO SAVEPOINT sp");
         await db.query("RELEASE SAVEPOINT sp");
       };
