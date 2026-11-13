@@ -98,7 +98,7 @@ async function loadModel(http, g) {
  * model.js, fdd.js, schedule.js, charts.js, rcx*.js ... in one vm context. `Date` is pinned to `nowMs` (the window end
  * is "now" for the browser code too, and the tests need a fixed clock); `api` is the browser's api() on the read-only http.
  */
-function loadSandbox(http, nowMs) {
+function loadSandbox(http, nowMs, tzSources) {
   class PinnedDate extends Date {
     /** @param {any[]} a */
     constructor(...a) { super(.../** @type {[any]} */ (a.length ? a : [nowMs])); }
@@ -111,6 +111,9 @@ function loadSandbox(http, nowMs) {
   });
   for (const f of SCRIPTS) vm.runInContext(fs.readFileSync(path.join(STATIC, f), 'utf8'), ctx, { filename: f });
   const g = (n) => vm.runInContext(n, ctx);
+  // the dashboard's site-zone sources (#1587): the app option `timezone` and NF Sites, so weekly runtime evaluates the
+  // schedule in the same zone the UI shows (model site tz still wins, inside resolveSiteTimeZone)
+  if (tzSources) g('setSiteTimeZoneSources')(tzSources);
   g.catalog = JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8'));
   return g;
 }
@@ -376,6 +379,8 @@ const TOOLS = { analyze_ahu_weekly_runtime, analyze_mechanical_cooling, analyze_
 // ---- hook ------------------------------------------------------------------------------------------------------------
 const errText = (e) => (e && (e.message || (e.response && JSON.stringify(e.response.data)))) || String(e);
 const startArgs = require('./lib/start-hook-args.js');
+const settings = require('./lib/settings.js');
+const siteTz = require('./lib/site-timezone.js');
 
 /** Hook arguments: NF passes the StartHook "args" object; accept the common spots (same as sparql.js). */
 const argsOf = (ctx) => {
@@ -400,8 +405,8 @@ function capResult(result) {
   return { result: out, text };
 }
 
-/** @param {{sdk: any, args?: any, now?: () => number}} o */
-async function handle({ sdk, args = {}, now = () => Date.now() }) {
+/** @param {{sdk: any, args?: any, config?: any, now?: () => number}} o */
+async function handle({ sdk, args = {}, config = {}, now = () => Date.now() }) {
   const log = (m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   const t0 = now();
   const tool = String((args && args.tool) || '');
@@ -410,7 +415,9 @@ async function handle({ sdk, args = {}, now = () => Date.now() }) {
     if (!Object.prototype.hasOwnProperty.call(TOOLS, tool)) throw new ToolError(`args.tool must be one of ${Object.keys(TOOLS).join(', ')}`);
     const http = readOnlyHttp(sdk.http);
     const nowMs = now();
-    const g = loadSandbox(http, nowMs);
+    const cfg = settings.normalizeConfig(config);
+    const nfSites = (await siteTz.loadNfSites(http)).sites;
+    const g = loadSandbox(http, nowMs, { appOption: siteTz.knownZone(siteTz.optionOf(cfg)), sites: nfSites, weatherOff: !settings.weatherEnabled(cfg) });
     const model = await loadModel(http, g);
     const out = await TOOLS[tool]({ g, model, http, now: nowMs }, args);
     result = { ok: true, tool, ms: now() - t0, ...out };
@@ -425,6 +432,6 @@ async function handle({ sdk, args = {}, now = () => Date.now() }) {
 
 // The hook is the function; the helpers hang off it for the tests (assigned in one go so tsc sees the shape).
 module.exports = Object.assign(
-  async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx) }),
+  async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx), config: ctx.config }),
   { handle, readOnlyHttp, argsOf, TOOLS, ToolError, loadSandbox, loadModel, resolveOne, equipsInScope },
 );

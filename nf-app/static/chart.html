@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-product="Open-FDD">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,9 +15,11 @@
 <script defer src="paging.js"></script>
 <script defer src="nf.js"></script>
 <script defer src="model.js"></script>
+<script defer src="units.js"></script>
 <script defer src="theme.js"></script>
 <script defer src="charts.js"></script>
 <script defer src="chart-page.js"></script>
+<link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -27,7 +29,7 @@
     <div class="sub" id="sub">Loading the Haystack model…</div>
   </div>
   <div class="spacer"></div>
-  <select id="pick" class="hidden"></select>
+  <select id="pick" hidden></select>
   <div class="chart-range-control" id="range"></div>
   <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
   <button class="btn" id="themeToggle" type="button">☾ dark</button>

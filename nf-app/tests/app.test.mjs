@@ -16,6 +16,13 @@ const load = (...files) => {
   return ctx;
 };
 
+// Globals app.js takes from fdd.js / rcx.js (the page loads those first); the stubbed app.js contexts below get the real ones.
+const sharedFdd = () => {
+  const c = vm.createContext({ console });
+  vm.runInContext(readFileSync(new URL("fdd.js", dir), "utf8"), c, { filename: "fdd.js" });
+  return vm.runInContext("({ fddUi, FDD_RULE_RICH, fddRuleTitle, fddRuleOf, fddRuleCellHtml, fddRuleBadgeHtml, fddRuleRich, fddHeatRows, fddEquipOptions, rcxUi: { equip: '', ahuOn: false } })", c);
+};
+
 // A small Haystack model in NF's point/query shape: one site, one equip, one device, points.
 const rec = (name, pointType, attrs, latest) => ({ uuid: `u-${name}`, name, pointType, attrs, latestValue: latest });
 const FIXTURE = {
@@ -199,6 +206,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     return { series: new Map(points.map((p) => [p.uuid, p.history || []])), windowSec: 3600 };
   };
   const ctx = vm.createContext({
+    ...sharedFdd(), WEATHER_SCOPE: "weather",
     console,
     document: { getElementById: (id) => el(id) },
     location: { pathname: "/apps/static/open-fdd/" },
@@ -224,7 +232,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     fetchRange: readRange,
     ofddChart: () => ({ setOption: (o) => { chartOption = o; } }),
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   const h = 3600e3;
   const point = (uuid, name, equipRef, tags, attrs = {}, value = 0, history = []) => ({ uuid, name, dis: name, equipRef, siteRef: attrs.siteRef || "site-fixture", tags, value,
     latest: { ts: "2026-01-01T00:00:00Z" }, history, rec: { attrs: { ...attrs } } });
@@ -276,6 +284,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   ], points: [...results, percentResult, mixedResult, otherSiteResult, vavResult, ...inputs] };
   vm.runInContext("model = testModel", ctx);
   vm.runInContext('scope.site = "site-fixture"', ctx);
+  ctx.fddUi.heatAll = true;
   const initial = vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddRangeStatus").textContent, /Loading fault history/);
   assert.equal(el("fddLanes").attrs["aria-busy"], "true");
@@ -312,13 +321,13 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
   assert.ok(hCells.some((x) => x[2] === 2.25), "current h value remains from the shared mixed-history fixture");
   assert.ok(hCells.some((x) => x[2] === 0), "assessed-zero cells remain visible");
   assert.ok(hCells.every((x) => x[2] != null), "missing samples are not displayed as zeros");
-  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-1")), "empty stale sensor lane is collapsed");
+  assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-1}")), "empty stale sensor lane is collapsed");
   assert.ok(!chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.includes("duct_static")), "empty excluded-role lane is collapsed");
-  assert.ok(chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-2")), "assessed-zero peer stays visible");
+  assert.ok(chartOption.yAxis.data.some((x) => x.includes("SV-STALE") && x.endsWith("sensor-2}")), "assessed-zero peer stays visible");
   assert.ok(hCells.every((x) => x[2] !== 18 && x[2] !== 95 && x[2] !== 80), "pre-boundary % history is excluded");
   const hRow = chartOption.yAxis.data.findIndex((x) => x.includes("SV-RANGE") && x.includes("sensor-5"));
   assert.match(chartOption.tooltip.formatter({ value: [1, hRow, 2] }), /2 h/);
-  const percentRow = chartOption.yAxis.data.findIndex((x) => x.startsWith("FC1"));
+  const percentRow = chartOption.yAxis.data.findIndex((x) => x.includes("rule FC1"));
   assert.match(chartOption.tooltip.formatter({ value: [0, percentRow, 30] }), /30 %/);
 
   el("fddFaultedOnly").checked = true;
@@ -366,7 +375,9 @@ test("161 fault lanes render an option using the real chunked All history path",
   const requests = [];
   let option = null;
   const ctx = vm.createContext({
+    ...sharedFdd(),
     console, URL, URLSearchParams, TextDecoder,
+    fddCatalog: null,
     document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" },
     has: (p, tag) => p.tags.includes(tag), idOf: (e) => e.id,
     latestOf: (p) => p.latest?.double, esc: (s) => String(s ?? "").replace(/[&<>\"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]),
@@ -384,7 +395,7 @@ test("161 fault lanes render an option using the real chunked All history path",
     },
     ofddChart: () => ({ setOption: (built) => { option = built; } }),
   });
-  for (const file of ["paging.js", "nf.js", "model.js", "charts.js", "app.js"]) {
+  for (const file of ["paging.js", "nf.js", "model.js", "charts.js", "app-core.js", "app.js"]) {
     vm.runInContext(readFileSync(new URL(`../static/${file}`, import.meta.url), "utf8"), ctx, { filename: file });
   }
   ctx.renderRangeControl = () => {};
@@ -396,6 +407,10 @@ test("161 fault lanes render an option using the real chunked All history path",
   });
   ctx.testModel = { equips: [{ id: "equip-1", name: "equip-1", attrs: { siteRef: "site-1" } }], points };
   vm.runInContext('model = testModel; scope.site = "site-1"', ctx);
+  await vm.runInContext("renderFddResults(model.equips)", ctx);
+  assert.equal(option.yAxis.data.length, 12, "the heat map defaults to the most-faulted rows only");
+  assert.match(el("fddHeatNote").textContent, /12 most-faulted of 161/);
+  ctx.fddUi.heatAll = true;
   await vm.runInContext("renderFddResults(model.equips)", ctx);
   assert.ok(requests.length > 1, "the rendered lanes read history in multiple bounded requests");
   assert.equal(option.yAxis.data.length, 161);
@@ -426,7 +441,7 @@ test("point history honors the same mixed-output boundary as FDD plots", async (
     },
     ofddChart: () => ({}), ofddRender: (_chart, option) => { plotted = option.series[0].data; },
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   const current = { uuid: "legacy", dis: "legacy output", name: "legacy output", kind: "Number", tags: [], rec: { attrs: {
     unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
   } } };
@@ -445,6 +460,8 @@ test("RCx ignores superseded range resolutions and failures", async () => {
   };
   const pending = [];
   const ctx = vm.createContext({
+    ...sharedFdd(),
+    esc: (x) => String(x ?? ""), fddEquipOptions: () => [],
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
     idOf: (r) => (r.attrs || {}).id || r.name,
     has: (p, marker) => (p.tags || []).includes(marker),
@@ -453,7 +470,7 @@ test("RCx ignores superseded range resolutions and failures", async () => {
     rcxPlan: () => ({ ready: [], missing: [] }),
     resolveChartSelection: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   ctx.testModel = { sites: [{ name: "Site", attrs: { id: "site-a" } }], equips: [], points: [] };
   vm.runInContext('model = testModel; scope.site = "site-a"', ctx);
 
@@ -478,13 +495,15 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
   };
   let rejectRange;
   const ctx = vm.createContext({
+    ...sharedFdd(),
+    esc: (x) => String(x ?? ""), fddCatalog: null,
     console, document: { getElementById: element }, location: { pathname: "/apps/static/open-fdd/" },
     idOf: (r) => (r.attrs || {}).id || r.name, has: (p, marker) => (p.tags || []).includes(marker),
     equipLabel: (e) => e.name, chartTimeZone: () => "UTC", resolveSiteTimeZone: () => ({ zone: "UTC" }), getChartRangeState: () => ({ preset: "custom" }),
     renderRangeControl: () => {}, loadCatalog: async () => ({}), equipRules: () => [{ rule: { id: "SV-RANGE", description: "sensor bounds" }, bound: {} }],
     resolveChartSelection: () => new Promise((_resolve, reject) => { rejectRange = reject; }),
   });
-  vm.runInContext(readFileSync(new URL("../static/app.js", import.meta.url), "utf8"), ctx, { filename: "app.js" });
+  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   ctx.testModel = { equips: [{ name: "AHU-1", attrs: { id: "AHU-1", siteRef: "site-a" } }],
     points: [{ name: "SAT", equipRef: "AHU-1", siteRef: "site-a", tags: ["his"] }] };
   vm.runInContext('model = testModel; scope.site = "site-a"', ctx);
@@ -497,4 +516,34 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
   await plot;
   assert.equal(element("fddPlotRangeStatus").textContent, "Could not load this range: range lookup failed");
   assert.equal(element("fddPlotNote").textContent, "could not draw: range lookup failed");
+});
+
+test("AHU on defaults to ON when a feeding AHU is known (airRef or the only AHU) and OFF when unknown; a click is explicit", () => {
+  const elements = new Map();
+  const el = (id) => { if (!elements.has(id)) elements.set(id, { textContent: "", hidden: true, attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, classList: { toggle() {} } }); return elements.get(id); };
+  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" }, esc: (x) => String(x ?? "") });
+  for (const f of ["paging.js", "nf.js", "model.js", "fdd.js", "rcx.js", "charts.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
+  const eq = (name, markers, extra = {}) => ({ uuid: `u-${name}`, name, attrs: { id: name, siteRef: "s", markers, ...extra } });
+  const ui = vm.runInContext("rcxUi", ctx);
+  const run = (equips) => { ui.ahuOn = null; return vm.runInContext("renderAhuControl", ctx)(equips, catalog); };
+  assert.equal(run([eq("A1", "equip,ahu"), eq("V1", "equip,vav", { airRef: "A1" })]), true, "airRef known");
+  assert.equal(run([eq("A1", "equip,ahu"), eq("V1", "equip,vav")]), true, "the only AHU is assumed");
+  assert.equal(run([eq("A1", "equip,ahu"), eq("A2", "equip,ahu"), eq("V1", "equip,vav")]), false, "two AHUs, no airRef: unknown");
+  assert.match(el("rcxAhuNote").textContent, /feeding AHU is unknown/);
+  ui.ahuOn = false;
+  assert.equal(vm.runInContext("renderAhuControl", ctx)([eq("A1", "equip,ahu"), eq("V1", "equip,vav", { airRef: "A1" })], catalog), false, "an explicit choice wins");
+});
+
+test("every card chart: x labels hide overlaps; the ECharts title is dropped when the card has a heading", () => {
+  const ctx = vm.createContext({ console });
+  vm.runInContext(readFileSync(new URL("rcx.js", dir), "utf8").replace(/^const /gm, "var "), ctx, { filename: "rcx.js" });
+  const t = (o, drop) => JSON.parse(JSON.stringify(vm.runInContext("rcxTidyOption", ctx)(o, drop)));
+  const o = { title: { text: "X", left: 8 }, legend: { top: 28 }, grid: { top: 72 }, xAxis: { type: "time" }, series: [] };
+  assert.equal(t(o, false).title.text, "X");
+  assert.equal(t(o, false).xAxis.axisLabel.hideOverlap, true);
+  const d = t(o, true);
+  assert.equal(d.title, undefined);
+  assert.deepEqual([d.legend.top, d.grid.top], [4, 48], "the empty title band is given back");
+  assert.equal(t({ title: { text: "X", subtext: "why" }, xAxis: [{ type: "time" }, { type: "time", axisLabel: { show: false } }] }, true).title.subtext, "why");
 });

@@ -11,6 +11,9 @@
 
 const RCX_VIEWS = [];
 
+/** RCx tab state (the device filter is the shell's per-tab equip picker): ahuOn = the "AHU on" filter (null = automatic: on when the feeding AHU is known). */
+const rcxUi = { ahuOn: null };
+
 /**
  * Register a view.
  * def = {
@@ -18,17 +21,21 @@ const RCX_VIEWS = [];
  *   group: "Air handlers",                    section heading on the RCx tab
  *   title: "Economizer: OAT − MAT",           card title
  *   kinds: ["ahu"],                           equipment kinds (fdd-catalog equipment_kinds); [] = any
- *   roles: { required: ["oa_t", "mat"], optional: ["rat"] },
+ *   roles: { required: ["oa_t", "mat"], optional: ["rat"] },     anyOf: [..] = at least one of these roles must bind (e.g. fan status OR command)
  *   scope: "equip" | "site",                  equip: one card per bound equip; site: one card, all bound equips
  *   minEquips: 1,                             site views: how many bound equips it needs
  *   hours: 168,                               default history span (the tab's range picker overrides)
+ *   tab: "rcx" | "fdd",                       which tab draws it (default "rcx"; fault-lane charts live on "fdd")
+ *   fleet: true,                              fleet analytics (pies, rankings, all-zones): only in the all-devices view
+ *   headline: true,                           drawn in the headline row at the top of the tab
+ *   tabHidden: true,                          registered (agent analytics, parity) but not drawn on any tab
  *   render: async (el, ctx) => {…}            draw into el; return a short text note or nothing
  * }
  */
 /** @param {RcxViewDef} def */
 function rcxView(def) {
   if (RCX_VIEWS.some((v) => v.id === def.id)) throw new Error(`rcxView: duplicate id ${def.id}`);
-  RCX_VIEWS.push({ kinds: [], roles: { required: [], optional: [] }, scope: "equip", minEquips: 1, hours: 168, ...def });
+  RCX_VIEWS.push({ kinds: [], roles: { required: [], optional: [] }, scope: "equip", minEquips: 1, hours: 168, tab: "rcx", ...def });
 }
 
 const equipLabel = (e) => (e.attrs || {}).dis || e.name;
@@ -43,8 +50,9 @@ function rcxBind(view, equips, model, catalog) {
   for (const rec of equips) {
     const kinds = equipKinds(rec, catalog);
     if (view.kinds.length && !view.kinds.some((k) => kinds.includes(k))) continue;
-    const bound = bindRoles([...view.roles.required, ...view.roles.optional], equipPool(rec, model), catalog);
-    if (view.roles.required.every((r) => bound[r] && bound[r].length)) {
+    const bound = bindRoles([...view.roles.required, ...(view.roles.anyOf || []), ...view.roles.optional], equipPool(rec, model), catalog);
+    const any = !view.roles.anyOf || !view.roles.anyOf.length || view.roles.anyOf.some((r) => bound[r] && bound[r].length);
+    if (any && view.roles.required.every((r) => bound[r] && bound[r].length)) {
       out.push({ rec, id: idOf(rec), name: equipLabel(rec), kinds, bound });
     }
   }
@@ -57,8 +65,10 @@ function rcxMissing(view, equips, model, catalog) {
   for (const rec of equips) {
     const kinds = equipKinds(rec, catalog);
     if (view.kinds.length && !view.kinds.some((k) => kinds.includes(k))) continue;
-    const bound = bindRoles(view.roles.required, equipPool(rec, model), catalog);
+    const bound = bindRoles([...view.roles.required, ...(view.roles.anyOf || [])], equipPool(rec, model), catalog);
     for (const r of view.roles.required) if (!bound[r].length) missing.add(r);
+    const any = view.roles.anyOf || [];
+    if (any.length && !any.some((r) => bound[r].length)) missing.add(any.join(" or "));
   }
   return [...missing];
 }
@@ -124,6 +134,10 @@ function rcxDispSeries(arr, siUnit, delta = false) {
  *   ctx.dispSeries(arr, si, delta)  [[ms, SI]] -> [[ms, display]]
  *   ctx.unit(p)         display unit of a point
  *   ctx.weather         site weather points (tagged `weather`)
+ *   ctx.ahuOn           true when the tab's "AHU on" filter is active
+ *   ctx.feedingAhu(eq)  { ahu, assumed } the AHU that feeds a VAV (airRef; the site's only AHU = assumed), or null
+ *   ctx.ahuMask(eq, windowSec)  async: { on: Map(bucket ms -> bool), ahu, assumed, role } or null (no fan signal)
+ *   ctx.kpi(tile)       publish a summary tile { id, label, value, sub?, tone?, order? } for the tab's KPI row
  *   ctx.model, ctx.catalog, ctx.view
  */
 const RCX_FINE_SEC = 300;              // NF resample window for integration (ctx.alignedFine)
@@ -131,17 +145,41 @@ const RCX_FINE_MAX_SAMPLES = 9000;     // per series per request (NF caps at ~10
 const rcxChartConfig = new WeakMap();
 const rcxChartOriginalSetOption = new WeakMap();
 
-function rcxSiteChart(el, siteTz, range) {
+/**
+ * Shared look of every card chart: x labels never overlap (hideOverlap), and `dropTitle` removes the ECharts title when
+ * the card already has a heading with the same text (a subtext, if any, stays). A title-less legend/grid moves up by the
+ * title's room so the chart does not keep an empty band.
+ */
+function rcxTidyOption(option, dropTitle) {
+  if (!option || typeof option !== "object") return option;
+  const out = { ...option };
+  const arr = (x) => (x == null ? [] : Array.isArray(x) ? x : [x]);
+  if (out.xAxis) out.xAxis = (Array.isArray(out.xAxis) ? out.xAxis : [out.xAxis]).map((a) => ({ ...a, axisLabel: { hideOverlap: true, ...(a.axisLabel || {}) } }));
+  if (Array.isArray(option.xAxis) === false && option.xAxis) out.xAxis = out.xAxis[0];
+  if (dropTitle && out.title && !Array.isArray(out.title) && out.title.text) {
+    const { text, ...rest } = out.title;
+    out.title = rest.subtext ? rest : undefined;
+    if (!rest.subtext) {
+      const up = (v) => (typeof v === "number" && v >= 24 ? v - 24 : v);
+      if (out.legend && !Array.isArray(out.legend)) out.legend = { ...out.legend, top: up(out.legend.top) };
+      if (out.grid) out.grid = Array.isArray(out.grid) ? out.grid.map((g) => ({ ...g, top: up(g.top) })) : { ...out.grid, top: up(out.grid.top) };
+    }
+  }
+  return out;
+}
+
+function rcxSiteChart(el, siteTz, range, dropTitle = false) {
   const chart = ofddChart(el);
   if (!chart || typeof chart.setOption !== "function") return chart;
-  rcxChartConfig.set(chart, { siteTz: chartTimeZone(siteTz), range });
+  rcxChartConfig.set(chart, { siteTz: chartTimeZone(siteTz), range, dropTitle });
   if (!rcxChartOriginalSetOption.has(chart)) {
     const original = chart.setOption.bind(chart);
     rcxChartOriginalSetOption.set(chart, original);
     chart.setOption = (option, ...args) => {
       const cfg = rcxChartConfig.get(chart);
+      const tidy = rcxTidyOption(option, cfg.dropTitle);
       const styled = typeof chartOptionSiteTime === "function"
-        ? chartOptionSiteTime(option, cfg.siteTz) : option;
+        ? chartOptionSiteTime(tidy, cfg.siteTz) : tidy;
       // Keep explicit view extents (for example a week bucket whose start precedes a short
       // selected interval). The input series itself is already fetched for cfg.range.
       const bounds = cfg.range?.resolvedBounds;
@@ -159,7 +197,7 @@ function rcxSiteChart(el, siteTz, range) {
 }
 
 /** @param {RcxViewDef} view @param {OfddEquip[]} equips @param {number} hours @param {OfddModel} model @param {FddCatalog} catalog @returns {RcxContext} */
-function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = "UTC") {
+function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = "UTC", extra = {}) {
   const first = (eq, role) => (eq.bound[role] && eq.bound[role][0]) || null;
   const series = async (pts, o = {}) => {
     const list = pts.filter(Boolean);
@@ -215,9 +253,28 @@ function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = 
     return { ...gridOf(cols, data, windowSec), windowSec, fine: true };
   };
   const site = equips[0] && equips[0].rec && (equips[0].rec.attrs || {}).siteRef;
+  const feeds = () => rcxAirFeeds(model, site, catalog);
+  const feedingAhu = (eq) => feeds().get(eq.id) || null;
+  const fanOf = (ahu) => {
+    const bound = bindRoles(["fan_status", "fan_cmd"], equipPool(ahu.rec, model), catalog);
+    const role = bound.fan_status.length ? "fan_status" : bound.fan_cmd.length ? "fan_cmd" : null;
+    return role ? { role, p: bound[role][0] } : null;
+  };
+  const maskCache = extra.maskCache || new Map();    // AHU fan point + window -> pending mask (VAVs share their AHU; the tab shares it across cards)
+  const ahuMask = async (eq, windowSec = RCX_FINE_SEC) => {
+    const f = feedingAhu(eq);
+    const fan = f && f.ahu ? fanOf(f.ahu) : null;
+    if (!fan) return null;
+    const key = `${fan.p.uuid}|${windowSec}`;
+    if (!maskCache.has(key)) {
+      maskCache.set(key, series([fan.p], { windowSec }).then((data) => rcxAhuOnBuckets(data.get(fan.p.uuid) || [], windowSec * 1e3)));
+    }
+    return { on: await maskCache.get(key), ahu: f.ahu, assumed: f.assumed, role: fan.role };
+  };
   return {
     view, equips, hours, model, catalog, first, series, aligned, alignedFine, range, siteTz,
-    chart: (el) => rcxSiteChart(el, siteTz, range),
+    ahuOn: !!extra.ahuOn, feedingAhu, ahuMask, kpi: (tile) => { if (extra.kpis) extra.kpis.push(tile); },
+    chart: (el) => rcxSiteChart(el, siteTz, range, !!extra.dropTitle),
     siUnit: rcxSiUnit,
     disp: rcxDisp,
     dispDelta: rcxDispDelta,
@@ -225,15 +282,79 @@ function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = 
     dispSystem: () => (rcxUnits() ? rcxUnits().displaySystem() : "si"),
     dispSeries: rcxDispSeries,
     unit: (p) => rcxDisp(0, rcxSiUnit(p)).unit,
-    weather: model.points.filter((p) => has(p, "weather") && has(p, "point") && p.siteRef === site),
+    // weather switched off (app option `weather`: false) -> its points are stale leftovers: RCx falls back to the equip oa_t
+    weather: typeof weatherDisabled === "function" && weatherDisabled() ? [] : model.points.filter((p) => has(p, "weather") && has(p, "point") && p.siteRef === site),
   };
 }
 
-/** Views for the equips in scope: { ready: [{view, equips}], missing: [{view, roles}] }. */
-function rcxPlan(equips, model, catalog) {
+// ---- AHU -> VAV feed + the "AHU on" filter ------------------------------------------------
+/** Ref value -> bare id ("@AHU-1" and "AHU-1" are the same). */
+const rcxRefId = (v) => String(v ?? "").trim().replace(/^@/, "");
+
+/**
+ * Which AHU feeds each VAV: Map(vav id -> { ahu: OfddEquip-like { rec, id, name }, assumed }).
+ *   1. the VAV's Haystack `airRef` names an AHU of the same site (by id, name or NF uuid): assumed = false;
+ *   2. no airRef at all and the site has exactly ONE AHU: that AHU, assumed = true (the UI says "assumed");
+ *   3. otherwise no entry (an airRef that points nowhere is not guessed around).
+ * `equips` = NF equip records of the site, `kindsOf(rec)` = equipment kinds of a record (fdd.js equipKinds).
+ */
+function rcxAirFeedMap(equips, kindsOf) {
+  const ahus = equips.filter((e) => kindsOf(e).includes("ahu"));
+  const out = new Map();
+  for (const e of equips) {
+    if (!kindsOf(e).includes("vav")) continue;
+    const ref = rcxRefId((e.attrs || {}).airRef);
+    const mk = (rec, assumed) => ({ ahu: { rec, id: idOf(rec), name: equipLabel(rec) }, assumed });
+    if (ref) {
+      const hit = ahus.find((a) => [idOf(a), a.name, a.uuid, (a.attrs || {}).dis].some((x) => x && rcxRefId(x) === ref));
+      if (hit) out.set(idOf(e), mk(hit, false));
+    } else if (ahus.length === 1) out.set(idOf(e), mk(ahus[0], true));
+  }
+  return out;
+}
+
+/** Feed map for one site of the model. */
+function rcxAirFeeds(model, site, catalog) {
+  const equips = model.equips.filter((e) => !site || (e.attrs || {}).siteRef === site);
+  return rcxAirFeedMap(equips, (e) => equipKinds(e, catalog));
+}
+
+/** [[ms, v], ...] fan status/cmd -> Map(bucket start ms -> on?) (on = fraction above 0.05, like the runtime views). */
+function rcxAhuOnBuckets(samples, stepMs) {
+  const m = new Map();
+  for (const [t, v] of samples) {
+    if (v == null || !Number.isFinite(v)) continue;
+    m.set(Math.floor(t / stepMs) * stepMs, rcxStats.frac(v) > 0.05);
+  }
+  return m;
+}
+
+/** Keep only the samples whose bucket has the AHU running. mask = rcxAhuOnBuckets(...); null mask = keep all. */
+function rcxKeepAhuOn(samples, mask, stepMs) {
+  if (!mask) return samples;
+  return samples.filter(([t]) => mask.get(Math.floor(t / stepMs) * stepMs) === true);
+}
+
+/** HTML for the KPI tile row: tiles = [{ id, label, value, sub?, tone? ("warn"|"ok") , order? }]. */
+function rcxKpiHtml(tiles) {
+  const e = (x) => String(x ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  return [...tiles].sort((a, b) => (a.order ?? 50) - (b.order ?? 50) || String(a.id).localeCompare(String(b.id)))
+    .map((t) => `<div class="kpi${t.tone ? ` kpi-${e(t.tone)}` : ""}" data-kpi="${e(t.id)}"><span class="kpi-label">${e(t.label)}</span>`
+      + `<b class="kpi-value">${e(t.value)}</b>${t.sub ? `<span class="kpi-sub">${e(t.sub)}</span>` : ""}</div>`).join("");
+}
+
+/**
+ * Views for the equips in scope: { ready: [{view, equips}], missing: [{view, roles}] }.
+ * opts.tab ("rcx" | "fdd"): only that tab's views (default: all, which the agent analytics hook relies on);
+ * opts.single: one device is selected, so fleet analytics (view.fleet) and tabHidden views are left out.
+ */
+function rcxPlan(equips, model, catalog, opts = {}) {
   const ready = [];
   const missing = [];
   for (const view of RCX_VIEWS) {
+    if (opts.tab && view.tab !== opts.tab) continue;
+    if (opts.tab && view.tabHidden) continue;
+    if (opts.single && view.fleet) continue;
     const bound = rcxBind(view, equips, model, catalog);
     if (bound.length >= (view.scope === "site" ? view.minEquips : 1)) ready.push({ view, equips: bound });
     else missing.push({ view, roles: rcxMissing(view, equips, model, catalog) });

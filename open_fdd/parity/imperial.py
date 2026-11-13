@@ -4,6 +4,10 @@
 command/position roles). A downstream app can push that through its own ingest (which converts to SI) and expect
 results identical to the SI run. ``from_imperial`` is the inverse (SI -> imperial -> SI is exact within 1e-9).
 
+One conversion table: the factors come from ``open_fdd/data/unit_factors.json`` (the NF ingest values, also behind
+``open_fdd.units.convert``, ``open_fdd.nf.units`` and ``nf-app/static/units.js``), so a store that converts with NF's table
+returns the SI dataset exactly.
+
 Only roles with a known conversion change: ``si:degC``, ``si:Pa``, ``si:L/s`` and ``fraction`` (0-1 -> 0-100 percent).
 Statuses (0/1), relative humidity, kW, kWh, A, ppm and counts are the same in both systems.
 """
@@ -34,6 +38,7 @@ _UNIT_BY_SYSTEM = {  # series/authorization unit tokens
 
 def _convert(ds: Dataset, which: int, target: str) -> Dataset:
     out = copy.deepcopy(ds)
+    out.__dict__.pop("sensor_history", None)   # a cached SI view would ride along unconverted: rebuild it from history
     plan = {col: CONVERSIONS[scale] for col, scale in _SCALES.items() if scale in CONVERSIONS}
     for row in out.history:
         for col, conv in plan.items():

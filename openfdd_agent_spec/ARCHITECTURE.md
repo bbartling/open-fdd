@@ -52,7 +52,7 @@ The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hoo
 | Hook | Edition | Mode | Caller | Reads / writes |
 |---|---|---|---|---|
 | `fdd` | Full | scheduled hourly (+ run-now) | dashboard (run-now, runs), installer, `export.js`, `rcx.js` | reads NF points + history; writes result points (and `openfdd.fdd_results` with the Timescale engine) |
-| `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; Lite also mirrors them to 3 BACnet AVs (`bacnetMirror`) |
+| `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; both editions mirror them to 3 BACnet AVs by default (`bacnetMirror:false` turns it off) |
 | `sparql` | Full | on request | agents and docs (the browser runs the same engine in `static/sparql.js`) | read-only |
 | `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
 | `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
@@ -63,13 +63,15 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 | Object | Kind | Written by | Read by |
 |---|---|---|---|
 | `openfdd.config` | table | `install.sql` seeds | `hooks/lib/timescale.js`, the retention functions, `doctor` |
-| `openfdd.fdd_results` | hypertable | `fdd` hook (upsert per run) | **integration output**: BI tools and downstream apps read it; the dashboard reads the hook's result points instead. PK `(run_ts, equip, rule_id, sensor_ref)`; columns `site`, `fault_pct`, `fault_hours`, `covered_hours`, `metric` (jsonb), `engine`, `window_start`, `window_end`, `role` |
-| `openfdd.retention_log` | table | `openfdd.retention_run()` | audit trail (tests, operators) |
-| `openfdd.nf_samples` | view | n/a | `hooks/lib/timescale.js`, `hooks/lib/engines.js` (adapter over NF's sample table) |
+| `fdd.point` | table | `fdd` hook (synced per equipment before each load) | **core schema** (`sql/fdd/schema/core.sql`): one row per bound point with its SI `unit`, `si_scale` / `si_offset` and `role`; read by `fdd.input_sample` |
+| `fdd.rule_result` | hypertable (`window_end`, 30 d) | `fdd` hook (upsert per run) | **core schema; integration output**: BI tools and downstream apps read it. PK `(site_id, equipment_id, rule_id, subject_key, window_start, window_end, rule_hash, config_hash)`; `status` PASS/FAULT/INCONCLUSIVE/SKIPPED/ERROR/STALE, `fault_hours`, `covered_hours`, `fault_pct`, `metrics`, `diagnostics` |
+| `fdd.rule_config` | table | tuning hook (writes), `fdd` hook (reads) | **core schema**: append-only tuning revisions (one active per scope); Open-FDD stores sweep role-limit overrides as `rule_id` `SV-LIMITS` (#1589) |
+| `openfdd.nf_samples` | view | n/a | NF's samples in native units (`history_buckets`, newest-sample lookup) |
+| `fdd.input_sample` | view | n/a | SI samples of the bound points (`value * si_scale + si_offset`); the loader reads it (`adapter_nf.sql`) |
 
-The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 2): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
+The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
 
-`sql/fdd/tuning_storage.sql` (`fdd.rule_config_revision`, `fdd.active_rule_config`, `fdd.rule_result`) is **not** part of the above: it is the tuning storage contract that integrators adopt (see [`sql/fdd/README.md`](../sql/fdd/README.md)); no Open-FDD component reads or writes those tables.
+`sql/fdd/schema/core.sql` is the shared core schema (`fdd.point`, `fdd.rule_result`, `fdd.rule_config`): the NF app installs it, and downstream applications vendor it byte for byte (it ships in the wheel as `open_fdd/data/core.sql`). Schema version 4 (5.0.16) replaced `openfdd.fdd_results` and `openfdd.retention_log` with it; see [`docs/upgrade-5x.md`](../docs/upgrade-5x.md).
 
 ## Constraints
 

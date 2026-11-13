@@ -1730,8 +1730,8 @@ def trim3(d, p, poll):
     hwst_hi = _f(p, "hwst_hi", 71.1111)
     req_lo = _f(p, "request_lo", 1.0)
     return (
-        d["hot-water-supply-temp"].notna() & d["hw-reset-request-sum"].notna()
-        & (d["hot-water-supply-temp"] > hwst_hi) & (d["hw-reset-request-sum"] < req_lo)
+        d["hot-water-supply-temp"].notna() & d["hot-water-reset-request-sum"].notna()
+        & (d["hot-water-supply-temp"] > hwst_hi) & (d["hot-water-reset-request-sum"] <= req_lo)
     )
 
 
@@ -1739,8 +1739,8 @@ def trim4(d, p, poll):
     chw_lo = _f(p, "chw_lo", 7.222222)
     req_lo = _f(p, "request_lo", 1.0)
     return (
-        d["chilled-water-supply-temp"].notna() & d["chw-reset-request-sum"].notna()
-        & (d["chilled-water-supply-temp"] < chw_lo) & (d["chw-reset-request-sum"] < req_lo)
+        d["chilled-water-supply-temp"].notna() & d["chilled-water-reset-request-sum"].notna()
+        & (d["chilled-water-supply-temp"] < chw_lo) & (d["chilled-water-reset-request-sum"] <= req_lo)
     )
 
 
@@ -2445,13 +2445,13 @@ RULES: list[CookbookRule] = [
             CookbookParam("request_lo", "Request sum low", "count", 0.0, 10.0, 0.5, 1.0, direction="stricter"),
             CONFIRM_PARAM()], confirm_seconds=1800),
     CookbookRule("TRIM-3", "HWST trim advisory", "trim", ["boiler"],
-        ["hot-water-supply-temp", "hw-reset-request-sum"], "HW supply > 71.1 °C while reset requests are low.",
+        ["hot-water-supply-temp", "hot-water-reset-request-sum"], "HW supply > 71.1 °C while the reset request sum is at or below request_lo.",
         trim3, params=[
             CookbookParam("hwst_hi", "HWST high", "°C", 48.888889, 93.333333, 0.555556, 71.111111, direction="fewer"),
             CookbookParam("request_lo", "Request sum low", "count", 0.0, 10.0, 0.5, 1.0, direction="stricter"),
             CONFIRM_PARAM()], confirm_seconds=1800),
     CookbookRule("TRIM-4", "CHW plant reset advisory", "trim", ["chiller"],
-        ["chilled-water-supply-temp", "chw-reset-request-sum"], "CHW supply < 7.2 °C while reset requests are low.",
+        ["chilled-water-supply-temp", "chilled-water-reset-request-sum"], "CHW supply < 7.2 °C while the reset request sum is at or below request_lo.",
         trim4, params=[
             CookbookParam("chw_lo", "CHWS low", "°C", 1.666667, 12.777778, 0.277778, 7.222222, direction="stricter"),
             CookbookParam("request_lo", "Request sum low", "count", 0.0, 10.0, 0.5, 1.0, direction="stricter"),

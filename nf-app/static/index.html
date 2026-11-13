@@ -6,7 +6,9 @@
 <title>Open-FDD</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https: 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <!--
-  Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js.
+  Open-FDD as a Normal Framework app (ADR-014): light/dark theme in theme.js. Top bar = the site only; each tab that
+  needs an equip has its own picker (app-core.js adds it). app-core.js is the dashboard shell shared with Lite;
+  app.js adds the Full-only tabs (FDD, RCx, Export).
   NF static plugin: served by Normal from the app's static/ folder at
   /api/v1/apps/static/<app-id>/ — same origin as the console, so the page
   calls /api/v1/* directly (LAN or portal tunnel, whichever you opened).
@@ -28,13 +30,18 @@
 <script defer src="fdd.js"></script>
 <script defer src="schedule.js"></script>
 <script defer src="rcx.js"></script>
+<script defer src="plot-spec-data.js"></script>
 <script defer src="fdd-plots.js"></script>
 <script defer src="rcx-overview.js"></script>
 <script defer src="rcx-presets.js"></script>
 <script defer src="energy.js"></script>
 <script defer src="export.js"></script>
+<script defer src="role-limits.js"></script>
+<script defer src="tuning.js"></script>
+<script defer src="app-core.js"></script>
 <script defer src="app.js"></script>
 <script defer src="sparql.js"></script>
+<link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -45,7 +52,6 @@
   </div>
   <div class="spacer"></div>
   <label class="scope">site <select id="sitePick"></select></label>
-  <label class="scope">equip <select id="equipPick"></select></label>
   <span class="pill"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting</span></span>
   <span class="pill" id="clock"></span>
   <button class="btn" id="unitsToggle" type="button" title="Display units">°F · imperial</button>
@@ -59,6 +65,7 @@
   <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
   <button data-tab="export">Export</button>
+  <button data-tab="tuning">Tuning</button>
   <button data-tab="model">Model &amp; RDF</button>
 </nav>
 
@@ -85,7 +92,7 @@
     </section>
     <section class="panel">
       <h2><span id="chartTitle">–</span>
-        <select id="chartPick" class="hidden"></select>
+        <select id="chartPick" hidden></select>
         <span class="hint" id="chartHint"></span>
         <a class="btn" id="chartOpen" target="_blank" rel="noopener" title="open this chart in its own window">open in new window ↗</a>
       </h2>
@@ -98,6 +105,7 @@
   <!-- FDD: which Open-FDD rules each equip can run, with inputs bound by Haystack class/markers -->
   <section class="tab" id="tab-fdd">
     <div class="stats" id="fddStats"></div>
+    <p class="hint" id="fddMode"></p>
     <section class="panel" id="fddPlotPanel" hidden>
       <h2><span id="fddPlotTitle">Rule plot</span> <span class="hint" id="fddPlotNote"></span>
         <button class="btn" id="fddPlotClose">Close</button></h2>
@@ -109,12 +117,19 @@
         <label class="hint"><input type="checkbox" id="fddFaultedOnly"> faulted sensors only</label></h2>
       <div id="fddRangeControl"></div>
       <p id="fddRangeStatus" class="hint" role="status"></p>
+      <label class="hint"><input type="checkbox" id="fddHeatAll"> all rows (default: the most-faulted)</label>
+      <p class="hint" id="fddHeatNote"></p>
       <div class="chart" id="fddLanes"></div>
       <div class="tablewrap"><table class="bac">
         <thead><tr><th>Rule</th><th>Equip</th><th>Latest</th><th>Run</th></tr></thead>
         <tbody id="fddResultRows"></tbody>
       </table></div>
     </section>
+    <section class="panel">
+      <h2>FDD charts <span class="hint">signals on top, bool fault lane at the bottom</span></h2>
+      <div id="fddChartsRangeControl"></div><p id="fddChartsRangeStatus" class="hint" role="status"></p>
+    </section>
+    <div id="fddBody"></div>
     <section class="panel">
       <h2>Rule inputs <span class="hint" id="fddHint">rules from sql/fdd/registry.yaml · inputs found by NF class or Haystack markers</span>
         <label class="hint"><input type="checkbox" id="fddRunnableOnly"> runnable only</label>
@@ -133,8 +148,14 @@
     <section class="panel">
       <h2>Retro-commissioning <span class="hint" id="rcxHint">views draw when their roles bind on the equips in scope</span>
       </h2>
+      <div class="rcx-controls">
+        <button class="btn" id="rcxAhuOn" type="button" aria-pressed="false" title="Only times the feeding AHU's fan is running">AHU on</button>
+        <span class="hint" id="rcxAhuNote"></span>
+      </div>
+      <p class="hint" id="rcxMode"></p>
       <div id="rcxRangeControl"></div><p id="rcxRangeStatus" class="hint" role="status"></p>
     </section>
+    <div class="kpis" id="rcxKpis"></div>
     <div id="rcxBody"></div>
     <section class="panel">
       <details id="rcxMissingBox"><summary>Not available here <span class="count" id="nRcxMissing"></span></summary>
@@ -211,6 +232,36 @@
       <div class="sub" id="exStatus"></div>
       <p class="sub">Columns: <code>timestamp</code> (local time), <code>timestamp_utc</code>, then one column per point as
         <code>equip point [unit]</code>. Boolean / fault points use the window maximum, everything else the average. 1 day windows follow UTC days.</p>
+    </section>
+  </section>
+
+  <!-- Tuning: sweep role limits per site / equipment (tuning.js, hooks/tuning.js; #1589) -->
+  <section class="tab" id="tab-tuning">
+    <section class="panel">
+      <h2>Sensor sweep limits <span class="hint">stored in SI, edited in display units · applied by the next FDD run · Timescale required</span></h2>
+      <div class="exform">
+        <label>Scope <select id="tunScope"></select></label>
+        <label>Chart <select id="tunQuantity">
+          <option value="absolute_temperature">Temperature bands</option>
+          <option value="relative_humidity">Humidity bands</option>
+          <option value="air_pressure">Pressure bands</option>
+          <option value="volume_flow">Flow bands</option>
+          <option value="power">Power bands</option>
+        </select></label>
+        <label>Note <input id="tunNote" maxlength="200" placeholder="why (stored with the revision)"></label>
+      </div>
+      <div class="chart" id="tunChart" style="height:360px"></div>
+      <div class="tablewrap"><table class="tun-table" id="tunRows"></table></div>
+      <div class="exbar">
+        <button class="btn" id="tunPreview" type="button">Preview</button>
+        <button class="btn primary" id="tunSave" type="button">Save revision</button>
+        <button class="btn" id="tunReset" type="button">Reset to defaults</button>
+        <span class="hint" id="tunStatus" role="status"></span>
+      </div>
+      <p class="sub">Precedence: shipped defaults, then the site, then the equipment. Each cell shows its source and the SI value
+        that is stored. Saving validates the whole set first (low below high, positive tolerances); history keeps every revision.</p>
+      <h2>History</h2>
+      <ul id="tunHistory"></ul>
     </section>
   </section>
 

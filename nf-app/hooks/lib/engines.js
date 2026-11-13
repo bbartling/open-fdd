@@ -303,12 +303,25 @@ async function createPglite(pack) {
   };
 }
 
+/** sha256 (hex) of a rule's SQL text: the rule_hash provenance of fdd.rule_result rows. */
+const ruleHashes = new WeakMap();
+function ruleHash(pack, ruleId) {
+  let byRule = ruleHashes.get(pack);
+  if (!byRule) ruleHashes.set(pack, (byRule = new Map()));
+  if (!byRule.has(ruleId)) {
+    const rule = pack.rules[ruleId];
+    byRule.set(ruleId, rule ? require("crypto").createHash("sha256").update(String(rule.sql)).digest("hex") : "");
+  }
+  return byRule.get(ruleId);
+}
+
 // ---------------------------------------------------------------- timescale (FULL edition: rules run inside NF's TimescaleDB)
 
 /**
- * Not fed with prebuilt rows: load() takes { equipId, siteId, roleToUuid, unitsByUuid, fractionRoles, booleanRoles, from,
- * to, stepSec } (the last two arrays are siPlan's scale decisions, #1541) and builds
- * the pack's wide `history` in SQL from openfdd.nf_samples (see timescale/adapter_nf.sql); returns the row count.
+ * Not fed with prebuilt rows: load() takes { equipId, siteId, roleToUuid, unitsByUuid, pointMeta, fractionRoles, booleanRoles,
+ * sensorSeries, from, to, stepSec } (the two role arrays are siPlan's scale decisions, #1541), mirrors the bound points into
+ * fdd.point (their SI scale / offset), and builds the pack's wide `history` in SQL from fdd.input_sample (see
+ * timescale/adapter_nf.sql); returns the row count.
  * opts.client = an already connected pg client (tests); otherwise opts.config (hook config.timescale) is used.
  */
 async function createTimescale(pack, opts = {}) {
@@ -317,7 +330,7 @@ async function createTimescale(pack, opts = {}) {
   const client = opts.client || (await ts.connect(opts.config));
   const owned = !opts.client;
   try {
-    // The v3 result upsert requires the migrated key before any result writes.
+    // The v4 core tables (fdd.point / fdd.rule_result) must exist before any sync or result write.
     const ver = await ts.schemaVersion(client);
     if (ver < ts.SCHEMA_VERSION) {
       try { await ts.install(client); } catch (e) {
@@ -330,17 +343,22 @@ async function createTimescale(pack, opts = {}) {
     client,
     warnings: [],
     async load(args) {
+      await ts.syncPoints(client, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) });
       const { rows, sensorRows } = await ts.loadHistory(client, { pack, ...args });
       return rows || sensorRows;
     },
-    async query(ruleId) {
-      const { results, errors } = await ts.runRules(client, pack, [ruleId]);
+    /** Mirror the bound points of one equipment into fdd.point (load() does this itself). */
+    syncPoints: (args) => ts.syncPoints(client, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) }),
+    /** sql: optional { sql, timeline_sql } of this rule re-rendered with role-limit overrides (#1589); default the pack's. */
+    async query(ruleId, sql) {
+      const runPack = sql && pack.rules[ruleId] ? { ...pack, rules: { ...pack.rules, [ruleId]: { ...pack.rules[ruleId], ...sql } } } : pack;
+      const { results, errors } = await ts.runRules(client, runPack, [ruleId]);
       if (errors[ruleId]) throw new Error(errors[ruleId]);
       return results[ruleId];
     },
     /** Same contract as the other engines; call it after query() of the rule (the helper SQL is installed there). */
-    async timeline(ruleId) {
-      const rule = pack.rules[ruleId];
+    async timeline(ruleId, sql) {
+      const rule = sql && pack.rules[ruleId] ? { ...pack.rules[ruleId], ...sql } : pack.rules[ruleId];
       if (!rule || !rule.timeline_sql) return [];
       const res = await client.query(rule.timeline_sql);
       const numeric = new Set(res.fields.filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
@@ -348,7 +366,9 @@ async function createTimescale(pack, opts = {}) {
     },
     /** Newest sample (epoch ms | null) of these points in the source table, any age (read-only). */
     newestSample: (uuids) => ts.newestSample(client, uuids),
-    resultRow: (a) => ts.toResultRow({ engine: "timescale", ...a }),
+    resultRow: (a) => ts.toResultRow({ engine: "timescale", pollSeconds: pack.poll_seconds, ruleHash: ruleHash(pack, a.ruleId), ...a }),
+    /** Active role-limit override revisions (fdd.rule_config SV-LIMITS) of every site (#1589). */
+    roleLimitOverrides: () => ts.activeRoleLimitOverrides(client),
     writeResults: (rows) => ts.writeResults(client, rows),
     maybeEnforceCap: () => ts.maybeEnforceCap(client),
     async close() { if (owned) await client.end(); },

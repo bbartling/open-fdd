@@ -33,16 +33,17 @@ function load(fetchData = new Map()) {
   return ctx;
 }
 
+// vav_flows (zone airflow timeseries) was removed on purpose; vav_positions and vav_reheat_dats take its place in the VAV group.
 const IDS = ["zone_comfort_rank", "zone_temps", "ahu_dats", "ahu_mats", "ahu_rats", "ahu_dampers", "duct_static_box",
   "duct_static_ts", "ahu_sat_reset_scatter", "hw_reset_scatter", "chw_reset_scatter", "cw_reset_scatter",
-  "vav_flows", "vav_health", "fan_speeds", "meter_elec_cdd", "meter_gas_hdd", "chw_temps_ts", "cw_temps_ts"];
+  "vav_positions", "vav_reheat_dats", "vav_health", "fan_speeds", "meter_elec_cdd", "meter_gas_hdd", "chw_temps_ts", "cw_temps_ts"];
 
-test("all 18 preset ids are registered once, in a known group, with real catalog roles", () => {
+test("all preset ids are registered once, in a known group, with real catalog roles", () => {
   const ctx = load();
   const views = Array.from(ctx.get("RCX_VIEWS"));
   for (const id of IDS) assert.equal(views.filter((v) => v.id === id).length, 1, id);
   assert.equal(views.length, IDS.length);
-  const groups = new Set(["Zones", "Air handlers", "Plant", "VAV", "Metering"]);
+  const groups = new Set(["Zones", "Air handlers", "Plant", "VAV", "Metering", "Scatter plots"]);
   const kinds = new Set(Object.keys(catalog.equipment_kinds));
   for (const v of views) {
     assert.ok(groups.has(v.group), `${v.id} group ${v.group}`);
@@ -119,6 +120,11 @@ test("ported renderers return options (or null when empty)", () => {
   assert.equal(o.rankingBarsOption([{ label: "a", value: 1 }, { label: "b", value: 5 }], { worstFirst: true }).yAxis.data[0], "a");
   assert.equal(o.comfortDonutOption([{ label: "x", value: 0 }]), null);
   assert.equal(o.vavHealthDonutOption([{ label: "x", value: 3 }]).title.text, "VAV health");
+  // the donut is sized in percent of its container (never a fixed size) with short labels, so it cannot be cut off
+  const pie = o.comfortDonutOption([{ label: "x", value: 3 }, { label: "y", value: 1 }]).series[0];
+  assert.ok(pie.radius.every((r) => /^\d+%$/.test(r) && parseInt(r, 10) <= 60), "radius is a percentage of the frame");
+  assert.ok(pie.center.every((c) => /%$/.test(c)));
+  assert.equal(pie.label.formatter, "{d}%");
   assert.equal(o.vavHealthWorstBarsOption([{ label: "x", value: 3 }]).title.text, "Worst zones");
   assert.equal(o.meteringChartsOption([{ month: "2026-07", energy: 5, dd: 3 }]).series.length, 2);
 });
@@ -209,31 +215,211 @@ test("VAV health math: comfort, rogue damper (>=20 h), broken flow, verdict", ()
   assert.equal(m.vavHealthStats({ temp: fill(72), lo: 70, hi: 75 }, 3600).broken, null);          // no flow data
 });
 
-test("vav_health renders bars + donut into two frames", async () => {
-  const MODEL2 = {
-    sites: [rec("S", "SITE", { id: "s" })],
-    equips: [rec("V-1", "EQUIPMENT", { id: "V-1", siteRef: "s", markers: "equip,vav" })],
-    devices: [],
-    points: [
-      rec("ZT", "POINT", { siteRef: "s", equipRef: "V-1", markers: "point,sensor,zone,air,temp,his", kind: "Number", unit: "°F" }),
-      rec("DM", "POINT", { siteRef: "s", equipRef: "V-1", markers: "point,sensor,damper,his", kind: "Number", unit: "%" }),
-    ],
-  };
-  const t = Date.parse("2026-07-01T00:00:00Z");
-  const data = new Map([["u-ZT", [[t, 80], [t + 3600e3, 81]]], ["u-DM", [[t, 50], [t + 3600e3, 50]]]]);
+// ---- rogue VAVs, zone percentile band, AHU on, single vs all devices ----------------------------
+const rep = (v, n) => Array.from({ length: n }, () => v);
+
+test("stuck verdict: always open / always closed over >= 90 % of assessed samples, nothing on too few samples", () => {
+  const m = load().get("rcxPresetMath");
+  const plain = (x) => JSON.parse(JSON.stringify(x));
+  assert.deepEqual(plain(m.stuckVerdict(rep(100, 20))), { state: "open", share: 1, n: 20 });
+  assert.equal(m.stuckVerdict(rep(0, 20)).state, "closed");
+  assert.equal(m.stuckVerdict(rep(1, 20)).state, "open", "0-1 fractions work like percent (1 = 100 %)");
+  assert.equal(m.stuckVerdict(rep(96, 18).concat(rep(40, 2))).state, "open", "18 of 20 = 90 % is enough");
+  assert.equal(m.stuckVerdict(rep(96, 17).concat(rep(40, 3))), null, "17 of 20 = 85 % is not");
+  assert.equal(m.stuckVerdict(rep(94, 20)), null, "94 % open is below the 95 % open threshold");
+  assert.equal(m.stuckVerdict(rep(5, 20)).state, "closed", "5 % or less counts as closed");
+  assert.equal(m.stuckVerdict(rep(100, 11)), null, "fewer than 12 assessed samples: no verdict");
+  assert.equal(m.stuckVerdict([...rep(100, 12), ...rep(null, 50)]).state, "open", "missing samples are not assessed samples");
+  const rows = m.rogueVavRows([
+    { id: "a", label: "VAV-A", damper: rep(100, 20), reheat: rep(50, 20) },
+    { id: "b", label: "VAV-B", damper: rep(50, 20), reheat: rep(0, 20) },
+    { id: "c", label: "VAV-C", damper: rep(100, 19).concat([50]), reheat: null },
+    { id: "d", label: "VAV-D", damper: rep(50, 20) },
+  ]);
+  assert.deepEqual(Array.from(rows, (r) => `${r.label}|${r.part}|${r.state}`), ["VAV-A|Damper|open", "VAV-B|Reheat valve|closed", "VAV-C|Damper|open"], "ranked by share, worst first; healthy VAVs absent");
+  assert.equal(m.vavVerdictLabel(rows, "b"), "Reheat valve always closed");
+  assert.equal(m.vavVerdictLabel(rows, "d"), "Healthy");
+});
+
+test("zone band + rogue selection: p10/p90 across zones, worst above p90 and below p10, one list each", () => {
+  const m = load().get("rcxPresetMath");
+  const N = 40, zones = Array.from({ length: 10 }, (_, z) => ({ id: `z${z}`, label: `Zone ${z}`,
+    v: Array.from({ length: N }, (_, i) => 70 + (z % 3) * 0.4 + Math.sin(i / 5 + z) * 0.5) }));
+  zones[3].v = zones[3].v.map((x) => x + 8);            // always much warmer than everybody
+  zones[7].v = zones[7].v.map((x) => x - 8);           // always much colder
+  const band = m.zoneBand(zones.map((z) => z.v));
+  assert.equal(band.lo.length, N);
+  assert.ok(band.lo.every((x, i) => x < band.hi[i]));
+  const rogue = m.pickRogueZones(zones, band);
+  assert.deepEqual(Array.from(rogue.above, (r) => r.id), ["z3"]);
+  assert.deepEqual(Array.from(rogue.below, (r) => r.id), ["z7"]);
+  assert.ok(rogue.above[0].share >= 0.9 && rogue.below[0].share >= 0.9);
+  // fewer than 5 zones: no band at all, nothing highlighted
+  const few = m.zoneBand(zones.slice(0, 4).map((z) => z.v));
+  assert.ok(few.lo.every((x) => x === null) && few.hi.every((x) => x === null));
+  assert.deepEqual(Array.from(m.pickRogueZones(zones.slice(0, 4), few).above), []);
+  // a normal fleet has no rogue zone
+  const calm = Array.from({ length: 10 }, (_, z) => ({ id: `c${z}`, label: `C${z}`, v: Array.from({ length: N }, (_, i) => 70 + Math.sin(i / 3) * 0.2 + z * 0.01) }));
+  const calmRogue = m.pickRogueZones(calm, m.zoneBand(calm.map((z) => z.v)));
+  assert.equal(calmRogue.above.length + calmRogue.below.length, 0);
+});
+
+const vavSite = (n, { airRef = true, ahus = ["AHU-1"] } = {}) => ({
+  sites: [rec("S", "SITE", { id: "s" })],
+  equips: [
+    ...ahus.map((a) => rec(a, "EQUIPMENT", { id: a, siteRef: "s", markers: "equip,ahu" })),
+    ...Array.from({ length: n }, (_, i) => rec(`VAV-${i + 1}`, "EQUIPMENT", { id: `VAV-${i + 1}`, siteRef: "s", markers: "equip,vav", ...(airRef ? { airRef: ahus[i % ahus.length] } : {}) })),
+  ],
+  devices: [],
+  points: [
+    ...ahus.map((a) => rec(`${a}-FAN`, "POINT", { siteRef: "s", equipRef: a, markers: "point,sensor,fan,run,his", kind: "Bool" })),
+    ...Array.from({ length: n }, (_, i) => [
+      rec(`V${i + 1}-ZT`, "POINT", { siteRef: "s", equipRef: `VAV-${i + 1}`, markers: "point,sensor,zone,air,temp,his", kind: "Number", unit: "°F" }),
+      rec(`V${i + 1}-DM`, "POINT", { siteRef: "s", equipRef: `VAV-${i + 1}`, markers: "point,sensor,damper,his", kind: "Number", unit: "%" }),
+      rec(`V${i + 1}-RH`, "POINT", { siteRef: "s", equipRef: `VAV-${i + 1}`, class: "reheat-cmd", markers: "point,cmd,reheat,his", kind: "Number", unit: "%" }),
+      rec(`V${i + 1}-DT`, "POINT", { siteRef: "s", equipRef: `VAV-${i + 1}`, markers: "point,sensor,discharge,air,temp,his", class: "discharge-air-temp-sensor", kind: "Number", unit: "°F" }),
+    ]).flat(),
+  ],
+});
+const vavFrame = () => { const kids = []; return { kids, el: { ownerDocument: { createElement: () => ({ style: {} }) }, appendChild: (c) => kids.push(c), style: {}, clientHeight: 300 } }; };
+async function renderVav(id, model, data, extra = {}, hours = 48) {
   const ctx = load(data);
-  const model = { ...MODEL2, points: MODEL2.points.map(ctx.toPoint) };
-  const view = Array.from(ctx.get("RCX_VIEWS")).find((v) => v.id === "vav_health");
-  assert.equal(view.group, "VAV");
-  const equips = ctx.rcxBind(view, MODEL2.equips, model, catalog);
-  assert.equal(equips.length, 1);
-  const kids = [];
-  const el = { ownerDocument: { createElement: () => ({ style: {} }) }, appendChild: (c) => kids.push(c), style: {}, clientHeight: 300 };
-  await view.render(el, ctx.rcxContext(view, equips, 24, model, catalog));
-  assert.equal(kids.length, 2);
-  assert.deepEqual(Array.from(ctx.rendered, (r) => r.name), ["rcx_vav_health_worst", "rcx_vav_health_donut"]);
-  assert.equal(ctx.rendered[0].option.series[0].data[0], 100);
-  assert.equal(ctx.rendered[1].option.series[0].data.find((d) => d.name === "Poor comfort").value, 1);
+  const m = { ...model, points: model.points.map(ctx.toPoint) };
+  const view = Array.from(ctx.get("RCX_VIEWS")).find((v) => v.id === id);
+  const equips = ctx.rcxBind(view, model.equips.filter((e) => /VAV/.test(e.name)), m, catalog);
+  const kpis = [], { kids, el } = vavFrame();
+  const note = await view.render(el, ctx.rcxContext(view, equips, hours, m, catalog, null, "UTC", { kpis, ...extra }));
+  return { ctx, note, kpis, kids, el, rendered: ctx.rendered };
+}
+const hourly = (vals, t0 = T0) => vals.map((v, i) => [t0 + i * 3600e3, v]);
+
+test("vav_health: rogue VAVs ranked, two frames that hold their charts (no cut-off), KPI published", async () => {
+  const model = vavSite(3);
+  const data = new Map();
+  data.set("u-V1-DM", hourly(rep(100, 48))); data.set("u-V1-RH", hourly(rep(0, 48)));          // damper always open, reheat always closed
+  data.set("u-V2-DM", hourly(Array.from({ length: 48 }, (_, i) => 20 + (i % 5) * 15))); data.set("u-V2-RH", hourly(rep(100, 48)));   // reheat always open
+  data.set("u-V3-DM", hourly(Array.from({ length: 48 }, (_, i) => 20 + (i % 5) * 15))); data.set("u-V3-RH", hourly(Array.from({ length: 48 }, (_, i) => (i % 2) * 60)));
+  const r = await renderVav("vav_health", model, data);
+  assert.equal(r.kids.length, 2);
+  assert.deepEqual(Array.from(r.rendered, (x) => x.name), ["rcx_vav_rogue", "rcx_vav_health_donut"]);
+  const bars = r.rendered[0].option;
+  assert.deepEqual(Array.from(bars.yAxis.data), ["VAV-1 · Damper always open", "VAV-1 · Reheat valve always closed", "VAV-2 · Reheat valve always open"]);
+  assert.equal(bars.series[0].data[0].value, 100);
+  const donut = r.rendered[1].option.series[0].data;
+  assert.equal(donut.find((d) => d.name === "Healthy").value, 1);
+  assert.equal(donut.find((d) => d.name === "Reheat valve always open").value, 1);
+  assert.ok(parseInt(r.el.style.height, 10) >= 260 + 320, "the parent grows to hold both frames");
+  assert.equal(r.kpis[0].id, "rogue-vavs");
+  assert.equal(r.kpis[0].value, "2 of 3");
+  assert.doesNotMatch(r.note, /comfort/i, "comfort lives under Zones only");
+});
+
+test("vav_health with no rogue VAV draws the healthy donut alone and says none found", async () => {
+  const data = new Map([["u-V1-DM", hourly(Array.from({ length: 48 }, (_, i) => 20 + (i % 5) * 15))]]);
+  const r = await renderVav("vav_health", vavSite(1), data);
+  assert.equal(r.kids.length, 1);
+  assert.match(r.note, /none found/);
+});
+
+test("AHU on filter: a damper that is closed whenever the AHU is off is rogue only when judged over all samples", async () => {
+  const model = vavSite(1, { airRef: true });
+  const fan = hourly(Array.from({ length: 48 }, (_, i) => (i < 24 ? 1 : 0)));                 // AHU on first 24 h
+  const damper = hourly(Array.from({ length: 48 }, (_, i) => (i < 24 ? 100 : 0)));             // open while on, closed while off
+  const data = new Map([["u-AHU-1-FAN", fan], ["u-V1-DM", damper]]);
+  const all = await renderVav("vav_health", model, data, { ahuOn: false });
+  assert.equal(all.kpis[0].value, "0 of 1", "50 % open / 50 % closed over every sample: not stuck");
+  const on = await renderVav("vav_health", model, data, { ahuOn: true });
+  assert.equal(on.kpis[0].value, "1 of 1", "only while the AHU runs the damper never leaves 100 %");
+  assert.match(on.note, /AHU on only: 1 of 1 filtered/);
+  assert.doesNotMatch(on.note, /assumed/, "linked by airRef, not assumed");
+});
+
+test("AHU on filter without airRef: the site's only AHU is assumed and the note says so; several AHUs and no airRef = unfiltered", async () => {
+  const fan = hourly(Array.from({ length: 48 }, (_, i) => (i < 24 ? 1 : 0))), damper = hourly(Array.from({ length: 48 }, (_, i) => (i < 24 ? 100 : 0)));
+  const one = await renderVav("vav_health", vavSite(1, { airRef: false }), new Map([["u-AHU-1-FAN", fan], ["u-V1-DM", damper]]), { ahuOn: true });
+  assert.equal(one.kpis[0].value, "1 of 1");
+  assert.match(one.note, /AHU assumed for 1 \(the site has one AHU and no airRef\)/);
+  const two = await renderVav("vav_health", vavSite(1, { airRef: false, ahus: ["AHU-1", "AHU-2"] }), new Map([["u-AHU-1-FAN", fan], ["u-V1-DM", damper]]), { ahuOn: true });
+  assert.equal(two.kpis[0].value, "0 of 1", "no airRef and two AHUs: the feed is unknown, so nothing is filtered");
+  assert.match(two.note, /1 without a known AHU fan signal left unfiltered/);
+});
+
+test("feed map: airRef (with or without @) wins; a dangling airRef is not guessed around", () => {
+  const ctx = load();
+  const kinds = (e) => ((e.attrs || {}).markers || "").split(",").includes("ahu") ? ["ahu"] : ["vav"];
+  const eq = (name, attrs) => rec(name, "EQUIPMENT", { id: name, siteRef: "s", ...attrs });
+  const m = ctx.rcxAirFeedMap([eq("A1", { markers: "equip,ahu" }), eq("A2", { markers: "equip,ahu" }),
+    eq("V1", { airRef: "@A2" }), eq("V2", { airRef: "A1" }), eq("V3", {}), eq("V4", { airRef: "nowhere" })], kinds);
+  assert.equal(m.get("V1").ahu.id, "A2"); assert.equal(m.get("V1").assumed, false);
+  assert.equal(m.get("V2").ahu.id, "A1");
+  assert.equal(m.has("V3"), false, "two AHUs and no airRef: unknown");
+  assert.equal(m.has("V4"), false, "an airRef that points nowhere is not guessed");
+  const single = ctx.rcxAirFeedMap([eq("A1", { markers: "equip,ahu" }), eq("V3", {}), eq("V4", { airRef: "nowhere" })], kinds);
+  assert.deepEqual([single.get("V3").ahu.id, single.get("V3").assumed], ["A1", true]);
+  assert.equal(single.has("V4"), false);
+});
+
+test("zone_temps draws the percentile band with rogue zones coloured and the rest muted; one zone = plain line", async () => {
+  const model = vavSite(10);
+  const data = new Map();
+  for (let z = 0; z < 10; z++) data.set(`u-V${z + 1}-ZT`, hourly(Array.from({ length: 48 }, (_, i) => 70 + (z % 3) * 0.3 + Math.sin(i / 4 + z) * 0.4 + (z === 3 ? 7 : 0) - (z === 6 ? 7 : 0))));
+  const r = await renderVav("zone_temps", model, data);
+  const o = r.rendered[0].option;
+  assert.equal(r.rendered[0].name, "rcx_zone_temps_band");
+  const names = Array.from(o.series, (s) => s.name);
+  assert.ok(names.includes("10th-90th percentile of all zones"));
+  const hot = o.series.find((s) => /^VAV-4 \(above p90/.test(s.name)), cold = o.series.find((s) => /^VAV-7 \(below p10/.test(s.name));
+  assert.ok(hot && cold, "rogue zones are named with their side");
+  assert.notEqual(hot.lineStyle.color, cold.lineStyle.color, "above and below get distinct colours");
+  const muted = o.series.find((s) => s.name === "VAV-1");
+  assert.ok(muted.lineStyle.opacity < 1 && muted.lineStyle.width <= 1, "the others are muted");
+  assert.equal(o.legend.data.length, 3, "the legend lists the band and the two rogue zones only");
+  assert.equal(r.kpis.find((k) => k.id === "rogue-zones").value, "2");
+  const one = await renderVav("zone_temps", vavSite(1), new Map([["u-V1-ZT", hourly(rep(70, 10))]]));
+  assert.equal(one.rendered[0].name, "rcx_zone_temps");
+  assert.match(one.note, /needs at least 5 zones/);
+});
+
+test("single device vs all devices: fleet analytics only in the all-devices plan", () => {
+  const ctx = load();
+  const model = vavSite(6);
+  const m = { ...model, points: model.points.map(ctx.toPoint) };
+  const ids = (plan) => Array.from(plan.ready, (r) => r.view.id);
+  const all = ctx.rcxPlan(model.equips, m, catalog, { tab: "rcx" });
+  const single = ctx.rcxPlan(model.equips.filter((e) => e.name === "VAV-2"), m, catalog, { tab: "rcx", single: true });
+  for (const id of ["zone_comfort_rank", "vav_health"]) {
+    assert.ok(ids(all).includes(id), `${id} in the all-devices view`);
+    assert.ok(!ids(single).includes(id), `${id} not on a single device`);
+  }
+  for (const id of ["zone_temps", "vav_positions", "vav_reheat_dats"]) assert.ok(ids(single).includes(id), `${id} is the device's own chart`);
+  assert.ok(!ids(all).includes("vav_flows") && !ids(single).includes("vav_flows"), "zone airflow timeseries is gone");
+  const fleet = Array.from(ctx.get("RCX_VIEWS")).filter((v) => v.fleet).map((v) => v.id).sort();
+  assert.deepEqual(fleet, ["vav_health", "zone_comfort_rank"]);
+});
+
+test("reheat discharge temps only for VAVs that have a reheat valve; positions view carries damper and reheat", async () => {
+  const model = vavSite(2);
+  model.points = model.points.filter((p) => p.name !== "V2-RH");                    // VAV-2 has no reheat valve
+  const data = new Map([["u-V1-DT", hourly(rep(90, 10))], ["u-V2-DT", hourly(rep(60, 10))], ["u-V1-DM", hourly(rep(40, 10))], ["u-V1-RH", hourly(rep(30, 10))]]);
+  const r = await renderVav("vav_reheat_dats", model, data);
+  assert.deepEqual(Array.from(r.rendered[0].option.series, (s) => s.name), ["VAV-1"], "VAV-2 has no reheat: not drawn");
+  const p = await renderVav("vav_positions", model, data);
+  assert.deepEqual(Array.from(p.rendered[0].option.series, (s) => s.name).sort(), ["VAV-1 · damper", "VAV-1 · reheat valve"]);
+});
+
+test("scatter plots: a hot-water / chilled-water scatter binds only where its role exists", () => {
+  const ctx = load();
+  const site = (extra) => ({ sites: [rec("S", "SITE", { id: "s" })], devices: [], equips: [rec("PLANT", "EQUIPMENT", { id: "PLANT", siteRef: "s", markers: "equip" })],
+    points: [rec("OAT", "POINT", { siteRef: "s", equipRef: "PLANT", markers: "point,sensor,outside,air,temp,his", class: "outside-air-temp-sensor", kind: "Number", unit: "°F" }), ...extra] });
+  const hw = rec("HWS", "POINT", { siteRef: "s", equipRef: "PLANT", markers: "point,sensor,hot,water,leaving,temp,his", kind: "Number", unit: "°F" });
+  const chw = rec("CHWS", "POINT", { siteRef: "s", equipRef: "PLANT", markers: "point,sensor,chilled,water,leaving,temp,his", kind: "Number", unit: "°F" });
+  const ready = (model) => { const m = { ...model, points: model.points.map(ctx.toPoint) }; return Array.from(ctx.rcxPlan(model.equips, m, catalog, { tab: "rcx" }).ready, (r) => r.view.id); };
+  const none = ready(site([])), onlyHw = ready(site([hw])), both = ready(site([hw, chw]));
+  assert.ok(!none.includes("hw_reset_scatter") && !none.includes("chw_reset_scatter"));
+  assert.ok(onlyHw.includes("hw_reset_scatter") && !onlyHw.includes("chw_reset_scatter"), "no chilled-water system, no CHW scatter");
+  assert.ok(both.includes("hw_reset_scatter") && both.includes("chw_reset_scatter"));
+  const v = Array.from(ctx.get("RCX_VIEWS"));
+  for (const id of ["hw_reset_scatter", "chw_reset_scatter"]) assert.equal(v.find((x) => x.id === id).group, "Scatter plots");
 });
 
 // ---- same physical data from a degF point and a degC point: same SI decisions ------------------

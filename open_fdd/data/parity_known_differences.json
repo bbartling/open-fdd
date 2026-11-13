@@ -1,126 +1,366 @@
 {
- "_doc": "Rules whose pandas twin and SQL pack differ on the parity dataset. scope: all = any size (asserted exactly on the 2x3 pytest dataset); stress_only = only shows on longer datasets; edge = only on the edge profile. Read by open_fdd.parity, tests/parity and scripts/nf/gen_cookbook.py.",
+ "_doc": "Rules whose pandas twin and SQL pack differ on the parity dataset. scope: all = any size (asserted exactly on the 2x3 pytest dataset); stress_only = only shows on longer datasets; edge = only on the edge profile. Read by open_fdd.parity, tests/parity and scripts/nf/gen_cookbook.py. expected: the pinned L1 fault-hour delta (SQL vs pandas, all equipment) and tolerance per canonical dataset (profile/seed/equips/days); the stress run fails when an observed delta leaves its band (#1590).",
  "version": 1,
  "differences": [
   {
    "rule": "AHU-SATDEV",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 5.6667,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 4.5,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "CHW-1",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 0.5,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.3333,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "CHW-NOLOAD-1",
    "scope": "all",
-   "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve"
+   "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 5.1667,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 3.0833,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "ECON-3",
    "scope": "all",
-   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
+   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 24.5833,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 11.5,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "ECON-4",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 2.8333,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 1.0833,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "ECON-7",
    "scope": "all",
-   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
+   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 30.6667,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 15.5833,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FC13-SAT-HIGH",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 26.0833,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 10.0833,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FC14",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 410.0833,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 93.75,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FC5",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 3.9167,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 1.8333,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FC6",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 15.75,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 6.75,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FC7",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 4.5833,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 3.9167,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FCU-HTG-COIL",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 5.4167,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 4.6667,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FCU-MODE-CYCLE",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 1.75,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 1.0,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "HP-1",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 17.0833,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 6.1667,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "MECH-OAT-1",
    "scope": "all",
-   "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve"
+   "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 208.6667,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 56.1667,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "OA-1",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 0.25,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.1667,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "OAT-METEO",
    "scope": "all",
-   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns"
+   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 359.3333,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 77.0,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "SV-RATE",
    "scope": "all",
-   "reason": "documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances"
+   "reason": "documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 468.3333,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 108.9167,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "TRIM-1",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds"
+   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 293.4167,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 51.25,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "TRIM-4",
-   "scope": "all",
-   "reason": "pandas skips (missing roles: reset requests); SQL treats absent requests as zero"
+   "scope": "stress_only",
+   "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 1.25,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.0,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "VAV-6",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 0.6667,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.3333,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "VAV-AHU-LEAVE",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges"
+   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 1.6667,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.4167,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "TRIM-3",
    "scope": "stress_only",
-   "reason": "three differences: (1) pandas reads role hw-reset-request-sum, the SQL contract and NF role is hot-water-reset-request-sum, so the harness gives pandas no input and it skips; (2) SQL faults at request sum <= request_lo, pandas at < request_lo; (3) pandas applies the hydronic-flow gate with a 600 s startup holdoff. Follow-up: align names and comparison with the owner (see #1582)"
+   "reason": "role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 1.3333,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.0,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "VAV-REHEAT",
    "scope": "stress_only",
-   "reason": "pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL"
+   "reason": "pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL",
+   "expected": {
+    "basic/0/8/7": {
+     "hours": 0.1667,
+     "tol": 0.01
+    },
+    "basic/0/4/3": {
+     "hours": 0.0,
+     "tol": 0.01
+    }
+   }
   },
   {
    "rule": "FC8",

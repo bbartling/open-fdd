@@ -273,18 +273,39 @@ def test_vav_reheat_difference_is_exactly_the_startup_holdoff(monkeypatch):
     assert h.pandas_fault_hours("VAV-REHEAT", df.copy(), None)[0] == pytest.approx(sql_hours)
 
 
-def test_trim3_difference_is_request_threshold_role_name_and_gate():
+def test_trim3_is_aligned_with_the_sql_contract_and_differs_only_by_the_startup_holdoff():
+    """#1588: pandas TRIM-3 reads the contract role, faults at request sum <= request_lo like SQL, and skips when the
+    request sum is absent (SQL has no rows then); what is left is the pandas 600 s hydronic-proof startup holdoff."""
     n = 24
     common = {"hot-water-supply-temp": [75.0] * n, "pump-status": [1] * n}
-    # (2) request sum exactly at request_lo (1): SQL (<=) faults, pandas (<) passes
-    df = _fixture_frame(n, **common, **{"hw-reset-request-sum": [1.0] * n})
+    df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [1.0] * n})     # exactly at request_lo
     pandas_hours, status = h.pandas_fault_hours("TRIM-3", df, None)
-    assert status == "PASS" and pandas_hours == 0.0
-    assert _sql_confirmed_hours([True] * n, CATALOG_CONFIRM["TRIM-3"]) > 0.0
-    # (1) the SQL contract / NF role name has no pandas input: pandas skips instead of evaluating
-    df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [0.0] * n})
-    assert h.pandas_fault_hours("TRIM-3", df, None)[1] == "SKIPPED_MISSING_ROLES"
-    assert "hw_reset_request_sum" not in h.ROLE_MAP and "hot-water-reset-request-sum" not in h.ROLE_MAP.values()
+    assert not str(status).startswith("SKIPPED") and pandas_hours > 0.0
+    sql_hours = _sql_confirmed_hours([True] * n, CATALOG_CONFIRM["TRIM-3"])
+    assert sql_hours >= pandas_hours and sql_hours - pandas_hours <= 600 / 3600 + 1e-9, (sql_hours, pandas_hours)
+    df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [2.0] * n})     # above request_lo: no fault
+    assert h.pandas_fault_hours("TRIM-3", df, None)[0] == 0.0
+    df = _fixture_frame(n, **common)                                                    # absent: not assessed
+    assert str(h.pandas_fault_hours("TRIM-3", df, None)[1]).startswith("SKIPPED")
 
 
 CATALOG_CONFIRM = {rid: h.CATALOG[rid]["parameters"]["confirm_min"]["default"] * 60 for rid in ("VAV-REHEAT", "TRIM-3")}
+
+
+def test_pinned_delta_band_catches_a_widened_known_difference():
+    """#1590: a known difference carries an expected delta on canonical datasets; widening it (e.g. an edit to the rule's
+    SQL that faults more) fails the verdict even though the rule is still on the known list."""
+    from open_fdd.parity.policy import Policy, compare, expected_deltas
+    ref = {"RULE-X": {"E1": {"pandas": 1.0}, "E2": {"pandas": 0.0}}}
+    pinned = Policy(known={"RULE-X": "test"}, pins={"RULE-X": {"hours": 0.5, "tol": 0.01}})
+    as_pinned = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.5}, {"equipment_id": "E2", "fault_hours": 0.0}]}, ref, pinned)
+    assert as_pinned.ok and as_pinned.pin_violations == [] and as_pinned.deltas == {"RULE-X": 0.5}
+    widened = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.5}, {"equipment_id": "E2", "fault_hours": 0.25}]}, ref, pinned)
+    assert not widened.ok and widened.unexpected == 0
+    assert widened.pin_violations == ["RULE-X: delta 0.7500 h, pinned 0.5000 +/- 0.0100 h"]
+    unpinned = Policy(known={"RULE-X": "test"}, pins={"OTHER": {"hours": 0.0, "tol": 0.01}})
+    assert compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.5}]}, ref, unpinned).pin_violations == [
+        "RULE-X: no expected delta pinned for this dataset"]
+    # every known difference of the stress scopes is pinned on both canonical stress datasets
+    for key in ("basic/0/8/7", "basic/0/4/3"):
+        assert set(expected_deltas(key)) == set(Policy.default("basic", stress=True).known), key

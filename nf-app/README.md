@@ -14,15 +14,15 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | `static/index.html` | UI tabs: Overview · Charts · FDD · RCx · Points · BACnet Server · Export · Model & RDF (+ `chart.html`, `tree.html`) | NF at `/api/v1/apps/static/open-fdd/` |
 | `static/nf.js`, `static/paging.js` | **Shared with Lite** (`shared/`, copied by `scripts/nf/sync_shared.py`). NF access: login (LAN or Normal Online/Clerk), `api()`, live push stream | browser |
 | `static/model.js` | **Shared with Lite.** Haystack model loader + RDF/Turtle export with time-series refs | browser + FDD hook |
-| `static/fdd.js`, `fdd-catalog.json` | Rule catalog + role binding (NF class, else Haystack markers) | browser + FDD hook |
-| `static/rcx.js` | RCx view registry, binding, shared math, **the fault lane** (`rcxWithFaultLane`) | browser |
-| `static/fdd-plots.js` | Per-rule plot, OAT-METEO, sensor health / sensor faults | browser |
-| `static/rcx-overview.js` | Weekly runtimes, mechanical cooling, economizer, BAS vs web OAT | browser |
-| `static/rcx-presets.js` | The 18 RCx presets + VAV health | browser |
+| `static/fdd.js`, `fdd-catalog.json` | Rule catalog + role binding (NF class, else Haystack markers); rule title + `rule` badge helpers, the FDD tab's heat-map row selection | browser + FDD hook |
+| `static/rcx.js` | RCx view registry (`tab` rcx/fdd, `fleet`, `headline`), binding, VAV→AHU feed (`airRef`) + the "AHU on" filter, KPI tiles, shared math, **the fault lane** (`rcxWithFaultLane`) | browser |
+| `static/fdd-plots.js` | Per-rule plot (signals + bool fault lane) and the FDD sensor validation chart (worst sensor, four SV lanes: Range, Rate, Spike, Stale) | browser |
+| `static/rcx-overview.js` | AHU run hours per day, weekly runtimes, mechanical cooling, economizer, BAS vs web OAT (an FDD-tab chart) | browser |
+| `static/rcx-presets.js` | The RCx presets: zones (10th–90th percentile band, comfort), rogue VAVs, VAV positions / reheat temps, scatter plots | browser |
 | `static/export.js` | Export tab: CSV download (date range, point picker, resolution, display/stored units; pure helpers tested in node) | browser |
 | `static/units.js` | SI math / imperial-or-SI display (`ofddUnits`); the header toggle sets `localStorage["openfdd-units"]` | browser + FDD hook |
 | `static/energy.js` | Demand, monthly energy, degree-day baseline, M&V, EUI / peers | browser |
-| `static/charts.js`, `theme*.js`, `style.css`, `vendor/` | Charts tab, light/dark themes, vendored ECharts 6.1.0 (ESM) | browser |
+| `static/app-core.js`, `charts.js`, `theme.js`, `base.css`, `style.css`, `vendor/` | The shared dashboard shell (top bar, tab router, Overview, Charts, Points, BACnet Server, Model & RDF), chart catalog, light/dark themes, CSS base + Full's own rules, vendored ECharts 6.1.0 (ESM). `app.js` adds the Full-only tabs (FDD, RCx, Export) | browser |
 | `hooks/fdd.js` | Hourly FDD: bind roles, read NF history (5-min grid), run the SQL pack, write result points, optional BACnet AVs | NF Node runtime |
 | `hooks/lib/engines.js` | SQL engines: `sqlite` (sql.js, vendored in `hooks/vendor/`) and `pglite` | FDD hook |
 | `hooks/weather.js` | **Shared with Lite** (one source). Open-Meteo outdoor air every 20 min → global variables (site lat/lon from NF) | NF Node runtime |
@@ -33,12 +33,17 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 
 ## Shared code (Full and Lite)
 
-The files both editions had hand-copied now have one source under `shared/` (`nf.js`, `model.js`, `theme-init.js`,
-`tree.css`, `version.js`, the pager `paging.js`, `settings.js`, the weather hook, `shapes.d.ts`). Edit the source and run
-`python scripts/nf/sync_shared.py`; `--check` and `tests/test_shared_sources.py` fail when a copy in `nf-app/` or `lite/` is
-stale or hand-edited. The remaining UI files (`app.js`, `charts.js`, `index.html`, `chart.html`, `tree.html`, `tree.js`,
-`chart-page.js`, `style.css`) are genuinely different per edition (Full has the FDD, RCx, SPARQL and Export tabs and the
-`theme.js` chart layer; Lite has `lite-theme.js`) and stay separate.
+The code both editions have in common has one source under `shared/`: the dashboard shell (`app-core.js`: top bar, equip
+pickers, tab router, Overview, Charts, Points, BACnet Server, Model & RDF, live loop), `charts.js`, `theme.js`,
+`chart-page.js`, `tree.js`, `base.css`, `nf.js`, `model.js`, `theme-init.js`, `tree.css`, `version.js`, the pager
+`paging.js`, `settings.js`, the weather hook and `shapes.d.ts`. Edit the source and run `python scripts/nf/sync_shared.py`;
+`--check` and `tests/test_shared_sources.py` fail when a copy in `nf-app/` or `lite/` is stale or hand-edited. What stays
+per edition: `app.js` (Full registers the FDD, RCx and Export tabs, the units toggle and Run FDD through the `ofddTabs` /
+`ofddEquipScoped` / `ofddWire` registries of `app-core.js`; Lite only starts the shell), the three HTML pages (script
+lists differ: Full loads the ES-module ECharts, Lite the UMD build), `style.css` (edition rules on top of `base.css`) and
+the Full-only files (`fdd*.js`, `rcx*.js`, `energy.js`, `export.js`, `sparql.js`, `units.js`, ...). Lite stays light: it
+does not load any FDD / RCx / SPARQL code. The default range of every history view is the last 7 days
+(`DEFAULT_RANGE_PRESET` in `charts.js`).
 
 ## Develop
 
@@ -94,7 +99,7 @@ The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hoo
 | Hook | Edition | Mode | Caller | Reads / writes |
 |---|---|---|---|---|
 | `fdd` | Full | scheduled hourly (+ run-now) | dashboard (run-now, runs), installer, `export.js`, `rcx.js` | reads NF points + history; writes result points (and `openfdd.fdd_results` with the Timescale engine) |
-| `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; Lite (default; app option `bacnetMirror` overrides) also mirrors them to 3 BACnet AVs |
+| `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; both editions also export them through the `exporters` list (default `bacnet-av`, only when NF's BACnet server is present; app option `bacnetMirror: false` removes it). App option `weather: false` = off: no outbound request, `{skipped, reason: "weather disabled"}`, rules fall back to the local OA sensor ([install reference](../docs/install.md)) |
 | `sparql` | Full | on request | agents and docs (the browser runs the same engine in `static/sparql.js`) | read-only |
 | `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
 | `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
@@ -105,13 +110,15 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 | Object | Kind | Written by | Read by |
 |---|---|---|---|
 | `openfdd.config` | table | `install.sql` seeds | `hooks/lib/timescale.js`, the retention functions, `doctor` |
-| `openfdd.fdd_results` | hypertable | `fdd` hook (upsert per run) | **integration output**: BI tools and downstream apps read it; the dashboard reads the hook's result points instead. PK `(run_ts, equip, rule_id, sensor_ref)`; columns `site`, `fault_pct`, `fault_hours`, `covered_hours`, `metric` (jsonb), `engine`, `window_start`, `window_end`, `role` |
-| `openfdd.retention_log` | table | `openfdd.retention_run()` | audit trail (tests, operators) |
-| `openfdd.nf_samples` | view | n/a | `hooks/lib/timescale.js`, `hooks/lib/engines.js` (adapter over NF's sample table) |
+| `fdd.point` | table | `fdd` hook (synced per equipment before each load) | **core schema** (`sql/fdd/schema/core.sql`): one row per bound point with its SI `unit`, `si_scale` / `si_offset` and `role`; read by `fdd.input_sample` |
+| `fdd.rule_result` | hypertable (`window_end`, 30 d) | `fdd` hook (upsert per run) | **core schema; integration output**: BI tools and downstream apps read it. PK `(site_id, equipment_id, rule_id, subject_key, window_start, window_end, rule_hash, config_hash)`; `status` PASS/FAULT/INCONCLUSIVE/SKIPPED/ERROR/STALE, `fault_hours`, `covered_hours`, `fault_pct`, `metrics`, `diagnostics` |
+| `fdd.rule_config` | table | tuning hook (writes), `fdd` hook (reads) | **core schema**: append-only tuning revisions (one active per scope); Open-FDD stores sweep role-limit overrides as `rule_id` `SV-LIMITS` (#1589) |
+| `openfdd.nf_samples` | view | n/a | NF's samples in native units (`history_buckets`, newest-sample lookup) |
+| `fdd.input_sample` | view | n/a | SI samples of the bound points (`value * si_scale + si_offset`); the loader reads it (`adapter_nf.sql`) |
 
-The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 2): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
+The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
 
-`sql/fdd/tuning_storage.sql` (`fdd.rule_config_revision`, `fdd.active_rule_config`, `fdd.rule_result`) is **not** part of the above: it is the tuning storage contract that integrators adopt (see [`sql/fdd/README.md`](../sql/fdd/README.md)); no Open-FDD component reads or writes those tables.
+`sql/fdd/schema/core.sql` is the shared core schema (`fdd.point`, `fdd.rule_result`, `fdd.rule_config`): the NF app installs it, and downstream applications vendor it byte for byte (it ships in the wheel as `open_fdd/data/core.sql`). Schema version 4 (5.0.16) replaced `openfdd.fdd_results` and `openfdd.retention_log` with it; see [`docs/upgrade-5x.md`](../docs/upgrade-5x.md).
 
 ## Rules this app follows
 

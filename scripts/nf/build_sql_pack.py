@@ -49,6 +49,7 @@ OUT_DIR = ROOT / "nf-app" / "rules"
 POLL_SECONDS = 300
 
 sys.path.insert(0, str(SQL_DIR))
+import render_rule  # noqa: E402
 from render_rule import render  # noqa: E402  (shared renderer, not copied)
 from input_contract import load_contract  # noqa: E402
 
@@ -408,6 +409,28 @@ def sqlite_prepare_check(sql, contract):
         db.close()
 
 
+def role_limit_templates(pg_rules):
+    """Templates of the five sweep rules for persisted role-limit overrides (#1589; Full edition, Timescale engine):
+    the rule and timeline SQL with the per-role limit fragment left as a sentinel, the numbers the fragment references,
+    the canonical -> SQL role names, and the shipped limits + allowlists the hook merges overrides onto. Filled with the
+    shipped limits each template must give the pack SQL byte for byte (checked here; the JS twin in role-limits.test.mjs)."""
+    shipped = json.loads((ROOT / "open_fdd" / "data" / "sensor_sweep_limits.json").read_text(encoding="utf-8"))
+    allow = json.loads((ROOT / "open_fdd" / "data" / "sensor_sweep_roles.json").read_text(encoding="utf-8"))
+    limits = render_rule.sweep_catalog.load_role_limits(shipped)
+    rules = {}
+    for rid in render_rule.FRAGMENT_KEYS:
+        t = render_rule.render_template(rid, POLL_SECONDS)
+        tl = None
+        if pg_rules[rid]["timeline_sql"]:
+            tl = build_timeline_pg(t["sql"])
+        for name, tmpl, want in (("sql", t["sql"], pg_rules[rid]["sql"]), ("timeline_sql", tl, pg_rules[rid]["timeline_sql"])):
+            got = render_rule.fill_template(tmpl, rid, t["values"], t["sql_roles"], limits) if tmpl else None
+            if got != want:
+                raise SystemExit(f"role-limit template of {rid} {name} does not reproduce the pack SQL")
+        rules[rid] = {"sql": t["sql"], "timeline_sql": tl, "fragment": t["fragment"], "sql_roles": t["sql_roles"], "values": t["values"]}
+    return {"version": 1, "rule_config_id": "SV-LIMITS", "shipped": shipped, "allowlists": allow, "rules": rules}
+
+
 def build():
     catalog = json.loads((SQL_DIR / "tuning_catalog.json").read_text(encoding="utf-8"))["rules"]
     contract = parse_contract()
@@ -453,7 +476,8 @@ def build():
             lite_rules[rid] = {"sql": lite, "output_columns": cols, "timeline_sql": tl_lite,
                                "timeline_reason": "" if tl_lite else tl_reason}
     head = {"poll_seconds": POLL_SECONDS}
-    pg_pack = {**head, "dialect": "postgres", "helpers_sql": helpers, "contract": contract, "rules": pg_rules}
+    pg_pack = {**head, "dialect": "postgres", "helpers_sql": helpers, "contract": contract, "rules": pg_rules,
+               "role_limit_templates": role_limit_templates(pg_rules)}
     lite_pack = {**head, "dialect": "sqlite", "helpers_sql": "", "helper_functions": sorted(HELPER_FUNCTIONS),
                  "contract": contract, "rules": lite_rules, "skipped": skipped, "notes": notes}
     if column_fixes:

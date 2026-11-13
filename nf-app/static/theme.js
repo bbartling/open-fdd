@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/static/theme.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 // Open-FDD UI themes (same tokens as Open-FDD 4.x): light "blueprint" (default)
 // and dark. CSS switches on <html data-theme>; charts use two registered ECharts themes.
 // Renderers build theme-free options; ofddRender() adds the shared behavior (Save PNG,

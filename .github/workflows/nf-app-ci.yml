@@ -10,7 +10,8 @@ on:
       - "scripts/nf/**"
       - "tools/rdf-check/**"
       - "open_fdd/rules/**"
-      - "tests/parity/test_parity.py"
+      - "tests/parity/**"
+      - "open_fdd/parity/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
   pull_request:
@@ -21,7 +22,8 @@ on:
       - "scripts/nf/**"
       - "tools/rdf-check/**"
       - "open_fdd/rules/**"
-      - "tests/parity/test_parity.py"
+      - "tests/parity/**"
+      - "open_fdd/parity/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
 
@@ -64,7 +66,7 @@ jobs:
         run: |
           node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
           python3 -m pip install --quiet pytest
-          python3 -m pytest -q tests/test_nf_app_install.py tests/test_nf_app_sync.py tests/test_nf_paging_and_guard.py tests/test_input_contract.py
+          python3 -m pytest -q tests/test_nf_app_install.py tests/test_nf_app_sync.py tests/test_nf_paging_and_guard.py tests/test_input_contract.py tests/test_core_schema.py
           node --test nf-app/timescale/test/bounds.test.mjs
           python3 - <<'EOF'
           import json, pathlib, re
@@ -86,10 +88,13 @@ jobs:
           EOF
           python3 -m pip install --quiet pyyaml
           python3 scripts/nf/build_input_contract.py --check
+          python3 scripts/nf/build_core_schema.py --check
           python3 scripts/nf/build_rule_catalog.py --check
           python3 scripts/nf/build_sql_pack.py --check
           python3 scripts/nf/sync_pypi_data.py --check
           python3 scripts/nf/build_plot_spec_data.py --check
+          python3 scripts/nf/build_app_dist.py --check
+          python3 scripts/nf/build_unit_factors.py --check
           python3 scripts/nf/gen_rule_docs.py --check
           python3 -m pip install --quiet pandas numpy
           python3 scripts/nf/gen_cookbook.py --check
@@ -104,7 +109,7 @@ jobs:
   timescale:
     name: TimescaleDB integration (retention scope, history bounds, rule parity)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     services:
       tsdb:
         image: timescale/timescaledb:2.31.0-pg17
@@ -129,3 +134,16 @@ jobs:
           set -o pipefail
           node --test nf-app/timescale/test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/ts.log"
           if grep -Eq "^# skipped [1-9]|^ℹ skipped [1-9]" "$RUNNER_TEMP/ts.log"; then echo "Timescale tests skipped: failing the lane"; exit 1; fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pandas == SQL parity through the core tables (fail on skip)
+        env:
+          OPENFDD_TS_TEST_DISPOSABLE: "1"
+          PGURL: postgres://postgres:example@localhost:5432/postgres
+        run: |
+          set -o pipefail
+          python -m pip install --quiet -e ".[oracle,test]"
+          python -m pytest tests/parity/test_timescale_parity.py -q -rs 2>&1 | tee "$RUNNER_TEMP/parity.log"
+          if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/parity.log"; then echo "parity tests skipped: failing the lane"; exit 1; fi
+          python tests/parity/stress.py --equips 8 --days 7 --engines pglite,sqlite,timescale

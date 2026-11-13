@@ -26,15 +26,32 @@ test("range presets resolve to the expected elapsed intervals and All uses oldes
   assert.deepEqual({ ...resolve({ preset: "custom", fromMs: now - 5000, toMs: now - 1000 }, { nowMs: now }) }, { fromMs: now - 5000, toMs: now - 1000 });
 });
 
-test("chart range URL state restores custom bounds and malformed links fall back to All", () => {
+test("chart range URL state restores custom bounds and malformed links fall back to the default 7 days", () => {
   const c = context("range.points=custom&from.points=1794300000000&to.points=1794303600000");
   assert.deepEqual({ ...c.get("getChartRangeState")("points") }, { preset: "custom", fromMs: 1794300000000, toMs: 1794303600000 });
   c.get("setChartRangeState")("points", { preset: "1w" });
   assert.equal(c.get("getChartRangeState")("points").preset, "1w");
   const invalid = context("range.points=custom&from.points=bad&to.points=100");
-  assert.deepEqual({ ...invalid.get("getChartRangeState")("points") }, { preset: "all" });
+  assert.deepEqual({ ...invalid.get("getChartRangeState")("points") }, { preset: "1w" });
   const backwards = context("range.points=custom&from.points=200&to.points=100");
-  assert.deepEqual({ ...backwards.get("getChartRangeState")("points") }, { preset: "all" });
+  assert.deepEqual({ ...backwards.get("getChartRangeState")("points") }, { preset: "1w" });
+});
+
+test("the default range is the last 7 days for every view, in one shared place", () => {
+  const c = context();
+  assert.equal(c.get("DEFAULT_RANGE_PRESET"), "1w");
+  assert.equal(c.get("DEFAULT_RANGE_HOURS"), 168);
+  assert.deepEqual({ ...c.get("defaultChartRange")() }, { preset: "1w" });
+  for (const key of ["overview", "charts", "points", "faults", "rulePlot", "rcx", "export"]) {
+    assert.equal(c.get("getChartRangeState")(key).preset, "1w", `${key} starts at 7 days`);
+  }
+  const now = Date.UTC(2026, 10, 12, 12), r = c.get("resolveChartRange")(c.get("getChartRangeState")("charts"), { nowMs: now });
+  assert.equal(r.toMs - r.fromMs, 168 * 3600e3);
+  assert.equal(c.get("resolveChartRange")(undefined, { nowMs: now }).toMs - now + 168 * 3600e3, 168 * 3600e3 - 0 + 0 * 1, "no state at all: still 7 days");
+  // the longer ranges stay selectable
+  assert.equal(c.get("getChartRangeState")("charts").preset, "1w");
+  assert.equal(context("range.charts=all").get("getChartRangeState")("charts").preset, "all");
+  assert.equal(context("range.charts=24h").get("getChartRangeState")("charts").preset, "24h");
 });
 
 test("custom chart dates use the site timezone wall clock", () => {

@@ -5212,8 +5212,8 @@ rules:
     sql_file: trim3_hwst.sql
     pandas_function: null
     description: HWST trim advisory
-    required_roles: [hw_supply_t]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, hw_reset_request_sum]
+    required_roles: [hw_supply_t, hw_reset_request_sum]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5287,8 +5287,8 @@ rules:
     sql_file: trim4_chw_reset.sql
     pandas_function: null
     description: CHW plant reset advisory
-    required_roles: [chw_supply_t]
-    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd, chw_reset_request_sum]
+    required_roles: [chw_supply_t, chw_reset_request_sum]
+    optional_roles: [pump_status, chiller_status, chw_flow, chw_pump_cmd]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening

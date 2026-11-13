@@ -29,21 +29,17 @@ test("manifest: every shipped file is listed (static/ and hooks/)", () => {
   for (const f of [...walk("static"), ...walk("hooks")]) assert.ok(listed.has(f), `${f} is not in app.json`);
 });
 
-test("Lite history views use shared range controls and keep overview samples bounded", () => {
-  const charts = read("static/charts.js"), app = read("static/app.js"), page = read("static/chart-page.js");
-  for (const key of ["lite.overview", "lite.chart", "lite.points"]) assert.ok(charts.includes(`key: "${key}"`) || app.includes(`"${key}"`));
-  assert.match(app, /fetchRange\(list, range, \{ target: 72/);
-  assert.match(app, /fetchRange\(\[p\], range/);
-  assert.match(app, /read !== sparkRangeRead/);
-  assert.match(app, /read !== pointHistoryRead/);
-  assert.ok(app.indexOf("renderSparkRange(site)") < app.indexOf("await fetchRange(list, range"), "overview range control is available before the request resolves");
-  assert.match(app, /renderRangeControl\(\$\("chartRange"\)/);
-  assert.match(app, /q\.set\("range\.lite\.chart", chartRange\.preset\)/);
+test("Lite history views use the shared range controls, default to 7 days and keep overview samples bounded", () => {
+  const core = read("static/app-core.js"), page = read("static/chart-page.js"), charts = read("static/charts.js");
+  for (const key of ["overview", "charts", "points"]) assert.ok(core.includes(`key: "${key}"`), `range control key ${key}`);
+  assert.match(core, /fetchRange\(points, state, \{ target: 72/);
+  assert.match(core, /fetchRange\(\[p\], range/);
+  assert.match(core, /read !== sparkRangeRead/);
+  assert.match(core, /read !== pointHistoryRead/);
+  assert.match(core, /arr\.length > 2000/);
   assert.match(page, /renderRangeControl\(\$\("range"\)/);
-  assert.match(page, /restored\.get\("point"\)/);
-  assert.doesNotMatch(app, /SPARK_HOURS/);
-  assert.match(read("static/index.html"), /id="sparkRange"/);
-  assert.match(read("static/index.html"), /id="histRange"/);
+  assert.match(charts, /DEFAULT_RANGE_PRESET = "1w"/);
+  for (const id of ["overviewRangeControl", "chartRangeControl", "histRangeControl"]) assert.match(read("static/index.html"), new RegExp(`id="${id}"`));
   assert.match(read("static/chart.html"), /id="range"/);
 });
 
@@ -54,7 +50,6 @@ test("Lite chart range helpers encode URL state, resolve presets and chunk bound
   const location = { href: "https://nf.example.test/chart.html?c=temps" };
   Object.defineProperty(location, "search", { get() { return new URL(this.href).search; } });
   const context = createContext({
-    LT: { palette: [], axisLine: "", label: "", split: "", tipBg: "", tipText: "", legend: "", panel: "", filler: "", dark: false },
     URL, URLSearchParams, Intl, Date, Math, Object, Map, Set, Promise, Number, String, encodeURIComponent,
     location,
     history: { pushState(_s, _t, url) { location.href = String(url); }, replaceState(_s, _t, url) { location.href = String(url); } },
@@ -74,27 +69,27 @@ test("Lite chart range helpers encode URL state, resolve presets and chunk bound
       return { data: uuids.map((uuid) => ({ uuid, values: [] })) };
     },
   });
-  const api = runInContext(`${read("static/charts.js")}\n;({ getChartRangeState, setChartRangeState, resolveChartRange, dateTimeInputValue, dateTimeInputMs, chartTimeParts, chartTimeLabel, timeAxis, fetchRange, fetchSeries })`, context);
-  api.setChartRangeState("lite.chart", { preset: "custom", fromMs: 1000, toMs: 9000 });
+  const api = runInContext(`${read("static/charts.js")}\n;({ getChartRangeState, setChartRangeState, resolveChartRange, dateTimeInputValue, dateTimeInputMs, fetchRange, fetchSeries })`, context);
+  api.setChartRangeState("charts", { preset: "custom", fromMs: 1000, toMs: 9000 });
   assert.deepEqual({
-    preset: api.getChartRangeState("lite.chart").preset,
-    fromMs: api.getChartRangeState("lite.chart").fromMs,
-    toMs: api.getChartRangeState("lite.chart").toMs,
+    preset: api.getChartRangeState("charts").preset,
+    fromMs: api.getChartRangeState("charts").fromMs,
+    toMs: api.getChartRangeState("charts").toMs,
   }, { preset: "custom", fromMs: 1000, toMs: 9000 });
   assert.deepEqual(JSON.parse(JSON.stringify(api.resolveChartRange({ preset: "24h" }, { nowMs: 100000 }))), { fromMs: 100000 - 86400000, toMs: 100000 });
   assert.equal(api.dateTimeInputValue(Date.parse("2026-01-01T12:00:00Z"), "America/Chicago"), "2026-01-01T06:00");
   assert.ok(Number.isNaN(api.dateTimeInputMs("2026-03-08T02:30", "America/Chicago")), "reject nonexistent site wall time at DST spring transition");
-  assert.equal(api.chartTimeParts(Date.parse("2026-01-01T12:00:00Z"), "America/Chicago").h, 6);
-  assert.equal(api.timeAxis("America/Chicago").axisLabel.formatter(Date.parse("2026-01-01T12:00:00Z")), api.chartTimeLabel(Date.parse("2026-01-01T12:00:00Z"), "America/Chicago"));
-  location.href = "https://nf.example.test/chart.html?range.lite.chart=custom&from.lite.chart=bad&to.lite.chart=9000";
-  assert.equal(api.getChartRangeState("lite.chart").preset, "all", "malformed custom URL state normalizes to All");
+  location.href = "https://nf.example.test/chart.html?range.charts=custom&from.charts=bad&to.charts=9000";
+  assert.equal(api.getChartRangeState("charts").preset, "1w", "malformed custom URL state falls back to the 7 day default");
+  location.href = "https://nf.example.test/chart.html?c=temps";
+  assert.equal(api.getChartRangeState("charts").preset, "1w", "no range in the URL: the last 7 days");
   const points = Array.from({ length: 81 }, (_, i) => ({ uuid: `point-${i}` }));
   const range = await api.fetchRange(points, { preset: "custom", fromMs: Date.now() - 3600000, toMs: Date.now() }, { windowSec: 300 });
   assert.equal(range.series.size, 81);
   assert.equal(calls.length, 3);
   assert.ok(calls.every((url) => new URL(url, "https://nf.example.test").searchParams.getAll("uuids").length <= 40));
   assert.ok(calls.every((url) => /count=10000/.test(url) && /reverse=false/.test(url)));
-  const year = await api.fetchSeries([{ uuid: "long-history" }], { preset: "custom", fromMs: Date.now() - 365 * 86400000, toMs: Date.now() });
+  const year = await api.fetchRange([{ uuid: "long-history" }], { preset: "custom", fromMs: Date.now() - 365 * 86400000, toMs: Date.now() });
   assert.ok(year.windowSec > 86400, `All/custom range should choose coarse target-based bins, got ${year.windowSec}s`);
   const many = Array.from({ length: 41 }, (_, i) => ({ uuid: `oldest-${i}` }));
   failOldestUuid = "oldest-40";
@@ -230,6 +225,7 @@ test("hook run: location from NF /sites, AVs created at the configured instances
       get: async (url) => {
         calls.push(`GET ${url}`);
         if (url.startsWith("/api/v1/sites")) return { data: { sites: [{ id: "s1", name: "Site One", latitude: 40.5, longitude: -75.25 }] } };
+        if (url === "/api/v1/bacnet/configuration") return { data: { deviceInstance: 54545 } };
         if (url === "/api/v1/bacnet/local") return { data: { objects: [] } };
         throw new Error(`unexpected GET ${url}`);
       },
@@ -263,14 +259,14 @@ test("hook run: location from NF /sites, AVs created at the configured instances
   };
   try {
     const vars = { byLabel: (label) => ({ uuid: `u-${label}` }) };
-    const out = await hook({ globalVariables: vars, sdk, config: { avInstances: [21, 22, 23] } });   // no bacnetMirror: Lite mirrors by default
+    const out = await hook({ globalVariables: vars, sdk, config: { avInstances: [21, 22, 23] } });   // no bacnetMirror: both editions mirror by default
     assert.match(requested, /latitude=40\.5&longitude=-75\.25/);
     assert.equal(out.site, "s1");
     assert.deepEqual(Object.keys(out.bacnet), ["av.21", "av.22", "av.23"]);
     const created = posted.filter(([u]) => u === "/api/v1/bacnet/local").map(([, b]) => b.objectId.instance);
     assert.deepEqual(created, [21, 22, 23]);
     assert.equal(posted.filter(([u]) => u === "/api/v1/point/data").length, 3);
-    // NF drops hook-level config: an empty or null config must still mirror on Lite (the edition decides the default)
+    // NF drops hook-level config: an empty or null config must still mirror (the default is on in both editions)
     for (const config of [{}, null, undefined]) {
       calls.length = 0;
       const o = await hook({ globalVariables: vars, sdk, config });
@@ -284,15 +280,19 @@ test("hook run: location from NF /sites, AVs created at the configured instances
       assert.equal(o.bacnet, null, JSON.stringify(config));
       assert.ok(!calls.some((c) => c.includes("/bacnet/")), calls.join(" | "));
     }
-    // the Full edition runs the same code with the default OFF; an explicit true turns it on
+    // the Full edition runs the same code and mirrors by default too; the same option turns it off
     const full = require(path.join(root, "..", "nf-app", "hooks", "weather.js"));
     assert.equal(full.OFDD_EDITION, "full");
     calls.length = 0;
     const fo = await full({ globalVariables: vars, sdk, config: {} });
-    assert.equal(fo.bacnet, null);
-    assert.ok(!calls.some((c) => c.includes("/bacnet/")), calls.join(" | "));
-    const fon = await full({ globalVariables: vars, sdk, config: { bacnetMirror: true } });
-    assert.deepEqual(Object.keys(fon.bacnet), ["av.1", "av.2", "av.3"]);
+    assert.deepEqual(Object.keys(fo.bacnet), ["av.1", "av.2", "av.3"], "Full mirrors by default");
+    assert.ok(calls.some((c) => c.includes("/bacnet/local")), calls.join(" | "));
+    for (const config of [{ bacnetMirror: false }, { bacnetMirror: "false" }, { bacnet_mirror: false }]) {
+      calls.length = 0;
+      const off = await full({ globalVariables: vars, sdk, config });
+      assert.equal(off.bacnet, null, `Full ${JSON.stringify(config)}`);
+      assert.ok(!calls.some((c) => c.includes("/bacnet/")), calls.join(" | "));
+    }
   } finally {
     https.get = realGet;
   }
@@ -338,15 +338,19 @@ test("vendored ECharts is 6.1.0 and still builds the chart types Lite uses", () 
   tree.dispose();
 });
 
-test("pages load the vendored UMD build and the Lite theme scripts in the right order", () => {
+test("pages load the vendored UMD build and the shared theme scripts in the right order", () => {
   for (const f of ["index.html", "chart.html", "tree.html"]) {
     const html = read(`static/${f}`);
     const at = (s) => html.indexOf(s);
-    assert.ok(at('src="theme-init.js"') > 0 && at('src="theme-init.js"') < at('src="lite-theme.js"'), `${f}: theme order`);
-    assert.ok(at('src="lite-theme.js"') < at('src="vendor/echarts.min.js"'), `${f}: LT before echarts`);
-    if (f !== "tree.html") assert.ok(at('src="lite-theme.js"') < at('src="charts.js"'), `${f}: LT before charts.js`);
+    assert.ok(at('src="theme-init.js"') > 0 && at('src="theme-init.js"') < at('src="vendor/echarts.min.js"'), `${f}: theme-init first`);
+    assert.ok(at('src="vendor/echarts.min.js"') < at('src="theme.js"'), `${f}: theme.js needs echarts`);
+    if (f !== "tree.html") assert.ok(at('src="theme.js"') < at('src="charts.js"'), `${f}: theme.js before charts.js`);
+    assert.ok(at('src="base.css"') < 0 && at('href="base.css"') > 0 && at('href="base.css"') < at('href="style.css"'), `${f}: base.css before style.css`);
     assert.ok(html.includes("ECharts 6.1.0"), `${f}: comment`);
   }
+  const index = read("static/index.html");
+  assert.ok(index.indexOf('src="app-core.js"') > index.indexOf('src="charts.js"') && index.indexOf('src="app.js"') > index.indexOf('src="app-core.js"'), "shell, then the edition's app.js");
+  assert.ok(!existsSync(path.join(root, "static", "lite-theme.js")), "lite-theme.js is gone: Lite uses the shared theme.js");
 });
 
 // ---- strict CSP + RDF export (Lite parity with the full edition) ----------------------

@@ -10,6 +10,8 @@
         "scopes": [
           "normalgw.hpl.v1.readwrite",
           "normalgw.hpl.v2.readwrite",
+          "normalgw.bacnet.v1.readwrite",
+          "normalgw.bacnet.v2.readwrite",
           "normalgw.ontology.v1.readonly",
           "normalgw.automation.v1.readonly"
         ]
@@ -22,11 +24,14 @@
     "/hooks/history.js": "hooks/history.js",
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
     "/hooks/lib/paging.js": "hooks/lib/paging.js",
+    "/hooks/lib/role-limits.js": "hooks/lib/role-limits.js",
     "/hooks/lib/settings.js": "hooks/lib/settings.js",
+    "/hooks/lib/site-timezone.js": "hooks/lib/site-timezone.js",
     "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
     "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
     "/hooks/schema.js": "hooks/schema.js",
     "/hooks/sparql.js": "hooks/sparql.js",
+    "/hooks/tuning.js": "hooks/tuning.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
     "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
     "/hooks/vendor/sql.js/sql-wasm.wasm": "hooks/vendor/sql.js/sql-wasm.wasm",
@@ -34,7 +39,9 @@
     "/package.json": "package.json",
     "/rules/pack-postgres.json": "rules/pack-postgres.json",
     "/rules/pack-sqlite.json": "rules/pack-sqlite.json",
+    "/static/app-core.js": "static/app-core.js",
     "/static/app.js": "static/app.js",
+    "/static/base.css": "static/base.css",
     "/static/chart-page.js": "static/chart-page.js",
     "/static/chart.html": "static/chart.html",
     "/static/charts.js": "static/charts.js",
@@ -53,6 +60,7 @@
     "/static/plot-spec.js": "static/plot-spec.js",
     "/static/rcx-presets.js": "static/rcx-presets.js",
     "/static/rcx.js": "static/rcx.js",
+    "/static/role-limits.js": "static/role-limits.js",
     "/static/schedule.js": "static/schedule.js",
     "/static/sparql.js": "static/sparql.js",
     "/static/style.css": "static/style.css",
@@ -61,6 +69,7 @@
     "/static/tree.css": "static/tree.css",
     "/static/tree.html": "static/tree.html",
     "/static/tree.js": "static/tree.js",
+    "/static/tuning.js": "static/tuning.js",
     "/static/units.js": "static/units.js",
     "/static/vendor/echarts.esm.min.js": "static/vendor/echarts.esm.min.js",
     "/static/vendor/oxigraph/LICENSE-APACHE": "static/vendor/oxigraph/LICENSE-APACHE",
@@ -72,6 +81,7 @@
     "/static/vendor/oxigraph/web_bg.wasm": "static/vendor/oxigraph/web_bg.wasm",
     "/static/version.js": "static/version.js",
     "/timescale/adapter_nf.sql": "timescale/adapter_nf.sql",
+    "/timescale/core.sql": "timescale/core.sql",
     "/timescale/install.sql": "timescale/install.sql"
   },
   "hooks": [
@@ -155,6 +165,16 @@
       "id": "schema",
       "name": "schema",
       "entryPoint": "/hooks/schema.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "30s"
+    },
+    {
+      "id": "tuning",
+      "name": "tuning",
+      "entryPoint": "/hooks/tuning.js",
       "points": {
         "noPoints": true
       },

@@ -27,7 +27,7 @@ function load(seriesData = {}) {
     ofddRender: (chart, option, name) => { chart.rendered = { option, name }; ctx.last = chart; },
   });
   ctx.units = "imperial";
-  for (const f of ["units.js", "model.js", "fdd.js", "rcx.js", "fdd-plots.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  for (const f of ["units.js", "model.js", "fdd.js", "rcx.js", "plot-spec-data.js", "fdd-plots.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   ctx.calls = calls;
   ctx.get = (name) => vm.runInContext(name, ctx);
   return ctx;
@@ -41,10 +41,11 @@ test("views register in the right groups with roles that exist in fdd-catalog", 
   const ctx = load();
   const views = ctx.get("RCX_VIEWS");
   const by = Object.fromEntries(views.map((v) => [v.id, v]));
-  assert.equal(by["fdd-oat-meteo"].group, "Weather");
-  assert.deepEqual(Array.from(by["fdd-oat-meteo"].roles.required), ["oa_t", "web_oa_t"]);
-  assert.equal(by["fdd-sensor-health"].group, "Sensors");
+  assert.equal(by["fdd-oat-meteo"], undefined, "the redundant Weather OAT-METEO chart is gone (the FDD BAS-vs-web chart replaces it)");
+  assert.equal(by["fdd-sensor-health"], undefined, "the separate sensor health view is dropped: the four sweep lanes cover it");
   assert.equal(by["fdd-sensor-fault"].group, "Sensors");
+  assert.equal(by["fdd-sensor-fault"].tab, "fdd");
+  assert.equal(by["fdd-sensor-fault"].scope, "site", "one worst-sensor chart for the whole scope, not one huge card per equip");
   for (const v of views) for (const r of [...v.roles.required, ...v.roles.optional]) assert.ok(catalog.roles[r], `${v.id}: role ${r} not in catalog`);
   assert.ok(catalog.roles.oa_damper_pct);
 });
@@ -226,24 +227,7 @@ test("legacy result history in a rule plot is cut at its % to h output boundary"
   assert.match(note, /fault in 1 of 2/);
 });
 
-test("OAT-METEO view: lane from rcxFaultData is the last grid; omitted when no result point", async () => {
-  const bas = pt("bas", "bas"), web = pt("web", "web", { tags: ["weather"] });
-  const res = pt("res", "res", { tags: ["fdd", "fault"], rec: { attrs: { ruleRef: "OAT-METEO" } } });
-  const ctx = load({ bas: [[0, 50]], web: [[0, 51]], res: [[0, 5], [H, 0]] });
-  const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-oat-meteo");
-  const mk = (points) => ctx.rcxContext(view, [{ id: "AHU-1", name: "AHU-1", bound: { oa_t: [bas], web_oa_t: [web] } }], 24, { points }, catalog);
-  const note = await view.render({ style: {} }, mk([bas, web, res]));
-  const o = plain(ctx.last.rendered.option);
-  assert.equal(o.yAxis[0].name, "°F"); near(o.series[0].data[0][1], 50, 1e-9);
-  assert.equal(o.grid.length, 2);
-  assert.equal(o.series[o.series.length - 1].xAxisIndex, 1);
-  assert.deepEqual(o.series[o.series.length - 1].data, [[0, 1], [H, 0]]);
-  assert.match(note, /fault in 1 of 2/);
-  await view.render({ style: {} }, mk([bas, web]));
-  assert.equal(plain(ctx.last.rendered.option).grid.length, 1);
-});
-
-test("sensor fault view: worst sensor, mask lanes are the trailing grids", async () => {
+test("sensor fault view: the worst sensor of the scope, always the four SV lanes (Range, Rate, Spike, Stale)", async () => {
   const a = pt("a", "good"), b = pt("b", "bad");
   const good = Array.from({ length: 8 }, (_, i) => [i * H, 70 + i]);
   const bad = Array.from({ length: 8 }, (_, i) => [i * H, i === 4 ? 300 : 70 + (i % 2)]);
@@ -254,34 +238,87 @@ test("sensor fault view: worst sensor, mask lanes are the trailing grids", async
   const o = plain(ctx.last.rendered.option);
   assert.equal(o.yAxis[0].name, "°F");                       // flagged in SI (300 F = 149 C > 65.6 C), shown in display units
   near(o.series[0].data.find(([, v]) => v > 200)[1], 300, 1e-9);
-  assert.equal(o.grid.length, 4, "signal + SV-FLATLINE + SV-SPIKE + SV-RANGE");
-  assert.deepEqual(o.series.slice(1).map((s) => s.name), ["SV-FLATLINE", "SV-SPIKE", "SV-RANGE"]);
-  assert.deepEqual(o.series.slice(1).map((s) => s.xAxisIndex), [1, 2, 3]);
-  assert.match(o.title.text, /oa_t/);
-  assert.match(note, /oa_t/);
+  assert.equal(o.grid.length, 5, "signal + the four SV lanes");
+  assert.deepEqual(o.series.slice(1).map((s) => s.name), ["SV Range", "SV Rate", "SV Spike", "SV Stale"]);
+  assert.deepEqual(o.series.slice(1).map((s) => s.xAxisIndex), [1, 2, 3, 4]);
+  assert.match(o.title.text, /bad/);
+  assert.match(o.title.subtext, /Worst of 2 sensors/, "the title says which sensor this is and why");
+  assert.match(o.title.text, /estimated in browser/);
+  assert.ok(o.legend && o.legend.top != null, "legend is drawn");
+  assert.match(note, /bad/);
+  const range = o.series.find((s) => s.name === "SV Range").data, rate = o.series.find((s) => s.name === "SV Rate").data;
+  assert.deepEqual(range.filter(([, f]) => f === 1).map(([t]) => t), [4 * H]);
+  assert.ok(rate.filter(([, f]) => f === 1).length >= 1, "a 70 F -> 300 F jump in one hour is a rate fault");
+  const el = { style: {}, dataset: {} };
+  await view.render(el, ctx.rcxContext(view, [eq], 24, { points: [] }, catalog));
+  assert.equal(el.dataset.sized, "1", "the chart is sized for its lanes (the tab must not add more height)");
 });
 
-test("health view tells you when no sensor role is bound", async () => {
-  const ctx = load();
-  const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-health");
-  const note = await view.render({ style: {} }, { equips: [{ id: "x", name: "x", bound: {} }], hours: 24, first: () => null });
-  assert.match(note, /No temperature/);
+test("sensor fault view: a clean sensor still shows all four lanes (nothing flagged)", async () => {
+  const a = pt("a", "good");
+  const ctx = load({ a: Array.from({ length: 8 }, (_, i) => [i * H, 70 + (i % 2)]) });
+  const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-fault");
+  await view.render({ style: {} }, ctx.rcxContext(view, [{ id: "AHU-1", name: "AHU-1", bound: { sat: [a] } }], 24, { points: [] }, catalog));
+  const o = plain(ctx.last.rendered.option);
+  assert.deepEqual(o.series.slice(1).map((s) => s.name), ["SV Range", "SV Rate", "SV Spike", "SV Stale"]);
+  assert.ok(o.series.slice(1).every((s) => s.data.length === 8 && s.data.every(([, f]) => f === 0)));
 });
 
-test("health view builds hourly columns from the selected historical range", async () => {
+const LIM = { lo: -50, hi: 60, spike_delta: 20, rate_per_h: 3.333333, stale_s: 7200 };
+test("sweep lanes (estimate): stale = a run of hours without samples; range, rate and spike use the given limits; null before the first sample", () => {
   const ctx = load();
-  const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-health");
-  const point = pt("sat", "supply air temp");
-  const fromMs = Date.parse("2026-10-31T10:30:00Z"), toMs = Date.parse("2026-10-31T12:15:00Z");
-  const range = { resolvedBounds: { fromMs, toMs } };
-  const data = new Map([["sat", [[Date.parse("2026-10-31T10:00:00Z"), 20], [Date.parse("2026-10-31T11:00:00Z"), 21], [Date.parse("2026-10-31T12:00:00Z"), 22]]]]);
-  const note = await view.render({ style: {} }, {
-    equips: [{ id: "AHU-1", name: "AHU-1", bound: { sat: [point] } }],
-    first: (eq, role) => eq.bound[role]?.[0] || null,
-    series: async () => data, hours: 168, range, siteTz: "UTC", catalog,
-  });
-  const option = plain(ctx.last.rendered.option);
-  assert.equal(option.xAxis.data.length, 3, "include the hourly bins intersecting both partial edges");
-  assert.deepEqual(option.xAxis.data, ["Sat 10 AM", "Sat 11 AM", "Sat 12 PM"]);
-  assert.match(note, /1 sensors/);
+  const arr = [[0, 20], [H, 20.5], [5 * H, 21], [6 * H, 21.2]];                       // gap of 3 empty hours (2..4)
+  const lanes = plain(ctx.fddPlotSweepLanes(arr, LIM, { firstMs: -2 * H, lastMs: 6 * H }));
+  assert.deepEqual(Object.keys(lanes), ["SV-RANGE", "SV-RATE", "SV-SPIKE", "SV-STALE"]);
+  assert.deepEqual(lanes["SV-STALE"].map(([t, f]) => [t / H, f]).filter(([, f]) => f === 1).map(([t]) => t), [2, 3, 4]);
+  assert.equal(lanes["SV-STALE"][0][1], null, "before the first sample there is no verdict");
+  assert.equal(lanes["SV-RANGE"][2][1], 0);
+  assert.equal(lanes["SV-RANGE"][4][1], null, "an hour without a sample has no range verdict");
+  const jump = plain(ctx.fddPlotSweepLanes([[0, 20], [H, 30]], LIM));                  // +10 degC in one hour: a rate fault, not a spike (< 20)
+  assert.deepEqual([jump["SV-RATE"][1][1], jump["SV-SPIKE"][1][1]], [1, 0]);
+  assert.equal(plain(ctx.fddPlotSweepLanes([[0, 20], [H, 45]], LIM))["SV-SPIKE"][1][1], 1);
+  assert.equal(plain(ctx.fddPlotSweepLanes([[0, 20], [H, 99]], LIM))["SV-RANGE"][1][1], 1);
+  assert.equal(plain(ctx.fddPlotSweepLanes([[0, 20], [H, 21]], LIM))["SV-RATE"][1][1], 0);
+  const noRate = plain(ctx.fddPlotSweepLanes([[0, 20], [H, 30]], { ...LIM, rate_per_h: null }));
+  assert.equal(noRate["SV-RATE"][1][1], 0, "a limit the file leaves null gives that lane no verdict");
+  assert.equal(ctx.fddPlotWorstSensor([{ k: "a", score: 1 }, { k: "b", score: 3 }, { k: "c", score: 3 }]).k, "b");
+});
+
+test("sweep limits come from open_fdd/data/sensor_sweep_limits.json: per-role entry, else the quantity fallback", () => {
+  const ctx = load();
+  const doc = JSON.parse(readFileSync(new URL("../../open_fdd/data/sensor_sweep_limits.json", import.meta.url), "utf8"));
+  assert.deepEqual(plain(ctx.get("ofddPlotSpecData").sweep_limits), doc, "plot-spec-data.js carries the file verbatim");
+  const oa = plain(ctx.fddPlotSweepLimits("outside-air-temp", "temp"));
+  const entry = doc.roles.find((r) => r.role === "outside-air-temp");
+  assert.deepEqual([oa.lo, oa.hi, oa.spike_delta, oa.rate_per_h, oa.stale_s, oa.source], [entry.lo, entry.hi, entry.spike_delta, entry.rate_per_h, doc.defaults.stale_s, "role"]);
+  const hw = plain(ctx.fddPlotSweepLimits("hot-water-supply-temp", "temp"));
+  assert.ok(hw.hi > 90, "hot water is judged by its own band (no air-sensor limit, no skip)");
+  const fb = plain(ctx.fddPlotSweepLimits("no-such-role", "pct"));
+  assert.deepEqual([fb.lo, fb.hi, fb.spike_delta, fb.rate_per_h, fb.source], [0, 100, 25, null, "quantity"]);
+  assert.equal(ctx.fddPlotSweepLimits("x", "bool"), null);
+});
+
+test("sensor fault view: with FDD hook results the four lanes ARE the hook's timelines; no browser thresholds", async () => {
+  const a = pt("a", "calm"), b = pt("b", "stuck");
+  const res = (id, rule, sensor, extra = {}) => pt(id, id, { tags: ["fdd", "fault"], latest: { double: extra.v ?? 0 }, rec: { attrs: { ruleRef: rule, sensorRef: sensor, fddSummary: "sensor" } } });
+  const tl = (id, rule, sensor) => pt(id, id, { tags: ["fault_timeline"], rec: { attrs: { ruleRef: rule, sensorRef: sensor } } });
+  const points = [a, b, res("ra", "SV-RANGE", "a"), res("rb", "SV-RANGE", "b", { v: 2 }), res("rb2", "SV-STALE", "b", { v: 1 }),
+    tl("tb-range", "SV-RANGE", "b"), tl("tb-stale", "SV-STALE", "b")];
+  const hist = Array.from({ length: 6 }, (_, i) => [i * H, 70]);                       // flat, in range: a browser estimate would flag nothing
+  const ctx = load({ a: hist, b: hist, "tb-range": [[0, 0], [H, 1], [2 * H, 1]], "tb-stale": [[3 * H, 1]] });
+  const view = ctx.get("RCX_VIEWS").find((v) => v.id === "fdd-sensor-fault");
+  const eq = { id: "AHU-1", name: "AHU-1", bound: { sat: [a], oa_t: [b] } };
+  const note = await view.render({ style: {} }, ctx.rcxContext(view, [eq], 24, { points }, catalog));
+  const o = plain(ctx.last.rendered.option);
+  assert.match(o.title.text, /stuck/); assert.match(o.title.text, /FDD hook results/);
+  assert.deepEqual(o.series.slice(1).map((s) => s.name), ["SV Range", "SV Rate", "SV Spike", "SV Stale"]);
+  assert.deepEqual(o.series[1].data.filter(([, f]) => f != null), [[0, 0], [H, 1], [2 * H, 1]], "the hook's SV-RANGE timeline, as written (gaps between samples stay gaps)");
+  assert.deepEqual(o.series[2].data.map(([, f]) => f), [null, null], "SV-RATE not written: an empty lane, still drawn");
+  assert.deepEqual(o.series[4].data, [[3 * H, 1]]);
+  assert.match(note, /from the FDD hook/);
+});
+
+test("health states are still available as a pure helper (heat map option)", () => {
+  const ctx = load();
+  assert.equal(typeof ctx.fddPlotHealthStates, "function");
 });

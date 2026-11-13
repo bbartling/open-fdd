@@ -5,12 +5,19 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.16 - 2026-11-12 (open-fdd 4.5.7 on PyPI)
+
+One shared core schema (`sql/fdd/schema/core.sql`: `fdd.point`, `fdd.rule_result`, `fdd.rule_config`). Timescale schema version 4 copies and drops `openfdd.fdd_results` / `openfdd.retention_log` (see [migrating to 5.0.16](upgrade-5x.html)). The hook loads history from the SI view `fdd.input_sample`. Input contract version 3 declares that view's signature. FDD results are unchanged unless you save tuning.
+
+- **Sweep tuning (Full, #1589):** a Tuning tab edits the five sensor sweeps' per-role limits for a site or one equipment in display units (degF, inH2O, cfm, gpm) and stores SI revisions in `fdd.rule_config` (shipped, then site, then equipment). Every save is validated first; preview, reset and rollback keep an append-only history. The next `fdd` run applies the active revision and records it on each result row. Lite has no editor.
+
 ## Open-FDD 5.0.15 - 2026-11-11 (open-fdd 4.5.6 on PyPI)
 
 Tidy-up. FDD results are unchanged (parity run: 71 compared, 47 matched, 24 known-divergent, 0 unexpected).
 
 - **Breaking (contract):** SQL input contract version 2 drops the scratch tables `authorized_series` and `equipment`: no rule reads them and the hooks no longer fill them. Rule SQL is unchanged.
-- **One shared source** (`shared/`, copied by `scripts/nf/sync_shared.py`, `--check` in CI) for the files Full and Lite had hand-copied, including the weather hook and a single pager. Hook ids are unchanged; the BACnet mirror default is built into each edition (Lite on, Full off) and the `bacnetMirror` app option overrides it.
+- **One shared source** (`shared/`, copied by `scripts/nf/sync_shared.py`, `--check` in CI) for the files Full and Lite had hand-copied, including the weather hook and a single pager. Hook ids are unchanged; the BACnet mirror is on by default in both editions and the `bacnetMirror: false` app option turns it off.
+- **UI:** Full and Lite share one dashboard shell (`shared/static/app-core.js`, charts, theme). The top bar shows only the site; each tab has its own equip picker with a separate Weather entry. Every history view opens on the last 7 days. Charts: "Weather vs outside air" removed, hour-of-day heat map gets a sensor dropdown, "Other signals" shows all numeric signals with one y-axis per unit plus an on/off lane.
 - **Docs:** `sql/fdd/tuning_storage.sql` is documented as the tuning storage contract, `openfdd.fdd_results` as the integration output, and the hooks and tables each edition creates are listed in one table.
 - Removed a stray dev patch; moved a test-only fixture out of `hooks/lib`.
 

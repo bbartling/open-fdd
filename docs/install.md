@@ -1,19 +1,17 @@
 ---
-title: Install the NF app
-nav_order: 2
+title: NF app install reference
 ---
 
-# Install Open-FDD on NF
+# NF app install reference
+
+The full installer runbook. Not published on the site: the site has the short [Normal Framework](normal-framework.html) page.
 
 Open-FDD is an app for the Normal Framework (NF). It reads the modeled site, equipment, points, and history from NF.
 It does not need a separate login or historian. Choose Full for FDD and larger hosts, or Lite for smaller hosts.
 
 ## Choose Full or Lite
 
-| Edition | App id | Includes | Typical resources |
-|---|---|---|---|
-| Full | `open-fdd` | SQL FDD, charts, export, RDF/SPARQL, and FDD, weather, and SPARQL hooks | SQLite on smaller hosts, PGlite or Timescale on larger hosts |
-| Lite | `open-fdd-lite` | dashboard, charts, export, weather hook, and RDF | about 1 GB RAM, without FDD or Timescale |
+See [Lite vs Full](editions.html). App ids: Full `open-fdd` (`nf-app/app.json`), Lite `open-fdd-lite` (`lite/app.json`).
 
 Do not install both editions on a constrained box. Build, test, and run installer commands from a PC. NF runs the
 installed app and hooks.
@@ -87,18 +85,46 @@ a PostgreSQL client; a `localhost`, `127.0.0.1` or `::1` option names the NF hos
 workstation), or fix the probe by installing the app dependencies. Keep credentials out of the command line.
 Lite, SQLite, and PGlite skip this preflight and never bootstrap the probe.
 
-## Weather hook BACnet mirror
+## Weather hook: on, off, exporters
 
-Full and Lite run the same weather hook. Lite mirrors the three weather values to analog values on NF's own BACnet server
-by default; Full does not. The default is part of the edition (built in), because NF drops hook-level config and only app
-**options** reach the hook. To change it set the app option `bacnetMirror` to `true` or `false` (alias `bacnet_mirror`);
-`avInstances` works the same way.
+Full and Lite run the same weather hook. NF drops hook-level config, so every setting is an app **option** (NF console >
+app settings; or `PATCH /api/v1/apps/<id>` with `updateMask: ["options"]`).
+
+| option | default | meaning |
+|---|---|---|
+| `weather` (alias `weatherEnabled`) | on | `false` = off: no outbound request at all |
+| `exporters` | `bacnet-av` when NF's BACnet server is present | where the values go besides the hook variables: a comma list or JSON array of ids, or `none` |
+| `bacnetMirror` (alias `bacnet_mirror`) | on | `false` removes `bacnet-av` from the list; `true` asks for it by name |
+| `avInstances` | `[1, 2, 3]` | AV instance numbers for the `bacnet-av` exporter |
+| `latitude`, `longitude`, `site` | unset | location override; otherwise NF Sites, then the modeled site |
+
+**Off (air-gapped or IT-restricted site).** Set `weather` to `false` before or after install. The hook then makes no outbound
+request and no NF call, and returns `{skipped: true, reason: "weather disabled"}`; its schedule can stay. `doctor` reports
+"weather disabled" and passes. Rules and charts that read the web outdoor-air temperature (`web_oa_t`) ignore the old weather
+points (they would be stale) and use the equipment's own outside-air sensor (role `oa_t`) when one is tagged: the `fdd` run
+summary has `oat: {weather, web, local, none}` and the log names each equip that fell back. A rule with no outside-air
+temperature at all is skipped with the reason; the OAT-METEO check (BAS sensor against web weather) is skipped because it would
+compare a sensor with itself. On the Timescale engine the local fallback is not available (one role per point), so those rules are
+skipped. The policy everywhere is "web first, else local".
+
+**Back on.** Set `weather` to `true` (or clear it). The next scheduled run (or `run --hook weather`) writes new samples to the same
+variables, so their history continues; nothing else needs a restart.
+
+**Exporters.** The hook variables (`oa_dry_bulb_web`, `oa_rh_web`, `oa_dewpoint_web`, with history) are always written. Each
+exporter is then detected and run. Unset `exporters` means `bacnet-av`, run only if `GET /api/v1/bacnet/configuration`
+answers; when it does not, the run still succeeds and the summary shows `exporters["bacnet-av"] = {status: "skipped", reason}`.
+An exporter you name that is absent or fails makes the run fail after the variables were written. To add another output
+(Modbus, OPC UA, ...) add an object to `EXPORTERS` in `shared/hooks/open_meteo_weather.js` (or `registerExporter`):
+`{ id, detect(sdk, config) -> {available, reason?}, export(sdk, {site, values, observed, config, log}) -> summary }`, where
+`values` holds the three variables in the units above; then name its id in `exporters`.
 
 ## Site timezone
 
 Range pickers, hour labels, and RCx weekly views use the site timezone. Open-FDD takes the first of: the modeled site's
 `tz` or `timezone`, the app option `timezone` (an IANA name such as `America/Chicago`, set in the NF console app
-settings like `latitude` and `longitude`), the NF Sites API `timezone`, the browser zone, then UTC. When it has to
+settings like `latitude` and `longitude`), the NF Sites API `timezone`, the browser zone, then UTC. The `fdd` hook's
+occupancy schedule (VAV-1 `occ_mode`) and the `analytics` weekly runtime use the same order with the host zone in place of the
+browser zone (UTC on real NF); the `fdd` run summary reports `timezones: {site: {zone, source}}`. When the UI has to
 fall back, the label says so, for example `UTC (fallback)`, and `doctor` reports a WARN that names the fix. No point is
 retagged. Keep `windowHours` no longer than the history retention of the timeline points: NF acknowledges an AddData
 batch even when it drops a sample older than the retention, and the timeline watermark does not retry it.
@@ -106,7 +132,7 @@ batch even when it drops a sample older than the retention, and the timeline wat
 ## Model and verify
 
 Tag sites, equipment, points, and units in NF. Open-FDD has no per-site configuration. Points need history for charts
-and rules. The FDD page lists missing required roles. See [Modeling](modeling.html) and [Units](units.html).
+and rules. The FDD page lists missing required roles. See the [data model](modeling.html).
 
 After install, verify the following.
 
@@ -139,12 +165,12 @@ write to HVAC controllers or other field devices.
 ## Further help
 
 - [NF gotchas](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-gotchas.md) documents NF-specific behaviors and workarounds.
-- [Modeling](modeling.html) covers classes, markers, roles, and point units.
+- The [data model](modeling.html) covers classes, markers, roles, and point units.
 - [API reference](fdd-data-access.html) covers NF points, results, and history.
 - [Timescale guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale) covers schema, roles, and retention.
 - [Development](development.html) covers the local mock, tests, and generated packs.
 
-## 10. Troubleshooting
+## Troubleshooting
 
 Run `doctor` from the release checkout with the protected console environment file.
 

@@ -280,7 +280,7 @@
   // motor_weekly_runtime.sql). A view requires one signal; the later-signal view only draws
   // equips that lack the preferred one, so no equip is counted twice.
   const MOTORS = [
-    { id: "fan", title: "Supply fans", group: "Air handlers", kinds: ["ahu"], signals: ["fan_status", "fan_cmd"], faults: ["SCHED-247"] },
+    { id: "fan", title: "AHU supply fans", group: "Air handlers", kinds: ["ahu"], signals: ["fan_status", "fan_cmd"], faults: ["SCHED-247"] },
     { id: "pump", title: "Pumps", group: "Plant", kinds: ["boiler", "chwPlant", "chiller"], signals: ["pump_status"] },
     { id: "chw-pump", title: "Chilled-water pumps", group: "Plant", kinds: ["chiller", "chwPlant"], signals: ["chw_pump_status", "chw_pump_cmd"] },
     { id: "cw-pump", title: "Condenser-water pumps", group: "Plant", kinds: ["chiller", "chwPlant", "cooling_tower"], signals: ["cw_pump_cmd"] },
@@ -343,7 +343,7 @@
   async function weeklyData(ctx, eqs, role) {
     const wx = weatherOat(ctx);
     const cols = {};
-    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = ctx.first(eq, "oa_t") || wx; });
+    eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });   // one OAT policy: weather first, else the equip oa_t
     const [g, sites] = await Promise.all([ctx.alignedFine(cols, { hours: ctx.hours }), siteSchedules(ctx, eqs)]);
     const perEq = eqs.map((eq, i) => {
       const site = sites.get(siteOf(eq));
@@ -351,6 +351,40 @@
         oat: g.cols[`o${i}`], weekOf: site && site.weekOf, occ: site && site.occ }) };
     });
     return { perEq, sites };
+  }
+
+  // ---- min-run-hours threshold: default from the schedule, user override kept in localStorage per site ----------------
+  const DEFAULT_MIN_RUN_HOURS = 50;                 // Mon-Fri 07-17: the calendar used when a site has no schedule
+  const minRunKey = (site, motorId) => `openfdd-min-run-hours:${site || "site"}:${motorId}`;
+  function readMinRun(key) {
+    try { const v = Number(globalThis.localStorage && globalThis.localStorage.getItem(key)); return Number.isFinite(v) && v > 0 && globalThis.localStorage.getItem(key) !== "" ? v : null; }
+    catch (e) { return null; }
+  }
+  function writeMinRun(key, v) {
+    try { if (v == null) globalThis.localStorage.removeItem(key); else globalThis.localStorage.setItem(key, String(v)); } catch (e) { /* storage blocked: the override lasts for this view only */ }
+  }
+  /** Number box above the chart (inside its card): sets / clears the override, then redraws the chart. No-op without a DOM. */
+  function minRunControl(el, { key, value, def, custom, onChange }) {
+    const doc = el.ownerDocument;
+    if (!doc || !doc.createElement || !el.parentNode) return;
+    const prev = el.parentNode.querySelector && el.parentNode.querySelector(`.rcx-thresh[data-for="${el.id}"]`);
+    if (prev) prev.remove();
+    const box = doc.createElement("div");
+    box.className = "rcx-thresh"; box.dataset.for = el.id;
+    const label = doc.createElement("label"); label.textContent = "Min run hours / week ";
+    const input = doc.createElement("input");
+    input.type = "number"; input.min = "1"; input.max = "168"; input.step = "1"; input.value = String(+value.toFixed(1));
+    input.addEventListener("change", () => {
+      const v = Number(input.value);
+      writeMinRun(key, Number.isFinite(v) && v > 0 ? v : null);
+      onChange();
+    });
+    label.appendChild(input);
+    const reset = doc.createElement("button");
+    reset.type = "button"; reset.className = "btn"; reset.textContent = `Reset (${+def.toFixed(1)})`; reset.hidden = !custom;
+    reset.addEventListener("click", () => { writeMinRun(key, null); onChange(); });
+    box.append(label, reset);
+    el.parentNode.insertBefore(box, el);
   }
 
   async function renderWeekly(el, ctx, motor, role) {
@@ -371,12 +405,14 @@
       const name = sites.size > 1 ? `${eqName(p.eq)} · ${siteOf(p.eq)}` : eqName(p.eq);
       if (!p.site) return [{ name, type: "bar", data: bars((w) => w.hours) }];
       return [
-        { name: `${name} · in schedule`, type: "bar", stack: `eq${i}`, itemStyle: color, data: bars((w) => w.inHours) },
-        { name: `${name} · after hours`, type: "bar", stack: `eq${i}`, itemStyle: { ...color, decal: AFTER_HOURS_DECAL }, data: bars((w) => w.afterHours) },
+        { name, type: "bar", stack: `eq${i}`, itemStyle: color, data: bars((w) => w.inHours) },
+        { name: `${name} (after hours)`, type: "bar", stack: `eq${i}`, itemStyle: { ...color, decal: AFTER_HOURS_DECAL }, data: bars((w) => w.afterHours) },
       ];
     });
-    // Schedule reference: hours per ISO week as a step line (holiday weeks step down), one per site.
+    // Schedule reference: hours per ISO week as a step line (holiday weeks step down), one per site. This is the default
+    // min-run-hours (bare-minimum occupied hours per week): the site schedule's hours, else the 50 h/week calendar.
     const S = sched(), refs = [];
+    let defaultMin = DEFAULT_MIN_RUN_HOURS;
     if (S) {
       for (const site of new Set(perEq.map((p) => p.site).filter(Boolean))) {
         const ks = [...new Set(perEq.filter((p) => p.site === site).flatMap((p) => [...p.weeks.keys()]))].sort((a, b) => a - b);
@@ -384,25 +420,35 @@
         const infos = ks.map((k) => S.weeklyScheduleInfo(site.schedule, k, site.tz));
         const end = site.tz ? S.localWeekStartMs(ks[ks.length - 1] + 8 * 86400e3, site.tz) : ks[ks.length - 1] + WEEK_MS;
         const label = infos[0].label + (sites.size > 1 ? ` · ${site.siteRef}` : "");
+        if (!refs.length) defaultMin = infos[0].hours;
         refs.push({ site, label, end });
         series.push({ id: `schedule-ref:${site.siteRef}`, name: label, type: "line", step: "end", showSymbol: false, z: 5,
           lineStyle: { width: 2, type: "dashed" }, data: [...ks.map((k, i) => [k, infos[i].hours]), [end, infos[infos.length - 1].hours]] });
       }
     }
+    // The user's override (per site, kept in localStorage) adds its own flat line on top of the schedule default.
+    const siteRef = siteOf(perEq[0].eq), key = minRunKey(siteRef, motor.id), override = readMinRun(key);
+    const xEnd = Math.max(starts[starts.length - 1] + WEEK_MS, ...refs.map((r) => r.end));
+    if (override != null) {
+      series.push({ id: `min-run:${motor.id}`, name: `Min run ${+override.toFixed(1)} h/week (set by you)`, type: "line", showSymbol: false, z: 6,
+        lineStyle: { width: 2, type: "dashed", color: "#dc2626" }, data: [[starts[0], override], [xEnd, override]] });
+    }
+    minRunControl(el, { key, value: override != null ? override : defaultMin, def: defaultMin, custom: override != null, onChange: () => renderWeekly(el, ctx, motor, role) });
     // mean OAT while on: averaged in degC, shown in the display system
     const oatMeans = ctx.dispSeries(starts.map((k) => [k, rcxStats.mean(perEq.map((p) => p.weeks.get(k)?.oat))]).filter(([, v]) => v != null), TEMP)
       .map(([k, v]) => [k, +v.toFixed(1)]);
     const oatUnit = ctx.dispUnit(TEMP);
     if (oatMeans.length) {
-      series.push(lineS(`Avg OAT ${oatUnit} (while on)`, oatMeans, { yAxisIndex: 1, showSymbol: true, symbolSize: 7,
+      series.push(lineS(`Avg OAT ${oatUnit}`, oatMeans, { yAxisIndex: 1, showSymbol: true, symbolSize: 7,
         lineStyle: { width: 2, type: "dotted" } }));
     }
-    const xMin = starts[0], xMax = Math.max(starts[starts.length - 1] + WEEK_MS, ...refs.map((r) => r.end));
+    const xMin = starts[0], xMax = xEnd;
     const tzs = [...new Set([...sites.values()].map((s) => s.tz || "UTC"))], tzLabel = tzs.length <= 1 ? tzs[0] || "UTC" : "site local";
     const option = {
-      tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 0 },
-      grid: baseGrid({ right: oatMeans.length ? 56 : 24 }),
-      xAxis: { type: "time", min: xMin, max: xMax, name: `week of (${tzLabel})` },
+      title: { text: `${motor.title}: weekly runtime`, left: 8, top: 0 },
+      tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? String(+v.toFixed(2)) : "") }, legend: { top: 24, type: "scroll", formatter: (n) => (n.length > 30 ? `${n.slice(0, 28)}…` : n) },
+      grid: baseGrid({ top: 80, bottom: 44, right: oatMeans.length ? 56 : 24 }),
+      xAxis: { type: "time", min: xMin, max: xMax, name: `week of (${tzLabel})`, nameLocation: "middle", nameGap: 28 },
       yAxis: [{ type: "value", name: "Run hours" },
         ...(oatMeans.length ? [{ type: "value", name: oatUnit, position: "right", scale: true, splitLine: { show: false } }] : [])],
       series,
@@ -413,7 +459,9 @@
     ofddRender(ctx.chart(el), out, `${motor.id}_weekly_runtime`);
     return `ISO weeks (${tzLabel}), ${starts.length} shown; ${partial.size ? `${partial.size} partial (under 6 days of data); ` : ""}`
       + `on = signal > ${ON * 100}%${role.endsWith("_status") ? " (status)" : " (command)"}`
-      + (refs.length ? `; hatched = after-hours run time; line = ${refs.map((r) => r.label).join(", ")}` : "");
+      + (perEq.some((p) => p.site) ? "; hatched = after-hours run time" : "")
+      + `; dashed line = min run hours/week (schedule${override != null ? ", or the value you set" : ""}); dotted = average outdoor-air temperature while on`
+      + (refs.length ? `; ${refs.map((r) => r.label).join(", ")}` : "");
   }
 
   for (const motor of MOTORS) {
@@ -429,23 +477,107 @@
     });
   }
 
+  // ================= AHU run hours per day ==============================================
+  // Replaces the weekly "Supply fans (command)" bars in the RCx tab: one bar per AHU per calendar day (site time zone),
+  // hours the fan was running, from the fan STATUS when the AHU has one and its COMMAND otherwise (the series name says which).
+
+  /** ms -> Date-only label key (UTC midnight ms of the calendar date in `tz`; UTC when no tz). Cached per quarter hour. */
+  function dayKeyer(tz) {
+    let fmt = null;
+    if (tz) { try { fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }); } catch (e) { fmt = null; } }
+    const cache = new Map();
+    return (ms) => {
+      const q = Math.floor(ms / 900e3);                          // every UTC offset is a multiple of 15 minutes
+      let k = cache.get(q);
+      if (k === undefined) { k = Date.parse(`${fmt ? fmt.format(ms) : new Date(ms).toISOString().slice(0, 10)}T00:00:00Z`); cache.set(q, k); }
+      return k;
+    };
+  }
+
+  /**
+   * Run hours per calendar day from one signal on a time grid (the weekly-runtime integration, bucketed by day).
+   * t = [ms], v = [value|null]; opts = { duty (Bool signal: resampled average = on-fraction), tz, gapMaxSec }.
+   * Interval i is [t[i], t[i+1]) and belongs to the day of t[i]; intervals longer than gapMaxSec are skipped (data gap);
+   * a sample counts as on above 5 % (onWeight). -> [{ day: "YYYY-MM-DD", dayMs, hours, n }] oldest first.
+   */
+  function dailyRuntime(t, v, { duty = false, tz = null, gapMaxSec = GAP_MAX_SEC } = {}) {
+    const m = weeklyRuntime(t, v, { duty, gapMaxSec, weekOf: dayKeyer(tz) });
+    return [...m].map(([dayMs, w]) => ({ day: new Date(dayMs).toISOString().slice(0, 10), dayMs, hours: w.hours, n: w.n }));
+  }
+
+  /** Signal a motor's run hours are computed from: the first of motor.signals that binds (status before command). */
+  const runSignalOf = (ctx, eq, motor) => {
+    for (const role of motor.signals) {
+      const p = ctx.first(eq, role);
+      if (p) return { p, role, label: role.endsWith("_status") ? "status" : "command" };
+    }
+    return null;
+  };
+
+  /**
+   * One daily run-hours chart for a motor family: grouped bars, one series per equip, "<equip> (status|command)"
+   * (status wins; the command is used for equips that have no status point). Plant motors get one chart per family.
+   */
+  function dailyRuntimeView(motor, id, extra = {}) {
+    rcxView({
+      id, group: motor.group, title: `${motor.title}: run hours per day`,
+      kinds: motor.kinds, scope: "site", hours: 168, ...extra,
+      roles: { required: [], anyOf: motor.signals, optional: [] },
+      render: async (el, ctx) => {
+        const list = ctx.equips.map((eq) => ({ eq, sig: runSignalOf(ctx, eq, motor) })).filter((x) => x.sig);
+        if (!list.length) return `no equipment here has ${motor.signals.join(" or ")}`;
+        const cols = {};
+        list.forEach((x, i) => { cols[`m${i}`] = x.sig.p; });
+        const g = await ctx.alignedFine(cols, { hours: ctx.hours });
+        const per = list.map((x, i) => ({ ...x, days: dailyRuntime(g.t, g.cols[`m${i}`], { duty: x.sig.p.kind === "Bool", tz: ctx.siteTz }) }));
+        const days = [...new Map(per.flatMap((p) => p.days.map((d) => [d.dayMs, d.day]))).entries()].sort((a, b) => a[0] - b[0]);
+        if (!days.length || !per.some((p) => p.days.some((d) => d.hours > 0))) return "no running time in this window";
+        const series = per.map((p) => {
+          const by = new Map(p.days.map((d) => [d.dayMs, d.hours]));
+          return { name: `${eqName(p.eq)} (${p.sig.label})`, type: "bar", data: days.map(([k]) => (by.has(k) ? +by.get(k).toFixed(2) : null)) };
+        });
+        draw(ctx, el, {
+          title: { text: `${motor.title}: run hours per day`, left: 8, top: 0 },
+          tooltip: { trigger: "axis", valueFormatter: (x) => (isNum(x) ? `${+x.toFixed(1)} h` : "") }, legend: { top: 24, type: "scroll" }, dataZoom: false,
+          grid: baseGrid({ top: 64, bottom: 44 }),
+          xAxis: { type: "category", data: days.map(([, d]) => d), name: `day (${ctx.siteTz || "UTC"})`, nameLocation: "middle", nameGap: 28 },
+          yAxis: { type: "value", name: "run hours / day", min: 0, max: 24 }, series,
+        }, null, `${motor.id.replace(/-/g, "_")}_runtime_daily`);
+        if (motor.id === "fan") {
+          const all = per.flatMap((p) => p.days.map((d) => d.hours));
+          ctx.kpi({ id: "ahu-run-hours", label: "AHU run hours / day", value: `${(all.reduce((a, b) => a + b, 0) / all.length).toFixed(1)} h`, sub: `average of ${per.length} AHU${per.length === 1 ? "" : "s"}`, order: 40 });
+        }
+        const usedCmd = per.filter((p) => p.sig.label === "command").length;
+        return `on = signal > ${ON * 100}% · integrated on the 5-minute grid · ${per.length - usedCmd} from status`
+          + `${usedCmd ? `, ${usedCmd} from command (no status point)` : ""} · first and last day may be partial`;
+      },
+    });
+  }
+
+  dailyRuntimeView(MOTORS[0], "ahu-runtime-daily", { headline: true });
+  // Plant motors are drawn by their weekly charts (same clean style, min-run line); the daily versions stay registered only.
+  for (const motor of MOTORS.slice(1)) dailyRuntimeView(motor, `runtime-daily-${motor.id}`, { tabHidden: true });
+
+  M.dailyRuntime = dailyRuntime;
+  M.dayKeyer = dayKeyer;
+
   // ================= mechanical cooling x OAT bins =====================================
 
   /**
    * Cooling hours per OAT bin per equip on the FINE grid (shared by the chart and the agent analytics hook).
    * toDisp only relabels the bins. -> { per: [{ eq, bins: { labels, hours } }], wx } or { error } (no OAT point at all).
    */
-  async function mechData(ctx, role, toDisp) {
+  async function mechData(ctx, role, toDisp, pick = null) {
     const wx = weatherOat(ctx);
     const cols = {};
-    ctx.equips.forEach((eq, i) => { cols[`a${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
+    ctx.equips.forEach((eq, i) => { cols[`a${i}`] = pick ? pick(eq) : ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
     if (!Object.keys(cols).some((k) => k[0] === "o" && cols[k])) return { error: "needs an outdoor-air temperature (weather point or oa_t)", per: [], wx };
     const g = await ctx.alignedFine(cols, { hours: ctx.hours });   // fine grid: a short low-OAT event must not vanish
     const per = ctx.equips.map((eq, i) => {
       const op = cols[`o${i}`];
       // a slow weather series (20 min) is carried as-of onto the 5 min device rows, bounded by its own cadence
       const oat = op ? M.asOfFill(g.t, g.cols[`o${i}`], Math.max(M.webMaxAgeMs(g.t, g.cols[`o${i}`]), g.windowSec * 1e3)) : null;
-      return oat ? { eq, bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
+      return oat && cols[`a${i}`] ? { eq, col: cols[`a${i}`], bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
         { toDisp, duty: cols[`a${i}`].kind === "Bool", gapMaxSec: GAP_MAX_SEC }) } : null;
     }).filter(Boolean);
     return { per, wx };
@@ -454,7 +586,7 @@
   for (const role of ["compressor_status", "chiller_status", "chiller_cmd"]) {
     rcxView({
       id: `mech-cooling-${role.split("_").slice(0, -1).join("-")}-${role.split("_").pop()}`,
-      group: "Plant",
+      group: "Plant", tabHidden: true,          // superseded on the tab by "mech-cooling-hours" (one chart, one series per equip)
       title: `Mechanical cooling hours by outdoor air (${role.replace("_", " ")})`,
       kinds: [], scope: "site", hours: 720,
       roles: { required: [role], optional: ["oa_t"] },
@@ -477,6 +609,36 @@
       },
     });
   }
+
+  // One chart per equip (hours per fixed SI outdoor-air bin). The proof is type-dispatched per equip: a status first (chiller
+  // status, compressor status, DX cooling status), else a command (chiller, compressor, DX cooling command), and the chart
+  // says which. AHU / RTU DX run roles bind too; a chilled-water valve is never proof (its hours belong to the plant).
+  const MECH_STATUS = ["chiller_status", "compressor_status", "dx_cooling"];
+  const MECH_CMD = ["chiller_cmd", "compressor_cmd", "dx_cool_cmd"];
+  rcxView({
+    id: "mech-cooling-hours", group: "Plant", title: "Mechanical cooling hours by outdoor air",
+    kinds: [], scope: "equip", hours: 720,
+    roles: { required: [], anyOf: [...MECH_STATUS, ...MECH_CMD], optional: ["oa_t"] },
+    render: async (el, ctx) => {
+      const roleOf = new Map();
+      const pick = (eq) => { for (const r of [...MECH_STATUS, ...MECH_CMD]) { const p = ctx.first(eq, r); if (p) { roleOf.set(p.uuid, r); return p; } } return null; };
+      const res = await mechData(ctx, null, (c) => ctx.disp(c, TEMP).value, pick);
+      if (res.error) return res.error;
+      const { per, wx } = res;
+      if (!per.length) return "no outdoor-air data";
+      const p = per[0], unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
+      const role = roleOf.get(p.col.uuid), how = MECH_STATUS.includes(role) ? "status" : "command";
+      if (!p.bins.hours.some((h) => h > 0)) return "cooling never ran in this window";
+      draw(ctx, el, {
+        title: { text: `Mechanical cooling hours by outdoor air · ${eqName(p.eq)}`, left: 8, top: 0 },
+        tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? `${+v.toFixed(1)} h` : "") }, legend: { top: 24 }, dataZoom: false,
+        grid: baseGrid({ top: 64, bottom: 44 }),
+        xAxis: { type: "category", data: labels, name: `OAT bin ${unit}`, nameLocation: "middle", nameGap: 28 },
+        yAxis: { type: "value", name: "hours" }, series: [{ name: `cooling on (${how})`, type: "bar", data: p.bins.hours.map((h) => (h > 0 ? h : null)) }],
+      }, null, `mech_cooling_${eqName(p.eq)}`);
+      return `${wx ? "web" : "equip"} outdoor-air temperature · ${how} proof (${role.replace(/_/g, " ")}) > ${ON * 100}% · fixed SI bins (shown in ${unit})`;
+    },
+  });
 
   // ================= economizer ========================================================
 
@@ -567,8 +729,11 @@
   }
   const BAS_ROLES = { required: ["oa_t", "web_oa_t"], optional: [] };
 
+  // The deviation sits under "Weather" (or the boiler / hot-water plant when that is where the hard-wired outdoor-air
+  // sensor is modelled), never with the air handlers. It is an FDD chart: signals on top, OAT-METEO fault lane at the bottom.
+  const basGroup = (eqs) => (((eqs && eqs[0] && eqs[0].kinds) || []).some((k) => ["boiler", "chwPlant", "chiller"].includes(k)) ? "Boiler / hot-water plant" : "Weather");
   rcxView({
-    id: "bas-vs-web-oat", group: "Weather", title: "BAS vs web outdoor-air temperature",
+    id: "bas-vs-web-oat", group: "Weather", groupOf: basGroup, tab: "fdd", title: "BAS vs web outdoor-air temperature",
     kinds: [], scope: "site", hours: 168, roles: BAS_ROLES,
     render: async (el, ctx) => {
       const d = await basData(ctx);
@@ -585,16 +750,21 @@
           lineStyle: { opacity: 0 }, areaStyle: { opacity: 0.18 }, data: d.rows.map((r) => [r.t, +(2 * half).toFixed(2)]) },
       ];
       const lanes = await faultLanes(ctx, ["OAT-METEO"], ctx.equips);
-      draw(ctx, el, { tooltip: { trigger: "axis" }, legend: { top: 0, data: ["Web OAT", "BAS oa_t", `+-${+half.toFixed(1)} band`] },
-        grid: baseGrid({ bottom: 56 }), xAxis: { type: "time" },
+      draw(ctx, el, { title: { text: fddRuleRich("BAS vs web outdoor-air temperature", "OAT-METEO", eqName(d.eq)), left: 8, top: 0, textStyle: { rich: FDD_RULE_RICH } },
+        tooltip: { trigger: "axis" }, legend: { top: 24, data: ["Web OAT", "BAS oa_t", `+-${+half.toFixed(1)} band`] },
+        grid: baseGrid({ top: 64, bottom: 56 }), xAxis: { type: "time" },
         yAxis: { type: "value", name: unit, scale: true }, series }, lanes, "bas_vs_web_oat");
-      const s = d.stats;
-      return `${eqName(d.eq)} vs web · ${s.n} samples · bias ${ctx.dispDelta(s.bias, TEMP).value.toFixed(2)} ${ctx.dispDelta(0, TEMP).unit} · within band ${(s.withinBand * 100).toFixed(0)}%`;
+      const s = d.stats, lane = lanes[0] && lanes[0].data;
+      const fault = lane && lane.length
+        ? ` · ${lane.approximate ? "approximate: fault" : "confirmed fault"} in ${lane.filter(([, f]) => f === 1).length} of ${lane.filter(([, f]) => f != null).length} ${lane.approximate ? "hourly results" : "assessed samples"}`
+        : " · no OAT-METEO result point yet (lane omitted)";
+      return `${eqName(d.eq)} vs web · ${s.n} samples · bias ${ctx.dispDelta(s.bias, TEMP).value.toFixed(2)} ${ctx.dispDelta(0, TEMP).unit} · within band ${(s.withinBand * 100).toFixed(0)}%${fault}`;
     },
   });
 
   rcxView({
-    id: "bas-vs-web-oat-hist", group: "Weather", title: "BAS vs web outdoor-air deviation",
+    // Registered for the agent analytics; not drawn on a tab (the FDD chart above carries bias and in-band share).
+    id: "bas-vs-web-oat-hist", group: "Weather", groupOf: basGroup, tab: "fdd", tabHidden: true, title: "BAS vs web outdoor-air deviation",
     kinds: [], scope: "site", hours: 168, roles: BAS_ROLES,
     // No fault lane: a histogram has no time axis.
     render: async (el, ctx) => {

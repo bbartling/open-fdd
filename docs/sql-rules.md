@@ -1,12 +1,23 @@
 ---
 title: Writing SQL rules
-nav_order: 5
+parent: Rules
+nav_order: 6
 ---
 
-# Write a SQL rule
+# Writing SQL rules
 
 PostgreSQL is the production FDD source. The SQLite pack is generated from it for smaller NF hosts. Keep every rule
 site-neutral and use SI values at the rule boundary.
+
+## Where inputs and results live
+
+Rules read per-run scratch tables (`history`, `weather`, ...) built from the input contract. In the Full edition the
+scratch `history` is built from the view `fdd.input_sample(site_id, point_key, ts, value)` (SI values) joined to
+`fdd.point`, and results are upserted into `fdd.rule_result`; tuning revisions live in `fdd.rule_config` (the Full edition's Tuning tab
+stores per-site and per-equipment sensor-sweep limits there in SI, rule id `SV-LIMITS`). All
+three tables are in `sql/fdd/schema/core.sql`, which every application using Open-FDD shares byte for byte. An
+application provides only its own `fdd.input_sample` view with the signature declared under `sources` in
+`sql/fdd/input_contract.json`.
 
 ## Rule contract
 
@@ -66,5 +77,6 @@ python scripts/nf/gen_rule_docs.py --check
 python scripts/nf/gen_cookbook.py --check
 ```
 
-The generated [rule catalog](fdd-rules.html) is the compact index. The [SQL cookbook](rules/sql-cookbook.html)
-contains the rendered rule SQL, parameters, roles, and outputs. See [Units](units.html) for the conversion boundary.
+The [rule catalog](rules/) is the compact index. The [SQL cookbook](rules/sql-cookbook.html) lists parameters, roles, units
+and outputs and links each SQL file. See the [units convention](rules/sql-cookbook.html#units-convention) for the conversion boundary.
+To run a rule on your own database see [Using SQL rules outside Open-FDD](rules/borrowing-sql.html).

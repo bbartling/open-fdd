@@ -10,8 +10,9 @@
     },
     "fdd-charts.js#oatMeteoFddOption": {
       "views": [
-        "fdd-oat-meteo"
-      ]
+        "bas-vs-web-oat"
+      ],
+      "where": "FDD tab: BAS vs web outdoor-air temperature (signals + OAT-METEO fault lane); the separate Weather OAT-METEO view was removed as redundant"
     },
     "chart-kit.js#fddPlotOption": {
       "fn": "fddRulePlot",
@@ -26,8 +27,10 @@
     },
     "sensor-charts.js#sensorHealthHeatmapOption": {
       "views": [
-        "fdd-sensor-health"
-      ]
+        "fdd-sensor-fault"
+      ],
+      "fn": "fddPlotHealthOption",
+      "where": "the separate Sensor health view was dropped: the four SV lanes (Range, Rate, Spike, Stale) of the FDD sensor validation chart cover it"
     },
     "sensor-charts.js#sensorFaultChartOption": {
       "views": [
@@ -86,7 +89,7 @@
     "rcx-vibe-charts.js#multiEquipmentTimeseriesOption": {
       "views": [
         "zone_temps",
-        "vav_flows",
+        "vav_reheat_dats",
         "ahu_dats",
         "ahu_mats",
         "ahu_rats",
@@ -241,7 +244,7 @@
     "hw_reset_scatter": "hw_reset_scatter",
     "chw_reset_scatter": "chw_reset_scatter",
     "cw_reset_scatter": "cw_reset_scatter",
-    "vav_flows": "vav_flows",
+    "vav_flows": "vav_reheat_dats",
     "fan_speeds": "fan_speeds",
     "meter_elec_cdd": "meter_elec_cdd",
     "meter_gas_hdd": "meter_gas_hdd",
@@ -250,9 +253,6 @@
     "cw_temps_ts": "cw_temps_ts"
   },
   "fault_lanes": {
-    "fdd-oat-meteo": [
-      "OAT-METEO"
-    ],
     "economizer-mat-residual": [
       "ECON-1",
       "ECON-2",
@@ -291,6 +291,7 @@
     "_rule_plot": "fddRulePlot draws the lane of whichever rule is plotted (all 77)"
   },
   "not_ported": {
+    "zone airflow timeseries (preset vav_flows)": "Removed on purpose in 5.0.15: it was unclear next to the VAV damper, reheat valve and reheat discharge temperature charts, which replace it in the VAV group",
     "utility bills / fuel prices (central /api/analytics/fuel inputs)": "NF holds no utility bills or tariffs; energy views use NF meter points and site area instead"
   }
 }

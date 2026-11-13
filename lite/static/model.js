@@ -39,6 +39,7 @@ async function loadModel() {
   if (!model.sites.length) {
     throw new Error("no Haystack site in this NF's model layer; tag the site, equipment and points first");
   }
+  if (typeof noteModelSiteCount === "function") noteModelSiteCount(model.sites.length);
   model.points = await loadPoints(model);
   return model;
 }

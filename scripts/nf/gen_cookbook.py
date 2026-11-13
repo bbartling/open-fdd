@@ -1,26 +1,19 @@
 #!/usr/bin/env python3
-"""Generate the Rule Cookbook (docs/rules/*.md) from the code, so the docs cannot drift.
+"""Generate the Rule Cookbook pages (docs/rules/*.md) from the code, so the docs cannot drift.
 
-    python3 scripts/nf/gen_cookbook.py            # write the five pages
+    python3 scripts/nf/gen_cookbook.py            # write the three pages
     python3 scripts/nf/gen_cookbook.py --check    # exit 1 if any committed page is stale
 
-Sources (all read, nothing hand-copied):
+Pages: sql-cookbook.md, pandas-cookbook.md, parity.md. (docs/rules/index.md, the rule catalog, is gen_rule_docs.py.)
+Per rule, the Inputs, Parameters and Outputs tables carry SI units, accepted declared units, expected range and parity status.
+Sources (all read, nothing hand-copied): see docs_units.py, plus
   nf-app/static/fdd-catalog.json        rule ids, kinds, roles, defaults (built from sql/fdd/registry.yaml)
-  sql/fdd/tuning_catalog.json           parameter labels, limits, steps, SI units, output columns, SQL file names
-  sql/fdd/role_map.json                 SQL history column -> Haystack role
-  nf-app/rules/pack-postgres.json       the PostgreSQL SQL of every rule, rendered at its defaults
-  open_fdd/rules/cookbook_catalog.py    the pandas twin of each rule (real function source via inspect)
-  open_fdd/data/parity_known_differences.json   known differences with reasons (scope all)
-  tests/parity/test_parity.py           NO_TWIN, read with ast
-
-Pages: docs/rules/index.md, sql-cookbook.md, pandas-cookbook.md, parity.md (and docs/fdd-rules.md keeps its own
-generator, scripts/nf/gen_rule_docs.py). Needs pandas + numpy + pyyaml (the pandas cookbook imports open_fdd.rules).
+  open_fdd/rules/cookbook_catalog.py    the pandas twin of each rule
+No SQL or pandas source is pasted: each entry links to its file. Needs pandas + numpy + pyyaml (imports open_fdd.rules).
 """
 from __future__ import annotations
 
 import argparse
-import ast
-import inspect
 import json
 import re
 import sys
@@ -28,13 +21,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from docs_units import (INPUT_HEADER, PARAM_HEADER, Contract, cell, fmt, imperial_note, output_rows, param_rows,  # noqa: E402
+                        parity_status, read_parity, read_pins, units_convention)
 
 CATALOG = ROOT / "nf-app" / "static" / "fdd-catalog.json"
 TUNING = ROOT / "sql" / "fdd" / "tuning_catalog.json"
-ROLE_MAP = ROOT / "sql" / "fdd" / "role_map.json"
 PACK = ROOT / "nf-app" / "rules" / "pack-postgres.json"
-PARITY_TEST = ROOT / "tests" / "parity" / "test_parity.py"
-KNOWN_DIFFS = ROOT / "open_fdd" / "data" / "parity_known_differences.json"
 OUT_DIR = ROOT / "docs" / "rules"
 
 GH = "https://github.com/bbartling/open-fdd/blob/master"
@@ -67,67 +61,8 @@ SI_UNITS = {"°C", "Δ°C", "Δ°C/h", "%", "% out", "%/h", "fraction (0-1)", "m
 # --------------------------------------------------------------------------------------------------------------------
 
 
-def fmt(v) -> str:
-    if isinstance(v, bool):
-        return "1" if v else "0"
-    if isinstance(v, float):
-        return f"{v:.6g}"
-    return str(v)
-
-
-def cell(text) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ").strip()
-
-
 def anchor(rule_id: str) -> str:
     return rule_id.lower()
-
-
-def liquid_safe(block: str) -> str:
-    """Wrap a fenced block in raw tags when it contains Liquid delimiters."""
-    if "{{" in block or "{%" in block:
-        return "{% raw %}\n" + block + "\n{% endraw %}"
-    return block
-
-
-def code_block(lang: str, text: str) -> str:
-    text = text.replace("\r\n", "\n").rstrip("\n")
-    fence = "````" if "```" in text else "```"
-    return liquid_safe(f"{fence}{lang}\n{text}\n{fence}")
-
-
-def details(summary: str, body: str) -> str:
-    return f'<details markdown="1">\n<summary>{summary}</summary>\n\n{body}\n\n</details>'
-
-
-def unit_for_role(name: str) -> str:
-    """SI unit of a role, from its Haystack-style or SQL-style name. Roles are SI by contract."""
-    n = name.lower().replace("_", "-")
-    if "co2" in n:
-        return "ppm"
-    if n.endswith("-kwh") or n == "kwh" or "energy" in n:
-        return "kWh"
-    if n.endswith("-kw") or "power" in n:
-        return "kW"
-    if "amps" in n or "current" in n:
-        return "A"
-    if "request" in n:
-        return "count"
-    if "humidity" in n or n.endswith("-h") or n.endswith("-rh") or n == "zone-rh":
-        return "%"
-    if "static" in n or n.endswith("-dp") or n.endswith("-dp-sp") or "differential-pressure" in n or "pressure" in n:
-        return "Pa"
-    if "flow" in n:
-        return "L/s"
-    if any(k in n for k in ("status", "enabled", "available", "satisfied", "occ-mode", "occupancy", "occupied", "proof")):
-        return "0/1"
-    if any(k in n for k in ("cmd", "damper", "valve", "pct", "position", "speed")):
-        return "%"
-    if any(k in n for k in ("temp", "dewpoint", "wetbulb", "wet-bulb")) or n in {"sat", "mat", "rat", "oa-t", "zone-t", "web-oa-t", "web-wb-t", "web-oa-dp"}:
-        return "°C"
-    if n.endswith("-t") or n.endswith("-sp") or n.endswith("-leave-t"):
-        return "°C"
-    return ""
 
 
 def group_of(rule: dict) -> str:
@@ -154,33 +89,13 @@ def group_of(rule: dict) -> str:
 def load() -> dict:
     cat = json.loads(CATALOG.read_text(encoding="utf-8"))
     tuning = {r["rule_id"]: r for r in json.loads(TUNING.read_text(encoding="utf-8"))["rules"]}
-    pack = json.loads(PACK.read_text(encoding="utf-8"))["rules"]
-    role_map = json.loads(ROLE_MAP.read_text(encoding="utf-8"))
     rules = sorted(cat["rules"], key=lambda r: r["id"])
     from open_fdd.rules.cookbook_catalog import RULES_BY_ID  # noqa: E402 - needs sys.path set above
     twins = {r["id"]: RULES_BY_ID[PANDAS_ID.get(r["id"], r["id"])] for r in rules if PANDAS_ID.get(r["id"], r["id"]) in RULES_BY_ID}
-    known, no_twin = read_parity()
-    return {"cat": cat, "tuning": tuning, "pack": pack, "role_map": role_map, "rules": rules, "twins": twins,
-            "known": known, "no_twin": no_twin}
-
-
-def read_parity() -> tuple[dict, set]:
-    """Known differences (scope ``all``, with reasons) from open_fdd/data/parity_known_differences.json, and NO_TWIN
-    from tests/parity/test_parity.py (read with ast, no pytest import)."""
-    doc = json.loads(KNOWN_DIFFS.read_text(encoding="utf-8"))
-    known = {d["rule"]: d["reason"] for d in doc["differences"] if d["scope"] == "all"}
-    tree = ast.parse(PARITY_TEST.read_text(encoding="utf-8"))
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)                 and node.targets[0].id == "NO_TWIN":
-            return known, set(ast.literal_eval(node.value))
-    raise RuntimeError("NO_TWIN not found in tests/parity/test_parity.py")
-
-
-def kind_legend(cat: dict) -> str:
-    rows = ["| Kind | Haystack equipment it matches |", "|---|---|"]
-    for k, v in cat["equipment_kinds"].items():
-        rows.append(f"| `{k}` | {', '.join(f'`{x}`' for x in v)} |")
-    return "\n".join(rows)
+    pack = json.loads(PACK.read_text(encoding="utf-8"))["rules"]  # the columns each rendered SQL really returns
+    known, other, no_twin = read_parity()
+    return {"cat": cat, "tuning": tuning, "pack": pack, "rules": rules, "twins": twins, "known": known, "other": other,
+            "no_twin": no_twin, "pins": read_pins(), "contract": Contract()}
 
 
 def grouped(d: dict) -> list[tuple[str, str, str, list[dict]]]:
@@ -200,91 +115,104 @@ def confirm_text(r: dict) -> str:
 
 
 # --------------------------------------------------------------------------------------------------------------------
-# SQL cookbook
+# shared entry pieces
 # --------------------------------------------------------------------------------------------------------------------
 
 
-def roles_table(d: dict, r: dict) -> str:
-    roles = d["cat"]["roles"]
-    rows = ["| Role (SQL column) | Haystack role | NF class | SI unit | Needed |", "|---|---|---|---|---|"]
-    req = r.get("required_roles") or []
-    opt = [x for x in (r.get("optional_roles") or []) if x not in req]
-    for role, need in [(x, "required") for x in req] + [(x, "optional") for x in opt]:
-        info = roles.get(role, {})
-        hs = d["role_map"].get(role) or info.get("name") or ""
-        cls = ", ".join(f"`{c}`" for c in info.get("classes") or []) or "-"
-        unit = unit_for_role(hs) or unit_for_role(role) or "-"
-        rows.append(f"| `{role}` | {cell(hs) or '-'} | {cls} | {unit} | {need} |")
+def toc(d: dict) -> list[str]:
+    out = ["## Rules by equipment\n"]
+    for _key, title, _blurb, members in grouped(d):
+        links = " · ".join(f"[{r['id']}](#{anchor(r['id'])})" for r in members)
+        out.append(f"**{title}** ({len(members)}): {links}\n")
+    return out
+
+
+def parity_line(d: dict, rid: str) -> str:
+    status = parity_status(rid, d["known"], d["no_twin"])
+    text = f"**Parity** [{status}](parity.html#{anchor(rid)})"
+    if status == "known divergence":
+        text += f": {d['known'][rid]}"
+    elif rid in d["other"]:
+        scope, why = d["other"][rid]
+        text += f"; differs only on {scope.replace('_', '-')} data: {why}"
+    return text
+
+
+def inputs_table(d: dict, required: list[str], optional: list[str]) -> str:
+    rows = list(INPUT_HEADER)
+    seen = set()
+    for names, need in ((required, "required"), (optional, "optional")):
+        for n in names:
+            if n in seen:
+                continue
+            seen.add(n)
+            rows.append(d["contract"].input_row(n, need))
     return "\n".join(rows)
 
 
-def sql_params_table(tun: dict) -> str:
-    params = tun.get("parameters") or {}
-    if not params:
-        return "_This rule has no tunable parameters._"
-    rows = ["| Parameter | Label | Default | Min | Max | Step | SI unit |", "|---|---|---:|---:|---:|---:|---|"]
-    info = False
-    for k in sorted(params):
-        p = params[k]
-        unit = UNIT_LABEL.get(p.get("unit", ""), p.get("unit", ""))
-        mark = ""
-        if not p.get("effect_in_sql", True):
-            mark = " †"
-            info = True
-        rows.append(f"| `{k}`{mark} | {cell(p.get('label', ''))} | {fmt(p['default'])} | {fmt(p['min'])} | {fmt(p['max'])} | {fmt(p['step'])} | {cell(unit)} |")
+def scales_of(d: dict, names: list[str]) -> set[str]:
+    roles = (d["contract"].sql_role(n) for n in names)
+    return {d["contract"].scale(r) for r in roles if r}
+
+
+def params_block(rows: list[str], info: bool) -> str:
+    out = list(PARAM_HEADER) + rows
     if info:
-        rows.append("")
-        rows.append("† informational: this control has no effect in the SQL template.")
-    return "\n".join(rows)
+        out += ["", "† informational: this control has no effect in the SQL template."]
+    return "\n".join(out)
+
+
+# --------------------------------------------------------------------------------------------------------------------
+# SQL cookbook
+# --------------------------------------------------------------------------------------------------------------------
 
 
 def render_sql(d: dict) -> str:
     n = len(d["rules"])
     out = [f"""---
 title: SQL cookbook
-nav_order: 8
+parent: Rules
+nav_order: 1
 ---
 
 # SQL cookbook
 
-<!-- GENERATED by scripts/nf/gen_cookbook.py from the rule pack, the tuning catalog and the registry. Do not edit by hand. -->
+<!-- GENERATED by scripts/nf/gen_cookbook.py from the registry, input contract, tuning catalog and unit tables. Do not edit by hand. -->
 
-**{n} PostgreSQL rules**, the production FDD engine. Each section is one rule: what it needs, what you can tune, what it returns and the
-**exact SQL the app runs**, rendered at the rule's default parameters. Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh, % (see
-[Units](../units.html)). The [pandas cookbook](pandas-cookbook.html) has the same rules as Python and [parity](parity.html) says where the two
-agree.
+**{n} PostgreSQL rules**: the production engine. Each entry gives the inputs, parameters and outputs with their units, the
+parity status and a link to the SQL file. Python twins are in the [pandas cookbook](pandas-cookbook.html). To run a rule
+on your own database see [Using SQL rules outside Open-FDD](borrowing-sql.html).
 
-How the SQL runs: the FDD hook feeds one scoped, SI, wide `history` table (one column per role, one row per equipment per timestamp) to the rule and
-reads one row per equipment back. Rules never convert units. A fault must hold for the rule's confirm time before it counts, and a gap longer than one
-hour is unknown rather than fault or ok. More in [sql/fdd/README.md]({GH}/sql/fdd/README.md).
+How a rule runs: the FDD hook passes one scoped, SI, wide `history` table (one column per role, one row per equipment and
+timestamp) and reads one row per equipment back. A fault must hold for its confirm time. A gap longer than one hour is
+unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More in [sql/fdd/README.md]({GH}/sql/fdd/README.md).
 
-Jump to a rule with its id, for example `sql-cookbook.html#fc1`.
-"""]
-    out.append("## Rules by equipment\n")
-    for key, title, _blurb, members in grouped(d):
-        links = " · ".join(f"[{r['id']}](#{anchor(r['id'])})" for r in members)
-        out.append(f"**{title}** ({len(members)}): {links}\n")
+""" + units_convention()]
+    out += toc(d)
     out.append("\n---\n")
     for key, title, blurb, members in grouped(d):
         out.append(f"\n## {title} {{#group-{key}}}\n\n{blurb}\n")
         for r in members:
             rid = r["id"]
             tun = d["tuning"][rid]
-            sql = d["pack"][rid]["sql"].replace("\r\n", "\n").rstrip("\n")
             cols = d["pack"][rid].get("output_columns") or tun.get("output_columns") or []
             kinds = ", ".join(f"`{k}`" for k in r.get("equipment_kinds") or []) or "any equipment"
             twin = d["twins"].get(rid)
-            twin_txt = f"[pandas twin](pandas-cookbook.html#{anchor(rid)})" if twin else "SQL only (no pandas twin)"
-            status = "SQL only" if rid not in d["twins"] else ("match" if rid not in d["known"] else "known divergence")
+            twin_txt = f"[pandas twin](pandas-cookbook.html#{anchor(rid)})" if twin else "SQL only"
+            req = r.get("required_roles") or []
+            opt = [x for x in (r.get("optional_roles") or []) if x not in req]
+            prow, has_delta, info = param_rows(tun.get("parameters") or {})
             out.append(f"\n### {rid} {{#{anchor(rid)}}}\n")
             out.append(f"{r.get('description', '')}\n")
             out.append(f"**Priority** {r.get('priority', '')} · **Equipment** {kinds} · **Confirm** {confirm_text(r)} · "
-                       f"**Parity** [{status}](parity.html#{anchor(rid)}) · {twin_txt}\n")
-            out.append("**Inputs**\n\n" + roles_table(d, r) + "\n")
-            out.append("**Parameters**\n\n" + sql_params_table(tun) + "\n")
-            out.append("**Output columns**: " + (", ".join(f"`{c}`" for c in cols) or "none") + "\n")
-            out.append(details(f"SQL at defaults ({len(sql.splitlines())} lines) · "
-                               f"<a href=\"{GH}/sql/fdd/postgres/rules/{tun['sql_file']}\">template file</a>", code_block("sql", sql)) + "\n")
+                       f"[SQL file]({GH}/sql/fdd/postgres/rules/{tun['sql_file']}) · {twin_txt}\n")
+            out.append("**Inputs**\n\n" + inputs_table(d, req, opt) + "\n")
+            out.append("**Parameters**\n\n" + (params_block(prow, info) if prow else "_None._") + "\n")
+            out.append("**Outputs**\n\n" + "\n".join(output_rows(cols)) + "\n")
+            out.append(parity_line(d, rid) + "\n")
+            note = imperial_note(has_delta, scales_of(d, req + opt))
+            if note:
+                out.append(note + "\n")
     return "\n".join(out).rstrip("\n") + "\n"
 
 
@@ -293,129 +221,75 @@ Jump to a rule with its id, for example `sql-cookbook.html#fc1`.
 # --------------------------------------------------------------------------------------------------------------------
 
 
-def pandas_params_table(rule) -> str:
-    if not rule.params:
-        return "_No tunable parameters._"
-    rows = ["| Parameter | Label | Default | Min | Max | Step | Unit |", "|---|---|---:|---:|---:|---:|---|"]
+def pandas_param_rows(rule) -> tuple[list[str], bool]:
+    rows, has_delta = [], False
     for p in sorted(rule.params, key=lambda x: x.key):
-        rows.append(f"| `{p.key}` | {cell(p.label)} | {fmt(p.default)} | {fmt(p.min)} | {fmt(p.max)} | {fmt(p.step)} | {cell(p.unit)} |")
-    return "\n".join(rows)
+        unit = UNIT_LABEL.get(p.unit, p.unit)
+        has_delta = has_delta or unit.startswith("Δ")
+        rows.append(f"| `{p.key}` | {cell(p.label)} | {fmt(p.default)} | {fmt(p.min)} | {fmt(p.max)} | {cell(unit)} |")
+    return rows, has_delta
 
-
-# (base, amplitude) per unit for the generated example frame; sensors wiggle so no series is a flatline.
-EXAMPLE_VALUE = {"°C": (21.0, 2.0), "%": (50.0, 20.0), "Pa": (250.0, 40.0), "L/s": (100.0, 25.0), "kW": (12.0, 3.0), "kWh": (50.0, 10.0),
-                 "ppm": (600.0, 150.0), "A": (15.0, 3.0), "count": (1.0, 1.0), "0/1": (1.0, 0.0)}
 
 # Hand-written examples that really trip the fault (verified by gen_cookbook.py on every run).
 HAND_EXAMPLES = {
-    "FC1": ('{"duct-static-pressure": 150.0, "duct-static-pressure-sp": 250.0, "fan-cmd": 100.0}', "equip-1", "AHU",
+    "FC1": ('{"duct-static-pressure": 150.0, "duct-static-pressure-sp": 250.0, "fan-cmd": 1.0}', "equip-1", "AHU",
             "Duct static (Pa) sits 100 Pa under its setpoint while the fan runs: low static at full fan."),
-    "ECON-1": ('{"fan-cmd": 100.0, "outside-air-damper": 0.0, "outside-air-temp": 16.0}', "equip-1", "AHU",
-               "Outside air is 16 °C (above the 12.8 °C economizer limit) yet the OA damper is shut."),
-    "CHW-1": ('{"chilled-water-supply-temp": 6.5, "chilled-water-return-temp": 7.5, "chiller-status": 1.0}', "equip-1", "CHILLER",
-              "Chilled-water ΔT is 1 Δ°C, below the 2.2 Δ°C minimum while the chiller runs: low-ΔT syndrome."),
 }
 
 
-# Extra columns a rule needs beyond its required roles to get past its operational gate / optional-input checks.
-EXTRA_ROLES = {
-    "CHW-NOLOAD-1": ["chiller-status", "building-zone-load-satisfied"],
-    "CW-APR-1": ["web-outside-air-wetbulb", "tower-fan-cmd", "chiller-status"],
-    "CW-FAN-1": ["web-outside-air-wetbulb", "tower-fan-cmd", "chiller-status"],
-    "CW-OPT-1": ["web-outside-air-wetbulb", "chiller-status"],
-    "ECON-3": ["web-outside-air-temp", "web-outside-air-humidity"], "ECON-6": ["web-outside-air-temp"],
-    "ECON-7": ["web-outside-air-temp", "web-outside-air-humidity", "cooling-valve"], "MECH-OAT-1": ["web-outside-air-temp", "chiller-status"],
-    "PID-HUNT-1": ["cooling-valve"], "SCHED-247": ["fan-status"], "TRIM-3": ["pump-status"], "TRIM-4": ["pump-status"],
-    "VAV-1": ["occ-mode"],
-    "SV-RANGE": ["zone-air-temp", "outside-air-temp", "duct-static-pressure"], "SV-FLATLINE": ["zone-air-temp", "outside-air-temp"],
-    "SV-SPIKE": ["zone-air-temp", "outside-air-temp"], "SV-STALE": ["zone-air-temp", "outside-air-temp"],
-    "SV-RATE": ["zone-air-temp", "outside-air-temp"],
-}
-
-
-def example_code(rule, equip_id: str | None = None, equip_type: str | None = None) -> tuple[str, str]:
-    """(source, kind note) of a minimal runnable example for a pandas rule."""
-    rid = rule.id
-    kind = (rule.equipment_kinds[0] if rule.equipment_kinds else "ahu")
-    if rid in HAND_EXAMPLES:
-        frame, eid, etype, note = HAND_EXAMPLES[rid]
-        cols = frame
-    else:
-        eid = "equip-1"
-        etype = kind.upper()
-        note = ""
-        items = []
-        roles = list(rule.required_roles) + [x for x in EXTRA_ROLES.get(rid, []) if x not in rule.required_roles]
-        for role in roles:
-            base, amp = EXAMPLE_VALUE.get(unit_for_role(role), (1.0, 0.0))
-            wob = f" + {amp:g} * wave" if amp else ""
-            items.append(f'    "{role}": {base:g}{wob},')
-        cols = "{\n" + "\n".join(items) + "\n}" if items else "{}"
-        extra = [x for x in EXTRA_ROLES.get(rid, []) if x not in rule.required_roles]
-        note = "Illustrative SI values for the rule's inputs; swap in your own series (they are not tuned to trip this rule)."
-        if extra:
-            note += " " + ", ".join(f"`{x}`" for x in extra) + (" is" if len(extra) == 1 else " are") + " not required but lets the rule get past its operational gate or optional-input checks."
+def example_code(rule) -> tuple[str, str]:
+    """(source, note) of a minimal runnable example for a pandas rule in HAND_EXAMPLES."""
+    frame, eid, etype, note = HAND_EXAMPLES[rule.id]
     src = [
-        "import numpy as np",
         "import pandas as pd",
-        "import open_fdd",
         "from open_fdd.rules import run_rule",
         "",
-        "# one day on a 5-minute grid, UTC timestamps, every value SI (degC, Pa, L/s, kW, %, 0-1)",
+        "# one day on a 5-minute grid, UTC timestamps, every value SI (°C, Pa, L/s, kW; commands 0-1)",
         'idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC", name="timestamp_utc")',
-        "wave = np.sin(np.linspace(0, 2 * np.pi, len(idx)))",
-        f"df = pd.DataFrame({cols}, index=idx)" if rid in HAND_EXAMPLES else f"df = pd.DataFrame({cols}, index=idx)",
+        f"df = pd.DataFrame({frame}, index=idx)",
         f'df.attrs.update(equipment_id="{eid}", equipment_type="{etype}")',
-        *(['df.attrs["role_units"] = {c: "°C" if "temp" in c else "Pa" for c in df.columns}  # sensor sweeps assess a series only when its declared unit is SI']
-          if rule.sensor_sweep else []),
         "",
-        f'result = run_rule("{rid}", df, params={{"confirm_min": {fmt(round(float(rule.confirm_seconds) / 60.0, 6))}}})',
+        f'result = run_rule("{rule.id}", df, params={{"confirm_min": {fmt(round(float(rule.confirm_seconds) / 60.0, 6))}}})',
         "print(result.status, result.fault_hours)",
     ]
-    if rid in HAND_EXAMPLES:
-        # constant series frame: no wave needed
-        src = [s for s in src if not s.startswith("wave =")]
     return "\n".join(src), note
-
-
-def pandas_source(rule) -> str:
-    return inspect.getsource(rule.compute).rstrip("\n")
 
 
 def render_pandas(d: dict) -> str:
     twins = d["twins"]
     sql_only = [r for r in d["rules"] if r["id"] not in twins]
     n = len(twins)
+    quick, quick_note = example_code(twins["FC1"])
     out = [f"""---
 title: Pandas cookbook
-nav_order: 9
+parent: Rules
+nav_order: 2
 ---
 
 # Pandas cookbook
 
-<!-- GENERATED by scripts/nf/gen_cookbook.py from open_fdd/rules/cookbook_catalog.py. Do not edit by hand. -->
+<!-- GENERATED by scripts/nf/gen_cookbook.py from open_fdd/rules/cookbook_catalog.py and the unit tables. Do not edit by hand. -->
 
-**{n} rules as pandas functions**: the oracle twin of the [SQL cookbook](sql-cookbook.html). Use them in notebooks, for CSV and RCx studies, and as
-the reference the SQL is tested against ([parity](parity.html)). The code shown for each rule is the real function from
-[`open_fdd/rules/cookbook_catalog.py`]({GH}/open_fdd/rules/cookbook_catalog.py), pulled with `inspect.getsource`. The
-{len(sql_only)} rules without a twin are marked **SQL only**.
+**{n} rules as pandas functions**: the reference twin of the [SQL cookbook](sql-cookbook.html), for notebooks, CSV studies and
+the parity tests ([parity](parity.html)). The function behind each rule is in
+[`open_fdd/rules/cookbook_catalog.py`]({GH}/open_fdd/rules/cookbook_catalog.py). The {len(sql_only)} rules without a twin are marked **SQL only**.
 
 **Conventions**
 
-- Input is a `DataFrame` with a UTC `DatetimeIndex` and one **Haystack-role column per signal** (`duct-static-pressure`,
-  `outside-air-temp`, ...). Everything is **SI**: °C, Δ°C, Pa, L/s, kW, kWh; commands and positions are fractions (0-1), statuses 0/1, humidity %RH (0-100) (`sql/fdd/input_contract.json`). The rules never convert units or guess a scale; convert at
-  ingest.
-- `run_rule(rule_id, df, params=..., poll_seconds=300)` returns a result with `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
-  `fault_hours`, `confirmed_fault` and `raw_fault` masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]` (`AHU`, `VAV`, `CHILLER`, ...).
-- A rule function returns the **raw** boolean fault mask; the runner applies the operational gate (equipment on) and the confirm delay (`confirm_min`).
-- Parameter keys match the SQL catalog, so a tuned value can be carried between the two.
+- Input is a `DataFrame` with a UTC `DatetimeIndex` and one Haystack-role column per signal, all in SI (table below).
+  The rules never convert units or guess a scale.
+- `run_rule(rule_id, df, params=..., poll_seconds=300)` returns `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
+  `fault_hours` (h), and the `raw_fault` and `confirmed_fault` boolean masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]`.
+- The runner applies the operational gate and the confirm delay (`confirm_min`, minutes). Parameter keys match the SQL catalog.
 
-Jump to a rule with its id, for example `pandas-cookbook.html#fc1`.
-"""]
-    out.append("## Rules by equipment\n")
-    for key, title, _blurb, members in grouped(d):
-        links = " · ".join(f"[{r['id']}](#{anchor(r['id'])})" for r in members)
-        out.append(f"**{title}** ({len(members)}): {links}\n")
+```python
+{quick}
+```
+
+{quick_note}
+
+""" + units_convention()]
+    out += toc(d)
     out.append("\n---\n")
     for key, title, blurb, members in grouped(d):
         out.append(f"\n## {title} {{#group-{key}}}\n\n{blurb}\n")
@@ -425,24 +299,26 @@ Jump to a rule with its id, for example `pandas-cookbook.html#fc1`.
             out.append(f"\n### {rid} {{#{anchor(rid)}}}\n")
             if rule is None:
                 out.append(f"{r.get('description', '')}\n")
-                out.append(f"**SQL only.** No pandas twin: this rule is an aggregate or utility analytic. See the [SQL version](sql-cookbook.html#{anchor(rid)}) "
+                out.append(f"**SQL only.** No pandas twin: an aggregate or utility analytic. See the [SQL entry](sql-cookbook.html#{anchor(rid)}) "
                            f"and [parity](parity.html#{anchor(rid)}).\n")
                 continue
             kinds = ", ".join(f"`{k}`" for k in rule.equipment_kinds) or "any equipment"
             out.append(f"{rule.summary or rule.title}\n")
             out.append(f"**{cell(rule.title)}** · **Family** {rule.family} · **Equipment** {kinds} · **Confirm** {fmt(round(rule.confirm_seconds / 60.0, 6))} min · "
-                       f"[SQL version](sql-cookbook.html#{anchor(rid)}) · [parity](parity.html#{anchor(rid)})\n")
+                       f"function `{rule.compute.__name__}` · [SQL entry](sql-cookbook.html#{anchor(rid)})\n")
             if rule.equation and rule.equation.strip() != (rule.summary or "").strip():
                 out.append(f"**Equation**: {rule.equation.strip()}\n")
-            req = ", ".join(f"`{x}`" for x in rule.required_roles) or "none"
-            opt = ", ".join(f"`{x}`" for x in rule.optional_roles) or "none"
-            out.append(f"**Required roles**: {req}  \n**Optional roles**: {opt}\n")
-            out.append("**Parameters (SI defaults)**\n\n" + pandas_params_table(rule) + "\n")
-            src = pandas_source(rule)
-            fn = rule.compute.__name__
-            out.append(details(f"Source: <code>{fn}</code> ({len(src.splitlines())} lines)", code_block("python", src)) + "\n")
-            code, note = example_code(rule)
-            out.append(details("Minimal runnable example", (note + "\n\n" if note else "") + code_block("python", code)) + "\n")
+            req = list(rule.required_roles)
+            opt = [x for x in rule.optional_roles if x not in req]
+            prow, has_delta = pandas_param_rows(rule)
+            cols = d["pack"][rid].get("output_columns") or d["tuning"][rid].get("output_columns") or []
+            out.append("**Inputs**\n\n" + inputs_table(d, req, opt) + "\n")
+            out.append("**Parameters**\n\n" + ("\n".join(PARAM_HEADER + prow) if prow else "_None._") + "\n")
+            out.append("**Outputs** (the same as the SQL twin)\n\n" + "\n".join(output_rows(cols)) + "\n")
+            out.append(parity_line(d, rid) + "\n")
+            note = imperial_note(has_delta, scales_of(d, req + opt))
+            if note:
+                out.append(note + "\n")
     return "\n".join(out).rstrip("\n") + "\n"
 
 
@@ -450,21 +326,34 @@ Jump to a rule with its id, for example `pandas-cookbook.html#fc1`.
 # parity
 # --------------------------------------------------------------------------------------------------------------------
 
-NO_TWIN_WHY = "Aggregate or utility analytic: it has no pandas function in `open_fdd.rules`, so there is nothing to compare."
+
+DATASET_TITLES = {"basic/0/4/3": "4 equip x 3 d", "basic/0/8/7": "8 equip x 7 d (CI stress size)", "edge/0/2/3": "edge, 2 equip x 3 d"}
 
 
-def param_default_differences(d: dict) -> list[tuple[str, str, float, float]]:
-    out = []
-    for r in d["rules"]:
-        tw = d["twins"].get(r["id"])
-        if tw is None:
-            continue
-        tun = d["tuning"][r["id"]]["parameters"]
-        for p in tw.params:
-            q = tun.get(p.key)
-            if q and abs(float(p.default) - float(q["default"])) > 1e-4 * max(1.0, abs(float(q["default"]))):
-                out.append((r["id"], p.key, float(p.default), float(q["default"])))
-    return out
+def pinned_deltas_table(d: dict) -> str:
+    """Every known difference with the expected SQL-vs-pandas delta the stress run pins for it, per canonical dataset."""
+    keys = [k for k in DATASET_TITLES if any(k in p for p in d["pins"].values())]
+    head = ["Rule", "Scope"] + [DATASET_TITLES[k] for k in keys]
+    scope = {rid: "all" for rid in d["known"]}
+    scope.update({rid: s for rid, (s, _why) in d["other"].items()})
+    rows = []
+    for rid in sorted(scope):
+        cells = []
+        for k in keys:
+            pin = d["pins"].get(rid, {}).get(k)
+            cells.append("-" if pin is None else f"{pin['hours']:g} h &plusmn; {pin['tol']:g}")
+        rows.append(f"| [{rid}](#{anchor(rid)}) | {scope[rid].replace('_', '-')} | " + " | ".join(cells) + " |\n")
+    return f"""
+## Pinned deltas
+
+Each known difference carries its expected delta: the sum over all equipment of the absolute fault-hours difference between SQL and
+pandas (a skipped pandas side counts as 0 h), with a tolerance, for the canonical seed (0) and dataset. `tests/parity/stress.py` fails
+when an observed delta leaves its band, so a known difference cannot grow unnoticed; a rule that matches on a dataset is pinned at 0 h.
+The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, keyed `profile/seed/equips/days`).
+
+| {" | ".join(head)} |
+|{"---|" * len(head)}
+""" + "".join(rows)
 
 
 def render_parity(d: dict) -> str:
@@ -473,70 +362,63 @@ def render_parity(d: dict) -> str:
     matched = [r for r in d["rules"] if r["id"] in twins and r["id"] not in known]
     out = [f"""---
 title: Parity
-nav_order: 10
+parent: Rules
+nav_order: 4
 ---
 
-# pandas and SQL parity
+# Parity
 
-<!-- GENERATED by scripts/nf/gen_cookbook.py from tests/parity/test_parity.py. Do not edit by hand. -->
+<!-- GENERATED by scripts/nf/gen_cookbook.py from tests/parity/test_parity.py and open_fdd/data/parity_known_differences.json. Do not edit by hand. -->
 
-This page summarizes the SQL and pandas parity contract from the [tests/parity suite]({GH}/tests/parity/).
+SQL is the production result; pandas is the reference. The strict suite ([tests/parity]({GH}/tests/parity/)) runs a seeded two-equipment,
+three-day SI dataset through PostgreSQL SQL (PGlite), SQLite and pandas and pins the match and known-divergence sets. A pass is
+evidence for that dataset, not proof for every input. Run it with `python -m pytest tests/parity -q`.
 
 | | Rules |
 |---|---:|
 | SQL rules | **{total}** |
 | With a pandas twin | **{len(twins)}** |
 | Match on the synthetic suite | **{len(matched)}** |
-| Known divergence (documented in source) | **{len(known)}** |
+| Known divergence | **{len(known)}** |
 | SQL only (no twin) | **{len(no_twin)}** |
 
-## What "match" means
+**Units.** Parity is checked in SI. Imperial input is converted to SI at ingest, so SQL on imperial input equals SQL on SI input by
+construction; `to_imperial` / `from_imperial` in the [harness](parity-harness.html) round-trip the dataset to 1e-9. There is no separate
+per-rule imperial parity run.
 
-The strict pytest suite runs a deterministic two-equipment, three-day SI fixture through PostgreSQL SQL in PGlite,
-SQLite, and pandas. It requires SQL engines to agree on every production rule and pins the expected pandas match and
-known-divergence set. A passing fixture is evidence for those cases, not a proof for every possible input.
+## Per rule
 
-CI also runs a wider SI stress report over eight equipment and seven days before ZAP. That report lists divergences
-found in the wider run. Pytest keeps the strict two-equipment, three-day expectation set stable.
-
+| Rule | pandas SI vs SQL SI | Note |
+|---|---|---|
 """]
-    out.append(" ".join('<a id="{}"></a>'.format(anchor(r["id"])) for r in d["rules"]))
+    for r in d["rules"]:
+        rid = r["id"]
+        status = parity_status(rid, known, no_twin)
+        if status == "SQL only":
+            note = "aggregate or utility analytic, no pandas function"
+        elif status == "known divergence":
+            note = known[rid]
+        elif rid in d["other"]:
+            scope, why = d["other"][rid]
+            note = f"match; differs only on {scope.replace('_', '-')} data: {why}"
+        else:
+            note = ""
+        out.append(f'| <a id="{anchor(rid)}"></a>[{rid}](sql-cookbook.html#{anchor(rid)}) | {status} | {cell(note)} |\n')
+    out.append(pinned_deltas_table(d))
     out.append(f"""
-Known differences and their reasons are listed in [KNOWN_DIFFERENCES.md]({GH}/sql/fdd/KNOWN_DIFFERENCES.md). SQL is
-the production result. Pandas is the reference for offline use. Update the fixture and the parity registry whenever a
-rule changes match status.
+Known differences: [KNOWN_DIFFERENCES.md]({GH}/sql/fdd/KNOWN_DIFFERENCES.md). Wider SI stress run: `python tests/parity/stress.py --equips 8 --days 7`.
 
-Run the strict suite with `python -m pytest tests/parity -q`. See the [SQL guide](../sql-rules.html) and
-[pandas guide](../pandas-rules.html) for the authoring workflows. The dataset, the pandas reference, the compare policy
-and the known-difference list ship in the PyPI package as `open_fdd.parity`; see the
-[parity harness](parity-harness.html) to run the same proof on your own database.
+## Change a rule
+
+1. SQL: edit `sql/fdd/postgres/rules/<rule>.sql`, then `sql/fdd/registry.yaml` and `sql/fdd/tuning_catalog.json`. New roles go in `role_map.json` and `input_contract.json`. See [Writing SQL rules](../sql-rules.html).
+2. pandas: add the function in `open_fdd/rules/` and register it in `cookbook_catalog.py`. Keep role names, SI units, defaults, confirm time and gating the same as SQL.
+3. Add the fault, healthy, missing-input and boundary cases to the parity dataset.
+4. If the two intentionally differ, add the rule, a reason and the expected delta (`expected`, fault hours and tolerance per canonical dataset) to `open_fdd/data/parity_known_differences.json`.
+5. Regenerate: `python scripts/nf/gen_rule_docs.py && python scripts/nf/gen_cookbook.py`.
+
+Use the [parity harness](parity-harness.html) to run the same proof on your own database.
 """)
-    return "\n".join(out)
-
-
-# --------------------------------------------------------------------------------------------------------------------
-# index
-# --------------------------------------------------------------------------------------------------------------------
-
-
-def render_index(d: dict) -> str:
-    out = ["""---
-title: Rule Cookbook
-nav_exclude: true
-permalink: /rules/
----
-
-# Rule Cookbook
-
-<!-- GENERATED by scripts/nf/gen_cookbook.py. Do not edit by hand. -->
-
-Use the [SQL rules guide](../sql-rules.html) to add or change a production rule. Use the
-[pandas rules guide](../pandas-rules.html) for reference implementations and parity checks. The generated
-[SQL cookbook](sql-cookbook.html), [pandas cookbook](pandas-cookbook.html), [parity table](parity.html), and
-[FDD catalog](../fdd-rules.html) provide the complete reference.
-
-"""]
-    return "\n".join(out).rstrip("\n") + "\n"
+    return "".join(out)
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -545,10 +427,11 @@ Use the [SQL rules guide](../sql-rules.html) to add or change a production rule.
 
 
 def verify_examples(d: dict) -> list[str]:
-    """Run every generated pandas example; hand-written ones must also trip the fault. Returns problems."""
+    """Run every hand-written pandas example; each must really trip the fault. Returns problems."""
     import warnings
     problems = []
-    for rid, rule in d["twins"].items():
+    for rid in HAND_EXAMPLES:
+        rule = d["twins"][rid]
         code, _ = example_code(rule)
         ns: dict = {}
         try:
@@ -558,9 +441,8 @@ def verify_examples(d: dict) -> list[str]:
         except Exception as exc:  # noqa: BLE001
             problems.append(f"{rid}: example raised {type(exc).__name__}: {exc}")
             continue
-        status = ns["result"].status
-        if rule.id in HAND_EXAMPLES and status != "FAULT":
-            problems.append(f"{rid}: hand example returned {status}, expected FAULT")
+        if ns["result"].status != "FAULT":
+            problems.append(f"{rid}: hand example returned {ns['result'].status}, expected FAULT")
     return problems
 
 
@@ -592,7 +474,6 @@ def render_all() -> dict[str, str]:
     if problems:
         raise SystemExit("pandas examples are broken:\n  " + "\n  ".join(problems))
     return {
-        "index.md": render_index(d),
         "sql-cookbook.md": render_sql(d),
         "pandas-cookbook.md": render_pandas(d),
         "parity.md": render_parity(d),

@@ -1,4 +1,5 @@
-// chart.html: one catalog chart per window (charts.js), chosen by the query string.
+// GENERATED COPY of shared/static/chart-page.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
+// chart.html (both editions; source: shared/static/chart-page.js): one catalog chart per window (charts.js), chosen by the query string.
 // Needs nf.js, model.js, theme.js and charts.js loaded first.
 
 /** @param {string} id @returns {AnyEl} */
@@ -45,9 +46,8 @@ async function draw() {
 }
 
 async function main() {
-  // chart.html may not list units.js; the display-unit helpers in charts.js need it.
-  if (typeof ofddUnits === "undefined") await loadScript("units.js").catch(() => {});
-  window.addEventListener("storage", (e) => { if (e.key === "openfdd-units") draw(); });  // toggled in the dashboard
+  // The unit toggle (Full only, units.js) lives in the dashboard; follow it when it changes.
+  window.addEventListener("storage", (e) => { if (e.key === "openfdd-units") draw(); });
   await initAuth();
   await loadSiteTimeZoneSources();
   model = await loadModel();
@@ -58,15 +58,15 @@ async function main() {
   if (!sel.hours) sel.hours = def.range;
   const site = model.sites.find((s) => idOf(s) === sel.site);
   const equip = model.equips.find((e) => idOf(e) === sel.equip);
-  document.title = `${def.title} · Open-FDD`;
+  document.title = `${def.title} · ${document.documentElement.dataset.product || "Open-FDD"}`;
   $("title").textContent = `⚡ ${def.title}`;
   $("sub").textContent = `${site?.name ?? sel.site} · ${equip ? (equip.attrs || {}).dis || equip.name : "all equips"} · ${def.desc}`;
   if (def.pick) {
     const opts = def.pick(ctx);
     if (!opts.some((p) => p.uuid === sel.point)) sel.point = def.defaultPick(ctx);
-    $("pick").innerHTML = opts.map((p) => `<option value="${p.uuid}">${esc(p.name)}</option>`).join("");
+    $("pick").innerHTML = pickOptions(def, ctx).map((o) => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join("");
     $("pick").value = sel.point;
-    $("pick").classList.remove("hidden");
+    $("pick").hidden = false;
     $("pick").onchange = () => { sel.point = $("pick").value; draw(); };
   }
   window.addEventListener("popstate", () => draw());

@@ -25,11 +25,33 @@
  * `site` to the site id. Otherwise the run fails naming where to set them.
  * The answer's coords_source says which one was used.
  *
- * BACnet mirror (default ON in the Lite edition, OFF in Full; the edition is written into each copy by
- * scripts/nf/sync_shared.py). NF drops hook-level config, so the default cannot live in app.json; the app OPTION
- * `bacnetMirror` (true/false; alias `bacnet_mirror`) overrides it either way. When on, the hook also creates (once) and
- * updates three analog-value objects on NF's own BACnet server so any BACnet client can read the same numbers. The AV instance numbers come from the config value `avInstances`
- * (default [1, 2, 3], in the order oa_dry_bulb_web, oa_rh_web, oa_dewpoint_web).
+ * OFF SWITCH (#1552): the app option `weather` = false (alias `weatherEnabled`) turns the whole fetch off. The hook then
+ * makes NO outbound HTTP request and no NF call either; it returns {skipped: true, reason: "weather disabled"} and
+ * `doctor` reports "weather disabled", not a failure. Set it back to true (or clear it) to turn the fetch back on: the
+ * next scheduled run resumes and the hook variables keep their history. Air-gapped / IT-restricted sites set it at install.
+ *
+ * EXPORTERS (#1552): the hook variables (oa_dry_bulb_web, oa_rh_web, oa_dewpoint_web, with history) are ALWAYS written.
+ * Besides them the run hands the values to a list of exporters, each a small object (see EXPORTERS below):
+ *
+ *     { id: string,
+ *       detect(sdk, config): Promise<{ available: boolean, reason?: string }>   // is this output present on this NF?
+ *       export(sdk, { site, values, observed, config, log }): Promise<object>   // write; the answer goes in the summary }
+ *
+ * `values` = { oa_dry_bulb_web: degF, oa_rh_web: %, oa_dewpoint_web: degF }. Built in: "bacnet-av" (analog values on NF's
+ * own BACnet server). Room for others (Modbus, OPC UA, ...): add an object to EXPORTERS (registerExporter) and name its
+ * id in the `exporters` app option. Which exporters run:
+ *
+ *   `exporters` unset        -> ["bacnet-av"], and only if NF's BACnet server is present (GET /api/v1/bacnet/configuration
+ *                               answers); absent = skipped with that reason, not a failure
+ *   `exporters` = "none"/[]  -> hook variables only
+ *   `exporters` = "bacnet-av" (or a comma list / JSON array) -> exactly those; one that is not available FAILS the run
+ *                               (after the variables were written), because it was asked for by name
+ *   `bacnetMirror` (alias bacnet_mirror): false removes "bacnet-av" from whatever list applies (the original off switch);
+ *                               true asks for it by name
+ *
+ * bacnet-av creates (once) and updates three analog-value objects on NF's BACnet server so any BACnet client can read the
+ * same numbers. The AV instance numbers come from the app option `avInstances` (default [1, 2, 3], in the order
+ * oa_dry_bulb_web, oa_rh_web, oa_dewpoint_web).
  *
  *     label              default object  name        units
  *     oa_dry_bulb_web    av.1            WEB OA-T    degF  (64)
@@ -43,7 +65,7 @@
  * nf-app/hooks/weather.js and lite/hooks/open_meteo_weather.js). Uses Node's built-in https module plus the
  * dependency-free ./lib/paging.js and ./lib/settings.js (also shared): no npm install needed.
  */
-// Written per edition by scripts/nf/sync_shared.py: 'lite' mirrors to NF's BACnet server by default, 'full' does not.
+// Written per edition by scripts/nf/sync_shared.py ('full' / 'lite'); informational: both editions mirror to NF's BACnet server by default.
 const OFDD_EDITION = /** @type {string} */ ('full');
 const https = require('https');
 const { pageAll, listAll } = require('./lib/paging.js');
@@ -291,15 +313,24 @@ async function nf(promise, what) {
 /** Create the weather AVs on NF's BACnet server if missing, then set their present values. */
 async function mirrorToBacnet(sdk, objects, values, observed, log) {
   const listing = await nf(sdk.http.get('/api/v1/bacnet/local'), 'GetLocalObjects');
-  const have = new Set(
+  const nameOf = (o) => (((o.props || []).find((x) => x.property === 'PROP_OBJECT_NAME') || {}).value || {}).characterString || '';
+  /** instance -> object name ('' when the listing carries no name) */
+  const have = new Map(
     (listing.objects || [])
       .filter((o) => o.objectId && o.objectId.objectType === 'OBJECT_ANALOG_VALUE')
-      .map((o) => o.objectId.instance),
+      .map((o) => [o.objectId.instance, nameOf(o)]),
   );
   const mirrored = {};
   for (const obj of objects) {
     const value = values[obj.label];
     if (!Number.isFinite(value)) continue;
+    const current = have.get(obj.instance);
+    if (current && current !== obj.name) {
+      // an analog value this hook did not create sits on that instance: never overwrite it
+      log(`BACnet av.${obj.instance} is "${current}", not "${obj.name}": left untouched (instance collision; `
+        + 'pick free instances with the app option avInstances)');
+      continue;
+    }
     const objectId = { objectType: 'OBJECT_ANALOG_VALUE', instance: obj.instance };
     const pv = { property: 'PROP_PRESENT_VALUE', value: { real: round2(value) } };
     const desc = { property: 'PROP_DESCRIPTION', value: { characterString: `${obj.description} (obs ${observed})` } };
@@ -325,6 +356,98 @@ async function mirrorToBacnet(sdk, objects, values, observed, log) {
   return mirrored;
 }
 
+// ---- exporters (#1552) ---------------------------------------------------------------------------------------------------
+/** The built-in BACnet analog-value exporter. */
+const bacnetAvExporter = {
+  id: 'bacnet-av',
+  /** NF's BACnet server is present when its configuration endpoint answers. */
+  async detect(sdk, _config) {
+    try {
+      await withDeadline(sdk.http.get('/api/v1/bacnet/configuration'), WRITE_TIMEOUT_MS, 'GetBacnetConfiguration');
+      return { available: true };
+    } catch (e) {
+      const status = e && (e.status || (e.response && e.response.status));
+      return { available: false, reason: `NF's BACnet server is not present (GET /api/v1/bacnet/configuration ${status ? `-> HTTP ${status}` : `failed: ${e && e.message}`})` };
+    }
+  },
+  async export(sdk, { site, values, observed, config, log }) {
+    const objects = bacnetObjects(site.name || site.id, avInstances(config));
+    return mirrorToBacnet(sdk, objects, values, observed, log);
+  },
+};
+
+/** id -> exporter. Add one with registerExporter (a fork, a test); name its id in the `exporters` app option. */
+const EXPORTERS = { [bacnetAvExporter.id]: bacnetAvExporter };
+function registerExporter(exporter) {
+  if (!exporter || !exporter.id || typeof exporter.detect !== 'function' || typeof exporter.export !== 'function') {
+    throw new Error('an exporter is { id, detect(sdk, config), export(sdk, ctx) }');
+  }
+  EXPORTERS[exporter.id] = exporter;
+}
+
+/** The `exporters` option as a list of ids: a JSON array, a comma list or one id; "none" / "[]" = []. undefined = not set. */
+function parseExporters(raw) {
+  if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return undefined;
+  let list = raw;
+  if (typeof raw === 'string') {
+    const t = raw.trim();
+    if (t.startsWith('[')) {
+      try { list = JSON.parse(t); } catch (_) { throw new Error(`app option "exporters" is not valid JSON: ${t.slice(0, 80)}`); }
+    } else list = t.split(',');
+  }
+  if (!Array.isArray(list)) throw new Error('app option "exporters" must be a list of exporter ids (or "none")');
+  return list.map((x) => String(x).trim()).filter((x) => x && x.toLowerCase() !== 'none');
+}
+
+/**
+ * Which exporters to run: [{ id, explicit }]. See the header for the rules. Throws on an unknown id before any network call.
+ * @param {any} config normalized config
+ * @returns {{id: string, explicit: boolean}[]}
+ */
+function exporterPlan(config) {
+  const listed = parseExporters(config.exporters);
+  const legacy = config.bacnetMirror !== undefined ? config.bacnetMirror : config.bacnet_mirror;
+  const off = legacy === false || legacy === 'false';
+  const on = legacy === true || legacy === 'true';
+  /** @type {{id: string, explicit: boolean}[]} */
+  let plan = listed === undefined ? [{ id: 'bacnet-av', explicit: false }] : listed.map((id) => ({ id, explicit: true }));
+  if (on) plan = [...plan.filter((x) => x.id !== 'bacnet-av'), { id: 'bacnet-av', explicit: true }];
+  if (off) plan = plan.filter((x) => x.id !== 'bacnet-av');
+  const unknown = plan.filter((x) => !EXPORTERS[x.id]).map((x) => x.id);
+  if (unknown.length) throw new Error(`unknown weather exporter(s) ${unknown.join(', ')}; known: ${Object.keys(EXPORTERS).join(', ')}, or "none"`);
+  return plan;
+}
+
+/**
+ * Detect, then run each planned exporter. The caller has already written the hook variables. An exporter named in the
+ * config that is absent or fails is a failure (collected, thrown by the caller after all ran); an implicit default that is
+ * absent is skipped with its reason.
+ * @returns {Promise<{ exporters: Record<string, any>, failures: string[] }>}
+ */
+async function runExporters(plan, sdk, ctx) {
+  /** @type {Record<string, any>} */
+  const exporters = {};
+  const failures = [];
+  for (const { id, explicit } of plan) {
+    try {
+      const det = await EXPORTERS[id].detect(sdk, ctx.config);
+      if (!det || !det.available) {
+        const reason = (det && det.reason) || 'not available';
+        exporters[id] = { status: explicit ? 'failed' : 'skipped', reason };
+        if (explicit) failures.push(`${id}: ${reason}`);
+        else ctx.log(`exporter ${id} skipped: ${reason}`);
+        continue;
+      }
+      exporters[id] = { status: 'ok', result: await EXPORTERS[id].export(sdk, ctx) };
+    } catch (e) {
+      exporters[id] = { status: 'failed', reason: String((e && e.message) || e) };
+      failures.push(`${id}: ${exporters[id].reason}`);
+    }
+  }
+  return { exporters, failures };
+}
+
+
 async function runOnce({ globalVariables, sdk, config }) {
   const log = (msg) => {
     console.log(msg);
@@ -337,10 +460,14 @@ async function runOnce({ globalVariables, sdk, config }) {
 
   // NF passes the app options as ctx.config (numbers can arrive as strings; blank options are "not set")
   config = settings.normalizeConfig(config);
+  // OFF is a first-class state: nothing below runs (no Sites / model / Open-Meteo / point / BACnet call)
+  if (!settings.weatherEnabled(config)) {
+    log('open-meteo weather disabled by the app option "weather" (no outbound request made)');
+    return { skipped: true, reason: 'weather disabled' };
+  }
   const wanted = config.site;
-  const explicit = config.bacnetMirror !== undefined ? config.bacnetMirror : config.bacnet_mirror;
-  const mirror = explicit === undefined ? OFDD_EDITION === 'lite' : explicit === true || explicit === 'true';
-  const instances = mirror ? avInstances(config) : null; // validate before any network call
+  const plan = exporterPlan(config);
+  if (plan.some((x) => x.id === 'bacnet-av')) avInstances(config); // validate before any network call
   // 1) the hook settings / app options latitude + longitude (an explicit override), 2) NF Sites, 3) the modeled SITE
   let site = coordsFromConfig(config);
   if (site) log(`weather location from the ${site.source}`);
@@ -414,7 +541,10 @@ async function runOnce({ globalVariables, sdk, config }) {
     }
   }
 
-  const bacnet = mirror ? await mirrorToBacnet(sdk, bacnetObjects(site.name || site.id, instances), { oa_dry_bulb_web: tempF, oa_rh_web: rh, oa_dewpoint_web: dewF }, cur.time, log) : null;
+  // exporters: the variables above are already written
+  const values = { oa_dry_bulb_web: tempF, oa_rh_web: rh, oa_dewpoint_web: dewF };
+  const { exporters, failures } = await runExporters(plan, sdk, { site, values, observed: cur.time, config, log });
+  const bacnet = exporters['bacnet-av'] && exporters['bacnet-av'].status === 'ok' ? exporters['bacnet-av'].result : null;
 
   const summary = {
     site: site.id,
@@ -430,9 +560,11 @@ async function runOnce({ globalVariables, sdk, config }) {
     dewpoint_written_f: round2(dewF),
     dewpoint_source: dewSource,
     write_path: writePath,
+    exporters,
     bacnet,
   };
   log(`open-meteo weather ${JSON.stringify(summary)}`);
+  if (failures.length) throw new Error(`weather values written, but ${failures.length} exporter(s) failed: ${failures.join('; ')}`);
   return summary;
 }
 
@@ -440,5 +572,6 @@ async function runOnce({ globalVariables, sdk, config }) {
 // (load the file from the hooks folder of either edition in node and call magnusDewpointF(70, 50)).
 module.exports = Object.assign(
   async (ctx) => withDeadline(runOnce(ctx), RUN_DEADLINE_MS, 'open-meteo weather hook run'),
-  { OFDD_EDITION, magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, avInstances, bacnetObjects, withDeadline, pageAll },
+  { OFDD_EDITION, magnusDewpointF, openMeteoUrl, pickSite, siteFromModel, coordsFromAttrs, coordsFromConfig, avInstances, bacnetObjects, mirrorToBacnet, withDeadline, pageAll,
+    EXPORTERS, registerExporter, exporterPlan, parseExporters },
 );

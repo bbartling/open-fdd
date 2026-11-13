@@ -63,6 +63,9 @@
 //   engine        "auto" | "sqlite" | "pglite" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
+//   weather       false = web weather is OFF (#1552): weather points are ignored (they are stale leftovers), rules that read
+//                 web_oa_t use the equip's own outside-air sensor when tagged, else skip with a reason (alias weatherEnabled)
+//   timezone      IANA zone (e.g. America/Chicago) for the occupancy schedule when the model site has no tz (#1587)
 //   equips        list of equip ids to limit a run to (default: every equip)
 //   dryRun        true → compute and log, write nothing
 //   bacnet        { enabled: true, firstInstance: 1000 } → fault count per equip as an AV on
@@ -79,6 +82,7 @@ const STATIC = path.join(__dirname, '..', 'static');
 const RULES = path.join(__dirname, '..', 'rules');
 const { queryPoints } = require('./lib/paging.js');
 const settings = require('./lib/settings.js');
+const roleLimits = require('./lib/role-limits.js');
 const PGLITE_MIN_BYTES = 3.5 * 1024 ** 3;
 
 // ---- shared code with the UI ------------------------------------------------------
@@ -91,6 +95,7 @@ function loadShared() {
   const get = (n) => vm.runInContext(n, ctx);
   return {
     toPoint: get('toPoint'), idOf: get('idOf'), has: get('has'), equipRules: get('equipRules'),
+    bindRoles: get('bindRoles'), equipPool: get('equipPool'),
     ENTITY_TYPES: get('ENTITY_TYPES'),
     catalog: JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8')),
   };
@@ -528,23 +533,70 @@ function timelineRecords({ equipRec, siteId, rule, shared, windowHours, key, run
   ];
 }
 
+// ---- outside-air temperature policy (#1552): web weather first, else the equip's local sensor ----------------------
+/**
+ * The same OAT policy as the RCx charts ("web first, else local"), applied to the rules that read `web_oa_t`:
+ *   - web weather bound (a point tagged `weather`) -> used, nothing changes;
+ *   - none bound but the equip has its own tagged outside-air temperature (role oa_t) -> that sensor feeds web_oa_t
+ *     (not on the timescale engine: fdd.point keys one role per point);
+ *   - none of either -> the rule is skipped with a reason that says why (only when weather is switched OFF; with weather
+ *     on but nothing bound yet the rule keeps its old behaviour).
+ * A rule that lists BOTH oa_t and web_oa_t (OAT-METEO) compares the two, so a local fallback would compare a sensor with
+ * itself: it is skipped when weather is off. Mutates the rows of equipRules(); returns what it did.
+ * @param {any[]} rows @param {{ localOat?: any, weatherOn: boolean, canSubstitute: boolean }} o
+ * @returns {{ source: 'web' | 'local' | 'none', local: any, skipped: string[] }}
+ */
+function applyOatPolicy(rows, { localOat, weatherOn, canSubstitute }) {
+  const out = { source: /** @type {'web' | 'local' | 'none'} */ ('none'), local: null, skipped: /** @type {string[]} */ ([]) };
+  if (rows.some((r) => (r.bound.web_oa_t || []).length)) out.source = 'web';
+  for (const r of rows) {
+    const roles = [...r.required, ...r.optional];
+    if (!roles.includes('web_oa_t') || (r.bound.web_oa_t || []).length) continue;
+    const compares = roles.includes('oa_t');
+    if (!compares && localOat && canSubstitute) {
+      r.bound.web_oa_t = [localOat];
+      r.oatLocal = true;
+      r.missing = r.required.filter((x) => !(r.bound[x] || []).length);
+      r.pointInputs = true;
+      r.runnable = r.missing.length === 0;
+      out.local = localOat;
+      if (out.source === 'none') out.source = 'local';
+      continue;
+    }
+    if (weatherOn) continue;                                   // nothing bound yet: old behaviour
+    r.runnable = false;
+    r.skipReason = compares
+      ? 'needs web weather to compare with the equip outside-air sensor, and weather is disabled (app option weather=false)'
+      : `needs an outside-air temperature: weather is disabled (app option weather=false) and ${localOat ? 'the local sensor cannot be used on the timescale engine' : 'this equip has no outside-air temperature sensor tagged'}`;
+    out.skipped.push(r.rule.id);
+  }
+  return out;
+}
+
 // ---- occupancy for rules whose occ_mode is optional and unbound -------------------------------------
 const scheduleLib = require('../static/schedule.js');
-const hostTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (e) { return 'UTC'; } };
+const siteTz = require('./lib/site-timezone.js');
 
 /**
- * { source: 'schedule' | 'default', label, tz, at(ms) -> occupied } for a site. NF schedules are read once per run
- * (cache.schedules) and never written. Timezone: the site record's tz / timezone, else the host's.
+ * { source: 'schedule' | 'default', label, tz, tz_source, at(ms) -> occupied } for a site. NF schedules are read once
+ * per run (cache.schedules) and never written. Timezone (#1587), the dashboard's order: the model site's tz / timezone,
+ * then the app option `timezone`, then NF Sites, then the host zone (UTC on real NF), then UTC; `tz_source` says which.
  */
-async function siteOccupancy({ http, model, shared, siteId, cache }) {
+async function siteOccupancy({ http, model, shared, siteId, cache, config }) {
   if (!cache.schedules) cache.schedules = scheduleLib.loadSchedules(async (p) => { const r = await http.get(p); return r && r.data; });
   const schedules = await cache.schedules;
   const site = model.sites.find((x) => shared.idOf(x) === siteId);
-  const sa = (site && site.attrs) || {};
-  const tz = sa.tz || sa.timezone || hostTz();
-  const picked = scheduleLib.pickSiteSchedule(schedules, { sites: model.sites, points: model.points }, siteId);
-  const sched = picked || scheduleLib.defaultSchedule(tz);
-  return { source: picked ? 'schedule' : 'default', label: sched.label, tz, at: (ms) => scheduleLib.occupied(sched, ms, tz) };
+  if (!cache.nfSites) cache.nfSites = siteTz.loadNfSites(http);
+  const nf = await cache.nfSites;
+  const z = siteTz.resolveSiteTimeZone(site, { config, sites: nf.sites });
+  // the schedule label names the zone from the site record: hand it the resolved one
+  const sites = z.source === 'model site' || !site ? model.sites
+    : model.sites.map((x) => (x === site ? { ...x, attrs: { ...(x.attrs || {}), tz: z.zone } } : x));
+  const picked = scheduleLib.pickSiteSchedule(schedules, { sites, points: model.points }, siteId);
+  const sched = picked || scheduleLib.defaultSchedule(z.zone);
+  const tz = z.zone;
+  return { source: picked ? 'schedule' : 'default', label: sched.label, tz, tz_source: z.source, tz_fallback: z.fallback,
+    tz_ignored: z.ignored, tz_sites_error: nf.error, at: (ms) => scheduleLib.occupied(sched, ms, tz) };
 }
 
 /** Model record of a previously published result, flagged stale: nothing else about it changes. */
@@ -677,6 +729,67 @@ async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInsta
 }
 
 /**
+ * Persisted sweep role-limit overrides (#1589; Full edition, Timescale engine only). Reads the active SV-LIMITS revisions
+ * of fdd.rule_config once per run and returns forEquip(site, equip): null when the shipped limits apply, else the five
+ * sweep rules re-rendered from the pack's role_limit_templates with shipped < site < equipment, plus the provenance the
+ * fdd.rule_result rows record (rule_hash of the rendered SQL, config_hash, config_revision, effective_parameters).
+ * An override that no longer validates (e.g. after a newer shipped file) is skipped LOUDLY: logged and listed in the summary.
+ * @param {{ engine: any, pack: any, log: (m: string) => void }} args
+ */
+async function loadRoleLimitOverrides({ engine, pack, log }) {
+  const summary = { source: 'shipped', revisions: 0, equips: 0, errors: /** @type {string[]} */ ([]) };
+  /** @type {{ summary: typeof summary, forEquip: (siteId: string, equipId: string) => any }} */
+  const none = { summary, forEquip: () => null };
+  if (!engine.roleLimitOverrides || !pack.role_limit_templates) return none;
+  let rows;
+  try { rows = await engine.roleLimitOverrides(); } catch (e) {
+    summary.errors.push(`could not read role-limit overrides: ${errText(e)}`);
+    log(`role limits: could not read fdd.rule_config (${errText(e)}); shipped limits used`);
+    return none;
+  }
+  if (!rows.length) return none;
+  summary.source = 'fdd.rule_config';
+  summary.revisions = rows.length;
+  const tpl = pack.role_limit_templates;
+  const byKey = new Map(rows.map((r) => [`${r.site_id}\u0001${r.scope_key}`, r]));
+  const cache = new Map();
+  const empty = (r) => !r || !r.parameters || !r.parameters.roles || !Object.keys(r.parameters.roles).length;
+  const sha = (/** @type {string} */ t) => crypto.createHash('sha256').update(t).digest('hex');
+  return {
+    summary,
+    forEquip(siteId, equipId) {
+      const site = byKey.get(`${siteId}\u0001${roleLimits.SITE_SCOPE}`);
+      const equip = byKey.get(`${siteId}\u0001${roleLimits.EQUIP_SCOPE_PREFIX}${equipId}`);
+      if (empty(site) && empty(equip)) return null;
+      const text = roleLimits.configText(site && site.parameters, equip && equip.parameters);
+      const key = `${site ? site.revision : ''}|${equip ? equip.revision : ''}`;
+      if (!cache.has(key)) {
+        try {
+          const limits = roleLimits.effectiveRoleLimits(tpl.shipped, tpl.allowlists, site && site.parameters, equip && equip.parameters);
+          const sweeps = roleLimits.renderSweeps(pack, limits);
+          cache.set(key, {
+            sweeps,
+            ruleHashes: Object.fromEntries(Object.entries(sweeps).map(([id, x]) => [id, sha(x.sql)])),
+            configHash: sha(text),
+            configRevision: !empty(equip) ? equip.revision : site.revision,
+            parameters: { role_limits: { config_rule_id: roleLimits.LIMITS_RULE_ID, site_revision: site ? site.revision : null,
+              equipment_revision: equip ? equip.revision : null, overrides: JSON.parse(text) } },
+          });
+        } catch (e) {
+          const msg = `${siteId || '(no site)'} / ${equipId}: role-limit override not applied (${errText(e)}); shipped limits used`;
+          summary.errors.push(msg);
+          log(`role limits: ${msg}`);
+          cache.set(key, null);
+        }
+      }
+      const out = cache.get(key);
+      if (out) summary.equips++;
+      return out;
+    },
+  };
+}
+
+/**
  * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
  *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number }} FddConfig
  * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number, hasPglite?: () => boolean }} args
@@ -699,12 +812,18 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   for (let t = from; t < to; t += step * 1e3) grid.push(t);
 
   const model = await loadModel(http, shared);
+  const weatherOn = settings.weatherEnabled(config);
+  if (!weatherOn) model.points = model.points.filter((p) => !shared.has(p, 'weather'));   // stale after the hook was switched off
   const modelProblem = modelProblemOf(model);
   const only = Array.isArray(config.equips) && config.equips.length ? new Set(config.equips) : null;
   const runIso = new Date(now).toISOString();
   const summary = { engine: kind, engine_configured: config.engine || 'auto', engine_note: engineNote, equips: 0, rules: 0, errors: 0, written: 0, results: [],
     sensor_results: { total: 0, ok: 0, fault: 0, 'not-assessed': 0, stale: 0 },
     status: { ok: 0, fault: 0, 'not-assessed': 0, stale: 0 }, requests: { metadata: 0, data: 0 },
+    // site time zone used for the occupancy schedule, per site, with where it came from (#1587)
+    // outside-air temperature policy (#1552): web weather first, else the equip's own sensor
+    oat: { weather: weatherOn ? 'on' : 'off', web: 0, local: 0, none: 0, local_points: /** @type {{site: string, equip: string, point: string}[]} */ ([]) },
+    timezones: /** @type {Record<string, {zone: string, source: string, fallback: boolean}>} */ ({}),
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
     eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {},
     window: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), hours: windowHours },
@@ -716,6 +835,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const warnedUnits = new Set();
   const engine = await createEngine({ kind, pack, config: config.timescale });
   try {
+    const tuning = await loadRoleLimitOverrides({ engine, pack, log });
+    summary.role_limits = tuning.summary;
     for (const equipRec of model.equips) {
       const equipId = shared.idOf(equipRec);
       if (only && !only.has(equipId)) continue;
@@ -734,8 +855,18 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
       };
       try {
         const bound = shared.equipRules(equipRec, model, shared.catalog).filter((r) => pack.rules[r.rule.id]);
+        if (bound.some((r) => [...r.required, ...r.optional].includes('web_oa_t'))) {
+          const localOat = shared.bindRoles(['oa_t'], shared.equipPool(equipRec, model), shared.catalog).oa_t[0] || null;
+          const oat = applyOatPolicy(bound, { localOat, weatherOn, canSubstitute: kind !== 'timescale' });
+          summary.oat[oat.source]++;
+          if (oat.local) {
+            summary.oat.local_points.push({ site: siteId, equip: equipId, point: oat.local.name });
+            log(`${equipId}: no web weather bound, using the local outside-air sensor "${oat.local.name}" for web_oa_t`);
+          }
+          if (oat.skipped.length) log(`${equipId}: ${oat.skipped.join(', ')} skipped: no outside-air temperature (weather disabled)`);
+        }
         for (const r of bound) {
-          if (!r.runnable) reasons.set(r.rule.id, `required roles missing (${r.missing.length ? r.missing.join(', ') : 'no input role is bound'})`);
+          if (!r.runnable) reasons.set(r.rule.id, r.skipReason || `required roles missing (${r.missing.length ? r.missing.join(', ') : 'no input role is bound'})`);
         }
         let runnable = bound.filter((r) => r.runnable);
         const hadResults = Object.keys(pack.rules).some((id) => model.results.has(resultUuid(key, id)));
@@ -754,7 +885,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const assessableRoles = shared.catalog.sensor_sweep_roles?.[r.rule.id];
           if (!Array.isArray(assessableRoles)) throw new Error(`fdd catalog has no assessable-role list for ${r.rule.id}`);
           for (const [role, points] of Object.entries(r.bound || {})) {
-            if (!assessableRoles.includes(role)) continue;
+            if (!assessableRoles.includes(role) || (r.oatLocal && role === 'web_oa_t')) continue;
             for (const point of points || []) {
               let sensor = sweepSensors.find((s) => s.point.uuid === point.uuid);
               if (!sensor) { sensor = { role, point, ruleIds: new Set() }; sweepSensors.push(sensor); }
@@ -786,10 +917,13 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         let occ = null;               // synthesized occupancy: a runnable rule has occ_mode optional and no point is bound
         if (kind !== 'timescale' && !roles.occ_mode && runnable.some((r) => r.optional.includes('occ_mode'))) {
           try {
-            occ = await siteOccupancy({ http, model, shared, siteId, cache: occCache });
+            occ = await siteOccupancy({ http, model, shared, siteId, cache: occCache, config });
             if (!occCache.logged.has(siteId)) {
               occCache.logged.add(siteId);
-              log(`${siteId || 'site'}: occ_mode synthesized from ${occ.source} (${occ.label}, ${occ.tz})`);
+              log(`${siteId || 'site'}: occ_mode synthesized from ${occ.source} (${occ.label}, ${occ.tz}, zone from ${occ.tz_source})`);
+              if (occ.tz_ignored) log(`${siteId || 'site'}: ${occ.tz_ignored}`);
+              if (occ.tz_sites_error) log(`${siteId || 'site'}: NF Sites unavailable for the time zone (${occ.tz_sites_error})`);
+              summary.timezones[siteId || ''] = { zone: occ.tz, source: occ.tz_source, fallback: occ.tz_fallback };
             }
           } catch (e) { log(`${equipId}: occupancy schedule unavailable (${errText(e)}); occ_mode not synthesized`); }
         }
@@ -798,7 +932,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const unitsByUuid = Object.fromEntries([...Object.values(roles), ...sweepSensors.map((s) => s.point)].map((p) => [p.uuid, p.units || '']));
           const sensorPlan = buildSensorInput({ equipId, sensors: sweepSensors, hist: {}, grid: [], catalog: shared.catalog, log, warned: warnedUnits });
           for (const [role, count] of Object.entries(sensorPlan.skipped)) summary.roles_skipped_by_unit[role] = (summary.roles_skipped_by_unit[role] || 0) + count;
-          loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid,
+          const pointMeta = Object.fromEntries([...Object.values(roles), ...sweepSensors.map((s) => s.point)]
+            .map((p) => [p.uuid, { name: p.name, dis: p.dis, kind: p.kind }]));
+          loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, pointMeta,
             sensorSeries: sensorPlan.sensorSeries, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
           if (!loadedRows && engine.newestSample) {   // empty window: when did these points last have a sample at all?
             try { newestHere = await engine.newestSample(uuids); } catch (e) { log(`${equipId}: newest-sample lookup failed: ${errText(e)}`); }
@@ -828,11 +964,12 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         const records = [];
         const values = [];
         const timelines = [];         // { records, series } per fault rule with a timeline_sql
-        const dbRows = [];            // timescale: rows for openfdd.fdd_results
+        const dbRows = [];            // timescale: rows for fdd.rule_result
+        const limitsHere = tuning.forEquip(siteId, equipId);      // persisted sweep role-limit overrides (#1589), else null
         for (const r of runnable) {
           let rows;
           try {
-            rows = await engine.query(r.rule.id);
+            rows = await engine.query(r.rule.id, limitsHere ? limitsHere.sweeps[r.rule.id] : undefined);
           } catch (e) {
             summary.errors++;
             reasons.set(r.rule.id, `rule error: ${errText(e)}`);
@@ -841,6 +978,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }
           summary.rules++;
           const packRule = pack.rules[r.rule.id];
+          const tuned = limitsHere && limitsHere.sweeps[r.rule.id] ? { ruleHash: limitsHere.ruleHashes[r.rule.id],
+            configHash: limitsHere.configHash, configRevision: limitsHere.configRevision, parameters: limitsHere.parameters } : {};
           const ruleSensors = packRule.output_columns?.includes('series_id')
             ? sweepSensors.filter((sensor) => sensor.ruleIds.has(r.rule.id)) : [];
           const assessableSeries = new Map(ruleSensors.map((sensor) => [sensor.point.uuid, sensor.role]));
@@ -859,9 +998,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           }]));
           if (engine.resultRow && perSensor.length) {
             for (const sensorRow of perSensor) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId,
-              ruleId: r.rule.id, row: sensorRow, windowStart: from, windowEnd: to }));
+              ruleId: r.rule.id, row: sensorRow, windowStart: from, windowEnd: to, ...tuned }));
             if (row) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id,
-              row, windowStart: from, windowEnd: to }));
+              row, windowStart: from, windowEnd: to, ...tuned }));
           }
           if (perSensor.length) {
             for (const sensorRow of perSensor) {
@@ -881,7 +1020,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           if (out.status !== 'not-assessed') {
             summary.results.push({ site: siteId, equip: equipId, rule: r.rule.id, value: out.value, unit: out.unit, fault: out.fault, status: out.status,
               ...(sensorFaultHours ? { sensor_fault_hours: sensorFaultHours } : {}) });
-            if (engine.resultRow && !perSensor.length) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to }));
+            if (engine.resultRow && !perSensor.length) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to, ...tuned }));
           }
           const uuid = resultUuid(key, r.rule.id);
           touched.add(uuid);
@@ -892,7 +1031,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           if (out.status !== 'not-assessed') values.push({ uuid, value: out.value });
           if (out.kind === 'fault' && !config.dryRun && engine.timeline && pack.rules[r.rule.id].timeline_sql) {
             try {
-              const timelineRows = await engine.timeline(r.rule.id);
+              const timelineRows = await engine.timeline(r.rule.id, limitsHere ? limitsHere.sweeps[r.rule.id] : undefined);
               const sensorTimelineRows = timelineRows?.some((x) => x.series_id) ? timelineRows : null;
               if (sensorTimelineRows) {
                 const timelineBySeries = new Map();
@@ -1175,4 +1314,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { runFdd, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });

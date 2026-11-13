@@ -7,10 +7,10 @@
 //
 // Why it is a hook: the database is usually on the NF host's loopback, so the installer workstation (nf_app_sync.py
 // install / doctor) can neither reach it nor needs a PostgreSQL client. The hook already runs next to the database with
-// the app's own option, so the check happens there and only three fields leave NF.
+// the app's own option, so the check happens there and only four fields leave NF.
 //
 // READ ONLY, enforced by the database: BEGIN TRANSACTION READ ONLY ... ROLLBACK. It never installs or upgrades a schema.
-// It returns { ok, installed, required } (or { ok: true, skipped, reason } when Timescale is not selected) and never a
+// It returns { ok, installed, required, core_ok } (core_ok = fdd.point, fdd.rule_result, fdd.rule_config and fdd.input_sample exist) (or { ok: true, skipped, reason } when Timescale is not selected) and never a
 // host, user, password or connection string; a failure carries the error text with the connection redacted.
 const settings = require('./lib/settings.js');
 const ts = require('./lib/timescale.js');
@@ -34,17 +34,34 @@ async function handle({ sdk, config: rawConfig = {}, client: given }) {
     if (!client) client = await ts.connect(conn);
     await client.query('BEGIN TRANSACTION READ ONLY');
     let installed;
-    try { installed = await ts.schemaVersion(client); } finally { await client.query('ROLLBACK'); }
-    return done({ ok: installed >= ts.SCHEMA_VERSION, installed, required: ts.SCHEMA_VERSION });
+    let coreOk = false;
+    try {
+      installed = await ts.schemaVersion(client);
+      coreOk = installed >= ts.SCHEMA_VERSION && await ts.coreOk(client);
+    } finally { await client.query('ROLLBACK'); }
+    return done({ ok: installed >= ts.SCHEMA_VERSION && coreOk, installed, required: ts.SCHEMA_VERSION, core_ok: coreOk });
   } catch (e) {
     let text = settings.redact((e && e.message) || e, conn);
-    for (const v of conn ? [conn.host, conn.user, conn.database] : []) {     // a driver error may name the endpoint
+    for (const v of endpointParts(conn)) {     // a driver error may name the endpoint
       if (v && String(v).length > 2) text = text.split(String(v)).join('***');
     }
     return done({ ok: false, required: ts.SCHEMA_VERSION, error: text });
   } finally {
     if (client && !given) { try { await client.end(); } catch (_) { /* nothing to report */ } }
   }
+}
+
+/** Host, user and database of a connection, from its fields or its postgres:// URL (for redacting driver errors). */
+function endpointParts(/** @type {any} */ conn) {
+  if (!conn || typeof conn !== 'object') return [];
+  const out = [conn.host, conn.user, conn.database];
+  if (conn.connectionString) {
+    try {
+      const u = new URL(String(conn.connectionString));
+      out.push(u.hostname, decodeURIComponent(u.username), decodeURIComponent(u.pathname.replace(/^\//, '')));
+    } catch (_) { /* not a URL: the fields above only */ }
+  }
+  return out.filter(Boolean).map(String).sort((x, y) => y.length - x.length);
 }
 
 /** NF hook entry point; handle exported for tests. */

@@ -1,13 +1,17 @@
 ---
 title: Parity harness
-nav_order: 11
+parent: Rules
+nav_order: 5
 ---
 
-# Parity harness (`open_fdd.parity`)
+# Parity harness
 
-The parity harness is a versioned part of the PyPI package. Any app that runs the Open-FDD rule SQL on its own
+The parity harness is a versioned part of the `open-fdd` package (`open_fdd.parity`). Any app that runs the Open-FDD rule SQL on its own
 database can use it to prove that the SQL result equals the pandas reference on the same data. It is stdlib plus
 pandas: `pip install open-fdd[oracle]` is all a third-party adapter needs. All values are SI.
+
+Older PyPI releases (4.5.4 and earlier) do not include it: install from git until a later release is published,
+`pip install "open-fdd[oracle] @ git+https://github.com/bbartling/open-fdd"`.
 
 ```python
 from open_fdd.parity import generate, reference, compare, Policy, run_adapter
@@ -90,6 +94,26 @@ assert conformance_errors(SqliteAdapter(), generate(0, 2, 1), ["FC1"]) == []
 ```
 
 The in-repo adapters (`tests/parity/adapters.py`) run the pack on PGlite and sql.js through `nf-app/hooks/lib/engines.js`.
+
+## Adapter contract for apps that store data in the core tables
+
+An application that keeps its data in the shared core schema (`sql/fdd/schema/core.sql`) proves its own database with
+the same dataset and the same pinned verdict:
+
+1. Apply the vendored `core.sql` (compare its bytes with `open_fdd/data/core.sql` from the installed wheel) and define
+   your `fdd.input_sample` view with the signature under `sources` in `input_contract.json`.
+2. `points, samples = ds.to_core_rows()` gives `fdd.point` rows and long `(site_id, point_key, ts_ms, value)` samples in SI.
+   `to_imperial(ds).to_core_rows()` gives the same in native units (`unit` per point, `si_unit` the SI unit):
+   seed those to prove a read-time conversion (`si_scale` / `si_offset`). `to_imperial(ds)` converts with the one canonical table (`open_fdd/data/unit_factors.json`: 249.0889 Pa per inH2O,
+   0.4719474 L/s per CFM, the NF ingest values), so an ingest that uses NF's table returns the SI dataset exactly.
+3. Load through your real ingest path, build the `history` scratch table from `fdd.point` + `fdd.input_sample`, run the pack,
+   write `fdd.rule_result` through your product code and read the rows BACK from it as the adapter's result.
+4. Assert: the loaded `history` equals `ds.history` cell for cell (1e-9 relative); the verdict equals
+   `tests/parity/baseline.json` (`compared=71 matched=47 known-divergent=24 unexpected=0` for 8 equipment x 7 days, 50/21 for 4 x 3; see the file); a second run writes zero new rows (the upsert key is the primary key).
+
+The in-repo reference is `TimescaleAdapter` (`tests/parity/adapters.py`, runner `nf-app/timescale/test/parity_run.mjs`);
+`python tests/parity/stress.py --engines pglite,sqlite,timescale` runs it against a disposable TimescaleDB
+(`PGURL`, `OPENFDD_TS_TEST_DISPOSABLE=1`).
 
 ## How a downstream app uses it
 

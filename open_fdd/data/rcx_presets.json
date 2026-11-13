@@ -45,7 +45,7 @@
     },
     {
       "id": "zone_temps",
-      "title": "Zones — all space temps (timeseries)",
+      "title": "Zones — all space temps (10th–90th percentile band)",
       "group": "Zones",
       "scope": "site",
       "equip_kinds": [
@@ -58,25 +58,17 @@
           "use": "primary",
           "required": true,
           "axis": "temp"
-        },
-        {
-          "role": "zone_air_temp_sp",
-          "use": "overlay",
-          "required": false,
-          "axis": "temp"
         }
       ],
-      "fault_rules": [
-        "ZONE-COMFORT-PCT"
-      ],
+      "fault_rules": [],
       "min_equips": 1,
       "default_hours": 168,
-      "chart": "timeseries",
+      "chart": "zone_band",
       "aliases": []
     },
     {
       "id": "vav_health",
-      "title": "VAV — health (broken / comfort / rogue)",
+      "title": "VAV — health (rogue dampers and reheat valves)",
       "group": "VAV",
       "scope": "site",
       "equip_kinds": [
@@ -84,30 +76,6 @@
         "zone_other"
       ],
       "series": [
-        {
-          "role": "zone_t",
-          "use": "primary",
-          "required": true,
-          "axis": "temp"
-        },
-        {
-          "role": "zone_air_temp_sp",
-          "use": "overlay",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "cooling_sp",
-          "use": "overlay",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "heating_sp",
-          "use": "overlay",
-          "required": false,
-          "axis": "temp"
-        },
         {
           "role": "damper_pct",
           "use": "signal",
@@ -121,51 +89,16 @@
           "axis": "percent"
         },
         {
-          "role": "zone_flow",
+          "role": "reheat_valve_pct",
           "use": "signal",
           "required": false,
-          "axis": "flow"
-        },
-        {
-          "role": "zone_airflow_sp",
-          "use": "signal",
-          "required": false,
-          "axis": "flow"
+          "axis": "percent"
         }
       ],
       "fault_rules": [],
       "min_equips": 1,
       "default_hours": 168,
-      "chart": "health",
-      "aliases": []
-    },
-    {
-      "id": "vav_flows",
-      "title": "Zones — zone airflow (timeseries)",
-      "group": "VAV",
-      "scope": "site",
-      "equip_kinds": [
-        "vav",
-        "zone_other"
-      ],
-      "series": [
-        {
-          "role": "zone_flow",
-          "use": "primary",
-          "required": true,
-          "axis": "flow"
-        },
-        {
-          "role": "zone_airflow_sp",
-          "use": "overlay",
-          "required": false,
-          "axis": "flow"
-        }
-      ],
-      "fault_rules": [],
-      "min_equips": 1,
-      "default_hours": 168,
-      "chart": "timeseries",
+      "chart": "rogue_vav",
       "aliases": []
     },
     {
@@ -354,7 +287,7 @@
     {
       "id": "ahu_sat_reset_scatter",
       "title": "AHU — SAT vs web dry-bulb (scatter)",
-      "group": "Air handlers",
+      "group": "Scatter plots",
       "scope": "site",
       "equip_kinds": [
         "ahu"
@@ -491,12 +424,10 @@
     },
     {
       "id": "hw_reset_scatter",
-      "title": "Boiler — HWS vs web dry-bulb (scatter)",
-      "group": "Plant",
+      "title": "Hot water — HWS vs web dry-bulb (scatter)",
+      "group": "Scatter plots",
       "scope": "site",
-      "equip_kinds": [
-        "boiler"
-      ],
+      "equip_kinds": [],
       "series": [
         {
           "role": "hw_supply_t",
@@ -525,13 +456,10 @@
     },
     {
       "id": "chw_reset_scatter",
-      "title": "Chiller — CHWS vs web dry-bulb (scatter)",
-      "group": "Plant",
+      "title": "Chilled water — CHWS vs web dry-bulb (scatter)",
+      "group": "Scatter plots",
       "scope": "site",
-      "equip_kinds": [
-        "chiller",
-        "chwPlant"
-      ],
+      "equip_kinds": [],
       "series": [
         {
           "role": "chw_supply_t",
@@ -561,7 +489,7 @@
     {
       "id": "cw_reset_scatter",
       "title": "Tower / CW — leave temp vs wet-bulb (dry-bulb fallback)",
-      "group": "Plant",
+      "group": "Scatter plots",
       "scope": "site",
       "equip_kinds": [
         "chiller",
@@ -1398,7 +1326,9 @@
           "axis": "temp"
         }
       ],
-      "fault_rules": [],
+      "fault_rules": [
+        "OAT-METEO"
+      ],
       "min_equips": 1,
       "default_hours": 168,
       "chart": "timeseries",
@@ -1433,239 +1363,204 @@
       "aliases": []
     },
     {
-      "id": "fdd-oat-meteo",
-      "title": "BAS vs web outside air temp (OAT-METEO)",
-      "group": "Weather",
-      "scope": "equip",
+      "id": "fdd-sensor-fault",
+      "title": "Sensor validation: the sensor with the most sweep faults",
+      "group": "Sensors",
+      "scope": "site",
       "equip_kinds": [],
       "series": [
         {
           "role": "oa_t",
-          "use": "primary",
-          "required": true,
+          "use": "signal",
+          "required": false,
           "axis": "temp"
         },
         {
-          "role": "web_oa_t",
-          "use": "primary",
-          "required": true,
+          "role": "mat",
+          "use": "signal",
+          "required": false,
           "axis": "temp"
+        },
+        {
+          "role": "zone_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "rat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "sat",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_supply_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "chw_return_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "hw_supply_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "hw_return_t",
+          "use": "signal",
+          "required": false,
+          "axis": "temp"
+        },
+        {
+          "role": "oa_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "ra_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "zone_rh",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "ma_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "sa_h",
+          "use": "signal",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "duct_static",
+          "use": "signal",
+          "required": false,
+          "axis": "pressure"
         }
       ],
       "fault_rules": [
-        "OAT-METEO"
+        "SV-RANGE",
+        "SV-RATE",
+        "SV-SPIKE",
+        "SV-STALE"
       ],
+      "min_equips": 1,
+      "default_hours": 168,
+      "chart": "sensor_lanes",
+      "aliases": []
+    },
+    {
+      "id": "vav_positions",
+      "title": "VAV — damper and reheat valve position (timeseries)",
+      "group": "VAV",
+      "scope": "site",
+      "equip_kinds": [
+        "vav",
+        "zone_other"
+      ],
+      "series": [
+        {
+          "role": "damper_pct",
+          "use": "primary",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "damper_cmd",
+          "use": "primary",
+          "required": false,
+          "axis": "percent"
+        },
+        {
+          "role": "reheat_valve_pct",
+          "use": "primary",
+          "required": false,
+          "axis": "percent"
+        }
+      ],
+      "fault_rules": [],
       "min_equips": 1,
       "default_hours": 168,
       "chart": "timeseries",
       "aliases": []
     },
     {
-      "id": "fdd-sensor-health",
-      "title": "Sensor health by hour (stale / flatline / out of range)",
-      "group": "Sensors",
-      "scope": "equip",
-      "equip_kinds": [],
+      "id": "vav_reheat_dats",
+      "title": "VAV — reheat discharge temps (timeseries)",
+      "group": "VAV",
+      "scope": "site",
+      "equip_kinds": [
+        "vav",
+        "zone_other"
+      ],
       "series": [
         {
-          "role": "oa_t",
-          "use": "signal",
-          "required": false,
+          "role": "vav_discharge_t",
+          "use": "primary",
+          "required": true,
           "axis": "temp"
         },
         {
-          "role": "mat",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "zone_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "rat",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "sat",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "chw_supply_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "chw_return_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "hw_supply_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "hw_return_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "oa_h",
-          "use": "signal",
+          "role": "reheat_valve_pct",
+          "use": "gate",
           "required": false,
           "axis": "percent"
-        },
-        {
-          "role": "ra_h",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "zone_rh",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "ma_h",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "sa_h",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "duct_static",
-          "use": "signal",
-          "required": false,
-          "axis": "pressure"
         }
       ],
       "fault_rules": [],
       "min_equips": 1,
       "default_hours": 168,
-      "chart": "heatmap",
+      "chart": "timeseries",
       "aliases": []
     },
     {
-      "id": "fdd-sensor-fault",
-      "title": "Sensor fault lanes (worst sensor)",
-      "group": "Sensors",
-      "scope": "equip",
-      "equip_kinds": [],
+      "id": "ahu-runtime-daily",
+      "title": "AHU run hours per day",
+      "group": "Air handlers",
+      "scope": "site",
+      "equip_kinds": [
+        "ahu"
+      ],
       "series": [
         {
-          "role": "oa_t",
-          "use": "signal",
+          "role": "fan_status",
+          "use": "primary",
           "required": false,
-          "axis": "temp"
+          "axis": "bool"
         },
         {
-          "role": "mat",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "zone_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "rat",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "sat",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "chw_supply_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "chw_return_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "hw_supply_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "hw_return_t",
-          "use": "signal",
-          "required": false,
-          "axis": "temp"
-        },
-        {
-          "role": "oa_h",
-          "use": "signal",
+          "role": "fan_cmd",
+          "use": "primary",
           "required": false,
           "axis": "percent"
-        },
-        {
-          "role": "ra_h",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "zone_rh",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "ma_h",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "sa_h",
-          "use": "signal",
-          "required": false,
-          "axis": "percent"
-        },
-        {
-          "role": "duct_static",
-          "use": "signal",
-          "required": false,
-          "axis": "pressure"
         }
       ],
       "fault_rules": [],
       "min_equips": 1,
       "default_hours": 168,
-      "chart": "sensor_lanes",
+      "chart": "daily_runtime",
       "aliases": []
     }
   ]

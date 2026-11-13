@@ -4,15 +4,17 @@
  *
  *   const ts = require("./lib/timescale");
  *   const client = await ts.connect(config.timescale);   // { connectionString | host,port,database,user, passwordEnv }
- *   await ts.install(client);                            // adapter_nf.sql + install.sql (idempotent)
- *   const h = await ts.loadHistory(client, { equipId, roleToUuid, unitsByUuid, from, to, stepSec: pack.poll_seconds });
+ *   await ts.install(client);                            // core.sql + adapter_nf.sql + install.sql (idempotent)
+ *   await ts.syncPoints(client, { siteId, equipId, rows: ts.pointRows({ pack, siteId, equipId, roleToUuid, unitsByUuid }) });
+ *   const h = await ts.loadHistory(client, { pack, siteId, equipId, roleToUuid, unitsByUuid, from, to, stepSec: pack.poll_seconds });
  *   const { results, errors } = await ts.runRules(client, pack, ruleIds);
  *   await ts.writeResults(client, rows);
  *   await ts.maybeEnforceCap(client);
  *   await client.end();
  *
- * NF's own tables are only touched through the view openfdd.nf_samples (timescale/adapter_nf.sql).
- * The rules run in the SAME session: loadHistory creates TEMP tables history / weather / ... with the
+ * NF's own tables are only touched through the views openfdd.nf_samples and fdd.input_sample (timescale/adapter_nf.sql);
+ * the Open-FDD tables are fdd.point (a mirror of the bound points, synced here), fdd.rule_result and fdd.rule_config
+ * (timescale/core.sql, the shared core schema). The rules run in the SAME session: loadHistory creates TEMP tables history / weather / ... with the
  * pack contract's columns, which shadow nothing in NF's schema (pg_temp is searched first).
  * Secrets: password comes from the env var named by config.passwordEnv (or config.password, an NF hook
  * setting), never from the repo.
@@ -64,8 +66,8 @@ async function connect(config = {}) {
   return client;
 }
 
-/** schema_version of install.sql this release needs (per-sensor results = 3). */
-const SCHEMA_VERSION = 3;
+/** schema_version of install.sql this release needs (4 = shared core schema: fdd.point / fdd.rule_result / fdd.rule_config). */
+const SCHEMA_VERSION = 4;
 
 /** Installed openfdd schema_version, 0 when the schema / config table / key is absent (pre-scoped release = 0). */
 async function schemaVersion(client) {
@@ -75,17 +77,28 @@ async function schemaVersion(client) {
   return rows.length ? Number(rows[0].value) || 0 : 0;
 }
 
+/** Install order: the core tables first (the adapter's view joins fdd.point), then the NF adapter, then policy + migration. */
+const SQL_FILES = ["core.sql", "adapter_nf.sql", "install.sql"];
+
 /**
- * Runs adapter_nf.sql then install.sql (run it as the INSTALLER role; an older install is upgraded in place:
- * scoped retention functions + the existing daily job altered). Returns { jobRegistered, maxBytes, schemaVersion }.
+ * Runs core.sql, adapter_nf.sql then install.sql (run it as the INSTALLER role; an older install is upgraded in place:
+ * scoped retention functions + the existing daily job altered; v3 results are copied into fdd.rule_result and the old
+ * tables dropped). Returns { jobRegistered, maxBytes, schemaVersion }.
  */
 async function install(client) {
-  for (const f of ["adapter_nf.sql", "install.sql"]) {
+  for (const f of SQL_FILES) {
     await client.query(fs.readFileSync(path.join(SQL_DIR, f), "utf8"));
   }
   const { rows } = await client.query("SELECT key, value FROM openfdd.config WHERE key IN ('job_registered', 'max_bytes', 'schema_version')");
   const cfg = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return { jobRegistered: cfg.job_registered === true || cfg.job_registered === "true", maxBytes: Number(cfg.max_bytes), schemaVersion: Number(cfg.schema_version) };
+}
+
+/** True when the core tables and the input view exist (read-only; the schema probe reports it as core_ok). */
+async function coreOk(client) {
+  const { rows } = await client.query(
+    "SELECT to_regclass('fdd.point') IS NOT NULL AND to_regclass('fdd.rule_result') IS NOT NULL AND to_regclass('fdd.rule_config') IS NOT NULL AND to_regclass('fdd.input_sample') IS NOT NULL AS ok");
+  return rows[0].ok === true;
 }
 
 /**
@@ -116,15 +129,89 @@ async function createTempTables(client, pack) {
   }
 }
 
+/** Scale decision for one bound role: {a, b, unit, bool?}, v_si = a + b * v. siPlan (hooks/fdd.js) made the decisions. */
+function roleFactors(role, uuid, { unitsByUuid = {}, fractionRoles = [], booleanRoles = [] }) {
+  const unit = unitsByUuid[uuid];
+  if (booleanRoles.includes(role)) return { a: 0, b: fractionRoles.includes(role) ? 0.01 : 1, unit: "bool", bool: true };
+  if (fractionRoles.includes(role)) return { a: 0, b: 0.01, unit: "fraction" };
+  return siFactors(unit);
+}
+
 /**
- * Builds the pack's wide `history` (+ weather, sensor_history) as TEMP tables in this session (the tables of pack.contract).
+ * The fdd.point rows (one per bound point, shape of core.sql) for one equipment, from the same arguments as loadHistory.
+ *   roleToUuid  {role: pointUuid}   unitsByUuid {pointUuid: nfUnit}   fractionRoles / booleanRoles = siPlan's decisions
+ *   sensorSeries [{uuid, role, unit}] sweep sensors (unit = canonical SI unit); pointMeta {uuid: {name, dis, kind, haystackId}}
+ * A point bound to a role AND swept appears once, with the role's scale. Text roles (occ_mode) keep their values (scale 1).
+ * @returns {Array<Record<string, any>>}
+ */
+function pointRows({ pack, siteId = "", equipId, roleToUuid = {}, unitsByUuid = {}, fractionRoles = [], booleanRoles = [], sensorSeries = [], pointMeta = {} }) {
+  const histCols = new Map(pack.contract.history.map((c) => [c.name, c]));
+  const plan = { unitsByUuid, fractionRoles, booleanRoles };
+  const rows = new Map();
+  const add = (uuid, role, f, unit, kind) => {
+    if (rows.has(uuid)) return;
+    const meta = pointMeta[uuid] || {};
+    const native = unitsByUuid[uuid];
+    rows.set(uuid, {
+      site_id: siteId, point_key: uuid, equipment_id: equipId, role, role_source: "nf-model", kind,
+      unit: unit || null, source_unit: native || null, si_scale: f.b, si_offset: f.a, haystack_id: meta.haystackId || null,
+      attrs: Object.fromEntries(Object.entries({ name: meta.name, dis: meta.dis, nf_kind: meta.kind }).filter(([, v]) => v != null && v !== "")),
+    });
+  };
+  for (const [role, uuid] of Object.entries(roleToUuid)) {
+    const col = histCols.get(role);
+    if (!col || role === "equipment_id" || role === "timestamp_utc") continue;
+    if (col.type === "text") { add(uuid, role, { a: 0, b: 1 }, unitsByUuid[uuid], "text"); continue; }
+    const f = roleFactors(role, uuid, plan);
+    add(uuid, role, f, f.unit, f.bool ? "bool" : "numeric");
+  }
+  for (const { uuid, role, unit } of sensorSeries) {
+    const f = siFactors(unitsByUuid[uuid]);
+    add(uuid, role, f, unit || f.unit, "numeric");
+  }
+  return [...rows.values()];
+}
+
+/**
+ * Mirrors the bound points of ONE equipment into fdd.point (upsert), and removes this equipment's rows that are no
+ * longer bound. fdd.point is keyed (site_id, point_key): a point shared by several equipments carries the binding of
+ * the equipment synced last, which is the one about to be loaded. Returns { upserted, removed }.
+ */
+async function syncPoints(client, { siteId = "", equipId, rows }) {
+  const ids = rows.map((r) => r.point_key);
+  await client.query("BEGIN");
+  try {
+    const up = await client.query(
+      `INSERT INTO fdd.point (site_id, point_key, equipment_id, role, role_source, kind, unit, source_unit, si_scale, si_offset, haystack_id, attrs, updated_at)
+       SELECT site_id, point_key, equipment_id, role, role_source, coalesce(kind, 'numeric'), unit, source_unit,
+              coalesce(si_scale, 1), coalesce(si_offset, 0), haystack_id, coalesce(attrs, '{}'::jsonb), now()
+       FROM jsonb_populate_recordset(null::fdd.point, $1::jsonb)
+       ON CONFLICT (site_id, point_key) DO UPDATE SET
+         equipment_id = EXCLUDED.equipment_id, role = EXCLUDED.role, role_source = EXCLUDED.role_source, kind = EXCLUDED.kind,
+         unit = EXCLUDED.unit, source_unit = EXCLUDED.source_unit, si_scale = EXCLUDED.si_scale, si_offset = EXCLUDED.si_offset,
+         haystack_id = EXCLUDED.haystack_id, attrs = EXCLUDED.attrs, updated_at = now()`,
+      [JSON.stringify(rows)]);
+    const del = await client.query(
+      "DELETE FROM fdd.point WHERE site_id = $1::text AND equipment_id = $2::text AND point_key <> ALL($3::text[])",
+      [siteId, equipId, ids]);
+    await client.query("COMMIT");
+    return { upserted: up.rowCount, removed: del.rowCount };
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch (_) { /* connection may be gone */ }
+    throw e;
+  }
+}
+
+/**
+ * Builds the pack's wide `history` (+ weather, sensor_history) as TEMP tables in this session (the tables of pack.contract)
+ * from fdd.input_sample (SI values: the view applies fdd.point.si_scale / si_offset, see timescale/adapter_nf.sql).
+ * The points must be synced first (syncPoints; the engine's load() does both).
  *   roleToUuid  {role: pointUuid}   roles must be history columns of pack.contract
- *   unitsByUuid {pointUuid: nfUnit} values are converted to SI in SQL (a + b*avg): one avg per role per bucket
- *   fractionRoles [role]  roles to divide by 100 (declared-% fraction/boolean roles): siPlan().scaled from hooks/fdd.js
+ *   unitsByUuid {pointUuid: nfUnit} only reported back (the conversion lives in fdd.point)
+ *   fractionRoles [role]  roles divided by 100 (siPlan().scaled)        -> the reported unit is "fraction"
  *   booleanRoles  [role]  roles whose bucket average must lie in [0, 1], else NULL (rejected): siPlan().bool
- * The scale decisions (fraction / boolean / unitless-skipped) are made ONLY by siPlan; this function applies them and
- * does not look at role names or units to guess one. Roles siPlan skipped are not passed in. Without the two arrays
- * the roles are plain SI conversions by unit.
+ * The scale decisions (fraction / boolean / unitless-skipped) are made ONLY by siPlan; this function applies the boolean
+ * clamp and does not look at role names or units to guess one. Roles siPlan skipped are not passed in.
  * sensorSeries is the validated sweep binding list with a canonical SI unit per UUID.
  * Returns counts of wide history rows and long sensor rows, plus wide roles and SI units.
  */
@@ -136,27 +223,18 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
   const histCols = new Map(pack.contract.history.map((c) => [c.name, c]));
   const roles = Object.entries(roleToUuid || {}).filter(([r]) => histCols.has(r) && r !== "equipment_id" && r !== "timestamp_utc");
   await createTempTables(client, pack);
-  const frac = new Set(fractionRoles);
   const bools = new Set(booleanRoles);
-  const factorsFor = (role, uuid) => {
-    const unit = unitsByUuid[uuid];
-    if (bools.has(role)) return { a: 0, b: frac.has(role) ? 0.01 : 1, unit: "bool", bool: true };
-    if (frac.has(role)) return { a: 0, b: 0.01, unit: "fraction" };
-    return siFactors(unit);
-  };
 
-  const params = [step, iso(from), iso(to), [...new Set(roles.map(([, u]) => u))], equipId];
+  const params = [step, iso(from), iso(to), [...new Set(roles.map(([, u]) => u))], equipId, String(siteId ?? "")];
   const exprs = roles.map(([role, uuid]) => {
     params.push(uuid);
     const u = `$${params.length}`;
     if (histCols.get(role).type === "text") {
-      return `max(value) FILTER (WHERE point_uuid = ${u})::text AS ${quoteId(role)}`;
+      return `max(value) FILTER (WHERE point_key = ${u})::text AS ${quoteId(role)}`;
     }
-    const f = factorsFor(role, uuid);
-    params.push(f.a, f.b);
-    const v = `(avg(value) FILTER (WHERE point_uuid = ${u})) * $${params.length}::double precision + $${params.length - 1}::double precision`;
+    const v = `avg(value) FILTER (WHERE point_key = ${u})`;
     // boolean roles: an on-fraction in [0, 1] (clamped for float noise); anything else is rejected (NULL), see siPlan
-    return f.bool ? `(CASE WHEN ${v} BETWEEN -1e-9 AND 1 + 1e-9 THEN least(1, greatest(0, ${v})) END) AS ${quoteId(role)}` : `${v} AS ${quoteId(role)}`;
+    return bools.has(role) ? `(CASE WHEN ${v} BETWEEN -1e-9 AND 1 + 1e-9 THEN least(1, greatest(0, ${v})) END) AS ${quoteId(role)}` : `${v} AS ${quoteId(role)}`;
   });
   let rows = 0;
   if (roles.length) {
@@ -167,8 +245,8 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
          SELECT $5::text AS equipment_id,
                 time_bucket(make_interval(secs => $1::double precision), ts, timestamptz '1970-01-01 00:00:00+00') AS timestamp_utc,
                 ${exprs.join(",\n                ")}
-         FROM openfdd.nf_samples
-         WHERE point_uuid = ANY($4::text[]) AND ts >= $2::timestamptz AND ts < $3::timestamptz
+         FROM fdd.input_sample
+         WHERE site_id = $6::text AND point_key = ANY($4::text[]) AND ts >= $2::timestamptz AND ts < $3::timestamptz
          GROUP BY 2
        ) t
        WHERE ${names.map((n) => `t.${n} IS NOT NULL`).join(" OR ")}
@@ -181,27 +259,22 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
 
   let sensorRows = 0;
   if (sensorSeries.length && pack.contract.sensor_history) {
-    const bindings = sensorSeries.map(({ uuid, role, unit }) => {
-      const factors = siFactors(unitsByUuid[uuid]);
-      return { uuid, role, unit, offset_value: factors.a, multiplier: factors.b };
-    });
+    const bindings = sensorSeries.map(({ uuid, role, unit }) => ({ uuid, role, unit }));
     const res = await client.query(
       `INSERT INTO pg_temp.sensor_history (equipment_id, series_id, sensor_role, unit, timestamp_utc, value)
        WITH samples AS (
-         SELECT point_uuid,
+         SELECT point_key,
                 time_bucket(make_interval(secs => $1::double precision), ts, timestamptz '1970-01-01 00:00:00+00') AS bucket,
                 avg(value) AS value
-         FROM openfdd.nf_samples
-         WHERE point_uuid = ANY($4::text[]) AND ts >= $2::timestamptz AND ts < $3::timestamptz
+         FROM fdd.input_sample
+         WHERE site_id = $7::text AND point_key = ANY($4::text[]) AND ts >= $2::timestamptz AND ts < $3::timestamptz
          GROUP BY 1, 2
        )
-       SELECT $5::text, b.uuid, b.role, b.unit, s.bucket, s.value * b.multiplier + b.offset_value
+       SELECT $5::text, b.uuid, b.role, b.unit, s.bucket, s.value
        FROM samples s
-       JOIN jsonb_to_recordset($6::jsonb)
-         AS b(uuid text, role text, unit text, offset_value double precision, multiplier double precision)
-         ON b.uuid = s.point_uuid
+       JOIN jsonb_to_recordset($6::jsonb) AS b(uuid text, role text, unit text) ON b.uuid = s.point_key
        WHERE s.value IS NOT NULL`,
-      [step, iso(from), iso(to), [...new Set(bindings.map(({ uuid }) => uuid))], equipId, JSON.stringify(bindings)],
+      [step, iso(from), iso(to), [...new Set(bindings.map(({ uuid }) => uuid))], equipId, JSON.stringify(bindings), String(siteId ?? "")],
     );
     sensorRows = res.rowCount;
   }
@@ -215,7 +288,7 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
        WHERE ${wcols.map((n) => `${quoteId(n)} IS NOT NULL`).join(" OR ")}`);
   }
   const si = {};
-  for (const [role, uuid] of roles) si[role] = factorsFor(role, uuid).unit;
+  for (const [role, uuid] of roles) si[role] = roleFactors(role, uuid, { unitsByUuid, fractionRoles, booleanRoles }).unit;
   return { rows, sensorRows, roles: roles.map(([r]) => r), si };
 }
 
@@ -269,39 +342,62 @@ async function runRules(client, pack, ruleIds) {
 
 // ---------------------------------------------------------------- results
 
+const RESULT_KEY = ["site_id", "equipment_id", "rule_id", "subject_key", "window_start", "window_end", "rule_hash", "config_hash"];
+
 /**
- * One fdd_results row from a rule's output row: fault_pct / fault_hours / covered_hours when present,
- * Other numeric outputs and the sweep's per-role hours go to metric.
+ * One fdd.rule_result row (core.sql) from a rule's output row: fault_pct / fault_hours / covered_hours when present;
+ * other numeric outputs and the sweep's per-role hours go to metrics, text outputs to diagnostics.outputs. status: fault_hours > 0 FAULT, = 0 PASS, not
+ * assessable (NULL) INCONCLUSIVE. subject_key = the swept sensor's point uuid ('' = equipment level). Both window ends
+ * are required (window_end > window_start); rule_hash / config_hash '' when the caller has none.
  */
-function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale", windowStart, windowEnd }) {
+function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale", windowStart, windowEnd, pollSeconds = 300,
+  ruleHash = "", configHash = "", configRevision = null, parameters = {} }) {
+  if (windowStart == null || windowEnd == null) throw new Error("toResultRow: windowStart and windowEnd are required");
   const known = new Set(["equipment_id", "series_id", "sensor_role", "fault_pct", "fault_hours", "covered_hours"]);
-  const metric = {};
-  for (const [k, v] of Object.entries(row)) if (!known.has(k) && typeof v === "number" && Number.isFinite(v)) metric[k] = v;
-  if (row.sensor_fault_hours) metric.sensor_fault_hours = row.sensor_fault_hours;
+  const metrics = {};
+  const outputs = {};   // text outputs of the rule (e.g. a status column) survive the round trip in diagnostics.outputs
+  for (const [k, v] of Object.entries(row)) {
+    if (known.has(k)) continue;
+    if (typeof v === "number" && Number.isFinite(v)) metrics[k] = v;
+    else if (typeof v === "string") outputs[k] = v;
+  }
+  if (row.sensor_fault_hours) metrics.sensor_fault_hours = row.sensor_fault_hours;
   const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   const sensorNotAssessed = typeof row.series_id === "string" && !(num(row.covered_hours) > 0);
+  const faultHours = sensorNotAssessed ? null : num(row.fault_hours);
   return {
-    run_ts: iso(runTs), equip, site, rule_id: ruleId, sensor_ref: row.series_id || "", role: row.sensor_role || null,
-    fault_pct: num(row.fault_pct), fault_hours: sensorNotAssessed ? null : num(row.fault_hours),
-    covered_hours: num(row.covered_hours),
-    metric: Object.keys(metric).length ? metric : null, engine,
-    window_start: windowStart == null ? null : iso(windowStart), window_end: windowEnd == null ? null : iso(windowEnd),
+    site_id: site || "", equipment_id: equip, rule_id: ruleId, subject_key: row.series_id || "",
+    window_start: iso(windowStart), window_end: iso(windowEnd), rule_hash: ruleHash, config_hash: configHash, config_revision: configRevision,
+    effective_parameters: parameters, poll_seconds: pollSeconds,
+    status: faultHours == null ? "INCONCLUSIVE" : faultHours > 0 ? "FAULT" : "PASS",
+    reason: faultHours != null ? null : sensorNotAssessed ? "sensor not assessed (no covered time)" : "rule reports no fault_hours",
+    fault_hours: faultHours, covered_hours: num(row.covered_hours), fault_pct: num(row.fault_pct), role: row.sensor_role || null,
+    engine, metrics, diagnostics: Object.keys(outputs).length ? { outputs } : {}, created_at: iso(runTs),
   };
 }
 
-/** Upsert rows (shape of toResultRow) into openfdd.fdd_results. Returns the row count. */
+/** Upsert rows (shape of toResultRow) into fdd.rule_result on its primary key (a re-run of a window updates in place). Returns the row count. */
 async function writeResults(client, rows) {
+  const byKey = new Map();
+  for (const r of rows) byKey.set(RESULT_KEY.map((k) => String(r[k] ?? "")).join("\u0001"), r);   // last wins inside one batch
+  const unique = [...byKey.values()];
   let n = 0;
-  for (let i = 0; i < rows.length; i += 500) {
-    const part = rows.slice(i, i + 500).map((r) => ({ ...r, sensor_ref: r.sensor_ref ?? "", run_ts: iso(r.run_ts) }));
+  for (let i = 0; i < unique.length; i += 500) {
     const res = await client.query(
-      `INSERT INTO openfdd.fdd_results
-         SELECT * FROM jsonb_populate_recordset(null::openfdd.fdd_results, $1::jsonb)
-       ON CONFLICT (run_ts, equip, rule_id, sensor_ref) DO UPDATE SET
-         site = EXCLUDED.site, fault_pct = EXCLUDED.fault_pct, fault_hours = EXCLUDED.fault_hours,
-         covered_hours = EXCLUDED.covered_hours, metric = EXCLUDED.metric, engine = EXCLUDED.engine,
-         window_start = EXCLUDED.window_start, window_end = EXCLUDED.window_end, role = EXCLUDED.role`,
-      [JSON.stringify(part)],
+      `INSERT INTO fdd.rule_result (site_id, equipment_id, rule_id, subject_key, window_start, window_end, rule_hash, config_hash,
+         config_revision, effective_parameters, poll_seconds, status, reason, fault_hours, covered_hours, fault_pct, role, engine,
+         metrics, diagnostics, source_watermark, created_at)
+       SELECT site_id, equipment_id, rule_id, coalesce(subject_key, ''), window_start, window_end, coalesce(rule_hash, ''), coalesce(config_hash, ''),
+         config_revision, coalesce(effective_parameters, '{}'::jsonb), coalesce(poll_seconds, 300), status, reason, fault_hours, covered_hours,
+         fault_pct, role, engine, coalesce(metrics, '{}'::jsonb), coalesce(diagnostics, '{}'::jsonb), source_watermark, coalesce(created_at, now())
+       FROM jsonb_populate_recordset(null::fdd.rule_result, $1::jsonb)
+       ON CONFLICT (site_id, equipment_id, rule_id, subject_key, window_start, window_end, rule_hash, config_hash) DO UPDATE SET
+         config_revision = EXCLUDED.config_revision, effective_parameters = EXCLUDED.effective_parameters,
+         poll_seconds = EXCLUDED.poll_seconds, status = EXCLUDED.status, reason = EXCLUDED.reason,
+         fault_hours = EXCLUDED.fault_hours, covered_hours = EXCLUDED.covered_hours, fault_pct = EXCLUDED.fault_pct,
+         role = EXCLUDED.role, engine = EXCLUDED.engine, metrics = EXCLUDED.metrics, diagnostics = EXCLUDED.diagnostics,
+         source_watermark = EXCLUDED.source_watermark, created_at = EXCLUDED.created_at`,
+      [JSON.stringify(unique.slice(i, i + 500))],
     );
     n += res.rowCount;
   }
@@ -313,7 +409,7 @@ async function writeResults(client, rows) {
 const DAY_MS = 24 * 3600e3;
 
 /**
- * Once a day (unless the TimescaleDB job exists): openfdd.enforce_size_cap(config max_bytes). Scope = schema openfdd
+ * Once a day (unless the TimescaleDB job exists): openfdd.enforce_size_cap(config max_bytes). Scope = schemas openfdd and fdd (fdd.rule_result)
  * + config retention_allowlist ONLY (never NF's own tables unless listed). Returns the function's JSON result
  * (always has status). Throws when the installed schema is the old global-retention release: re-run install.sql
  * as the installer role (the old job is then altered in place).
@@ -456,7 +552,64 @@ async function historyRoute(client, args = {}, limits = {}) {
   };
 }
 
+// ---------------------------------------------------------------- sweep role-limit overrides (#1589, fdd.rule_config)
+
+const LIMITS_RULE_ID = "SV-LIMITS";
+
+/** Active SV-LIMITS revisions, all sites: [{ site_id, scope_key, revision, parameters }] (read-only). */
+async function activeRoleLimitOverrides(client, siteId) {
+  const args = [LIMITS_RULE_ID];
+  let where = "rule_id = $1 AND active";
+  if (siteId != null) { args.push(siteId); where += " AND site_id = $2"; }
+  const { rows } = await client.query(`SELECT site_id, scope_key, revision, parameters FROM fdd.rule_config WHERE ${where} ORDER BY site_id, scope_key`, args);
+  return rows.map((r) => ({ site_id: r.site_id, scope_key: r.scope_key, revision: Number(r.revision), parameters: r.parameters }));
+}
+
+/** Revision history (newest first) of one scope: [{ revision, active, created_at, created_by, parameters }]. */
+async function roleLimitHistory(client, siteId, scopeKey, limit = 50) {
+  const { rows } = await client.query(
+    `SELECT revision, active, created_at, created_by, parameters FROM fdd.rule_config
+      WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 ORDER BY revision DESC LIMIT $4`,
+    [siteId, LIMITS_RULE_ID, scopeKey, Math.max(1, Math.min(500, Number(limit) || 50))]);
+  return rows.map((r) => ({ revision: Number(r.revision), active: r.active, created_at: iso(r.created_at), created_by: r.created_by, parameters: r.parameters }));
+}
+
+/**
+ * Append a new ACTIVE revision for (site, SV-LIMITS, scope) in one transaction (the previous active one is kept, inactive).
+ * The caller validated `parameters` (role-limits.js); this only stores. Returns the new revision number.
+ */
+async function appendRoleLimitRevision(client, { siteId, scopeKey, parameters, createdBy }) {
+  if (!scopeKey || (scopeKey !== "site" && !scopeKey.startsWith("equip:"))) throw new Error('scope must be "site" or "equip:<equipment id>"');
+  await client.query("BEGIN");
+  try {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`${siteId}|${LIMITS_RULE_ID}|${scopeKey}`]);
+    const { rows } = await client.query(
+      "SELECT coalesce(max(revision), 0) + 1 AS rev FROM fdd.rule_config WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3",
+      [siteId, LIMITS_RULE_ID, scopeKey]);
+    const rev = Number(rows[0].rev);
+    await client.query("UPDATE fdd.rule_config SET active = false WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 AND active",
+      [siteId, LIMITS_RULE_ID, scopeKey]);
+    await client.query(
+      "INSERT INTO fdd.rule_config (site_id, rule_id, scope_key, revision, parameters, active, created_by) VALUES ($1, $2, $3, $4, $5::jsonb, true, $6)",
+      [siteId, LIMITS_RULE_ID, scopeKey, rev, JSON.stringify(parameters), String(createdBy || "open-fdd")]);
+    await client.query("COMMIT");
+    return rev;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  }
+}
+
+/** The parameters of one stored revision (null when it does not exist). */
+async function roleLimitRevision(client, siteId, scopeKey, revision) {
+  const { rows } = await client.query(
+    "SELECT parameters FROM fdd.rule_config WHERE site_id = $1 AND rule_id = $2 AND scope_key = $3 AND revision = $4",
+    [siteId, LIMITS_RULE_ID, scopeKey, Number(revision)]);
+  return rows.length ? rows[0].parameters : null;
+}
+
 module.exports = {
-  connect, install, schemaVersion, requireConfig, SCHEMA_VERSION, loadHistory, runRules, toResultRow, writeResults,
+  connect, install, coreOk, schemaVersion, requireConfig, SCHEMA_VERSION, SQL_FILES, pointRows, syncPoints, loadHistory, runRules, toResultRow, writeResults,
   maybeEnforceCap, retentionPreview, historyRoute, siFactors, newestSample,
+  LIMITS_RULE_ID, activeRoleLimitOverrides, roleLimitHistory, appendRoleLimitRevision, roleLimitRevision,
 };

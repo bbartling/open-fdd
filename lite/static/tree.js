@@ -1,5 +1,6 @@
+// GENERATED COPY of shared/static/tree.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 // tree.html: read-only view of NF's own BACnet server (left) and the Haystack
-// model tree (right). Needs nf.js loaded first. Nothing here writes to NF.
+// model tree (right). Needs nf.js and theme.js loaded first. Nothing here writes to NF.
 
 /** @param {string} id @returns {AnyEl} */
 const $ = (id) => /** @type {AnyEl} */ (document.getElementById(id));
@@ -181,31 +182,43 @@ async function main() {
 
   $("sub").textContent = `read-only · ${model.sites.length} site · ${model.equips.length} equip · ${model.devices.length} device · `
     + `${points.length} points · BACnet server d.${bacnet.dev} with ${bacnet.objects.length} objects · ${location.host}`;
-  $("legend").innerHTML = Object.entries(COLORS).map(([k, c]) => `<span><i data-c="${c}"></i>${k}</span>`).join("");
-  paintLegend($("legend"));
+  // Legend dots are colored through the CSSOM (style attributes are blocked by the CSP).
+  $("legend").replaceChildren(...Object.entries(COLORS).map(([k, c]) => {
+    const item = document.createElement("span"), dot = document.createElement("i");
+    dot.style.background = c;
+    item.append(dot, k);
+    return item;
+  }));
 
-  const root = buildTree(model, points, bacnet);
+  root = buildTree(model, points, bacnet);
   // Size the canvas to the leaves visible at the initial depth so labels don't stack.
   const leaves = (n, depth) => (!n.children?.length || n.collapsed || depth >= 4 ? 1
     : n.children.reduce((s, c) => s + leaves(c, depth + 1), 0));
   $("tree").style.height = `${Math.max(600, leaves(root, 0) * 24 + 60)}px`;
-  const chart = echarts.init($("tree"));
-  chart.setOption({
-    tooltip: { trigger: "item", backgroundColor: LT.tipBg, borderColor: LT.axisLine, textStyle: { color: LT.tipText },
-      formatter: (x) => `${esc(x.data.rec?.attrs?.dis || x.name)}<br><small>${esc(markersOf(x.data.rec || {}).join(" "))}</small>` },
+  drawTree();
+  onThemeChange(drawTree);
+}
+
+let root = null;
+
+function drawTree() {
+  const chart = ofddChart($("tree"));
+  ofddRender(chart, {
+    tooltip: { trigger: "item",
+      formatter: (x) => `${esc(x.data.rec?.attrs?.dis || x.name)}<br><span class="muted">${esc(markersOf(x.data.rec || {}).join(" "))}</span>` },
     series: [{
       type: "tree", data: [root], top: 30, bottom: 20, left: 90, right: 330,
       orient: "LR", initialTreeDepth: 4, roam: true, expandAndCollapse: true, animationDuration: 400,
-      symbol: "circle", lineStyle: { color: LT.axisLine, width: 1.4, curveness: 0.5 },
+      symbol: "circle", lineStyle: { color: cssVar("--line"), width: 1.4, curveness: 0.5 },
       // Branch labels sit above their node; leaf labels run off to the right.
-      label: { position: "top", distance: 6, align: "center", color: LT.legend, fontSize: 12 },
+      label: { position: "top", distance: 6, align: "center", color: cssVar("--text"), fontSize: 12 },
       leaves: { label: { position: "right", verticalAlign: "middle", align: "left", distance: 6 } },
       emphasis: { focus: "descendant" },
     }],
-  });
+  }, "haystack-tree");
+  chart.off("click");
   chart.on("click", (x) => showDetail(x.data));
   showDetail(chart.getOption().series[0].data[0]);
-  window.addEventListener("resize", () => chart.resize());
 }
 
 main().catch((e) => {

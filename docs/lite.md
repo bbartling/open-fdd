@@ -33,7 +33,9 @@ The manifest asks for API-key scopes (`normalgw.hpl.v1/v2.readwrite`, `normalgw.
 | key | default | meaning |
 |---|---|---|
 | `site` | `""` | NF site id; only needed when several sites have coordinates |
-| `bacnetMirror` | on in Lite (the edition default) | app option; `false` skips the BACnet objects (alias `bacnet_mirror`) |
+| `weather` | on | app option; `false` = no outbound request at all (`doctor`: "weather disabled") |
+| `exporters` | `bacnet-av` if NF's BACnet server is present | `none` = hook variables only |
+| `bacnetMirror` | on | app option; `false` removes `bacnet-av` from the list (alias `bacnet_mirror`) |
 | `avInstances` | `[1, 2, 3]` | AV instance numbers for temperature, RH, dewpoint |
 
 Set the site coordinates in NF (Sites), not in code. The hook never tags points: tag the weather variables in NF
