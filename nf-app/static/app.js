@@ -27,6 +27,8 @@ async function renderFdd() {
   const catalog = await loadCatalog();
   wireViewTabs();
   const equips = fddEquipsInScope();
+  // The rule plot and its Tuners belong to one equipment: when the selection moves off it, close them (#1613).
+  if (activeRulePlot && !equips.some((e) => idOf(e) === activeRulePlot.equipId)) closeRulePlot();
   const rows = equips.flatMap((e) => equipRules(e, model, catalog).map((r) => ({ ...r, equip: e })));
   const runnable = rows.filter((r) => r.runnable);
   $("nRules").textContent = runnable.length;
@@ -79,6 +81,13 @@ async function runFddNow() {
   } finally {
     $("fddRunNow").disabled = false;
   }
+}
+
+function closeRulePlot() {
+  fddPlotRead += 1;   // a range read still in flight for the old plot draws nothing
+  activeRulePlot = null;
+  if ($("fddPlotPanel")) $("fddPlotPanel").hidden = true;
+  if (typeof ofddTuning !== "undefined" && ofddTuning && ofddTuning.cancelInline) ofddTuning.cancelInline();
 }
 
 async function showRulePlot(ruleId, equipId) {
@@ -565,7 +574,7 @@ ofddWire.push(() => {
       if (tr) showRulePlot(tr.dataset.rule, tr.dataset.equip).catch(plotErr);
     };
   }
-  $("fddPlotClose").onclick = () => { $("fddPlotPanel").hidden = true; activeRulePlot = null; };
+  $("fddPlotClose").onclick = () => closeRulePlot();
   $("fddRunNow").onclick = () => runFddNow().catch((e) => ($("fddRunState").textContent = `could not start: ${e.message}`));
   $("unitsToggle").onclick = () => setUnits(unitSystem() === "si" ? "imperial" : "si");
   syncUnitsToggle();

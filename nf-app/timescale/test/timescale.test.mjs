@@ -976,6 +976,32 @@ test("openfdd_rt least-privilege role can read views and write fdd tables, never
   }
 });
 
+test("one combined Save (rule parameters + SV-LIMITS) commits both or neither on the real database (#1622)", { skip, timeout: 60000 }, async () => {
+  const tuning = require("../../hooks/tuning.js");
+  const call = (args) => tuning.handle({ sdk: { logEvent: () => {} }, args, connect: async () => db, pack });
+  const SITE = "combined-site", SCOPE = "equip:combined-eq";
+  const count = async () => (await db.query("SELECT rule_id, count(*)::int AS n FROM fdd.rule_config WHERE site_id = $1 GROUP BY 1 ORDER BY 1", [SITE])).rows;
+  await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
+  const both = (exp, limExp, hi) => call({ action: "save", site: SITE, scope: SCOPE, rule_id: "SV-RANGE",
+    overrides: JSON.stringify({ version: 1, params: { confirm_min: 20 } }), expected_revision: exp,
+    limits_overrides: JSON.stringify({ version: 1, roles: { "discharge-air-temp": { hi } } }), limits_expected_revision: limExp });
+  const ok = await both(0, 0, 30);
+  assert.equal(ok.ok, true, ok.error);
+  assert.equal(ok.revision, 1);
+  assert.equal(ok.role_limits.revision, 1);
+  const stale = await both(1, 0, 31);   // SV-LIMITS moved on: the rule part must not commit either
+  assert.equal(stale.ok, false);
+  assert.equal(stale.code, "revision_conflict");
+  const invalid = await both(1, 1, -500);   // limits invalid: nothing stored
+  assert.equal(invalid.ok, false);
+  assert.deepEqual(await count(), [{ rule_id: "SV-LIMITS", n: 1 }, { rule_id: "SV-RANGE", n: 1 }]);
+  const reset = await call({ action: "reset", site: SITE, scope: SCOPE, rule_id: "SV-RANGE", expected_revision: 1,
+    limits_overrides: JSON.stringify({ version: 1, roles: {} }), limits_expected_revision: 1 });
+  assert.equal(reset.ok, true, reset.error);
+  assert.deepEqual(await count(), [{ rule_id: "SV-LIMITS", n: 2 }, { rule_id: "SV-RANGE", n: 2 }]);
+  await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
+});
+
 // The README's runtime grants, verbatim (README "installer vs runtime role").
 async function grantRuntime(role, dbName) {
   await db.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`);

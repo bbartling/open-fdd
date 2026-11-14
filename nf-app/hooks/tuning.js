@@ -34,7 +34,7 @@ function loadTemplates() {
 
 /** @param {any} args */
 function parseArgs(args) {
-  const a = startArgs.normalizeStartHookArgs(args, { jsonFields: ['overrides'], numberFields: ['revision', 'expected_revision'] });
+  const a = startArgs.normalizeStartHookArgs(args, { jsonFields: ['overrides', 'limits_overrides'], numberFields: ['revision', 'expected_revision', 'limits_expected_revision'] });
   const action = String(a.action || 'get');
   if (!ACTIONS.includes(action)) throw new Error(`action must be one of ${ACTIONS.join(', ')}`);
   const site = typeof a.site === 'string' ? a.site : '';
@@ -56,6 +56,17 @@ function parseArgs(args) {
       throw new Error('expected_revision must be a non-negative integer');
     }
     out.expected_revision = a.expected_revision;
+  }
+  if (a.limits_overrides !== undefined) {
+    if (!roleLimits.SWEEP_RULES.includes(out.rule_id) || !['preview', 'save', 'reset'].includes(action)) {
+      throw new Error('limits_overrides is only valid for preview/save/reset of a sweep rule');
+    }
+    if (!Number.isInteger(a.limits_expected_revision) || a.limits_expected_revision < 0
+        || (action !== 'preview' && out.expected_revision == null)) {
+      throw new Error('combined writes need expected_revision and limits_expected_revision');
+    }
+    out.limits_overrides = a.limits_overrides;
+    out.limits_expected_revision = a.limits_expected_revision;
   }
   return out;
 }
@@ -202,7 +213,24 @@ async function handle({ sdk, args = {}, config = {}, connect, templates, pack: p
     }
     if (!(await ts.coreOk(client))) throw new Error('core schema missing (fdd.rule_config): run the schema hook or timescale/install.sql first');
     const ruleId = a.rule_id || roleLimits.LIMITS_RULE_ID;
-    if (ruleId === roleLimits.LIMITS_RULE_ID) {
+    if (a.limits_overrides !== undefined) {
+      // A single Save (or Reset) is one transaction across both documents. appendRuleConfigRevision's nested
+      // transaction control is absorbed by this transaction-scoped client; its advisory locks, expected-revision
+      // checks, and SQL are unchanged. Limits first so the rule's SQL is rendered against the candidate limits.
+      await client.query('BEGIN');
+      const tx = { query: (sql, params) => /^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)
+        ? Promise.resolve({ rows: [] }) : client.query(sql, params) };
+      try {
+        const limits = await handleRoleLimits({ ts, client: tx, tpl, log, a: { ...a, rule_id: roleLimits.LIMITS_RULE_ID,
+          action: a.action === 'reset' ? 'save' : a.action, overrides: a.limits_overrides, expected_revision: a.limits_expected_revision } });
+        result = await handleRuleParams({ ts, client: tx, a, pack: pack || loadPack(), log });
+        result.role_limits = limits;
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      }
+    } else if (ruleId === roleLimits.LIMITS_RULE_ID) {
       result = await handleRoleLimits({ ts, client, a, tpl, log });
     } else {
       result = await handleRuleParams({ ts, client, a, pack: pack || loadPack(), log });
