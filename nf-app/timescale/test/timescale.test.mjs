@@ -738,8 +738,14 @@ test("retention scope defaults to the Open-FDD schemas (openfdd, fdd) only", { s
     `chunks: source ${snap.source.chunks.length}, other ${snap.other.chunks.length}, ours ${snap.ours.chunks.length}`);
   const scope = (await db.query("SELECT schema_name || '.' || table_name AS t, reason FROM openfdd.retention_scope()")).rows;
   assert.deepEqual(scope, [{ t: HT.ours, reason: "openfdd" }]);
-  const size = Number((await db.query("SELECT hypertable_size('fdd.rule_result') AS b")).rows[0].b);
-  assert.equal(await scopedBytes(), size, "the cap counts Open-FDD tables only");
+  // autovacuum can add a free-space/visibility-map page between two reads; compare a stable pair of reads
+  let size = -1, scoped = -2;
+  for (let i = 0; i < 5 && scoped !== size; i++) {
+    size = Number((await db.query("SELECT hypertable_size('fdd.rule_result') AS b")).rows[0].b);
+    scoped = await scopedBytes();
+    if (scoped !== size) await new Promise((r) => setTimeout(r, 500));
+  }
+  assert.equal(scoped, size, "the cap counts Open-FDD tables only");
   assert.equal((await db.query("SELECT openfdd.retention_allowlist() AS a")).rows[0].a.length, 0);
 });
 
