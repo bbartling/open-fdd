@@ -468,8 +468,17 @@ async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
       merged.truncated = !!(merged.truncated || part.truncated);
       merged.coarsened = !!(merged.coarsened || part.coarsened);
       if (typeof merged.total === "number" && typeof part.total === "number") merged.total += part.total;
+      const a = merged.coverage, c = part.coverage;
+      if (a && c) {
+        merged.coverage = {
+          ...a, requested: (a.requested || 0) + (c.requested || 0), with_data: (a.with_data || 0) + (c.with_data || 0),
+          without_data: [...(a.without_data || []), ...(c.without_data || [])],
+          points: { ...(a.points || {}), ...(c.points || {}) },
+        };
+      }
     }
   }
+  if (merged.coverage) merged.coverage.complete = !merged.truncated;
   // each batch coarsens on its own uuid count: one width when they agree, else say so (rows keep their own buckets)
   merged.buckets = [...widths];
   if (widths.size > 1) merged.bucket = "mixed (" + merged.buckets.join(", ") + ")";

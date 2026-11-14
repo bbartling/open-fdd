@@ -584,8 +584,11 @@ test("Full Timescale history: more than 200 uuids are sent in batches of at most
       const ids = JSON.parse(body.uuids);
       starts.push(ids);
       const id = String(++pid);
+      const last = ids.length < 200;   // the last batch is truncated and coarsened to a wider bucket
       pending.set(id, ids.length > 200 ? { ok: false, error: "at most 200 uuids" }
-        : { ok: true, bucket: "1 hour", truncated: false, rows: ids.map((u) => ({ point_uuid: u, bucket: "2026-09-02T00:00:00.000Z", avg: 1 })) });
+        : { ok: true, bucket: last ? "2 hours" : "1 hour", truncated: last, total: ids.length,
+          coverage: { requested: ids.length, with_data: ids.length, without_data: [], complete: !last, points: Object.fromEntries(ids.map((u) => [u, 1])) },
+          rows: ids.map((u) => ({ point_uuid: u, bucket: "2026-09-02T00:00:00.000Z", avg: 1 })) });
       return { pid: id };
     }
     return { runs: [...pending].map(([p, a]) => ({ pid: p, state: "STATE_SUCCESS", results: { "": { events: [{ message: JSON.stringify(a) }] } } })) };
@@ -597,4 +600,10 @@ test("Full Timescale history: more than 200 uuids are sent in batches of at most
   assert.equal(res.ok, true, JSON.stringify(res).slice(0, 200));
   assert.equal(res.rows.length, 450);
   assert.equal(new Set(res.rows.map((r) => r.point_uuid)).size, 450);
+  assert.equal(res.truncated, true);
+  assert.equal(res.coverage.complete, false, "a truncated later batch makes the merged coverage incomplete");
+  assert.equal(res.coverage.requested, 450);
+  assert.equal(Object.keys(res.coverage.points).length, 450);
+  assert.equal(res.total, 450);
+  assert.match(res.bucket, /mixed/);
 });

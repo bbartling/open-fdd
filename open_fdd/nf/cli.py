@@ -303,14 +303,16 @@ def cmd_sparql(a: argparse.Namespace) -> int:
         print(json.dumps(ans["rows"], indent=2) if a.json else _table(ans["rows"], ans["vars"]))
         return 0
     site = a.site
-    if site:  # --site is an id or a display name; the answer carries ids only
+    if site:  # --site is an id or a display name; the answer carries ids only. An exact id always wins.
         from open_fdd.nf.model import id_of
 
-        for rec in client.query_all("model"):
-            a_ = rec.get("attrs") or {}
-            if rec.get("pointType") == "SITE" and site in (str(a_.get("dis") or ""), str(rec.get("name") or "")):
-                site = id_of(rec)
-                break
+        recs = [r for r in client.query_all("model") if r.get("pointType") == "SITE"]
+        if site not in {id_of(r) for r in recs}:
+            for rec in recs:
+                a_ = rec.get("attrs") or {}
+                if site in (str(a_.get("dis") or ""), str(rec.get("name") or "")):
+                    site = id_of(rec)
+                    break
     frames = sd.frames(ans, site=site, equip=a.equip)
     if a.out:
         import pandas as pd

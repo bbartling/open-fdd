@@ -182,7 +182,7 @@ function modelToTurtle(model, base, opts = {}) {
     ]), extra);
   }
   // Define the time-series stores the point references point at.
-  if (model.points.some((x) => x.tags.length)) {
+  if (model.points.some((x) => x.tags.length || ((x.rec || {}).attrs || {}).ofddRole)) {
     entity("store_nf", "ref:Database", "Normal Framework point history", [], [], [
       `schema:description "Time series read with GET /api/v1/point/data?uuids=<ref:hasTimeseriesId>"`,
       ...(nfBase ? [`schema:url <${nfBase}>`] : [])]);

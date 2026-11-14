@@ -102,7 +102,8 @@ async function handle({ sdk, args = {}, now = () => Date.now() }) {
       budget = Math.max(1, budget - over - 16);
     }
   } catch (e) {
-    result = { ok: false, ms: now() - t0, error: String((e && e.message) || e), ...(e && e.code ? { error_code: String(e.code) } : {}) };
+    // an error answer is capped too (an upstream message can be long)
+    result = { ok: false, ms: now() - t0, error: String((e && e.message) || e).slice(0, 2000), ...(e && e.code ? { error_code: String(e.code).slice(0, 64) } : {}) };
   }
   log(JSON.stringify(result));
   return result;

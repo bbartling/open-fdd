@@ -71,7 +71,7 @@ as a synthetic NF and runs the shipped `sparql-data` hook over it in Node (only 
 - the client's results to equal the oracle's (status, fault hours, and the samples that pass the gate);
 - the same verdict against the SQL pack, under the same pinned known differences.
 
-The SV sweeps use the dataset's sensor population (`role_units`), so which sensors are swept matches; values do not change.
+SV sweeps use the dataset's sensor population (`role_units`), so the swept sensors match; values do not change.
 `test_sparql_motor_gate.py` runs the fan ON, then OFF, then ON (plus a command-only variant): a fault while OFF
 never counts, and a fault while ON counts the same in all three legs.
 
