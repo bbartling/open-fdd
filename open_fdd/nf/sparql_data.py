@@ -219,7 +219,7 @@ def fetch_local(client: NFClient, query: str, start: datetime | str, end: dateti
                 keys[base + p.uuid] = p.uuid
     var, uuids = _pick(vars_, rows, keys, uuid_var)
     by = {p.uuid: p for p in model.points}
-    data = client.point_data(uuids, _utc(start), _utc(end), window_sec=window_sec)
+    data = client.point_data(uuids, _utc(start), _utc(end), window_sec=window_sec, keep_text=True)
     out = _empty("raw" if not window_sec else f"{window_sec} s")
     out.update(vars=vars_, rows=rows, uuid_var=var, source="nf", points_total=len(uuids))
     for u in uuids:

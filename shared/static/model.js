@@ -155,7 +155,7 @@ function modelToTurtle(model, base, opts = {}) {
   }
   const stations = [...new Set(model.points.map((p) => p.weatherStationRef).filter(Boolean))];
   for (const ws of stations) entity(ws, "phIoT:weatherStation", ws, ["weatherStation"], []);
-  for (const p of model.points.filter((x) => x.tags.length)) {
+  for (const p of model.points.filter((x) => x.tags.length || ((x.rec || {}).attrs || {}).ofddRole)) {
     const extra = [];
     if (p.units) extra.push(`ph:unit ${ttlStr(p.units)}`);
     if (p.kind) extra.push(`ph:kind ${ttlStr(p.kind)}`);

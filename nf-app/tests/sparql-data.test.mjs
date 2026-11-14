@@ -300,3 +300,26 @@ test("the shipped example query (examples/sparql_data/ahu_points.rq) finds the A
   assert.ok(Object.values(out.points).some((p) => p.tags.includes("weather")), "weather point");
   assert.ok(Object.values(out.points).every((p) => p.equip === "AHU-1" || p.tags.includes("weather")));
 });
+test("hardening: the RSS watchdog stops a query whose WebAssembly memory grows past the limit", async () => {
+  const turtle = "@prefix ex: <urn:ex:> .\nex:a ex:p ex:b .\n";
+  let n = 0;
+  const rss = () => (n++ === 0 ? 0 : 1e12);   // first read is the baseline, then a huge jump
+  await assert.rejects(hook.evaluate(turtle, "SELECT * WHERE { ?s ?p ?o }", { rss, everyMs: 1, maxGrowthMb: 1 }), (e) => {
+    assert.match(String(e.message), /memory limit/);
+    assert.equal(e.code, "too_large");
+    return true;
+  });
+  const ok = await hook.evaluate(turtle, "SELECT * WHERE { ?s ?p ?o }", { rss: () => 0 });
+  assert.equal(ok.rows.length, 1);
+});
+
+test("rdf hook: the logged JSON line fits the limit even for quote-heavy Turtle; model_changed keeps its code", async () => {
+  const recs = fixture.records.map((r) => (r.pointType === "POINT" ? { ...r, attrs: { ...r.attrs, dis: '"q"\n"q"\n"q"\n"q"' } } : r));
+  const { sdk } = mockSdk({ records: recs });
+  const a = await rdf.handle({ sdk, args: { limit: "2000" } });
+  assert.equal(a.ok, true, a.error);
+  assert.ok(Buffer.byteLength(JSON.stringify(a), "utf8") <= 2000);
+  const b = await rdf.handle({ sdk, args: { offset: "0", snapshot: "not-the-snapshot" } });
+  assert.equal(b.ok, false);
+  assert.equal(b.error_code, "model_changed");
+});

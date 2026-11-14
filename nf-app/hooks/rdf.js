@@ -90,12 +90,20 @@ async function handle({ sdk, args = {}, now = () => Date.now() }) {
     const snapshot = crypto.createHash('sha256').update(turtle).digest('hex');
     if (args.snapshot && args.snapshot !== snapshot) throw Object.assign(new Error('the model changed while paging; start again from offset 0'), { code: 'model_changed' });
     if (offset > turtle.length) throw new Error('args.offset is past the end of the Turtle');
-    const chunk = sliceBytes(turtle, offset, limit);
-    const end = offset + chunk.length;
-    result = { ok: true, ms: now() - t0, base, snapshot, total_chars: turtle.length, offset,
-      next_offset: end < turtle.length ? end : null, points: model.points.length, turtle: chunk };
+    // `limit` bounds the logged JSON line, not just the Turtle: JSON escaping (quotes, newlines) adds bytes
+    let budget = limit;
+    for (;;) {
+      const chunk = sliceBytes(turtle, offset, Math.max(1, budget));
+      const end = offset + chunk.length;
+      result = { ok: true, ms: now() - t0, base, snapshot, total_chars: turtle.length, offset,
+        next_offset: end < turtle.length ? end : null, points: model.points.length, turtle: chunk };
+      const over = Buffer.byteLength(JSON.stringify(result), 'utf8') - limit;
+      if (over <= 0) break;
+      if (budget <= 1) throw new Error('args.limit is too small for one character of Turtle plus the answer');
+      budget = Math.max(1, budget - over - 16);
+    }
   } catch (e) {
-    result = { ok: false, ms: now() - t0, error: String((e && e.message) || e) };
+    result = { ok: false, ms: now() - t0, error: String((e && e.message) || e), ...(e && e.code ? { error_code: String(e.code) } : {}) };
   }
   log(JSON.stringify(result));
   return result;

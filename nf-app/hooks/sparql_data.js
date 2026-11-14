@@ -44,6 +44,7 @@ const LIMITS = {
   nfRequests: 400,          // point/data calls per run
   nfSampleCap: 10000,       // NF returns at most this many samples per series and call
   maxTriples: 500000,
+  maxRssGrowthMb: 256,      // process RSS growth while the query worker runs (WebAssembly is outside the V8 heap)
 };
 const UUID_VARS = ['uuid', 'tsId', 'timeseriesId', 'point', 'p'];
 const NF_BATCH = 20;
@@ -63,19 +64,28 @@ const time = (v, name) => {
   return ms;
 };
 
-/** Run in a disposable worker: hard wall-clock limit and bounded V8 heap. A worker failure never falls back to
- * synchronous evaluation in NF's application thread. SELECT gets an engine-side cap in sparql-worker.js. */
-function evaluate(turtle, query, { timeoutMs = 15000, cap = LIMITS.maxRows } = {}) {
+/** Run in a disposable worker: hard wall-clock limit, bounded V8 heap, and an RSS watchdog (Oxigraph's WebAssembly
+ * memory, store plus ORDER BY / GROUP BY / DISTINCT buffers, is outside the V8 heap limit but shows in the process RSS).
+ * A worker failure never falls back to synchronous evaluation in NF's application thread. SELECT gets an engine-side cap
+ * in sparql-worker.js. */
+function evaluate(turtle, query, { timeoutMs = 15000, cap = LIMITS.maxRows, maxGrowthMb = LIMITS.maxRssGrowthMb,
+  rss = () => process.memoryUsage().rss, everyMs = 50 } = {}) {
   return new Promise((resolve, reject) => {
+    const base = rss();
     const worker = new Worker(path.join(__dirname, 'lib', 'sparql-worker.js'), {
       workerData: { ofddSparqlWorker: true }, resourceLimits: { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16 },
     });
     let done = false;
     const finish = (error, value) => {
-      if (done) return; done = true; clearTimeout(timer); worker.terminate();
+      if (done) return; done = true; clearTimeout(timer); clearInterval(watch); worker.terminate();
       if (error) reject(error); else resolve(value);
     };
     const timer = setTimeout(() => finish(new Error('SPARQL query exceeded wall-clock limit')), Math.min(15000, timeoutMs));
+    const watch = setInterval(() => {
+      if (rss() - base > maxGrowthMb * 1048576) {
+        finish(Object.assign(new Error(`SPARQL query exceeded the memory limit (${maxGrowthMb} MB); narrow it (ORDER BY / GROUP BY / DISTINCT over a large join buffer every solution)`), { code: 'too_large' }));
+      }
+    }, everyMs);
     worker.on('error', e => finish(e));
     worker.on('exit', code => { if (!done) finish(new Error('SPARQL worker exited before answering: ' + code)); });
     worker.on('message', msg => finish(msg.ok ? null : new Error(msg.error), msg.r));

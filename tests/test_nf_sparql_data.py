@@ -169,7 +169,7 @@ def test_fetch_local_runs_the_query_here_like_lite(tmp_path):
         def query_all(self, layer, structured=None):
             return [r for r in recs if (r["pointType"] != "POINT") == (layer == "model")]
 
-        def point_data(self, uuids, start, end, window_sec=300):
+        def point_data(self, uuids, start, end, window_sec=300, **kw):
             self.calls.append((tuple(uuids), window_sec))
             return {u: [(T0, 55.0), (T0 + timedelta(minutes=5), 56.0)] for u in uuids}
 
@@ -186,3 +186,58 @@ def test_fetch_local_runs_the_query_here_like_lite(tmp_path):
     with pytest.raises(NFError):
         sd.fetch_local(c, "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", T0, T0 + timedelta(hours=1),
                        turtle=ttl.read_text(encoding="utf-8"))
+
+def test_to_iso_z_keeps_fractions_for_exact_continuation():
+    from open_fdd.nf.client import parse_nf_ts, to_iso_z
+
+    assert to_iso_z(datetime(2026, 1, 5, tzinfo=timezone.utc)) == "2026-01-05T00:00:00Z"
+    t = parse_nf_ts("2026-01-05T00:00:00.500Z")
+    assert to_iso_z(t) == "2026-01-05T00:00:00.500Z" and parse_nf_ts(to_iso_z(t)) == t
+    assert to_iso_z(datetime(2026, 1, 5, 0, 0, 0, 123456, tzinfo=timezone.utc)).endswith(".123456Z")
+
+
+def test_fetch_continues_from_a_subsecond_next_from():
+    seen = []
+
+    def hook(h, a):
+        seen.append(a["from"])
+        if len(seen) == 1:
+            return {"ok": True, "kind": "select", "vars": ["uuid"], "rows": [], "uuid_var": "uuid", "snapshot": "A",
+                    "points": {"u1": _pt("u1")}, "equips": [], "series": {"u1": [[MS0, 1.0]]}, "complete": False,
+                    "next_from": "2026-01-05T00:00:00.500Z", "next_point_offset": None}
+        return {"ok": True, "kind": "select", "snapshot": "A", "points": {"u1": _pt("u1")}, "equips": [],
+                "series": {"u1": [[MS0 + 500, 2.0]]}, "complete": True, "next_point_offset": None}
+
+    ans = sd.fetch(hook, "SELECT ?uuid WHERE {}", T0, T0 + timedelta(minutes=5), bucket="raw")
+    assert seen[1] == "2026-01-05T00:00:00.500Z" and len(seen) == 2
+    assert [t for t, _ in ans["series"]["u1"]] == [MS0, MS0 + 500]
+
+
+def test_raw_point_data_splits_at_the_sample_cap_and_keeps_text():
+    from open_fdd.nf.client import NFClient
+
+    calls = []
+
+    class C(NFClient):
+        def __init__(self):
+            pass
+
+        def get(self, path):
+            import urllib.parse as up
+            q = up.parse_qs(up.urlparse(path).query)
+            f = datetime.fromisoformat(q["from"][0].replace("Z", "+00:00"))
+            t = datetime.fromisoformat(q["to"][0].replace("Z", "+00:00"))
+            calls.append((f, t))
+            n = int((t - f).total_seconds() // 60)
+            vals = [{"ts": (f + timedelta(minutes=i)).isoformat().replace("+00:00", "Z"),
+                     "double": float(i)} for i in range(min(n, 4))]
+            txt = [{"ts": f.isoformat().replace("+00:00", "Z"), "string": "Occupied"}]
+            full = [{"ts": f.isoformat().replace("+00:00", "Z"), "double": 1.0}] * 2   # always at a cap of 1
+            return {"data": [{"uuid": "num", "values": vals}, {"uuid": "txt", "values": txt}, {"uuid": "full", "values": full}]}
+
+    out = C().point_data(["num", "txt"], T0, T0 + timedelta(minutes=8), window_sec=0, keep_text=True, sample_cap=4)
+    assert len(out["num"]) == 8 and len(calls) > 1           # a read at the cap is split until under it
+    assert out["txt"][0][1] == "Occupied"
+    assert C().point_data(["txt"], T0, T0 + timedelta(minutes=1), window_sec=0)["txt"] == []   # numbers only by default
+    with pytest.raises(NFError, match="sample cap"):
+        C().point_data(["full"], T0, T0 + timedelta(minutes=8), window_sec=0, sample_cap=1)

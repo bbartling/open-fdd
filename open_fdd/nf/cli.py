@@ -291,7 +291,9 @@ def cmd_sparql(a: argparse.Namespace) -> int:
         with open(q, encoding="utf-8") as fh:
             q = fh.read()
     start, end = time_range(a)
-    bucket = a.bucket or ("raw" if a.window == 0 else f"{max(1, a.window // 60)} minutes")
+    if not a.bucket and a.window % 60:
+        raise NFError("--window must be 0 (raw) or whole minutes for sparql; or pass --bucket")
+    bucket = a.bucket or ("raw" if a.window == 0 else f"{a.window // 60} minutes")
     client = client_from_args(a)
     ans = sd.fetch_auto(client, q, start, end, bucket=bucket, mode=a.mode)
     if ans["kind"] == "ask":
@@ -300,7 +302,16 @@ def cmd_sparql(a: argparse.Namespace) -> int:
     if a.rows:
         print(json.dumps(ans["rows"], indent=2) if a.json else _table(ans["rows"], ans["vars"]))
         return 0
-    frames = sd.frames(ans, site=a.site, equip=a.equip)
+    site = a.site
+    if site:  # --site is an id or a display name; the answer carries ids only
+        from open_fdd.nf.model import id_of
+
+        for rec in client.query_all("model"):
+            a_ = rec.get("attrs") or {}
+            if rec.get("pointType") == "SITE" and site in (str(a_.get("dis") or ""), str(rec.get("name") or "")):
+                site = id_of(rec)
+                break
+    frames = sd.frames(ans, site=site, equip=a.equip)
     if a.out:
         import pandas as pd
 

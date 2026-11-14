@@ -34,6 +34,7 @@ UA = "open-fdd-nf/1.0"
 RETRY_CODES = (403, 429, 500, 502, 503, 504)
 BATCH = 40  # uuids per point/data request (keeps the URL short)
 CHUNK_DAYS = 7  # NF caps samples per request; history is fetched in pieces of at most 7 days
+SAMPLE_CAP = 10_000  # NF returns at most this many samples per series and call; a raw read at the cap is split
 PAGE_SIZE = 500
 PENDING_STATES = ("STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED", "STATE_UNSPECIFIED", None)
 MAX_PAGES = 1000
@@ -124,10 +125,15 @@ def _utc(ts: datetime) -> datetime:
 
 
 def to_iso_z(ts: datetime | str) -> str:
-    """UTC ISO-8601 with a Z suffix (whole seconds), as NF expects for ``from`` / ``to``."""
+    """UTC ISO-8601 with a Z suffix, as NF expects for ``from`` / ``to``: whole seconds, or the fraction when there is
+    one (milliseconds, or microseconds when finer) so a paging boundary such as ``next_from`` is kept exactly."""
     if isinstance(ts, str):
         return ts
-    return _utc(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
+    t = _utc(ts)
+    if not t.microsecond:
+        return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    frac = f"{t.microsecond:06d}"
+    return t.strftime("%Y-%m-%dT%H:%M:%S.") + (frac[:3] if frac.endswith("000") else frac) + "Z"
 
 
 _FRAC = re.compile(r"\.(\d+)")
@@ -431,11 +437,15 @@ class NFClient:
         end: datetime | str,
         window_sec: int = 300,
         method: str = "AVERAGE",
+        keep_text: bool = False,
+        sample_cap: int = SAMPLE_CAP,
     ) -> dict[str, list[tuple[datetime, float]]]:
         """Resampled history: ``{uuid: [(utc datetime, value), ...]}`` sorted by time.
 
         NF resamples on the box (``window`` seconds, ``method`` AVERAGE|MIN|MAX|SUM|FIRST|LAST|COUNT);
-        ``window_sec=0`` reads the raw samples (no resampling).
+        ``window_sec=0`` reads the raw samples (no resampling). A raw read where a series reaches NF's sample cap
+        is split in halves and read again; still at the cap at a one-second window raises ``NFError`` (never a silent
+        partial series). ``keep_text=True`` keeps String samples as ``str`` (default: numbers only).
         Requests are batched by at most 40 uuids and cut into pieces of at most 7 days.
         """
         t0 = _utc(start) if isinstance(start, datetime) else parse_nf_ts(start)
@@ -448,19 +458,34 @@ class NFClient:
             nxt = min(t + timedelta(days=CHUNK_DAYS), t1)
             pieces.append((t, nxt))
             t = nxt
+        raw = int(window_sec) <= 0
+
+        def read(batch: list[str], a: datetime, b: datetime, depth: int = 0) -> None:
+            qs = "&".join("uuids=" + urllib.parse.quote(u) for u in batch)
+            path = f"/api/v1/point/data?{qs}&from={to_iso_z(a)}&to={to_iso_z(b)}"
+            if not raw:
+                path += f"&window={int(window_sec)}s&method={method}"
+            got = {s.get("uuid"): s.get("values") or [] for s in self.get(path).get("data") or []}
+            full = [u for u in batch if raw and len(got.get(u) or []) >= sample_cap]
+            if full:
+                if b - a <= timedelta(seconds=1) or depth >= 40:
+                    raise NFError(f"NF history still hits its {sample_cap}-sample cap at {to_iso_z(a)}; "
+                                  "shorten the range or resample")
+                mid = a + (b - a) / 2
+                read(full, a, mid, depth + 1)
+                read(full, mid, b, depth + 1)
+            for u in batch:
+                if u in full:
+                    continue
+                slot = out.get(u)
+                for s in got.get(u) or []:
+                    v = sample_value(s)
+                    if v is None and keep_text and s.get("string") is not None:
+                        v = str(s["string"])
+                    if v is not None and s.get("ts"):
+                        slot[parse_nf_ts(s["ts"])] = v
+
         for a, b in pieces:
             for i in range(0, len(ids), BATCH):
-                batch = ids[i:i + BATCH]
-                qs = "&".join("uuids=" + urllib.parse.quote(u) for u in batch)
-                path = f"/api/v1/point/data?{qs}&from={to_iso_z(a)}&to={to_iso_z(b)}"
-                if int(window_sec) > 0:
-                    path += f"&window={int(window_sec)}s&method={method}"
-                for series in self.get(path).get("data") or []:
-                    slot = out.get(series.get("uuid"))
-                    if slot is None:
-                        continue
-                    for s in series.get("values") or []:
-                        v = sample_value(s)
-                        if v is not None and s.get("ts"):
-                            slot[parse_nf_ts(s["ts"])] = v
+                read(ids[i:i + BATCH], a, b)
         return {u: sorted(m.items()) for u, m in out.items()}

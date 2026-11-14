@@ -457,16 +457,22 @@ async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
   if (cleanIds.length <= TIMESCALE_HISTORY_BATCH) return queryTimescaleHistoryBatch({ cleanIds, fromMs, toMs, bucket });
   /** @type {any} */
   let merged = null;
+  const widths = new Set();
   for (let i = 0; i < cleanIds.length; i += TIMESCALE_HISTORY_BATCH) {
     const part = /** @type {any} */ (await queryTimescaleHistoryBatch({ cleanIds: cleanIds.slice(i, i + TIMESCALE_HISTORY_BATCH), fromMs, toMs, bucket }));
     if (!part || part.ok === false || part.skipped) return part;
+    if (part.bucket != null) widths.add(String(part.bucket));
     if (!merged) merged = { ...part, rows: [...(part.rows || [])] };
     else {
       merged.rows.push(...(part.rows || []));
       merged.truncated = !!(merged.truncated || part.truncated);
       merged.coarsened = !!(merged.coarsened || part.coarsened);
+      if (typeof merged.total === "number" && typeof part.total === "number") merged.total += part.total;
     }
   }
+  // each batch coarsens on its own uuid count: one width when they agree, else say so (rows keep their own buckets)
+  merged.buckets = [...widths];
+  if (widths.size > 1) merged.bucket = "mixed (" + merged.buckets.join(", ") + ")";
   merged.row_count = merged.rows.length;
   merged.batches = Math.ceil(cleanIds.length / TIMESCALE_HISTORY_BATCH);
   return merged;

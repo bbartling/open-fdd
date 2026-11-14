@@ -120,8 +120,8 @@ def client_frames(ds: Dataset, query: str = QUERY, **fetch_kw: Any):
     from open_fdd.nf import sparql_data as sd
     from open_fdd.parity.pandas_ref import weather_on_grid
 
-    start = min(r["ts"] for r in ds.history)
-    end = max(r["ts"] for r in ds.history) + ds.step_seconds * 1000
+    ts = [r["ts"] for r in ds.history] + [r["ts"] for r in ds.weather]   # weather may start before equipment history
+    start, end = min(ts), max(ts) + ds.step_seconds * 1000
     from datetime import datetime, timezone
     t0, t1 = (datetime.fromtimestamp(x / 1000, tz=timezone.utc) for x in (start, end))
     with HookProcess(nf_world(ds)) as hp:
