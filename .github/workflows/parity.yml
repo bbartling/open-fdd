@@ -1,5 +1,8 @@
-# pandas == SQL parity: the open_fdd pandas oracle must agree with the SQL FDD pack
-# (sql/fdd) across PGlite, SQLite, DuckDB, and standalone PostgreSQL on synthetic SI data.
+# pandas == SQL parity, PR tier: the open_fdd pandas oracle must agree with the SQL FDD pack (sql/fdd) across
+# PGlite, SQLite, DuckDB and standalone PostgreSQL on synthetic SI data, and the three-way check (SI pandas == SQL ==
+# the SPARQL data client running the same pandas rule functions) must agree on the small 2x3 datasets (2 equipment,
+# 3 days, basic and edge profiles). Both jobs are required checks on master. The larger 4x3 / 8x7 tiers run nightly
+# and before each release in parity-stress.yml. Tiers: docs/rules/parity-harness.md.
 name: pandas == SQL parity
 
 on:
@@ -41,19 +44,16 @@ jobs:
           set -o pipefail
           python -m pytest tests -q --ignore=tests/parity/test_sparql_parity.py --ignore=tests/parity/test_sparql_motor_gate.py -k "not test_postgres_4x3_basic_and_edge_parity and not test_timescale_through_the_core_tables and not test_timescale_native_unit_ingestion"
 
-      - name: SI stress matrix (4x3 basic, 8x7 basic, 4x3 edge across PGlite, SQLite, DuckDB)
-        run: |
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile basic
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 8 --days 7 --profile basic
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile edge
+      # The 4x3 and 8x7 stress tiers moved to the nightly / pre-release workflow (#1617): PR CI keeps the unit-level
+      # parity tests here and the 2x3 three-way stress in the SPARQL job.
 
   sparql:
     # Third leg (#1618): the SPARQL data client (open_fdd.nf.sparql_data) through the shipped sparql-data / rdf hooks
     # over the same synthetic datasets, the oracle's own pandas rule functions on its frames. pandas == SQL ==
-    # SPARQL-client; a skip fails the lane. A separate job so the oracle job stays inside its time limit (#1617).
+    # SPARQL-client; a skip or any disagreeing path fails the lane. Required check (PR tier: 2x3 basic and edge).
     name: pandas == SQL == SPARQL-client
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,10 +80,10 @@ jobs:
           python -m pytest tests/test_nf_sparql_data.py tests/parity/test_sparql_parity.py tests/parity/test_sparql_motor_gate.py -q -rs 2>&1 | tee "$RUNNER_TEMP/sparql.log"
           if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/sparql.log"; then echo "SPARQL parity tests skipped: failing the lane"; exit 1; fi
 
-      - name: Three-way SI stress (4x3 basic, 4x3 edge; PGlite, SQLite, DuckDB)
+      - name: Three-way SI stress, PR tier (2x3 basic, 2x3 edge; PGlite, SQLite, DuckDB)
         run: |
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile basic --sparql
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile edge --sparql
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 2 --days 3 --profile basic --sparql --out "$RUNNER_TEMP/3way-2x3-basic.json"
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 2 --days 3 --profile edge --sparql --out "$RUNNER_TEMP/3way-2x3-edge.json"
 
   postgres:
     name: standalone PostgreSQL parity (no Timescale)
@@ -125,5 +125,5 @@ jobs:
           set -o pipefail
           python -m pytest tests/parity/test_engine_matrix.py -q -rs 2>&1 | tee "$RUNNER_TEMP/pg-parity.log"
           if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/pg-parity.log"; then echo "Postgres parity tests skipped: failing the lane"; exit 1; fi
-          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 4 --days 3 --profile basic
-          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 4 --days 3 --profile edge
+          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile basic
+          python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile edge

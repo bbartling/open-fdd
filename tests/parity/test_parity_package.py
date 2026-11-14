@@ -93,6 +93,38 @@ def test_edge_has_nulls_gap_dupes_out_of_order_jitter_and_dst(edge):
     assert t0 + 2 * 86400000 < transition < t0 + 3 * 86400000
 
 
+def test_edge_jitter_first_rows_before_t0_and_harness_windows_start_there():
+    """A device's jittered first row can precede the nominal t0. Every harness window (the Timescale leg's load window,
+    the SPARQL client's fetch window) must start at or before each device's actual first row, so no leg drops it, and
+    the pandas oracle scores the same rows the SQL engines do."""
+    ds = generate(0, 2, 3, "edge")
+    t0 = ds.meta["t0_ms"]
+    firsts = ds.first_row_ms()
+    assert set(firsts) == {"AHU-1", "AHU-2"}
+    early = {e: t for e, t in firsts.items() if t < t0}
+    assert early, "edge/0/2/3 has a device whose first row is before t0 (the case this test pins)"
+    lo, hi = ds.history_window_ms()
+    assert lo == min(firsts.values()) and lo < t0
+    assert hi > max(r["ts"] for r in ds.history)
+    sys.path.insert(0, str(HERE))
+    from adapters import TimescaleAdapter
+    ad = TimescaleAdapter(plan_only=True)
+    try:
+        ad.load(ds)
+        window = json.loads(ad._in.read_text(encoding="utf-8"))["window"]
+    except RuntimeError:
+        pytest.skip("Timescale adapter not loadable here")
+    finally:
+        ad.close()
+    assert window["from_ms"] <= min(firsts.values()) and window["to_ms"] >= hi
+    # the pandas oracle counts each device from its own first row: the early rows are in the reference input
+    from open_fdd.parity.pandas_ref import reference
+    ref = reference(ds)
+    assert ref, "the oracle scored the dataset"
+    for e, t in early.items():
+        assert any(r["equipment_id"] == e and r["ts"] == t for r in ds.history)
+
+
 def test_edge_planted_faults_have_known_windows(edge):
     kinds = {f["kind"] for f in edge.faults}
     assert kinds == {"flatline", "out_of_range"}

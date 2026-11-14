@@ -325,6 +325,25 @@ class Dataset:
                             "unit": s["unit"], "ts": row["ts"], "value": row.get(s["role"])})
         return out
 
+    def first_row_ms(self) -> dict[str, int]:
+        """Each equipment's actual first history timestamp (ms UTC). With the edge profile's +-60 s jitter a device's
+        first row can sit BEFORE ``meta["t0_ms"]``; a harness must score from these, never from the nominal t0."""
+        out: dict[str, int] = {}
+        for row in self.history:
+            e = row["equipment_id"]
+            if e not in out or row["ts"] < out[e]:
+                out[e] = row["ts"]
+        return out
+
+    def history_window_ms(self) -> tuple[int, int]:
+        """``(from_ms, to_ms)`` covering every row of every device and the weather: from the earliest actual row (which
+        may precede the nominal t0) to one step past the last one. What a harness passes as its load window."""
+        ts = [r["ts"] for r in self.history] + [r["ts"] for r in self.weather]
+        if not ts:
+            t0 = int(self.meta.get("t0_ms", 0))
+            return t0, t0 + int(self.meta.get("steps", 0)) * self.step_seconds * 1000
+        return min(ts), max(ts) + self.step_seconds * 1000
+
     def samples(self) -> Iterator[tuple[str, str, int, float | str | None]]:
         """Long format: ``(equipment_id, column, ts_ms_utc, value)``, one per history cell, in row order."""
         names = [c["name"] for c in self.history_columns]

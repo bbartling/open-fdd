@@ -71,8 +71,22 @@ function scaled(r2u, units, kinds = {}) {
   return { plan, args: { roleToUuid: kept, unitsByUuid: units, fractionRoles: [...plan.scaled], booleanRoles: [...plan.bool] } };
 }
 
+/**
+ * The hook's run-proof binding (#1608) for a test role map: the equipment's own status role, else its own command role
+ * (catalog.run_proof.own order), as the history column run_proof, scaled like its source. No proof role = none bound.
+ */
+function withRunProof(args) {
+  const r2u = args.roleToUuid || {};
+  if (r2u.run_proof) return args;
+  const own = catalog.run_proof.own, role = [...own.status, ...own.command].find((x) => r2u[x]);
+  if (!role) return args;
+  const tag = (list) => (list && list.includes(role) ? [...list, "run_proof"] : list);
+  return { ...args, roleToUuid: { ...r2u, run_proof: r2u[role] }, fractionRoles: tag(args.fractionRoles), booleanRoles: tag(args.booleanRoles) };
+}
+
 /** The engine's load(): mirror the bound points into fdd.point, then build the TEMP history from fdd.input_sample. */
-async function load(args) {
+async function load(rawArgs) {
+  const args = withRunProof(rawArgs);
   await ts.syncPoints(db, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) });
   return ts.loadHistory(db, { pack, ...args });
 }
@@ -375,6 +389,7 @@ test("FC1 on declared-% fan commands: Timescale == PGlite for 1 %, 2 % and 99 %"
     for (let t = Date.parse(from); t < Date.parse(to); t += STEP * 1000) {
       const row = { equipment_id: equip, ts: t };
       for (const role of Object.keys(roles)) row[role] = plan.convert[role](rawVals[role]);
+      row.run_proof = row.fan_cmd;            // the hook binds the fan command as this AHU's run proof (#1608)
       hist.push(row);
     }
     const eng = await createEngine({ kind: "pglite", pack });
@@ -974,6 +989,43 @@ test("openfdd_rt least-privilege role can read views and write fdd tables, never
     await db.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${role}; REVOKE ALL ON SCHEMA public FROM ${role}; REVOKE ALL ON ALL TABLES IN SCHEMA openfdd FROM ${role}; REVOKE ALL ON ALL FUNCTIONS IN SCHEMA openfdd FROM ${role}; REVOKE ALL ON SCHEMA openfdd FROM ${role}; REVOKE ALL ON ALL TABLES IN SCHEMA fdd FROM ${role}; REVOKE ALL ON SCHEMA fdd FROM ${role}; REVOKE ALL ON DATABASE "${dbName}" FROM ${role}; DROP ROLE ${role}`);
     await db.query("DELETE FROM fdd.point WHERE site_id = 's1'");
   }
+});
+
+test("occupancy calendar: save, get, reset and rollback round-trip per site on the real database (5.0.20)", { skip, timeout: 60000 }, async () => {
+  const tuning = require("../../hooks/tuning.js");
+  const call = (args) => tuning.handle({ sdk: { logEvent: () => {} }, args, connect: async () => db, pack });
+  const SITE = "occ-site";
+  await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
+  const fresh = await call({ action: "get", site: SITE, rule_id: "OCC-CALENDAR" });
+  assert.equal(fresh.ok, true, fresh.error);
+  assert.equal(fresh.source, "default");
+  assert.equal(fresh.bare_min_occ_hours_per_week, 60);
+  const cal = { timezone: "America/New_York", days: { sat: { occupied: true, start: "08:00", end: "12:00" }, sun: { occupied: true, start: "22:00", end: "02:00" } } };
+  const saved = await call({ action: "save", site: SITE, rule_id: "OCC-CALENDAR", expected_revision: 0, overrides: JSON.stringify({ version: 1, calendar: cal }) });
+  assert.equal(saved.ok, true, saved.error);
+  assert.equal(saved.revision, 1);
+  assert.equal(saved.bare_min_occ_hours_per_week, 68);
+  const got = await call({ action: "get", site: SITE, rule_id: "OCC-CALENDAR" });
+  assert.equal(got.source, "saved");
+  assert.deepEqual(got.calendar.days.sun, { occupied: true, start: "22:00", end: "02:00" });
+  assert.equal(got.calendar.timezone, "America/New_York");
+  assert.equal(got.calendar.days.mon.start, "06:00", "missing days keep the defaults");
+  const bad = await call({ action: "save", site: SITE, rule_id: "OCC-CALENDAR", expected_revision: 1, overrides: JSON.stringify({ version: 1, calendar: { days: { mon: { start: "25:00" } } } }) });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /mon\.start must be HH:MM/);
+  const equip = await call({ action: "get", site: SITE, scope: "equip:x", rule_id: "OCC-CALENDAR" });
+  assert.equal(equip.ok, false, "per site only");
+  const reset = await call({ action: "reset", site: SITE, rule_id: "OCC-CALENDAR", expected_revision: 1 });
+  assert.equal(reset.ok, true, reset.error);
+  assert.equal(reset.source, "default");
+  assert.equal(reset.bare_min_occ_hours_per_week, 60);
+  const back = await call({ action: "rollback", site: SITE, rule_id: "OCC-CALENDAR", revision: 1, expected_revision: 2 });
+  assert.equal(back.ok, true, back.error);
+  assert.equal(back.bare_min_occ_hours_per_week, 68);
+  const analytics = require("../../hooks/analytics.js");
+  const cals = await analytics.loadCalendars({}, async () => db);
+  assert.deepEqual(cals[SITE].days.sun, { occupied: true, start: "22:00", end: "02:00" }, "the analytics hook reads the active calendar");
+  await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
 });
 
 test("one combined Save (rule parameters + SV-LIMITS) commits both or neither on the real database (#1622)", { skip, timeout: 60000 }, async () => {

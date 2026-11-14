@@ -136,8 +136,7 @@ def client_frames(ds: Dataset, query: str = QUERY, *, source: str = "nf", **fetc
     from open_fdd.nf import sparql_data as sd
     from open_fdd.parity.pandas_ref import weather_on_grid
 
-    ts = [r["ts"] for r in ds.history] + [r["ts"] for r in ds.weather]   # weather may start before equipment history
-    start, end = min(ts), max(ts) + ds.step_seconds * 1000
+    start, end = ds.history_window_ms()   # every device's actual first row (jitter may precede t0) and the weather
     from datetime import datetime, timezone
     t0, t1 = (datetime.fromtimestamp(x / 1000, tz=timezone.utc) for x in (start, end))
     world = {**nf_world(ds), "timescale": source == "timescale"}

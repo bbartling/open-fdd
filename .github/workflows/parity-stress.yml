@@ -1,0 +1,105 @@
+# Parity stress, large tiers: SI pandas == SQL == SPARQL client on 4x3 (4 equipment, 3 days) and 8x7 (8 equipment,
+# 7 days) synthetic datasets, basic and edge profiles, plus standalone PostgreSQL at the same sizes. Runs nightly on
+# master and by workflow_dispatch before each release (the release checklist links the run). Any disagreeing path, a
+# skipped leg or an error fails the run. The PR tier (2x3) is in parity.yml. Tiers: docs/rules/parity-harness.md.
+name: parity stress (nightly / pre-release)
+
+on:
+  schedule:
+    - cron: "41 7 * * *"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to stress (default: the dispatching ref)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: parity-stress-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  three-way:
+    name: three-way ${{ matrix.size }} ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        size: ["4x3", "8x7"]
+        profile: [basic, edge]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install oracle (pandas), rdflib, DuckDB and nf-app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[oracle,test,rdf,duckdb]"
+          cd nf-app && npm ci
+      - name: SI pandas == SQL (PGlite, SQLite, DuckDB) == SPARQL client
+        env:
+          SIZE: ${{ matrix.size }}
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          set -o pipefail
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --sparql --out "$RUNNER_TEMP/stress.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parity-stress-${{ matrix.size }}-${{ matrix.profile }}
+          path: ${{ runner.temp }}/stress.json
+          if-no-files-found: ignore
+
+  postgres:
+    name: standalone PostgreSQL ${{ matrix.size }} ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        size: ["4x3", "8x7"]
+        profile: [basic, edge]
+    services:
+      pg:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: example
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install oracle (pandas), DuckDB, Postgres driver and nf-app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[oracle,test,rdf,duckdb,postgres]"
+          cd nf-app && npm ci
+      - name: SI pandas == SQL (PGlite, PostgreSQL, DuckDB)
+        env:
+          OPENFDD_PG_TEST_DISPOSABLE: "1"
+          POSTGRES_TEST_URL: postgres://postgres:example@localhost:5432/postgres
+          SIZE: ${{ matrix.size }}
+          PROFILE: ${{ matrix.profile }}
+        run: python tests/parity/stress.py --engines pglite,postgres,duckdb --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE"

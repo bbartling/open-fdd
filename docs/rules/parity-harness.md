@@ -75,6 +75,32 @@ test matches pandas on numeric inputs; irregular data equals epoch-bucket means.
 `test_sparql_motor_gate.py` runs the fan ON, then OFF, then ON (plus a command-only variant): a fault while OFF
 never counts, and a fault while ON counts the same in all three legs.
 
+## CI tiers
+
+Every leg runs the same synthetic SI dataset: the pandas oracle, the SQL pack, and the SPARQL data client running the
+same pandas rule functions. A run fails when any leg disagrees with the others, a leg is skipped, or a leg errors.
+
+| Tier | Datasets | Engines | When | Workflow / job |
+| --- | --- | --- | --- | --- |
+| PR | unit-level parity tests (the engine matrix, NF agent tools, deploy tool) | PGlite, SQLite, DuckDB | every push and PR | `parity.yml` / `pandas oracle vs SQL pack` (required) |
+| PR | 2x3 (2 equipment, 3 days), `basic` and `edge` | PGlite, SQLite, DuckDB + SPARQL client | every push and PR | `parity.yml` / `pandas == SQL == SPARQL-client` (required) |
+| PR | 2x3 `basic` and `edge` | PGlite, standalone PostgreSQL, DuckDB | every push and PR | `parity.yml` / `standalone PostgreSQL parity (no Timescale)` |
+| Large | 4x3 and 8x7 (8 equipment, 7 days), `basic` and `edge` | PGlite, SQLite, DuckDB + SPARQL client | nightly on master; `workflow_dispatch` before each release | `parity-stress.yml` / `three-way <size> <profile>` |
+| Large | 4x3 and 8x7, `basic` and `edge` | PGlite, standalone PostgreSQL, DuckDB | nightly on master; `workflow_dispatch` before each release | `parity-stress.yml` / `standalone PostgreSQL <size> <profile>` |
+
+Required checks on `master` are `pandas == SQL parity / pandas oracle vs SQL pack` and
+`pandas == SQL parity / pandas == SQL == SPARQL-client`. Before a release, dispatch `parity-stress.yml` on the release
+branch (`gh workflow run parity-stress.yml -f ref=<branch>`) and link the green run in the release PR. Run a tier
+locally with `python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 8 --days 7 --profile edge --sparql`.
+
+### Each device scores from its own first row
+
+With the `edge` profile's +-60 s jitter, a device's first row can come before the nominal `meta["t0_ms"]`. Harness
+windows come from `Dataset.history_window_ms()`, which runs from the earliest actual row of any device (or the weather)
+to one step past the last row, and `Dataset.first_row_ms()` gives each device's first row. Never build a window from
+`t0`: a load window that starts at `t0` silently drops the early rows from one leg, and the legs then disagree even
+though the SQL is correct. `test_edge_jitter_first_rows_before_t0_and_harness_windows_start_there` pins this.
+
 ## Hash stability
 
 `dataset.content_hash()` is the sha256 of a canonical serialization (sorted keys, compact, floats by repr, `-0.0` as

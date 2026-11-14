@@ -468,14 +468,14 @@ class TimescaleAdapter:
             cols = columnar.setdefault(key, [[], []])
             cols[0].append(ts)
             cols[1].append(value)
-        meta = dataset.meta
-        t0, steps = meta["t0_ms"], meta["steps"]
+        # the load window starts at each device's actual first row (edge jitter can put it before the nominal t0)
+        win_from, win_to = dataset.history_window_ms()
         si_history: dict[str, list[dict]] = {}
         for row in dataset.history:
             si_history.setdefault(row["equipment_id"], []).append(row)
         self._in.write_text(json.dumps({
             "site_id": site, "ingest": self.ingest, "step_seconds": dataset.step_seconds,
-            "window": {"from_ms": t0, "to_ms": t0 + steps * dataset.step_seconds * 1000},
+            "window": {"from_ms": win_from, "to_ms": win_to},
             "points": points, "samples": columnar, "si_history": si_history, "weather": dataset.weather,
             "utility_interval": dataset.utility_interval, "utility_monthly": dataset.utility_monthly,
             "history_columns": dataset.history_columns}, ensure_ascii=False), encoding="utf-8")
