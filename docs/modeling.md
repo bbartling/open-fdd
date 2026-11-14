@@ -59,3 +59,33 @@ links to its NF time-series id. The tab flags dangling references and non-standa
 | Query from code (Full) | `POST /api/v1/apps/{app-id}/hooks/sparql`, then read `GET /api/v1/apps/{app-id}/hooks/sparql/runs?include_results=true` |
 
 Updates and remote `SERVICE` queries are refused. Request and response shapes are in the [API reference](fdd-data-access.html).
+
+### SPARQL to trend data to pandas (both editions)
+
+A client script can ask the site model which points it wants and get their history back in one step, then run the
+pandas reference rules on its own machine:
+
+| Edition | Path |
+|---|---|
+| Full | `sparql-data` hook: SELECT / ASK only, the matched points' history from NF `point/data` (raw or resampled) or Timescale (`source=timescale`), at most 200 points a page (`pointOffset`), at most 190 000 UTF-8 bytes an answer (cut on a timestamp, continue from `next_from`), every page pinned to one model `snapshot` |
+| Lite | `rdf` hook hands over the model Turtle in pages; the client runs the query with rdflib (same SELECT / ASK policy) and reads history through NF `point/data` |
+
+```bash
+open-fdd-nf sparql examples/sparql_data/ahu_points.rq --days 7 --rules FC1,FC3
+```
+
+```python
+from open_fdd.nf import NFClient
+from open_fdd.nf import sparql_data as sd
+
+client = NFClient.from_env()
+answer = sd.fetch_auto(client, open("ahu_points.rq").read(), start, end)   # every page, one snapshot
+frames = sd.frames(answer)                                                 # SI frames, same code as equipment_frames
+print(sd.run_rules(frames))                                                # the open_fdd.rules pandas functions
+```
+
+A point binds to a rule input by the query's `?role` column, else its NF attr `ofddRole` (exported as `local:ofddRole`),
+else the catalog binding (NF class, then markers). The client holds no fault math: frames are built by
+`open_fdd.nf.model.frames_from_samples` and the rules are the package's. The parity harness proves it: the SPARQL
+client through the shipped hook gives the same results as the pandas oracle and the SQL pack (see
+[parity](rules/parity.html)).

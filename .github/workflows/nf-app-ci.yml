@@ -12,6 +12,8 @@ on:
       - "open_fdd/rules/**"
       - "tests/parity/**"
       - "open_fdd/parity/**"
+      - "examples/sparql_data/**"
+      - "open_fdd/nf/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
   pull_request:
@@ -24,6 +26,8 @@ on:
       - "open_fdd/rules/**"
       - "tests/parity/**"
       - "open_fdd/parity/**"
+      - "examples/sparql_data/**"
+      - "open_fdd/nf/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
 

@@ -61,6 +61,42 @@ duplicate rows). They are listed with the reason and evidence in `parity_known_d
 `reference(ds)` sorts rows by time and drops duplicate timestamps before running the pandas rules (a no-op on `basic`);
 pass `ingest="as_is"` to see the raw behavior.
 
+## Third leg: the SPARQL data client
+
+`pandas == SQL == SPARQL-client` (a job of the parity workflow; `tests/parity/sparql_leg.py`,
+`tests/parity/test_sparql_parity.py`, `stress.py --sparql`) checks that a client script outside the app reaches the same
+results as the oracle and the SQL pack:
+
+1. The synthetic dataset is served as a synthetic NF: each history column of each equipment is a point with
+   `ofddRole` set to its SQL role and its SI unit, and weather is a weather-station point. Samples come from raw NF `point/data`.
+2. The shipped `sparql-data` and `rdf` hooks run over it in Node (`sparql_hook_runner.mjs`). Only NF's HTTP surface
+   is mocked. The query, Turtle export, Oxigraph worker, point selection, paging, byte cap and NF sample-cap split are
+   the real code.
+3. `open_fdd.nf.sparql_data.fetch` pages through every answer with the flat StartHook args NF delivers. `frames` and
+   `weather_frame` build the SI frames with the package's shared frame assembly.
+4. `open_fdd.parity.pandas_ref.reference_from_frames` runs the oracle's own pandas rule functions on those frames.
+
+The job checks three things:
+
+| Check | Requirement |
+|---|---|
+| Frames | Equal to the oracle's input frames: same index, columns, values and dtypes |
+| SPARQL client vs pandas oracle | Same status, fault hours and per-sensor sweep hours on every rule and equipment (float noise of 1e-9 h at most) |
+| SPARQL client vs SQL pack | The same verdict as the oracle on every SQL engine of the run. The oracle's pinned known differences (`parity_known_differences.json`) are the only divergences allowed, and they must stay inside their pinned bands |
+
+The comparison is not stricter than pandas vs SQL. Where pandas and SQL have a pinned known difference, the SPARQL leg
+is held to the same pin, no more. One alignment is made on purpose. The sensor-validation sweeps (SV-*) assess the
+sensors that carry a unit in the frame's `role_units`. The oracle's frames list only the dataset's declared sensor
+units (`Dataset.units`), but the client would list every NF unit it saw. The leg therefore sets the client frames'
+`role_units` to the dataset's sensor population. This changes which sensors are swept, not any value or fault equation.
+
+**Motor-status gate** (`tests/parity/test_sparql_motor_gate.py`). One AHU runs for one day with the fan proof ON, then
+OFF, then ON. A +8 K supply-air fault is injected for two hours inside the OFF window, and in some variants for two hours
+inside an ON window. The variants are OFF-only, OFF and ON, command-only (no status point, so the gate falls back to the
+fan command), and fan off all day. The SQL pack (PGlite and SQLite), the pandas oracle and the SPARQL client must agree
+on the status of AHU-SATDEV, its fault hours and the samples that pass the gate. An OFF-window fault must count zero
+hours, and an ON-window fault must count its two hours less the rule's confirmation delay.
+
 ## Hash stability
 
 `dataset.content_hash()` is the sha256 of a canonical serialization (sorted keys, compact, floats by repr, `-0.0` as

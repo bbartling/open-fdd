@@ -1,0 +1,13 @@
+# Points for the pandas rules: every point of an AHU plus the site's weather points, each with its timeseries uuid and
+# (optional) explicit Open-FDD role. Prefixes the model declares (ph, phIoT, ref, local, rdfs, ...) are added for you.
+#   open-fdd-nf sparql examples/sparql_data/ahu_points.rq --days 7 --rules FC1,FC3
+SELECT ?uuid ?role ?equip WHERE {
+  {
+    ?e a phIoT:equip ; ph:hasTag phIoT:ahu ; rdfs:label ?equip .
+    ?p a phIoT:point ; phIoT:equipRef ?e .
+  } UNION {
+    ?p a phIoT:point ; ph:hasTag phIoT:weather .
+  }
+  ?p ref:hasExternalReference/ref:hasTimeseriesId ?uuid .
+  OPTIONAL { ?p local:ofddRole ?role }
+}

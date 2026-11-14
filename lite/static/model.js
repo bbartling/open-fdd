@@ -88,7 +88,8 @@ const ttlId = (s) => String(s).replace(/[^A-Za-z0-9_-]/g, "_");
  *       rdfs:label "NF history" ; schema:url <{nfBase}/api/v1/point/data?uuids=<uuid>> ] .
  * local:store_nf is the NF store node. nfBase = opts.nfBase, else the page origin (never a
  * hard-coded host); with neither, the URL is omitted and the uuid is the only key. NF's class and
- * the FDD hook's ruleRef are exported as local:nfClass / local:ruleRef (defined as rdf:Property).
+ * the FDD hook's ruleRef are exported as local:nfClass / local:ruleRef (defined as rdf:Property), and an
+ * explicit `ofddRole` attr as local:ofddRole.
  * Full edition: pass opts.timescale = { label, uri } to add a second reference per point,
  * stored at local:store_timescaledb (same uuid; the TimescaleDB rows are keyed by it). Lite has no
  * TimescaleDB and never passes it.
@@ -170,6 +171,10 @@ function modelToTurtle(model, base, opts = {}) {
     if (p.cls) { extra.push(`local:nfClass ${ttlStr(p.cls)}`); usedProps.add("nfClass"); }
     const ruleRef = ((p.rec || {}).attrs || {}).ruleRef;
     if (ruleRef) { extra.push(`local:ruleRef ${ttlStr(ruleRef)}`); usedProps.add("ruleRef"); }
+    // An explicit Open-FDD role on the point (NF attr `ofddRole`, optional): lets a SPARQL query bind rule inputs
+    // without guessing from classes / markers. The app's own binder still uses NF classes, then markers.
+    const ofddRole = ((p.rec || {}).attrs || {}).ofddRole;
+    if (ofddRole) { extra.push(`local:ofddRole ${ttlStr(ofddRole)}`); usedProps.add("ofddRole"); }
     extra.push(tsRef("store_nf", link));
     if (tsdb) extra.push(tsRef("store_timescaledb"));
     entity(p.uuid, "phIoT:point", p.dis, p.tags, refsOf(p.siteRef, [
@@ -188,7 +193,8 @@ function modelToTurtle(model, base, opts = {}) {
     }
   }
   // Define the local properties we used (NF class, FDD rule of a result point).
-  const PROPS = { nfClass: "NF ontology class of the point", ruleRef: "Open-FDD rule this result point belongs to" };
+  const PROPS = { nfClass: "NF ontology class of the point", ruleRef: "Open-FDD rule this result point belongs to",
+    ofddRole: "Open-FDD rule input role of the point (explicit binding)" };
   for (const p of [...usedProps].sort()) entity(p, "rdf:Property", p, [], [], [`rdfs:comment ${ttlStr(PROPS[p])}`]);
   // Define every non-standard tag we used, so no term in the graph is left undefined.
   for (const t of [...nonStandard].sort()) {

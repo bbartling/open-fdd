@@ -29,9 +29,12 @@
     "/hooks/lib/settings.js": "hooks/lib/settings.js",
     "/hooks/lib/site-timezone.js": "hooks/lib/site-timezone.js",
     "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
+    "/hooks/lib/sparql-worker.js": "hooks/lib/sparql-worker.js",
     "/hooks/lib/timescale.js": "hooks/lib/timescale.js",
+    "/hooks/rdf.js": "hooks/rdf.js",
     "/hooks/schema.js": "hooks/schema.js",
     "/hooks/sparql.js": "hooks/sparql.js",
+    "/hooks/sparql_data.js": "hooks/sparql_data.js",
     "/hooks/tuning.js": "hooks/tuning.js",
     "/hooks/vendor/sql.js/LICENSE": "hooks/vendor/sql.js/LICENSE",
     "/hooks/vendor/sql.js/sql-wasm.js": "hooks/vendor/sql.js/sql-wasm.js",
@@ -187,6 +190,26 @@
       "id": "history",
       "name": "history",
       "entryPoint": "/hooks/history.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "60s"
+    },
+    {
+      "id": "sparql-data",
+      "name": "sparql-data",
+      "entryPoint": "/hooks/sparql_data.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "120s"
+    },
+    {
+      "id": "rdf",
+      "name": "rdf",
+      "entryPoint": "/hooks/rdf.js",
       "points": {
         "noPoints": true
       },

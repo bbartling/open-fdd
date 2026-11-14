@@ -9,6 +9,8 @@ a copy is missing, hand-edited or stale. Edit shared/..., run this script, commi
     shared/paging.js                        -> {nf-app,lite}/hooks/lib/paging.js, {nf-app,lite}/static/paging.js
     shared/hooks/settings.js                -> {nf-app,lite}/hooks/lib/settings.js
     shared/hooks/site-timezone.js           -> nf-app/hooks/lib/site-timezone.js   (the fdd / analytics hooks' site time zone, same order as the UI)
+    shared/hooks/start-hook-args.js         -> {nf-app,lite}/hooks/lib/start-hook-args.js   (NF StartHook string-map args)
+    shared/hooks/rdf.js                     -> {nf-app,lite}/hooks/rdf.js   (the model as Turtle, paged; the Lite SPARQL client path)
     shared/role-limits.js                   -> nf-app/hooks/lib/role-limits.js, nf-app/static/role-limits.js   (sweep role-limit overrides, #1589; Full only)
     shared/hooks/open_meteo_weather.js      -> nf-app/hooks/weather.js, lite/hooks/open_meteo_weather.js   (edition constant substituted: 'full' / 'lite')
     shared/static/<file>                    -> {nf-app,lite}/static/<file>
@@ -40,6 +42,8 @@ SHARED: dict[str, list[str]] = {
     "shared/paging.js": [f"{app}/{sub}/paging.js" for app in BOTH for sub in ("hooks/lib", "static")],
     "shared/hooks/settings.js": [f"{app}/hooks/lib/settings.js" for app in BOTH],
     "shared/hooks/site-timezone.js": ["nf-app/hooks/lib/site-timezone.js"],
+    "shared/hooks/start-hook-args.js": [f"{app}/hooks/lib/start-hook-args.js" for app in BOTH],
+    "shared/hooks/rdf.js": [f"{app}/hooks/rdf.js" for app in BOTH],
     "shared/role-limits.js": ["nf-app/hooks/lib/role-limits.js", "nf-app/static/role-limits.js"],
     "shared/rule-tuning.js": ["nf-app/hooks/lib/rule-tuning.js", "nf-app/static/rule-tuning.js"],
     "shared/hooks/open_meteo_weather.js": ["nf-app/hooks/weather.js", "lite/hooks/open_meteo_weather.js"],

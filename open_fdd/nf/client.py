@@ -153,6 +153,38 @@ def sample_value(s: Mapping[str, Any]) -> float | None:
         return None
 
 
+def hook_args(args: Mapping[str, Any] | None) -> dict[str, str]:
+    """NF StartHook args: a flat string -> string map. Strings stay, booleans are ``"true"`` / ``"false"``, numbers
+    their text, lists / objects JSON text; ``None`` values are left out."""
+    out: dict[str, str] = {}
+    for k, v in (args or {}).items():
+        if v is None:
+            continue
+        if isinstance(v, str):
+            out[str(k)] = v
+        elif isinstance(v, bool):
+            out[str(k)] = "true" if v else "false"
+        elif isinstance(v, (int, float)):
+            out[str(k)] = repr(v) if isinstance(v, float) else str(v)
+        else:
+            out[str(k)] = json.dumps(v, separators=(",", ":"))
+    return out
+
+
+def hook_answer(run: Mapping[str, Any]) -> dict | None:
+    """A hook's answer from a finished run: the last JSON object event it logged that has ``ok`` (Open-FDD hooks log
+    their return value as one JSON line; NF leaves the run's return value empty), else ``None``."""
+    events = [e for g in (run.get("results") or {}).values() if isinstance(g, Mapping) for e in (g.get("events") or [])]
+    for ev in reversed(events):
+        try:
+            out = json.loads((ev or {}).get("message", ""))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(out, dict) and "ok" in out:
+            return out
+    return None
+
+
 def _load_env_file(path: str | os.PathLike[str]) -> dict[str, str]:
     file = Path(path).expanduser()
     if not file.is_file():
@@ -314,35 +346,58 @@ class NFClient:
 
     # ------------------------------------------------------------------ hooks
     def start_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None) -> str:
-        """StartHook: run an on-request hook once now with ``args``; returns the run id (``pid``). Sent once, never retried."""
+        """StartHook: run an on-request hook once now with ``args``; returns the run id (``pid``). Sent once, never retried.
+
+        NF takes the hook args as a FLAT string-to-string map (``{"tool": "x", "days": "28"}``); wrapping them in
+        ``{"args": ...}`` makes NF answer HTTP 500. ``hook_args`` does the coercion (lists and objects as JSON text).
+        """
         path = f"/api/v1/apps/{urllib.parse.quote(app_id, safe='')}/hooks/{urllib.parse.quote(hook_id, safe='')}"
-        pid = self.request("POST", path, {"args": dict(args or {})}, once=True).get("pid")
+        pid = self.request("POST", path, hook_args(args), once=True).get("pid")
         if not pid:
             raise NFError("StartHook returned no run id (pid)")
         return str(pid)
 
     def hook_runs(self, app_id: str, hook_id: str, page_size: int = 10) -> list[dict]:
-        """Recent runs of a hook, newest first, with their results (events)."""
+        """Recent runs of a hook, newest first, with their results and log events (the hook's JSON answer line)."""
         path = (f"/api/v1/apps/{urllib.parse.quote(app_id, safe='')}/hooks/{urllib.parse.quote(hook_id, safe='')}"
-                f"/runs?page_size={int(page_size)}&include_results=true")
+                f"/runs?page_size={int(page_size)}&include_results=true&include_logs=true")
         return list(self.get(path).get("runs") or [])
 
     def run_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None, *,
-                 timeout: float = 120.0, poll: float = 1.0) -> dict:
+                 timeout: float = 120.0, poll: float = 1.0, want_answer: bool = False) -> dict:
         """Start an on-request hook and wait for its run: returns the finished run (``state`` STATE_SUCCESS ...).
 
         Polls the hook's runs until the run with the started ``pid`` leaves RUNNING / ENQUEUED / SCHEDULED;
-        raises ``NFError`` when it is still running after ``timeout`` seconds.
+        raises ``NFError`` when it is still running after ``timeout`` seconds. With ``want_answer`` a successful run is
+        polled a little longer (event lines can land a poll late) until its JSON answer line is there.
         """
         pid = self.start_hook(app_id, hook_id, args)
         deadline = time.monotonic() + timeout
+        grace: float | None = None
         while True:
             run = next((r for r in self.hook_runs(app_id, hook_id) if str(r.get("pid")) == pid), None)
             if run is not None and run.get("state") not in PENDING_STATES:
-                return run
+                if not want_answer or run.get("state") != "STATE_SUCCESS" or hook_answer(run) is not None:
+                    return run
+                grace = grace if grace is not None else time.monotonic() + min(10.0, max(0.0, deadline - time.monotonic()))
+                if time.monotonic() >= grace:
+                    return run
             if time.monotonic() >= deadline:
                 raise NFError(f"hook {app_id}/{hook_id} run {pid} still running after {timeout:g} s (read its runs later)")
             (self._sleep or time.sleep)(poll)
+
+    def call_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None, *,
+                  timeout: float = 120.0, poll: float = 1.0) -> dict:
+        """Run an on-request hook and return its answer (the JSON object it logged). Raises ``NFError`` when the run
+        failed or left no answer; an answer with ``ok: false`` is returned as is (the caller decides)."""
+        run = self.run_hook(app_id, hook_id, args, timeout=timeout, poll=poll, want_answer=True)
+        if run.get("state") != "STATE_SUCCESS":
+            raise NFError(f"hook {app_id}/{hook_id} run ended {run.get('state')}: "
+                          f"{str(run.get('error') or run.get('message') or '')[:200]}".rstrip(": "))
+        out = hook_answer(run)
+        if out is None:
+            raise NFError(f"hook {app_id}/{hook_id} run finished without an answer event (see the run's logs)")
+        return out
 
     # ------------------------------------------------------------------ API
     def platform_info(self) -> dict:
@@ -379,7 +434,8 @@ class NFClient:
     ) -> dict[str, list[tuple[datetime, float]]]:
         """Resampled history: ``{uuid: [(utc datetime, value), ...]}`` sorted by time.
 
-        NF resamples on the box (``window`` seconds, ``method`` AVERAGE|MIN|MAX|SUM|FIRST|LAST|COUNT).
+        NF resamples on the box (``window`` seconds, ``method`` AVERAGE|MIN|MAX|SUM|FIRST|LAST|COUNT);
+        ``window_sec=0`` reads the raw samples (no resampling).
         Requests are batched by at most 40 uuids and cut into pieces of at most 7 days.
         """
         t0 = _utc(start) if isinstance(start, datetime) else parse_nf_ts(start)
@@ -396,8 +452,9 @@ class NFClient:
             for i in range(0, len(ids), BATCH):
                 batch = ids[i:i + BATCH]
                 qs = "&".join("uuids=" + urllib.parse.quote(u) for u in batch)
-                path = (f"/api/v1/point/data?{qs}&from={to_iso_z(a)}&to={to_iso_z(b)}"
-                        f"&window={int(window_sec)}s&method={method}")
+                path = f"/api/v1/point/data?{qs}&from={to_iso_z(a)}&to={to_iso_z(b)}"
+                if int(window_sec) > 0:
+                    path += f"&window={int(window_sec)}s&method={method}"
                 for series in self.get(path).get("data") or []:
                     slot = out.get(series.get("uuid"))
                     if slot is None:

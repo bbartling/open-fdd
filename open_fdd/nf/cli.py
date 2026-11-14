@@ -64,7 +64,7 @@ def _range(p: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="open-fdd-nf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = ap.add_subparsers(dest="cmd", required=True, metavar="{info,model,pull,rules,report,analyze}")
+    sub = ap.add_subparsers(dest="cmd", required=True, metavar="{info,model,pull,rules,report,analyze,sparql}")
     c = _common()
     sub.add_parser("info", parents=[c], help="platform info and the sites in the model")
     m = sub.add_parser("model", parents=[c], help="equipment with the points bound to each FDD role")
@@ -95,6 +95,20 @@ def build_parser() -> argparse.ArgumentParser:
     an.add_argument("--dense", action="store_true", help="fault-timeline: every 5-minute sample, not just state changes")
     an.add_argument("--wait", type=float, default=120.0, help="seconds to wait for the hook run (default 120)")
     an.add_argument("--json", action="store_true", help="the hook's full JSON answer instead of a table")
+    sq = sub.add_parser(
+        "sparql", parents=[c], help="SPARQL query -> trend data -> SI frames -> pandas rules (read-only)",
+        description="Run a SELECT / ASK against the site model and fetch the matched points' history: the Full app's "
+                    "sparql-data hook, or on Lite the rdf hook's Turtle queried here with rdflib. Then the pandas "
+                    "reference rules (open_fdd.rules) run on the SI frames.")
+    _range(sq)
+    sq.add_argument("query", help="a .rq file, or the query text")
+    sq.add_argument("--mode", choices=("auto", "hook", "local"), default="auto",
+                    help="hook: Full sparql-data hook; local: rdf hook + rdflib (Lite); auto: hook when the box has it")
+    sq.add_argument("--bucket", help='resample bucket, e.g. "5 minutes" or "raw" (default: --window seconds)')
+    sq.add_argument("--rules", help="comma list of rule ids (default: every applicable rule)")
+    sq.add_argument("--rows", action="store_true", help="print the SPARQL rows, not the rules")
+    sq.add_argument("--out", help="also write the merged SI frames as CSV here")
+    sq.add_argument("--json", action="store_true", help="JSON instead of tables")
     return ap
 
 
@@ -269,8 +283,40 @@ def cmd_analyze(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sparql(a: argparse.Namespace) -> int:
+    from open_fdd.nf import sparql_data as sd
+
+    q = a.query
+    if os.path.isfile(q):
+        with open(q, encoding="utf-8") as fh:
+            q = fh.read()
+    start, end = time_range(a)
+    bucket = a.bucket or ("raw" if a.window == 0 else f"{max(1, a.window // 60)} minutes")
+    client = client_from_args(a)
+    ans = sd.fetch_auto(client, q, start, end, bucket=bucket, mode=a.mode)
+    if ans["kind"] == "ask":
+        print(json.dumps({"ask": ans["value"]}) if a.json else str(ans["value"]).lower())
+        return 0
+    if a.rows:
+        print(json.dumps(ans["rows"], indent=2) if a.json else _table(ans["rows"], ans["vars"]))
+        return 0
+    frames = sd.frames(ans, site=a.site, equip=a.equip)
+    if a.out:
+        import pandas as pd
+
+        pd.concat({f"{k[0]}/{k[1]}": v for k, v in frames.items()}, names=["equipment"]).to_csv(a.out)
+    rules = [r.strip() for r in a.rules.split(",")] if a.rules else None
+    table = sd.run_rules(frames, rules)
+    if a.json:
+        print(table.to_json(orient="records", indent=2))
+    else:
+        print(f"{len(ans['points'])} points, {len(frames)} equipment, {sum(len(s) for s in ans['series'].values())} samples")
+        print(_table(table.to_dict("records"), ["site", "equip", "rule", "status", "fault_hours", "fault_pct"]))
+    return 0
+
+
 COMMANDS = {"info": cmd_info, "model": cmd_model, "pull": cmd_pull, "rules": cmd_rules, "report": cmd_report,
-            "analyze": cmd_analyze}
+            "analyze": cmd_analyze, "sparql": cmd_sparql}
 
 
 def main(argv: list[str] | None = None) -> int:

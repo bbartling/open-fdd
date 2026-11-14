@@ -117,7 +117,11 @@ test("manifest: the app id is the slug of the name (NF derives the id from the n
 });
 
 test("manifest: no FDD hook, no npm dependencies", () => {
-  assert.deepEqual(manifest.hooks.map((h) => h.id), ["open-meteo-weather"]);
+  assert.deepEqual(manifest.hooks.map((h) => h.id), ["open-meteo-weather", "rdf"]);
+  // the rdf hook (5.0.19) only serves the model Turtle: on request, no SPARQL engine and no FDD on the small box
+  assert.equal(manifest.hooks[1].mode, "MODE_ON_REQUEST");
+  assert.ok(!/oxigraph|sql\.js|pglite/i.test(read("hooks/rdf.js")), "the Lite rdf hook carries no query engine");
+  assert.ok(!/require\((?!['"](fs|path|vm|crypto|\.\/lib\/(paging|start-hook-args)\.js)['"]\))/.test(read("hooks/rdf.js")), "rdf hook: node built-ins and ./lib/{paging,start-hook-args}.js only");
   assert.ok(!existsSync(path.join(root, "package.json")));
   // node built-ins plus the dependency-free shared libs (shared/paging.js, shared/hooks/settings.js; scripts/nf/sync_shared.py)
   assert.ok(!/require\((?!['"](https|http|node:|\.\/lib\/(paging|settings)\.js)['"]\))/.test(read("hooks/open_meteo_weather.js")), "hook may only require node built-ins and ./lib/{paging,settings}.js");

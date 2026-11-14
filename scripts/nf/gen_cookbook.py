@@ -386,6 +386,14 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 construction; `to_imperial` / `from_imperial` in the [harness](parity-harness.html) round-trip the dataset to 1e-9. There is no separate
 per-rule imperial parity run.
 
+**Third leg: the SPARQL client.** A client script outside the app can reach the same answers. The CI job
+`pandas == SQL == SPARQL-client` serves the synthetic data as a synthetic NF and fetches it through the shipped `sparql-data` hook
+with `open_fdd.nf.sparql_data`. It then runs the oracle's own pandas rule functions on the client's SI frames. The job requires the
+frames to equal the oracle's frames, the results to equal the oracle's (status, fault hours and samples that pass the gate), and the
+same verdict against the SQL pack, held to the same pinned known differences. It also runs a motor-status case (fan ON, then OFF,
+then ON, plus a command-only variant): a fault injected while the fan is OFF never counts, and one injected while it is ON counts
+the same in all three legs. See the [harness](parity-harness.html).
+
 ## Per rule
 
 | Rule | pandas SI vs SQL SI | Note |
