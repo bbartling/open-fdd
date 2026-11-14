@@ -242,7 +242,7 @@
     const { pid } = await api(`/api/v1/apps/${APP_ID()}/hooks/tuning`, body);
     for (let i = 0; i < 30; i++) {
       await new Promise((ok) => setTimeout(ok, 1000));
-      const runs = (await api(`/api/v1/apps/${APP_ID()}/hooks/tuning/runs?page_size=5&include_results=true`)).runs || [];
+      const runs = (await api(`/api/v1/apps/${APP_ID()}/hooks/tuning/runs?page_size=5&include_results=true&include_logs=true`)).runs || [];
       const run = runs.find((r) => r.pid === pid);
       if (!run || ["STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED"].includes(run.state)) continue;
       const events = Object.values(run.results || {}).flatMap((g) => g.events || []);

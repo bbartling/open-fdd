@@ -5,6 +5,10 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.18 - 2026-11-13 (app only; open-fdd 4.5.8 on PyPI)
+
+- **Full UI hook answers (#1610):** long-range Timescale history in charts and the joined CSV export works again (flat StartHook args, answer read from the hook's event line), and the inline FDD tuners load live values (run polls ask for `include_logs=true`).
+
 ## Open-FDD 5.0.17 - 2026-11-13 (open-fdd 4.5.8 on PyPI)
 
 - **Overview single-equipment landing & I/O inventory:** Overview opens on one equipment chosen from fresh, model-bound OAT (`<12 °C` heating, `12–24 °C` RTU, `>=24 °C` cooling, local BAS OAT first then weather) with manual picks saved per site ID, showing all modeled I/O including current-only points.

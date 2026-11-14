@@ -7,6 +7,11 @@ Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) 
 
 (nothing yet)
 
+## 5.0.18 — 2026-11-13 (app only; open-fdd stays 4.5.8 on PyPI)
+
+- **Full UI hook answers (#1610):** long-range Timescale history now starts the `history` hook with a flat StartHook args map (the `{args: ...}` wrapper got HTTP 500) and reads the hook's JSON event line, so charts and the joined CSV export backfill older ranges from Timescale. Hook run polls (history, tuning, Run FDD now) ask for `include_logs=true`, so the inline FDD tuners load live values instead of falling back to read-only defaults.
+- **CI:** the pandas oracle parity lane budget is 75 minutes (pytest plus the three-engine SI stress matrix ran past 45).
+
 ## 5.0.17 — 2026-11-13 (app) / open-fdd 4.5.8 (PyPI)
 
 - **Overview single-equipment landing & full I/O inventory:** Overview defaults to one modeled equipment selected from fresh, model-bound OAT (`<12 °C` boiler/heating-water, `12–24 °C` RTU, `>=24 °C` chiller/CHW; local BAS OAT preferred over weather), saves manual selections per exact site ID, and displays all modeled I/O including current-only, `Bool`, `Enum`, and `String` points.

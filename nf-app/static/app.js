@@ -66,7 +66,7 @@ async function runFddNow() {
     const { pid } = await api(`/api/v1/apps/${APP_ID}/hooks/fdd`, {});
     for (let i = 0; i < 60; i++) {
       await new Promise((ok) => setTimeout(ok, 2000));
-      const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/fdd/runs?page_size=5&include_results=true`)).runs || [];
+      const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/fdd/runs?page_size=5&include_results=true&include_logs=true`)).runs || [];
       const run = runs.find((r) => r.pid === pid);
       if (!run || ["STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED"].includes(run.state)) { state.textContent = `running… ${2 * (i + 1)} s`; continue; }
       const events = Object.values(run.results || {}).flatMap((g) => g.events || []);
@@ -451,13 +451,14 @@ async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
   }
   const cleanIds = [...new Set((uuids || []).map((u) => String(u || "").trim()).filter(Boolean))];
   if (!cleanIds.length) return { ok: true, skipped: true, reason: "no numeric uuids" };
+  // NF StartHook takes the hook args as a flat string->string map (same as the tuning hook); wrapping them in
+  // {args: ...} makes NF answer HTTP 500 and the long-range Timescale fill silently never runs.
+  /** @type {Record<string, string>} */
   const body = {
-    args: {
-      uuids: JSON.stringify(cleanIds),
-      from: new Date(fromMs).toISOString(),
-      to: new Date(toMs).toISOString(),
-      ...(bucket ? { bucket: String(bucket) } : {}),
-    },
+    uuids: JSON.stringify(cleanIds),
+    from: new Date(fromMs).toISOString(),
+    to: new Date(toMs).toISOString(),
+    ...(bucket ? { bucket: String(bucket) } : {}),
   };
   let pid;
   try {
@@ -475,12 +476,16 @@ async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
   const deadline = Date.now() + 25e3;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 400));
-    const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/history/runs?page_size=5&include_results=true`)).runs || [];
+    const runs = (await api(`/api/v1/apps/${APP_ID}/hooks/history/runs?page_size=5&include_results=true&include_logs=true`)).runs || [];
     const hit = runs.find((r) => r.pid === pid || (r.run && r.run.pid === pid));
     if (!hit) continue;
     const status = String(hit.status || hit.state || "").toUpperCase();
-    if (status === "STATE_RUNNING" || status === "STATE_PENDING" || status === "RUNNING" || status === "PENDING") continue;
-    const rawOut = hit.result ?? hit.output ?? (Array.isArray(hit.logs) ? hit.logs.at(-1) : null);
+    if (/RUNNING|PENDING|ENQUEUED|SCHEDULED/.test(status)) continue;
+    // The hook logs its answer as one JSON event line (NF leaves returnValue empty); events can land a poll late.
+    const events = Object.values(hit.results || {}).flatMap((g) => (g && g.events) || []);
+    const lastJson = [...events].reverse().find((e) => e && typeof e.message === "string" && e.message.trim().startsWith("{"));
+    if (!lastJson && status.includes("SUCCESS") && Date.now() < deadline - 20e3) continue;
+    const rawOut = lastJson ? lastJson.message : (hit.result ?? hit.output ?? (Array.isArray(hit.logs) ? hit.logs.at(-1) : null));
     let parsed = rawOut;
     if (typeof rawOut === "string") {
       try { parsed = JSON.parse(rawOut); } catch { parsed = null; }

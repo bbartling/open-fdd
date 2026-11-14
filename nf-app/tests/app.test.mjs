@@ -547,3 +547,27 @@ test("every card chart: x labels hide overlaps; the ECharts title is dropped whe
   assert.deepEqual([d.legend.top, d.grid.top], [4, 48], "the empty title band is given back");
   assert.equal(t({ title: { text: "X", subtext: "why" }, xAxis: [{ type: "time" }, { type: "time", axisLabel: { show: false } }] }, true).title.subtext, "why");
 });
+
+test("Full Timescale history: StartHook gets a flat string-map body and the answer is read from the hook's JSON event line", async () => {
+  const el = () => ({ textContent: "", hidden: true, attrs: {}, setAttribute() {}, classList: { toggle() {} } });
+  const calls = [];
+  const answer = { ok: true, bucket: "1 day", rows: [{ point_uuid: "p1", bucket: "2026-09-02T00:00:00.000Z", avg: 20.5 }] };
+  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, setTimeout: (f) => setImmediate(f), document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" }, esc: (x) => String(x ?? "") });
+  for (const f of ["paging.js", "nf.js", "model.js", "fdd.js", "rcx.js", "charts.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  ctx.__api = async (path, body) => {
+    calls.push({ path, body });
+    if (body) return { pid: "7" };
+    return { runs: [{ pid: "7", state: "STATE_SUCCESS", results: { "": { returnValue: "", events: [{ message: "starting" }, { message: JSON.stringify(answer) }] } } }] };
+  };
+  vm.runInContext("api = (p, b) => __api(p, b)", ctx);
+  const res = await vm.runInContext("queryTimescaleHistory", ctx)({ uuids: ["p1", "p1", " "], fromMs: Date.parse("2026-09-01T00:00:00Z"), toMs: Date.parse("2026-11-01T00:00:00Z"), bucket: "1 day" });
+  const start = calls[0];
+  assert.match(start.path, /\/hooks\/history$/);
+  assert.equal(start.body.args, undefined, "no {args: ...} wrapper (NF answers 500)");
+  assert.deepEqual(JSON.parse(JSON.stringify(start.body)), { uuids: '["p1"]', from: "2026-09-01T00:00:00.000Z", to: "2026-11-01T00:00:00.000Z", bucket: "1 day" });
+  for (const v of Object.values(start.body)) assert.equal(typeof v, "string");
+  assert.ok(calls.slice(1).every((x) => /include_logs=true/.test(x.path)), "run polls ask for the event lines (include_logs)");
+  assert.equal(res.ok, true);
+  assert.equal(res.rows.length, 1)
+  assert.equal(res.rows[0].avg, 20.5);
+});
