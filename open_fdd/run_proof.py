@@ -89,12 +89,15 @@ def resolve_run_proof(node: ProofNode, nodes: Iterable[ProofNode], contract: Map
     hit = _own(node, own)
     if hit:
         return RunProof(True, "own", hit[0], hit[1], node.id, "self")
-    pool = [n for n in nodes if n.site == node.site and n is not node]
+    site_nodes = [n for n in nodes if n.site == node.site]
+    pool = [n for n in site_nodes if n is not node]
 
     def find(target: str) -> list[ProofNode]:
         t = _ref_id(target)
-        hits = [n for n in pool if t in n.names()] if t else []
-        return hits if len(hits) == 1 else []   # an ambiguous ref (one name, several equipment) binds nothing: never guess
+        # count across the whole site, the requester included: an ambiguous ref (one name, several equipment) binds
+        # nothing, and a ref that names the requester itself is not a feeder
+        hits = [n for n in site_nodes if t in n.names()] if t else []
+        return hits if len(hits) == 1 and hits[0] is not node else []
 
     feeders: list[tuple[str, ProofNode]] = []
     for ref in contract["feeders"]["refs"]:

@@ -104,6 +104,9 @@ def test_no_proof_is_skipped_on_both_sides_and_only_with_the_gate_on(runs):
         assert sql_rows_by_equipment(sql_off.get(rule))["AHU-4"]["fault_hours"] is not None or rule in ("OAT-METEO",), rule
         # a unit proven by ANOTHER unit's fan (a VAV fed by an AHU) is assessed
         assert ref_on[rule]["AHU-3"]["status"] != "SKIPPED_NO_RUN_PROOF", rule
+        if rule != "OAT-METEO":   # OAT-METEO may answer NULL hours while assessed (see the ungated check above)
+            assert (sql_rows_by_equipment(sql_on.get(rule)).get("AHU-3") or {}).get("fault_hours") is not None, \
+                f"{rule}: SQL must assess the feeder-proven unit too"
 
 
 def test_sweeps_honour_the_gate_in_sql_and_pandas(ds):

@@ -35,11 +35,14 @@ function ownRunProof(equipRec, model, catalog) {
 function runProofFeeders(equipRec, model, catalog) {
   const a = equipRec.attrs || {};
   const site = a.siteRef || "";
-  const pool = model.equips.filter((e) => e !== equipRec && ((e.attrs || {}).siteRef || "") === site);
+  const siteEquips = model.equips.filter((e) => ((e.attrs || {}).siteRef || "") === site);
+  const pool = siteEquips.filter((e) => e !== equipRec);
   const find = (target) => {
     const t = runProofRefId(target);
-    const hits = t ? pool.filter((e) => runProofNames(e).has(t)) : [];
-    return hits.length === 1 ? hits : [];   // an ambiguous ref (one name, several equipment) binds nothing: never guess
+    // count across the whole site, the requester included: an ambiguous ref binds nothing (never guess), and a ref
+    // that names the requester itself is not a feeder
+    const hits = t ? siteEquips.filter((e) => runProofNames(e).has(t)) : [];
+    return hits.length === 1 && hits[0] !== equipRec ? hits : [];
   };
   const out = [];
   for (const ref of catalog.run_proof.feeders.refs) for (const rec of find(a[ref])) out.push({ rec, via: ref });

@@ -217,6 +217,16 @@ def test_ambiguous_feeder_name_binds_nothing():
     assert not resolve_run_proof(v, [a, b, v], spec()).found
 
 
+def test_a_ref_that_also_names_the_requester_binds_nothing():
+    # the requester carries the referenced alias too: two same-site matches, so the reference is ambiguous
+    a = ProofNode("A", "s", aliases=("shared",), roles=frozenset({"fan_status"}))
+    v = ProofNode("V", "s", aliases=("shared",), refs={"airRef": "shared"})
+    assert not resolve_run_proof(v, [a, v], spec()).found
+    # a ref that names only the requester is not a feeder either
+    w = ProofNode("W", "s", aliases=("me",), refs={"airRef": "me"})
+    assert not resolve_run_proof(w, [a, w], spec()).found
+
+
 def test_explicit_off_proof_is_assessed_zero_not_missing_proof():
     df = _vav("resolved")
     df["run-proof"] = 0.0

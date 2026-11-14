@@ -121,6 +121,8 @@
     for (const [rawKey, raw] of Object.entries(doc.params)) {
       // #1608: require_operational_gate is the old name of require_run_proof (an alias, like in render_rule.py)
       const key = rawKey === 'require_operational_gate' && controls && has(controls, 'require_run_proof') && !has(controls, rawKey) ? 'require_run_proof' : rawKey;
+      // the canonical key wins over its legacy alias whatever the property order (like render_rule.py)
+      if (key !== rawKey && has(doc.params, key)) continue;
       if (!controls || !has(controls, key)) {
         throw new Error(`${ruleId ? ruleId + '.' : ''}${key} is not a tunable SQL parameter`);
       }
