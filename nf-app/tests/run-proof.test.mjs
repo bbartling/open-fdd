@@ -89,3 +89,15 @@ test("ambiguous feeder names bind nothing rather than picking the first equipmen
   })()`, ctx);
   assert.equal(result, 0);
 });
+
+test("a Turtle ref written as the feeder's display name points at the feeder's subject", () => {
+  const ttl = vm.runInContext(`(() => {
+    const site = { uuid: "s", name: "Site", pointType: "SITE", attrs: { id: "s1" } };
+    const ahu = { uuid: "a", name: "Main AHU", pointType: "EQUIPMENT", attrs: { id: "AHU-1", siteRef: "s1" } };
+    const vav = { uuid: "v", name: "VAV", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "s1", airRef: "Main AHU" } };
+    return modelToTurtle({ sites: [site], equips: [ahu, vav], devices: [], points: [] }, "urn:test:", { nfBase: "" }).turtle;
+  })()`, ctx);
+  const subject = ttl.match(/^(local:\S+)\s+a phIoT:equip ;\s+rdfs:label "Main AHU"/m);
+  assert.ok(subject, ttl);
+  assert.match(ttl, new RegExp(`phIoT:airRef ${subject[1]}\\b`));
+});

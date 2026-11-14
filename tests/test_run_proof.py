@@ -254,3 +254,21 @@ def test_stale_proof_samples_do_not_prove_operation():
     gone = _vav("resolved")
     gone["run-proof"] = float("nan")                                                     # no proof sample at all: skipped
     assert _run("VAV-3", gone).status == "SKIPPED_NO_RUN_PROOF"
+
+
+def test_rdf_equipment_sharing_a_label_keeps_its_own_identity():
+    rdflib = pytest.importorskip("rdflib")
+    ttl = """
+@prefix phIoT: <https://project-haystack.org/def/phIoT/3.9.13#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix local: <urn:test:> .
+local:s1 a phIoT:site ; rdfs:label "Site" .
+local:AHU-1 a phIoT:equip ; rdfs:label "AHU" ; phIoT:siteRef local:s1 .
+local:AHU-2 a phIoT:equip ; rdfs:label "AHU" ; phIoT:siteRef local:s1 .
+local:VAV-1 a phIoT:equip ; rdfs:label "VAV" ; phIoT:siteRef local:s1 ; phIoT:airRef local:AHU-2 .
+"""
+    g = rdflib.Graph()
+    g.parse(data=ttl, format="turtle")
+    nodes = {n.id: n for n in nodes_from_graph(g)}
+    assert {"AHU-1", "AHU-2", "VAV"} <= set(nodes)  # a shared label falls back to each subject's own name
+    assert nodes["VAV"].refs.get("airRef") == "AHU-2"

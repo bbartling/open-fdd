@@ -165,8 +165,18 @@ def nodes_from_graph(graph, catalog: Mapping | None = None) -> list[ProofNode]:
 
     equips = [s for s in set(graph.subjects(RDF.type, None)) if any(tail(t) == "equip" for t in graph.objects(s, RDF.type))]
     label = lambda s: str(next(iter(graph.objects(s, RDFS.label)), tail(s)))  # noqa: E731
-    site_of = lambda s: next((label(x) for x in objs(s, "siteRef")), "")  # noqa: E731
-    ident = {s: label(s) for s in equips}
+
+    def identities(subjects) -> dict:
+        # a label is a display name, not an identity: when two subjects share one, both fall back to their own
+        # (unique) subject name, so a precise RDF reference never lands on the wrong equipment or merges two sites
+        counts: dict[str, int] = {}
+        for x in subjects:
+            counts[label(x)] = counts.get(label(x), 0) + 1
+        return {x: label(x) if counts[label(x)] == 1 else tail(x) for x in subjects}
+
+    sites = identities({x for s in equips for x in objs(s, "siteRef")})
+    site_of = lambda s: next((sites[x] for x in objs(s, "siteRef")), "")  # noqa: E731
+    ident = identities(equips)
     points: dict[Any, list[URIRef]] = {}
     for pt in set(graph.subjects(RDF.type, None)):
         if any(tail(t) == "point" for t in graph.objects(pt, RDF.type)):

@@ -119,17 +119,21 @@ function modelToTurtle(model, base, opts = {}) {
   const siteOfRec = (r) => (r.attrs || {}).siteRef || "";
   const subjectOf = (r, isSite) => (r.uuid ? ttlId(r.uuid) : ttlId(isSite ? idOf(r) : `${siteOfRec(r)}/${idOf(r)}`));
   const subjects = { site: new Map(), equip: new Map(), device: new Map() };   // kind -> id -> [{ site, subject }]
+  const named = { site: new Map(), equip: new Map(), device: new Map() };      // kind -> display name -> [{ site, subject }]
   const register = (kind, r) => {
     const id = idOf(r), list = subjects[kind].get(id) || [];
-    list.push({ site: kind === "site" ? id : siteOfRec(r), subject: subjectOf(r, kind === "site") });
+    const x = { site: kind === "site" ? id : siteOfRec(r), subject: subjectOf(r, kind === "site") };
+    list.push(x);
     subjects[kind].set(id, list);
+    if (r.name && r.name !== id) named[kind].set(r.name, [...(named[kind].get(r.name) || []), x]);
   };
   for (const s of model.sites) register("site", s);
   for (const e of model.equips) register("equip", e);
   for (const d of model.devices) register("device", d);
   /** Subject a ref points at, or null (unknown / ambiguous). `site` = the referrer's siteRef. */
   const resolve = (kind, id, site) => {
-    const list = subjects[kind].get(id) || [];
+    // an id first; a ref written as the equipment's display name (an accepted alias) resolves the same way
+    const list = subjects[kind].get(id) || named[kind].get(id) || [];
     const scoped = kind === "site" ? list : list.filter((x) => x.site === site);
     const pick = scoped.length ? scoped : !site ? list : list.filter((x) => !x.site);   // an entity without a siteRef is shared
     return pick.length === 1 ? pick[0].subject : null;
