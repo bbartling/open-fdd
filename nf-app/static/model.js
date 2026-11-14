@@ -135,13 +135,12 @@ function modelToTurtle(model, base, opts = {}) {
   for (const d of model.devices) register("device", d);
   /** Subject a ref points at, or null (unknown / ambiguous). `site` = the referrer's siteRef. */
   const resolve = (kind, id, site) => {
-    // ids first, then the display-name aliases; each is scoped to the referrer's site before a target is chosen
-    const inScope = (list) => {
-      const scoped = kind === "site" ? list : list.filter((x) => x.site === site);
-      return scoped.length ? scoped : !site ? list : list.filter((x) => !x.site);   // an entity without a siteRef is shared
-    };
-    let pick = inScope(subjects[kind].get(id) || []);
-    if (!pick.length) pick = inScope(named[kind].get(id) || []);
+    // ids and display-name aliases together (as runProofFeeders matches), scoped to the referrer's site: a ref that
+    // matches two records there (one by id, one by name) is ambiguous and binds nothing
+    const all = [...(subjects[kind].get(id) || []), ...(named[kind].get(id) || [])];
+    const list = [...new Map(all.map((x) => [x.subject, x])).values()];
+    const scoped = kind === "site" ? list : list.filter((x) => x.site === site);
+    const pick = scoped.length ? scoped : !site ? list : list.filter((x) => !x.site);   // an entity without a siteRef is shared
     return pick.length === 1 ? pick[0].subject : null;
   };
   const entity = (subject, type, label, tags, refs, extra = []) => {

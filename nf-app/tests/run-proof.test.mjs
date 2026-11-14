@@ -122,3 +122,22 @@ test("a display-name ref is scoped to the referrer's site before an id at anothe
   })()`, ctx);
   assert.match(ttl, /phIoT:airRef local:u1 \./, ttl);
 });
+
+test("a ref matching one record's id and another's name at the same site binds nothing, as in the resolver", () => {
+  const ttl = vm.runInContext(`(() => {
+    const site = { uuid: "s", name: "Site", pointType: "SITE", attrs: { id: "s1" } };
+    const a = { uuid: "a", name: "A", pointType: "EQUIPMENT", attrs: { id: "X", siteRef: "s1" } };
+    const b = { uuid: "b", name: "B", pointType: "EQUIPMENT", attrs: { id: "B", siteRef: "s1", dis: "X" } };
+    const vav = { uuid: "v", name: "VAV", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "s1", airRef: "X" } };
+    return modelToTurtle({ sites: [site], equips: [a, b, vav], devices: [], points: [] }, "urn:test:", { nfBase: "" }).turtle;
+  })()`, ctx);
+  assert.doesNotMatch(ttl, /phIoT:airRef local:(a|b) \./, ttl);
+  const nf = vm.runInContext(`(() => {
+    const a = { uuid: "a", name: "A", pointType: "EQUIPMENT", attrs: { id: "X", siteRef: "s1" } };
+    const b = { uuid: "b", name: "B", pointType: "EQUIPMENT", attrs: { id: "B", siteRef: "s1", dis: "X" } };
+    const vav = { uuid: "v", name: "VAV", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "s1", airRef: "X" } };
+    return resolveRunProof(vav, { sites: [], equips: [a, b, vav], devices: [], points: [] }, catalog).found;
+  })()`, ctx);
+  assert.equal(nf, false);
+});
+

@@ -218,9 +218,20 @@ def nodes_from_graph(graph, catalog: Mapping | None = None) -> list[ProofNode]:
         return ident.get(o) or tail(o)
 
     out = []
+    # the subject name is an alias only when no other equipment shares it or has it as its identity, so a relationship
+    # written as a subject never matches a second equipment
+    tail_count: dict[str, int] = {}
+    for eq in equips:
+        tail_count[tail(eq)] = tail_count.get(tail(eq), 0) + 1
+    taken = set(ident.values())
+
+    def alias_of(eq) -> tuple[str, ...]:
+        t = tail(eq)
+        return (t,) if tail_count[t] == 1 and (t == ident[eq] or t not in taken) else ()
+
     for eq in sorted(equips, key=str):
         out.append(ProofNode(
-            id=ident[eq], site=site_of(eq), aliases=(tail(eq),),
+            id=ident[eq], site=site_of(eq), aliases=alias_of(eq),
             refs={r: ref_target(next(iter(objs(eq, r)))) for r in c["feeders"]["refs"] if objs(eq, r)},
             is_fed_by=tuple(ref_target(o) for o in objs(eq, "isFedBy")),
             feeds=tuple(ref_target(o) for o in objs(eq, "feeds")),

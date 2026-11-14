@@ -310,3 +310,21 @@ local:A3 a phIoT:equip ; rdfs:label "A3" ; phIoT:siteRef local:s3 .
     g.parse(data=ttl, format="turtle")
     sites = {n.id: n.site for n in nodes_from_graph(g)}
     assert len({sites["A1"], sites["A2"], sites["A3"]}) == 3
+
+
+def test_rdf_a_shared_subject_name_is_not_an_alias():
+    pytest.importorskip("rdflib")
+    import rdflib
+    ttl = """
+@prefix phIoT: <https://project-haystack.org/def/phIoT/3.9.13#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix local: <urn:test:> .
+@prefix other: <urn:other:> .
+local:s1 a phIoT:site ; rdfs:label "Site" .
+local:unit a phIoT:equip ; rdfs:label "A" ; phIoT:siteRef local:s1 .
+other:unit a phIoT:equip ; rdfs:label "unit" ; phIoT:siteRef local:s1 .
+"""
+    g = rdflib.Graph()
+    g.parse(data=ttl, format="turtle")
+    names = [n.names() for n in nodes_from_graph(g)]
+    assert sum("unit" in ns for ns in names) <= 1
