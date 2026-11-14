@@ -290,3 +290,23 @@ local:A3 a phIoT:equip ; rdfs:label "A3" ; phIoT:siteRef local:s3 .
     g.parse(data=ttl, format="turtle")
     sites = {n.id: n.site for n in nodes_from_graph(g)}
     assert sites["A1"] != sites["A3"]
+
+
+def test_rdf_identities_stay_unique_even_when_a_label_spells_another_subjects_iri():
+    rdflib = pytest.importorskip("rdflib")
+    ttl = """
+@prefix phIoT: <https://project-haystack.org/def/phIoT/3.9.13#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix local: <urn:test:> .
+@prefix other: <urn:other:> .
+local:s1 a phIoT:site ; rdfs:label "Site" .
+other:s1 a phIoT:site ; rdfs:label "Site" .
+local:s3 a phIoT:site ; rdfs:label "urn:test:s1" .
+local:A1 a phIoT:equip ; rdfs:label "A1" ; phIoT:siteRef local:s1 .
+local:A2 a phIoT:equip ; rdfs:label "A2" ; phIoT:siteRef other:s1 .
+local:A3 a phIoT:equip ; rdfs:label "A3" ; phIoT:siteRef local:s3 .
+"""
+    g = rdflib.Graph()
+    g.parse(data=ttl, format="turtle")
+    sites = {n.id: n.site for n in nodes_from_graph(g)}
+    assert len({sites["A1"], sites["A2"], sites["A3"]}) == 3

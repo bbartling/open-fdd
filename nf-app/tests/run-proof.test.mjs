@@ -97,9 +97,7 @@ test("a Turtle ref written as the feeder's display name points at the feeder's s
     const vav = { uuid: "v", name: "VAV", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "s1", airRef: "Main AHU" } };
     return modelToTurtle({ sites: [site], equips: [ahu, vav], devices: [], points: [] }, "urn:test:", { nfBase: "" }).turtle;
   })()`, ctx);
-  const subject = ttl.match(/^(local:\S+)\s+a phIoT:equip ;\s+rdfs:label "Main AHU"/m);
-  assert.ok(subject, ttl);
-  assert.match(ttl, new RegExp(`phIoT:airRef ${subject[1]}\\b`));
+  assert.match(ttl, /phIoT:airRef local:a \./, ttl);
 });
 
 test("a Turtle ref written as the feeder's dis points at the feeder's subject", () => {
@@ -110,4 +108,17 @@ test("a Turtle ref written as the feeder's dis points at the feeder's subject", 
     return modelToTurtle({ sites: [site], equips: [ahu, vav], devices: [], points: [] }, "urn:test:", { nfBase: "" }).turtle;
   })()`, ctx);
   assert.doesNotMatch(ttl, /Main_Floor_AHU/, ttl);
+  assert.match(ttl, /phIoT:airRef local:u1 \./, ttl);
+});
+
+test("a display-name ref is scoped to the referrer's site before an id at another site can win", () => {
+  const ttl = vm.runInContext(`(() => {
+    const s1 = { uuid: "s", name: "Site", pointType: "SITE", attrs: { id: "s1" } };
+    const s2 = { uuid: "t", name: "Other", pointType: "SITE", attrs: { id: "s2" } };
+    const ahu = { uuid: "u1", name: "u1", pointType: "EQUIPMENT", attrs: { siteRef: "s1", dis: "Main AHU" } };
+    const far = { uuid: "u2", name: "Main AHU", pointType: "EQUIPMENT", attrs: { id: "Main AHU", siteRef: "s2" } };
+    const vav = { uuid: "v", name: "VAV", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "s1", airRef: "Main AHU" } };
+    return modelToTurtle({ sites: [s1, s2], equips: [ahu, far, vav], devices: [], points: [] }, "urn:test:", { nfBase: "" }).turtle;
+  })()`, ctx);
+  assert.match(ttl, /phIoT:airRef local:u1 \./, ttl);
 });

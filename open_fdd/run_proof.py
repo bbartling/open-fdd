@@ -183,7 +183,16 @@ def nodes_from_graph(graph, catalog: Mapping | None = None) -> list[ProofNode]:
                 out[x] = lb
             else:
                 out[x] = tl if tails[tl] == 1 and tl not in labels else str(x)
-        return out
+        # last guard: any identity still shared falls back to the full IRI (unique per subject), until none is shared
+        while True:
+            seen: dict[str, list] = {}
+            for x, v in out.items():
+                seen.setdefault(v, []).append(x)
+            clash = [x for v, xs in seen.items() if len(xs) > 1 for x in xs if out[x] != str(x)]
+            if not clash:
+                return out
+            for x in clash:
+                out[x] = str(x)
 
     sites = identities({x for s in equips for x in objs(s, "siteRef")})
     site_of = lambda s: next((sites[x] for x in objs(s, "siteRef")), "")  # noqa: E731
