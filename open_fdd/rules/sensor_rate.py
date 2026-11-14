@@ -231,6 +231,7 @@ def evaluate_point(
     max_gap_hours: float = MAX_GAP_HOURS_DEFAULT,
     poll_seconds: float = 300.0,
     source_unit: str | None = None,
+    gate: pd.Series | None = None,
 ) -> dict[str, Any]:
     idx = values.index
     empty_mask = _false(idx)
@@ -331,6 +332,10 @@ def evaluate_point(
     max_15 = float(rates["rate_15min"].max()) if rates["rate_15min"].notna().any() else float("nan")
     max_60 = float(rates["rate_60min"].max()) if rates["rate_60min"].notna().any() else float("nan")
 
+    if gate is not None:
+        # run-proof gate: proof-off samples never count, and the evidence (counts, minutes, timestamps, message) is
+        # computed from the gated mask so it always agrees with the reported fault hours
+        confirmed = confirmed.reindex(idx).fillna(False) & gate.reindex(idx).fillna(False).astype(bool)
     viol = confirmed.reindex(idx).fillna(False)
     dt_h = rates["dt_hours"].reindex(idx)
     # Sum real intervals for violations; fall back to poll when dt missing (first sample)
@@ -449,6 +454,7 @@ def sv_rate_compute(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
             sensor_span=float(sensor_span) if sensor_span not in (None, "") else None,
             max_gap_hours=max_gap,
             poll_seconds=poll,
+            gate=gate,
         )
         ev["role"] = role
         ev["profile_resolution_source"] = src

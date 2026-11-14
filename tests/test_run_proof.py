@@ -210,6 +210,18 @@ def test_sensor_sweeps_honour_the_gate():
     res = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], none, equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0)
     assert res.status == "SKIPPED_NO_RUN_PROOF"
 
+def test_the_global_gate_switch_also_ungates_sweeps():
+    idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC")
+    none = pd.DataFrame({"outside-air-temp": 90.0}, index=idx)
+    none.attrs.update(equipment_id="EQ", equipment_type="AHU", role_units={"outside-air-temp": "\u00b0C"})
+    gated = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], none.copy(), equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0,
+                              params_by_rule={"SV-RANGE": {"confirm_min": 0}})
+    assert gated.status == "SKIPPED_NO_RUN_PROOF"
+    ungated = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], none.copy(), equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0,
+                                params_by_rule={"SV-RANGE": {"confirm_min": 0}}, require_operational_gates=False)
+    assert ungated.fault_hours and ungated.fault_hours > 0
+
+
 def test_ambiguous_feeder_name_binds_nothing():
     a = ProofNode("A", "s", aliases=("shared",), roles=frozenset({"fan_status"}))
     b = ProofNode("B", "s", aliases=("shared",), roles=frozenset({"fan_status"}))

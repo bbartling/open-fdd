@@ -603,6 +603,9 @@ def run_cookbook_rule(
                 )
             proof_ok = proof_on(proof)
             gate_meta = {**gate_meta, "run_proof_source": proof_src}
+        if rule.sensor_sweep and not require_operational_gates:
+            # the global switch off means ungated everywhere: sweeps gate inside the rule, so tell them too
+            params = {**params, "require_run_proof": 0}
         if rule.id == "ECON-3":
             raw = econ3_compute(d, params, poll_seconds, wx_ok)
         elif rule.id == "OAT-METEO":
