@@ -63,9 +63,8 @@ pass `ingest="as_is"` to see the raw behavior.
 
 ## Third leg: the SPARQL data client
 
-The `pandas == SQL == SPARQL-client` job (`tests/parity/sparql_leg.py`, `stress.py --sparql`) serves the synthetic data
-as a synthetic NF and runs the shipped `sparql-data` hook over it in Node (only NF's HTTP is mocked). It then fetches with
-`open_fdd.nf.sparql_data` and runs the oracle's own pandas rules on the client's frames. The job requires:
+The `pandas == SQL == SPARQL-client` job (`tests/parity/sparql_leg.py`) runs the shipped `sparql-data` hook over a
+synthetic NF, fetches with `open_fdd.nf.sparql_data`, and runs the oracle's pandas rules on the client's frames. It requires:
 
 - the client's frames to equal the oracle's frames;
 - the client's results to equal the oracle's (status, fault hours, and the samples that pass the gate);
