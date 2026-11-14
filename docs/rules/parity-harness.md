@@ -10,9 +10,6 @@ The parity harness is a versioned part of the `open-fdd` package (`open_fdd.pari
 database can use it to prove that the SQL result equals the pandas reference on the same data. It is stdlib plus
 pandas: `pip install open-fdd[oracle]` is all a third-party adapter needs. All values are SI.
 
-Older PyPI releases (4.5.4 and earlier) do not include it: install from git until a later release is published,
-`pip install "open-fdd[oracle] @ git+https://github.com/bbartling/open-fdd"`.
-
 ```python
 from open_fdd.parity import generate, reference, compare, Policy, run_adapter
 
@@ -70,36 +67,27 @@ synthetic NF, fetches with `open_fdd.nf.sparql_data`, and runs the oracle's pand
 - the client's results to equal the oracle's (status, fault hours, and the samples that pass the gate);
 - the same verdict against the SQL pack, under the same pinned known differences.
 
-Sweep membership and units come from fetched metadata (`sensor` markers) and are asserted. A Timescale-source
-test matches pandas on numeric inputs; irregular data equals epoch-bucket means.
-`test_sparql_motor_gate.py` runs the fan ON, then OFF, then ON (plus a command-only variant): a fault while OFF
-never counts, and a fault while ON counts the same in all three legs.
+Sweep membership and units come from fetched metadata (`sensor` markers). `test_sparql_motor_gate.py` pins that a
+fault while the fan is OFF never counts in any leg.
 
 ## CI tiers
 
-Every leg runs the same synthetic SI dataset: the pandas oracle, the SQL pack, and the SPARQL data client running the
-same pandas rule functions. A run fails when any leg disagrees with the others, a leg is skipped, or a leg errors.
+Each tier fails when any leg (pandas oracle, SQL pack, SPARQL client) disagrees, is skipped, or errors.
 
-| Tier | Datasets | Engines | When | Workflow / job |
-| --- | --- | --- | --- | --- |
-| PR | unit-level parity tests (the engine matrix, NF agent tools, deploy tool) | PGlite, SQLite, DuckDB | every push and PR | `parity.yml` / `pandas oracle vs SQL pack` (required) |
-| PR | 2x3 (2 equipment, 3 days), `basic` and `edge` | PGlite, SQLite, DuckDB + SPARQL client | every push and PR | `parity.yml` / `pandas == SQL == SPARQL-client` (required) |
-| PR | 2x3 `basic` and `edge` | PGlite, standalone PostgreSQL, DuckDB | every push and PR | `parity.yml` / `standalone PostgreSQL parity (no Timescale)` |
-| Large | 4x3 and 8x7 (8 equipment, 7 days), `basic` and `edge` | PGlite, SQLite, DuckDB + SPARQL client | nightly on master; `workflow_dispatch` before each release | `parity-stress.yml` / `three-way <size> <profile>` |
-| Large | 4x3 and 8x7, `basic` and `edge` | PGlite, standalone PostgreSQL, DuckDB | nightly on master; `workflow_dispatch` before each release | `parity-stress.yml` / `standalone PostgreSQL <size> <profile>` |
+| Tier | Data | When | Workflow / job |
+| --- | --- | --- | --- |
+| PR | unit-level parity tests | every PR | `parity.yml` / `pandas oracle vs SQL pack` (required) |
+| PR | 2x3 `basic` and `edge`, three-way | every PR | `parity.yml` / `pandas == SQL == SPARQL-client` (required) |
+| PR | 2x3, standalone PostgreSQL | every PR | `parity.yml` / `standalone PostgreSQL parity (no Timescale)` |
+| Large | 4x3 and 8x7, `basic` and `edge`, three-way and standalone PostgreSQL | nightly on master; before each release | `parity-stress.yml` |
 
-Required checks on `master` are `pandas == SQL parity / pandas oracle vs SQL pack` and
-`pandas == SQL parity / pandas == SQL == SPARQL-client`. Before a release, dispatch `parity-stress.yml` on the release
-branch (`gh workflow run parity-stress.yml -f ref=<branch>`) and link the green run in the release PR. Run a tier
-locally with `python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 8 --days 7 --profile edge --sparql`.
+Before a release, run `gh workflow run parity-stress.yml -f ref=<branch>` and link the green run.
 
 ### Each device scores from its own first row
 
-With the `edge` profile's +-60 s jitter, a device's first row can come before the nominal `meta["t0_ms"]`. Harness
-windows come from `Dataset.history_window_ms()`, which runs from the earliest actual row of any device (or the weather)
-to one step past the last row, and `Dataset.first_row_ms()` gives each device's first row. Never build a window from
-`t0`: a load window that starts at `t0` silently drops the early rows from one leg, and the legs then disagree even
-though the SQL is correct. `test_edge_jitter_first_rows_before_t0_and_harness_windows_start_there` pins this.
+Edge jitter can put a device's first row before `meta["t0_ms"]`. Build harness windows from
+`Dataset.history_window_ms()` (earliest actual row to one step past the last); `Dataset.first_row_ms()` gives each
+device's first row. A window that starts at `t0` drops early rows from one leg.
 
 ## Hash stability
 
@@ -157,10 +145,6 @@ The in-repo reference is `TimescaleAdapter` (`tests/parity/adapters.py`, runner 
 
 ## How a downstream app uses it
 
-1. Add `open-fdd[oracle]` to the test dependencies.
-2. Write an adapter for your database (or your ingest plus the rendered pack SQL).
-3. In CI: `generate` both profiles, `run_adapter`, `reference`, `compare`; fail the build on `not verdict.ok`.
-4. To test unit handling at ingest, push `to_imperial(ds)` through your ingest and expect the same verdict as the SI run.
-5. Differences you cannot fix go in your own `Policy(known={...})`, with a reason, not in a silent tolerance.
-
-From the repo: `python tests/parity/stress.py --equips 8 --days 7 [--profile edge]`.
+Add `open-fdd[oracle]` to the test dependencies, write an adapter, and in CI `generate` both profiles, `run_adapter`,
+`reference`, `compare`, failing on `not verdict.ok`. Push `to_imperial(ds)` through your ingest to test unit handling.
+Put differences you cannot fix in your own `Policy(known={...})` with a reason, never in a silent tolerance.
