@@ -75,3 +75,47 @@ tr.clickable:hover td { background: var(--panel2); }
 .tuners-subhead { margin: 12px 0 6px; font-size: 13px; color: var(--muted); }
 .tun-history { margin-top: 8px; font-size: 12px; }
 .tun-history ul { margin: 6px 0 0; padding-left: 18px; }
+
+/* ---- Overview (5.0.20): RCx dashboard on top, the Points section (one device) below ---------------------------- */
+#overviewRcx, #overviewPoints { display: grid; gap: 14px; margin-top: 14px; }
+#overviewPointsHead .scopebar { margin: 0; }
+
+/* ---- FDD tab (5.0.20): summary strip, faults-first list, one open rule, tuning drawer ------------------------- */
+.fdd-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 10px; }
+.fdd-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); font: inherit; }
+.fdd-chip b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.fdd-chip.fault b { color: var(--hot); } .fdd-chip.pass b { color: var(--good); }
+.fdd-chip.insufficient b { color: var(--warm); } .fdd-chip.skipped b { color: var(--muted); }
+.fdd-chip.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.fdd-list { display: grid; gap: 6px; }
+.fdd-item { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.fdd-item.fault { border-left: 4px solid var(--hot); } .fdd-item.insufficient { border-left: 4px solid var(--warm); }
+.fdd-item.pass { border-left: 4px solid var(--good); } .fdd-item.skipped { border-left: 4px solid var(--line); }
+.fdd-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 4px 12px; align-items: center; width: 100%; text-align: left;
+  padding: 8px 12px; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.fdd-row:hover { background: var(--row-hover); border-radius: 10px; }
+.fdd-hours { font-variant-numeric: tabular-nums; font-weight: 600; }
+.fdd-reason { grid-column: 2 / 4; color: var(--muted); font-size: 12px; }
+.fdd-badge { justify-self: start; font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--panel2); color: var(--muted); }
+.fdd-badge.fault { background: color-mix(in srgb, var(--hot) 18%, transparent); color: var(--hot); }
+.fdd-badge.pass { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.fdd-badge.insufficient { background: color-mix(in srgb, var(--warm) 18%, transparent); color: var(--warm); }
+.fdd-open { padding: 4px 14px 14px; border-top: 1px solid var(--cell-line); }
+.fdd-open h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; margin: 10px 0; }
+.fdd-detail-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 14px; margin-bottom: 8px; }
+.fdd-detail-grid h4 { margin: 0 0 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.fdd-si ul { margin: 0; padding-left: 16px; font-size: 13px; }
+.fdd-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 92vw); overflow: auto; z-index: 50;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: -12px 0 30px rgba(0, 0, 0, .18); padding: 14px 16px; }
+.fdd-drawer h2 { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 15px; margin: 0 0 10px; }
+.fdd-more > summary { cursor: pointer; font-weight: 600; }
+.fdd-more[open] > summary { margin-bottom: 10px; }
+.fdd-more > .panel { margin-top: 12px; }
+/* Weekly occupancy calendar: site-scoped, one editor and one reference line for every weekly runtime chart. */
+.occ-editor summary { cursor: pointer; font-weight: 650; margin-bottom: 12px; }
+.occ-editor table { max-width: 620px; margin: 12px 0; }
+.occ-editor th, .occ-editor td { padding: 5px 12px; text-align: left; }
+.occ-editor input[type="time"] { max-width: 110px; }
+.occ-editor > strong { display: block; margin: 8px 0; }
+.occ-editor > button, .occ-editor > span { margin-right: 10px; }

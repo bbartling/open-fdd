@@ -49,18 +49,23 @@ test("top bar: only the site (picker), the live pill, clock, units and theme; no
   assert.ok(!/equipPick/.test(text("app-core.js")), "no code still looks for the old top-bar equip picker");
 });
 
-test("each tab that needs an equip gets its own equip picker (the shell adds it), Full adds FDD / RCx / Export", () => {
+test("each tab that needs an equip gets its own equip picker (the shell adds it), Full adds FDD / Export; Overview's is in Points", () => {
   const core = text("app-core.js"), app = text("app.js");
-  assert.match(core, /ofddEquipScoped = new Set\(\["overview", "charts", "points"\]\)/);
+  assert.match(core, /ofddEquipScoped = new Set\(\["charts"\]\)/);
   assert.match(core, /className = "equip-pick"/);
-  if (edition === "full") assert.match(app, /for \(const tab of \["fdd", "rcx", "export"\]\) ofddEquipScoped\.add\(tab\)/);
+  assert.match(core, /name === "overview" && document\.getElementById\("overviewPointsScope"\)/);
+  if (edition === "full") assert.match(app, /for \(const tab of \["fdd", "export"\]\) ofddEquipScoped\.add\(tab\)/);
   else assert.ok(!/renderFdd|renderRcx|ofddTabs|ofddExport/.test(app), "Lite carries no FDD / RCx / export code");
 });
 
-test("equip choices come from the model and list Weather as its own entry", () => {
+test("equip choices come from the model, alphabetical, list Weather as its own entry and never offer all devices", () => {
   const ctx = load(), m = modelFor(ctx);
   const choices = Array.from(ctx.get("equipChoices")(m, "site-a"), (c) => [c.value, c.label]);
-  assert.deepEqual(choices, [["", "all equips (2)"], ["VAV-A", "Zone A"], ["VAV-B", "Zone B"], ["__weather__", "Weather"]]);
+  assert.deepEqual(choices, [["VAV-A", "Zone A"], ["VAV-B", "Zone B"], ["__weather__", "Weather"]]);
+  assert.ok(!choices.some(([v, l]) => v === "" || /^all /i.test(l)), "no all-devices entry");
+  const shuffled = { ...m, equips: [equip("VAV-10", "Zone 10"), equip("VAV-9", "Zone 9"), equip("AHU-1", "Air handler")] };
+  assert.deepEqual(Array.from(ctx.get("equipChoices")(shuffled, "site-a"), (c) => c.value).filter((v) => v !== "__weather__"), ["AHU-1", "VAV-9", "VAV-10"],
+    "alphabetical (natural numbers): the first one is the default");
   const noWx = { ...m, points: m.points.filter((p) => !p.weatherStationRef) };
   assert.ok(!ctx.get("equipChoices")(noWx, "site-a").some((c) => c.label === "Weather"), "no Weather entry without weather points");
 });
@@ -79,8 +84,32 @@ test("weather points are their own category: never an equip's sensors, selectabl
   // labels: the owner of a weather point is "Weather", of an equip point its equip name
   assert.equal(ctx.pointOwner(all.weather[0], all), "Weather");
   assert.equal(ctx.pointOwner(m.points.find((p) => p.uuid === "u-ZN-T"), all), "Zone A");
-  // the Points tab: Weather scope shows only weather points; an equip scope never shows them
-  assert.match(text("app-core.js"), /scope\.equip === WEATHER_SCOPE \? isWeatherPoint\(p\)/);
+  // the Overview Points section: the one picked device's points, the Weather category after them, never every device
+  assert.match(text("app-core.js"), /const inScope = \(p\) => !has\(p, "point"\) \|\| isWeatherPoint\(p\) \|\| \(!!eq && p\.equipRef === eq\)/);
+});
+
+test("nav: no RCx or Points tab; Overview holds the Points section (its only device picker) and, on Full, the RCx dashboard", () => {
+  const html = text("index.html");
+  const nav = html.slice(html.indexOf('<nav class="tabs"'), html.indexOf("</nav>"));
+  assert.ok(!/data-tab="(rcx|points)"/.test(nav), "the RCx and Points tabs are gone");
+  assert.ok(!/id="tab-(rcx|points)"/.test(html));
+  const ov = html.slice(html.indexOf('id="tab-overview"'), html.indexOf("<!-- Charts"));
+  for (const id of ["overviewPoints", "overviewPointsScope", "pointRows", "pointFilter", "histChart", "cards", "overviewIoRows", "nPoints"]) assert.match(ov, new RegExp(`id="${id}"`), id);
+  if (edition === "full") {
+    for (const id of ["overviewRcx", "rcxBody", "rcxKpis", "rcxAhuOn", "rcxRangeControl"]) assert.match(ov, new RegExp(`id="${id}"`), id);
+    assert.match(ov, /id="overviewRcx" hidden/, "the dashboard is hidden until a panel draws");
+    assert.ok(ov.indexOf('id="overviewRcx"') < ov.indexOf('id="overviewPoints"'), "dashboard first, Points below");
+    assert.ok(!/rcxMissing/.test(html + text("app.js")), "unavailable views are hidden, not listed");
+  } else assert.ok(!/rcx/i.test(ov), "Lite has no RCx dashboard");
+  assert.equal((ov.match(/<select/g) || []).length, 0, "the device picker is added by the shell into the Points section only");
+});
+
+test("old #rcx / #points links open Overview (hash rewritten); #tuning still opens FDD", () => {
+  const ctx = load();
+  assert.deepEqual({ ...ctx.get("TAB_ALIASES") }, { tuning: "fdd", rcx: "overview", points: "overview" });
+  const core = text("app-core.js");
+  assert.match(core, /if \(TAB_ALIASES\[activeTab\]\) \{[^}]*replaceState\(null, "", `#\$\{activeTab\}`\)/);
+  assert.match(core, /const requested = name, alias = TAB_ALIASES\[name\]/);
 });
 
 test("heat-map sensor dropdown: options come from the model, label = dis + unit, default unchanged", () => {

@@ -25,7 +25,7 @@ function load() {
   ctx.ofddRender = (chart, option, name) => { chart.setOption?.(option); ctx.rendered.push({ option: chart.option || option, name }); };
   ctx.series = new Map();                      // uuid -> [[ms, v]] served by the fetchSeries stub
   ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));
-  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "schedule.js", "charts.js", "rcx.js", "rcx-overview.js"]) {
+  for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "schedule.js", "occupancy.js", "charts.js", "rcx.js", "rcx-overview.js"]) {
     vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
   }
   ctx.fetchSeries = async (list) => new Map(list.map((p) => [p.uuid, ctx.series.get(p.uuid) || []]));
@@ -470,7 +470,7 @@ test("BAS vs web OAT is an FDD-tab chart (signals + OAT-METEO fault lane) under 
   assert.equal(ctx.rcxPlan([AHU], { points: [] , equips: [AHU], sites: [] }, catalog, { tab: "rcx" }).ready.some((r) => r.view.id === "bas-vs-web-oat"), false);
 });
 
-test("plant motors keep their weekly charts (the daily ones are registered only); cooling hours are one chart per equip", async () => {
+test("plant motors keep their weekly charts (the daily ones are registered only); cooling hours are one chart for all modeled cooling devices", async () => {
   const { ctx } = setup();
   const vs = views(ctx), byId = Object.fromEntries(vs.map((v) => [v.id, v]));
   for (const v of vs.filter((x) => /^weekly-/.test(x.id))) assert.ok(!v.tabHidden, `${v.id} is drawn`);
@@ -479,7 +479,7 @@ test("plant motors keep their weekly charts (the daily ones are registered only)
   }
   assert.deepEqual(Array.from(byId["runtime-daily-chiller"].roles.anyOf), ["chiller_status", "chiller_cmd"], "status before command");
   for (const id of ["mech-cooling-compressor-status", "mech-cooling-chiller-status", "mech-cooling-chiller-cmd"]) assert.equal(byId[id].tabHidden, true);
-  assert.equal(byId["mech-cooling-hours"].scope, "equip", "one chart per equip");
+  assert.equal(byId["mech-cooling-hours"].scope, "site", "one chart includes every relevant device (no picker)");
   assert.deepEqual(Array.from(byId["mech-cooling-hours"].roles.anyOf), ["chiller_status", "compressor_status", "dx_cooling", "chiller_cmd", "compressor_cmd", "dx_cool_cmd"], "statuses before commands; no CHW valve");
   // AHU / RTU DX proof binds (by markers, no catalog role needed)
   const RTU = rec("RTU-1", "EQUIPMENT", { id: "RTU-1", siteRef: "s", markers: "equip,ahu,rtu" });
@@ -503,33 +503,57 @@ test("plant motors keep their weekly charts (the daily ones are registered only)
   const r = await renderView(mk.ctx, mk.model, "runtime-daily-chiller", 48);
   assert.deepEqual(arr(r.out.option.series, (x) => [x.name, arr(x.data)]), [["CH-1 (status)", [12, 0]]]);
   const c = await renderView(mk.ctx, mk.model, "mech-cooling-hours", 48);
-  assert.deepEqual(arr(c.out.option.series, (x) => x.name), ["cooling on (status)"]);
-  assert.match(c.note, /status proof \(chiller status\)/);
+  assert.deepEqual(arr(c.out.option.series, (x) => x.name), ["CH-1"], "one series per device, named by the device");
+  assert.match(c.note, /CH-1: chiller status/, "the proof is the status, not the command");
   assert.ok(c.out.option.series[0].data.some((h) => h > 0));
+  // every cooling device of the site on ONE chart (no device picker): a chiller (status) and a DX rooftop unit (command)
+  const RTU2 = rec("RTU-2", "EQUIPMENT", { id: "RTU-2", siteRef: "s", markers: "equip,ahu,rtu" });
+  const both = setup([chp("CH-S", "chiller,run,sensor"), rec("DX2", "POINT", { siteRef: "s", equipRef: "RTU-2", markers: "point,his,dx,cool,cmd", kind: "Bool", unit: "" }),
+    rec("WX3", "POINT", { siteRef: "s", weatherStationRef: "w", markers: "point,weather,outside,air,temp,his", kind: "Number", unit: "°F" })]);
+  both.model.equips = [CH, RTU2];
+  both.ctx.series.set(both.byName("CH-S").uuid, hourly(48, (i) => (i < 12 ? 1 : 0)));
+  both.ctx.series.set(both.byName("DX2").uuid, hourly(48, (i) => (i >= 24 && i < 30 ? 1 : 0)));
+  both.ctx.series.set(both.byName("WX3").uuid, hourly(48, () => 75));
+  const cb = await renderView(both.ctx, both.model, "mech-cooling-hours", 48);
+  assert.deepEqual(arr(cb.out.option.series, (x) => x.name).sort(), ["CH-1", "RTU-2"]);
+  assert.match(cb.note, /RTU-2: dx cool cmd/);
 });
 
-test("weekly chart: min-run-hours control defaults to the schedule hours, a per-site override adds its own line and survives a reload", async () => {
-  const store = new Map();
+test("weekly chart: the reference line is the occupancy calendar's bare-minimum hours; weeks below it are shaded", async () => {
   const { ctx, model, byName } = setup();
-  ctx.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
-  ctx.series.set(byName("FAN-S").uuid, hourly(48, (i) => (i < 24 ? 1 : 0)));
-  const made = [];
-  const node = () => { const n = { dataset: {}, style: {}, listeners: {}, children: [], addEventListener(e, f) { this.listeners[e] = f; }, append(...c) { this.children.push(...c); }, appendChild(c) { this.children.push(c); }, remove() {} }; made.push(n); return n; };
-  const mkEl = () => ({ id: "chart-1", ownerDocument: { createElement: node }, parentNode: { querySelector: () => null, insertBefore() {} } });
+  ctx.series.set(byName("FAN-S").uuid, hourly(21 * 24, (i) => (i % 24 < 8 ? 1 : 0)));      // 8 h a day = 56 h a week
   const v = view(ctx, "weekly-fan"), bound = ctx.rcxBind(v, model.equips, model, catalog);
-  const run = async () => { made.length = 0; const el = mkEl(); const note = await v.render(el, ctx.rcxContext(v, bound, 48, model, catalog)); return { el, note, option: ctx.rendered[ctx.rendered.length - 1].option }; };
+  const run = async () => { const note = await v.render({}, ctx.rcxContext(v, bound, 21 * 24, model, catalog)); return { note, option: ctx.rendered[ctx.rendered.length - 1].option }; };
+  // no calendar saved, no NF schedule: the 4.x default line (50 h), 56 h weeks are above it
   let r = await run();
-  assert.ok(!r.option.series.some((s) => /^min-run:/.test(s.id || "")), "no override: only the schedule line");
-  const input = made.find((n) => n.type === "number");
-  assert.equal(input.value, "50", "the box shows the schedule default (50 h/week calendar)");
-  input.value = "60"; input.listeners.change();                                   // the user sets 60 h/week
-  assert.equal(store.get("openfdd-min-run-hours:s:fan"), "60", "persisted per site (and motor family)");
+  let ref = r.option.series.find((s) => /^schedule-ref:/.test(s.id || ""));
+  assert.ok(ref, "reference line present");
+  assert.equal(r.option.bareMinOccHoursPerWeek, 50);
+  assert.equal(r.option.belowWeeks.length, 0);
+  // the default calendar (Mon-Fri 06:00-18:00 = 60 h): full 56 h weeks fall below and are shaded
+  ctx.ofddOccCalendars = { s: ctx.ofddOccupancy.defaultCalendar("UTC") };
   r = await run();
-  const line = r.option.series.find((s) => s.id === "min-run:fan");
-  assert.equal(line.name, "Min run 60 h/week (set by you)");
-  assert.deepEqual(arr(line.data, (d) => d[1]), [60, 60]);
-  assert.equal(made.find((n) => n.type === "number").value, "60");
-  assert.match(r.note, /dashed line = min run hours\/week/);
+  ref = r.option.series.find((s) => /^schedule-ref:/.test(s.id || ""));
+  assert.match(ref.name, /^occupancy calendar 60 h\/week \(UTC\)/);
+  assert.ok(arr(ref.data, (d) => d[1]).every((h) => h === 60), "flat 60 h line");
+  assert.equal(r.option.bareMinOccHoursPerWeek, 60);
+  assert.ok(r.option.belowWeeks.length >= 2, "full weeks under 60 h are highlighted");
+  const area = r.option.series[0].markArea;
+  assert.equal(area.data.length, r.option.belowWeeks.length);
+  assert.match(r.note, /amber = \d+ weeks? below the line/);
+  assert.match(r.note, /bare-minimum occupied hours\/week/);
+  // a saved Sunday night shift wraps past midnight into Monday: 60 + 8 = 68 h
+  const cal = ctx.ofddOccupancy.defaultCalendar("UTC");
+  cal.days.sun = { occupied: true, start: "22:00", end: "06:00" };
+  ctx.ofddOccCalendars = { s: cal };
+  r = await run();
+  assert.equal(r.option.bareMinOccHoursPerWeek, 68);
   const legend = r.option.series.map((s) => s.name).filter((n) => /Avg OAT/.test(n));
   assert.ok(legend.every((n) => n.length < 20), "short legend names");
+});
+
+test("weekly runtime is the Overview's AHU chart: the daily AHU view is registered only", () => {
+  const { ctx } = setup();
+  assert.equal(view(ctx, "ahu-runtime-daily").tabHidden, true);
+  assert.ok(!view(ctx, "weekly-fan").tabHidden);
 });

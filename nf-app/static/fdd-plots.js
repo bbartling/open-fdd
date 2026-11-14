@@ -69,20 +69,22 @@
     if (!list.length) return { option: null, gridCount: 0, heightPx: 0 };
     const grids = [], xAxis = [], yAxis = [], series = [];
     list.forEach((g, i) => {
-      grids.push({ left: 64, right: 24, top: topPad + i * rowH, height: rowH - 12 });
+      grids.push({ left: 64, right: 150, top: topPad + i * rowH, height: rowH - 12 });   // right: room for the line labels
       xAxis.push(hiddenX(i, !withLane && i === list.length - 1));
       yAxis.push({ type: "value", gridIndex: i, scale: true, name: g.unit || g.family.replace(/^other:/, ""), nameTextStyle: { fontSize: 11 } });
       for (const s of g.series) {
         series.push({
           name: s.name, type: "line", xAxisIndex: i, yAxisIndex: i, showSymbol: false, connectNulls: false,
           step: s.kind === "Bool" ? "end" : false, lineStyle: { width: 1.6, ...(s.color ? { color: s.color } : {}) }, data: s.data,
+          // each line is labelled at its end instead of a legend (less clutter)
+          endLabel: { show: true, formatter: () => s.name, fontSize: 10, width: 140, overflow: "truncate" },
         });
       }
     });
     return {
       option: {
         title: { text: title, left: 8, top: 4, textStyle: { rich: FDD_RULE_RICH } },
-        legend: { top: 26, type: "scroll" },
+        legend: { show: false },
         tooltip: { trigger: "axis", axisPointer: { type: "line", link: [{ xAxisIndex: "all" }] } },
         axisPointer: { link: [{ xAxisIndex: "all" }] },
         grid: grids, xAxis, yAxis, series,
@@ -257,6 +259,33 @@
 
   const hourly = (arr) => new Map((arr || []).map(([t, v]) => [hourFloor(t), v]));
 
+  /** [[fromMs, toMs]] runs of consecutive samples where pred(v) holds; a run ends at the next sample (or one step on). */
+  function fddPlotSpans(arr, pred) {
+    const out = [], pts = (arr || []).filter(([t]) => Number.isFinite(t));
+    const step = pts.length > 1 ? pts[1][0] - pts[0][0] : 0;
+    let start = null;
+    for (let i = 0; i < pts.length; i++) {
+      const on = pred(pts[i][1]);
+      if (on && start == null) start = pts[i][0];
+      if (!on && start != null) { out.push([start, pts[i][0]]); start = null; }
+    }
+    if (start != null && pts.length) out.push([start, pts[pts.length - 1][0] + step]);
+    return out;
+  }
+  const SHADE_FAULT = "rgba(220, 38, 38, 0.13)", SHADE_OFF = "rgba(100, 116, 139, 0.16)";
+  /** Shade confirmed-fault spans (red) and equipment-OFF spans (grey) behind every signal grid (layout only). */
+  function fddPlotShade(option, gridCount, faultSpans, offSpans) {
+    const area = [...offSpans.map(([a, b]) => [{ xAxis: a, itemStyle: { color: SHADE_OFF } }, { xAxis: b }]),
+      ...faultSpans.map(([a, b]) => [{ xAxis: a, itemStyle: { color: SHADE_FAULT } }, { xAxis: b }])];
+    if (!area.length) return option;
+    for (let i = 0; i < gridCount; i++) {
+      const s = (option.series || []).find((x) => (x.xAxisIndex || 0) === i && x.type === "line");
+      if (s) s.markArea = { silent: true, data: area };
+    }
+    return option;
+  }
+  const RUN_PROOF_ROLES = ["run_proof", "fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "fan_cmd", "chw_pump_cmd"];
+
   /** Latest persisted sweep result, in fault hours per assessed sensor role. */
   function fddPlotSensorFaultHours(point) {
     const attrs = point?.rec?.attrs || {};
@@ -346,6 +375,13 @@
       withLane: lane.length > 0 || sensorLanes.length > 0,
     });
     if (!built.option) return "No history for the bound inputs in this range.";
+    // red = confirmed fault, grey = the equipment's run proof says OFF (status first, else command; SI fraction <= 5 %)
+    const proofRole = RUN_PROOF_ROLES.find((r) => bound[r] && bound[r][0]);
+    const proofPt = proofRole ? bound[proofRole][0] : null;
+    const proofSeries = proofPt ? (sigRaw.get(proofPt.uuid) || (await fetchSeries([proofPt], hours, { windowSec })).get(proofPt.uuid) || []) : [];
+    const offSpans = proofPt ? fddPlotSpans(rcxToSI(proofSeries, proofPt), (v) => v != null && Number(v) <= 0.05) : [];
+    const faultSpans = sensorLanes.length ? [] : fddPlotSpans(lane, (f) => f === 1);
+    fddPlotShade(built.option, built.gridCount, faultSpans, offSpans);
     built.option = rcxWithFaultLane(built.option, sensorLanes.length
       ? sensorLanes.map((x) => ({ name: `${rule.id} · ${x.label}`, data: x.data }))
       : [{ name: rule.id, data: lane }]);
@@ -365,11 +401,12 @@
     }
     if (lane.source === "none") return `${roles.length} inputs · no result point yet (the FDD hook has not written ${rule.id} for this equip)`;
     const confirmed = lane.filter(([, f]) => f === 1).length, gaps = lane.filter(([, f]) => f == null).length;
+    const shadeNote = faultSpans.length || offSpans.length ? ` · shaded: ${[faultSpans.length ? "red = confirmed fault" : "", offSpans.length ? `grey = equipment off (${proofRole.replace(/_/g, " ")})` : ""].filter(Boolean).join(", ")}` : "";
     if (lane.source === "timeline") {
       return `${roles.length} inputs · confirmed fault in ${confirmed} of ${lane.length - gaps} assessed samples`
-        + (gaps ? ` · ${gaps} gap${gaps === 1 ? "" : "s"} (not assessed)` : "") + sensorNote;
+        + (gaps ? ` · ${gaps} gap${gaps === 1 ? "" : "s"} (not assessed)` : "") + sensorNote + shadeNote;
     }
-    return `${roles.length} inputs · approximate: fault in ${confirmed} of ${lane.length} hourly results (no per-timestamp timeline for ${rule.id} yet)` + sensorNote;
+    return `${roles.length} inputs · approximate: fault in ${confirmed} of ${lane.length} hourly results (no per-timestamp timeline for ${rule.id} yet)` + sensorNote + shadeNote;
   }
 
   /** Fallback lane from a rolling fault_pct series (no timeline point): [[ms, 1|0]], nulls kept, tagged approximate. */
@@ -545,7 +582,7 @@
   });
 
   Object.assign(globalThis, {
-    fddRulePlot, fddPlotMaskLanes, fddPlotExpandRoles, fddPlotRuleOption, fddPlotOatOption, fddPlotHealthStates,
+    fddPlotSpans, fddPlotShade, fddRulePlot, fddPlotMaskLanes, fddPlotExpandRoles, fddPlotRuleOption, fddPlotOatOption, fddPlotHealthStates,
     fddPlotHealthOption, fddPlotSensorMasks, fddPlotSensorFaultOption, fddPlotUnitFamily: unitFamily, fddPlotLimits: SENSOR_LIMITS,
     fddPlotSweepLanes, fddPlotSweepLimits, fddPlotHookSensors, fddPlotSweepScore, fddPlotWorstSensor, FDD_SWEEP_LANES: SWEEP_LANES,
   });

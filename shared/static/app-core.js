@@ -1,6 +1,7 @@
 // Open-FDD dashboard shell, shared by both editions (source: shared/static/app-core.js, copied into nf-app/ and lite/ by
 // scripts/nf/sync_shared.py). It owns what Full and Lite have in common: the top bar (site picker, live pill, theme), the
-// per-tab equip pickers, the tab router, Overview, Charts, Points, BACnet Server and Model & RDF, and the live loop.
+// per-tab equip pickers, the tab router, Overview (with its Points section), Charts, BACnet Server and Model & RDF, and the
+// live loop. There is no "all devices" choice anywhere: a picker always names one device (or the Weather category).
 // Everything renders from `model` (model.js: Haystack SITE / EQUIPMENT / DEVICE records + point markers and refs), so the
 // same page works on any NF whose points are tagged. The edition's own app.js loads after this file, registers the tabs
 // only that edition has (Full: FDD, RCx, Export, ...) through the ofdd* registries below, then calls main().
@@ -15,7 +16,9 @@ const CHART_REFRESH_MS = 5 * 60e3;
 /** Tabs only one edition has: tab name -> render function (may return a promise). */
 const ofddTabs = /** @type {Record<string, () => any>} */ ({});
 /** Tabs that get an equip picker at the top (the top bar has only the site). Editions add their own. */
-const ofddEquipScoped = new Set(["overview", "charts", "points"]);
+const ofddEquipScoped = new Set(["charts"]);   // Overview's one device picker sits in its Points section (#overviewPointsScope)
+/** Old tab links that now open another tab (#rcx and #points were folded into Overview in 5.0.20). */
+const TAB_ALIASES = /** @type {Record<string, string>} */ ({ tuning: "fdd", rcx: "overview", points: "overview" });
 /** Functions run once by wireControls() (the edition's own buttons and inputs). */
 const ofddWire = /** @type {Array<() => void>} */ ([]);
 /** Functions run after a theme switch, once the shared tabs have redrawn. */
@@ -30,7 +33,7 @@ const fmtPoint = (p) => {
 };
 
 let model = null;                        // loadModel() result
-const scope = { site: "", equip: "" };   // equip "" = every equip on the site; WEATHER_SCOPE = the weather points
+const scope = { site: "", equip: "" };   // equip = ONE equip id (or WEATHER_SCOPE = the weather points); "" only before a site loads
 let points = [];          // numeric sensor/sp points on the scoped equips (cards + charts)
 let variables = [];       // `weather` points on the site
 let statusPts = [];       // kind Bool points on the scoped equips (status chips)
@@ -38,7 +41,7 @@ let sparkHist = new Map();  // uuid -> [[ms, value], ...] for the sparklines (+ 
 let sparkRangeRead = 0;
 let sparkCustomEnd = Infinity;
 const chartSel = { id: "", hours: 0, point: "" };  // Charts tab: the one chart on screen
-let selectedPoint = null; // Points tab
+let selectedPoint = null; // Overview Points section
 let pointHistoryRead = 0;
 let activeTab = "overview";
 // Chart instances live in theme.js (one per element, rebuilt on a theme switch).
@@ -47,7 +50,6 @@ const mk = (id) => ofddChart($(id));
 // ---- scope: which points each tab shows, decided by tags --------------------------
 const OVERVIEW_EQUIP_KEY = "openfdd.overview.equip";
 let overviewSelection = { site: "", equipId: "", mode: "auto", reason: "" };
-const deliberateAllTabs = new Set();
 
 function loadOverviewEquipMap() {
   try {
@@ -106,27 +108,29 @@ const activeEquipScope = () => {
 const scopedSets = () => pointSets(model, scope.site, activeEquipScope());
 
 /**
- * Entries of the equip pickers for one site: every equip, plus "Weather" as its own entry when the site has weather
- * points (weather is a category of its own, never an equip's sensors).
+ * Entries of the equip pickers for one site: every equip by name (alphabetical), plus "Weather" as its own entry when the
+ * site has weather points (weather is a category of its own, never an equip's sensors). No "all devices" entry: a picker
+ * always names one device, and the first one alphabetically is the default.
  * @returns {{value: string, label: string}[]}
  */
 function equipChoices(m, site) {
-  const equips = m.equips.filter((e) => (e.attrs || {}).siteRef === site);
+  const equips = m.equips.filter((e) => (e.attrs || {}).siteRef === site)
+    .map((e) => ({ value: idOf(e), label: equipLabelOf(e) }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }) || a.value.localeCompare(b.value));
   const weather = m.points.some((p) => p.siteRef === site && has(p, "point") && isWeatherPoint(p));
-  return [{ value: "", label: `all equips (${equips.length})` },
-    ...equips.map((e) => ({ value: idOf(e), label: equipLabelOf(e) })),
-    ...(weather ? [{ value: WEATHER_SCOPE, label: WEATHER_LABEL }] : [])];
+  return [...equips, ...(weather ? [{ value: WEATHER_SCOPE, label: WEATHER_LABEL }] : [])];
 }
 
-/** One equip picker at the top of every tab that needs one (the top bar only has the site). */
+/** One equip picker at the top of every tab that needs one (the top bar only has the site); Overview's in its Points section. */
 function ensureScopeBars() {
-  for (const name of ofddEquipScoped) {
+  for (const name of [...ofddEquipScoped, "overview"]) {
     const tab = document.getElementById(`tab-${name}`);
     if (!tab || tab.querySelector(".scopebar")) continue;
+    const host = (name === "overview" && document.getElementById("overviewPointsScope")) || tab;
     const bar = document.createElement("div"), label = document.createElement("label"), pick = document.createElement("select");
     bar.className = "scopebar"; label.className = "scope"; pick.className = "equip-pick";
     pick.setAttribute("aria-label", "equip");
-    label.append("equip ", pick); bar.append(label);
+    label.append(name === "overview" ? "device " : "equip ", pick); bar.append(label);
     if (name === "overview") {
       const autoBtn = document.createElement("button");
       autoBtn.type = "button";
@@ -139,7 +143,7 @@ function ensureScopeBars() {
       reason.id = "overviewScopeReason";
       bar.append(autoBtn, reason);
     }
-    tab.prepend(bar);
+    host.prepend(bar);
   }
 }
 
@@ -149,7 +153,9 @@ function fillPickers(opts = {}) {
   ensureScopeBars();
   overviewSelection = resolveOverviewSelection(model, scope.site, opts);
   const choices = equipChoices(model, scope.site);
-  if (!choices.some((c) => c.value === scope.equip)) scope.equip = "";
+  if (!choices.some((c) => c.value === scope.equip)) {   // never "all": the Overview device, else the first one alphabetically
+    scope.equip = choices.some((c) => c.value === overviewSelection.equipId) ? overviewSelection.equipId : (choices[0] || { value: "" }).value;
+  }
   const singleEquips = eligibleSingleEquips(model, scope.site);
   const singleHtml = singleEquips.length
     ? singleEquips.map((e) => `<option value="${esc(idOf(e))}">${esc(equipLabelOf(e))}</option>`).join("")
@@ -407,9 +413,9 @@ const pointGroup = (p) => (isWeatherPoint(p) ? "￿" : p.equipRef || "");
 function pointRows() {
   const showUntagged = $("showUntagged").checked;
   const tokens = $("pointFilter").value.toLowerCase().split(/[\s,]+/).filter(Boolean);
-  const inScope = (p) => !scope.equip ? true
-    : scope.equip === WEATHER_SCOPE ? isWeatherPoint(p)
-    : (!isWeatherPoint(p) && p.equipRef === scope.equip) || !has(p, "point");
+  // the Overview device's points, the site's Weather category after them, and (opt-in) untagged objects; never every device
+  const eq = overviewEquipId();
+  const inScope = (p) => !has(p, "point") || isWeatherPoint(p) || (!!eq && p.equipRef === eq);
   return model.points
     .filter((p) => p.siteRef === scope.site && (showUntagged || has(p, "point")))
     .filter(inScope)
@@ -432,7 +438,7 @@ function renderPoints() {
       .filter(Boolean).join("<br>") || "–";
     const ts = p.latest?.ts ? new Date(parseTs(p.latest.ts)).toLocaleTimeString() : "–";
     const g = has(p, "point") ? pointGroup(p) : "\u0000untagged";
-    const head = g !== group && !scope.equip
+    const head = g !== group
       ? `<tr class="grouprow"><td colspan="6">${esc(!has(p, "point") ? "Untagged objects" : weather ? WEATHER_LABEL : names[p.equipRef] || p.equipRef || "Site")}</td></tr>` : "";
     group = g;
     return `${head}<tr class="pick ${selectedPoint === p.uuid ? "sel" : ""}" data-uuid="${p.uuid}">
@@ -704,9 +710,12 @@ function download(name, text, type) {
 // ---- tabs + live loop -----------------------------------------------------------------
 function renderTab(name) {
   const errs = (e) => setLive(false, e.message);
-  if (name === "overview") refreshOverviewSparks();
+  if (name === "overview") {
+    refreshOverviewSparks();
+    renderPoints();
+    renderPointHistory().catch(errs);
+  }
   if (name === "charts") renderCharts().catch(errs);
-  if (name === "points") { renderPoints(); if (selectedPoint) renderPointHistory().catch(errs); }
   if (name === "bacnet") renderBacnet().catch((e) => ($("bacHint").textContent = `BACnet server: ${e.message}`));
   if (name === "model") renderModel();
   if (ofddTabs[name]) {                      // a tab only this edition has
@@ -717,17 +726,20 @@ function renderTab(name) {
 }
 
 function showTab(name) {
-  if (name === "tuning") name = "fdd";
-  if (name === "tuning") name = "fdd";
+  const requested = name, alias = TAB_ALIASES[name];
+  if (alias) name = alias;
   if (!$(`tab-${name}`)) name = "overview";
   activeTab = name;
   document.querySelectorAll("#tabs button").forEach((/** @type {HTMLElement} */ b) => b.classList.toggle("on", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === `tab-${name}`));
   // Keep the tab in the URL hash so a link opens straight on it.
-  if (location.hash !== `#${name}`) window.history.replaceState(null, "", `#${name}`);
+  // (a tab may keep its own state after the name, e.g. #fdd?equip=…&rule=…)
+  if (location.hash.split(/[?&]/)[0] !== `#${name}`) window.history.replaceState(null, "", `#${name}`);
   ({ cards: points, weather: variables, status: statusPts } = scopedSets());
   if (name === "overview") { renderCards(); renderChips(); renderOverviewIo(); }
   renderTab(name);
+  const pointsEl = requested === "points" ? document.getElementById("overviewPoints") : null;
+  if (pointsEl && typeof pointsEl.scrollIntoView === "function") pointsEl.scrollIntoView();   // an old #points link lands on the section
 }
 
 // ---- live values: NF push stream, polling as fallback ------------------------------------
@@ -767,7 +779,7 @@ function onUpdate(u) {
     }
     changed.clear();
     renderChips();
-    if (activeTab === "points") renderPoints();
+    if (activeTab === "overview") renderPoints();
     setLive(true, `live (push) · ${new Date().toLocaleTimeString()}`);
   }, 250);
 }
@@ -798,8 +810,7 @@ async function refreshLive() {
     }
     statusPts = scopedSets().status;
     renderChips();
-    if (activeTab === "overview") renderOverviewIo();
-    if (activeTab === "points") renderPoints();
+    if (activeTab === "overview") { renderOverviewIo(); renderPoints(); }
     if (activeTab === "bacnet") renderBacnet().catch((e) => ($("bacHint").textContent = `BACnet server: ${e.message}`));
     setLive(true, `${streamUp ? "live (push)" : "polling"} · ${new Date().toLocaleTimeString()}`);
     return true;
@@ -824,8 +835,7 @@ function wireControls() {
   $("tabs").onclick = (ev) => { const b = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (ev.target).closest("button")); if (b) showTab(b.dataset.tab); };
   $("sitePick").onchange = () => {
     scope.site = $("sitePick").value;
-    scope.equip = "";
-    deliberateAllTabs.clear();
+    scope.equip = "";   // fillPickers picks the Overview device, else the first one alphabetically
     overviewSelection = { site: "", equipId: "", mode: "auto", reason: "" };
     fillPickers();
     applyScope().catch(showErr);
@@ -836,10 +846,10 @@ function wireControls() {
     if (!btn) return;
     saveOverviewEquipForSite(scope.site, "");
     fillPickers({ forceAuto: true });
-    if (!deliberateAllTabs.size && overviewSelection.equipId) scope.equip = overviewSelection.equipId;
+    if (overviewSelection.equipId) scope.equip = overviewSelection.equipId;
     applyScope().catch(showErr);
   });
-  // The equip pickers sit inside their tabs: Overview persists its own single-equip pick per site and never wipes deliberate All on FDD/RCx.
+  // The equip pickers sit inside their tabs: Overview (its Points section) persists its own pick per site and the other tabs follow it.
   document.addEventListener("change", (ev) => {
     const sel = /** @type {HTMLElement} */ (ev.target).closest?.(".equip-pick");
     if (!sel) return;
@@ -849,11 +859,9 @@ function wireControls() {
       if (val) {
         saveOverviewEquipForSite(scope.site, val);
         overviewSelection = { site: scope.site, equipId: val, mode: "manual", reason: "Manual selection (saved for this site)." };
-        if (!deliberateAllTabs.has("fdd") && !deliberateAllTabs.has("rcx")) scope.equip = val;
+        scope.equip = val;
       }
-    } else {
-      if (val === "") deliberateAllTabs.add(tabId);
-      else deliberateAllTabs.delete(tabId);
+    } else if (val) {
       scope.equip = val;
     }
     fillPickers();
@@ -883,7 +891,7 @@ function wireControls() {
     points: model.points.filter((p) => p.tags.length).map((p) => p.rec),
   }, null, 2), "application/json");
   window.addEventListener("popstate", () => {
-    const restoredTab = (location.hash || `#${activeTab}`).slice(1);
+    const restoredTab = (location.hash || `#${activeTab}`).slice(1).split(/[?&]/)[0];
     showTab(restoredTab);
   });
   // Theme switch: theme.js disposed every chart; draw the visible ones again.
@@ -900,8 +908,11 @@ async function main() {
   model = await loadModel();
   scope.site = idOf(model.sites[0]);
   fillPickers();
-  activeTab = (location.hash || "#overview").slice(1);
-  if (activeTab === "tuning") activeTab = "fdd";
+  activeTab = (location.hash || "#overview").slice(1).split(/[?&]/)[0];
+  if (TAB_ALIASES[activeTab]) {          // an old #rcx / #points link: open Overview and rewrite the hash
+    activeTab = TAB_ALIASES[activeTab];
+    window.history.replaceState(null, "", `#${activeTab}`);
+  }
   if (!$(`tab-${activeTab}`)) activeTab = "overview";
   document.querySelectorAll("#tabs button").forEach((/** @type {HTMLElement} */ b) => b.classList.toggle("on", b.dataset.tab === activeTab));
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === `tab-${activeTab}`));

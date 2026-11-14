@@ -1,1 +1,5 @@
 /* Open-FDD Lite styles on top of base.css (shared/static/base.css): nothing edition-specific yet. */
+
+/* ---- Overview (5.0.20): the Points section (one device) ------------------------------------------------------- */
+#overviewPoints { display: grid; gap: 14px; margin-top: 14px; }
+#overviewPointsHead .scopebar { margin: 0; }

@@ -325,10 +325,14 @@
     if (!S) return out;
     let schedules = [];
     try { if (typeof api === "function") schedules = await S.loadSchedules(api); } catch (e) { schedules = []; }
+    const O = occ();
     for (const ref of new Set(eqs.map(siteOf))) {
       const rec = ((ctx.model && ctx.model.sites) || []).find((r) => ((r.attrs && r.attrs.id) || r.name) === ref);
       const tz = siteZone(rec);
-      const schedule = S.pickSiteSchedule(schedules, ctx.model, ref) || S.defaultSchedule(tz);
+      // 5.0.20: the site's occupancy calendar (saved on the Overview, or the draft being edited) comes first; without
+      // one, unchanged: an NF schedule bound to the site, else the 4.x default (the FDD hook's occ_mode uses the same).
+      const cal = O && occCalendarOf(ref);
+      const schedule = cal ? O.calendarSchedule(cal) : S.pickSiteSchedule(schedules, ctx.model, ref) || S.defaultSchedule(tz);
       const zone = schedule.tz || tz || null;
       out.set(ref, { siteRef: ref, schedule, tz: zone, weekOf: weekIndexer(zone), occ: (ms) => S.occupied(schedule, ms, zone) });
     }
@@ -353,38 +357,27 @@
     return { perEq, sites };
   }
 
-  // ---- min-run-hours threshold: default from the schedule, user override kept in localStorage per site ----------------
-  const DEFAULT_MIN_RUN_HOURS = 50;                 // Mon-Fri 07-17: the calendar used when a site has no schedule
-  const minRunKey = (site, motorId) => `openfdd-min-run-hours:${site || "site"}:${motorId}`;
-  function readMinRun(key) {
-    try { const v = Number(globalThis.localStorage && globalThis.localStorage.getItem(key)); return Number.isFinite(v) && v > 0 && globalThis.localStorage.getItem(key) !== "" ? v : null; }
-    catch (e) { return null; }
+  // ---- occupancy calendar (static/occupancy.js = ofddOccupancy) -------------------------------------------------------
+  const occ = () => globalThis.ofddOccupancy || null;
+  /** The calendar the page (or the analytics hook) set for a site: globalThis.ofddOccCalendars[siteRef], else null. */
+  function occCalendarOf(siteRef) {
+    const all = globalThis.ofddOccCalendars;
+    const c = all && (all instanceof Map ? all.get(siteRef) : all[siteRef]);
+    return c && typeof c === "object" ? c : null;
   }
-  function writeMinRun(key, v) {
-    try { if (v == null) globalThis.localStorage.removeItem(key); else globalThis.localStorage.setItem(key, String(v)); } catch (e) { /* storage blocked: the override lasts for this view only */ }
-  }
-  /** Number box above the chart (inside its card): sets / clears the override, then redraws the chart. No-op without a DOM. */
-  function minRunControl(el, { key, value, def, custom, onChange }) {
-    const doc = el.ownerDocument;
-    if (!doc || !doc.createElement || !el.parentNode) return;
-    const prev = el.parentNode.querySelector && el.parentNode.querySelector(`.rcx-thresh[data-for="${el.id}"]`);
-    if (prev) prev.remove();
-    const box = doc.createElement("div");
-    box.className = "rcx-thresh"; box.dataset.for = el.id;
-    const label = doc.createElement("label"); label.textContent = "Min run hours / week ";
-    const input = doc.createElement("input");
-    input.type = "number"; input.min = "1"; input.max = "168"; input.step = "1"; input.value = String(+value.toFixed(1));
-    input.addEventListener("change", () => {
-      const v = Number(input.value);
-      writeMinRun(key, Number.isFinite(v) && v > 0 ? v : null);
-      onChange();
-    });
-    label.appendChild(input);
-    const reset = doc.createElement("button");
-    reset.type = "button"; reset.className = "btn"; reset.textContent = `Reset (${+def.toFixed(1)})`; reset.hidden = !custom;
-    reset.addEventListener("click", () => { writeMinRun(key, null); onChange(); });
-    box.append(label, reset);
-    el.parentNode.insertBefore(box, el);
+  /** Bare-minimum occupied hours per week of a site entry: its schedule's nominal week (calendar, NF schedule or default). */
+  const bareMinOf = (site) => (site && site.schedule && Number.isFinite(site.schedule.hoursPerWeek) ? site.schedule.hoursPerWeek : null);
+  M.bareMinOf = bareMinOf;
+  M.occCalendarOf = occCalendarOf;
+
+  // The reference line is the occupancy calendar's bare-minimum hours (edited on the Overview, saved per site); the old
+  // per-browser min-run override box is gone (5.0.20): one setter, shared by every chart, export and the analytics hook.
+  const DEFAULT_MIN_RUN_HOURS = 50;                 // the 4.x default schedule (no calendar saved, no NF schedule)
+
+  /** The reference hours for week k: the first site's schedule week (calendar = bare-min), else the default. */
+  function refAt(refs, k, def) {
+    for (const r of refs) if (r.weeks && r.weeks.has(k)) return r.weeks.get(k);
+    return def;
   }
 
   async function renderWeekly(el, ctx, motor, role) {
@@ -421,19 +414,18 @@
         const end = site.tz ? S.localWeekStartMs(ks[ks.length - 1] + 8 * 86400e3, site.tz) : ks[ks.length - 1] + WEEK_MS;
         const label = infos[0].label + (sites.size > 1 ? ` · ${site.siteRef}` : "");
         if (!refs.length) defaultMin = infos[0].hours;
-        refs.push({ site, label, end });
+        refs.push({ site, label, end, weeks: new Map(ks.map((k, i) => [k, infos[i].hours])) });
         series.push({ id: `schedule-ref:${site.siteRef}`, name: label, type: "line", step: "end", showSymbol: false, z: 5,
           lineStyle: { width: 2, type: "dashed" }, data: [...ks.map((k, i) => [k, infos[i].hours]), [end, infos[infos.length - 1].hours]] });
       }
     }
-    // The user's override (per site, kept in localStorage) adds its own flat line on top of the schedule default.
-    const siteRef = siteOf(perEq[0].eq), key = minRunKey(siteRef, motor.id), override = readMinRun(key);
     const xEnd = Math.max(starts[starts.length - 1] + WEEK_MS, ...refs.map((r) => r.end));
-    if (override != null) {
-      series.push({ id: `min-run:${motor.id}`, name: `Min run ${+override.toFixed(1)} h/week (set by you)`, type: "line", showSymbol: false, z: 6,
-        lineStyle: { width: 2, type: "dashed", color: "#dc2626" }, data: [[starts[0], override], [xEnd, override]] });
+    const bareMin = bareMinOf(perEq[0].site);
+    if (motor.id === "fan" && ctx.kpi) {
+      const full = perEq.flatMap((p) => [...p.weeks.values()].filter((w) => !w.partial).map((w) => w.hours));
+      if (full.length) ctx.kpi({ id: "ahu-run-hours-week", label: "AHU run hours / week", value: `${(full.reduce((x, y) => x + y, 0) / full.length).toFixed(1)} h`,
+        sub: `bare-min occupied ${+defaultMin.toFixed(1)} h/week`, order: 40 });
     }
-    minRunControl(el, { key, value: override != null ? override : defaultMin, def: defaultMin, custom: override != null, onChange: () => renderWeekly(el, ctx, motor, role) });
     // mean OAT while on: averaged in degC, shown in the display system
     const oatMeans = ctx.dispSeries(starts.map((k) => [k, rcxStats.mean(perEq.map((p) => p.weeks.get(k)?.oat))]).filter(([, v]) => v != null), TEMP)
       .map(([k, v]) => [k, +v.toFixed(1)]);
@@ -453,6 +445,18 @@
         ...(oatMeans.length ? [{ type: "value", name: oatUnit, position: "right", scale: true, splitLine: { show: false } }] : [])],
       series,
     };
+    // Weeks where an equip ran fewer hours than the bare-minimum occupied hours (the reference line) are shaded amber.
+    const below = [];
+    for (const k of starts) {
+      const ref = refAt(refs, k, defaultMin);
+      if (perEq.some((p) => p.weeks.has(k) && !p.weeks.get(k).partial && p.weeks.get(k).hours < ref - 1e-9)) below.push(k);
+    }
+    if (below.length && series.length) {
+      series[0] = { ...series[0], markArea: { silent: true, itemStyle: { color: "rgba(245,158,11,0.14)" },
+        data: below.map((k) => [{ xAxis: k, name: "below min" }, { xAxis: k + WEEK_MS }]) } };
+    }
+    option.belowWeeks = below;
+    option.bareMinOccHoursPerWeek = bareMin != null ? bareMin : defaultMin;
     const lanes = motor.faults ? await faultLanes(ctx, motor.faults, eqs) : [];
     let out = lanes.length ? rcxWithFaultLane(option, lanes) : option;
     out = { ...out, xAxis: [].concat(out.xAxis).map((x) => ({ ...x, min: xMin, max: xMax })) };   // bars and lane share one range
@@ -460,8 +464,9 @@
     return `ISO weeks (${tzLabel}), ${starts.length} shown; ${partial.size ? `${partial.size} partial (under 6 days of data); ` : ""}`
       + `on = signal > ${ON * 100}%${role.endsWith("_status") ? " (status)" : " (command)"}`
       + (perEq.some((p) => p.site) ? "; hatched = after-hours run time" : "")
-      + `; dashed line = min run hours/week (schedule${override != null ? ", or the value you set" : ""}); dotted = average outdoor-air temperature while on`
-      + (refs.length ? `; ${refs.map((r) => r.label).join(", ")}` : "");
+      + `; dashed line = bare-minimum occupied hours/week (occupancy calendar or NF schedule); dotted = average outdoor-air temperature while on`
+      + (refs.length ? `; ${refs.map((r) => r.label).join(", ")}` : "")
+      + (option.belowWeeks.length ? `; amber = ${option.belowWeeks.length} week${option.belowWeeks.length === 1 ? "" : "s"} below the line` : "");
   }
 
   for (const motor of MOTORS) {
@@ -554,7 +559,8 @@
     });
   }
 
-  dailyRuntimeView(MOTORS[0], "ahu-runtime-daily", { headline: true });
+  // 5.0.20: the Overview draws WEEKLY run hours against the occupancy calendar; the daily view stays registered only.
+  dailyRuntimeView(MOTORS[0], "ahu-runtime-daily", { headline: true, tabHidden: true });
   // Plant motors are drawn by their weekly charts (same clean style, min-run line); the daily versions stay registered only.
   for (const motor of MOTORS.slice(1)) dailyRuntimeView(motor, `runtime-daily-${motor.id}`, { tabHidden: true });
 
@@ -617,7 +623,7 @@
   const MECH_CMD = ["chiller_cmd", "compressor_cmd", "dx_cool_cmd"];
   rcxView({
     id: "mech-cooling-hours", group: "Plant", title: "Mechanical cooling hours by outdoor air",
-    kinds: [], scope: "equip", hours: 720,
+    kinds: [], scope: "site", hours: 720,
     roles: { required: [], anyOf: [...MECH_STATUS, ...MECH_CMD], optional: ["oa_t"] },
     render: async (el, ctx) => {
       const roleOf = new Map();
@@ -626,17 +632,17 @@
       if (res.error) return res.error;
       const { per, wx } = res;
       if (!per.length) return "no outdoor-air data";
-      const p = per[0], unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
-      const role = roleOf.get(p.col.uuid), how = MECH_STATUS.includes(role) ? "status" : "command";
-      if (!p.bins.hours.some((h) => h > 0)) return "cooling never ran in this window";
+      const unit = ctx.dispUnit(TEMP), labels = M.oatBinLabels((c) => ctx.disp(c, TEMP).value);
+      const proof = (p) => `${eqName(p.eq)}: ${roleOf.get(p.col.uuid).replace(/_/g, " ")}`;
+      if (!per.some((p) => p.bins.hours.some((h) => h > 0))) return "cooling never ran in this window";
       draw(ctx, el, {
-        title: { text: `Mechanical cooling hours by outdoor air · ${eqName(p.eq)}`, left: 8, top: 0 },
+        title: { text: "Mechanical cooling hours by outdoor air", left: 8, top: 0 },
         tooltip: { trigger: "axis", valueFormatter: (v) => (isNum(v) ? `${+v.toFixed(1)} h` : "") }, legend: { top: 24 }, dataZoom: false,
         grid: baseGrid({ top: 64, bottom: 44 }),
         xAxis: { type: "category", data: labels, name: `OAT bin ${unit}`, nameLocation: "middle", nameGap: 28 },
-        yAxis: { type: "value", name: "hours" }, series: [{ name: `cooling on (${how})`, type: "bar", data: p.bins.hours.map((h) => (h > 0 ? h : null)) }],
-      }, null, `mech_cooling_${eqName(p.eq)}`);
-      return `${wx ? "web" : "equip"} outdoor-air temperature · ${how} proof (${role.replace(/_/g, " ")}) > ${ON * 100}% · fixed SI bins (shown in ${unit})`;
+        yAxis: { type: "value", name: "hours" }, series: per.map((p) => ({ name: eqName(p.eq), type: "bar", data: p.bins.hours.map((h) => (h > 0 ? h : null)) })),
+      }, null, "mech_cooling_hours");
+      return `${wx ? "web" : "equip"} outdoor-air temperature · proof > ${ON * 100}% (${per.map(proof).join("; ")}) · fixed SI bins (shown in ${unit})`;
     },
   });
 

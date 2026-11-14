@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 const require = createRequire(import.meta.url);
@@ -35,7 +36,7 @@ test("pack rule_tuning_templates and plot-spec-data rule_tuning are clean (zero 
 });
 
 test("JS renderRuleSql matches Python sql/fdd/render_rule.py byte-for-byte with overrides", () => {
-  const root = new URL("../..", import.meta.url).pathname;
+  const root = fileURLToPath(new URL("../..", import.meta.url));
   const pyBin = process.env.OPENFDD_PYTHON || "python3";
   const cases = [
     { ruleId: "VAV-1", params: { confirm_min: 15, zone_t_hi: 26.5, require_occupied: 0 } },
@@ -230,5 +231,5 @@ test("HTML and shell: standalone Tuning tab removed, inline host present, #tunin
   assert.ok(!/data-tab="tuning"/.test(html), "no Tuning nav button");
   assert.ok(!/id="tab-tuning"/.test(html), "no standalone tab-tuning section");
   assert.match(html, /id="fddTunersPanel"/, "inline Tuners host inside #fddPlotPanel");
-  assert.match(core, /if \(name === "tuning"\) name = "fdd"/, "#tuning hash/tab redirects to fdd");
+  assert.match(core, /TAB_ALIASES = [^;]*\{ tuning: "fdd"/, "#tuning hash/tab redirects to fdd");
 });

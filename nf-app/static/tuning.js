@@ -695,7 +695,7 @@
   const exported = {
     FIELDS, unitFor, unitLabel, displayRows, buildOverride, bandChartOption,
     sweepFieldsForRule, assessableSweepRoles, buildRuleOverride, resetSweepOverrideForRule, rollbackSweepOverrideForRule,
-    renderInline, render, cancelInline,
+    renderInline, render, cancelInline, callHook,
     _setTransport: (fn) => { transport = fn; }, _state: () => st,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = exported;

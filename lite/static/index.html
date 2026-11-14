@@ -44,7 +44,6 @@
 <nav class="tabs" id="tabs">
   <button data-tab="overview" class="on">Overview</button>
   <button data-tab="charts">Charts</button>
-  <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
   <button data-tab="model">Model &amp; RDF</button>
 </nav>
@@ -52,23 +51,47 @@
 <main>
   <div id="err"></div>
 
-  <!-- Overview: live cards + equipment status -->
+  <!-- Overview: site summary, the RCx dashboard (Full) and the Points section (one device) -->
   <section class="tab on" id="tab-overview">
     <div class="stats" id="summary"></div>
-    <div id="overviewRangeControl"></div>
-    <p id="overviewRangeStatus" class="hint" role="status"></p>
-    <section class="cards" id="cards"></section>
-    <section class="panel">
-      <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
-      <div class="chips" id="chips"></div>
-    </section>
-    <section class="panel" id="overviewIoPanel">
-      <h2>Equipment I/O <span class="hint" id="overviewIoHint">all modeled points on the selected equipment</span></h2>
-      <div class="tablewrap"><table class="bac">
-        <thead><tr><th>Point</th><th>Role / type</th><th class="num">Latest value</th><th>Unit</th><th>Updated</th><th>History</th><th>Status</th></tr></thead>
-        <tbody id="overviewIoRows"></tbody>
-      </table></div>
-    </section>
+    <!-- Points: ONE device at a time (the only device picker on Overview): live cards, status, I/O, every point, history -->
+    <div id="overviewPoints">
+      <section class="panel" id="overviewPointsHead">
+        <h2>Points <span class="hint">pick a device · live values, status, I/O and history</span></h2>
+        <div id="overviewPointsScope"></div>
+      </section>
+      <div id="overviewRangeControl"></div>
+      <p id="overviewRangeStatus" class="hint" role="status"></p>
+      <section class="cards" id="cards"></section>
+      <section class="panel">
+        <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
+        <div class="chips" id="chips"></div>
+      </section>
+      <section class="panel" id="overviewIoPanel">
+        <h2>Equipment I/O <span class="hint" id="overviewIoHint">all modeled points on the selected equipment</span></h2>
+        <div class="tablewrap"><table class="bac">
+          <thead><tr><th>Point</th><th>Role / type</th><th class="num">Latest value</th><th>Unit</th><th>Updated</th><th>History</th><th>Status</th></tr></thead>
+          <tbody id="overviewIoRows"></tbody>
+        </table></div>
+      </section>
+      <section class="panel">
+        <h2>Point data <span class="count" id="nPoints"></span>
+          <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
+          <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
+          <span class="hint" id="pointHint"></span>
+        </h2>
+        <div class="tablewrap"><table class="bac">
+          <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Ref</th><th>Binding</th><th>Updated</th></tr></thead>
+          <tbody id="pointRows"></tbody>
+        </table></div>
+      </section>
+      <section class="panel">
+        <h2>History <span class="hint" id="histHint">click a point above</span>
+        </h2>
+        <div id="histRangeControl"></div><p id="histRangeStatus" class="hint" role="status"></p>
+        <div class="chart short" id="histChart"></div>
+      </section>
+    </div>
   </section>
 
   <!-- Charts: pick one; only that chart's points are fetched (resampled by NF) -->
@@ -86,27 +109,6 @@
       <div id="chartRangeControl"></div>
       <p id="chartRangeStatus" class="hint" role="status"></p>
       <div class="chart tall" id="chartHost"></div>
-    </section>
-  </section>
-
-  <!-- Points: every point on the site, filter by markers, click for history -->
-  <section class="tab" id="tab-points">
-    <section class="panel">
-      <h2>Point data
-        <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
-        <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
-        <span class="hint" id="pointHint"></span>
-      </h2>
-      <div class="tablewrap"><table class="bac">
-        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Ref</th><th>Binding</th><th>Updated</th></tr></thead>
-        <tbody id="pointRows"></tbody>
-      </table></div>
-    </section>
-    <section class="panel">
-      <h2>History <span class="hint" id="histHint">click a point above</span>
-      </h2>
-      <div id="histRangeControl"></div><p id="histRangeStatus" class="hint" role="status"></p>
-      <div class="chart short" id="histChart"></div>
     </section>
   </section>
 
