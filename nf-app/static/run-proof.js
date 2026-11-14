@@ -38,7 +38,8 @@ function runProofFeeders(equipRec, model, catalog) {
   const pool = model.equips.filter((e) => e !== equipRec && ((e.attrs || {}).siteRef || "") === site);
   const find = (target) => {
     const t = runProofRefId(target);
-    return t ? pool.filter((e) => runProofNames(e).has(t)) : [];
+    const hits = t ? pool.filter((e) => runProofNames(e).has(t)) : [];
+    return hits.length === 1 ? hits : [];   // an ambiguous ref (one name, several equipment) binds nothing: never guess
   };
   const out = [];
   for (const ref of catalog.run_proof.feeders.refs) for (const rec of find(a[ref])) out.push({ rec, via: ref });

@@ -93,7 +93,8 @@ def resolve_run_proof(node: ProofNode, nodes: Iterable[ProofNode], contract: Map
 
     def find(target: str) -> list[ProofNode]:
         t = _ref_id(target)
-        return [n for n in pool if t and t in n.names()] if t else []
+        hits = [n for n in pool if t in n.names()] if t else []
+        return hits if len(hits) == 1 else []   # an ambiguous ref (one name, several equipment) binds nothing: never guess
 
     feeders: list[tuple[str, ProofNode]] = []
     for ref in contract["feeders"]["refs"]:

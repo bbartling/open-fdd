@@ -79,3 +79,13 @@ test("the Turtle export carries the refs and feeds the resolution follows", () =
   assert.match(ttl, /brick:feeds local:/);
   assert.match(ttl, /@prefix brick: </);
 });
+
+test("ambiguous feeder names bind nothing rather than picking the first equipment", () => {
+  const result = vm.runInContext(`(() => {
+    const e = { uuid: 'v', name: 'V', attrs: { id: 'V', siteRef: 's1', airRef: 'shared' } };
+    const a = { uuid: 'a', name: 'shared', attrs: { id: 'A', siteRef: 's1' } };
+    const b = { uuid: 'b', name: 'shared', attrs: { id: 'B', siteRef: 's1' } };
+    return runProofFeeders(e, { equips: [e, a, b] }, catalog).length;
+  })()`, ctx);
+  assert.equal(result, 0);
+});

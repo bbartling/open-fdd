@@ -209,3 +209,26 @@ def test_sensor_sweeps_honour_the_gate():
     none = df.drop(columns=["run-proof"])
     res = run_cookbook_rule(RULES_BY_ID["SV-RANGE"], none, equipment_id="EQ", equipment_kind="ahu", poll_seconds=300.0)
     assert res.status == "SKIPPED_NO_RUN_PROOF"
+
+def test_ambiguous_feeder_name_binds_nothing():
+    a = ProofNode("A", "s", aliases=("shared",), roles=frozenset({"fan_status"}))
+    b = ProofNode("B", "s", aliases=("shared",), roles=frozenset({"fan_status"}))
+    v = ProofNode("V", "s", refs={"airRef": "shared"})
+    assert not resolve_run_proof(v, [a, b, v], spec()).found
+
+
+def test_explicit_off_proof_is_assessed_zero_not_missing_proof():
+    df = _vav("resolved")
+    df["run-proof"] = 0.0
+    result = _run("VAV-3", df)
+    assert result.status != "SKIPPED_NO_RUN_PROOF"
+    assert result.fault_hours == 0
+
+
+def test_stale_proof_samples_do_not_prove_operation():
+    stale = _vav("resolved")
+    stale["run-proof"] = [1.0 if i < len(stale) // 2 else float("nan") for i in range(len(stale))]   # proof stops reporting
+    assert _run("VAV-3", stale).fault_hours == pytest.approx(_run("VAV-3", _vav("resolved")).fault_hours)   # missing != running
+    gone = _vav("resolved")
+    gone["run-proof"] = float("nan")                                                     # no proof sample at all: skipped
+    assert _run("VAV-3", gone).status == "SKIPPED_NO_RUN_PROOF"

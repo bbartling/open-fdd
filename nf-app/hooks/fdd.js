@@ -737,6 +737,26 @@ async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInsta
  * An override that no longer validates (e.g. after a newer shipped file) is skipped LOUDLY: logged and listed in the summary.
  * @param {{ engine: any, pack: any, log: (m: string) => void }} args
  */
+/**
+ * Is the run-proof gate on for this rule on this equipment (#1608)? The EFFECTIVE tuning decides, not the catalog alone:
+ * a saved require_run_proof 0 (or the legacy alias require_operational_gate 0 when require_run_proof is not set)
+ * runs the rule ungated, so it is assessed, keeps its timeline, and is never reported as no_run_proof.
+ * @param {any} rule catalog rule  @param {any} ruleTpl pack.rule_tuning_templates.rules[id]  @param {any} tunedHere tuning.forRule()
+ */
+function runProofGateOn(rule, ruleTpl, tunedHere) {
+  if (!rule || rule.run_proof !== 'gated') return false;
+  const rp = tunedHere && tunedHere.parameters && tunedHere.parameters.rule_params;
+  const layers = rp && rp.overrides ? [rp.overrides.equip, rp.overrides.site] : [];
+  for (const layer of layers) {
+    if (!layer || typeof layer !== 'object') continue;
+    const v = layer.require_run_proof !== undefined ? layer.require_run_proof : layer.require_operational_gate;
+    if (v !== undefined && v !== null) return Number(v) >= 0.5;
+  }
+  const ctrl = (ruleTpl && ruleTpl.controls) || {};
+  const shipped = ctrl.require_run_proof || ctrl.require_operational_gate;
+  return shipped ? Number(shipped.default) >= 0.5 : true;
+}
+
 async function loadRoleLimitOverrides({ engine, pack, log }) {
   const summary = { source: 'shipped', revisions: 0, equips: 0, rule_revisions: 0, errors: /** @type {string[]} */ ([]) };
   /** @type {{ summary: typeof summary, forEquip: (siteId: string, equipId: string) => any, forRule: (siteId: string, equipId: string, ruleId: string) => any }} */
@@ -1081,7 +1101,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           const row = equipmentResult(packRule, ruleRows, equipId,
             Object.fromEntries(ruleSensors.map((sensor) => [sensor.point.uuid, sensor.point.dis || sensor.point.name || sensor.point.uuid])));
           const out = resultValue(packRule, row);
-          const noProof = r.rule.run_proof === 'gated' && !roles.run_proof;
+          const gateOn = runProofGateOn(r.rule, pack.rule_tuning_templates && pack.rule_tuning_templates.rules
+            && pack.rule_tuning_templates.rules[r.rule.id], tunedHere);
+          const noProof = gateOn && !roles.run_proof;
           if (noProof && out.status === 'not-assessed') {
             out.reason = `${shared.catalog.run_proof.skip_reason}: no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound`;
             summary.no_run_proof++;
@@ -1117,6 +1139,15 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             summary.results.push({ site: siteId, equip: equipId, rule: r.rule.id, value: out.value, unit: out.unit, fault: out.fault, status: out.status,
               ...(sensorFaultHours ? { sensor_fault_hours: sensorFaultHours } : {}) });
             if (engine.resultRow && !perSensor.length) dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id, row, windowStart: from, windowEnd: to, ...tuned }));
+          } else if (noProof && engine.resultRow && !perSensor.length) {
+            // a skip is a durable result: stored as SKIPPED no_run_proof (unknown, never an assessed zero)
+            dbRows.push(engine.resultRow({ runTs: to, equip: equipId, site: siteId, ruleId: r.rule.id,
+              row: row || { equipment_id: equipId, fault_hours: null, covered_hours: null }, windowStart: from, windowEnd: to, ...tuned }));
+          }
+          if (noProof && out.status === 'not-assessed') {
+            for (const dbRow of dbRows) if (dbRow && dbRow.rule_id === r.rule.id && dbRow.equipment_id === equipId) {
+              Object.assign(dbRow, { status: 'SKIPPED', reason: shared.catalog.run_proof.skip_reason, fault_hours: null, covered_hours: null, fault_pct: null });
+            }
           }
           const uuid = resultUuid(key, r.rule.id);
           touched.add(uuid);
