@@ -164,3 +164,60 @@ test("fetchRange fills older uncovered range from Full Timescale fallback when r
   assert.equal(out.series.get("p1")[0][1], 66.5);
   assert.equal(out.series.get("p1").at(-1)[1], 72);
 });
+
+test("All on Full starts at the earlier of NF's and Timescale's oldest sample (#1612)", async () => {
+  const now = Date.parse("2026-11-14T00:00:00Z"), nfOldest = "2026-11-07T00:00:00Z", tsOldest = Date.parse("2026-11-02T00:00:00Z");
+  const nf = (c) => {
+    c.api = async (path) => {
+      const q = new URL(path, "https://nf.example.test").searchParams;
+      return { data: q.getAll("uuids").map((uuid) => ({ uuid, values: [{ ts: nfOldest, double: 1 }] })) };
+    };
+  };
+  const pts = [{ uuid: "num-1" }, { uuid: "num-2" }, { uuid: "txt-1", kind: "String" }];
+  // Lite / no Timescale: NF only
+  const lite = context(); nf(lite);
+  const a = await lite.get("resolveChartSelection")(pts, { preset: "all" }, { nowMs: now });
+  assert.equal(a.resolvedBounds.fromMs, Date.parse(nfOldest));
+  // Full: the Timescale answer is earlier and wins; only numeric points are asked
+  const full = context(); nf(full);
+  const asked = [];
+  full.ofddTimescaleOldest = async (uuids) => { asked.push(uuids); return { ok: true, complete: true, oldest: { "num-1": new Date(tsOldest).toISOString(), "num-2": null } }; };
+  const b = await full.get("resolveChartSelection")(pts, { preset: "all" }, { nowMs: now });
+  assert.deepEqual(asked.map((x) => [...x]), [["num-1", "num-2"]]);
+  assert.equal(b.resolvedBounds.fromMs, tsOldest);
+  assert.equal(b.oldestSource, "timescale");
+  // a failed or partial Timescale answer falls back to NF's start and says so
+  for (const ans of [{ ok: false, error: "boom" }, null]) {
+    const f = context(); nf(f);
+    f.ofddTimescaleOldest = async () => { if (!ans) throw new Error("network"); return ans; };
+    const r = await f.get("resolveChartSelection")(pts, { preset: "all" }, { nowMs: now });
+    assert.equal(r.resolvedBounds.fromMs, Date.parse(nfOldest));
+    assert.match(r.oldestWarning, /Timescale/);
+  }
+  // non-All presets never ask Timescale
+  const w = context(); nf(w);
+  w.ofddTimescaleOldest = async () => { throw new Error("must not be called"); };
+  const r = await w.get("resolveChartSelection")(pts, { preset: "1w" }, { nowMs: now });
+  assert.equal(r.resolvedBounds.toMs - r.resolvedBounds.fromMs, 168 * 3600e3);
+});
+test("All on Full then draws the Timescale-only history before NF's oldest sample (#1612)", async () => {
+  const now = Date.parse("2026-11-14T00:00:00Z"), nfStart = Date.parse("2026-11-07T00:00:00Z"), tsStart = Date.parse("2026-11-02T00:00:00Z");
+  const c = context();
+  c.api = async (path) => {
+    const q = new URL(path, "https://nf.example.test").searchParams;
+    return { data: q.getAll("uuids").map((uuid) => ({ uuid, values: [{ ts: new Date(nfStart).toISOString(), double: 1 }] })) };
+  };
+  c.ofddTimescaleOldest = async (uuids) => ({ ok: true, complete: true, oldest: Object.fromEntries(uuids.map((u) => [u, new Date(tsStart).toISOString()])) });
+  const asked = [];
+  c.ofddTimescaleHistory = async (q) => {
+    asked.push(q);
+    return { ok: true, bucket: q.bucket, rows: [{ point_uuid: "num-1", bucket: new Date(tsStart).toISOString(), avg: 7 }] };
+  };
+  const r = await c.get("fetchRange")([{ uuid: "num-1" }], { preset: "all" }, { nowMs: now });
+  assert.equal(r.fromMs, tsStart);
+  assert.equal(asked.length, 1);
+  assert.equal(asked[0].fromMs, tsStart);
+  assert.ok(asked[0].toMs <= nfStart, "Timescale fills only before NF's own data");
+  assert.deepEqual([...r.series.get("num-1")[0]], [tsStart, 7]);
+  assert.equal(r.timescaleFallback.used, true);
+});

@@ -496,11 +496,11 @@ async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
   return merged;
 }
 /** One history hook run for at most 200 uuids. */
-async function queryTimescaleHistoryBatch({ cleanIds, fromMs, toMs, bucket }) {
+async function queryTimescaleHistoryBatch({ cleanIds, fromMs, toMs, bucket, oldest = false }) {
   // NF StartHook takes the hook args as a flat string->string map (same as the tuning hook); wrapping them in
   // {args: ...} makes NF answer HTTP 500 and the long-range Timescale fill silently never runs.
   /** @type {Record<string, string>} */
-  const body = {
+  const body = oldest ? { uuids: JSON.stringify(cleanIds), oldest: "true" } : {
     uuids: JSON.stringify(cleanIds),
     from: new Date(fromMs).toISOString(),
     to: new Date(toMs).toISOString(),
@@ -550,7 +550,32 @@ async function queryTimescaleHistoryBatch({ cleanIds, fromMs, toMs, bucket }) {
   }
   return { ok: false, error: "history hook timed out waiting for result" };
 }
-if (typeof globalThis !== "undefined") globalThis.ofddTimescaleHistory = queryTimescaleHistory;
+/**
+ * The oldest Timescale sample per point (the "All" range start on Full, #1612), in batches of TIMESCALE_HISTORY_BATCH.
+ * {ok, complete, oldest: {uuid: ISO | null}}; complete is false when a batch failed (the others still count).
+ * @param {string[]} uuids
+ */
+async function queryTimescaleOldest(uuids) {
+  if (timescaleHistoryState.disabled) return { ok: false, skipped: true, reason: timescaleHistoryState.reason };
+  const cleanIds = [...new Set((uuids || []).filter((u) => typeof u === "string" && u))];
+  /** @type {Record<string, string | null>} */
+  const oldest = {};
+  let okBatches = 0, error = "";
+  for (let i = 0; i < cleanIds.length; i += TIMESCALE_HISTORY_BATCH) {
+    const ids = cleanIds.slice(i, i + TIMESCALE_HISTORY_BATCH);
+    let ans;
+    try { ans = await queryTimescaleHistoryBatch({ cleanIds: ids, fromMs: 0, toMs: 0, bucket: null, oldest: true }); }
+    catch (e) { ans = { ok: false, error: String((e && e.message) || e) }; }
+    if (ans && ans.ok && ans.oldest) { okBatches += 1; Object.assign(oldest, ans.oldest); }
+    else error ||= (ans && (ans.error || ans.reason)) || "no answer";
+  }
+  if (!okBatches) return { ok: false, error: error || "no uuids" };
+  return { ok: true, complete: !error && okBatches * TIMESCALE_HISTORY_BATCH >= cleanIds.length, oldest, ...(error ? { error } : {}) };
+}
+if (typeof globalThis !== "undefined") {
+  globalThis.ofddTimescaleHistory = queryTimescaleHistory;
+  globalThis.ofddTimescaleOldest = queryTimescaleOldest;
+}
 
 ofddTabs.export = () => ofddExport.render({ model, scope: { ...scope, equip: exportEquipId() }, timescaleHistory: queryTimescaleHistory });
 for (const tab of ["fdd", "rcx", "export"]) ofddEquipScoped.add(tab);     // these get an equip picker too

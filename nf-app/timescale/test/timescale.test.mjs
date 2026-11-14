@@ -1002,6 +1002,18 @@ test("one combined Save (rule parameters + SV-LIMITS) commits both or neither on
   await db.query("DELETE FROM fdd.rule_config WHERE site_id = $1", [SITE]);
 });
 
+test("oldestRoute: the oldest stored sample per point equals min(ts) on the real database; unknown points are null (#1612)", { skip, timeout: 60000 }, async () => {
+  if (sourceDirty) { await seed(); sourceDirty = false; }
+  await ts.install(db);
+  const { rows } = await db.query("SELECT point_uuid, min(ts) AS t FROM openfdd.nf_samples GROUP BY 1 ORDER BY 1 LIMIT 3");
+  assert.ok(rows.length >= 2);
+  const unknown = "00000000-0000-0000-0000-00000000dead";
+  const ans = await ts.oldestRoute(db, { uuids: [...rows.map((r) => r.point_uuid), unknown] });
+  assert.equal(ans.ok, true);
+  for (const r of rows) assert.equal(ans.oldest[r.point_uuid], r.t.toISOString(), r.point_uuid);
+  assert.equal(ans.oldest[unknown], null);
+});
+
 // The README's runtime grants, verbatim (README "installer vs runtime role").
 async function grantRuntime(role, dbName) {
   await db.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`);

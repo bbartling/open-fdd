@@ -215,3 +215,19 @@ test("README manual install: one psql command, ON_ERROR_STOP, one transaction, t
   const files = [...cmd.matchAll(/-f nf-app\/timescale\/(\S+)/g)].map((m) => m[1]);
   assert.deepEqual(files, ts.SQL_FILES);
 });
+test("oldestRoute: one bounded LIMIT 1 lookup per uuid, in a timed transaction, validated before any query (#1612)", async () => {
+  const answer = [{ point_uuid: U1, t: new Date("2026-01-02T00:00:00Z") }, { point_uuid: U2, t: null }];
+  const c = { calls: [], async query(sql, params) { this.calls.push({ sql: String(sql), params }); return { rows: /nf_samples/.test(sql) ? answer : [] }; } };
+  const r = await ts.oldestRoute(c, { uuids: [U1, U2, U1] });
+  assert.deepEqual(r, { ok: true, complete: true, oldest: { [U1]: "2026-01-02T00:00:00.000Z", [U2]: null } });
+  const sql = c.calls.map((q) => q.sql).join("\n");
+  assert.deepEqual(c.calls.find((q) => /nf_samples/.test(q.sql)).params[0], [U1, U2], "deduplicated, bound as a parameter");
+  assert.match(sql, /BEGIN/);
+  assert.match(sql, /statement_timeout/);
+  assert.match(sql, /ORDER BY s\.ts ASC LIMIT 1/);
+  for (const bad of [{}, { uuids: [] }, { uuids: [""] }, { uuids: uuids(201) }]) {
+    const f = fake();
+    await assert.rejects(ts.oldestRoute(f, bad));
+    assert.equal(f.queries.length, 0, "no query for a bad request");
+  }
+});
