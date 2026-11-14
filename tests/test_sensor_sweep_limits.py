@@ -103,7 +103,8 @@ def test_invalid_limits_are_rejected(mutate, message):
 
 def _frame(role: str, values, unit: str) -> pd.DataFrame:
     idx = pd.date_range("2026-01-05", periods=len(values), freq="5min", tz="UTC", name="timestamp_utc")
-    df = pd.DataFrame({role: pd.Series(values, index=idx, dtype=float)}, index=idx)
+    # the equipment is proven running throughout (#1608 run-proof gate), so only the limits decide
+    df = pd.DataFrame({role: pd.Series(values, index=idx, dtype=float), "run-proof": 1.0}, index=idx)
     df.attrs.update({"equipment_id": "FIXTURE", "equipment_type": "AHU", "units_map": {role: unit}, "role_units": {role: unit}})
     return df
 

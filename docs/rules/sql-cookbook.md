@@ -16,6 +16,52 @@ How a rule runs: the FDD hook passes one scoped, SI, wide `history` table (one c
 timestamp) and reads one row per equipment back. A fault must hold for its confirm time. A gap longer than one hour is
 unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More in [sql/fdd/README.md](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/README.md).
 
+## Run proof gate {#run-proof}
+
+52 of the 77 rules count only samples while the equipment is **proven running**. The proof is the input role
+`run_proof`: the `history` column `run_proof` (0/1 or a 0-1 fraction; running when above 0.05). It is resolved from the model, never from a point name, in this order (first hit wins):
+
+1. **The equipment's own proof**: a bound status role (`fan_status` > `pump_status` > `chw_pump_status` > `chiller_status` > `compressor_status`), then a bound command role (`fan_cmd` > `chw_pump_cmd` > `cw_pump_cmd` > `tower_fan_cmd`).
+2. **The feeding equipment's proof**, one hop: the equipment's `airRef`, `chilledWaterRef`, `hotWaterRef` target (a VAV to its AHU, a water loop to its pump or plant),
+   then an `isFedBy` target, then any equipment that lists it under `feeds` (RDF: `brick:isFedBy` / `brick:feeds`). A feeder
+   is judged by its own proof (step 1). Refs never cross sites; nothing is assumed when a ref is missing.
+3. **None found**: the rule is **SKIPPED** with reason `no_run_proof` (SQL: `fault_hours` NULL and `covered_hours` 0;
+   pandas: status `SKIPPED_NO_RUN_PROOF`). It is never a silent PASS.
+
+`require_run_proof` (default 1; the old name `require_operational_gate` is an alias) switches the gate off per rule. A sample
+with no proof value is not proof. A rule that is not gated says why in its entry. SQL and pandas read the same `run_proof`
+signal, and the parity harness checks that both skip the same equipment.
+
+Rules that are not gated, and why:
+
+| Rule | Why not |
+|---|---|
+| `AHU-DUCTHI` | evaluates when the fan is proven on OR the duct static itself shows pressure; a proof gate would hide high static with a failed status |
+| `AVG-ZONE-TEMP` | zone statistic, not an equipment fault |
+| `CHW-NOLOAD-1` | no-load detection with its own mechanical-cooling proof and a 30 min confirmation that must see off samples |
+| `CMD-1` | command versus status mismatch: the proof is the signal |
+| `FAN-RUNTIME-HOURS` | measures the equipment runtime itself |
+| `FAULT-ELAPSED-HOURS` | aggregates fault flags of other rules |
+| `FCU-CLG-COIL` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-CO2-DAMPER` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-DAMPER-POS` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-DEADBAND` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-HTG-COIL` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-MODE-CYCLE` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-SENSOR-NULL` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-VALVE-PASS-CLG` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `FCU-VALVE-PASS-HTG` | deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up) |
+| `MECH-OAT-1` | needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof |
+| `OAT-METEO` | compares two outside-air sources; no running equipment is judged |
+| `SCHED-1` | runtime outside the schedule: the proof is the signal |
+| `SCHED-247` | always-on detection: the proof is the signal and off samples must be seen |
+| `UTIL-INTERVAL` | utility meter data, no running equipment |
+| `UTIL-MONTHLY` | utility meter data, no running equipment |
+| `VAV-1` | zone comfort band while occupied; independent of the air handler running |
+| `VAV-2` | night setback runs while the air handler is off by design |
+| `WX-1` | weather-source sanity; no running equipment is judged |
+| `ZONE-COMFORT-PCT` | zone comfort statistic, not an equipment fault |
+
 ## Units convention
 
 - Rules compute in **SI only**. The engineer declares each point's unit in NF; ingest converts it to SI (`open_fdd/data/units.json`).
@@ -124,6 +170,7 @@ SAT deviation from setpoint
 | `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -131,7 +178,7 @@ SAT deviation from setpoint
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sat_dev_err` | SAT deviation | 2.77778 | 0.555556 | 8.33333 | Δ°C |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
@@ -165,6 +212,7 @@ Heating and cooling simultaneous
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -172,7 +220,7 @@ Heating and cooling simultaneous
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `valve_open_pct` | Valve open threshold | 0.1 | 0.05 | 0.5 | fraction (0-1) |
 
@@ -236,6 +284,7 @@ OA damper leakage
 | `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -244,7 +293,7 @@ OA damper leakage
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `leak_delta` | Leak ΔT | 1.11111 | 0.277778 | 3.33333 | Δ°C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -277,6 +326,7 @@ Economizer stuck closed when OAT favorable
 | `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -286,7 +336,7 @@ Economizer stuck closed when OAT favorable
 | `econ1_damper_max` | Stuck-closed damper frac | 0.05 | 0 | 0.2 | fraction (0-1) |
 | `econ1_oat_min` | Favorable OAT | 12.7778 | 7.22222 | 21.1111 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -317,6 +367,7 @@ Economizing when outdoor air unfavorable
 | `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -326,7 +377,7 @@ Economizing when outdoor air unfavorable
 | `econ2_damper` | Damper open frac | 0.42 | 0.2 | 0.9 | fraction (0-1) |
 | `econ2_oat_hi` | OAT high cutoff | 17.2222 | 12.7778 | 26.6667 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -359,6 +410,7 @@ Mech cooling without integrated economizer
 | `web_oa_dp` | `web-outside-air-dewpoint` | Temperature | °C | °F, K | - | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -371,7 +423,7 @@ Mech cooling without integrated economizer
 | `econ3_db_min` | Free-cool OA dry-bulb min | 15.5556 | 10 | 20 | °C |
 | `econ3_dp_max` | Free-cool OA dew point max | 15.5556 | 7.22222 | 20 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -403,6 +455,7 @@ Low estimated OA fraction
 | `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -412,7 +465,7 @@ Low estimated OA fraction
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `oa_min_pct` | Min OA fraction | 21 | 5 | 40 | % |
 | `oat_rat_delta_min` | Min \|RAT−OAT\| for OA-fraction estimate (Δ°C) | 1.22222 | 0.277778 | 5.55556 | Δ°C |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -447,6 +500,7 @@ Preheat over-conditioning
 | `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -456,7 +510,7 @@ Preheat over-conditioning
 | `htg_open_min` | Heating valve open minimum | 0.01 | 0 | 0.5 | fraction (0-1) |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `preheat_over` | Preheat over ΔT | 1.22222 | 0.277778 | 4.44444 | Δ°C |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -489,6 +543,7 @@ Economizing in freezing weather
 | `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -498,7 +553,7 @@ Economizing in freezing weather
 | `econ6_damper_max` | Winter min-OA damper | 0.25 | 0.05 | 0.5 | fraction (0-1) |
 | `econ6_oat_max` | Winter OAT ceiling | -3.88889 | -9.44444 | 4.44444 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -531,6 +586,7 @@ Economizer OK but not economizing
 | `web_oa_dp` | `web-outside-air-dewpoint` | Temperature | °C | °F, K | - | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -543,7 +599,7 @@ Economizer OK but not economizing
 | `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | 1.66667 | -6.66667 | 10 | °C |
 | `econ7_dp_max` | Econ-OK dew point max | 15.5556 | 7.22222 | 20 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -574,6 +630,7 @@ Duct static below SP at full fan
 | `duct_static_sp` | `duct-static-pressure-sp` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -585,7 +642,7 @@ Duct static below SP at full fan
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
@@ -616,6 +673,7 @@ MAT-OAT delta while cooling and economizing
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -630,7 +688,7 @@ MAT-OAT delta while cooling and economizing
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -665,6 +723,7 @@ OAT low vs SAT SP while cooling and economizing
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -680,7 +739,7 @@ OAT low vs SAT SP while cooling and economizing
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -715,6 +774,7 @@ SAT above MAT while cooling
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -731,7 +791,7 @@ SAT above MAT while cooling
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 | `supply_tol` † | Supply tol (alias eps_sat) | 0.638889 | 0 | 5.55556 | Δ°C |
 
@@ -767,6 +827,7 @@ SAT above setpoint at full cooling
 | `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -781,7 +842,7 @@ SAT above setpoint at full cooling
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `oa_damper_econ_low` | OA damper economizer low | 0.05 | 0 | 0.5 | fraction (0-1) |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -818,6 +879,7 @@ CHW coil ΔT when inactive (GL36 L)
 | `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -835,7 +897,7 @@ CHW coil ΔT when inactive (GL36 L)
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -872,6 +934,7 @@ HW coil ΔT when inactive (GL36 M)
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -890,7 +953,7 @@ HW coil ΔT when inactive (GL36 M)
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -924,6 +987,7 @@ Mixed air below envelope
 | `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -937,7 +1001,7 @@ Mixed air below envelope
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
@@ -969,6 +1033,7 @@ Mixed air above envelope
 | `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -982,7 +1047,7 @@ Mixed air above envelope
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
@@ -1013,6 +1078,7 @@ PID hunting (operating-state oscillation)
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1023,7 +1089,7 @@ PID hunting (operating-state oscillation)
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mode_delay_min` † | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1055,6 +1121,7 @@ SAT cold when heating commanded (GL36 D)
 | `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1069,7 +1136,7 @@ SAT cold when heating commanded (GL36 D)
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1104,6 +1171,7 @@ Estimated OA fraction mismatch
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `vav_total_flow` | `vav-total-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1116,7 +1184,7 @@ Estimated OA fraction mismatch
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `oat_rat_delta_min` | Min \|OAT-RAT\| | 2.77778 | 0 | 16.6667 | Δ°C |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
@@ -1148,6 +1216,7 @@ SAT low while heating at full
 | `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1159,7 +1228,7 @@ SAT low while heating at full
 | `htg_full_min` | Full-heating threshold (GL36 99%) | 0.9 | 0.5 | 1 | fraction (0-1) |
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mode_delay_min` † | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1194,6 +1263,7 @@ SAT vs MAT while economizing
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1209,7 +1279,7 @@ SAT vs MAT while economizing
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 | `supply_tol` | Supply tol (alias eps_sat) | 0.638889 | 0 | 5.55556 | Δ°C |
 
@@ -1243,6 +1313,7 @@ OAT high vs SAT SP while economizing
 | `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1258,7 +1329,7 @@ OAT high vs SAT SP while economizing
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1325,6 +1396,7 @@ Low OA fraction
 | `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1334,7 +1406,7 @@ Low OA fraction
 | `min_oa_frac` | Min OA fraction | 0.15 | 0.05 | 0.4 | fraction (0-1) |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `oat_rat_guard` | OAT/RAT guard | 1.22222 | 0.277778 | 3.33333 | Δ°C |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1367,6 +1439,7 @@ SAT reset not tracking outdoor air
 | `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1374,7 +1447,7 @@ SAT reset not tracking outdoor air
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `reset_err` | Reset error | 1.66667 | 0.277778 | 5.55556 | Δ°C |
 | `reset_oat_ref` | Reset OAT ref | 18.3333 | 10 | 26.6667 | °C |
 | `reset_sat_at_ref` | SAT SP at the reset OAT reference | 11.1111 | 7.22222 | 18.3333 | °C |
@@ -1480,6 +1553,7 @@ Duct static trim advisory
 | `static_reset_request` | `vav-pressure-request-sum` | Count | count | none | - | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1489,7 +1563,7 @@ Duct static trim advisory
 | `duct_hi` | Duct static high | 335.934 | 124.42 | 746.52 | Pa |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1522,6 +1596,7 @@ Cooling valve leakage
 | `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1530,7 +1605,7 @@ Cooling valve leakage
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `mat_leak_delta` | SAT vs MAT leak ΔT | 1.11111 | 0.277778 | 6.66667 | Δ°C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sat_err` | SAT vs SP leak ΔT | 1.11111 | 0.277778 | 4.44444 | Δ°C |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
@@ -1646,6 +1721,7 @@ Excessive reheat during warm weather
 | `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1656,7 +1732,7 @@ Excessive reheat during warm weather
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `reheat_oat` | Warm OAT | 25.5556 | 18.3333 | 32.2222 | °C |
 | `reheat_pct` | Reheat frac | 0.52 | 0.1 | 1 | fraction (0-1) |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1687,6 +1763,7 @@ Damper stuck at full open
 | `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1696,7 +1773,7 @@ Damper stuck at full open
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `full_open_pct` | Full open frac | 0.975 | 0.8 | 1 | fraction (0-1) |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `sustain_hours` | Sustain window | 1.5 | 0.5 | 6 | h |
 
@@ -1728,6 +1805,7 @@ Airflow sensor bias
 | `damper_pct` | `damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1737,7 +1815,7 @@ Airflow sensor bias
 | `damper_closed_max` | Damper closed maximum | 0.1 | 0 | 0.5 | fraction (0-1) |
 | `flow_bias` | Airflow bias threshold | 23.5973 | 4.71947 | 94.3894 | L/s |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1767,6 +1845,7 @@ Reheat when cooling available
 | `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 | `reheat_valve_pct` | `reheat-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `clg_available` | `clg-available` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1776,7 +1855,7 @@ Reheat when cooling available
 | `free_cool_oat` | Free-cool OAT | 18.3333 | 7.22222 | 23.8889 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `reheat_pct` | Reheat frac | 0.25 | 0.05 | 1 | fraction (0-1) |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1807,6 +1886,7 @@ Min airflow / fixed high flow
 | `min_flow_sp` | `min-flow-sp` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1819,7 +1899,7 @@ Min airflow / fixed high flow
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `high_min_flow_sp` | High min-flow SP | 117.987 | 23.5973 | 943.894 | L/s |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -1851,6 +1931,7 @@ VAV leave vs parent AHU SAT (fedBy)
 | `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1859,6 +1940,7 @@ VAV leave vs parent AHU SAT (fedBy)
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `delta` | Leave Δ vs AHU SAT | 4.44444 | 1.11111 | 13.8889 | Δ°C |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 
 **Outputs**
 
@@ -1890,6 +1972,7 @@ Reheat valve stuck / no temp rise
 | `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1900,7 +1983,7 @@ Reheat valve stuck / no temp rise
 | `min_rise` | Min temp rise | 1.66667 | 0.277778 | 8.33333 | Δ°C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `reheat_cmd` | Reheat open frac | 0.3 | 0.1 | 1 | fraction (0-1) |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2296,6 +2379,7 @@ Low chilled-water ΔT
 | `chiller_amps` | `chiller-amps` | Current | A | none (declare A) | - | optional |
 | `chiller_power` | `chiller-power` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2304,7 +2388,7 @@ Low chilled-water ΔT
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `min_dt` | Minimum delta-T | 2.22222 | 0.555556 | 6.66667 | Δ°C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2339,6 +2423,7 @@ DP below SP at max pump speed
 | `pump_status` | `pump-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2348,7 +2433,7 @@ DP below SP at max pump speed
 | `dp_margin` | DP margin | 15168.5 | 3447.38 | 41368.5 | Pa |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2381,6 +2466,7 @@ Plant supply temp outside deadband
 | `pump_status` | `pump-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2388,7 +2474,7 @@ Plant supply temp outside deadband
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sp_band` | SP band | 1.22222 | 0.277778 | 3.33333 | Δ°C |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
@@ -2422,6 +2508,7 @@ Flow high at max pump
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `pump_status` | `pump-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2431,7 +2518,7 @@ Flow high at max pump
 | `flow_hi` | Flow high | 69.3992 | 12.618 | 189.271 | L/s |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2507,6 +2594,7 @@ High CW approach at full tower fan
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2515,7 +2603,7 @@ High CW approach at full tower fan
 | `approach_max` | Max approach at full fan | 4.44444 | 2.77778 | 8.33333 | Δ°C |
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
 
@@ -2552,6 +2640,7 @@ Excess tower fan energy vs wet-bulb limit
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2561,7 +2650,7 @@ Excess tower fan energy vs wet-bulb limit
 | `cw_approach` | Design approach | 3.88889 | 1.66667 | 8.33333 | Δ°C |
 | `excess_beyond_approach` | Excess beyond approach | 2.77778 | 1.11111 | 11.1111 | Δ°C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
 
@@ -2597,6 +2686,7 @@ Condenser water not optimized vs wet-bulb
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2606,7 +2696,7 @@ Condenser water not optimized vs wet-bulb
 | `cw_approach` | Design approach | 3.88889 | 1.66667 | 8.33333 | Δ°C |
 | `cw_slack` | Slack below target | 1.11111 | 0.277778 | 3.33333 | Δ°C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2641,6 +2731,7 @@ CHW plant reset advisory
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2650,7 +2741,7 @@ CHW plant reset advisory
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2688,6 +2779,7 @@ HWST trim advisory
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | optional |
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2697,7 +2789,7 @@ HWST trim advisory
 | `hwst_hi` | HWST high | 71.1111 | 48.8889 | 93.3333 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2734,6 +2826,7 @@ Discharge cold when heating
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2742,7 +2835,7 @@ Discharge cold when heating
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `min_sat` | Min discharge SAT | 29.4444 | 21.1111 | 43.3333 | °C |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `zone_cold` | Zone cold threshold | 20.5556 | 15.5556 | 22.2222 | °C |
 
@@ -2855,6 +2948,7 @@ Suspected control-output hunting
 | `loop_enabled` | `loop-enabled` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2867,7 +2961,7 @@ Suspected control-output hunting
 | `minimum_equivalent_cycles` | Min equivalent cycles | 2.5 | 0.5 | 10 | count |
 | `minimum_reversals` | Min direction reversals | 4 | 1 | 20 | count |
 | `minimum_span_pct` | Minimum observed span | 20 | 5 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `total_variation_fault_pct` | Total variation fault threshold | 500 | 50 | 2000 | % |
 | `window_hours` | Hunting lookback window | 1 | 0.25 | 4 | h |
@@ -2916,6 +3010,7 @@ Sensor flatline (stuck)
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2926,7 +3021,7 @@ Sensor flatline (stuck)
 | `flatline_tol` | Flatline tolerance | 0.055556 | 0.011111 | 0.555556 | Δ°C |
 | `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
 | `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -2980,6 +3075,7 @@ Sensor out of hard range
 | `kwh` | `kwh` | Energy | kWh | Wh, MWh, kBtu, MMBtu, therm | - | optional |
 | `electric_kw` | `electric-kw` | Power | kW | W, MW, Btu/h, ton, hp | - | optional |
 | `electric_kwh` | `electric-kwh` | Energy | kWh | Wh, MWh, kBtu, MMBtu, therm | - | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2991,7 +3087,7 @@ Sensor out of hard range
 | `range_scale_humidity` | Humidity range scale | 1 | 0.5 | 2 | x (ratio) |
 | `range_scale_pressure` | Pressure / duct-static range scale | 1 | 0.5 | 2 | x (ratio) |
 | `range_scale_temperature` | Temp range scale | 1 | 0.5 | 2 | x (ratio) |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
@@ -3024,6 +3120,7 @@ Context-aware sensor rate of change
 | `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
 | `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
 | `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -3032,6 +3129,7 @@ Context-aware sensor rate of change
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `max_gap_hours` | Max sample gap | 1 | 0.1 | 12 | h |
 | `persistence_min` † | Fault persistence | 10 | 5 | 60 | min |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sensor_span` | Sensor span | 100 | 1 | 500 | signal units |
 | `steady_fault_per_hour` | Steady-state slew limit | 3.33333 | 0.555556 | 33.3333 | Δ°C/h |
 
@@ -3079,6 +3177,7 @@ Sensor rate-of-change spike
 | `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -3087,7 +3186,7 @@ Sensor rate-of-change spike
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
 | `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `spike_scale` † | Spike limit scale (global) | 1 | 0.25 | 3 | x (ratio) |
 | `spike_scale_humidity` | Spike scale humidity | 1 | 0.25 | 4 | x (ratio) |
 | `spike_scale_pressure` | Spike scale pressure | 1 | 0.25 | 4 | x (ratio) |
@@ -3133,6 +3232,7 @@ Stale data (no fresh samples)
 | `zone_rh` | `zone-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `ma_h` | `mixed-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `sa_h` | `supply-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
+| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -3140,6 +3240,7 @@ Stale data (no fresh samples)
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
+| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `stale_hours` | Stale window | 2 | 0.25 | 12 | h |
 | `stale_tol` | Stale tolerance | 0.027778 | 0 | 0.555556 | Δ°C |
 

@@ -38,7 +38,7 @@ FORBIDDEN_NAV = tuple(d + "/" for d in INTERNAL_DIRS)
 DEFAULT_BUDGET = 800  # prose words per published page (tables, code, link targets excluded)
 BUDGETS = {
     # generated reference: one structured entry per rule; the prose is the per-rule description and the intro
-    "rules/sql-cookbook.md": 3500,
+    "rules/sql-cookbook.md": 3700,   # + the run-proof gate section (#1608)
     "rules/pandas-cookbook.md": 2500,
 }
 TOTAL_BUDGET = 12000  # prose words across every published page
