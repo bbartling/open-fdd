@@ -124,7 +124,10 @@ function modelToTurtle(model, base, opts = {}) {
     const x = { site: kind === "site" ? id : siteOfRec(r), subject: subjectOf(r, kind === "site") };
     list.push(x);
     subjects[kind].set(id, list);
-    if (r.name && r.name !== id) named[kind].set(r.name, [...(named[kind].get(r.name) || []), x]);
+    // the same aliases the run-proof resolver accepts (runProofNames): the record name and its dis
+    for (const alias of new Set([r.name, (r.attrs || {}).dis].filter((v) => v && v !== id))) {
+      named[kind].set(alias, [...(named[kind].get(alias) || []), x]);
+    }
   };
   for (const s of model.sites) register("site", s);
   for (const e of model.equips) register("equip", e);

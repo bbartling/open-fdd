@@ -101,3 +101,13 @@ test("a Turtle ref written as the feeder's display name points at the feeder's s
   assert.ok(subject, ttl);
   assert.match(ttl, new RegExp(`phIoT:airRef ${subject[1]}\\b`));
 });
+
+test("a Turtle ref written as the feeder's dis points at the feeder's subject", () => {
+  const ttl = vm.runInContext(`(() => {
+    const site = { uuid: "s", name: "Site", pointType: "SITE", attrs: { id: "s1" } };
+    const ahu = { uuid: "u1", name: "u1", pointType: "EQUIPMENT", attrs: { siteRef: "s1", dis: "Main Floor AHU" } };
+    const vav = { uuid: "v", name: "VAV", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "s1", airRef: "Main Floor AHU" } };
+    return modelToTurtle({ sites: [site], equips: [ahu, vav], devices: [], points: [] }, "urn:test:", { nfBase: "" }).turtle;
+  })()`, ctx);
+  assert.doesNotMatch(ttl, /Main_Floor_AHU/, ttl);
+});

@@ -272,3 +272,21 @@ local:VAV-1 a phIoT:equip ; rdfs:label "VAV" ; phIoT:siteRef local:s1 ; phIoT:ai
     nodes = {n.id: n for n in nodes_from_graph(g)}
     assert {"AHU-1", "AHU-2", "VAV"} <= set(nodes)  # a shared label falls back to each subject's own name
     assert nodes["VAV"].refs.get("airRef") == "AHU-2"
+
+
+def test_rdf_a_fallback_name_never_collides_with_another_subjects_label():
+    rdflib = pytest.importorskip("rdflib")
+    ttl = """
+@prefix phIoT: <https://project-haystack.org/def/phIoT/3.9.13#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix local: <urn:test:> .
+local:s1 a phIoT:site ; rdfs:label "Site" .
+local:s2 a phIoT:site ; rdfs:label "Site" .
+local:s3 a phIoT:site ; rdfs:label "s1" .
+local:A1 a phIoT:equip ; rdfs:label "A1" ; phIoT:siteRef local:s1 .
+local:A3 a phIoT:equip ; rdfs:label "A3" ; phIoT:siteRef local:s3 .
+"""
+    g = rdflib.Graph()
+    g.parse(data=ttl, format="turtle")
+    sites = {n.id: n.site for n in nodes_from_graph(g)}
+    assert sites["A1"] != sites["A3"]

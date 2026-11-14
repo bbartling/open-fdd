@@ -167,12 +167,23 @@ def nodes_from_graph(graph, catalog: Mapping | None = None) -> list[ProofNode]:
     label = lambda s: str(next(iter(graph.objects(s, RDFS.label)), tail(s)))  # noqa: E731
 
     def identities(subjects) -> dict:
-        # a label is a display name, not an identity: when two subjects share one, both fall back to their own
-        # (unique) subject name, so a precise RDF reference never lands on the wrong equipment or merges two sites
-        counts: dict[str, int] = {}
+        # a label is a display name, not an identity. It is used only when no other subject shares it AND it cannot
+        # be mistaken for another subject's own name; otherwise the subject's own name (or its full IRI when even that
+        # is shared) is the identity, so a precise RDF reference never lands on the wrong equipment or merges two sites
+        subjects = list(subjects)
+        labels: dict[str, int] = {}
+        tails: dict[str, int] = {}
         for x in subjects:
-            counts[label(x)] = counts.get(label(x), 0) + 1
-        return {x: label(x) if counts[label(x)] == 1 else tail(x) for x in subjects}
+            labels[label(x)] = labels.get(label(x), 0) + 1
+            tails[tail(x)] = tails.get(tail(x), 0) + 1
+        out = {}
+        for x in subjects:
+            lb, tl = label(x), tail(x)
+            if labels[lb] == 1 and (lb == tl or lb not in tails):
+                out[x] = lb
+            else:
+                out[x] = tl if tails[tl] == 1 and tl not in labels else str(x)
+        return out
 
     sites = identities({x for s in equips for x in objs(s, "siteRef")})
     site_of = lambda s: next((sites[x] for x in objs(s, "siteRef")), "")  # noqa: E731
