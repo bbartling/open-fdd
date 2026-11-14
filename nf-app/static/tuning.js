@@ -518,6 +518,12 @@
         await loadInlineState(ctx, st.scopeKey, gen);
       } catch (_) { /* the reload reports its own state */ }
       if (gen !== st.gen) return;
+      // The reload failed too (read-only fallback to shipped defaults): the committed revision is unknown, not 0.
+      const reloaded = (!meta.wantParams || (st.ruleResp && st.ruleResp.ok)) && (!meta.wantSweep || (st.limitsResp && st.limitsResp.ok));
+      if (!reloaded) {
+        setStatus(`${what} result unknown (${err.message}), and the committed state could not be reloaded${st.readOnlyReason ? ` (${st.readOnlyReason})` : ""}. Click "Reload latest" before saving again.`, true);
+        return;
+      }
       const ruleRev = activeRuleRev(), limRev = activeLimitsRev();
       setStatus(`${what} result unknown (${err.message}); reloaded the committed state: active revision ${meta.wantParams ? ruleRev : limRev}`
         + `${meta.wantParams && meta.wantSweep ? ` (SV-LIMITS ${limRev})` : ""}. Check it before saving again.`, true);
@@ -642,7 +648,7 @@
           }
           clearDraft(ctx, st.scopeKey);
           await loadInlineState(ctx, st.scopeKey, gen);
-          setStatus(`Rolled back ${ctx.ruleId} to revision ${rev}; the next FDD run applies it.`);
+          if (gen === st.gen) setStatus(`Rolled back ${ctx.ruleId} to revision ${rev}; the next FDD run applies it.`);
         } catch (e) {
           // a lost answer may still have committed: reload and report what is active instead of guessing
           if (gen === st.gen) await reconcile(gen, "Rollback", e);

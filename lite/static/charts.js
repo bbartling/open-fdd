@@ -730,7 +730,9 @@ async function fetchRange(list, state, { method = "AVERAGE", windowSec = null, m
   const tsFn = typeof globalThis.ofddTimescaleHistory === "function" ? globalThis.ofddTimescaleHistory : null;
   let timescaleFallback = null;
   const fillUntil = Number.isFinite(earliestNfMs) ? earliestNfMs : bounds.toMs;
-  if (tsFn && list.length && fillUntil - bounds.fromMs > Math.max(effectiveWindowSec * 2000, 3600e3)) {
+  // When Timescale's oldest sample set All's start, that interval is the point of the range: fetch it whatever its size.
+  const minGap = resolved.oldestSource === "timescale" ? 0 : Math.max(effectiveWindowSec * 2000, 3600e3);
+  if (tsFn && list.length && fillUntil - bounds.fromMs > minGap) {
     const numericUuids = list.filter((p) => p.kind !== "String" && p.kind !== "Enum").map((p) => p.uuid);
     if (numericUuids.length) {
       const bucket = effectiveWindowSec <= 300 ? "5 minutes"

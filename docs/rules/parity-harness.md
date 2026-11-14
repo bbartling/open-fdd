@@ -72,14 +72,14 @@ fault while the fan is OFF never counts in any leg.
 
 ## CI tiers
 
-Each tier fails when any leg (pandas oracle, SQL pack, SPARQL client) disagrees, is skipped, or errors.
+Each tier fails on unexpected disagreement under the pinned known-difference policy, a skipped leg, or an error.
 
 | Tier | Data | When | Workflow / job |
 | --- | --- | --- | --- |
-| PR | unit-level parity tests | every PR | `parity.yml` / `pandas oracle vs SQL pack` (required) |
+| PR | unit-level parity tests (PGlite, SQLite, DuckDB, Parquet through DuckDB) | every PR | `parity.yml` / `pandas oracle vs SQL pack` (required) |
 | PR | 2x3 `basic` and `edge`, three-way | every PR | `parity.yml` / `pandas == SQL == SPARQL-client` (required) |
 | PR | 2x3, standalone PostgreSQL | every PR | `parity.yml` / `standalone PostgreSQL parity (no Timescale)` |
-| Large | 4x3 and 8x7, `basic` and `edge`, three-way and standalone PostgreSQL | nightly on master; before each release | `parity-stress.yml` |
+| Large | 4x3 and 8x7, `basic` and `edge`, three-way (Parquet too) and standalone PostgreSQL | nightly on master; before each release | `parity-stress.yml` |
 
 Before a release, run `gh workflow run parity-stress.yml -f ref=<branch>` and link the green run.
 

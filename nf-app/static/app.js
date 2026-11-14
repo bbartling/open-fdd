@@ -13,7 +13,7 @@ const fddExpandedGroups = new Set();
 // (heat map, FDD charts, the rule-input table) under "More". Equipment, filter and open rule are kept in the URL.
 const tabEquip = () => (scope.equip && scope.equip !== WEATHER_SCOPE ? scope.equip : "");
 const fddEquipsInScope = () => (tabEquip() ? model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && idOf(e) === tabEquip()) : []);
-const fddView = { filter: "", showAll: false, open: /** @type {{ruleId: string, equipId: string}|null} */ (null), urlRead: false, entries: /** @type {any[]} */ ([]) };
+const fddView = { restoreOpen: false, filter: "", showAll: false, open: /** @type {{ruleId: string, equipId: string}|null} */ (null), urlRead: false, entries: /** @type {any[]} */ ([]) };
 const FDD_STATUS_ONE = { fault: "Fault", pass: "Pass", skipped: "Skipped", insufficient: "Insufficient data" };
 
 /** One input chip: role -> bound point (got), optional and missing (opt), required and missing (miss). */
@@ -44,6 +44,11 @@ function renderFddSummary(entries) {
 function renderFddList(entries) {
   const panel = $("fddPlotPanel"), list = $("fddList");
   if (panel && panel.parentElement !== $("tab-fdd")) $("tab-fdd").appendChild(panel);   // keep the open-rule panel alive across redraws
+  if (fddView.restoreOpen) {
+    const restored = entries.find((e) => fddView.open && e.ruleId === fddView.open.ruleId && e.equipId === fddView.open.equipId);
+    if (restored && !fddView.filter && ["pass", "skipped"].includes(restored.status)) fddView.showAll = true;
+    fddView.restoreOpen = false;
+  }
   const { shown, hidden } = fddVisibleEntries(entries, fddView);
   const all = $("fddShowAll");
   all.hidden = !!fddView.filter || (!hidden && !fddView.showAll);
@@ -77,6 +82,7 @@ function wireViewTabs() {
   viewTabsWired = true;
   const fail = (e) => setLive(false, e.message);
   const on = (id, event, fn) => { const el = $(id); if (el) el[event] = fn; };
+  on("fddMore", "ontoggle", () => { if (/** @type {HTMLDetailsElement} */ (/** @type {unknown} */ ($("fddMore"))).open) requestAnimationFrame(ofddResizeAll); });
   on("fddHeatAll", "onchange", (e) => { fddUi.heatAll = e.target.checked; renderScopedFddResults().catch(fail); });
   on("rcxAhuOn", "onclick", (e) => { rcxUi.ahuOn = e.currentTarget.getAttribute("aria-pressed") !== "true"; renderRcx().catch(fail); });
 }
@@ -89,7 +95,7 @@ async function renderFdd() {
     const u = fddUrlState();
     if (u.equip && u.equip !== scope.equip && equipChoices(model, scope.site).some((c) => c.value === u.equip)) { scope.equip = u.equip; fillPickers(); }
     fddView.filter = u.filter;
-    if (u.rule) fddView.open = { ruleId: u.rule, equipId: u.equip || tabEquip() };
+    if (u.rule) { fddView.open = { ruleId: u.rule, equipId: u.equip || tabEquip() }; fddView.restoreOpen = true; }
   }
   const equips = fddEquipsInScope();
   if (fddView.open && !equips.some((e) => idOf(e) === fddView.open.equipId)) fddView.open = null;
@@ -430,7 +436,9 @@ async function renderViewTab(tab) {
   wireViewTabs();
   const siteEquips = model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site);
   const fleet = tab === "rcx";                                  // the RCx dashboard: every device, never one picked
-  const equips = fleet ? siteEquips : siteEquips.filter((e) => !tabEquip() || idOf(e) === tabEquip()), single = !fleet && !!tabEquip();
+  // Weather checks still bind their outdoor-air pair from the site's model, but must never draw equipment plots.
+  const weatherOnly = !fleet && scope.equip === WEATHER_SCOPE;
+  const equips = fleet || weatherOnly ? siteEquips : fddEquipsInScope(), single = !fleet && !!tabEquip();
   const ahuOn = tab === "rcx" ? renderAhuControl(siteEquips, catalog) : false;
   const rangeState = getChartRangeState(T.key), siteTz = siteTimeZone();
   renderRangeControl($(T.range), { key: T.key, state: rangeState, siteTz,
@@ -449,7 +457,9 @@ async function renderViewTab(tab) {
   if (run !== viewTabRuns[tab]) return;
   const hours = Math.max(1, (range.resolvedBounds.toMs - range.resolvedBounds.fromMs) / 3600e3);
   $(T.status).textContent = "Loading history…";
-  const { ready, missing } = rcxPlan(equips, model, catalog, { tab, single });
+  const plan = rcxPlan(equips, model, catalog, { tab, single });
+  const { missing } = plan;
+  const ready = weatherOnly ? plan.ready.filter(({ view }) => view.id === "bas-vs-web-oat" || view.id === "bas-vs-web-oat-hist") : plan.ready;
   const cards = ready.flatMap(({ view, equips: eqs }) => (view.scope === "site" ? [{ view, eqs }] : eqs.map((eq) => ({ view, eqs: [eq] }))));
   const groupOf = (c) => (c.view.groupOf ? c.view.groupOf(c.eqs) : c.view.group);
   void missing;                                                  // unbound views are hidden, never listed

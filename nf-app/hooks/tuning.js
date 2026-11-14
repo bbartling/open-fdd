@@ -224,10 +224,13 @@ async function handleOccCalendar({ ts, client, a, log }) {
     log(`tuning: ${a.action} ${ruleId} on site ${a.site || '(none)'} -> revision ${revision}`);
   }
   const history = await ts.ruleConfigHistory(client, a.site, ruleId, a.scope, 20);
+  // The calendar and the revision returned together describe one state: the snapshot this answer was computed from
+  // (get / preview) or the revision this call wrote. Re-reading here could pair calendar N with revision N+1.
+  const active = revision != null ? { ...before, [a.scope]: { revision, parameters: candidate } } : before;
   return {
     ok: true, action: a.action, site: a.site, scope: a.scope, rule_id: ruleId,
     written: revision != null, ...(revision != null ? { revision } : {}),
-    active: await activeOf(), calendar, source: candidate && !candidate.reset && candidate.calendar ? 'saved' : 'default',
+    active, calendar, source: candidate && !candidate.reset && candidate.calendar ? 'saved' : 'default',
     bare_min_occ_hours_per_week: occupancy.occupiedHoursPerWeek(calendar), history,
   };
 }

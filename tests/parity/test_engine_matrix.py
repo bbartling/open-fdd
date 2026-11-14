@@ -82,6 +82,23 @@ def test_duckdb_4x3_edge_parity_matches_pglite_and_pandas(ds_edge_4x3, pglite_ed
     assert verdict.ok, verdict.summary()
 
 
+@pytest.mark.parametrize("profile", ["basic", "edge"])
+def test_parquet_through_duckdb_matches_pglite(profile, ds_basic_4x3, ds_edge_4x3, pglite_basic_4x3, pglite_edge_4x3):
+    """The same pack over Parquet files (written by DuckDB, read back with read_parquet) agrees row for row."""
+    pytest.importorskip("duckdb")
+    ds, ref = (ds_basic_4x3, pglite_basic_4x3) if profile == "basic" else (ds_edge_4x3, pglite_edge_4x3)
+    duck = DuckDBAdapter(parquet=True)
+    duck.load(ds)
+    try:
+        assert duck._conn.execute("SELECT count(*) FROM duckdb_views() WHERE view_name = 'history'").fetchone()[0] == 1
+        rows = duck.run()
+    finally:
+        duck.close()
+    assert duck.stats["errors"] == {}
+    bad = engines_disagree({"pglite": ref, "duckdb-parquet": rows}, "duckdb-parquet", ref_engine="pglite")
+    assert bad == [], bad
+
+
 @pytest.mark.skipif(not postgres_configured(), reason="POSTGRES_TEST_URL + OPENFDD_PG_TEST_DISPOSABLE=1 required")
 def test_postgres_4x3_basic_and_edge_parity(ds_basic_4x3, ds_edge_4x3, pglite_basic_4x3, pglite_edge_4x3):
     for profile, ds, pg_rows in (("basic", ds_basic_4x3, pglite_basic_4x3), ("edge", ds_edge_4x3, pglite_edge_4x3)):

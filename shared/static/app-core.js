@@ -454,6 +454,16 @@ function renderPoints() {
 
 async function renderPointHistory() {
   const read = ++pointHistoryRead;
+  // A point picked on another device or site is out of scope now: drop it and its chart instead of showing it here.
+  const picked = selectedPoint ? model.points.find((x) => x.uuid === selectedPoint) : null;
+  const outOfScope = (x) => (!!x.siteRef && x.siteRef !== scope.site)
+    || ((x.tags || []).includes("point") && !isWeatherPoint(x) && x.equipRef !== overviewEquipId());
+  if (selectedPoint && (!picked || outOfScope(picked))) {
+    selectedPoint = null;
+    const el = $("histChart"), inst = el && typeof echarts !== "undefined" ? echarts.getInstanceByDom(el) : null;
+    if (inst) inst.clear();
+    $("histHint").textContent = "";
+  }
   const p = model.points.find((x) => x.uuid === selectedPoint);
   const state = getChartRangeState("points"), siteTz = siteTimeZone();
   renderRangeControl($("histRangeControl"), { key: "points", state, siteTz,

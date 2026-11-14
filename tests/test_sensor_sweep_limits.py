@@ -118,6 +118,15 @@ def _range_hours(df: pd.DataFrame, role: str, limits: dict | None = None) -> flo
     return float(evidence.get(role, 0.0))
 
 
+def test_an_explicit_empty_sweep_population_sweeps_nothing():
+    """sweep_units (the fetched metadata's sweep population) wins over a units_map already on the frame: {} -> no column."""
+    over = _frame("chw-flow", [120.0] * 12 + [2000.0] * 12 + [120.0] * 12, "L/s")
+    assert _range_hours(over, "chw-flow") > 0.0
+    stale = _frame("chw-flow", [120.0] * 12 + [2000.0] * 12 + [120.0] * 12, "L/s")
+    stale.attrs["sweep_units"] = {}
+    assert _range_hours(stale, "chw-flow") == 0.0
+
+
 def test_chw_flow_out_of_range_faults():
     n = 36
     healthy = _frame("chw-flow", [120.0] * n, "L/s")

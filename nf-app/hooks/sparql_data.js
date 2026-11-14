@@ -54,7 +54,9 @@ const BUCKET_RE = /^\s*(\d+)\s*(minute|hour|day)s?\s*$/i;
 
 const argsOf = (ctx) => startArgs.startHookArgs(ctx, {
   numberFields: ['windowHours', 'pointOffset', 'pointLimit', 'maxBytes', 'maxRows', 'nfSampleCap'],
-  booleanFields: ['includeRows'], expandWindowHours: true,
+  // windowHours stays a window length: validateArgs turns it into a bucket-aligned window (expanding it here to
+  // unaligned ISO bounds made every windowHours-only bucketed request fail as "unaligned").
+  booleanFields: ['includeRows'],
 });
 
 const lower = (v, cap) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.min(Math.floor(Number(v)), cap) : cap);

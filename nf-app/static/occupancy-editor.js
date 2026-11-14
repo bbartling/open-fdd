@@ -24,9 +24,12 @@
       try {
         const answer = await root.ofddTuning.callHook({ action: "get", site, scope: "site", rule_id: O().RULE_ID });
         if (!answer.ok) throw new Error(answer.error || "calendar unavailable");
-        const calendar = O().normalizeCalendar(answer.calendar, { tz: timezone });
         const saved = answer.source === "saved";
-        states.set(site, { calendar, saved: saved ? JSON.stringify(calendar) : "", revision: answer.active?.site?.revision || 0, error: "", busy: false, stored: saved });
+        // an unsaved default starts in the site's own zone; a saved calendar keeps the zone it was saved with
+        const calendar = saved ? O().normalizeCalendar(answer.calendar, { tz: timezone }) : O().defaultCalendar(timezone);
+        // a newer render (the user left and came back) owns the shared state: drop this older answer
+        if (gen !== generation || states.has(site)) return;
+        states.set(site, { calendar, saved: saved ? JSON.stringify(calendar) : "", revision: answer.active?.site?.revision || 0, error: "", saveError: "", busy: false, stored: saved, view: null });
         // only a SAVED calendar drives the charts; until then they keep the site's NF schedule (or the 4.x default)
         if (saved) root.ofddOccCalendars[site] = calendar;
         else delete root.ofddOccCalendars[site];
@@ -77,7 +80,7 @@
         st.calendar = O().normalizeCalendar({ timezone: zone.value, days });
         st.touched = true;
         root.ofddOccCalendars[site] = st.calendar;
-        st.error = "";
+        st.error = ""; st.saveError = "";
         redraw();
       } catch (e) { st.error = e.message || String(e); }
       drawState();
@@ -87,10 +90,11 @@
       hours.textContent = `Bare-min occupied hours/week: ${h}`;
       const dirty = JSON.stringify(st.calendar) !== st.saved;
       save.textContent = st.stored ? "Save occupancy calendar" : "Save and use this calendar";
-      status.textContent = st.error || (st.busy ? "Saving…" : !st.stored && !st.touched
+      status.textContent = st.error || st.saveError || (st.busy ? "Saving…" : !st.stored && !st.touched
         ? "Not saved yet: the weekly charts use the site's NF schedule, else the 4.x default (50 h/week), until you save"
         : dirty ? "Unsaved changes (the charts preview them)" : `Saved (revision ${st.revision})`);
-      save.disabled = st.busy || !!st.error || !dirty;
+      // a failed Save keeps the draft and leaves Save enabled to retry; only an invalid draft disables it
+      save.disabled = st.busy || !!st.error || (!dirty && !st.saveError);
       reset.disabled = st.busy;
       zone.disabled = st.busy;
       for (const c of inputs.values()) {
@@ -113,12 +117,14 @@
           expected_revision: st.revision, overrides: { version: 1, calendar: st.calendar } });
         if (!ans.ok) throw new Error(ans.error || "Save failed");
         st.calendar = O().normalizeCalendar(ans.calendar);
-        st.saved = JSON.stringify(st.calendar); st.revision = ans.revision; st.error = ""; st.stored = true;
+        st.saved = JSON.stringify(st.calendar); st.revision = ans.revision; st.saveError = ""; st.stored = true;
         root.ofddOccCalendars[site] = st.calendar; redraw();
-      } catch (e) { st.error = `Not saved: ${e.message || e}`; }
-      finally { st.busy = false; if (gen === generation) drawState(); }
+      } catch (e) { st.saveError = `Not saved: ${e.message || e} (your changes are kept; Save to retry)`; }
+      // the editor on screen may be a newer render of this site (a theme change during Save): refresh that one
+      finally { st.busy = false; if (st.view) st.view(); }
     });
     details.append(sum, hours, note, zoneLabel, table, save, reset, status);
+    st.view = drawState;
     host.replaceChildren(details); drawState();
   }
   root.ofddOccupancyEditor = { render };

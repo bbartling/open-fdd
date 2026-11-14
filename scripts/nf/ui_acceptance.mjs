@@ -107,6 +107,10 @@ async function waitRendered(page) {
     return cards.length > 0 && cards.every((c) => c.hidden || c.querySelector(".chart.rendered") || c.querySelector(".note")?.textContent);
   }, null, { timeout: 60000 });
   await page.waitForTimeout(800);
+  // a chart that threw is caught by the page and written into its note: that is a failure, not a rendered panel
+  const broken = await page.$$eval("#overviewRcx .rcx-card", (cs) => cs.filter((c) => !c.hidden && (!c.querySelector(".chart.rendered")
+    || /^could not draw/.test(c.querySelector(".note")?.textContent || ""))).map((c) => `${c.dataset.view}: ${c.querySelector(".note")?.textContent || "not rendered"}`));
+  check(broken.length === 0, `every shown panel rendered (${broken.join(" | ")})`);
 }
 const visibleViews = (page) => page.$$eval("#overviewRcx .rcx-card", (cs) => cs.filter((c) => !c.hidden && !c.closest("section.panel")?.hidden).map((c) => c.dataset.view));
 
@@ -189,8 +193,9 @@ async function main() {
     check(true, "reload restores the open rule from the URL");
     await page.click("#fddSummary .fdd-chip[data-filter='skipped']");
     await page.waitForTimeout(500);
-    const onlySkipped = await page.$$eval("#fddList .fdd-item", (is) => is.every((i) => i.dataset.status === "skipped"));
-    check(onlySkipped, "a chip filters the list");
+    const skippedRows = await page.$$eval("#fddList .fdd-item", (is) => is.map((i) => `${i.dataset.rule}:${i.dataset.status}`));
+    check(skippedRows.length > 0 && skippedRows.every((r) => r.endsWith(":skipped")) && skippedRows.some((r) => r.startsWith("FC1:")),
+      `the Skipped chip lists only skipped rules, FC1 (no run proof) among them (${skippedRows.join(", ")})`);
     check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
     full.srv.close();
 

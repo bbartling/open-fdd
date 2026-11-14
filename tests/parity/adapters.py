@@ -235,7 +235,13 @@ class DuckDBAdapter:
 
     name = "duckdb"
 
-    def __init__(self):
+    def __init__(self, parquet: bool = False):
+        # parquet=True: every input table is written to a Parquet file and the rules read it back through
+        # read_parquet (the "data lake" path: Parquet files queried in place by DuckDB, values still SI).
+        self.parquet = parquet
+        if parquet:
+            self.name = "duckdb-parquet"
+        self._tmp = None
         self._conn = None
         self._pack: dict | None = None
         self.stats: dict = {}
@@ -271,6 +277,15 @@ class DuckDBAdapter:
                 names = ", ".join(f'"{c["name"]}"' for c in spec)
                 tuples = [tuple(_cell_value(row, c) for c in spec) for row in rows]
                 self._conn.executemany(f"INSERT INTO {table} ({names}) VALUES ({placeholders})", tuples)
+            if self.parquet:
+                import tempfile
+
+                if self._tmp is None:
+                    self._tmp = tempfile.TemporaryDirectory(prefix="ofdd-parquet-")
+                f = Path(self._tmp.name, f"{table}.parquet").as_posix()
+                self._conn.execute(f"COPY {table} TO '{f}' (FORMAT parquet)")
+                self._conn.execute(f"DROP TABLE {table}")
+                self._conn.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{f}')")
         self._load_ms = int((time.time() - t0) * 1000)
 
     def run(self, rule_ids: Sequence[str] | None = None, rule_sql: dict | None = None) -> dict[str, list[dict]]:
@@ -308,6 +323,9 @@ class DuckDBAdapter:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+        if self._tmp is not None:
+            self._tmp.cleanup()
+            self._tmp = None
 
 
 def postgres_configured() -> bool:
@@ -518,6 +536,7 @@ ADAPTERS = {
     "pglite": lambda: NodeEngineAdapter("pglite"),
     "sqlite": lambda: NodeEngineAdapter("sqlite"),
     "duckdb": lambda: DuckDBAdapter(),
+    "duckdb-parquet": lambda: DuckDBAdapter(parquet=True),
     "postgres": lambda: PostgresAdapter(),
     "timescale": lambda: TimescaleAdapter(ingest="si"),
 }

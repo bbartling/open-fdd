@@ -7,12 +7,22 @@ Needs a disposable TimescaleDB (PGURL + OPENFDD_TS_TEST_DISPOSABLE=1, as nf-app/
 CI's TimescaleDB job sets both and fails when this test is skipped.
 """
 import json
+import re
+from pathlib import Path
 
 import pytest
 
 from adapters import NodeEngineAdapter, TimescaleAdapter, timescale_configured
 from open_fdd.parity import Policy, compare, from_imperial, generate, reference, to_imperial
 from stress import BASELINE, engines_disagree
+
+# The installed schema version, read from the hook so the test follows schema bumps.
+SCHEMA_VERSION = int(
+    re.search(
+        r"const SCHEMA_VERSION = (\d+);",
+        (Path(__file__).resolve().parents[2] / "nf-app" / "hooks" / "lib" / "timescale.js").read_text(encoding="utf-8"),
+    ).group(1)
+)
 
 _BASE = json.loads(BASELINE.read_text(encoding="utf-8"))["datasets"]
 PINNED = next(d for d in _BASE if (d["equips"], d["days"]) == (4, 3))   # the fast size; CI's stress run pins 8 x 7
@@ -116,7 +126,7 @@ def test_timescale_through_the_core_tables_reproduces_the_verdict(ds):
     raw = adapter.raw
     assert raw["errors"] == {}
     assert raw["ingest"] == "si"
-    assert raw["schema_version"] == 4 and raw["signature_ok"] is True
+    assert raw["schema_version"] == SCHEMA_VERSION and raw["signature_ok"] is True
     assert raw["history_mismatches"] == [], "history == SI dataset cell for cell (1e-9 relative)"
     assert raw["factor"]["factor_mismatches"] == []
     assert raw["stored"]["after"] == raw["stored"]["before"] > 0, "re-running writes no new rows"

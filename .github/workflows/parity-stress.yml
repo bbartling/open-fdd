@@ -54,7 +54,7 @@ jobs:
           PROFILE: ${{ matrix.profile }}
         run: |
           set -o pipefail
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --sparql --out "$RUNNER_TEMP/stress.json"
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb,duckdb-parquet --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --sparql --out "$RUNNER_TEMP/stress.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

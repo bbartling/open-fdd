@@ -221,3 +221,21 @@ test("All on Full then draws the Timescale-only history before NF's oldest sampl
   assert.deepEqual([...r.series.get("num-1")[0]], [tsStart, 7]);
   assert.equal(r.timescaleFallback.used, true);
 });
+test("All on Full fetches a short Timescale-only interval too when Timescale set the start (#1612)", async () => {
+  const now = Date.parse("2026-11-14T00:00:00Z"), nfStart = Date.parse("2026-11-13T12:00:00Z"), tsStart = nfStart - 30 * 60e3;
+  const c = context();
+  c.api = async (path) => {
+    const q = new URL(path, "https://nf.example.test").searchParams;
+    return { data: q.getAll("uuids").map((uuid) => ({ uuid, values: [{ ts: new Date(nfStart).toISOString(), double: 1 }] })) };
+  };
+  c.ofddTimescaleOldest = async (uuids) => ({ ok: true, complete: true, oldest: Object.fromEntries(uuids.map((u) => [u, new Date(tsStart).toISOString()])) });
+  const asked = [];
+  c.ofddTimescaleHistory = async (q) => {
+    asked.push(q);
+    return { ok: true, bucket: q.bucket, rows: [{ point_uuid: "num-1", bucket: new Date(tsStart).toISOString(), avg: 7 }] };
+  };
+  const r = await c.get("fetchRange")([{ uuid: "num-1" }], { preset: "all" }, { nowMs: now });
+  assert.equal(r.fromMs, tsStart);
+  assert.equal(asked.length, 1, "the 30-minute Timescale interval is fetched");
+  assert.deepEqual([...r.series.get("num-1")[0]], [tsStart, 7]);
+});

@@ -94,3 +94,14 @@ test("Overview: the weekly runtime chart shows with an AHU / fan and is hidden w
   const noAhu = plan((r) => !(r.pointType === "EQUIPMENT" && /^AHU/.test(r.attrs.id)));
   assert.ok(![...noAhu].some((id) => /^weekly-fan/.test(id)), "no AHU: no weekly fan chart");
 });
+test("a shift that wraps into the next day's shift is rejected (no double-counted hours)", () => {
+  const days = { mon: { occupied: true, start: "22:00", end: "10:00" }, tue: { occupied: true, start: "06:00", end: "18:00" },
+    wed: { occupied: false }, thu: { occupied: false }, fri: { occupied: false }, sat: { occupied: false }, sun: { occupied: false } };
+  assert.throws(() => O.normalizeCalendar({ timezone: "America/Chicago", days }), /mon 22:00-10:00 runs into tue 06:00-18:00/);
+  days.mon.end = "06:00";                                   // ends exactly when Tuesday starts: fine
+  const cal = O.normalizeCalendar({ timezone: "America/Chicago", days });
+  assert.equal(O.occupiedHoursPerWeek(cal), 20);
+  assert.equal(O.calendarSchedule(cal).hoursPerWeek, 20);
+  days.tue.occupied = false; days.mon.end = "10:00";        // nothing to collide with
+  assert.equal(O.occupiedHoursPerWeek(O.normalizeCalendar({ timezone: "America/Chicago", days })), 12);
+});

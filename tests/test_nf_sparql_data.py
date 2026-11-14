@@ -286,7 +286,8 @@ def test_incomplete_page_without_next_from_is_rejected():
     ({"point_offset": 3}, "point_offset"),
     ({"points_total": None}, "points_total"),
     ({"from": "2026-01-05T00:30:00Z"}, "window"),
-    ({"series": {"u9": []}}, "not a point of this page"),
+    ({"series": {"u1": [], "u9": []}}, "not a point of this page"),
+    ({"series": {}}, "no series for points"),                                            # a point's series is missing
     ({"series": {"u1": [[MS0 - 1, 1.0]]}}, "outside the page window"),
     ({"series": {"u1": [["x", 1.0]]}}, "epoch_ms"),
     ({"series": {"u1": [[MS0, True]]}}, "epoch_ms"),
@@ -414,3 +415,9 @@ def test_bucketed_fetch_pages_on_epoch_bucket_boundaries():
     for f, t in seen:
         for x in (f, t):
             assert int(datetime.fromisoformat(x.replace("Z", "+00:00")).timestamp()) % 300 == 0, x
+
+
+def test_a_point_with_no_samples_answers_an_empty_series():
+    """{"u1": []} is a point with no samples in the window: valid, and distinct from a missing series entry."""
+    got = sd.fetch(_one(series={"u1": []}), "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+    assert got is not None

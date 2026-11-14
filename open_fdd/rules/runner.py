@@ -445,14 +445,17 @@ def run_cookbook_rule(
         units: dict[str, str] = {}
         # an explicit sweep population (frames_from_samples(sweep_marker=...)) wins over every unit-bearing column
         role_units = d.attrs["sweep_units"] if isinstance(d.attrs.get("sweep_units"), dict) else d.attrs.get("role_units")
+        explicit = isinstance(d.attrs.get("sweep_units"), dict)
         if isinstance(role_units, dict):
             units.update({str(k): str(v) for k, v in role_units.items() if v})
         column_map = d.attrs.get("column_map")
         if isinstance(column_map, dict):
             raw_units = column_map.get("units")
             if isinstance(raw_units, dict):
-                units.update({str(k): str(v) for k, v in raw_units.items() if v})
-        if units:
+                units.update({str(k): str(v) for k, v in raw_units.items() if v
+                              and (not explicit or str(k) in d.attrs["sweep_units"])})
+        if units or explicit:
+            # explicit population: exactly its columns, so an empty one sweeps nothing (a stale units_map never leaks)
             d.attrs["units_map"] = units
     # Fingerprint after params resolve; still stamp skips that happen after params exist.
     missing = _missing_roles(rule, d)

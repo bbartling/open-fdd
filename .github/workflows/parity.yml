@@ -123,7 +123,9 @@ jobs:
           POSTGRES_TEST_URL: postgres://postgres:example@localhost:5432/postgres
         run: |
           set -o pipefail
-          python -m pytest tests/parity/test_engine_matrix.py -q -rs 2>&1 | tee "$RUNNER_TEMP/pg-parity.log"
-          if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/pg-parity.log"; then echo "Postgres parity tests skipped: failing the lane"; exit 1; fi
+          python -m pytest tests/parity/test_engine_matrix.py -q -rA 2>&1 | tee "$RUNNER_TEMP/pg-parity.log"
+          if grep -Eq "SKIPPED|skipped|deselected" "$RUNNER_TEMP/pg-parity.log"; then echo "Postgres parity tests skipped: failing the lane"; exit 1; fi
+          # the PostgreSQL test must have actually run and passed against the service container, not just "not skipped"
+          grep -Eq "^PASSED .*test_postgres_4x3_basic_and_edge_parity" "$RUNNER_TEMP/pg-parity.log" || { echo "standalone PostgreSQL parity did not run"; exit 1; }
           python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile basic
           python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile edge

@@ -329,3 +329,9 @@ test("rdf hook: the logged JSON line fits the limit even for quote-heavy Turtle;
   assert.equal(b.ok, false);
   assert.equal(b.error_code, "model_changed");
 });
+test("a windowHours-only request gets the bucket-aligned default window", () => {
+  const args = hook.argsOf({ args: { query: "ASK { ?s ?p ?o }", windowHours: "6" } });
+  assert.equal(args.from, undefined, "windowHours is not expanded to unaligned bounds before validation");
+  const v = hook.validateArgs(args, { now: Date.parse("2026-11-14T12:03:17Z") });
+  assert.equal(v.form, "ASK");
+});

@@ -139,6 +139,10 @@ def check_data_page(ans: Any, *, offset: int, cur: datetime, stop: datetime, fir
     if repeated:
         raise PageError(f"sparql-data page: points repeated from an earlier point page: {sorted(repeated)[:3]}")
     end_ms = nxt_ms if nxt_ms is not None else t1
+    missing = [u for u in points if u not in series]
+    if missing:
+        # every point of the page answers, even with no samples ([]); a missing entry is lost data, not an empty series
+        raise PageError(f"sparql-data page: no series for points {sorted(missing)[:3]}")
     for u, s in series.items():
         if u not in points:
             raise PageError(f"sparql-data page: series for {u!r}, which is not a point of this page")

@@ -60,6 +60,16 @@
       }
       days[d] = { occupied, start: out.start, end: out.end };
     }
+    // A shift that wraps past midnight must end before the next day's shift starts: overlapping hours would count
+    // twice in the bare-minimum sum while the schedule (a union) counts them once.
+    DAYS.forEach((d, i) => {
+      const r = days[d], next = DAYS[(i + 1) % 7], n = days[next];
+      if (!r.occupied || !n.occupied) return;
+      const s = minutesOf(r.start), e = minutesOf(r.end);
+      if (e <= s && e > minutesOf(n.start)) {
+        throw new Error(`${d} ${r.start}-${r.end} runs into ${next} ${n.start}-${n.end}: end ${d} by ${n.start} or move ${next}'s start`);
+      }
+    });
     return { timezone: tz, days };
   }
 

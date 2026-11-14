@@ -78,6 +78,7 @@
     <div class="stats" id="summary"></div>
     <!-- RCx dashboard (Full): every modeled device on the site at once, no device picker; a panel draws only when the
          model has its equipment (AHU, DX / compressor / chiller, hot-water plant, zones, ...) and is hidden otherwise -->
+    <section class="panel" id="overviewOccupancy" hidden></section>
     <div id="overviewRcx" hidden>
       <section class="panel" id="rcxHead">
         <h2>Retro-commissioning <span class="hint" id="rcxHint">every modeled device on this site · a panel shows only when the model has that equipment</span></h2>
@@ -88,7 +89,6 @@
         <p class="hint" id="rcxMode"></p>
         <div id="rcxRangeControl"></div><p id="rcxRangeStatus" class="hint" role="status"></p>
       </section>
-      <section class="panel" id="overviewOccupancy" hidden></section>
       <div class="kpis" id="rcxKpis"></div>
       <div id="rcxBody"></div>
     </div>
