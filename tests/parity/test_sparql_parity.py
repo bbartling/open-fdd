@@ -75,6 +75,79 @@ def test_sparql_client_equals_sql_pack_like_the_oracle(case):
     assert vs.compared >= 40 and not vs.pin_violations, vs.pin_violations
 
 
+def test_sweep_population_comes_from_the_fetched_metadata(case):
+    """The SV sweep set is what the client derives from the points' own markers, never a fixture overwrite."""
+    ds = case["ds"]
+    assert case["info"]["sweep_mismatches"] == []
+    _, frames, _, _ = leg.client_frames(ds)
+    assert leg.sweep_mismatches(ds, frames) == []
+    for e, df in frames.items():
+        sweep, units = df.attrs["sweep_units"], df.attrs["role_units"]
+        assert sweep and set(sweep) < set(units), e          # inputs that are not sensors keep their units, unswept
+        assert all(units[c] == u for c, u in sweep.items()), e
+    import inspect
+    assert 'attrs["role_units"] =' not in inspect.getsource(leg.client_frames)
+
+
+# ---------------------------------------------------------------------------- Timescale-selected source
+def _text_columns(ds):
+    from open_fdd.nf.model import column_for
+    return {column_for(c["name"]) for c in ds.history_columns if c["type"] == "text"} | \
+        {c["name"] for c in ds.history_columns if c["type"] == "text"}
+
+
+def test_timescale_selected_client_equals_the_oracle_on_numeric_inputs():
+    """basic (on the 5-minute grid): source=timescale through the shipped hook and lib/timescale.js historyRoute.
+
+    Timescale stores numbers only, so text points (occupancy mode, ...) have no history there. The comparison is with
+    the oracle run on the same frames minus those text columns: every rule, status, hours and gated samples equal.
+    """
+    from open_fdd.parity.pandas_ref import reference_from_frames
+
+    ds = generate(0, 2, 1, "basic")
+    sparql, info = leg.sparql_reference(ds, source="timescale")
+    assert info["source"] == "timescale" and info["hook_calls"] > 2 and info["sweep_mismatches"] == []
+    text = _text_columns(ds)
+    assert text, "the dataset must carry a text point for this test to mean anything"
+    frames = {e["equipment_id"]: equip_frame(ds, e["equipment_id"]).drop(columns=[c for c in text], errors="ignore")
+              for e in ds.equipment}
+    for e, df in frames.items():   # the client marks its sweep set; give the oracle frames the same metadata
+        df.attrs["role_units"] = equip_frame(ds, e).attrs.get("role_units", {})
+    oracle = reference_from_frames(frames, weather_frame(ds), float(ds.step_seconds))
+    bad = leg.oracle_mismatches(sparql, oracle)
+    assert not bad, bad[:20]
+    full = reference(ds)
+    differ = {m.split("/")[0] for m in leg.oracle_mismatches(sparql, full)}
+    assert differ and differ <= {"SCHED-1", "VAV-1", "VAV-2"}, differ   # only the text-input rules move
+
+
+def test_timescale_selected_frames_are_epoch_bucket_means_on_irregular_data():
+    """edge (irregular stamps, gaps, duplicates): every numeric column of the client's frame is the mean of the raw
+    samples per epoch-aligned 5-minute bucket, labelled by the bucket start; no bucket is split or counted twice."""
+    ds = generate(0, 2, 1, "edge")
+    _, frames, _, calls = leg.client_frames(ds, source="timescale")
+    assert calls > 2
+    from open_fdd.nf.model import column_for
+
+    series = leg.nf_world(ds)["series"]       # the raw samples as stored, duplicates included (avg counts each)
+    step = f"{ds.step_seconds}s"
+    checked = 0
+    for e, df in frames.items():
+        for c in ds.history_columns:
+            col = column_for(c["name"])
+            if c["type"] == "text" or col not in df.columns:
+                continue
+            raw = [(t, v) for t, v in series[leg.point_uuid(e, c["name"])] if not isinstance(v, str)]
+            want = pd.Series([float(v) for _, v in raw], index=pd.to_datetime([t for t, _ in raw], unit="ms", utc=True))
+            want = want.groupby(want.index.floor(step)).mean()
+            got = df[col].dropna()
+            assert set(got.index) == set(want.index), (e, col)
+            pd.testing.assert_series_equal(got, want.reindex(got.index), check_names=False, check_freq=False,
+                                           check_index_type=False, rtol=1e-12, atol=1e-9, obj=f"{e}/{col}")
+            checked += 1
+    assert checked > 50
+
+
 def test_the_leg_uses_the_package_rule_functions():
     import inspect
 

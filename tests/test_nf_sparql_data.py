@@ -398,3 +398,19 @@ def test_rdf_turtle_pages_must_join_exactly():
         sd.rdf_turtle(_rdf(wrong))
     with pytest.raises(sd.PageError, match="receipt"):
         sd.rdf_turtle(_rdf({0: lambda a: {"ok": True, "offset": 0, "next_offset": None}}))
+
+
+def test_bucketed_fetch_pages_on_epoch_bucket_boundaries():
+    """A bucket split across two time pages would come back twice under one timestamp (5.0.20)."""
+    seen = []
+
+    def hook(h, a):
+        seen.append((a["from"], a["to"]))
+        return _page(a, series={"u1": []})
+
+    sd.fetch(hook, "SELECT ?uuid WHERE {}", T0 + timedelta(minutes=2), T0 + timedelta(minutes=58), bucket="5 minutes",
+             page_days=0.0123)
+    assert seen[0][0] == "2026-01-05T00:00:00Z" and seen[-1][1] == "2026-01-05T01:00:00Z"
+    for f, t in seen:
+        for x in (f, t):
+            assert int(datetime.fromisoformat(x.replace("Z", "+00:00")).timestamp()) % 300 == 0, x

@@ -104,7 +104,8 @@ function validateArgs(args = {}, { now = Date.now() } = {}) {
     const h = Number(args.windowHours) > 0 ? Number(args.windowHours) : 24;
     to = now; from = now - h * 3600e3;
   }
-  const f = time(from, 'from'), t = time(to, 'to');
+  const defaulted = (args.from == null || args.from === '') && (args.to == null || args.to === '');
+  let f = time(from, 'from'), t = time(to, 'to');
   if (t <= f) throw new Error('args.from must be before args.to');
   const bucketText = args.bucket == null || args.bucket === '' ? '5 minutes' : String(args.bucket).trim();
   let windowSec = 0;
@@ -112,6 +113,14 @@ function validateArgs(args = {}, { now = Date.now() } = {}) {
     const m = BUCKET_RE.exec(bucketText);
     if (!m || Number(m[1]) < 1) throw new Error('args.bucket must be "raw" or like "5 minutes", "1 hour", "1 day"');
     windowSec = Number(m[1]) * UNIT_SECS[m[2].toLowerCase()];
+    // Buckets are aligned to the Unix epoch. A window edge inside a bucket would answer a partial bucket under the
+    // full bucket's timestamp, and the next page would answer the rest under the same timestamp (5.0.20): so a
+    // bucketed window must start and end on bucket boundaries. The defaulted window is widened to them.
+    const w = windowSec * 1000;
+    if (defaulted) { f = Math.floor(f / w) * w; t = Math.ceil(t / w) * w; }
+    else if (f % w || t % w) {
+      throw Object.assign(new Error(`args.from and args.to must be multiples of the bucket (${bucketText}, aligned to the Unix epoch)`), { code: 'unaligned' });
+    }
   }
   const source = String(args.source || 'auto').toLowerCase();
   if (!['auto', 'nf', 'timescale'].includes(source)) throw new Error('args.source must be auto, nf or timescale');

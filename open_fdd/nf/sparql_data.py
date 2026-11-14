@@ -170,6 +170,13 @@ def fetch(transport: Transport, query: str, start: datetime | str, end: datetime
         raise NFError("start must be before end")
     out = _empty(bucket)
     page = timedelta(days=page_days)
+    width = 0 if str(bucket).strip().lower() == "raw" else _bucket_sec(bucket)
+    min_window = max(MIN_WINDOW, timedelta(seconds=width))
+    if width:
+        # buckets are aligned to the Unix epoch: widen to whole buckets and page on bucket boundaries, so no bucket
+        # is ever split across two pages (it would come back twice under one timestamp with partial averages)
+        t0, t1 = _align(t0, width, up=False), _align(t1, width, up=True)
+        page = timedelta(seconds=max(width, (page.total_seconds() // width) * width))
     offset: int | None = 0
     first: dict | None = None
     seen: set[str] = set()
@@ -193,8 +200,10 @@ def fetch(transport: Transport, query: str, start: datetime | str, end: datetime
                 if not isinstance(ans, Mapping):
                     raise PageError("sparql-data page: answer is not an object")
                 if ans.get("ok") is not True:
-                    if ans.get("ok") is False and ans.get("error_code") == "too_large" and stop - cur > MIN_WINDOW:
-                        stop = cur + max(MIN_WINDOW, (stop - cur) / 2)
+                    if ans.get("ok") is False and ans.get("error_code") == "too_large" and stop - cur > min_window:
+                        stop = cur + max(min_window, (stop - cur) / 2)
+                        if width:
+                            stop = max(cur + timedelta(seconds=width), _align(stop, width, up=False))
                         continue
                     if ans.get("ok") is not False:
                         raise PageError("sparql-data page: no ok flag")
@@ -231,6 +240,12 @@ def fetch(transport: Transport, query: str, start: datetime | str, end: datetime
         raise PageError(f"sparql-data: {len(seen)} points received, points_total is {first['points_total']}")
     _dedup(out)
     return out
+
+
+def _align(t: datetime, width: int, *, up: bool) -> datetime:
+    ms, w = int(round(t.timestamp() * 1000)), width * 1000
+    ms = -(-ms // w) * w if up else (ms // w) * w
+    return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
 
 
 def _dedup(out: dict) -> None:
@@ -448,14 +463,16 @@ def samples_of(answer: Mapping[str, Any]) -> dict[str, list]:
 
 
 def frames(answer: Mapping[str, Any], *, weather: str = "columns", roles: Iterable[str] | None = None,
-           site: str | None = None, equip: str | None = None, window_sec: int | None = None) -> dict[tuple[str, str], Any]:
+           site: str | None = None, equip: str | None = None, window_sec: int | None = None,
+           sweep_marker: str | None = None) -> dict[tuple[str, str], Any]:
     """``{(site, equip): SI DataFrame}`` for ``open_fdd.rules``: the very code of ``equipment_frames``.
 
     Binding is ``bind_equipment`` (NF class, then markers; the equipment's points plus its site's weather points),
     frame assembly and SI conversion are ``frames_from_samples`` / ``si_plan_for``. A point the query (``?role``) or
     the model (``ofddRole``) binds explicitly fills that role, and only that role, on its equipment. Weather points
     (``weather`` marker, no equipRef) join every equipment of their site as ``web-*`` columns (``weather="columns"``)
-    or are left out (``"separate"``: read them with ``weather_frame``).
+    or are left out (``"separate"``: read them with ``weather_frame``). ``sweep_marker`` (e.g. ``"sensor"``) limits the
+    SV sweeps to points carrying that marker (see ``frames_from_samples``).
     """
     from open_fdd.nf.model import bind_equipment, frames_from_samples
 
@@ -479,7 +496,7 @@ def frames(answer: Mapping[str, Any], *, weather: str = "columns", roles: Iterab
                 pins.setdefault((b.site, b.equip), {}).setdefault(role, p)
         if b.roles or (b.site, b.equip) in pins:
             scope.append(b)
-    return frames_from_samples(scope, samples_of(answer), window_sec or _window_of(answer), pins)
+    return frames_from_samples(scope, samples_of(answer), window_sec or _window_of(answer), pins, sweep_marker)
 
 
 def _is_weather(p) -> bool:

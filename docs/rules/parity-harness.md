@@ -70,7 +70,8 @@ synthetic NF, fetches with `open_fdd.nf.sparql_data`, and runs the oracle's pand
 - the client's results to equal the oracle's (status, fault hours, and the samples that pass the gate);
 - the same verdict against the SQL pack, under the same pinned known differences.
 
-SV sweeps use the dataset's sensor population (`role_units`), so the swept sensors match; values do not change.
+Sweep membership and units come from fetched metadata (`sensor` markers) and are asserted. A Timescale-source
+test matches pandas on numeric inputs; irregular data equals epoch-bucket means.
 `test_sparql_motor_gate.py` runs the fan ON, then OFF, then ON (plus a command-only variant): a fault while OFF
 never counts, and a fault while ON counts the same in all three legs.
 

@@ -434,7 +434,8 @@ def run_cookbook_rule(
             d = inject_oa_t_for_physics(d)
     if rule.sensor_sweep:
         units: dict[str, str] = {}
-        role_units = d.attrs.get("role_units")
+        # an explicit sweep population (frames_from_samples(sweep_marker=...)) wins over every unit-bearing column
+        role_units = d.attrs["sweep_units"] if isinstance(d.attrs.get("sweep_units"), dict) else d.attrs.get("role_units")
         if isinstance(role_units, dict):
             units.update({str(k): str(v) for k, v in role_units.items() if v})
         column_map = d.attrs.get("column_map")
