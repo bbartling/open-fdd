@@ -1,6 +1,6 @@
 """SPARQL data client: query the site model on an NF box, get trend data, run the pandas reference rules here.
 
-Same workflow as a stand-alone SPARQL playground ("server = model + time series, laptop = fault math"), served by the
+Same workflow as a stand-alone SPARQL endpoint ("server = model + time series, laptop = fault math"), served by the
 Open-FDD NF app itself (#1618):
 
     from open_fdd.nf import NFClient
