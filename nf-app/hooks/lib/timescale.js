@@ -67,7 +67,7 @@ async function connect(config = {}) {
 }
 
 /** schema_version of install.sql this release needs (4 = shared core schema: fdd.point / fdd.rule_result / fdd.rule_config). */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /** Installed openfdd schema_version, 0 when the schema / config table / key is absent (pre-scoped release = 0). */
 async function schemaVersion(client) {

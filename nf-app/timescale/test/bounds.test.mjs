@@ -204,3 +204,14 @@ test("optional pgweb sidecar stays off by default, private, TLS + basic_auth, re
   assert.match(pgGrants, /statement_timeout = '10s'/);
   assert.doesNotMatch(pgGrants, /(INSERT|UPDATE|DELETE|TRUNCATE|ALTER TABLE|CREATE TABLE)/i);
 });
+
+test("README manual install: one psql command, ON_ERROR_STOP, one transaction, the installer's file order (#1625)", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const cmds = readme.split("\n").filter((l) => /^\s*psql .*-f nf-app\/timescale\/install\.sql/.test(l));
+  assert.equal(cmds.length, 1, cmds.join("\n"));
+  const cmd = cmds[0];
+  assert.match(cmd, /-v ON_ERROR_STOP=1/);
+  assert.match(cmd, /\s-1\s/);
+  const files = [...cmd.matchAll(/-f nf-app\/timescale\/(\S+)/g)].map((m) => m[1]);
+  assert.deepEqual(files, ts.SQL_FILES);
+});

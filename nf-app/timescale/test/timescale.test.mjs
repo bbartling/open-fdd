@@ -222,7 +222,7 @@ test("upgrade v3 -> v4: results are copied into fdd.rule_result, legacy tables d
   assert.equal(await ts.schemaVersion(db), 3);
   const engine = await createEngine({ kind: "timescale", pack, client: db });   // installs because 3 < 4
   await engine.close();
-  assert.equal(await ts.schemaVersion(db), 4);
+  assert.equal(await ts.schemaVersion(db), ts.SCHEMA_VERSION);
   const out = (await db.query(`SELECT site_id, rule_id, subject_key, status, fault_hours, role, metrics, diagnostics->'legacy'->>'window_defaulted' AS defaulted,
       window_start, window_end, created_at FROM fdd.rule_result WHERE equipment_id = 'fixture' ORDER BY created_at, rule_id, subject_key`)).rows;
   assert.equal(out.length, 4, "every legacy row copied");
@@ -236,7 +236,7 @@ test("upgrade v3 -> v4: results are copied into fdd.rule_result, legacy tables d
   assert.equal((await db.query("SELECT value->>'rows' AS n FROM openfdd.config WHERE key = 'legacy_results_copied'")).rows[0].n, "4");
   const count = async () => Number((await db.query("SELECT count(*) AS n FROM fdd.rule_result")).rows[0].n);
   const n1 = await count();
-  assert.equal((await ts.install(db)).schemaVersion, 4);
+  assert.equal((await ts.install(db)).schemaVersion, ts.SCHEMA_VERSION);
   assert.equal(await count(), n1, "re-running the installer changes nothing");
   await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'fixture'");
 });
@@ -254,7 +254,7 @@ test("upgrade v3 -> v4 refuses on a row-count mismatch and leaves both tables un
   assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_result WHERE equipment_id = 'fixture'")).rows[0].n, 1, "nothing half-copied");
   assert.ok((await db.query("SELECT to_regclass('openfdd.retention_log') AS b")).rows[0].b, "retention_log kept");
   await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'fixture'");
-  assert.equal((await ts.install(db)).schemaVersion, 4, "after the conflict is cleared the upgrade completes");
+  assert.equal((await ts.install(db)).schemaVersion, ts.SCHEMA_VERSION, "after the conflict is cleared the upgrade completes");
   assert.equal((await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'fixture'")).rowCount, 2, "the completed upgrade copied exactly the two legacy rows");
 });
 
@@ -976,6 +976,72 @@ test("openfdd_rt least-privilege role can read views and write fdd tables, never
   }
 });
 
+// The README's runtime grants, verbatim (README "installer vs runtime role").
+async function grantRuntime(role, dbName) {
+  await db.query(`CREATE ROLE ${role} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`);
+  for (const g of [
+    "GRANT USAGE ON SCHEMA public TO R", "GRANT SELECT ON public.data, public.points, public.instances TO R",
+    "GRANT USAGE ON SCHEMA openfdd TO R", "GRANT SELECT ON openfdd.nf_samples TO R",
+    "GRANT SELECT, INSERT, UPDATE ON openfdd.config TO R", "GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA openfdd TO R",
+    "GRANT USAGE, CREATE ON SCHEMA fdd TO R", "GRANT SELECT ON fdd.input_sample TO R",
+    "GRANT SELECT, INSERT, UPDATE, DELETE ON fdd.point, fdd.rule_result, fdd.rule_config TO R", `GRANT TEMP ON DATABASE "${dbName}" TO R`,
+  ]) await db.query(g.replace(/\bR$/, role));
+}
+async function dropRuntime(role, dbName) {
+  await db.query(`REVOKE ALL ON ALL TABLES IN SCHEMA public FROM ${role}; REVOKE ALL ON SCHEMA public FROM ${role}; REVOKE ALL ON ALL TABLES IN SCHEMA openfdd FROM ${role}; REVOKE ALL ON ALL FUNCTIONS IN SCHEMA openfdd FROM ${role}; REVOKE ALL ON SCHEMA openfdd FROM ${role}; REVOKE ALL ON ALL TABLES IN SCHEMA fdd FROM ${role}; REVOKE ALL ON SCHEMA fdd FROM ${role}; REVOKE ALL ON DATABASE "${dbName}" FROM ${role}; DROP ROLE ${role}`);
+}
+
+test("runtime role cannot widen retention: installer-only config keys are refused, so the owner's cap never drops source chunks", { skip, timeout: 180000 }, async () => {
+  await retentionFixture();
+  const before = await snapshot();
+  const dbName = (await db.query("SELECT current_database() AS d")).rows[0].d;
+  const role = `openfdd_rt_${Math.random().toString(16).slice(2, 10)}`;
+  await grantRuntime(role, dbName);
+  try {
+    await db.query("BEGIN");
+    try {
+      await db.query(`SET LOCAL ROLE ${role}`);
+      const refuse = async (sql, params = []) => {
+        await db.query("SAVEPOINT sp");
+        await assert.rejects(db.query(sql, params), /installer-only|permission denied/i, sql);
+        await db.query("ROLLBACK TO SAVEPOINT sp");
+        await db.query("RELEASE SAVEPOINT sp");
+      };
+      const upsert = "INSERT INTO openfdd.config (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value";
+      await refuse(upsert, ["retention_allowlist", JSON.stringify([HT.source])]);
+      await refuse("UPDATE openfdd.config SET value = $1::jsonb WHERE key = 'retention_allowlist'", [JSON.stringify([HT.source])]);
+      await refuse(upsert, ["max_bytes", "1"]);
+      await refuse(upsert, ["max_chunks_per_call", "100000"]);
+      await refuse(upsert, ["schema_version", "99"]);
+      await refuse(upsert, ["job_registered", "false"]);
+      await db.query(upsert, ["last_cap_run", JSON.stringify("2026-11-14")]);
+      await refuse("UPDATE openfdd.config SET key = 'retention_allowlist' WHERE key = 'last_cap_run'");
+      await refuse("INSERT INTO openfdd.config (key, value) VALUES ('some_new_key', '1')");
+      await refuse("DELETE FROM openfdd.config WHERE key = 'retention_allowlist'");
+      // the runtime's own bookkeeping stays writable
+      await db.query(upsert, ["last_cap_run", JSON.stringify("2026-11-14")]);
+      // invoker-rights: the runtime calling the cap itself cannot reach a source table either
+      await db.query("SAVEPOINT sp");
+      try { await db.query("SELECT openfdd.enforce_size_cap(1)"); } catch (_) { /* not the chunk owner */ }
+      await db.query("ROLLBACK TO SAVEPOINT sp");
+    } finally {
+      await db.query("COMMIT");
+    }
+    const { rows } = await db.query("SELECT value FROM openfdd.config WHERE key = 'retention_allowlist'");
+    assert.deepEqual(rows[0].value, [], "allowlist unchanged");
+    // the owner's cap (what the daily job runs) then drops only Open-FDD chunks
+    sourceDirty = true;
+    const r = await enforce(1);
+    assert.ok(r.dropped.every((d) => d.hypertable === HT.ours), JSON.stringify(r.dropped.map((d) => d.hypertable)));
+    assert.deepEqual((await snapshot()).source, before.source, "source rows identical");
+    assert.deepEqual((await snapshot()).other, before.other, "unrelated table identical");
+    // the installer (table owner) still manages the policy
+    await setCfg("max_chunks_per_call", 100);
+  } finally {
+    await dropRuntime(role, dbName);
+  }
+});
+
 test("upgrade v3 -> v4 rolls back cleanly on transaction abort (#1606)", { skip }, async () => {
   await makeV3(`
     INSERT INTO openfdd.fdd_results (run_ts, equip, site, rule_id, fault_pct, fault_hours, covered_hours, engine, window_start, window_end, sensor_ref) VALUES
@@ -995,6 +1061,6 @@ test("upgrade v3 -> v4 rolls back cleanly on transaction abort (#1606)", { skip 
   assert.ok((await db.query("SELECT to_regclass('openfdd.retention_log') AS b")).rows[0].b);
   assert.equal((await db.query("SELECT count(*)::int AS n FROM fdd.rule_result WHERE equipment_id = 'rb-eq'")).rows[0].n, 0);
   // complete the upgrade cleanly afterward so subsequent tests see v4
-  assert.equal((await ts.install(db)).schemaVersion, 4);
+  assert.equal((await ts.install(db)).schemaVersion, ts.SCHEMA_VERSION);
   await db.query("DELETE FROM fdd.rule_result WHERE equipment_id = 'rb-eq'");
 });
