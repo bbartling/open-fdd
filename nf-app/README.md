@@ -17,7 +17,9 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | `static/fdd.js`, `fdd-catalog.json` | Rule catalog + role binding (NF class, else Haystack markers); rule title + `rule` badge helpers, the FDD tab's heat-map row selection | browser + FDD hook |
 | `static/rcx.js` | RCx view registry (`tab` rcx/fdd, `fleet`, `headline`), binding, VAV→AHU feed (`airRef`) + the "AHU on" filter, KPI tiles, shared math, **the fault lane** (`rcxWithFaultLane`) | browser |
 | `static/fdd-plots.js` | Per-rule plot (signals + bool fault lane) and the FDD sensor validation chart (worst sensor, four SV lanes: Range, Rate, Spike, Stale) | browser |
-| `static/rcx-overview.js` | AHU run hours per day, weekly runtimes, mechanical cooling, economizer, BAS vs web OAT (an FDD-tab chart) | browser |
+| `static/rcx-overview.js` | weekly runtimes against the occupancy calendar (AHU, plant motors), mechanical cooling binned by OAT, economizer, BAS vs web OAT (an FDD-tab chart); the daily AHU view is registered for analytics only | browser |
+| `static/occupancy.js`, `static/occupancy-editor.js` | the site's weekly occupancy calendar (bare-minimum occupied hours per week, same arithmetic as `open_fdd.analytics.occupancy`) and its Overview editor, saved through the `tuning` hook as `OCC-CALENDAR` | browser + hooks |
+| `static/fdd-view.js` | FDD tab view model: statuses, faults-first order, summary chips, URL state, SI thresholds | browser |
 | `static/rcx-presets.js` | The RCx presets: zones (10th–90th percentile band, comfort), rogue VAVs, VAV positions / reheat temps, scatter plots | browser |
 | `static/export.js` | Export tab: CSV download (date range, point picker, resolution, display/stored units; pure helpers tested in node) | browser |
 | `static/units.js` | SI math / imperial-or-SI display (`ofddUnits`); the header toggle sets `localStorage["openfdd-units"]` | browser + FDD hook |

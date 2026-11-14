@@ -14,7 +14,7 @@ tagging ([Haystack tagging](haystack-tagging.html)); they differ in whether a ru
 | NF app id | `open-fdd-lite` | `open-fdd` |
 | Host | 1 GB boxes, Raspberry Pi class | 2 GB or more; 4 GB or more is comfortable |
 | FDD engine | **none** (no rules run) | SQLite-WASM (about 2 GB), PGlite (4 GB or more), or TimescaleDB |
-| What you get | dashboard, charts, points, view of NF's BACnet server, RDF export, weather hook | everything in Lite plus the FDD and RCx tabs, fault points, SPARQL |
+| What you get | dashboard, charts, points, view of NF's BACnet server, RDF export, weather hook | everything in Lite plus the FDD tab, the Overview RCx dashboard and occupancy calendar, fault points, SPARQL |
 | History it can see | NF's own history: **about 7 days** kept in NF's Redis time series (resampled by NF) | the same, or long-range history from TimescaleDB |
 | Hook dependencies | none (Node built-ins) | sql.js, PGlite, `pg` |
 
