@@ -39,13 +39,51 @@ jobs:
       - name: Python tests (pandas == SQL parity, engine matrix, NF agent tools, deploy tool)
         run: |
           set -o pipefail
-          python -m pytest tests -q -k "not test_postgres_4x3_basic_and_edge_parity and not test_timescale_through_the_core_tables and not test_timescale_native_unit_ingestion"
+          python -m pytest tests -q --ignore=tests/parity/test_sparql_parity.py --ignore=tests/parity/test_sparql_motor_gate.py -k "not test_postgres_4x3_basic_and_edge_parity and not test_timescale_through_the_core_tables and not test_timescale_native_unit_ingestion"
 
       - name: SI stress matrix (4x3 basic, 8x7 basic, 4x3 edge across PGlite, SQLite, DuckDB)
         run: |
           python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile basic
           python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 8 --days 7 --profile basic
           python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile edge
+
+  sparql:
+    # Third leg (#1618): the SPARQL data client (open_fdd.nf.sparql_data) through the shipped sparql-data / rdf hooks
+    # over the same synthetic datasets, the oracle's own pandas rule functions on its frames. pandas == SQL ==
+    # SPARQL-client; a skip fails the lane. A separate job so the oracle job stays inside its time limit (#1617).
+    name: pandas == SQL == SPARQL-client
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install oracle (pandas), rdflib, DuckDB and nf-app dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[oracle,test,rdf,duckdb]"
+          cd nf-app && npm ci
+
+      - name: SPARQL client, hook transport and motor-status gate tests (fail on skip)
+        run: |
+          set -o pipefail
+          python -m pytest tests/test_nf_sparql_data.py tests/parity/test_sparql_parity.py tests/parity/test_sparql_motor_gate.py -q -rs 2>&1 | tee "$RUNNER_TEMP/sparql.log"
+          if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/sparql.log"; then echo "SPARQL parity tests skipped: failing the lane"; exit 1; fi
+
+      - name: Three-way SI stress (4x3 basic, 4x3 edge; PGlite, SQLite, DuckDB)
+        run: |
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile basic --sparql
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb --equips 4 --days 3 --profile edge --sparql
 
   postgres:
     name: standalone PostgreSQL parity (no Timescale)

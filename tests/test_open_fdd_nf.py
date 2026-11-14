@@ -607,10 +607,10 @@ def test_run_hook_starts_once_then_polls_runs(fake):
     posts = _fake_hook(fake, WEEKLY, pending=2)
     run = quick(fake.url).run_hook("open-fdd", "analytics", {"tool": "analyze_ahu_weekly_runtime", "days": 28}, timeout=5, poll=0)
     assert run["state"] == "STATE_SUCCESS" and run["pid"] == "p-1"
-    assert posts == [{"args": {"tool": "analyze_ahu_weekly_runtime", "days": 28}}]
+    assert posts == [{"tool": "analyze_ahu_weekly_runtime", "days": "28"}], "flat string map, no {args: ...} wrapper (NF answers 500)"
     methods = [m for m, *_ in fake.log]
     assert methods.count("POST") == 1 and methods.count("GET") == 3, "one StartHook, three polls (2 running + done)"
-    assert "include_results=true" in fake.log[-1][1]
+    assert "include_results=true" in fake.log[-1][1] and "include_logs=true" in fake.log[-1][1]
 
 
 def test_start_hook_is_never_retried(fake):
@@ -653,10 +653,10 @@ def test_cli_analyze_json_table_and_args(capsys, fake, monkeypatch):
     posts = _fake_hook(fake, WEEKLY)
     code, out, _ = run_cli(capsys, "analyze", "weekly-runtime", "--url", fake.url, "--site", "site-a", "--days", "28", "--json")
     assert code == 0 and json.loads(out)["rows"][1]["equipUuid"] == "u-b"
-    assert posts[-1] == {"args": {"tool": "analyze_ahu_weekly_runtime", "site": "site-a", "days": 28.0}}
+    assert posts[-1] == {"tool": "analyze_ahu_weekly_runtime", "site": "site-a", "days": "28.0"}
     code, out, _ = run_cli(capsys, "analyze", "analyze_ahu_weekly_runtime", "--url", fake.url)
     assert code == 0 and "u-a" in out and "u-b" in out and "run_hours" in out
-    assert posts[-1] == {"args": {"tool": "analyze_ahu_weekly_runtime"}}
+    assert posts[-1] == {"tool": "analyze_ahu_weekly_runtime"}
     # fault timeline: scope + rule + dense go through as args, the table shows the states
     fake.handlers.clear()
     posts = _fake_hook(fake, {"ok": True, "tool": "get_fdd_fault_timeline", "siteRef": "site-a", "equipRef": "AHU-1", "equipUuid": "u-a",
@@ -666,7 +666,7 @@ def test_cli_analyze_json_table_and_args(capsys, fake, monkeypatch):
     code, out, _ = run_cli(capsys, "analyze", "fault-timeline", "--url", fake.url, "--site", "site-a", "--equip", "AHU-1",
                            "--rule", "CMD-1", "--days", "3", "--dense")
     assert code == 0 and "confirmed" in out and "last state ok" in out
-    assert posts[-1] == {"args": {"tool": "get_fdd_fault_timeline", "site": "site-a", "equip": "AHU-1", "rule": "CMD-1", "days": 3.0, "dense": True}}
+    assert posts[-1] == {"tool": "get_fdd_fault_timeline", "site": "site-a", "equip": "AHU-1", "rule": "CMD-1", "days": "3.0", "dense": "true"}
 
 
 def test_cli_analyze_errors_and_help(capsys, fake, monkeypatch):

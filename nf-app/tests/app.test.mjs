@@ -571,3 +571,39 @@ test("Full Timescale history: StartHook gets a flat string-map body and the answ
   assert.equal(res.rows.length, 1)
   assert.equal(res.rows[0].avg, 20.5);
 });
+
+test("Full Timescale history: more than 200 uuids are sent in batches of at most 200 and the rows merged (the hook refuses more)", async () => {
+  const el = () => ({ textContent: "", hidden: true, attrs: {}, setAttribute() {}, classList: { toggle() {} } });
+  const starts = [];
+  let pid = 0;
+  const pending = new Map();
+  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, setTimeout: (f) => setImmediate(f), document: { getElementById: el }, location: { pathname: "/apps/static/open-fdd/" }, esc: (x) => String(x ?? "") });
+  for (const f of ["paging.js", "nf.js", "model.js", "fdd.js", "rcx.js", "charts.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
+  ctx.__api = async (path, body) => {
+    if (body) {
+      const ids = JSON.parse(body.uuids);
+      starts.push(ids);
+      const id = String(++pid);
+      const last = ids.length < 200;   // the last batch is truncated and coarsened to a wider bucket
+      pending.set(id, ids.length > 200 ? { ok: false, error: "at most 200 uuids" }
+        : { ok: true, bucket: last ? "2 hours" : "1 hour", truncated: last, total: ids.length,
+          coverage: { requested: ids.length, with_data: ids.length, without_data: [], complete: !last, points: Object.fromEntries(ids.map((u) => [u, 1])) },
+          rows: ids.map((u) => ({ point_uuid: u, bucket: "2026-09-02T00:00:00.000Z", avg: 1 })) });
+      return { pid: id };
+    }
+    return { runs: [...pending].map(([p, a]) => ({ pid: p, state: "STATE_SUCCESS", results: { "": { events: [{ message: JSON.stringify(a) }] } } })) };
+  };
+  vm.runInContext("api = (p, b) => __api(p, b)", ctx);
+  const uuids = Array.from({ length: 450 }, (_, i) => `p${i}`);
+  const res = await vm.runInContext("queryTimescaleHistory", ctx)({ uuids, fromMs: Date.parse("2026-09-01T00:00:00Z"), toMs: Date.parse("2026-09-03T00:00:00Z"), bucket: "1 hour" });
+  assert.deepEqual(starts.map((s) => s.length), [200, 200, 50]);
+  assert.equal(res.ok, true, JSON.stringify(res).slice(0, 200));
+  assert.equal(res.rows.length, 450);
+  assert.equal(new Set(res.rows.map((r) => r.point_uuid)).size, 450);
+  assert.equal(res.truncated, true);
+  assert.equal(res.coverage.complete, false, "a truncated later batch makes the merged coverage incomplete");
+  assert.equal(res.coverage.requested, 450);
+  assert.equal(Object.keys(res.coverage.points).length, 450);
+  assert.equal(res.total, 450);
+  assert.match(res.bucket, /mixed/);
+});

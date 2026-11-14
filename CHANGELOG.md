@@ -7,6 +7,14 @@ Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) 
 
 (nothing yet)
 
+## 5.0.19 ? 2026-11-14 (app) / open-fdd 4.5.9 (PyPI)
+
+- **SPARQL data hook (#1618):** Full gets an on-request `sparql-data` hook: a read-only SPARQL SELECT / ASK over the site model returns the matched points' trend data (NF `point/data` raw or resampled, or Timescale), with unit, kind, class, tags, equipment and an explicit `ofddRole` per point. It pages over points (at most 200 a page) and time (`next_from`, 190 000 UTF-8 bytes an answer), pins every page to one model `snapshot`, runs Oxigraph in a worker with a wall-clock timeout and row / triple caps, and errors rather than returning a silent partial series. Both editions get an `rdf` hook (the model Turtle in byte-capped pages); Lite clients run the query locally with rdflib.
+- **Python SPARQL client (open-fdd 4.5.9):** `open_fdd.nf.sparql_data` (`fetch`, `fetch_local`, `fetch_auto`, `frames`, `weather_frame`, `run_rules`, `run_example`) and `open-fdd-nf sparql` with `examples/sparql_data/ahu_points.rq`. Frames are built by the same code as `equipment_frames` (`frames_from_samples`, SI plan) and the rules are the package's pandas rules. `NFClient.start_hook` sends NF's flat string map, run polls ask for `include_logs=true`, and `call_hook` returns a hook's JSON answer.
+- **Model export:** a point's NF attr `ofddRole` is exported as `local:ofddRole`.
+- **Three-way parity:** a new `pandas == SQL == SPARQL-client` job in the parity workflow serves the synthetic datasets as a synthetic NF, runs the shipped hooks over it, and requires the client frames to equal the oracle's input frames, the client's rule results to equal the pandas oracle, and the same verdict as the oracle against PGlite, SQLite and DuckDB (`stress.py --sparql`).
+- **Full UI history over 200 points (#1619):** charts and the joined export batch Timescale history requests to 200 uuids a call and merge the answers instead of sending them all in one call.
+
 ## 5.0.18 — 2026-11-13 (app only; open-fdd stays 4.5.8 on PyPI)
 
 - **Full UI hook answers (#1610):** long-range Timescale history now starts the `history` hook with a flat StartHook args map (the `{args: ...}` wrapper got HTTP 500) and reads the hook's JSON event line, so charts and the joined CSV export backfill older ranges from Timescale. Hook run polls (history, tuning, Run FDD now) ask for `include_logs=true`, so the inline FDD tuners load live values instead of falling back to read-only defaults.

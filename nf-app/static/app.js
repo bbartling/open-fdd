@@ -445,12 +445,49 @@ function setUnits(sys) {
 ofddTabs.fdd = () => renderFdd();
 ofddTabs.rcx = () => renderRcx();
 const timescaleHistoryState = { disabled: false, reason: "" };
+// The history hook takes at most 200 uuids per run (hooks/lib/timescale.js MAX_UUIDS); a chart or export with more
+// points is sent in batches and the rows merged, instead of one refused run that silently drops the long-range fill.
+const TIMESCALE_HISTORY_BATCH = 200;
 async function queryTimescaleHistory({ uuids, fromMs, toMs, bucket }) {
   if (timescaleHistoryState.disabled) {
     return { ok: true, skipped: true, reason: timescaleHistoryState.reason || "timescale unavailable" };
   }
   const cleanIds = [...new Set((uuids || []).map((u) => String(u || "").trim()).filter(Boolean))];
   if (!cleanIds.length) return { ok: true, skipped: true, reason: "no numeric uuids" };
+  if (cleanIds.length <= TIMESCALE_HISTORY_BATCH) return queryTimescaleHistoryBatch({ cleanIds, fromMs, toMs, bucket });
+  /** @type {any} */
+  let merged = null;
+  const widths = new Set();
+  for (let i = 0; i < cleanIds.length; i += TIMESCALE_HISTORY_BATCH) {
+    const part = /** @type {any} */ (await queryTimescaleHistoryBatch({ cleanIds: cleanIds.slice(i, i + TIMESCALE_HISTORY_BATCH), fromMs, toMs, bucket }));
+    if (!part || part.ok === false || part.skipped) return part;
+    if (part.bucket != null) widths.add(String(part.bucket));
+    if (!merged) merged = { ...part, rows: [...(part.rows || [])] };
+    else {
+      merged.rows.push(...(part.rows || []));
+      merged.truncated = !!(merged.truncated || part.truncated);
+      merged.coarsened = !!(merged.coarsened || part.coarsened);
+      if (typeof merged.total === "number" && typeof part.total === "number") merged.total += part.total;
+      const a = merged.coverage, c = part.coverage;
+      if (a && c) {
+        merged.coverage = {
+          ...a, requested: (a.requested || 0) + (c.requested || 0), with_data: (a.with_data || 0) + (c.with_data || 0),
+          without_data: [...(a.without_data || []), ...(c.without_data || [])],
+          points: { ...(a.points || {}), ...(c.points || {}) },
+        };
+      }
+    }
+  }
+  if (merged.coverage) merged.coverage.complete = !merged.truncated;
+  // each batch coarsens on its own uuid count: one width when they agree, else say so (rows keep their own buckets)
+  merged.buckets = [...widths];
+  if (widths.size > 1) merged.bucket = "mixed (" + merged.buckets.join(", ") + ")";
+  merged.row_count = merged.rows.length;
+  merged.batches = Math.ceil(cleanIds.length / TIMESCALE_HISTORY_BATCH);
+  return merged;
+}
+/** One history hook run for at most 200 uuids. */
+async function queryTimescaleHistoryBatch({ cleanIds, fromMs, toMs, bucket }) {
   // NF StartHook takes the hook args as a flat string->string map (same as the tuning hook); wrapping them in
   // {args: ...} makes NF answer HTTP 500 and the long-range Timescale fill silently never runs.
   /** @type {Record<string, string>} */

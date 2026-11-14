@@ -25,6 +25,7 @@ in environment variables or a protected env file, then use read commands:
 open-fdd-nf info
 open-fdd-nf model
 open-fdd-nf rules --days 7
+open-fdd-nf sparql examples/sparql_data/ahu_points.rq --days 7   # SPARQL -> trend data -> pandas rules
 ```
 
 The tools read NF and do not write to it. The portal key is read-only. See the

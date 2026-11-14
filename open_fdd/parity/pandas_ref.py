@@ -12,7 +12,7 @@ from __future__ import annotations
 import copy
 import json
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Mapping
 
 from open_fdd.parity.dataset import Dataset, role_map
 
@@ -88,9 +88,16 @@ def weather_frame(ds: Dataset):
     idx = pd.DatetimeIndex(pd.to_datetime([r["ts"] for r in rows], unit="ms", utc=True))
     out = pd.DataFrame({"web-outside-air-temp": [r.get("web_oa_t") for r in rows],
                         "web-outside-air-dewpoint": [r.get("web_oa_dp") for r in rows]}, index=idx)
-    step = pd.Timedelta(seconds=ds.step_seconds)
+    return weather_on_grid(out, ds.step_seconds)
+
+
+def weather_on_grid(out, step_seconds: int):
+    """Weather samples carried forward up to 25 min onto the poll grid (first to last sample), as the SQL join does."""
+    import pandas as pd
+
+    step = pd.Timedelta(seconds=step_seconds)
     grid = pd.date_range(out.index[0], out.index[-1], freq=step)
-    return out.reindex(out.index.union(grid)).ffill(limit=int(25 * 60 / ds.step_seconds)).reindex(grid)
+    return out.reindex(out.index.union(grid)).ffill(limit=int(25 * 60 / step_seconds)).reindex(grid)
 
 
 def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0):
@@ -116,12 +123,18 @@ def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0):
 
 def reference(ds: Dataset, rules: Iterable[str] | None = None, ingest: str = "sorted") -> dict[str, dict[str, dict]]:
     """Run the pandas twin of every (or each given) SQL rule on every equipment of ``ds``."""
+    frames = {e["equipment_id"]: equip_frame(ds, e["equipment_id"], ingest) for e in ds.equipment}
+    return reference_from_frames(frames, weather_frame(ds), float(ds.step_seconds), rules)
+
+
+def reference_from_frames(frames: Mapping[str, Any], weather, poll_seconds: float,
+                          rules: Iterable[str] | None = None) -> dict[str, dict[str, dict]]:
+    """``reference`` for frames built elsewhere (``{equipment_id: frame}``; e.g. by the SPARQL data client): the same
+    pandas twin of every SQL rule, run the same way, so any difference comes from the frames alone."""
     twins, _ = twin_rule_ids()
     wanted = set(rules) if rules is not None else None
     hs_to_sql = {v: k for k, v in role_map().items()}
-    weather = weather_frame(ds)
-    frames = {e["equipment_id"]: equip_frame(ds, e["equipment_id"], ingest) for e in ds.equipment}
-    equips = [e["equipment_id"] for e in ds.equipment]
+    equips = list(frames)
     out: dict[str, dict[str, dict]] = {}
     for rule in twins:
         if wanted is not None and rule not in wanted:
@@ -132,10 +145,12 @@ def reference(ds: Dataset, rules: Iterable[str] | None = None, ingest: str = "so
                 # fresh copy per run: rules stash evidence/units in df.attrs and must not leak into each other
                 df = frames[e].copy()
                 df.attrs = copy.deepcopy(frames[e].attrs)
-                ph, status, res = pandas_rule_result(rule, df, weather, float(ds.step_seconds))
+                ph, status, res = pandas_rule_result(rule, df, weather, poll_seconds)
             except Exception as exc:  # noqa: BLE001 - reported, not hidden
                 ph, status, res = None, f"ERROR {type(exc).__name__}: {exc}", None
             item = {"pandas": None if ph is None else float(ph), "status": status}
+            if res is not None:  # samples the rule assessed after its operational gate (motor status / command)
+                item["active_samples"] = int(res.sample_count or 0)
             evidence = (res.metrics.get("sv_sweep_evidence") or []) if res is not None and rule.startswith("SV-") else None
             if evidence is not None:
                 roles = {hs_to_sql.get(r["role"], r["role"]): float(r["fault_hours"])

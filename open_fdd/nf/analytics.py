@@ -27,7 +27,7 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping
 
-from open_fdd.nf.client import NFClient, NFError
+from open_fdd.nf.client import NFClient, NFError, hook_answer
 
 APP_ID = "open-fdd"
 HOOK_ID = "analytics"
@@ -70,14 +70,9 @@ def run_result(run: Mapping[str, Any]) -> dict:
     """The hook's answer from a finished run: the last JSON event the hook logged (the same object it returned)."""
     if run.get("state") != "STATE_SUCCESS":
         raise NFError(f"analytics run ended {run.get('state')}: {str(run.get('error') or run.get('message') or '')[:200]}".rstrip(": "))
-    events = [e for g in (run.get("results") or {}).values() if isinstance(g, Mapping) for e in (g.get("events") or [])]
-    for ev in reversed(events):
-        try:
-            out = json.loads(ev.get("message", ""))
-        except (TypeError, ValueError):
-            continue
-        if isinstance(out, dict) and "ok" in out:
-            return out
+    out = hook_answer(run)
+    if out is not None:
+        return out
     raise NFError("analytics run finished without a result event (see the run's logs)")
 
 

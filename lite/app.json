@@ -20,7 +20,9 @@
   "files": {
     "/hooks/lib/paging.js": "hooks/lib/paging.js",
     "/hooks/lib/settings.js": "hooks/lib/settings.js",
+    "/hooks/lib/start-hook-args.js": "hooks/lib/start-hook-args.js",
     "/hooks/open_meteo_weather.js": "hooks/open_meteo_weather.js",
+    "/hooks/rdf.js": "hooks/rdf.js",
     "/static/app-core.js": "static/app-core.js",
     "/static/app.js": "static/app.js",
     "/static/base.css": "static/base.css",
@@ -90,6 +92,16 @@
       },
       "mode": "MODE_SCHEDULED",
       "invokeTimeout": "190s"
+    },
+    {
+      "id": "rdf",
+      "name": "rdf",
+      "entryPoint": "/hooks/rdf.js",
+      "points": {
+        "noPoints": true
+      },
+      "mode": "MODE_ON_REQUEST",
+      "invokeTimeout": "60s"
     }
   ]
 }

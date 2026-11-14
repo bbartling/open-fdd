@@ -1,3 +1,4 @@
+// GENERATED COPY of shared/hooks/start-hook-args.js by scripts/nf/sync_shared.py: edit the source, then re-run the script.
 // Normal Framework StartHook arguments arrive as a string-to-string map.
 // Keep this helper small and schema-driven so ordinary string fields remain strings.
 

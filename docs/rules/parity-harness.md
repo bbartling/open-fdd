@@ -61,6 +61,19 @@ duplicate rows). They are listed with the reason and evidence in `parity_known_d
 `reference(ds)` sorts rows by time and drops duplicate timestamps before running the pandas rules (a no-op on `basic`);
 pass `ingest="as_is"` to see the raw behavior.
 
+## Third leg: the SPARQL data client
+
+The `pandas == SQL == SPARQL-client` job (`tests/parity/sparql_leg.py`) runs the shipped `sparql-data` hook over a
+synthetic NF, fetches with `open_fdd.nf.sparql_data`, and runs the oracle's pandas rules on the client's frames. It requires:
+
+- the client's frames to equal the oracle's frames;
+- the client's results to equal the oracle's (status, fault hours, and the samples that pass the gate);
+- the same verdict against the SQL pack, under the same pinned known differences.
+
+SV sweeps use the dataset's sensor population (`role_units`), so the swept sensors match; values do not change.
+`test_sparql_motor_gate.py` runs the fan ON, then OFF, then ON (plus a command-only variant): a fault while OFF
+never counts, and a fault while ON counts the same in all three legs.
+
 ## Hash stability
 
 `dataset.content_hash()` is the sha256 of a canonical serialization (sorted keys, compact, floats by repr, `-0.0` as

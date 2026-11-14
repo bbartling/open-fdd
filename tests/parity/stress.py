@@ -107,6 +107,9 @@ def main() -> int:
     ap.add_argument("--engines", default="pglite,sqlite")
     ap.add_argument("--no-pandas", action="store_true", help="SQL engines only (fast; for large --equips/--days)")
     ap.add_argument("--out", type=Path, default=None, help="write the JSON report here")
+    ap.add_argument("--sparql", action="store_true",
+                    help="third leg: the SPARQL data client through the shipped sparql-data hook (sparql_leg.py); "
+                         "pandas == SQL == SPARQL-client")
     args = ap.parse_args()
 
     engine_list = [e.strip() for e in args.engines.split(",") if e.strip()]
@@ -239,6 +242,27 @@ def main() -> int:
                                                                          "unexpected_rules"))
                 ok = ok and ve.ok and same_verdict
         rep["verdict_by_engine"] = verdict_by_engine
+        if args.sparql:
+            from sparql_leg import oracle_mismatches, sparql_reference
+
+            t2 = time.time()
+            sref, sinfo = sparql_reference(ds)
+            keys = ("compared", "matched", "known_divergent", "unexpected", "unexpected_rules")
+            by_engine, same_all, ok_all = {}, True, True
+            for kind in engine_list:  # the SPARQL client against every SQL engine of this run, like the oracle
+                if kind == "timescale" and ts_raw is not None and ts_raw.get("ingest") == "native":
+                    continue  # native-unit ingest has its own threshold-tie accounting above
+                vs = compare(results[kind], sref, policy)
+                vsd = vs.to_dict()
+                same = all(vsd[k] == verdict_by_engine[kind][k] for k in keys)
+                by_engine[kind] = {**vsd, "same_verdict_as_oracle": same}
+                same_all, ok_all = same_all and same, ok_all and vs.ok
+            om = oracle_mismatches(sref, ref)
+            rep["sparql_client"] = {**sinfo, "seconds": round(time.time() - t2, 2), "verdict_by_engine": by_engine,
+                                    "same_verdict_as_oracle": same_all, "oracle_mismatches": om}
+            ok = ok and ok_all and same_all and not om
+            print(f"SPARQL-client leg: {len(om)} oracle mismatches; same verdict as the oracle on "
+                  f"{sorted(by_engine)}: {same_all}", file=sys.stderr)
         if "timescale" in verdict_by_engine:
             rep["verdict_timescale"] = verdict_by_engine["timescale"]
     else:

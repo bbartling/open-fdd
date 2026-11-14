@@ -326,32 +326,56 @@ def equipment_frames(
       ``skipped`` (role -> reason), ``window_sec``
     Equipment with no usable data in the range is left out.
     """
-    import pandas as pd
-
     scope = _frame_scope(model, roles, site, equip)
     uuids: list[str] = []
     for b in scope:
         uuids.extend(p.uuid for p in b.best().values())
     data = client.point_data(sorted(set(uuids)), start, end, window_sec=window_sec) if uuids else {}
+    return frames_from_samples(scope, data, window_sec)
+
+
+def frames_from_samples(
+    scope: list[EquipBinding],
+    data: Mapping[str, list],
+    window_sec: int = 300,
+    pins: Mapping[tuple[str, str], Mapping[str, Point]] | None = None,
+) -> dict[tuple[str, str], "Any"]:
+    """The frame assembly of ``equipment_frames`` for samples already fetched (``{uuid: [(utc datetime, value)]}``).
+
+    Shared by every path that feeds the pandas rules (NF ``point/data``, the SPARQL data client) so they build the
+    same SI frames. ``pins`` (``{(site, equip): {role: Point}}``) override the catalog's best point for a role
+    (an explicit ``ofddRole`` / ``?role`` binding).
+    """
+    import pandas as pd
+
     out: dict[tuple[str, str], pd.DataFrame] = {}
     for b in scope:
         cols: dict[str, Any] = {}
         bindings: dict[str, dict] = {}
         units: dict[str, str] = {}
         skipped: dict[str, str] = {}
-        for role, p in b.best().items():
+        best = {**b.best(), **dict((pins or {}).get((b.site, b.equip)) or {})}
+        for role, p in best.items():
             samples = data.get(p.uuid) or []
             if not samples:
                 skipped[role] = "no history in the requested range"
+                continue
+            col = column_for(role)
+            idx = pd.DatetimeIndex([t for t, _ in samples], tz="UTC")
+            if role_scales().get(role) == "text" and any(isinstance(v, str) for _, v in samples):
+                # a text role (occupancy mode, ...) keeps its text; NF point/data only ever returns numbers
+                if col not in cols:
+                    cols[col] = pd.Series([v for _, v in samples], index=idx)  # pandas infers the text dtype
+                    units[col] = ""
+                    bindings[col] = {"role": role, "uuid": p.uuid, "name": p.dis, "unit": "", "source_unit": p.unit,
+                                     "class": p.cls}
                 continue
             plan = si_plan_for(role, p)
             if plan.convert is None:
                 skipped[role] = plan.reason
                 continue
-            col = column_for(role)
             if col in cols:
                 continue
-            idx = pd.DatetimeIndex([t for t, _ in samples], tz="UTC")
             series = pd.Series([v for _, v in samples], index=idx, dtype="float64")
             cols[col] = plan.convert(series)
             units[col] = plan.unit

@@ -5,6 +5,12 @@ nav_order: 18
 
 # Changelog
 
+## Open-FDD 5.0.19 - 2026-11-14 (open-fdd 4.5.9 on PyPI)
+
+- **SPARQL to trend data to pandas (#1618):** a read-only SPARQL query over the site model returns the matched points' history (Full `sparql-data` hook; Lite `rdf` hook plus a local query), and `open-fdd-nf sparql` / `open_fdd.nf.sparql_data` turn it into SI frames and run the pandas rules. See the [Data model](modeling.html) page.
+- **Three-way parity:** CI checks pandas == SQL == SPARQL-client on synthetic SI datasets.
+- **Full UI:** Timescale history for more than 200 points is fetched in batches (#1619).
+
 ## Open-FDD 5.0.18 - 2026-11-13 (app only; open-fdd 4.5.8 on PyPI)
 
 - **Full UI hook answers (#1610):** long-range Timescale history in charts and the joined CSV export works again (flat StartHook args, answer read from the hook's event line), and the inline FDD tuners load live values (run polls ask for `include_logs=true`).

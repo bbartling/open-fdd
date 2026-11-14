@@ -34,6 +34,7 @@ UA = "open-fdd-nf/1.0"
 RETRY_CODES = (403, 429, 500, 502, 503, 504)
 BATCH = 40  # uuids per point/data request (keeps the URL short)
 CHUNK_DAYS = 7  # NF caps samples per request; history is fetched in pieces of at most 7 days
+SAMPLE_CAP = 10_000  # NF returns at most this many samples per series and call; a raw read at the cap is split
 PAGE_SIZE = 500
 PENDING_STATES = ("STATE_RUNNING", "STATE_ENQUEUED", "STATE_SCHEDULED", "STATE_UNSPECIFIED", None)
 MAX_PAGES = 1000
@@ -124,10 +125,15 @@ def _utc(ts: datetime) -> datetime:
 
 
 def to_iso_z(ts: datetime | str) -> str:
-    """UTC ISO-8601 with a Z suffix (whole seconds), as NF expects for ``from`` / ``to``."""
+    """UTC ISO-8601 with a Z suffix, as NF expects for ``from`` / ``to``: whole seconds, or the fraction when there is
+    one (milliseconds, or microseconds when finer) so a paging boundary such as ``next_from`` is kept exactly."""
     if isinstance(ts, str):
         return ts
-    return _utc(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
+    t = _utc(ts)
+    if not t.microsecond:
+        return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+    frac = f"{t.microsecond:06d}"
+    return t.strftime("%Y-%m-%dT%H:%M:%S.") + (frac[:3] if frac.endswith("000") else frac) + "Z"
 
 
 _FRAC = re.compile(r"\.(\d+)")
@@ -151,6 +157,38 @@ def sample_value(s: Mapping[str, Any]) -> float | None:
         return None if v is None else float(v)
     except (TypeError, ValueError):
         return None
+
+
+def hook_args(args: Mapping[str, Any] | None) -> dict[str, str]:
+    """NF StartHook args: a flat string -> string map. Strings stay, booleans are ``"true"`` / ``"false"``, numbers
+    their text, lists / objects JSON text; ``None`` values are left out."""
+    out: dict[str, str] = {}
+    for k, v in (args or {}).items():
+        if v is None:
+            continue
+        if isinstance(v, str):
+            out[str(k)] = v
+        elif isinstance(v, bool):
+            out[str(k)] = "true" if v else "false"
+        elif isinstance(v, (int, float)):
+            out[str(k)] = repr(v) if isinstance(v, float) else str(v)
+        else:
+            out[str(k)] = json.dumps(v, separators=(",", ":"))
+    return out
+
+
+def hook_answer(run: Mapping[str, Any]) -> dict | None:
+    """A hook's answer from a finished run: the last JSON object event it logged that has ``ok`` (Open-FDD hooks log
+    their return value as one JSON line; NF leaves the run's return value empty), else ``None``."""
+    events = [e for g in (run.get("results") or {}).values() if isinstance(g, Mapping) for e in (g.get("events") or [])]
+    for ev in reversed(events):
+        try:
+            out = json.loads((ev or {}).get("message", ""))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(out, dict) and "ok" in out:
+            return out
+    return None
 
 
 def _load_env_file(path: str | os.PathLike[str]) -> dict[str, str]:
@@ -314,35 +352,58 @@ class NFClient:
 
     # ------------------------------------------------------------------ hooks
     def start_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None) -> str:
-        """StartHook: run an on-request hook once now with ``args``; returns the run id (``pid``). Sent once, never retried."""
+        """StartHook: run an on-request hook once now with ``args``; returns the run id (``pid``). Sent once, never retried.
+
+        NF takes the hook args as a FLAT string-to-string map (``{"tool": "x", "days": "28"}``); wrapping them in
+        ``{"args": ...}`` makes NF answer HTTP 500. ``hook_args`` does the coercion (lists and objects as JSON text).
+        """
         path = f"/api/v1/apps/{urllib.parse.quote(app_id, safe='')}/hooks/{urllib.parse.quote(hook_id, safe='')}"
-        pid = self.request("POST", path, {"args": dict(args or {})}, once=True).get("pid")
+        pid = self.request("POST", path, hook_args(args), once=True).get("pid")
         if not pid:
             raise NFError("StartHook returned no run id (pid)")
         return str(pid)
 
     def hook_runs(self, app_id: str, hook_id: str, page_size: int = 10) -> list[dict]:
-        """Recent runs of a hook, newest first, with their results (events)."""
+        """Recent runs of a hook, newest first, with their results and log events (the hook's JSON answer line)."""
         path = (f"/api/v1/apps/{urllib.parse.quote(app_id, safe='')}/hooks/{urllib.parse.quote(hook_id, safe='')}"
-                f"/runs?page_size={int(page_size)}&include_results=true")
+                f"/runs?page_size={int(page_size)}&include_results=true&include_logs=true")
         return list(self.get(path).get("runs") or [])
 
     def run_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None, *,
-                 timeout: float = 120.0, poll: float = 1.0) -> dict:
+                 timeout: float = 120.0, poll: float = 1.0, want_answer: bool = False) -> dict:
         """Start an on-request hook and wait for its run: returns the finished run (``state`` STATE_SUCCESS ...).
 
         Polls the hook's runs until the run with the started ``pid`` leaves RUNNING / ENQUEUED / SCHEDULED;
-        raises ``NFError`` when it is still running after ``timeout`` seconds.
+        raises ``NFError`` when it is still running after ``timeout`` seconds. With ``want_answer`` a successful run is
+        polled a little longer (event lines can land a poll late) until its JSON answer line is there.
         """
         pid = self.start_hook(app_id, hook_id, args)
         deadline = time.monotonic() + timeout
+        grace: float | None = None
         while True:
             run = next((r for r in self.hook_runs(app_id, hook_id) if str(r.get("pid")) == pid), None)
             if run is not None and run.get("state") not in PENDING_STATES:
-                return run
+                if not want_answer or run.get("state") != "STATE_SUCCESS" or hook_answer(run) is not None:
+                    return run
+                grace = grace if grace is not None else time.monotonic() + min(10.0, max(0.0, deadline - time.monotonic()))
+                if time.monotonic() >= grace:
+                    return run
             if time.monotonic() >= deadline:
                 raise NFError(f"hook {app_id}/{hook_id} run {pid} still running after {timeout:g} s (read its runs later)")
             (self._sleep or time.sleep)(poll)
+
+    def call_hook(self, app_id: str, hook_id: str, args: Mapping[str, Any] | None = None, *,
+                  timeout: float = 120.0, poll: float = 1.0) -> dict:
+        """Run an on-request hook and return its answer (the JSON object it logged). Raises ``NFError`` when the run
+        failed or left no answer; an answer with ``ok: false`` is returned as is (the caller decides)."""
+        run = self.run_hook(app_id, hook_id, args, timeout=timeout, poll=poll, want_answer=True)
+        if run.get("state") != "STATE_SUCCESS":
+            raise NFError(f"hook {app_id}/{hook_id} run ended {run.get('state')}: "
+                          f"{str(run.get('error') or run.get('message') or '')[:200]}".rstrip(": "))
+        out = hook_answer(run)
+        if out is None:
+            raise NFError(f"hook {app_id}/{hook_id} run finished without an answer event (see the run's logs)")
+        return out
 
     # ------------------------------------------------------------------ API
     def platform_info(self) -> dict:
@@ -376,10 +437,15 @@ class NFClient:
         end: datetime | str,
         window_sec: int = 300,
         method: str = "AVERAGE",
+        keep_text: bool = False,
+        sample_cap: int = SAMPLE_CAP,
     ) -> dict[str, list[tuple[datetime, float]]]:
         """Resampled history: ``{uuid: [(utc datetime, value), ...]}`` sorted by time.
 
-        NF resamples on the box (``window`` seconds, ``method`` AVERAGE|MIN|MAX|SUM|FIRST|LAST|COUNT).
+        NF resamples on the box (``window`` seconds, ``method`` AVERAGE|MIN|MAX|SUM|FIRST|LAST|COUNT);
+        ``window_sec=0`` reads the raw samples (no resampling). A raw read where a series reaches NF's sample cap
+        is split in halves and read again; still at the cap at a one-second window raises ``NFError`` (never a silent
+        partial series). ``keep_text=True`` keeps String samples as ``str`` (default: numbers only).
         Requests are batched by at most 40 uuids and cut into pieces of at most 7 days.
         """
         t0 = _utc(start) if isinstance(start, datetime) else parse_nf_ts(start)
@@ -392,18 +458,34 @@ class NFClient:
             nxt = min(t + timedelta(days=CHUNK_DAYS), t1)
             pieces.append((t, nxt))
             t = nxt
+        raw = int(window_sec) <= 0
+
+        def read(batch: list[str], a: datetime, b: datetime, depth: int = 0) -> None:
+            qs = "&".join("uuids=" + urllib.parse.quote(u) for u in batch)
+            path = f"/api/v1/point/data?{qs}&from={to_iso_z(a)}&to={to_iso_z(b)}"
+            if not raw:
+                path += f"&window={int(window_sec)}s&method={method}"
+            got = {s.get("uuid"): s.get("values") or [] for s in self.get(path).get("data") or []}
+            full = [u for u in batch if raw and len(got.get(u) or []) >= sample_cap]
+            if full:
+                if b - a <= timedelta(seconds=1) or depth >= 40:
+                    raise NFError(f"NF history still hits its {sample_cap}-sample cap at {to_iso_z(a)}; "
+                                  "shorten the range or resample")
+                mid = a + (b - a) / 2
+                read(full, a, mid, depth + 1)
+                read(full, mid, b, depth + 1)
+            for u in batch:
+                if u in full:
+                    continue
+                slot = out.get(u)
+                for s in got.get(u) or []:
+                    v = sample_value(s)
+                    if v is None and keep_text and s.get("string") is not None:
+                        v = str(s["string"])
+                    if v is not None and s.get("ts"):
+                        slot[parse_nf_ts(s["ts"])] = v
+
         for a, b in pieces:
             for i in range(0, len(ids), BATCH):
-                batch = ids[i:i + BATCH]
-                qs = "&".join("uuids=" + urllib.parse.quote(u) for u in batch)
-                path = (f"/api/v1/point/data?{qs}&from={to_iso_z(a)}&to={to_iso_z(b)}"
-                        f"&window={int(window_sec)}s&method={method}")
-                for series in self.get(path).get("data") or []:
-                    slot = out.get(series.get("uuid"))
-                    if slot is None:
-                        continue
-                    for s in series.get("values") or []:
-                        v = sample_value(s)
-                        if v is not None and s.get("ts"):
-                            slot[parse_nf_ts(s["ts"])] = v
+                read(ids[i:i + BATCH], a, b)
         return {u: sorted(m.items()) for u, m in out.items()}
