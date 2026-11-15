@@ -43,7 +43,8 @@ class FakeHook:
         ans = {"ok": True, "kind": "select", "vars": ["uuid", "role"], "uuid_var": "uuid", "source": "nf",
                "snapshot": snap, "points": {u: self.points[u]}, "equips": [{"site": "s1", "id": "AHU-1", "dis": "AHU 1",
                                                                             "tags": ["equip", "ahu"]}],
-               "series": {u: page}, "complete": not rest,
+               "series": {u: page}, "complete": not rest, "point_offset": off, "points_total": len(self.points),
+               "from": args["from"], "to": args["to"],
                "next_point_offset": off + 1 if off + 1 < len(self.points) else None}
         if args.get("includeRows"):
             ans["rows"] = [{"uuid": k, "role": self.points[k]["role"]} for k in sorted(self.points)]
@@ -201,12 +202,13 @@ def test_fetch_continues_from_a_subsecond_next_from():
 
     def hook(h, a):
         seen.append(a["from"])
+        env = {"ok": True, "kind": "select", "uuid_var": "uuid", "snapshot": "A", "source": "nf", "point_offset": 0,
+               "points_total": 1, "from": a["from"], "to": a["to"], "points": {"u1": _pt("u1")}, "equips": [],
+               "next_point_offset": None}
         if len(seen) == 1:
-            return {"ok": True, "kind": "select", "vars": ["uuid"], "rows": [], "uuid_var": "uuid", "snapshot": "A",
-                    "points": {"u1": _pt("u1")}, "equips": [], "series": {"u1": [[MS0, 1.0]]}, "complete": False,
-                    "next_from": "2026-01-05T00:00:00.500Z", "next_point_offset": None}
-        return {"ok": True, "kind": "select", "snapshot": "A", "points": {"u1": _pt("u1")}, "equips": [],
-                "series": {"u1": [[MS0 + 500, 2.0]]}, "complete": True, "next_point_offset": None}
+            return {**env, "vars": ["uuid"], "rows": [], "series": {"u1": [[MS0, 1.0]]}, "complete": False,
+                    "next_from": "2026-01-05T00:00:00.500Z"}
+        return {**env, "series": {"u1": [[MS0 + 500, 2.0]]}, "complete": True}
 
     ans = sd.fetch(hook, "SELECT ?uuid WHERE {}", T0, T0 + timedelta(minutes=5), bucket="raw")
     assert seen[1] == "2026-01-05T00:00:00.500Z" and len(seen) == 2
@@ -241,3 +243,181 @@ def test_raw_point_data_splits_at_the_sample_cap_and_keeps_text():
     assert C().point_data(["txt"], T0, T0 + timedelta(minutes=1), window_sec=0)["txt"] == []   # numbers only by default
     with pytest.raises(NFError, match="sample cap"):
         C().point_data(["full"], T0, T0 + timedelta(minutes=8), window_sec=0, sample_cap=1)
+
+# ---------------------------------------------------------------------------- #1623: page receipts
+def _page(a, **kw):
+    """One valid single-point page answering request ``a``; ``kw`` overrides fields (``None`` deletes one)."""
+    ans = {"ok": True, "kind": "select", "vars": ["uuid"], "rows": [{"uuid": "u1"}], "uuid_var": "uuid",
+           "snapshot": "A", "source": "nf", "point_offset": int(a.get("pointOffset") or 0), "points_total": 1,
+           "from": a["from"], "to": a["to"], "points": {"u1": _pt("u1")}, "equips": [],
+           "series": {"u1": [[MS0, 1.0]]}, "complete": True, "next_point_offset": None}
+    ans.update(kw)
+    return {k: v for k, v in ans.items() if v is not None or k in ("next_point_offset",)}
+
+
+def _one(**kw):
+    return lambda h, a: _page(a, **kw)
+
+
+T1 = T0 + timedelta(hours=1)
+
+
+def test_incomplete_page_without_next_from_is_rejected():
+    """The minimal malformed response of #1623: one row, complete=false, no next_from -> error, never success."""
+    calls = []
+
+    def hook(h, a):
+        calls.append(a)
+        return _page(a, complete=False, next_from=None)
+
+    with pytest.raises(sd.PageError, match="without next_from"):
+        sd.fetch(hook, "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("kw, match", [
+    ({"complete": False, "next_from": "2026-01-05T00:00:00Z"}, "does not advance"),      # repeated cursor
+    ({"complete": False, "next_from": "2026-01-04T23:00:00Z"}, "does not advance"),      # regressing
+    ({"complete": False, "next_from": "2026-01-05T02:00:00Z"}, "does not advance"),      # past the window
+    ({"complete": False, "next_from": "soon"}, "not a timestamp"),
+    ({"complete": None}, "complete flag"),
+    ({"snapshot": None}, "snapshot"),
+    ({"source": "elsewhere"}, "unknown source"),
+    ({"point_offset": 3}, "point_offset"),
+    ({"points_total": None}, "points_total"),
+    ({"from": "2026-01-05T00:30:00Z"}, "window"),
+    ({"series": {"u1": [], "u9": []}}, "not a point of this page"),
+    ({"series": {}}, "no series for points"),                                            # a point's series is missing
+    ({"series": {"u1": [[MS0 - 1, 1.0]]}}, "outside the page window"),
+    ({"series": {"u1": [["x", 1.0]]}}, "epoch_ms"),
+    ({"series": {"u1": [[MS0, True]]}}, "epoch_ms"),
+    ({"series": {"u1": [[MS0, {"v": 1}]]}}, "epoch_ms"),
+    ({"points_total": 2}, "points_total"),                                               # last page short
+    ({"next_point_offset": 5, "points_total": 6}, "next_point_offset"),                  # skips points
+    ({"kind": "construct"}, "unknown kind"),
+    ({"ok": None}, "no ok flag"),
+])
+def test_malformed_pages_are_rejected_distinctly(kw, match):
+    with pytest.raises(sd.PageError, match=match):
+        sd.fetch(_one(**kw), "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+
+
+def test_hook_error_and_empty_result_are_not_page_errors():
+    with pytest.raises(NFError) as e:
+        sd.fetch(lambda h, a: {"ok": False, "error": "too big", "error_code": "too_large"}, "SELECT ?uuid WHERE {}",
+                 T0, T0 + timedelta(minutes=5), bucket="raw")
+    assert not isinstance(e.value, sd.PageError) and "too big" in str(e.value)
+    empty = sd.fetch(_one(series={"u1": []}), "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+    assert empty["series"] == {"u1": []} and empty["points_total"] == 1        # genuine empty data is a success
+
+
+def test_a_false_or_zero_sample_is_data_not_absence():
+    ans = sd.fetch(_one(series={"u1": [[MS0, 0], [MS0 + 1, 0.0]]}), "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+    assert ans["series"]["u1"] == [[MS0, 0], [MS0 + 1, 0.0]]
+
+
+def test_continuation_at_a_legal_boundary_and_inconsistent_later_pages():
+    nxt = "2026-01-05T00:30:00Z"
+    ms_nxt = MS0 + 30 * 60_000
+
+    def good(h, a):
+        if a["from"] == to_z(T0):
+            return _page(a, complete=False, next_from=nxt, series={"u1": [[MS0, 1.0]]})
+        return _page(a, series={"u1": [[ms_nxt, 2.0]]})       # the sample AT next_from belongs to the next page
+
+    ans = sd.fetch(good, "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+    assert ans["series"]["u1"] == [[MS0, 1.0], [ms_nxt, 2.0]]
+
+    def leaks(h, a):   # first page holds a sample at/after its own next_from: overlap
+        return _page(a, complete=False, next_from=nxt, series={"u1": [[ms_nxt, 1.0]]})
+
+    with pytest.raises(sd.PageError, match="outside the page window"):
+        sd.fetch(leaks, "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+
+    for change in ({"snapshot": "B"}, {"source": "timescale"}, {"points_total": 2}, {"uuid_var": "p"}):
+        def mixed(h, a, change=change):
+            if a["from"] == to_z(T0):
+                return _page(a, complete=False, next_from=nxt)
+            return _page(a, series={"u1": []}, **change)
+        with pytest.raises(sd.PageError, match="differs from the first page"):
+            sd.fetch(mixed, "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+
+
+def to_z(t):
+    from open_fdd.nf.client import to_iso_z
+    return to_iso_z(t)
+
+
+def test_multi_page_join_and_offset_substitution():
+    pts = {"u1": _pt("u1"), "u2": _pt("u2")}
+
+    def two(h, a, dup=False):
+        off = int(a["pointOffset"])
+        u = "u1" if (off == 0 or dup) else "u2"
+        return _page(a, points={u: pts[u]}, points_total=2, point_offset=off, series={u: [[MS0, float(off)]]},
+                     next_point_offset=1 if off == 0 else None, **({} if off == 0 else {"rows": None, "vars": None}))
+
+    ans = sd.fetch(two, "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+    assert ans["series"] == {"u1": [[MS0, 0.0]], "u2": [[MS0, 1.0]]} and ans["calls"] == 2
+    with pytest.raises(sd.PageError, match="repeated from an earlier point page"):
+        sd.fetch(lambda h, a: two(h, a, dup=True), "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+
+
+def test_incompatible_hook_response_is_rejected():
+    """A pre-5.0.20 / foreign answer without the envelope fields never merges silently."""
+    legacy = lambda h, a: {"ok": True, "kind": "select", "vars": ["uuid"], "rows": [], "snapshot": "A",  # noqa: E731
+                           "points": {"u1": _pt("u1")}, "series": {"u1": [[MS0, 1.0]]}, "complete": True}
+    with pytest.raises(sd.PageError):
+        sd.fetch(legacy, "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+
+
+def _rdf(pages):
+    def hook(h, a):
+        return pages[int(a.get("offset") or 0)](a)
+    return hook
+
+
+def test_rdf_turtle_pages_must_join_exactly():
+    text = "@prefix x: <urn:x#> .\nx:a x:b \"\U0001F600\" .\n"          # one astral char = 2 UTF-16 units
+    n = len(text.encode("utf-16-le")) // 2
+    cut = 10
+    env = {"ok": True, "snapshot": "S", "total_chars": n, "base": "urn:b:"}
+    good = {0: lambda a: {**env, "offset": 0, "turtle": text[:cut], "next_offset": cut},
+            cut: lambda a: {**env, "offset": cut, "turtle": text[cut:], "next_offset": None}}
+    assert sd.rdf_turtle(_rdf(good)) == (text, "urn:b:")
+    gap = {**good, 0: lambda a: {**env, "offset": 0, "turtle": text[:cut - 1], "next_offset": cut}}
+    with pytest.raises(sd.PageError, match="does not follow"):
+        sd.rdf_turtle(_rdf(gap))
+    short = {**good, cut: lambda a: {**env, "offset": cut, "turtle": text[cut:-1], "next_offset": None}}
+    with pytest.raises(sd.PageError, match="total_chars"):
+        sd.rdf_turtle(_rdf(short))
+    changed = {**good, cut: lambda a: {**env, "snapshot": "T", "offset": cut, "turtle": text[cut:], "next_offset": None}}
+    with pytest.raises(sd.PageError, match="snapshot"):
+        sd.rdf_turtle(_rdf(changed))
+    wrong = {**good, cut: lambda a: {**env, "offset": 0, "turtle": text[cut:], "next_offset": None}}
+    with pytest.raises(sd.PageError, match="offset"):
+        sd.rdf_turtle(_rdf(wrong))
+    with pytest.raises(sd.PageError, match="receipt"):
+        sd.rdf_turtle(_rdf({0: lambda a: {"ok": True, "offset": 0, "next_offset": None}}))
+
+
+def test_bucketed_fetch_pages_on_epoch_bucket_boundaries():
+    """A bucket split across two time pages would come back twice under one timestamp (5.0.20)."""
+    seen = []
+
+    def hook(h, a):
+        seen.append((a["from"], a["to"]))
+        return _page(a, series={"u1": []})
+
+    sd.fetch(hook, "SELECT ?uuid WHERE {}", T0 + timedelta(minutes=2), T0 + timedelta(minutes=58), bucket="5 minutes",
+             page_days=0.0123)
+    assert seen[0][0] == "2026-01-05T00:00:00Z" and seen[-1][1] == "2026-01-05T01:00:00Z"
+    for f, t in seen:
+        for x in (f, t):
+            assert int(datetime.fromisoformat(x.replace("Z", "+00:00")).timestamp()) % 300 == 0, x
+
+
+def test_a_point_with_no_samples_answers_an_empty_series():
+    """{"u1": []} is a point with no samples in the window: valid, and distinct from a missing series entry."""
+    got = sd.fetch(_one(series={"u1": []}), "SELECT ?uuid WHERE {}", T0, T1, bucket="raw")
+    assert got is not None

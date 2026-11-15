@@ -36,6 +36,19 @@ The script prints SQL; it does not connect to your database. In an application i
 
 Execute against **one authorized tenant and building at a time**. Most rules partition by `equipment_id`; the five sensor sweeps partition sample windows by `(equipment_id, series_id)`, with `sensor_role` used for thresholds and output labels. Weather joins partition by timestamp. An unscoped warehouse view would mix sites that reuse equipment IDs and could attach another site's weather. Scope all inputs before the rule query. Use transaction-local temporary views/tables or a validated CTE adapter with bound scope values. Select equipment by explicit metadata kind and mapped roles; IDs are exact keys, never prefix heuristics. Mixed equipment cadences need separate runs/resampling, not a single invented poll interval.
 
+## Run proof gate (#1608)
+
+Rules marked `run_proof: gated` in `registry.yaml` (52 of 77) read one more `history` column, `run_proof` (0/1, or a 0-1 command fraction;
+running when above 0.05), and count only samples while it says the equipment runs. A missing sample is not proof. The column is resolved
+from the model by `run_proof.json`: the equipment's own status role (fan, pump, chilled-water pump, chiller, compressor), then its own
+command role, then the proof of the equipment that feeds it (`airRef`, `chilledWaterRef`, `hotWaterRef`, then Brick `isFedBy` / `feeds`,
+one hop). When no sample of an equipment has a proof, the rule returns that equipment with `fault_hours` NULL and `covered_hours` 0 (SKIPPED,
+reason `no_run_proof`); it used to store 0 fault hours (PASS). `require_run_proof` (alias `require_operational_gate`, default 1) switches
+the gate off per rule. Exempt rules carry `run_proof: exempt` and a `run_proof_note`. The pandas twins read the same signal
+(`open_fdd/run_proof.py`), and `tests/parity` checks that both sides skip the same equipment.
+
+The **effective** tuning decides the gate, not the catalog: a saved `require_run_proof` 0 (or the legacy alias at 0 when `require_run_proof` is unset) runs the rule ungated, so it is assessed, keeps its fault timeline, and is never counted as `no_run_proof`. A skipped equipment is stored in `fdd.rule_result` as `SKIPPED` / `no_run_proof` with NULL hours on the summary and per-sensor rows: unknown, never an assessed zero. A proof that is bound but OFF (or stale) for the whole window is different: the rule is assessed, with 0 covered hours. Exceptions are deliberate: command/status-mismatch rules and runtime-outside-schedule / always-on rules are exempt because the proof *is* the signal (they must see off samples), and so are zone, weather and meter rules that judge no running equipment; each carries its `run_proof_note`.
+
 ## Sensor sweep result grain and silence
 
 All five sensor sweeps return one row per assessable bound sensor series: `(equipment_id, series_id, sensor_role, fault_hours, covered_hours)`. The canonical per-sweep role lists are in `open_fdd/data/sensor_sweep_roles.json`; SQL rendering, the generated NF rule catalog, and the pandas oracle read the same lists. `zone_flow` is never a sweep target. `duct_static` is assessed only by SV-RANGE and SV-SPIKE. Other bound roles can still provide operating-state context to rules but do not create sensor result rows. Two bound points with the same assessable role remain separate results. `series_id` is the point UUID; `sensor_role` describes the point and selects its rule threshold. A separate series result prevents a healthy sensor from masking a faulty peer and lets callers identify the exact point. Each sample in `sensor_history` carries its own SI unit; unsupported units and invalid/mixed-unit samples are masked. An assessable series with no covered interval returns `fault_hours = NULL` and `covered_hours = 0`.

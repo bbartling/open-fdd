@@ -67,7 +67,7 @@ async function connect(config = {}) {
 }
 
 /** schema_version of install.sql this release needs (4 = shared core schema: fdd.point / fdd.rule_result / fdd.rule_config). */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 /** Installed openfdd schema_version, 0 when the schema / config table / key is absent (pre-scoped release = 0). */
 async function schemaVersion(client) {
@@ -473,6 +473,41 @@ const posNum = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v
  * The query runs in a transaction with SET LOCAL statement_timeout and LIMIT maxPoints + 1. Result:
  * { bucket, requested_bucket, coarsened, from, to, total, truncated, max_points, coverage, rows }.
  */
+/**
+ * The oldest stored sample per point (for the "All" range on Full, #1612): one index-ordered LIMIT 1 lookup per uuid
+ * (at most maxUuids), inside a transaction with the history statement timeout. {ok, complete, oldest: {uuid: ISO | null}}.
+ */
+async function oldestRoute(client, args = {}, limits = {}) {
+  const L = {};
+  for (const k of Object.keys(HISTORY_LIMITS)) L[k] = posNum(limits[k], HISTORY_LIMITS[k]);
+  const { uuids } = args;
+  if (!Array.isArray(uuids) || !uuids.length) throw new Error("args.uuids (array) is required");
+  const ids = [...new Set(uuids.map((u) => (typeof u === "string" ? u.trim() : "")))];
+  if (ids.some((u) => !u || u.length > 128)) throw new Error("args.uuids must be non-empty strings (point uuids)");
+  if (ids.length > L.maxUuids) throw new Error(`at most ${L.maxUuids} uuids`);
+  let res;
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT set_config('statement_timeout', $1::text, true)", [`${Math.floor(L.statementTimeoutMs)}ms`]);
+    res = await client.query(
+      `SELECT u.id AS point_uuid,
+              (SELECT s.ts FROM openfdd.nf_samples s WHERE s.point_uuid = u.id ORDER BY s.ts ASC LIMIT 1) AS t
+         FROM unnest($1::text[]) AS u(id)`, [ids]);
+    await client.query("COMMIT");
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch (_) { /* connection may be gone */ }
+    if (e && e.code === "57014") {
+      const err = /** @type {any} */ (new Error(`oldest-sample query exceeded ${L.statementTimeoutMs} ms and was cancelled; use fewer uuids`));
+      err.code = "history_timeout";
+      throw err;
+    }
+    throw e;
+  }
+  const oldest = Object.fromEntries(ids.map((u) => [u, null]));
+  for (const r of res.rows) if (r.point_uuid in oldest) oldest[r.point_uuid] = r.t ? new Date(r.t).toISOString() : null;
+  return { ok: true, complete: true, oldest };
+}
+
 async function historyRoute(client, args = {}, limits = {}) {
   const L = {};
   for (const k of Object.keys(HISTORY_LIMITS)) L[k] = posNum(limits[k], HISTORY_LIMITS[k]);
@@ -643,7 +678,7 @@ const roleLimitRevision = (client, siteId, scopeKey, revision) => ruleConfigRevi
 
 module.exports = {
   connect, install, coreOk, schemaVersion, requireConfig, SCHEMA_VERSION, SQL_FILES, pointRows, syncPoints, loadHistory, runRules, toResultRow, writeResults,
-  maybeEnforceCap, retentionPreview, historyRoute, siFactors, newestSample,
+  maybeEnforceCap, retentionPreview, historyRoute, oldestRoute, siFactors, newestSample,
   LIMITS_RULE_ID, activeRuleConfigs, ruleConfigHistory, appendRuleConfigRevision, ruleConfigRevision,
   activeRoleLimitOverrides, roleLimitHistory, appendRoleLimitRevision, roleLimitRevision,
 };

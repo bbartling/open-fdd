@@ -47,6 +47,33 @@ ON CONFLICT (key) DO NOTHING;
 INSERT INTO openfdd.config (key, value) VALUES ('max_chunks_per_call', to_jsonb(100))
 ON CONFLICT (key) DO NOTHING;
 
+-- Privilege boundary: the retention policy keys (max_bytes, retention_allowlist, max_chunks_per_call, schema_version,
+-- job_registered, ...) are INSTALLER-ONLY. The daily job runs as its owner, so a runtime role that could edit them
+-- could make the owner drop NF chunks. Only members of the table owner's role (installer, superuser) may write any key;
+-- every other role may write only its own bookkeeping keys (last_cap_run, retention_last).
+CREATE OR REPLACE FUNCTION openfdd.config_guard() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_runtime_keys constant text[] := ARRAY['last_cap_run', 'retention_last'];
+  v_owner oid;
+BEGIN
+  SELECT c.relowner INTO v_owner FROM pg_catalog.pg_class c WHERE c.oid = TG_RELID;
+  IF pg_catalog.pg_has_role(current_user, v_owner, 'USAGE') THEN
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+  IF (TG_OP IN ('UPDATE', 'DELETE') AND NOT (OLD.key = ANY (v_runtime_keys)))
+     OR (TG_OP IN ('INSERT', 'UPDATE') AND NOT (NEW.key = ANY (v_runtime_keys))) THEN
+    RAISE EXCEPTION 'openfdd.config key % is installer-only (role % may write only %)',
+      CASE WHEN TG_OP = 'DELETE' THEN OLD.key ELSE NEW.key END, current_user, v_runtime_keys
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END
+$$;
+DROP TRIGGER IF EXISTS config_guard ON openfdd.config;
+CREATE TRIGGER config_guard BEFORE INSERT OR UPDATE OR DELETE ON openfdd.config
+  FOR EACH ROW EXECUTE FUNCTION openfdd.config_guard();
+
 -- Retention cap in bytes (value may be stored as a JSON number or string).
 CREATE OR REPLACE FUNCTION openfdd.max_bytes() RETURNS bigint
 LANGUAGE sql STABLE AS $$
@@ -361,5 +388,5 @@ $$;
 DROP TABLE IF EXISTS openfdd.retention_log;
 
 -- Last statement: mark the schema after the migration succeeds.
-INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(4))
+INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(5))
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

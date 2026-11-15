@@ -235,7 +235,13 @@ class DuckDBAdapter:
 
     name = "duckdb"
 
-    def __init__(self):
+    def __init__(self, parquet: bool = False):
+        # parquet=True: every input table is written to a Parquet file and the rules read it back through
+        # read_parquet (the "data lake" path: Parquet files queried in place by DuckDB, values still SI).
+        self.parquet = parquet
+        if parquet:
+            self.name = "duckdb-parquet"
+        self._tmp = None
         self._conn = None
         self._pack: dict | None = None
         self.stats: dict = {}
@@ -271,6 +277,15 @@ class DuckDBAdapter:
                 names = ", ".join(f'"{c["name"]}"' for c in spec)
                 tuples = [tuple(_cell_value(row, c) for c in spec) for row in rows]
                 self._conn.executemany(f"INSERT INTO {table} ({names}) VALUES ({placeholders})", tuples)
+            if self.parquet:
+                import tempfile
+
+                if self._tmp is None:
+                    self._tmp = tempfile.TemporaryDirectory(prefix="ofdd-parquet-")
+                f = Path(self._tmp.name, f"{table}.parquet").as_posix()
+                self._conn.execute(f"COPY {table} TO '{f}' (FORMAT parquet)")
+                self._conn.execute(f"DROP TABLE {table}")
+                self._conn.execute(f"CREATE VIEW {table} AS SELECT * FROM read_parquet('{f}')")
         self._load_ms = int((time.time() - t0) * 1000)
 
     def run(self, rule_ids: Sequence[str] | None = None, rule_sql: dict | None = None) -> dict[str, list[dict]]:
@@ -308,6 +323,9 @@ class DuckDBAdapter:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+        if self._tmp is not None:
+            self._tmp.cleanup()
+            self._tmp = None
 
 
 def postgres_configured() -> bool:
@@ -468,14 +486,14 @@ class TimescaleAdapter:
             cols = columnar.setdefault(key, [[], []])
             cols[0].append(ts)
             cols[1].append(value)
-        meta = dataset.meta
-        t0, steps = meta["t0_ms"], meta["steps"]
+        # the load window starts at each device's actual first row (edge jitter can put it before the nominal t0)
+        win_from, win_to = dataset.history_window_ms()
         si_history: dict[str, list[dict]] = {}
         for row in dataset.history:
             si_history.setdefault(row["equipment_id"], []).append(row)
         self._in.write_text(json.dumps({
             "site_id": site, "ingest": self.ingest, "step_seconds": dataset.step_seconds,
-            "window": {"from_ms": t0, "to_ms": t0 + steps * dataset.step_seconds * 1000},
+            "window": {"from_ms": win_from, "to_ms": win_to},
             "points": points, "samples": columnar, "si_history": si_history, "weather": dataset.weather,
             "utility_interval": dataset.utility_interval, "utility_monthly": dataset.utility_monthly,
             "history_columns": dataset.history_columns}, ensure_ascii=False), encoding="utf-8")
@@ -518,6 +536,7 @@ ADAPTERS = {
     "pglite": lambda: NodeEngineAdapter("pglite"),
     "sqlite": lambda: NodeEngineAdapter("sqlite"),
     "duckdb": lambda: DuckDBAdapter(),
+    "duckdb-parquet": lambda: DuckDBAdapter(parquet=True),
     "postgres": lambda: PostgresAdapter(),
     "timescale": lambda: TimescaleAdapter(ingest="si"),
 }

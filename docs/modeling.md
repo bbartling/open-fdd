@@ -25,6 +25,10 @@ of the role's classes, or when it carries every marker of the role. Class wins b
 - Equipment kinds come from the equipment markers. Weather points fill weather roles only.
 - The role-to-class and marker map is `nf-app/static/fdd-catalog.json`. The [rule catalog](rules/) and
   [cookbooks](rules/sql-cookbook.html) list each rule's roles.
+- **Run proof** is the one role no point fills by class: it is resolved from the model. An equipment proves itself by its own fan,
+  pump, chiller or compressor status, then command; otherwise by the equipment that feeds it, through `airRef` (a VAV to its AHU),
+  `chilledWaterRef` or `hotWaterRef` (a water loop to its pump), or RDF `brick:isFedBy` / `brick:feeds`. With none, rules that
+  need proof are skipped with `no_run_proof`. See the [run proof gate](rules/sql-cookbook.html#run-proof).
 - The FDD and RCx pages show missing required roles. Fix the class or markers in NF, check the point has history and a unit, reload.
 
 ## Units are SI-first

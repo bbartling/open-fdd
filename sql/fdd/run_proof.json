@@ -1,0 +1,22 @@
+{
+  "_doc": "The run-proof binding contract (#1608), the ONE source for every engine. The input role `run_proof` (history column run_proof, 0/1 or a 0-1 fraction; run when > threshold) says whether the equipment a rule judges is proven running at a sample. It is resolved from the model, never from point names: tier 1 = the equipment's own proof (status roles first, then command roles, in the order below); tier 2 = the proof of the equipment that feeds it (refs listed under `feeders`, in order, first feeder with proof wins; RDF: brick:isFedBy / brick:feeds); otherwise NONE, and a gated rule is SKIPPED with reason no_run_proof (never a silent PASS). Read by scripts/nf/sync_pypi_data.py (open_fdd/data/run_proof.json), open_fdd/run_proof.py and nf-app/static/run-proof.js.",
+  "version": 1,
+  "role": "run_proof",
+  "column": "run-proof",
+  "threshold": 0.05,
+  "skip_reason": "no_run_proof",
+  "own": {
+    "status": ["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status"],
+    "command": ["fan_cmd", "chw_pump_cmd", "cw_pump_cmd", "tower_fan_cmd"]
+  },
+  "feeders": {
+    "refs": ["airRef", "chilledWaterRef", "hotWaterRef"],
+    "links": ["isFedBy", "feeds"],
+    "max_hops": 1
+  },
+  "rdf": {
+    "brick_ns": "https://brickschema.org/schema/Brick#",
+    "predicates": {"airRef": "ph:airRef", "chilledWaterRef": "ph:chilledWaterRef", "hotWaterRef": "ph:hotWaterRef",
+                   "isFedBy": "brick:isFedBy", "feeds": "brick:feeds"}
+  }
+}

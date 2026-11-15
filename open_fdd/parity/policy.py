@@ -92,6 +92,11 @@ class Verdict:
     ok: bool
     deltas: dict = field(default_factory=dict)
     pin_violations: list[str] = field(default_factory=list)
+    #: rule -> equipment ids both sides skipped for no run proof (pandas SKIPPED_NO_RUN_PROOF, SQL fault_hours NULL)
+    no_run_proof: dict = field(default_factory=dict)
+    #: "rule/equipment" pairs where one side skipped for no run proof and the other assessed. Always a failure, even
+    #: for a known-divergent rule: the known-difference list covers fault-hour deltas, never proof disagreements.
+    proof_mismatches: list = field(default_factory=list)
 
     @property
     def unexpected(self) -> int:
@@ -106,7 +111,7 @@ class Verdict:
     def to_dict(self) -> dict:
         return {"compared": self.compared, "matched": self.matched, "known_divergent": self.known_divergent,
                 "unexpected": self.unexpected, "unexpected_rules": list(self.unexpected_rules),
-                "pin_violations": list(self.pin_violations), "ok": self.ok}
+                "pin_violations": list(self.pin_violations), "proof_mismatches": list(self.proof_mismatches), "ok": self.ok}
 
 
 def verdict_from_counts(compared: int, twins: int, diverged: Iterable[str], known: Iterable[str]) -> dict:
@@ -192,7 +197,7 @@ def pin_violations(per_rule: Mapping[str, dict], known: Iterable[str], pins: Map
             bad.append(f"{rule}: pinned {pin['hours']} h but the rule was not compared")
         else:
             got = rule_delta(per_rule[rule])
-            if abs(got - float(pin["hours"])) > float(pin["tol"]):
+            if not math.isfinite(got) or abs(got - float(pin["hours"])) > float(pin["tol"]):
                 bad.append(f"{rule}: delta {got:.4f} h, pinned {float(pin['hours']):.4f} +/- {float(pin['tol']):.4f} h")
     return bad
 
@@ -202,11 +207,29 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
     """Compare engine rows with the pandas reference under ``policy`` (default: ``Policy.default()``)."""
     policy = policy or Policy.default()
     per_rule: dict[str, dict] = {}
+    agreed: dict[str, list[str]] = {}
+    proof_mismatches: list[str] = []
     for rule, ref_by_equip in ref_rows.items():
         sql = sql_rows_by_equipment(sql_rows.get(rule))
         per: dict[str, dict] = {}
         for equip, ref in ref_by_equip.items():
             row = sql.get(equip)
+            no_proof = str(ref.get("status") or "") == "SKIPPED_NO_RUN_PROOF"
+            if no_proof:
+                # #1608: no run proof is SKIPPED on BOTH sides. A SQL row that still reports hours is a divergence.
+                if row is None or row.get("fault_hours") is None:
+                    agreed.setdefault(rule, []).append(equip)
+                else:
+                    per[equip] = {"sql": float("nan"), "pandas": None, "status": ref.get("status")}   # never finite: no match
+                    proof_mismatches.append(f"{rule}/{equip}: pandas skipped for no run proof, SQL assessed")
+                continue
+            # sensor aggregates included: a null-hours, zero-coverage SQL row is SQL's skip
+            if (row is not None and row.get("fault_hours") is None and "covered_hours" in row
+                    and not row.get("covered_hours") and str(ref.get("status") or "").startswith(("FAULT", "PASS"))):
+                # SQL SKIPPED (no proof) but pandas assessed the equipment: a divergence
+                per[equip] = {"sql": float("nan"), "pandas": ref.get("pandas"), "status": ref.get("status")}
+                proof_mismatches.append(f"{rule}/{equip}: SQL skipped, pandas assessed")
+                continue
             if row is None or row.get("fault_hours") is None:
                 continue
             item = {"sql": float(row["fault_hours"]), "pandas": ref.get("pandas"), "status": ref.get("status")}
@@ -217,12 +240,16 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
             per[equip] = item
         if per:
             per_rule[rule] = per
+    # a rule whose every equipment agrees on "no run proof" was compared and matched (unknown hours stay unknown)
+    fully_skipped = [r for r in agreed if r not in per_rule]
     diverged = sorted(r for r, per in per_rule.items() if not rule_matches(per, policy))
     violations = pin_violations(per_rule, policy.known, policy.pins) if policy.pins else []
-    v = verdict_from_counts(len(per_rule), len(ref_rows) if policy.require_all_twins else 0, diverged, policy.known)
+    v = verdict_from_counts(len(per_rule) + len(fully_skipped), len(ref_rows) if policy.require_all_twins else 0,
+                            diverged, policy.known)
     return Verdict(
         compared=v["compared"], twins=len(ref_rows), matched=v["matched"], known_divergent=v["known_divergent"],
         unexpected_rules=v["unexpected_rules"], diverged=diverged,
         now_matching_but_listed=sorted(r for r in policy.known if r in per_rule and r not in diverged),
-        no_twin=sorted(r for r in sql_rows if r not in ref_rows), per_rule=per_rule, ok=v["ok"] and not violations,
-        deltas={r: rule_delta(per) for r, per in per_rule.items() if r in policy.known}, pin_violations=violations)
+        no_twin=sorted(r for r in sql_rows if r not in ref_rows), per_rule=per_rule, ok=v["ok"] and not violations and not proof_mismatches,
+        deltas={r: rule_delta(per) for r, per in per_rule.items() if r in policy.known}, pin_violations=violations,
+        no_run_proof=agreed, proof_mismatches=proof_mismatches)

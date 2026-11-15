@@ -7,7 +7,8 @@
 //   action             "get" (default) | "preview" | "save" | "reset" | "rollback" | "history"
 //   site               NF site id
 //   scope              "site" (default) | "equip:<equipment id>"
-//   rule_id            "SV-LIMITS" (default) | any rule id in pack.rule_tuning_templates.rules
+//   rule_id            "SV-LIMITS" (default) | any rule id in pack.rule_tuning_templates.rules | "OCC-CALENDAR"
+//                      (the site's weekly occupancy calendar, scope "site" only; overrides { version: 1, calendar })
 //   overrides          JSON { version: 1, roles: {...} } (SV-LIMITS) or { version: 1, params: {...} } (per-rule) in SI
 //   revision           rollback: positive integer revision to restore
 //   expected_revision  optional optimistic-concurrency check (0 = none active yet, >= 1 = current active revision)
@@ -18,6 +19,7 @@ const settings = require('./lib/settings.js');
 const startArgs = require('./lib/start-hook-args.js');
 const roleLimits = require('./lib/role-limits.js');
 const ruleTuning = require('./lib/rule-tuning.js');
+const occupancy = require('../static/occupancy.js');
 const fs = require('fs');
 const path = require('path');
 
@@ -34,7 +36,7 @@ function loadTemplates() {
 
 /** @param {any} args */
 function parseArgs(args) {
-  const a = startArgs.normalizeStartHookArgs(args, { jsonFields: ['overrides'], numberFields: ['revision', 'expected_revision'] });
+  const a = startArgs.normalizeStartHookArgs(args, { jsonFields: ['overrides', 'limits_overrides'], numberFields: ['revision', 'expected_revision', 'limits_expected_revision'] });
   const action = String(a.action || 'get');
   if (!ACTIONS.includes(action)) throw new Error(`action must be one of ${ACTIONS.join(', ')}`);
   const site = typeof a.site === 'string' ? a.site : '';
@@ -56,6 +58,17 @@ function parseArgs(args) {
       throw new Error('expected_revision must be a non-negative integer');
     }
     out.expected_revision = a.expected_revision;
+  }
+  if (a.limits_overrides !== undefined) {
+    if (!roleLimits.SWEEP_RULES.includes(out.rule_id) || !['preview', 'save', 'reset'].includes(action)) {
+      throw new Error('limits_overrides is only valid for preview/save/reset of a sweep rule');
+    }
+    if (!Number.isInteger(a.limits_expected_revision) || a.limits_expected_revision < 0
+        || (action !== 'preview' && out.expected_revision == null)) {
+      throw new Error('combined writes need expected_revision and limits_expected_revision');
+    }
+    out.limits_overrides = a.limits_overrides;
+    out.limits_expected_revision = a.limits_expected_revision;
   }
   return out;
 }
@@ -181,6 +194,48 @@ async function handleRuleParams({ ts, client, a, pack, log }) {
 }
 
 /**
+ * The site's weekly occupancy calendar (5.0.20): stored like any tuning document (fdd.rule_config, revisioned, one active),
+ * read by the Overview's weekly runtime charts and the analytics hook. Returns the effective calendar (the saved one,
+ * else the default Mon-Fri 06:00-18:00) and bare_min_occ_hours_per_week computed from it.
+ */
+async function handleOccCalendar({ ts, client, a, log }) {
+  if (a.scope !== roleLimits.SITE_SCOPE) throw new Error(`${occupancy.RULE_ID} is per site: scope must be "site"`);
+  const ruleId = occupancy.RULE_ID;
+  const activeOf = async () => Object.fromEntries((await ts.activeRuleConfigs(client, { siteId: a.site, ruleId })).map((r) => [r.scope_key, { revision: r.revision, parameters: r.parameters }]));
+  const before = await activeOf();
+  let candidate = before.site && before.site.parameters;
+  if (a.action === 'preview' || a.action === 'save') {
+    candidate = occupancy.normalizeCalendarOverride(a.overrides);
+    if (a.note) candidate.note = a.note;
+  } else if (a.action === 'reset') {
+    candidate = { version: 1, reset: true, ...(a.note ? { note: a.note } : {}) };
+  } else if (a.action === 'rollback') {
+    if (!Number.isInteger(a.revision) || a.revision < 1) throw new Error('rollback needs revision (a positive integer)');
+    const old = await ts.ruleConfigRevision(client, a.site, ruleId, a.scope, a.revision);
+    if (!old) throw new Error(`no revision ${a.revision} for ${ruleId} ${a.scope}`);
+    candidate = old.reset ? { version: 1, reset: true, rollback_of: a.revision } : { ...occupancy.normalizeCalendarOverride({ version: 1, calendar: old.calendar }), rollback_of: a.revision };
+  }
+  const calendar = candidate && !candidate.reset && candidate.calendar ? occupancy.normalizeCalendar(candidate.calendar) : occupancy.defaultCalendar();
+  let revision;
+  if (['save', 'reset', 'rollback'].includes(a.action)) {
+    revision = await ts.appendRuleConfigRevision(client, {
+      siteId: a.site, ruleId, scopeKey: a.scope, parameters: candidate, createdBy: a.by, expectedRevision: a.expected_revision,
+    });
+    log(`tuning: ${a.action} ${ruleId} on site ${a.site || '(none)'} -> revision ${revision}`);
+  }
+  const history = await ts.ruleConfigHistory(client, a.site, ruleId, a.scope, 20);
+  // The calendar and the revision returned together describe one state: the snapshot this answer was computed from
+  // (get / preview) or the revision this call wrote. Re-reading here could pair calendar N with revision N+1.
+  const active = revision != null ? { ...before, [a.scope]: { revision, parameters: candidate } } : before;
+  return {
+    ok: true, action: a.action, site: a.site, scope: a.scope, rule_id: ruleId,
+    written: revision != null, ...(revision != null ? { revision } : {}),
+    active, calendar, source: candidate && !candidate.reset && candidate.calendar ? 'saved' : 'default',
+    bare_min_occ_hours_per_week: occupancy.occupiedHoursPerWeek(calendar), history,
+  };
+}
+
+/**
  * @param {{ sdk: any, args?: any, config?: any, connect?: (cfg: any) => Promise<any>, templates?: any, pack?: any }} o
  */
 async function handle({ sdk, args = {}, config = {}, connect, templates, pack: packIn }) {
@@ -202,7 +257,26 @@ async function handle({ sdk, args = {}, config = {}, connect, templates, pack: p
     }
     if (!(await ts.coreOk(client))) throw new Error('core schema missing (fdd.rule_config): run the schema hook or timescale/install.sql first');
     const ruleId = a.rule_id || roleLimits.LIMITS_RULE_ID;
-    if (ruleId === roleLimits.LIMITS_RULE_ID) {
+    if (a.limits_overrides !== undefined) {
+      // A single Save (or Reset) is one transaction across both documents. appendRuleConfigRevision's nested
+      // transaction control is absorbed by this transaction-scoped client; its advisory locks, expected-revision
+      // checks, and SQL are unchanged. Limits first so the rule's SQL is rendered against the candidate limits.
+      await client.query('BEGIN');
+      const tx = { query: (sql, params) => /^(BEGIN|COMMIT|ROLLBACK)$/.test(sql)
+        ? Promise.resolve({ rows: [] }) : client.query(sql, params) };
+      try {
+        const limits = await handleRoleLimits({ ts, client: tx, tpl, log, a: { ...a, rule_id: roleLimits.LIMITS_RULE_ID,
+          action: a.action === 'reset' ? 'save' : a.action, overrides: a.limits_overrides, expected_revision: a.limits_expected_revision } });
+        result = await handleRuleParams({ ts, client: tx, a, pack: pack || loadPack(), log });
+        result.role_limits = limits;
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      }
+    } else if (ruleId === occupancy.RULE_ID) {
+      result = await handleOccCalendar({ ts, client, a, log });
+    } else if (ruleId === roleLimits.LIMITS_RULE_ID) {
       result = await handleRoleLimits({ ts, client, a, tpl, log });
     } else {
       result = await handleRuleParams({ ts, client, a, pack: pack || loadPack(), log });
@@ -219,5 +293,5 @@ async function handle({ sdk, args = {}, config = {}, connect, templates, pack: p
 
 module.exports = Object.assign(
   async (ctx) => handle({ sdk: ctx.sdk, args: startArgs.startHookArgs(ctx, { configFallback: false }), config: ctx.config }),
-  { handle, parseArgs, effectiveOf },
+  { handle, parseArgs, effectiveOf, handleOccCalendar },
 );

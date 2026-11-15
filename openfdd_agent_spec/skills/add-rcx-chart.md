@@ -12,7 +12,7 @@ description: Add an RCx chart (view) to the Open-FDD NF app with the bottom faul
 4. Faults: only through `rcxWithFaultLane(option, [{ name, data: [[ms, 0|1], ...] }])`. No markers, shading or extra series.
 5. Add the view id to `nf-app/rcx-parity.json` (`presets` or the matching builder entry, and `fault_lanes` if it draws one).
 6. Add or extend a test in `nf-app/tests/` (rcx-presets, rcx-overview or fdd-plots tests).
-7. Check it visually: `node nf-app/dev/mock-nf.mjs`, open `http://127.0.0.1:8765/api/v1/apps/static/open-fdd/`, RCx tab.
+7. Check it visually: `node nf-app/dev/mock-nf.mjs`, open `http://127.0.0.1:8765/api/v1/apps/static/open-fdd/`, Overview (the RCx dashboard; panels show only when the model has the equipment). `node scripts/nf/ui_acceptance.mjs` is the headless check.
 
 Tests: `node --test nf-app/tests/*.test.mjs` (`parity.test.mjs` fails on a missing view or entry) and
 `(cd nf-app && npm run typecheck)`.

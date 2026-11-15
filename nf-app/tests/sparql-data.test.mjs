@@ -67,8 +67,14 @@ test("args: caps can only be lowered; time range is checked", () => {
   assert.throws(() => hook.validateArgs({ query: PTS_Q, ...range(24 * 40), source: "nf" }), /days/);
   assert.throws(() => hook.validateArgs({ query: PTS_Q, ...range(1), bucket: "3 fortnights" }), /bucket/);
   assert.throws(() => hook.validateArgs({ query: PTS_Q, ...range(1), bucket: "raw", source: "timescale" }), /raw/);
-  const w = hook.validateArgs({ query: PTS_Q, windowHours: "2" });
-  assert.equal(Date.parse(w.to) - Date.parse(w.from), 2 * 3600e3);
+  const w = hook.validateArgs({ query: PTS_Q, windowHours: "2" });   // widened to whole 5-minute buckets
+  const span = Date.parse(w.to) - Date.parse(w.from);
+  assert.ok(span >= 2 * 3600e3 && span <= 2 * 3600e3 + 300e3, String(span));
+  assert.equal(Date.parse(w.from) % 300e3, 0); assert.equal(Date.parse(w.to) % 300e3, 0);
+  // a bucketed window must sit on bucket boundaries (epoch-aligned), else one bucket would be split across pages
+  assert.throws(() => hook.validateArgs({ query: PTS_Q, from: "2026-01-05T00:02:00Z", to: "2026-01-05T01:00:00Z" }),
+    (e) => e.code === "unaligned" && /multiples of the bucket/.test(e.message));
+  assert.equal(hook.validateArgs({ query: PTS_Q, from: "2026-01-05T00:02:00Z", to: "2026-01-05T01:00:00Z", bucket: "raw" }).bucket, "raw");
   // StartHook string map -> numbers
   assert.equal(hook.argsOf({ args: { pointOffset: "3" } }).pointOffset, 3);
 });
@@ -322,4 +328,10 @@ test("rdf hook: the logged JSON line fits the limit even for quote-heavy Turtle;
   const b = await rdf.handle({ sdk, args: { offset: "0", snapshot: "not-the-snapshot" } });
   assert.equal(b.ok, false);
   assert.equal(b.error_code, "model_changed");
+});
+test("a windowHours-only request gets the bucket-aligned default window", () => {
+  const args = hook.argsOf({ args: { query: "ASK { ?s ?p ?o }", windowHours: "6" } });
+  assert.equal(args.from, undefined, "windowHours is not expanded to unaligned bounds before validation");
+  const v = hook.validateArgs(args, { now: Date.parse("2026-11-14T12:03:17Z") });
+  assert.equal(v.form, "ASK");
 });

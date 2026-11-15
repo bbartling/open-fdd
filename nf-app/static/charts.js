@@ -668,12 +668,27 @@ async function oldestSamples(list) {
 }
 
 async function resolveChartSelection(list, state, { siteTz = "UTC", nowMs = Date.now() } = {}) {
-  let oldestMs = null;
+  let oldestMs = null, oldestSource = null, oldestWarning = "";
   if (state?.preset === "all" && list.length) {
     const found = (await oldestSamples(list)).filter(Number.isFinite);
-    if (found.length) oldestMs = Math.min(...found);
+    if (found.length) { oldestMs = Math.min(...found); oldestSource = "nf"; }
+    // Full: history that only Timescale still holds (older than NF's own retention) belongs to "All" too (#1612).
+    const tsOldest = typeof globalThis.ofddTimescaleOldest === "function" ? globalThis.ofddTimescaleOldest : null;
+    const numeric = list.filter((p) => p.kind !== "String" && p.kind !== "Enum").map((p) => p.uuid);
+    if (tsOldest && numeric.length) {
+      try {
+        const ans = await tsOldest(numeric);
+        if (!ans || !ans.ok || !ans.oldest) throw new Error((ans && (ans.error || ans.reason)) || "no answer");
+        const ts = Object.values(ans.oldest).map((v) => (v ? Date.parse(v) : NaN)).filter(Number.isFinite);
+        if (ts.length && (oldestMs == null || Math.min(...ts) < oldestMs)) { oldestMs = Math.min(...ts); oldestSource = "timescale"; }
+        if (ans.complete === false) oldestWarning = "Timescale answered for only part of the points; All may start later than the oldest stored sample.";
+      } catch (e) {
+        oldestWarning = `Timescale oldest sample unavailable (${(e && e.message) || e}); All starts at NF's oldest sample.`;
+      }
+    }
   }
-  return { ...state, resolvedBounds: resolveChartRange(state, { nowMs, oldestMs }), timeZone: chartTimeZone(siteTz) };
+  return { ...state, resolvedBounds: resolveChartRange(state, { nowMs, oldestMs }), timeZone: chartTimeZone(siteTz),
+    ...(oldestSource ? { oldestSource } : {}), ...(oldestWarning ? { oldestWarning } : {}) };
 }
 
 /**
@@ -715,7 +730,9 @@ async function fetchRange(list, state, { method = "AVERAGE", windowSec = null, m
   const tsFn = typeof globalThis.ofddTimescaleHistory === "function" ? globalThis.ofddTimescaleHistory : null;
   let timescaleFallback = null;
   const fillUntil = Number.isFinite(earliestNfMs) ? earliestNfMs : bounds.toMs;
-  if (tsFn && list.length && fillUntil - bounds.fromMs > Math.max(effectiveWindowSec * 2000, 3600e3)) {
+  // When Timescale's oldest sample set All's start, that interval is the point of the range: fetch it whatever its size.
+  const minGap = resolved.oldestSource === "timescale" ? 0 : Math.max(effectiveWindowSec * 2000, 3600e3);
+  if (tsFn && list.length && fillUntil - bounds.fromMs > minGap) {
     const numericUuids = list.filter((p) => p.kind !== "String" && p.kind !== "Enum").map((p) => p.uuid);
     if (numericUuids.length) {
       const bucket = effectiveWindowSec <= 300 ? "5 minutes"

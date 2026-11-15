@@ -128,9 +128,9 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [CHW-NOLOAD-1](#chw-noload-1) | all | 3.0833 h &plusmn; 0.01 | 5.1667 h &plusmn; 0.01 |
 | [ECON-3](#econ-3) | all | 11.5 h &plusmn; 0.01 | 24.5833 h &plusmn; 0.01 |
 | [ECON-4](#econ-4) | all | 1.0833 h &plusmn; 0.01 | 2.8333 h &plusmn; 0.01 |
-| [ECON-7](#econ-7) | all | 15.5833 h &plusmn; 0.01 | 30.6667 h &plusmn; 0.01 |
+| [ECON-7](#econ-7) | all | 14.8333 h &plusmn; 0.01 | 27.6667 h &plusmn; 0.01 |
 | [FC13-SAT-HIGH](#fc13-sat-high) | all | 10.0833 h &plusmn; 0.01 | 26.0833 h &plusmn; 0.01 |
-| [FC14](#fc14) | all | 93.75 h &plusmn; 0.01 | 410.083 h &plusmn; 0.01 |
+| [FC14](#fc14) | all | 62.5 h &plusmn; 0.01 | 292.917 h &plusmn; 0.01 |
 | [FC3](#fc3) | edge | - | - |
 | [FC5](#fc5) | all | 1.8333 h &plusmn; 0.01 | 3.9167 h &plusmn; 0.01 |
 | [FC6](#fc6) | all | 6.75 h &plusmn; 0.01 | 15.75 h &plusmn; 0.01 |
@@ -140,18 +140,18 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [FCU-HTG-COIL](#fcu-htg-coil) | all | 4.6667 h &plusmn; 0.01 | 5.4167 h &plusmn; 0.01 |
 | [FCU-MODE-CYCLE](#fcu-mode-cycle) | all | 1 h &plusmn; 0.01 | 1.75 h &plusmn; 0.01 |
 | [FCU-VALVE-PASS-CLG](#fcu-valve-pass-clg) | edge | - | - |
-| [HP-1](#hp-1) | all | 6.1667 h &plusmn; 0.01 | 17.0833 h &plusmn; 0.01 |
+| [HP-1](#hp-1) | all | 2.9167 h &plusmn; 0.01 | 3 h &plusmn; 0.01 |
 | [MECH-OAT-1](#mech-oat-1) | all | 56.1667 h &plusmn; 0.01 | 208.667 h &plusmn; 0.01 |
 | [OA-1](#oa-1) | all | 0.1667 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
 | [OAT-METEO](#oat-meteo) | all | 77 h &plusmn; 0.01 | 359.333 h &plusmn; 0.01 |
-| [SV-RATE](#sv-rate) | all | 108.917 h &plusmn; 0.01 | 468.333 h &plusmn; 0.01 |
-| [TRIM-1](#trim-1) | all | 51.25 h &plusmn; 0.01 | 293.417 h &plusmn; 0.01 |
-| [TRIM-3](#trim-3) | stress-only | 0 h &plusmn; 0.01 | 1.3333 h &plusmn; 0.01 |
-| [TRIM-4](#trim-4) | stress-only | 0 h &plusmn; 0.01 | 1.25 h &plusmn; 0.01 |
+| [SV-RATE](#sv-rate) | all | 44 h &plusmn; 0.01 | 199.25 h &plusmn; 0.01 |
+| [TRIM-1](#trim-1) | all | 18.6667 h &plusmn; 0.01 | 107.917 h &plusmn; 0.01 |
+| [TRIM-3](#trim-3) | stress-only | 0 h &plusmn; 0.01 | 0.9167 h &plusmn; 0.01 |
+| [TRIM-4](#trim-4) | stress-only | 0 h &plusmn; 0.01 | 0.9167 h &plusmn; 0.01 |
 | [VAV-1](#vav-1) | edge | - | - |
-| [VAV-6](#vav-6) | all | 0.3333 h &plusmn; 0.01 | 0.6667 h &plusmn; 0.01 |
+| [VAV-6](#vav-6) | all | 1.25 h &plusmn; 0.01 | 3.6667 h &plusmn; 0.01 |
 | [VAV-7](#vav-7) | edge | - | - |
-| [VAV-AHU-LEAVE](#vav-ahu-leave) | all | 0.4167 h &plusmn; 0.01 | 1.6667 h &plusmn; 0.01 |
+| [VAV-AHU-LEAVE](#vav-ahu-leave) | all | 0.3333 h &plusmn; 0.01 | 1.3333 h &plusmn; 0.01 |
 | [VAV-REHEAT](#vav-reheat) | stress-only | 0 h &plusmn; 0.01 | 0.1667 h &plusmn; 0.01 |
 | [WX-1](#wx-1) | edge | - | - |
 

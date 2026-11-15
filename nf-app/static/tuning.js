@@ -237,7 +237,9 @@
     st.drafts.delete(draftKey(ctx, scopeKey));
   }
 
+  let transport = null;   // test seam: (args) => hook answer
   async function callHook(args) {
+    if (transport) return transport(args);
     const body = Object.fromEntries(Object.entries(args).filter(([, v]) => v != null).map(([k, v]) => [k, typeof v === "string" ? v : JSON.stringify(v)]));
     const { pid } = await api(`/api/v1/apps/${APP_ID()}/hooks/tuning`, body);
     for (let i = 0; i < 30; i++) {
@@ -504,58 +506,94 @@
       return a ? a.revision : 0;
     };
 
+    const curLimits = () => st.limitsResp && st.limitsResp.active && st.limitsResp.active[st.scopeKey] && st.limitsResp.active[st.scopeKey].parameters;
+    const hasSweepEdits = () => Object.values(draft.sweeps || {}).some((f) => f && Object.keys(f).length);
+    const conflictText = (ans) => `Revision conflict (active is now rev ${ans.active_revision}); nothing was saved. Click "Reload latest" before saving again.`;
+    const revText = (ans) => [ans.revision != null ? `${ctx.ruleId} ${ans.revision}` : null,
+      ans.role_limits && ans.role_limits.revision != null ? `SV-LIMITS ${ans.role_limits.revision}` : (ans.rule_id === RL().LIMITS_RULE_ID && ans.revision != null ? null : null)]
+      .filter(Boolean).join(" / ") || String(ans.revision);
+    /** The answer to a write was lost (network, timeout): reload what is committed and say so, never guess. */
+    const reconcile = async (gen, what, err) => {
+      try {
+        await loadInlineState(ctx, st.scopeKey, gen);
+      } catch (_) { /* the reload reports its own state */ }
+      if (gen !== st.gen) return;
+      // The reload failed too (read-only fallback to shipped defaults): the committed revision is unknown, not 0.
+      const reloaded = (!meta.wantParams || (st.ruleResp && st.ruleResp.ok)) && (!meta.wantSweep || (st.limitsResp && st.limitsResp.ok));
+      if (!reloaded) {
+        setStatus(`${what} result unknown (${err.message}), and the committed state could not be reloaded${st.readOnlyReason ? ` (${st.readOnlyReason})` : ""}. Click "Reload latest" before saving again.`, true);
+        return;
+      }
+      const ruleRev = activeRuleRev(), limRev = activeLimitsRev();
+      setStatus(`${what} result unknown (${err.message}); reloaded the committed state: active revision ${meta.wantParams ? ruleRev : limRev}`
+        + `${meta.wantParams && meta.wantSweep ? ` (SV-LIMITS ${limRev})` : ""}. Check it before saving again.`, true);
+    };
+    /** One hook call per click: rule parameters and SV-LIMITS travel together and commit together (or not at all). */
+    const request = (mode, extra = {}) => {
+      const withLimits = meta.wantSweep && (mode === "reset" || hasSweepEdits());
+      const write = mode !== "preview";
+      if (meta.wantParams) {
+        const args = { action: mode, site: ctx.site, scope: st.scopeKey, rule_id: ctx.ruleId, note: extra.note,
+          expected_revision: write ? activeRuleRev() : undefined };
+        if (mode !== "reset") {
+          const curRule = st.ruleResp && st.ruleResp.active && st.ruleResp.active[st.scopeKey] && st.ruleResp.active[st.scopeKey].parameters;
+          args.overrides = buildRuleOverride(draft.params, meta.controls, meta.effParams, curRule, sys, ctx.ruleId);
+        }
+        if (withLimits) {
+          args.limits_overrides = mode === "reset"
+            ? resetSweepOverrideForRule(curLimits(), meta.sweepFields, meta.boundRoles)
+            : buildOverride(draft.sweeps, meta.sweepRows, curLimits(), meta.sweepFields, meta.boundRoles);
+          args.limits_expected_revision = activeLimitsRev();
+        }
+        return args;
+      }
+      return { action: mode === "reset" ? "save" : mode, site: ctx.site, scope: st.scopeKey, rule_id: RL().LIMITS_RULE_ID,
+        note: extra.note || (mode === "reset" ? `reset ${ctx.ruleId}` : undefined),
+        overrides: mode === "reset"
+          ? resetSweepOverrideForRule(curLimits(), meta.sweepFields, meta.boundRoles)
+          : buildOverride(draft.sweeps, meta.sweepRows, curLimits(), meta.sweepFields, meta.boundRoles),
+        expected_revision: write ? activeLimitsRev() : undefined };
+    };
+
     const runAction = async (mode) => {
       if (st.busy) return;
       st.busy = true;
       const gen = st.gen;
+      const label = mode === "preview" ? "Preview" : mode === "reset" ? "Reset" : "Save";
+      let args;
       try {
-        setStatus(mode === "preview" ? "Validating…" : "Saving…");
-        const note = (draft.note || "").trim() || undefined;
-        let wroteRev = null;
-        if (meta.wantParams && (mode === "preview" || mode === "save")) {
-          const curRule = st.ruleResp && st.ruleResp.active && st.ruleResp.active[st.scopeKey] && st.ruleResp.active[st.scopeKey].parameters;
-          const ov = buildRuleOverride(draft.params, meta.controls, meta.effParams, curRule, sys, ctx.ruleId);
-          const ans = await callHook({
-            action: mode, site: ctx.site, scope: st.scopeKey, rule_id: ctx.ruleId,
-            overrides: ov, expected_revision: mode === "save" ? activeRuleRev() : undefined, note,
-          });
+        args = request(mode, { note: (draft.note || "").trim() || undefined });
+      } catch (e) {
+        setStatus(e.message, true);
+        st.busy = false;
+        return;
+      }
+      try {
+        setStatus(mode === "preview" ? "Validating?" : mode === "reset" ? "Resetting?" : "Saving?");
+        let ans;
+        try {
+          ans = await callHook(args);
+        } catch (e) {
           if (gen !== st.gen) return;
-          if (!ans.ok) {
-            if (ans.code === "revision_conflict") {
-              setStatus(`Revision conflict on ${ctx.ruleId} (active is now rev ${ans.active_revision}). Click "Reload latest" before saving again.`, true);
-            } else {
-              setStatus(`${mode} refused: ${ans.error}`, true);
-            }
-            return;
-          }
-          if (mode === "save") { st.ruleResp = ans; wroteRev = ans.revision; }
+          if (mode === "preview") { setStatus(`Preview failed: ${e.message}`, true); return; }
+          await reconcile(gen, label, e);
+          return;
         }
-        if (meta.wantSweep && (mode === "preview" || mode === "save")) {
-          const curLim = st.limitsResp && st.limitsResp.active && st.limitsResp.active[st.scopeKey] && st.limitsResp.active[st.scopeKey].parameters;
-          const ovLim = buildOverride(draft.sweeps, meta.sweepRows, curLim, meta.sweepFields, meta.boundRoles);
-          const ans = await callHook({
-            action: mode, site: ctx.site, scope: st.scopeKey, rule_id: RL().LIMITS_RULE_ID,
-            overrides: ovLim, expected_revision: mode === "save" ? activeLimitsRev() : undefined, note,
-          });
-          if (gen !== st.gen) return;
-          if (!ans.ok) {
-            if (ans.code === "revision_conflict") {
-              setStatus(`Revision conflict on SV-LIMITS (active is now rev ${ans.active_revision}). Click "Reload latest" before saving again.`, true);
-            } else {
-              setStatus(`${mode} refused: ${ans.error}`, true);
-            }
-            return;
-          }
-          if (mode === "save") { st.limitsResp = ans; wroteRev = wroteRev != null ? `${wroteRev} / SV-LIMITS ${ans.revision}` : ans.revision; }
+        if (gen !== st.gen) return;
+        if (!ans.ok) {
+          setStatus(ans.code === "revision_conflict" ? conflictText(ans) : `${label} refused: ${ans.error}`, true);
+          return;
         }
         if (mode === "preview") {
-          setStatus("Validated (read-only preview — bounds and SQL rendering passed; nothing saved or re-run).");
+          setStatus("Validated (read-only preview ? bounds and SQL rendering passed; nothing saved or re-run).");
           return;
         }
         clearDraft(ctx, st.scopeKey);
-        st.status = `Saved revision ${wroteRev}; the next FDD run applies it.`;
-        st.statusIsErr = false;
+        const msg = mode === "reset"
+          ? `Reset ${ctx.ruleId} to inherited defaults (revision ${revText(ans)}); the next FDD run applies it.`
+          : `Saved revision ${revText(ans)}; the next FDD run applies it.`;
         await loadInlineState(ctx, st.scopeKey, gen);
+        if (gen === st.gen) setStatus(msg);
       } catch (e) {
         if (gen === st.gen) setStatus(e.message, true);
       } finally {
@@ -570,36 +608,10 @@
 
     const resetBtn = document.getElementById("tunReset");
     if (resetBtn) {
-      resetBtn.onclick = async () => {
-        if (st.busy) return;
-        if (!confirm(`Reset ${ctx.ruleId} overrides in ${st.scopeKey} to inherited defaults? (stored as a new revision)`)) return;
-        st.busy = true;
-        const gen = st.gen;
-        try {
-          setStatus("Resetting…");
-          if (meta.wantParams) {
-            const ans = await callHook({ action: "reset", site: ctx.site, scope: st.scopeKey, rule_id: ctx.ruleId, expected_revision: activeRuleRev() });
-            if (gen !== st.gen) return;
-            if (!ans.ok) { setStatus(`Reset refused: ${ans.error}`, true); return; }
-          }
-          if (meta.wantSweep) {
-            const curLim = st.limitsResp && st.limitsResp.active && st.limitsResp.active[st.scopeKey] && st.limitsResp.active[st.scopeKey].parameters;
-            const pruned = resetSweepOverrideForRule(curLim, meta.sweepFields, meta.boundRoles);
-            const ans = await callHook({
-              action: "save", site: ctx.site, scope: st.scopeKey, rule_id: RL().LIMITS_RULE_ID,
-              overrides: pruned, expected_revision: activeLimitsRev(), note: `reset ${ctx.ruleId}`,
-            });
-            if (gen !== st.gen) return;
-            if (!ans.ok) { setStatus(`Reset refused: ${ans.error}`, true); return; }
-          }
-          clearDraft(ctx, st.scopeKey);
-          await loadInlineState(ctx, st.scopeKey, gen);
-          setStatus(`Reset ${ctx.ruleId} to inherited defaults; the next FDD run applies it.`);
-        } catch (e) {
-          if (gen === st.gen) setStatus(`Reset failed: ${e.message}`, true);
-        } finally {
-          st.busy = false;
-        }
+      resetBtn.onclick = () => {
+        if (st.busy) return undefined;
+        if (!confirm(`Reset ${ctx.ruleId} overrides in ${st.scopeKey} to inherited defaults? (stored as a new revision)`)) return undefined;
+        return runAction("reset");
       };
     }
 
@@ -636,9 +648,10 @@
           }
           clearDraft(ctx, st.scopeKey);
           await loadInlineState(ctx, st.scopeKey, gen);
-          setStatus(`Rolled back ${ctx.ruleId} to revision ${rev}; the next FDD run applies it.`);
+          if (gen === st.gen) setStatus(`Rolled back ${ctx.ruleId} to revision ${rev}; the next FDD run applies it.`);
         } catch (e) {
-          if (gen === st.gen) setStatus(`Rollback failed: ${e.message}`, true);
+          // a lost answer may still have committed: reload and report what is active instead of guessing
+          if (gen === st.gen) await reconcile(gen, "Rollback", e);
         } finally {
           st.busy = false;
         }
@@ -667,6 +680,18 @@
     }
   }
 
+  /** Close the Tuners (the rule plot closed or the equipment selection moved on): pending loads and saves draw nothing. */
+  function cancelInline() {
+    st.gen += 1;
+    st.context = null;
+    st.ruleResp = null;
+    st.limitsResp = null;
+    st.status = "";
+    st.statusIsErr = false;
+    const host = typeof document !== "undefined" ? document.getElementById("fddTunersPanel") : null;
+    if (host) host.innerHTML = "";
+  }
+
   /** Legacy tab entry (no-op if standalone #tab-tuning is gone). */
   function render(opts) {
     if (typeof document === "undefined" || !document.getElementById("tunScope")) return;
@@ -676,7 +701,8 @@
   const exported = {
     FIELDS, unitFor, unitLabel, displayRows, buildOverride, bandChartOption,
     sweepFieldsForRule, assessableSweepRoles, buildRuleOverride, resetSweepOverrideForRule, rollbackSweepOverrideForRule,
-    renderInline, render,
+    renderInline, render, cancelInline, callHook,
+    _setTransport: (fn) => { transport = fn; }, _state: () => st,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = exported;
   root.ofddTuning = exported;

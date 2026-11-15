@@ -7,7 +7,8 @@
 // never share a row):
 //   analyze_ahu_weekly_runtime  {site?, equip?, days=28}     per (siteRef, equipUuid) ISO week: run_hours, schedule_hours,
 //                                                            in_schedule_hours, after_hours, partial_week, mean_oat_on_c,
-//                                                            schedule_source / schedule_label (fine 300 s grid, chunked)
+//                                                            schedule_source / schedule_label (fine 300 s grid, chunked);
+//                                                            bare_min_occ_hours_per_week per site (the occupancy calendar)
 //   analyze_mechanical_cooling  {site?, equip?, days=28}     per equip hours in the six fixed SI OAT bins (fine grid)
 //   analyze_economizer          {site?, equip?, days=7}      n, n_identifiable, median_residual_k, mae_k
 //   get_fdd_fault_timeline      {site?, equip, rule, days=1, dense?}  confirmed | ok | unknown per assessed timestamp,
@@ -37,7 +38,7 @@ const MAX_RESULT_CHARS = 200000;
 const FINE_SEC = 300;                   // the pack grid: native cadence of the FDD timeline points
 const FINE_MAX_SAMPLES = 9000;          // per series per request (NF caps at ~10000)
 const MAX_DAYS = 366;
-const SCRIPTS = ['units.js', 'model.js', 'fdd.js', 'schedule.js', 'charts.js', 'rcx.js', 'rcx-overview.js', 'rcx-presets.js', 'fdd-plots.js', 'energy.js'];
+const SCRIPTS = ['units.js', 'model.js', 'fdd.js', 'schedule.js', 'occupancy.js', 'charts.js', 'rcx.js', 'rcx-overview.js', 'rcx-presets.js', 'fdd-plots.js', 'energy.js'];
 const READ_POSTS = new Set(['/api/v1/point/query', '/api/v1/auth/token']);
 const COOLING_ROLES = ['compressor_status', 'chiller_status', 'chiller_cmd'];
 
@@ -114,6 +115,8 @@ function loadSandbox(http, nowMs, tzSources) {
   // the dashboard's site-zone sources (#1587): the app option `timezone` and NF Sites, so weekly runtime evaluates the
   // schedule in the same zone the UI shows (model site tz still wins, inside resolveSiteTimeZone)
   if (tzSources) g('setSiteTimeZoneSources')(tzSources);
+  // the sites' saved occupancy calendars (5.0.20, fdd.rule_config OCC-CALENDAR): the weekly reference line
+  if (tzSources && tzSources.calendars) ctx.ofddOccCalendars = tzSources.calendars;
   g.catalog = JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8'));
   return g;
 }
@@ -193,6 +196,8 @@ async function analyze_ahu_weekly_runtime(sb, args) {
   const status = viewOf(g, (v) => v.id === 'weekly-fan'), cmd = viewOf(g, (v) => v.id === 'weekly-fan-cmd');
   const D = g('rcxOverviewMath').data, S = g('ofddSchedule');
   const rows = [];
+  /** @type {Record<string, number|null>} */
+  const bare = {};
   for (const [, list] of bySite(equips)) {
     const withStatus = g('rcxBind')(status, list, model, g.catalog);
     const seen = new Set(withStatus.map((e) => e.rec.uuid || e.id));
@@ -202,6 +207,8 @@ async function analyze_ahu_weekly_runtime(sb, args) {
       if (!bound.length) continue;
       const { perEq } = await D.weeklyData(ctxFor(g, view, bound, hours, model), bound, role);
       for (const p of perEq) {
+        const ref = siteOfEquip(p.eq.rec);
+        if (bare[ref] == null) bare[ref] = g('rcxOverviewMath').bareMinOf(p.site);
         for (const [k, w] of p.weeks) {
           const info = p.site ? S.weeklyScheduleInfo(p.site.schedule, k, p.site.tz) : null;
           rows.push({
@@ -217,7 +224,12 @@ async function analyze_ahu_weekly_runtime(sb, args) {
     }
   }
   rows.sort((a, b) => a.siteRef.localeCompare(b.siteRef) || a.equipRef.localeCompare(b.equipRef) || String(a.equipUuid).localeCompare(String(b.equipUuid)) || a.week_start.localeCompare(b.week_start));
-  return { days, grid_s: FINE_SEC, to: iso(Math.ceil(now / (FINE_SEC * 1e3)) * FINE_SEC * 1e3), rows };
+  // Bare-minimum occupied hours per week, per site: the nominal week of the schedule the reference line uses (the saved
+  // occupancy calendar, else an NF schedule bound to the site, else the 4.x default); schedule_hours is per week.
+  const byS = Object.fromEntries(Object.entries(bare).sort(([a], [b]) => a.localeCompare(b)));
+  const refs = Object.keys(byS);
+  return { days, grid_s: FINE_SEC, to: iso(Math.ceil(now / (FINE_SEC * 1e3)) * FINE_SEC * 1e3),
+    bare_min_occ_hours_per_week: refs.length === 1 ? byS[refs[0]] : null, bare_min_occ_hours_per_week_by_site: byS, rows };
 }
 
 async function analyze_mechanical_cooling(sb, args) {
@@ -405,8 +417,29 @@ function capResult(result) {
   return { result: out, text };
 }
 
-/** @param {{sdk: any, args?: any, config?: any, now?: () => number}} o */
-async function handle({ sdk, args = {}, config = {}, now = () => Date.now() }) {
+/**
+ * The active OCC-CALENDAR document per site from fdd.rule_config (a read: SELECT only). {} when Timescale is not
+ * configured or not reachable (the charts then use the default calendar). `connect` is injectable for the tests.
+ * @param {any} cfg @param {any} [connect] @param {(m: string) => void} [log]
+ */
+async function loadCalendars(cfg, connect, log = () => {}) {
+  const out = {};
+  if (!connect && !(cfg && cfg.timescale)) return out;
+  const ts = require('./lib/timescale.js');
+  let client = null, owned = false;
+  try {
+    if (connect) client = await connect(cfg);
+    else { client = await ts.connect(cfg.timescale); owned = true; }
+    for (const r of await ts.activeRuleConfigs(client, { ruleId: 'OCC-CALENDAR' })) {
+      if (r.scope_key === 'site' && r.parameters && !r.parameters.reset && r.parameters.calendar) out[r.site_id] = r.parameters.calendar;
+    }
+  } catch (e) { log(`analytics: occupancy calendars unavailable (${errText(e)}); using the default calendar`); }
+  finally { if (client && owned) { try { await client.end(); } catch (_) { /* closing */ } } }
+  return out;
+}
+
+/** @param {{sdk: any, args?: any, config?: any, now?: () => number, connect?: any}} o */
+async function handle({ sdk, args = {}, config = {}, now = () => Date.now(), connect }) {
   const log = (m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   const t0 = now();
   const tool = String((args && args.tool) || '');
@@ -417,7 +450,8 @@ async function handle({ sdk, args = {}, config = {}, now = () => Date.now() }) {
     const nowMs = now();
     const cfg = settings.normalizeConfig(config);
     const nfSites = (await siteTz.loadNfSites(http)).sites;
-    const g = loadSandbox(http, nowMs, { appOption: siteTz.knownZone(siteTz.optionOf(cfg)), sites: nfSites, weatherOff: !settings.weatherEnabled(cfg) });
+    const calendars = tool === 'analyze_ahu_weekly_runtime' ? await loadCalendars(cfg, connect, log) : {};
+    const g = loadSandbox(http, nowMs, { appOption: siteTz.knownZone(siteTz.optionOf(cfg)), sites: nfSites, weatherOff: !settings.weatherEnabled(cfg), calendars });
     const model = await loadModel(http, g);
     const out = await TOOLS[tool]({ g, model, http, now: nowMs }, args);
     result = { ok: true, tool, ms: now() - t0, ...out };
@@ -433,5 +467,5 @@ async function handle({ sdk, args = {}, config = {}, now = () => Date.now() }) {
 // The hook is the function; the helpers hang off it for the tests (assigned in one go so tsc sees the shape).
 module.exports = Object.assign(
   async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx), config: ctx.config }),
-  { handle, readOnlyHttp, argsOf, TOOLS, ToolError, loadSandbox, loadModel, resolveOne, equipsInScope },
+  { handle, readOnlyHttp, argsOf, TOOLS, ToolError, loadSandbox, loadModel, resolveOne, equipsInScope, loadCalendars },
 );

@@ -103,7 +103,8 @@ def test_invalid_limits_are_rejected(mutate, message):
 
 def _frame(role: str, values, unit: str) -> pd.DataFrame:
     idx = pd.date_range("2026-01-05", periods=len(values), freq="5min", tz="UTC", name="timestamp_utc")
-    df = pd.DataFrame({role: pd.Series(values, index=idx, dtype=float)}, index=idx)
+    # the equipment is proven running throughout (#1608 run-proof gate), so only the limits decide
+    df = pd.DataFrame({role: pd.Series(values, index=idx, dtype=float), "run-proof": 1.0}, index=idx)
     df.attrs.update({"equipment_id": "FIXTURE", "equipment_type": "AHU", "units_map": {role: unit}, "role_units": {role: unit}})
     return df
 
@@ -115,6 +116,15 @@ def _range_hours(df: pd.DataFrame, role: str, limits: dict | None = None) -> flo
                             params_by_rule={"SV-RANGE": {"confirm_min": 0.0}}, weather=None, require_operational_gates=True)
     evidence = {e["role"]: e["fault_hours"] for e in (res.metrics.get("sv_sweep_evidence") or [])}
     return float(evidence.get(role, 0.0))
+
+
+def test_an_explicit_empty_sweep_population_sweeps_nothing():
+    """sweep_units (the fetched metadata's sweep population) wins over a units_map already on the frame: {} -> no column."""
+    over = _frame("chw-flow", [120.0] * 12 + [2000.0] * 12 + [120.0] * 12, "L/s")
+    assert _range_hours(over, "chw-flow") > 0.0
+    stale = _frame("chw-flow", [120.0] * 12 + [2000.0] * 12 + [120.0] * 12, "L/s")
+    stale.attrs["sweep_units"] = {}
+    assert _range_hours(stale, "chw-flow") == 0.0
 
 
 def test_chw_flow_out_of_range_faults():

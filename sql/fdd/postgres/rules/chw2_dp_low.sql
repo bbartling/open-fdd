@@ -1,8 +1,17 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- chw2_dp_low.sql — DP below SP at max pump speed
-WITH h AS (
+WITH rp AS (
+  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
+  SELECT equipment_id,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+  FROM history
+  GROUP BY equipment_id
+),
+h AS (
   SELECT
+    run_proof,
     equipment_id,
     timestamp_utc,
     chw_dp, chw_dp_sp,
@@ -18,6 +27,7 @@ proof AS (
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
       WHEN pump IS NOT NULL THEN CASE WHEN pump > 0.05 THEN 1 ELSE 0 END
+      WHEN run_proof IS NOT NULL THEN CASE WHEN run_proof > 0.05 THEN 1 ELSE 0 END
       ELSE NULL
     END AS proof_on
   FROM h
@@ -27,6 +37,7 @@ base AS (
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN proof_on IS NULL OR proof_on = 0 THEN 0
       WHEN chw_dp IS NULL OR chw_dp_sp IS NULL OR pump IS NULL THEN 0
       WHEN pump >= {{PUMP_HI}} AND chw_dp < chw_dp_sp - {{DP_MARGIN}} THEN 1
@@ -97,8 +108,8 @@ final AS (
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
-  SUM(held_seconds) / 3600.0 AS covered_hours,
-  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS fault_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(held_seconds) / 3600.0 END AS covered_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE 100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) END AS fault_pct
 FROM final
 GROUP BY equipment_id;

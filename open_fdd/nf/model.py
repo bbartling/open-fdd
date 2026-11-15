@@ -339,12 +339,17 @@ def frames_from_samples(
     data: Mapping[str, list],
     window_sec: int = 300,
     pins: Mapping[tuple[str, str], Mapping[str, Point]] | None = None,
+    sweep_marker: str | None = None,
 ) -> dict[tuple[str, str], "Any"]:
     """The frame assembly of ``equipment_frames`` for samples already fetched (``{uuid: [(utc datetime, value)]}``).
 
     Shared by every path that feeds the pandas rules (NF ``point/data``, the SPARQL data client) so they build the
     same SI frames. ``pins`` (``{(site, equip): {role: Point}}``) override the catalog's best point for a role
     (an explicit ``ofddRole`` / ``?role`` binding).
+
+    ``sweep_marker`` (e.g. ``"sensor"``): the SV sweep population is the numeric columns whose bound point carries
+    that marker, stamped as ``df.attrs["sweep_units"]`` (column -> SI unit) and preferred by the rule runner over
+    ``role_units``. Default ``None`` keeps the earlier behaviour (every unit-bearing column is swept).
     """
     import pandas as pd
 
@@ -354,6 +359,7 @@ def frames_from_samples(
         bindings: dict[str, dict] = {}
         units: dict[str, str] = {}
         skipped: dict[str, str] = {}
+        sweep: dict[str, str] = {}
         best = {**b.best(), **dict((pins or {}).get((b.site, b.equip)) or {})}
         for role, p in best.items():
             samples = data.get(p.uuid) or []
@@ -379,6 +385,8 @@ def frames_from_samples(
             series = pd.Series([v for _, v in samples], index=idx, dtype="float64")
             cols[col] = plan.convert(series)
             units[col] = plan.unit
+            if sweep_marker and p.has(sweep_marker) and plan.unit:
+                sweep[col] = plan.unit
             bindings[col] = {"role": role, "uuid": p.uuid, "name": p.dis, "unit": plan.unit,
                              "source_unit": p.unit, "class": p.cls}
         if not cols:
@@ -390,6 +398,8 @@ def frames_from_samples(
             "role_units": units, "bindings": bindings, "skipped": skipped, "window_sec": window_sec,
             "equipment_name": b.dis,
         })
+        if sweep_marker:
+            df.attrs["sweep_units"] = sweep
         out[(b.site, b.equip)] = df
     return out
 

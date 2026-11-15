@@ -71,7 +71,7 @@ and has no `authorized_series` / `equipment` tables. `tuning_catalog.json` `outp
 
 - **FDD tab:** Faults panel (latest per rule/equip + 7-day hourly heatmap), click any rule → per-rule plot
   (inputs stacked by unit family + bottom fault lane), "Run FDD now" (NF StartHook).
-- **RCx tab:** 60 views from four modules (`fdd-plots.js`, `rcx-overview.js`, `rcx-presets.js`, `energy.js`)
+- **Overview RCx dashboard (was the RCx tab until 5.0.20):** 60 views from four modules (`fdd-plots.js`, `rcx-overview.js`, `rcx-presets.js`, `energy.js`)
   on one registry (`rcx.js`). Every chart of the old central UI is mapped in `nf-app/rcx-parity.json`, and
   `tests/parity.test.mjs` fails CI if one goes missing. Only utility-bill/tariff inputs are not ported (NF has none).
 - **Faults:** always a stand-alone 0/1 lane at the bottom of the plot (`rcxWithFaultLane`), from the FDD hook's

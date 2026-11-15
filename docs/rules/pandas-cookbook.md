@@ -18,7 +18,7 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
   The rules never convert units or guess a scale.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours` (h), and the `raw_fault` and `confirmed_fault` boolean masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]`.
-- The runner applies the operational gate and the confirm delay (`confirm_min`, minutes). Parameter keys match the SQL catalog.
+- The runner applies the [run-proof gate](sql-cookbook.html#run-proof) and the confirm delay (`confirm_min`, minutes). Parameter keys match the SQL catalog.
 
 ```python
 import pandas as pd
@@ -96,6 +96,8 @@ Duct static > static SP + margin.
 **Duct static pressure high** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function `ahu_duct_high` · [SQL entry](sql-cookbook.html#ahu-ducthi)
 
 **Equation**: Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -195,6 +197,8 @@ Heating valve > 10% AND cooling valve > 10% at once.
 Fan command and proven status disagree.
 
 **Fan cmd/status mismatch** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `cmd1` · [SQL entry](sql-cookbook.html#cmd-1)
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -1140,6 +1144,8 @@ Flags proven DX or chiller cooling while web dry-bulb is below 15.6 °C.
 
 **Equation**: Proven DX/chiller mechanical cooling while web dry-bulb < 15.6 °C. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 15.6 °C is outside the free-cool + integrated economizer band.
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1255,6 +1261,8 @@ Flags fan runtime during unoccupied hours from the Overview calendar.
 
 **Equation**: Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside comfort_low…comfort_high (defaults 21.1–23.9 °C; synced from Overview zone band).
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1290,6 +1298,8 @@ Flags fans or pumps that stay on for nearly the entire analysis window (24/7 run
 **Always-on fan or pump runtime** · **Family** schedule · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `heatpump` · **Confirm** 60 min · function `_sched247` · [SQL entry](sql-cookbook.html#sched-247)
 
 **Equation**: Ranked proof (status/current > command) is on for ≥ always_on_pct of the window. Pressure is inferred runtime only and does not trip this rule ID.
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -1416,6 +1426,8 @@ Flags occupied-band zone temperature violations.
 
 **Equation**: Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied hours when an occupancy column or Overview calendar is set (require_occupied, default on). Unoccupied setback stays on VAV-2.
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1452,6 +1464,8 @@ Flags unoccupied zones that never drop into heating setback.
 **Night setback miss** · **Family** vav · **Equipment** `vav`, `zone_other`, `heatpump`, `baseboard` · **Confirm** 15 min · function `vav2` · [SQL entry](sql-cookbook.html#vav-2)
 
 **Equation**: Unoccupied AND zone temp > setback_hi (default 20 °C) — heating setback not taken.
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -1731,6 +1745,8 @@ Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below z
 
 **FCU cooling coil under-delivery** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_clg_coil` · [SQL entry](sql-cookbook.html#fcu-clg-coil)
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1767,6 +1783,8 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 
 **FCU high CO2 with low outdoor-air command** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_co2_damper` · [SQL entry](sql-cookbook.html#fcu-co2-damper)
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1801,6 +1819,8 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 Fan on and damper command ≥15%, but feedback is more than 15 percentage points below command.
 
 **FCU damper command/position mismatch** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_damper_pos` · [SQL entry](sql-cookbook.html#fcu-damper-pos)
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -1837,6 +1857,8 @@ Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 
 **FCU heat/cool deadband collapse** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function `fcu_deadband` · [SQL entry](sql-cookbook.html#fcu-deadband)
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1868,6 +1890,8 @@ Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zone temperature.
 
 **FCU heating coil under-delivery** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_htg_coil` · [SQL entry](sql-cookbook.html#fcu-htg-coil)
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -1905,6 +1929,8 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 
 **FCU heating/cooling mode cycling** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function `fcu_mode_cycle` · [SQL entry](sql-cookbook.html#fcu-mode-cycle)
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1938,6 +1964,8 @@ Own zone setpoint is present while zone temperature is null for at least 90% of 
 
 **Missing FCU zone sensor** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function `fcu_sensor_null` · [SQL entry](sql-cookbook.html#fcu-sensor-null)
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -1969,6 +1997,8 @@ Own zone setpoint is present while zone temperature is null for at least 90% of 
 Fan on and both valves shut, but zone temperature exceeds discharge air by more than 3 Δ°C.
 
 **FCU cooling valve passing** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_valve_pass_clg` · [SQL entry](sql-cookbook.html#fcu-valve-pass-clg)
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -2005,6 +2035,8 @@ Fan on and both valves shut, but zone temperature exceeds discharge air by more 
 Fan on and both valves shut, but discharge air exceeds zone temperature by more than 3 Δ°C.
 
 **FCU heating valve passing** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_valve_pass_htg` · [SQL entry](sql-cookbook.html#fcu-valve-pass-htg)
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -2180,6 +2212,8 @@ Flags a chiller running while mapped zones or AHU SAT show the building is satis
 **Chiller running with no building load** · **Family** plant · **Equipment** `chiller` · **Confirm** 30 min · function `chw_noload1_compute` · [SQL entry](sql-cookbook.html#chw-noload-1)
 
 **Equation**: Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -2696,6 +2730,8 @@ Flags large disagreement between BAS outdoor-air temp and web weather OAT.
 
 **Equation**: BAS OAT sensor differs from Open-Meteo dry bulb by more than 2.8 Δ°C.
 
+**Run proof** not gated.
+
 **Inputs**
 
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
@@ -2729,6 +2765,8 @@ Flags large disagreement between BAS outdoor-air temp and web weather OAT.
 OAT sample-to-sample jump > 8.9 Δ°C.
 
 **OA temperature spike** · **Family** weather · **Equipment** `weather` · **Confirm** 5 min · function `wx1` · [SQL entry](sql-cookbook.html#wx-1)
+
+**Run proof** not gated.
 
 **Inputs**
 

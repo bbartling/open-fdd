@@ -191,6 +191,7 @@ test("FDD catalog covers every registry rule and only names NF classes", () => {
   }
   for (const [role, def] of Object.entries(catalog.roles)) {
     for (const c of def.classes) assert.ok(nf.has(c), `${role}: ${c} is not an NF class`);
+    if (role === catalog.run_proof.role) continue;   // resolved from the model (own proof, feeding equipment), never class- or marker-bound
     assert.ok(def.classes.length || def.markers.length, `${role} cannot match anything`);
   }
 });
@@ -232,7 +233,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     fetchRange: readRange,
     ofddChart: () => ({ setOption: (o) => { chartOption = o; } }),
   });
-  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
+  for (const f of ["fdd-view.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   const h = 3600e3;
   const point = (uuid, name, equipRef, tags, attrs = {}, value = 0, history = []) => ({ uuid, name, dis: name, equipRef, siteRef: attrs.siteRef || "site-fixture", tags, value,
     latest: { ts: "2026-01-01T00:00:00Z" }, history, rec: { attrs: { ...attrs } } });
@@ -283,7 +284,7 @@ test("Faults panel expands per-sensor sweep rows and heatmap scales hours separa
     { id: "AHU-A", name: "Other AHU-A", attrs: { siteRef: "site-other" } },
   ], points: [...results, percentResult, mixedResult, otherSiteResult, vavResult, ...inputs] };
   vm.runInContext("model = testModel", ctx);
-  vm.runInContext('scope.site = "site-fixture"', ctx);
+  vm.runInContext('scope.site = "site-fixture"; scope.equip = "AHU-A"', ctx);   // one equipment: there is no all-devices view (5.0.20)
   ctx.fddUi.heatAll = true;
   const initial = vm.runInContext("renderScopedFddResults()", ctx);
   assert.match(el("fddRangeStatus").textContent, /Loading fault history/);
@@ -441,7 +442,7 @@ test("point history honors the same mixed-output boundary as FDD plots", async (
     },
     ofddChart: () => ({}), ofddRender: (_chart, option) => { plotted = option.series[0].data; },
   });
-  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
+  for (const f of ["fdd-view.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   const current = { uuid: "legacy", dis: "legacy output", name: "legacy output", kind: "Number", tags: [], rec: { attrs: {
     unit: "h", fddOutput: "fault_hours", fddOutputSince: new Date(90 * 60e3).toISOString(),
   } } };
@@ -470,7 +471,7 @@ test("RCx ignores superseded range resolutions and failures", async () => {
     rcxPlan: () => ({ ready: [], missing: [] }),
     resolveChartSelection: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
   });
-  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
+  for (const f of ["fdd-view.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   ctx.testModel = { sites: [{ name: "Site", attrs: { id: "site-a" } }], equips: [], points: [] };
   vm.runInContext('model = testModel; scope.site = "site-a"', ctx);
 
@@ -503,7 +504,7 @@ test("rule plot panel is visible while resolving a range and exposes lookup erro
     renderRangeControl: () => {}, loadCatalog: async () => ({}), equipRules: () => [{ rule: { id: "SV-RANGE", description: "sensor bounds" }, bound: {} }],
     resolveChartSelection: () => new Promise((_resolve, reject) => { rejectRange = reject; }),
   });
-  for (const f of ["app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
+  for (const f of ["fdd-view.js", "app-core.js", "app.js"]) vm.runInContext(readFileSync(new URL(`../static/${f}`, import.meta.url), "utf8"), ctx, { filename: f });   // shared shell, then the Full tabs
   ctx.testModel = { equips: [{ name: "AHU-1", attrs: { id: "AHU-1", siteRef: "site-a" } }],
     points: [{ name: "SAT", equipRef: "AHU-1", siteRef: "site-a", tags: ["his"] }] };
   vm.runInContext('model = testModel; scope.site = "site-a"', ctx);

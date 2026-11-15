@@ -34,6 +34,45 @@ OUT_DIR = ROOT / "docs" / "rules"
 GH = "https://github.com/bbartling/open-fdd/blob/master"
 PANDAS_ID = {"FC13-SAT-HIGH": "FC13"}  # SQL rule id -> pandas rule id where they differ (same as tests/parity/harness.py)
 
+def run_proof_section(d: dict, sql: bool) -> str:
+    """The run-proof gate (#1608), from sql/fdd/run_proof.json (shipped in the catalog as `run_proof`)."""
+    rp = d["cat"]["run_proof"]
+    own_s = " > ".join(f"`{x}`" for x in rp["own"]["status"])
+    own_c = " > ".join(f"`{x}`" for x in rp["own"]["command"])
+    refs = ", ".join(f"`{x}`" for x in rp["feeders"]["refs"])
+    n_gated = sum(1 for r in d["rules"] if r.get("run_proof") == "gated")
+    where = (f"the `history` column `run_proof` (0/1 or a 0-1 fraction; running when above {rp['threshold']})" if sql
+             else f"the frame column `{rp['column']}` (running when above {rp['threshold']})")
+    return f"""## Run proof gate {{#run-proof}}
+
+{n_gated} of the {len(d['rules'])} rules count only samples while the equipment is **proven running**. The proof is the input role
+`run_proof`: {where}. It is resolved from the model, never from a point name, in this order (first hit wins):
+
+1. **The equipment's own proof**: a bound status role ({own_s}), then a bound command role ({own_c}).
+2. **The feeding equipment's proof**, one hop: the equipment's {refs} target (a VAV to its AHU, a water loop to its pump or plant),
+   then an `isFedBy` target, then any equipment that lists it under `feeds` (RDF: `brick:isFedBy` / `brick:feeds`). A feeder
+   is judged by its own proof (step 1). Refs never cross sites; nothing is assumed when a ref is missing.
+3. **None found**: the rule is **SKIPPED** with reason `{rp['skip_reason']}` (SQL: `fault_hours` NULL and `covered_hours` 0;
+   pandas: status `SKIPPED_NO_RUN_PROOF`). It is never a silent PASS.
+
+`require_run_proof` (default 1; the old name `require_operational_gate` is an alias) switches the gate off per rule. A sample
+with no proof value is not proof. A rule that is not gated says why in its entry. SQL and pandas read the same `run_proof`
+signal, and the parity harness checks that both skip the same equipment.
+
+Rules that are not gated, and why:
+
+| Rule | Why not |
+|---|---|
+""" + chr(10).join(f"| `{r['id']}` | {cell(r.get('run_proof_note', ''))} |" for r in d["rules"] if r.get("run_proof") != "gated")
+
+
+def run_proof_line(r: dict) -> str:
+    """One line per rule: gated (and the parameter) or not gated (and why)."""
+    if r.get("run_proof") == "gated":
+        return ""
+    return "**Run proof** not gated."
+
+
 GROUPS = [
     ("ahu", "Air handling units", "AHU / RTU / MAU / DOAS: duct static, supply air, economizer, mixing and mode faults."),
     ("vav", "VAV terminals", "VAV boxes and other zone terminals: comfort, airflow, reheat and damper faults."),
@@ -187,7 +226,7 @@ How a rule runs: the FDD hook passes one scoped, SI, wide `history` table (one c
 timestamp) and reads one row per equipment back. A fault must hold for its confirm time. A gap longer than one hour is
 unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More in [sql/fdd/README.md]({GH}/sql/fdd/README.md).
 
-""" + units_convention()]
+""" + run_proof_section(d, True) + "\n\n" + units_convention()]
     out += toc(d)
     out.append("\n---\n")
     for key, title, blurb, members in grouped(d):
@@ -280,7 +319,7 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
   The rules never convert units or guess a scale.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours` (h), and the `raw_fault` and `confirmed_fault` boolean masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]`.
-- The runner applies the operational gate and the confirm delay (`confirm_min`, minutes). Parameter keys match the SQL catalog.
+- The runner applies the [run-proof gate](sql-cookbook.html#run-proof) and the confirm delay (`confirm_min`, minutes). Parameter keys match the SQL catalog.
 
 ```python
 {quick}
@@ -312,6 +351,8 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
             opt = [x for x in rule.optional_roles if x not in req]
             prow, has_delta = pandas_param_rows(rule)
             cols = d["pack"][rid].get("output_columns") or d["tuning"][rid].get("output_columns") or []
+            if run_proof_line(r):
+                out.append(run_proof_line(r) + chr(10))
             out.append("**Inputs**\n\n" + inputs_table(d, req, opt) + "\n")
             out.append("**Parameters**\n\n" + ("\n".join(PARAM_HEADER + prow) if prow else "_None._") + "\n")
             out.append("**Outputs** (the same as the SQL twin)\n\n" + "\n".join(output_rows(cols)) + "\n")

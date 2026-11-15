@@ -96,6 +96,9 @@ test("analyze_ahu_weekly_runtime: per (siteRef, equipUuid) ISO week equals TRUTH
   // site-b: no bound schedule -> the 4.x default calendar, zero after-hours
   assert.deepEqual(b.map((r) => r.schedule_hours), [50, 50, 50, 50]);
   assert.ok(b.every((r) => r.after_hours === 0 && r.schedule_source === "default" && /50 h\/week \(default\)/.test(r.schedule_label)));
+  // bare-minimum occupied hours per week sit next to the weekly rows (5.0.20): the nominal week of each site's line
+  assert.deepEqual({ ...result.bare_min_occ_hours_per_week_by_site }, { "site-a": 50, "site-b": 50 });
+  assert.equal(result.bare_min_occ_hours_per_week, null, "two sites: per site only");
   // the answer is also one logged JSON line
   assert.equal(logs.length, 1);
   assert.deepEqual(JSON.parse(logs[0]).rows.length, rows.length);
@@ -386,4 +389,16 @@ test("the hook function takes args from the NF context, logs one JSON line, reje
   assert.ok(big.result.equips.length < 1502);
   assert.equal(big.logs.length, 1);
   assert.ok(big.logs[0].length <= 200000);
+});
+
+test("analyze_ahu_weekly_runtime: a saved occupancy calendar (fdd.rule_config OCC-CALENDAR) sets the line and bare_min_occ_hours_per_week", async () => {
+  const cal = { timezone: "America/New_York", days: { sat: { occupied: true, start: "08:00", end: "12:00" } } };   // 60 + 4 = 64 h
+  const queries = [];
+  const client = { async query(sql, args) { queries.push(sql); return { rows: [{ site_id: "site-b", rule_id: "OCC-CALENDAR", scope_key: "site", revision: "3", parameters: { version: 1, calendar: cal } }] }; } };
+  const logs = [];
+  const result = await analytics.handle({ sdk: { http: nfHttp(), logEvent: (m) => logs.push(m) }, args: { tool: "analyze_ahu_weekly_runtime", days: DAYS, site: "site-b" }, now: () => NOW, connect: async () => client });
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.bare_min_occ_hours_per_week, 64);
+  assert.ok(result.rows.length && result.rows.every((r) => r.schedule_hours === 64 && r.schedule_source === "calendar"));
+  assert.ok(queries.every((q) => /^SELECT /.test(q)), "the calendar read is a SELECT");
 });

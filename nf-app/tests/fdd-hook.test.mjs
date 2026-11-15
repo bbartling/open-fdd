@@ -384,7 +384,10 @@ test("sweep result keeps per-series rows and summarizes by maximum hours", () =>
 });
 
 test("the FDD hook writes stable per-sensor results, timelines identity attrs, and the equipment max summary", async () => {
-  const http = fakeHttp([], {}, { model: [...multiSensorEquip.sites, ...multiSensorEquip.equips], points: multiSensorEquip.points });
+  // the AHU's own fan status is its run proof (#1608): without a resolvable proof every gated rule is SKIPPED no_run_proof
+  const fanStatus = { uuid: "ahu-fan-status", name: "fan-status", layer: "default", pointType: "POINT", attrs: {
+    siteRef: "site-fixture", equipRef: "AHU-A", dis: "fan-status", kind: "Bool", class: "discharge-run-sensor", markers: "point,his,discharge,fan,run,sensor" } };
+  const http = fakeHttp([], {}, { model: [...multiSensorEquip.sites, ...multiSensorEquip.equips], points: [...multiSensorEquip.points, fanStatus] });
   const pack = {
     ...PACK,
     rules: { "SV-STALE": { sql: "-", timeline_sql: "-", output_columns: ["equipment_id", "series_id", "sensor_role", "fault_hours", "covered_hours"] } },
@@ -704,3 +707,122 @@ test("sweep publishing handles duplicate display labels and reordered point disc
     reordered.http.writes.points.filter((p) => p.layer === "model" && /(^|,)fault_timeline(,|$)/.test(p.attrs.markers)).map((p) => p.uuid).sort()
   );
 });
+
+// ---- run proof (#1608) --------------------------------------------------------------------------------------------
+test("fdd hook: a VAV's run proof is its AHU's fan status (airRef); a VAV with no proof is not assessed (no_run_proof)", async () => {
+  const model = [
+    { uuid: "s", name: "site-a", pointType: "SITE", attrs: { id: "site-a", markers: "site" } },
+    { uuid: "e1", name: "AHU-1", pointType: "EQUIPMENT", attrs: { id: "AHU-1", siteRef: "site-a", markers: "equip,ahu" } },
+    { uuid: "e2", name: "VAV-1", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "site-a", markers: "equip,vav", airRef: "@AHU-1" } },
+    { uuid: "e3", name: "VAV-2", pointType: "EQUIPMENT", attrs: { id: "VAV-2", siteRef: "site-a", markers: "equip,vav" } },
+  ];
+  const vavPoints = (n) => [
+    pt(`u-${n}-OAT`, `${n} OAT`, ["outside", "air", "temp", "sensor"], { equipRef: n, class: "outside-air-temp-sensor", unit: "°C" }),
+    pt(`u-${n}-RH`, `${n} RH`, ["reheat", "cmd"], { equipRef: n, class: "reheat-cmd", unit: "%" }),
+    pt(`u-${n}-FLOW`, `${n} FLOW`, ["discharge", "air", "flow", "sensor"], { equipRef: n, class: "discharge-air-flow-sensor", unit: "L/s" }),
+  ];
+  const points = [pt("u-AHUFAN", "AHU-1 fan", ["discharge", "fan", "run", "sensor"], { equipRef: "AHU-1", class: "discharge-run-sensor", kind: "Bool" }),
+    ...vavPoints("VAV-1"), ...vavPoints("VAV-2")];
+  const pack = {
+    poll_seconds: STEP,
+    contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "oa_t", type: "double" },
+      { name: "reheat_valve_pct", type: "double" }, { name: "zone_flow", type: "double" }, { name: "run_proof", type: "double" }] },
+    rules: { "VAV-3": { sql: "-", output_columns: ["equipment_id", "fault_hours", "covered_hours", "fault_pct"] } },
+  };
+  const loads = {};
+  const createEngine = async () => {
+    let equip = "";
+    return {
+      async load(input) { equip = input.history[0].equipment_id; loads[equip] = input; },
+      // SQL: no proof anywhere -> fault_hours NULL, covered_hours 0 (the gate); otherwise assessed
+      async query() {
+        const rows = loads[equip].history;
+        return rows.some((r) => r.run_proof != null)
+          ? [{ equipment_id: equip, fault_hours: 1, covered_hours: 24, fault_pct: 4 }]
+          : [{ equipment_id: equip, fault_hours: null, covered_hours: 0, fault_pct: null }];
+      },
+      async close() {},
+    };
+  };
+  const http = fakeHttp([], { "u-AHUFAN": (t) => ((t / 3600e3) % 2 < 1 ? 1 : 0), "u-VAV-1-RH": () => 0.9 }, { model, points });
+  const summary = await hook.runFdd({ sdk: { http, logEvent() {} }, pack, createEngine, now: NOW });
+  // VAV-1: the AHU fan status rides in as the history column run_proof, on VAV-1's own grid
+  assert.ok(loads["VAV-1"].history.every((r) => r.run_proof === 0 || r.run_proof === 1), "run_proof is 0/1");
+  assert.ok(loads["VAV-1"].history.some((r) => r.run_proof === 1) && loads["VAV-1"].history.some((r) => r.run_proof === 0));
+  // VAV-2: nothing proves it runs: no run_proof column at all
+  assert.ok(loads["VAV-2"].history.every((r) => !("run_proof" in r)));
+  const attrsOf = (equip) => http.writes.points.find((r) => r.layer === "model" && r.attrs.ruleRef === "VAV-3" && r.attrs.equipRef === equip).attrs;
+  assert.equal(attrsOf("VAV-1").fddStatus, "fault");
+  assert.equal(attrsOf("VAV-2").fddStatus, "not-assessed");
+  assert.match(attrsOf("VAV-2").fddReason, /^no_run_proof/);
+  assert.equal(summary.no_run_proof, 1);
+  assert.equal(http.writes.data.filter((d) => d.uuid === hook.resultUuid(hook.resultKey(model[3], "site-a", "VAV-2"), "VAV-3")).length, 0, "no value is written for the skipped result");
+});
+
+// ---- run proof: the effective tuning decides, and a skip is durable (#1608 port) ----------------------------------------
+{
+  const { readFileSync } = await import("node:fs");
+  const real = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
+  const model = [
+    { uuid: "s", name: "site-a", pointType: "SITE", attrs: { id: "site-a", markers: "site" } },
+    { uuid: "e3", name: "VAV-2", pointType: "EQUIPMENT", attrs: { id: "VAV-2", siteRef: "site-a", markers: "equip,vav" } },
+  ];
+  const points = [
+    pt("u-OAT", "OAT", ["outside", "air", "temp", "sensor"], { equipRef: "VAV-2", class: "outside-air-temp-sensor", unit: "°C" }),
+    pt("u-RH", "RH", ["reheat", "cmd"], { equipRef: "VAV-2", class: "reheat-cmd", unit: "%" }),
+    pt("u-FLOW", "FLOW", ["discharge", "air", "flow", "sensor"], { equipRef: "VAV-2", class: "discharge-air-flow-sensor", unit: "L/s" }),
+  ];
+  const pack = {
+    poll_seconds: STEP,
+    contract: { history: [{ name: "equipment_id", type: "text" }, { name: "timestamp_utc", type: "timestamp" }, { name: "oa_t", type: "double" },
+      { name: "reheat_valve_pct", type: "double" }, { name: "zone_flow", type: "double" }, { name: "run_proof", type: "double" }] },
+    rules: { "VAV-3": { sql: "-", timeline_sql: "-", output_columns: ["equipment_id", "fault_hours", "covered_hours", "fault_pct"] } },
+    rule_tuning_templates: { ...real.rule_tuning_templates, rules: { "VAV-3": real.rule_tuning_templates.rules["VAV-3"] } },
+    role_limit_templates: real.role_limit_templates,
+  };
+  // the stub mirrors the SQL: gate on + no run_proof column -> nothing assessed; gate off (tuned SQL) -> assessed, with a fault
+  const engineFor = (seen) => async () => ({
+    async load(input) { seen.history = input.history; },
+    async query(_id, tuned) {
+      seen.tunedSql = tuned && tuned.sql;
+      const gateOff = !!(tuned && tuned.sql);   // these tests only tune the gate off
+      return gateOff || seen.history.some((r) => r.run_proof != null)
+        ? [{ equipment_id: "VAV-2", fault_hours: 2, covered_hours: 24, fault_pct: 8 }]
+        : [{ equipment_id: "VAV-2", fault_hours: null, covered_hours: 0, fault_pct: null }];
+    },
+    async timeline() { seen.timeline = (seen.timeline || 0) + 1; return []; },
+    resultRow: (a) => require("../hooks/lib/timescale.js").toResultRow({ ...a, windowStart: a.windowStart, windowEnd: a.windowEnd }),
+    async writeResults(rows) { seen.dbRows = rows; return rows.length; },
+    async ruleConfigOverrides() { return seen.configs || []; },
+    async close() {},
+  });
+  const run = async (configs) => {
+    const seen = { configs };
+    const http = fakeHttp([], { "u-RH": () => 0.9, "u-FLOW": () => 100, "u-OAT": () => 5 }, { model, points });
+    const summary = await hook.runFdd({ sdk: { http, logEvent() {} }, pack, createEngine: engineFor(seen), now: NOW });
+    const rec = http.writes.points.find((r) => r.layer === "model" && r.attrs.ruleRef === "VAV-3" && r.attrs.equipRef === "VAV-2");
+    return { seen, summary, attrs: rec && rec.attrs };
+  };
+
+  test("run proof: gate on and no proof -> SKIPPED no_run_proof, stored with null hours, no timeline (#1608)", async () => {
+    const { seen, summary, attrs } = await run([]);
+    assert.equal(attrs.fddStatus, "not-assessed");
+    assert.match(attrs.fddReason, /^no_run_proof/);
+    assert.equal(summary.no_run_proof, 1);
+    assert.ok(!seen.timeline, "no timeline for a skipped rule");
+    const stored = (seen.dbRows || []).filter((r) => r.rule_id === "VAV-3");
+    assert.equal(stored.length, 1, "the skip is persisted, not dropped");
+    assert.deepEqual({ status: stored[0].status, reason: stored[0].reason, fault_hours: stored[0].fault_hours, covered_hours: stored[0].covered_hours },
+      { status: "SKIPPED", reason: "no_run_proof", fault_hours: null, covered_hours: null });
+  });
+
+  for (const [label, params] of [["require_run_proof 0", { require_run_proof: 0 }], ["legacy require_operational_gate 0", { require_operational_gate: 0 }]]) {
+    test(`run proof: the effective tuning (${label}) turns the gate off: assessed, timeline drawn, not counted as no_run_proof (#1608)`, async () => {
+      const { seen, summary, attrs } = await run([{ site_id: "site-a", rule_id: "VAV-3", scope_key: "site", revision: 1, parameters: { version: 1, params } }]);
+      assert.ok(seen.tunedSql, "the tuned SQL ran");
+      assert.equal(summary.no_run_proof, 0);
+      assert.doesNotMatch(String(attrs.fddReason || ""), /no_run_proof/);
+      assert.equal(seen.timeline, 1, "the timeline is not suppressed when the tuner disabled the gate");
+    });
+  }
+}

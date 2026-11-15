@@ -60,6 +60,7 @@ const HS_NS = {
   phIoT: "https://project-haystack.org/def/phIoT/",
   phIct: "https://project-haystack.org/def/phIct/",
   ref: "https://brickschema.org/schema/Brick/ref#",
+  brick: "https://brickschema.org/schema/Brick#",
   schema: "https://schema.org/",
 };
 const TAG_LIB = {
@@ -117,17 +118,30 @@ function modelToTurtle(model, base, opts = {}) {
   const siteOfRec = (r) => (r.attrs || {}).siteRef || "";
   const subjectOf = (r, isSite) => (r.uuid ? ttlId(r.uuid) : ttlId(isSite ? idOf(r) : `${siteOfRec(r)}/${idOf(r)}`));
   const subjects = { site: new Map(), equip: new Map(), device: new Map() };   // kind -> id -> [{ site, subject }]
+  const named = { site: new Map(), equip: new Map(), device: new Map() };      // kind -> display name -> [{ site, subject }]
   const register = (kind, r) => {
     const id = idOf(r), list = subjects[kind].get(id) || [];
-    list.push({ site: kind === "site" ? id : siteOfRec(r), subject: subjectOf(r, kind === "site") });
+    const x = { site: kind === "site" ? id : siteOfRec(r), subject: subjectOf(r, kind === "site") };
+    list.push(x);
     subjects[kind].set(id, list);
+    // the same aliases the run-proof resolver accepts (runProofNames): the record name and its dis
+    for (const alias of new Set([r.name, (r.attrs || {}).dis].filter((v) => v && v !== id))) {
+      named[kind].set(alias, [...(named[kind].get(alias) || []), x]);
+    }
   };
   for (const s of model.sites) register("site", s);
   for (const e of model.equips) register("equip", e);
   for (const d of model.devices) register("device", d);
   /** Subject a ref points at, or null (unknown / ambiguous). `site` = the referrer's siteRef. */
   const resolve = (kind, id, site) => {
-    const list = subjects[kind].get(id) || [];
+    // "feeder" refs (airRef / chilledWaterRef / hotWaterRef / isFedBy / feeds) match ids and display-name aliases
+    // together, as runProofFeeders does: a ref matching two records at the site (one by id, one by name) binds nothing.
+    // Every other ref (siteRef, equipRef) is an id: the alias is only a fallback when no record has that id.
+    const feeder = kind === "feeder";
+    if (feeder) kind = "equip";
+    const all = feeder ? [...(subjects[kind].get(id) || []), ...(named[kind].get(id) || [])]
+      : (subjects[kind].get(id) || named[kind].get(id) || []);
+    const list = [...new Map(all.map((x) => [x.subject, x])).values()];
     const scoped = kind === "site" ? list : list.filter((x) => x.site === site);
     const pick = scoped.length ? scoped : !site ? list : list.filter((x) => !x.site);   // an entity without a siteRef is shared
     return pick.length === 1 ? pick[0].subject : null;
@@ -146,7 +160,14 @@ function modelToTurtle(model, base, opts = {}) {
   }
   for (const e of model.equips) {
     const a = e.attrs || {};
-    entity(subjectOf(e), "phIoT:equip", e.name, markersOf(e), refsOf(a.siteRef, [["phIoT:siteRef", "site", a.siteRef]]));
+    // Run-proof links (#1608): the refs and feeds the run-proof resolution follows (sql/fdd/run_proof.json)
+    const links = (v) => (Array.isArray(v) ? v : String(v || "").split(",")).map((x) => String(x).trim().replace(/^@/, "")).filter(Boolean);
+    entity(subjectOf(e), "phIoT:equip", e.name, markersOf(e), refsOf(a.siteRef, [
+      ["phIoT:siteRef", "site", a.siteRef],
+      ...["airRef", "chilledWaterRef", "hotWaterRef"].filter((r) => a[r]).map((r) => [`phIoT:${r}`, "feeder", String(a[r]).trim().replace(/^@/, "")]),
+      ...links(a.isFedBy).map((id) => ["brick:isFedBy", "feeder", id]),
+      ...links(a.feeds).map((id) => ["brick:feeds", "feeder", id]),
+    ]));
   }
   for (const d of model.devices) {
     const a = d.attrs || {};

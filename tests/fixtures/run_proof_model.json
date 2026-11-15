@@ -1,0 +1,414 @@
+{
+ "_doc": "Synthetic model for the run-proof resolution tests (#1608): own status beats own command, a VAV follows airRef to its AHU, a chilled-water loop follows chilledWaterRef / brick:isFedBy / brick:feeds to its pump, a hot-water loop follows hotWaterRef, no proof anywhere -> none, refs never cross sites.",
+ "records": [
+  {
+   "uuid": "22222222-0000-4000-8000-000000000001",
+   "name": "s1",
+   "pointType": "SITE",
+   "attrs": {
+    "id": "s1"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000002",
+   "name": "s2",
+   "pointType": "SITE",
+   "attrs": {
+    "id": "s2"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000003",
+   "name": "AHU-1",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "AHU-1",
+    "siteRef": "s1",
+    "markers": "equip,ahu"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000004",
+   "name": "AHU-1 fan status",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "AHU-1",
+    "markers": "point,sensor,discharge,fan,run,his",
+    "kind": "Bool",
+    "dis": "AHU-1 fan status",
+    "class": "discharge-run-sensor"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000005",
+   "name": "AHU-1 fan cmd",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "AHU-1",
+    "markers": "point,cmd,discharge,fan,run,his",
+    "kind": "Number",
+    "dis": "AHU-1 fan cmd",
+    "class": "discharge-run-cmd",
+    "unit": "%"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000006",
+   "name": "AHU-2",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "AHU-2",
+    "siteRef": "s1",
+    "markers": "equip,ahu"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000007",
+   "name": "AHU-2 fan cmd",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "AHU-2",
+    "markers": "point,cmd,discharge,fan,run,his",
+    "kind": "Number",
+    "dis": "AHU-2 fan cmd",
+    "class": "discharge-run-cmd",
+    "unit": "%"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000008",
+   "name": "AHU-3",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "AHU-3",
+    "siteRef": "s1",
+    "markers": "equip,ahu"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000009",
+   "name": "AHU-3 supply temp",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "AHU-3",
+    "markers": "point,sensor,discharge,air,temp,his",
+    "kind": "Number",
+    "dis": "AHU-3 supply temp",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000010",
+   "name": "VAV-1",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "VAV-1",
+    "siteRef": "s1",
+    "markers": "equip,vav",
+    "airRef": "@AHU-1"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000011",
+   "name": "VAV-1 zone temp",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "VAV-1",
+    "markers": "point,sensor,zone,air,temp,his",
+    "kind": "Number",
+    "dis": "VAV-1 zone temp",
+    "class": "zone-air-temp-sensor",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000012",
+   "name": "VAV-2",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "VAV-2",
+    "siteRef": "s1",
+    "markers": "equip,vav",
+    "airRef": "AHU-2"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000013",
+   "name": "VAV-2 zone temp",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "VAV-2",
+    "markers": "point,sensor,zone,air,temp,his",
+    "kind": "Number",
+    "dis": "VAV-2 zone temp",
+    "class": "zone-air-temp-sensor",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000014",
+   "name": "VAV-3",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "VAV-3",
+    "siteRef": "s1",
+    "markers": "equip,vav"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000015",
+   "name": "VAV-3 zone temp",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "VAV-3",
+    "markers": "point,sensor,zone,air,temp,his",
+    "kind": "Number",
+    "dis": "VAV-3 zone temp",
+    "class": "zone-air-temp-sensor",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000016",
+   "name": "VAV-4",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "VAV-4",
+    "siteRef": "s1",
+    "markers": "equip,vav",
+    "airRef": "AHU-3"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000017",
+   "name": "VAV-4 zone temp",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "VAV-4",
+    "markers": "point,sensor,zone,air,temp,his",
+    "kind": "Number",
+    "dis": "VAV-4 zone temp",
+    "class": "zone-air-temp-sensor",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000018",
+   "name": "CHWP-1",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "CHWP-1",
+    "siteRef": "s1",
+    "markers": "equip,pump"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000019",
+   "name": "CHWP-1 status",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "CHWP-1",
+    "markers": "point,sensor,chilled,water,pump,run,his",
+    "kind": "Bool",
+    "dis": "CHWP-1 status"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000020",
+   "name": "CHW-LOOP-A",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "CHW-LOOP-A",
+    "siteRef": "s1",
+    "markers": "equip,chilledWater",
+    "chilledWaterRef": "CHWP-1"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000021",
+   "name": "A supply",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "CHW-LOOP-A",
+    "markers": "point,sensor,chilled,water,leaving,temp,his",
+    "kind": "Number",
+    "dis": "A supply",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000022",
+   "name": "CHWP-B",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "CHWP-B",
+    "siteRef": "s1",
+    "markers": "equip,pump",
+    "feeds": "CHW-LOOP-B"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000023",
+   "name": "CHWP-B status",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "CHWP-B",
+    "markers": "point,sensor,chilled,water,pump,run,his",
+    "kind": "Bool",
+    "dis": "CHWP-B status"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000024",
+   "name": "CHW-LOOP-B",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "CHW-LOOP-B",
+    "siteRef": "s1",
+    "markers": "equip,chilledWater"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000025",
+   "name": "B supply",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "CHW-LOOP-B",
+    "markers": "point,sensor,chilled,water,leaving,temp,his",
+    "kind": "Number",
+    "dis": "B supply",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000026",
+   "name": "CHW-LOOP-C",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "CHW-LOOP-C",
+    "siteRef": "s1",
+    "markers": "equip,chilledWater",
+    "isFedBy": "CHWP-1"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000027",
+   "name": "C supply",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "CHW-LOOP-C",
+    "markers": "point,sensor,chilled,water,leaving,temp,his",
+    "kind": "Number",
+    "dis": "C supply",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000028",
+   "name": "CHW-LOOP-D",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "CHW-LOOP-D",
+    "siteRef": "s1",
+    "markers": "equip,chilledWater"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000029",
+   "name": "D supply",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "CHW-LOOP-D",
+    "markers": "point,sensor,chilled,water,leaving,temp,his",
+    "kind": "Number",
+    "dis": "D supply",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000030",
+   "name": "HW-LOOP",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "HW-LOOP",
+    "siteRef": "s1",
+    "markers": "equip,hotWater",
+    "hotWaterRef": "HWP-1"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000031",
+   "name": "HW supply",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "HW-LOOP",
+    "markers": "point,sensor,hot,water,leaving,temp,his",
+    "kind": "Number",
+    "dis": "HW supply",
+    "unit": "degC"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000032",
+   "name": "HWP-1",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "HWP-1",
+    "siteRef": "s1",
+    "markers": "equip,pump"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000033",
+   "name": "HWP-1 status",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "HWP-1",
+    "markers": "point,sensor,pump,run,his",
+    "kind": "Bool",
+    "dis": "HWP-1 status"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000034",
+   "name": "VAV-9",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "VAV-9",
+    "siteRef": "s2",
+    "markers": "equip,vav",
+    "airRef": "AHU-1"
+   }
+  },
+  {
+   "uuid": "22222222-0000-4000-8000-000000000035",
+   "name": "VAV-9 zone temp",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s2",
+    "equipRef": "VAV-9",
+    "markers": "point,sensor,zone,air,temp,his",
+    "kind": "Number",
+    "dis": "VAV-9 zone temp",
+    "class": "zone-air-temp-sensor",
+    "unit": "degC"
+   }
+  }
+ ]
+}

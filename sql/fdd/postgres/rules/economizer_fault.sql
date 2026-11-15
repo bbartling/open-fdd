@@ -4,11 +4,21 @@
 -- CAST DOUBLE. oa_damper_pct is a fraction 0-1 (input_contract.sql): a 20 % minimum OA position arrives as 0.20
 -- and does not fire vs ECON2_DAMPER 0.42. No magnitude guess.
 -- Pandas econ2 has no fan gate.
-WITH base AS (
+WITH rp AS (
+  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
+  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
+  SELECT equipment_id,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
+  FROM history
+  GROUP BY equipment_id
+),
+base AS (
   SELECT
+    run_proof,
     equipment_id,
     timestamp_utc,
     CAST(CASE
+      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN oa_t IS NOT NULL AND oa_damper_pct IS NOT NULL
        AND CAST(oa_t AS DOUBLE PRECISION) > {{ECON2_OAT_HI}}
        AND CAST(oa_damper_pct AS DOUBLE PRECISION) > {{ECON2_DAMPER}}
@@ -78,8 +88,8 @@ final AS (
 )
 SELECT
   equipment_id,
-  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,
-  SUM(held_seconds) / 3600.0 AS covered_hours,
-  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS fault_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(held_seconds) / 3600.0 END AS covered_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE 100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) END AS fault_pct
 FROM final
 GROUP BY equipment_id;

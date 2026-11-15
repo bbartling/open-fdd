@@ -217,6 +217,8 @@ const GRID = Array.from({ length: GRID_N }, (_, i) => GRID_T0 + i * GRID_STEP * 
 
 /** spec: {role: {value|fn(i), units, kind?}} -> { input, plan } through the hook's real siPlan + buildInput. */
 function hookInput(pack, spec, logs = []) {
+  // the resolved run proof (#1608: own status, own command or the feeding equipment) is on unless the test says otherwise
+  spec = { run_proof: { value: 1, units: "", kind: "Bool" }, ...spec };
   const roles = {}, hist = {};
   for (const [role, s] of Object.entries(spec)) {
     roles[role] = { uuid: role, name: role, units: s.units, kind: s.kind };

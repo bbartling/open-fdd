@@ -44,8 +44,13 @@ Stop and delete the container: `docker compose -f nf-app/timescale/test/docker-c
 2. Look at the real DDL: `psql ... -c '\d data' -c '\d points' -c '\d instances' -c '\dv'`.
 3. Edit `adapter_nf.sql` if it differs (schema, column names, value type, how the point uuid is stored; the
    `point_uuid` it returns must equal the NF point uuid the hook binds). Nothing else needs to change.
-4. Apply **as the installer role**: `psql "$PGURL" -f nf-app/timescale/adapter_nf.sql -f nf-app/timescale/install.sql`
-   (or let the hook call `install()` on first run, which needs the same rights). Safe to re-run. If the role cannot
+4. Apply **as the installer role**, in this order, stopping at the first error, in one transaction:
+   ```
+   psql "$PGURL" -X -v ON_ERROR_STOP=1 -1 -f nf-app/timescale/core.sql -f nf-app/timescale/adapter_nf.sql -f nf-app/timescale/install.sql
+   ```
+   (or let the hook call `install()` on first run, which needs the same rights and uses the same order). `core.sql`
+   first: the adapter's `fdd.input_sample` view joins `fdd.point`. A failed statement exits nonzero and rolls back
+   everything. Safe to re-run. See also [Install](../../docs/install.md#timescale-option-and-schema-preflight). If the role cannot
    `add_job`, install prints a NOTICE and the fdd hook enforces the cap once a day instead
    (`openfdd.config.job_registered` says which).
 5. App options (set on the box, never in the repo), read by both the `fdd` and `history` hooks. NF 3.10.x stores app
@@ -57,7 +62,7 @@ Stop and delete the container: `docker compose -f nf-app/timescale/test/docker-c
    (or a `postgres://...` URL). Set the option `engine` to `timescale` (or leave it unset / `auto`); the connector
    alone does not switch Open-FDD to this engine, the options do. With `engine = timescale` and no usable
    `timescale` option the hook fails with `Timescale connection settings not found` instead of falling back. The
-   value is never logged. See [Install](../../docs/install.md#optional-the-timescaledb-engine).
+   value is never logged. See [Install](../../docs/install.md#timescale-option-and-schema-preflight).
 ## Installer role vs runtime role
 
 | | Installer (run `install.sql`, owns the job) | Runtime (the hooks connect as this role) |
@@ -90,7 +95,10 @@ Both `openfdd.nf_samples` and `fdd.input_sample` use `WITH (security_invoker = t
 `SELECT` only on those views (never `ALL TABLES IN SCHEMA openfdd` or write grants on the views), so `openfdd_rt`
 cannot mutate `public.data` directly or through an auto-updatable view.
 
-The retention job runs as the job owner (the installer), not as the runtime role. A runtime role without install
+The retention policy keys in `openfdd.config` (`max_bytes`, `retention_allowlist`, `max_chunks_per_call`,
+`schema_version`, `job_registered`) are **installer-only**: a trigger refuses any write by a role that is not a member
+of the table owner, so the runtime role's `INSERT, UPDATE` reaches only its bookkeeping keys (`last_cap_run`,
+`retention_last`). The retention job runs as the job owner (the installer), not as the runtime role. A runtime role without install
 rights still works for rules and history; if the schema is older than this release the hook refuses to run
 retention (it reports a clear error) until `install.sql` is run once as the installer.
 

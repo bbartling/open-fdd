@@ -296,6 +296,10 @@
   {
    "name": "zone_t",
    "type": "double"
+  },
+  {
+   "name": "run_proof",
+   "type": "double"
   }
  ],
  "confirm_min": {

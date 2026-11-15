@@ -4,6 +4,7 @@
 //        {"args": {"uuids": ["<point uuid>", ...], "from": "2026-06-01T00:00:00Z", "to": "2026-11-01T00:00:00Z", "bucket": "1 day"}}
 //   GET  /api/v1/apps/open-fdd/hooks/history/runs?include_results=true     -> the answer
 //
+// With "oldest": "true" (uuids only) it answers {ok, complete, oldest: {uuid: ISO | null}} instead (the "All" range start).
 // Returns {bucket, from, to, total, truncated, rows: [{point_uuid, bucket, avg, min, max, n}]}, capped at
 // about 200 KB (truncated = true when more rows existed). bucket is optional ("15 minutes", "1 hour",
 // "1 day", ...); without it one is picked so each series has about 1000 buckets.
@@ -33,7 +34,7 @@ const normalizeArgs = (args) => startArgs.normalizeStartHookArgs(args,
   { jsonFields: ['uuids'], numberFields: ['windowHours'], expandWindowHours: true });
 
 /**
- * @param {{ sdk: any, args?: { uuids?: string[], from?: string, to?: string, bucket?: string }, config?: { timescale?: object, history?: object } }} p
+ * @param {{ sdk: any, args?: { uuids?: string[], from?: string, to?: string, bucket?: string, oldest?: string | boolean }, config?: { timescale?: object, history?: object } }} p
  */
 async function handle({ sdk, args = {}, config: rawConfig = {} }) {
   args = normalizeArgs(args);
@@ -66,6 +67,19 @@ async function handle({ sdk, args = {}, config: rawConfig = {} }) {
   } catch (e) {
     if (runtimeError(e)) return failed(e, 'connect');
     throw e;
+  }
+  if (args.oldest === true || args.oldest === 'true' || args.oldest === '1') {
+    // {"uuids": [...], "oldest": "true"}: the oldest stored sample per point, for the "All" range (#1612)
+    try {
+      const result = await ts.oldestRoute(client, /** @type {any} */ (args), /** @type {any} */ (config.history || {}));
+      log(JSON.stringify(result));
+      return result;
+    } catch (e) {
+      if (runtimeError(e)) return failed(e, 'query');
+      throw e;
+    } finally {
+      await client.end();
+    }
   }
   try {
     const result = /** @type {any} */ (await ts.historyRoute(client, /** @type {any} */ (args), /** @type {any} */ (config.history || {})));

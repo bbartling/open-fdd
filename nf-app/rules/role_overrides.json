@@ -1,5 +1,9 @@
 {
- "_doc": "How each Open-FDD rule role (sql/fdd/role_map.json) is found on an NF site. A point fills a role if its NF class is in `classes`, or else it carries every Haystack marker in `markers`. Roles not listed here use the classes found automatically (role_map name + -sensor/-cmd/-status) and markers derived from the role_map name. Classes come from NF's ontology (nf_classes.json). Roles that the rules use but role_map.json lacks are defined here with a `name`.",
+ "run_proof": {
+  "classes": [],
+  "markers": []
+ },
+ "_doc": "How each Open-FDD rule role (sql/fdd/role_map.json) is found on an NF site. A point fills a role if its NF class is in `classes`, or else it carries every Haystack marker in `markers`. Roles not listed here use the classes found automatically (role_map name + -sensor/-cmd/-status) and markers derived from the role_map name. Classes come from NF's ontology (nf_classes.json). Roles that the rules use but role_map.json lacks are defined here with a `name`. `run_proof` is never bound by class or marker: it is resolved from the model by sql/fdd/run_proof.json (own status, own command, feeding equipment).",
  "oa_damper_pct": {
   "classes": [
    "outside-damper-cmd",

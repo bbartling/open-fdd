@@ -1,0 +1,82 @@
+{
+ "_note": "Synthetic: one ref (X) matches one equipment's id and another's dis at the same site; both have proof.",
+ "records": [
+  {
+   "uuid": "c0000000-0000-4000-8000-000000000001",
+   "name": "Site",
+   "pointType": "SITE",
+   "attrs": {
+    "id": "s1"
+   }
+  },
+  {
+   "uuid": "c0000000-0000-4000-8000-000000000002",
+   "name": "A",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "X",
+    "siteRef": "s1",
+    "markers": "equip,ahu"
+   }
+  },
+  {
+   "uuid": "c0000000-0000-4000-8000-000000000003",
+   "name": "B",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "B",
+    "siteRef": "s1",
+    "dis": "X",
+    "markers": "equip,ahu"
+   }
+  },
+  {
+   "uuid": "c0000000-0000-4000-8000-000000000004",
+   "name": "VAV-1",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "VAV-1",
+    "siteRef": "s1",
+    "airRef": "X",
+    "markers": "equip,vav"
+   }
+  },
+  {
+   "uuid": "c0000000-0000-4000-8000-000000000005",
+   "name": "VAV-2",
+   "pointType": "EQUIPMENT",
+   "attrs": {
+    "id": "VAV-2",
+    "siteRef": "s1",
+    "airRef": "B",
+    "markers": "equip,vav"
+   }
+  },
+  {
+   "uuid": "c0000000-0000-4000-8000-000000000006",
+   "name": "X fan status",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "X",
+    "markers": "point,sensor,discharge,fan,run,his",
+    "kind": "Bool",
+    "dis": "X fan status",
+    "class": "discharge-run-sensor"
+   }
+  },
+  {
+   "uuid": "c0000000-0000-4000-8000-000000000007",
+   "name": "B fan status",
+   "pointType": "POINT",
+   "attrs": {
+    "siteRef": "s1",
+    "equipRef": "B",
+    "markers": "point,sensor,discharge,fan,run,his",
+    "kind": "Bool",
+    "dis": "B fan status",
+    "class": "discharge-run-sensor"
+   }
+  }
+ ]
+}

@@ -92,7 +92,11 @@ const twoRoleSensors = [
 const sweepScore = (out, rule, series_id) => Number(out[rule].find((row) => row.series_id === series_id)?.fault_hours ?? 0);
 const sweepCovered = (out, rule, series_id) => Number(out[rule].find((row) => row.series_id === series_id)?.covered_hours ?? 0);
 
+/** The resolved run proof (#1608) of these fixtures is their own fan status (tier 1), as the hook would bind it. */
+const withRunProof = (input) => ({ ...input, history: input.history.map((row) => ("run_proof" in row ? row : { ...row, run_proof: row.fan_status ?? null })) });
+
 async function queryBoth(input, ruleIds) {
+  input = withRunProof(input);
   const pg = await createEngine({ kind: "pglite", pack: pgPack });
   const lite = await createEngine({ kind: "sqlite", pack: litePack });
   try {
@@ -177,7 +181,7 @@ test("all five sweeps return separate rows and timelines for same-role sensors",
       equipment_id: row.equipment_id, series_id, sensor_role: "sat", unit: "°C", ts: row.ts, value: values[index],
     }));
   }
-  const input = { history, sensorHistory, equipment: [{ building_id: "site-1", equipment_id: "eq-1" }] };
+  const input = withRunProof({ history, sensorHistory, equipment: [{ building_id: "site-1", equipment_id: "eq-1" }] });
   const pg = await createEngine({ kind: "pglite", pack: pgPack });
   const lite = await createEngine({ kind: "sqlite", pack: litePack });
   try {

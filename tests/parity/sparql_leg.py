@@ -43,6 +43,18 @@ def point_uuid(equip: str, column: str) -> str:
     return str(_uuid.uuid5(NS, f"{equip}/{column}"))
 
 
+def _markers(col: str, ds: Dataset) -> str:
+    """Haystack markers as a site would model them: the dataset's registered sensors (``Dataset.units``, the SV sweep
+    population of the SQL fixture) are ``sensor`` points; commands, setpoints and the other inputs are not."""
+    if col in ds.units:
+        return "point,his,sensor"
+    if col.endswith("_cmd"):
+        return "point,his,cmd"
+    if col.endswith("_sp"):
+        return "point,his,sp"
+    return "point,his"
+
+
 def nf_world(ds: Dataset) -> dict:
     """``{records, series}``: the dataset as NF model records (site, equipment, points) and raw samples per point."""
     recs: list[dict] = [{"uuid": str(_uuid.uuid5(NS, "site")), "name": "Parity site", "pointType": "SITE",
@@ -56,7 +68,7 @@ def nf_world(ds: Dataset) -> dict:
     for p in ds.model["points"]:
         eid, col = p["equipment_id"], p["column"]
         u = point_uuid(eid, col)
-        attrs = {"siteRef": SITE_ID, "equipRef": eid, "markers": "point,his,sensor", "dis": f"{eid} {col}",
+        attrs = {"siteRef": SITE_ID, "equipRef": eid, "markers": _markers(col, ds), "dis": f"{eid} {col}",
                  "kind": "Str" if types.get(col) == "text" else "Number", "ofddRole": col}
         if p.get("unit"):
             attrs["unit"] = p["unit"]
@@ -115,27 +127,28 @@ class HookProcess:
         self.close()
 
 
-def client_frames(ds: Dataset, query: str = QUERY, **fetch_kw: Any):
-    """``(answer, {equipment_id: frame}, weather_on_grid | None, calls)`` through the hooks and the client."""
+def client_frames(ds: Dataset, query: str = QUERY, *, source: str = "nf", **fetch_kw: Any):
+    """``(answer, {equipment_id: frame}, weather_on_grid | None, calls)`` through the hooks and the client.
+
+    ``source="nf"``: raw NF ``point/data`` samples. ``source="timescale"``: the hook's Timescale-selected path, buckets
+    of the dataset's own step (``historyRoute`` over an in-memory ``history_buckets``; see the runner).
+    """
     from open_fdd.nf import sparql_data as sd
     from open_fdd.parity.pandas_ref import weather_on_grid
 
-    ts = [r["ts"] for r in ds.history] + [r["ts"] for r in ds.weather]   # weather may start before equipment history
-    start, end = min(ts), max(ts) + ds.step_seconds * 1000
+    start, end = ds.history_window_ms()   # every device's actual first row (jitter may precede t0) and the weather
     from datetime import datetime, timezone
     t0, t1 = (datetime.fromtimestamp(x / 1000, tz=timezone.utc) for x in (start, end))
-    with HookProcess(nf_world(ds)) as hp:
-        answer = sd.fetch(hp.transport, query, t0, t1, bucket="raw", source="nf", **fetch_kw)
-        calls = len(hp.calls)
-    fr = sd.frames(answer, weather="separate", window_sec=ds.step_seconds)
-    # Dataset.units (and Dataset.series) is the synthetic sensor population for the SV sweeps. Other history
-    # columns are rule inputs but not sweep sensors in the oracle/SQL fixture. Keep that *same* population on
-    # the SPARQL frames; otherwise the richer NF metadata would make SV-RANGE/SPIKE assess extra sensors.
-    # Values still went through the client's SI conversion; this changes sweep scope, not fault equations.
-    from open_fdd.nf.model import column_for
-    sweep_units = {column_for(r): u for r, u in ds.units.items() if u}
-    for df in fr.values():
-        df.attrs["role_units"] = {c: u for c, u in sweep_units.items() if c in df.columns}
+    world = {**nf_world(ds), "timescale": source == "timescale"}
+    bucket = "raw" if source == "nf" else f"{ds.step_seconds // 60} minutes"
+    with HookProcess(world) as hp:
+        answer = sd.fetch(hp.transport, query, t0, t1, bucket=bucket, source=source, **fetch_kw)
+    if answer["source"] != source:
+        raise AssertionError(f"asked for source {source}, the hook answered {answer['source']}")
+    calls = len(hp.calls)
+    # The SV sweep population comes from the points' own metadata (the ``sensor`` marker), as on a real site; it is
+    # checked against the dataset's registered sensors by ``sweep_mismatches`` instead of being overwritten here.
+    fr = sd.frames(answer, weather="separate", window_sec=ds.step_seconds, sweep_marker="sensor")
     wx = sd.weather_frame(answer)
     return answer, {k[1]: v for k, v in fr.items()}, (None if wx is None else weather_on_grid(wx, ds.step_seconds)), calls
 
@@ -145,8 +158,8 @@ def sparql_reference(ds: Dataset, rules: Iterable[str] | None = None, **fetch_kw
     from open_fdd.parity.pandas_ref import reference_from_frames
 
     answer, frames, weather, calls = client_frames(ds, **fetch_kw)
-    info = {"hook_calls": calls, "points": len(answer["points"]), "equipment": len(frames),
-            "samples": sum(len(s) for s in answer["series"].values())}
+    info = {"hook_calls": calls, "points": len(answer["points"]), "equipment": len(frames), "source": answer["source"],
+            "samples": sum(len(s) for s in answer["series"].values()), "sweep_mismatches": sweep_mismatches(ds, frames)}
     return reference_from_frames(frames, weather, float(ds.step_seconds), rules), info
 
 
@@ -178,4 +191,22 @@ def oracle_mismatches(sparql: Mapping[str, Mapping[str, dict]], oracle: Mapping[
                 x, y = a.get(k) or {}, b.get(k) or {}
                 if set(x) != set(y) or any(not _close(x[r], y[r], tol_h) for r in x):
                     bad.append(f"{rule}/{e}: {k} differ")
+    return bad
+
+def sweep_mismatches(ds: Dataset, frames: Mapping[str, Any]) -> list[str]:
+    """Where the client's SV sweep population or units differ from the dataset's registered sensors.
+
+    The SQL fixture sweeps ``Dataset.units`` (role -> SI unit) on every equipment; the client must arrive at exactly
+    that set from the fetched metadata, with the same SI unit, and must not sweep anything else.
+    """
+    from open_fdd.nf.model import column_for
+
+    bad = []
+    for eid, df in sorted(frames.items()):
+        want = {column_for(r): u for r, u in ds.units.items() if u and column_for(r) in df.columns}
+        got = dict(df.attrs.get("sweep_units") or {})
+        if got != want:
+            extra, missing = sorted(set(got) - set(want)), sorted(set(want) - set(got))
+            wrong = sorted(c for c in set(got) & set(want) if got[c] != want[c])
+            bad.append(f"{eid}: sweep extra={extra} missing={missing} unit={wrong}")
     return bad

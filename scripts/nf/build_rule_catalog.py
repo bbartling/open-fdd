@@ -55,6 +55,11 @@ def build() -> dict:
     kinds = overrides.pop("_equipment_kinds")
     kinds.pop("_doc", None)
     registry = yaml.safe_load((ROOT / "sql/fdd/registry.yaml").read_text(encoding="utf-8"))
+    run_proof = json.loads((ROOT / "sql/fdd/run_proof.json").read_text(encoding="utf-8"))
+    run_proof.pop("_doc", None)
+    bad_proof = sorted({x for g in run_proof["own"].values() for x in g} - set(role_map))
+    if bad_proof:
+        raise SystemExit(f"sql/fdd/run_proof.json names roles absent from role_map.json: {bad_proof}")
 
     bad = sorted({c for o in overrides.values() for c in o["classes"] if c not in classes})
     if bad:
@@ -99,14 +104,17 @@ def build() -> dict:
             "unmapped_roles": missing,
             "confirm_seconds": r.get("confirm_seconds", 0),
             "parameters": {k: v.get("default") for k, v in (r.get("parameters") or {}).items()},
+            "run_proof": r.get("run_proof", "exempt"),
+            **({"run_proof_note": r["run_proof_note"]} if r.get("run_proof_note") else {}),
         })
     return {
         "_generated_by": "scripts/nf/build_rule_catalog.py",
         "source": ["sql/fdd/registry.yaml", "sql/fdd/role_map.json", "sql/fdd/input_contract.json",
-                   "open_fdd/data/sensor_sweep_roles.json", "nf-app/rules/role_overrides.json"],
+                   "open_fdd/data/sensor_sweep_roles.json", "nf-app/rules/role_overrides.json", "sql/fdd/run_proof.json"],
         "equipment_kinds": kinds,
         "roles": roles,
         "sensor_sweep_roles": sensor_sweep_roles,
+        "run_proof": run_proof,
         "rules": rules,
     }
 

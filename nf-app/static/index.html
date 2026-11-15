@@ -29,6 +29,7 @@
 <script defer src="charts.js"></script>
 <script defer src="fdd.js"></script>
 <script defer src="schedule.js"></script>
+<script defer src="occupancy.js"></script>
 <script defer src="rcx.js"></script>
 <script defer src="plot-spec-data.js"></script>
 <script defer src="fdd-plots.js"></script>
@@ -39,6 +40,8 @@
 <script defer src="role-limits.js"></script>
 <script defer src="rule-tuning.js"></script>
 <script defer src="tuning.js"></script>
+<script defer src="occupancy-editor.js"></script>
+<script defer src="fdd-view.js"></script>
 <script defer src="app-core.js"></script>
 <script defer src="app.js"></script>
 <script defer src="sparql.js"></script>
@@ -62,8 +65,6 @@
   <button data-tab="overview" class="on">Overview</button>
   <button data-tab="charts">Charts</button>
   <button data-tab="fdd">FDD <span class="count" id="nRules"></span></button>
-  <button data-tab="rcx">RCx <span class="count" id="nRcx"></span></button>
-  <button data-tab="points">Points <span class="count" id="nPoints"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
   <button data-tab="export">Export</button>
   <button data-tab="model">Model &amp; RDF</button>
@@ -72,23 +73,63 @@
 <main>
   <div id="err"></div>
 
-  <!-- Overview: live cards + equipment status -->
+  <!-- Overview: site summary, the RCx dashboard (Full) and the Points section (one device) -->
   <section class="tab on" id="tab-overview">
     <div class="stats" id="summary"></div>
-    <div id="overviewRangeControl"></div>
-    <p id="overviewRangeStatus" class="hint" role="status"></p>
-    <section class="cards" id="cards"></section>
-    <section class="panel">
-      <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
-      <div class="chips" id="chips"></div>
-    </section>
-    <section class="panel" id="overviewIoPanel">
-      <h2>Equipment I/O <span class="hint" id="overviewIoHint">all modeled points on the selected equipment</span></h2>
-      <div class="tablewrap"><table class="bac">
-        <thead><tr><th>Point</th><th>Role / type</th><th class="num">Latest value</th><th>Unit</th><th>Updated</th><th>History</th><th>Status</th></tr></thead>
-        <tbody id="overviewIoRows"></tbody>
-      </table></div>
-    </section>
+    <!-- RCx dashboard (Full): every modeled device on the site at once, no device picker; a panel draws only when the
+         model has its equipment (AHU, DX / compressor / chiller, hot-water plant, zones, ...) and is hidden otherwise -->
+    <section class="panel" id="overviewOccupancy" hidden></section>
+    <div id="overviewRcx" hidden>
+      <section class="panel" id="rcxHead">
+        <h2>Retro-commissioning <span class="hint" id="rcxHint">every modeled device on this site · a panel shows only when the model has that equipment</span></h2>
+        <div class="rcx-controls">
+          <button class="btn" id="rcxAhuOn" type="button" aria-pressed="false" title="Only times the feeding AHU's fan is running">AHU on</button>
+          <span class="hint" id="rcxAhuNote"></span>
+        </div>
+        <p class="hint" id="rcxMode"></p>
+        <div id="rcxRangeControl"></div><p id="rcxRangeStatus" class="hint" role="status"></p>
+      </section>
+      <div class="kpis" id="rcxKpis"></div>
+      <div id="rcxBody"></div>
+    </div>
+    <!-- Points: ONE device at a time (the only device picker on Overview): live cards, status, I/O, every point, history -->
+    <div id="overviewPoints">
+      <section class="panel" id="overviewPointsHead">
+        <h2>Points <span class="hint">pick a device · live values, status, I/O and history</span></h2>
+        <div id="overviewPointsScope"></div>
+      </section>
+      <div id="overviewRangeControl"></div>
+      <p id="overviewRangeStatus" class="hint" role="status"></p>
+      <section class="cards" id="cards"></section>
+      <section class="panel">
+        <h2>Equipment status <span class="hint">binary points (kind Bool) on each equip</span></h2>
+        <div class="chips" id="chips"></div>
+      </section>
+      <section class="panel" id="overviewIoPanel">
+        <h2>Equipment I/O <span class="hint" id="overviewIoHint">all modeled points on the selected equipment</span></h2>
+        <div class="tablewrap"><table class="bac">
+          <thead><tr><th>Point</th><th>Role / type</th><th class="num">Latest value</th><th>Unit</th><th>Updated</th><th>History</th><th>Status</th></tr></thead>
+          <tbody id="overviewIoRows"></tbody>
+        </table></div>
+      </section>
+      <section class="panel">
+        <h2>Point data <span class="count" id="nPoints"></span>
+          <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
+          <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
+          <span class="hint" id="pointHint"></span>
+        </h2>
+        <div class="tablewrap"><table class="bac">
+          <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Ref</th><th>Binding</th><th>Updated</th></tr></thead>
+          <tbody id="pointRows"></tbody>
+        </table></div>
+      </section>
+      <section class="panel">
+        <h2>History <span class="hint" id="histHint">click a point above</span>
+        </h2>
+        <div id="histRangeControl"></div><p id="histRangeStatus" class="hint" role="status"></p>
+        <div class="chart short" id="histChart"></div>
+      </section>
+    </div>
   </section>
 
   <!-- Charts: pick one; only that chart's points are fetched (resampled by NF) -->
@@ -109,89 +150,66 @@
     </section>
   </section>
 
-  <!-- FDD: which Open-FDD rules each equip can run, with inputs bound by Haystack class/markers -->
+  <!-- FDD: the selected equipment's rules, faults first. Summary chips filter the list; one rule opens at a time with its
+       plot, SI thresholds and inputs; tuning sits in a side drawer. Equipment, window and open rule live in the URL. -->
   <section class="tab" id="tab-fdd">
-    <div class="stats" id="fddStats"></div>
+    <div class="fdd-summary" id="fddSummary" role="toolbar" aria-label="Filter rules by result"></div>
     <p class="hint" id="fddMode"></p>
-    <section class="panel" id="fddPlotPanel" hidden>
-      <h2><span id="fddPlotTitle">Rule plot</span> <span class="hint" id="fddPlotNote"></span>
-        <button class="btn" id="fddPlotClose">Close</button></h2>
-      <div id="fddPlotRangeControl"></div><p id="fddPlotRangeStatus" class="hint" role="status"></p>
-      <div class="chart" id="fddPlot"></div>
-      <section class="tuners-panel" id="fddTunersPanel"></section>
-    </section>
-    <section class="panel" id="fddResultsPanel" hidden>
-      <h2>Faults <span class="hint" id="fddResultsHint">written by the open-fdd hook · sensor sweeps show per-sensor results</span>
-        <label class="hint"><input type="checkbox" id="fddFaultedOnly"> faulted sensors only</label></h2>
-      <div id="fddRangeControl"></div>
-      <p id="fddRangeStatus" class="hint" role="status"></p>
-      <label class="hint"><input type="checkbox" id="fddHeatAll"> all rows (default: the most-faulted)</label>
-      <p class="hint" id="fddHeatNote"></p>
-      <div class="chart" id="fddLanes"></div>
-      <div class="tablewrap"><table class="bac">
-        <thead><tr><th>Rule</th><th>Equip</th><th>Latest</th><th>Run</th></tr></thead>
-        <tbody id="fddResultRows"></tbody>
-      </table></div>
-    </section>
-    <section class="panel">
-      <h2>FDD charts <span class="hint">signals on top, bool fault lane at the bottom</span></h2>
-      <div id="fddChartsRangeControl"></div><p id="fddChartsRangeStatus" class="hint" role="status"></p>
-    </section>
-    <div id="fddBody"></div>
-    <section class="panel">
-      <h2>Rule inputs <span class="hint" id="fddHint">rules from sql/fdd/registry.yaml · inputs found by NF class or Haystack markers</span>
-        <label class="hint"><input type="checkbox" id="fddRunnableOnly"> runnable only</label>
+    <section class="panel" id="fddListPanel">
+      <h2>Rules <span class="hint" id="fddListHint">faults first · click a rule to open it</span>
+        <button class="btn" id="fddShowAll" type="button" aria-pressed="false">show all</button>
         <button class="btn" id="fddRunNow" title="Run the open-fdd hook now (NF StartHook; needs the console login)">Run FDD now</button>
         <span class="hint" id="fddRunState"></span>
       </h2>
-      <div class="tablewrap"><table class="bac">
-        <thead><tr><th>Rule</th><th>Equip</th><th>Inputs</th><th>Status</th></tr></thead>
-        <tbody id="fddRows"></tbody>
-      </table></div>
+      <div class="fdd-list" id="fddList"></div>
     </section>
-  </section>
-
-  <!-- RCx: retro-commissioning views (rcx-*.js modules), roles bound like the FDD rules -->
-  <section class="tab" id="tab-rcx">
-    <section class="panel">
-      <h2>Retro-commissioning <span class="hint" id="rcxHint">views draw when their roles bind on the equips in scope</span>
-      </h2>
-      <div class="rcx-controls">
-        <button class="btn" id="rcxAhuOn" type="button" aria-pressed="false" title="Only times the feeding AHU's fan is running">AHU on</button>
-        <span class="hint" id="rcxAhuNote"></span>
+    <!-- the open rule: moved under its row in #fddList when a rule is opened -->
+    <section class="fdd-open" id="fddPlotPanel" hidden>
+      <h3><span id="fddPlotTitle">Rule plot</span> <span class="hint" id="fddPlotNote"></span>
+        <button class="btn" id="fddTuneOpen" type="button" title="Tune this rule for this site or equipment">Tune…</button>
+        <button class="btn" id="fddPlotClose" type="button">Close</button></h3>
+      <div class="fdd-detail-grid">
+        <div><h4>SI thresholds</h4><div class="fdd-si" id="fddSiParams"></div></div>
+        <div><h4>Inputs</h4><div class="tags" id="fddInputs"></div></div>
       </div>
-      <p class="hint" id="rcxMode"></p>
-      <div id="rcxRangeControl"></div><p id="rcxRangeStatus" class="hint" role="status"></p>
+      <div id="fddPlotRangeControl"></div><p id="fddPlotRangeStatus" class="hint" role="status"></p>
+      <div class="chart" id="fddPlot"></div>
     </section>
-    <div class="kpis" id="rcxKpis"></div>
-    <div id="rcxBody"></div>
-    <section class="panel">
-      <details id="rcxMissingBox"><summary>Not available here <span class="count" id="nRcxMissing"></span></summary>
-        <div class="tablewrap"><table class="bac"><thead><tr><th>View</th><th>Needs</th></tr></thead>
-          <tbody id="rcxMissing"></tbody></table></div>
-      </details>
-    </section>
-  </section>
-
-  <!-- Points: every point on the site, filter by markers, click for history -->
-  <section class="tab" id="tab-points">
-    <section class="panel">
-      <h2>Point data
-        <input type="search" id="pointFilter" placeholder="markers, e.g. temp sensor (all must match)">
-        <label class="hint"><input type="checkbox" id="showUntagged"> show untagged objects</label>
-        <span class="hint" id="pointHint"></span>
-      </h2>
-      <div class="tablewrap"><table class="bac">
-        <thead><tr><th>Point</th><th>Tags</th><th class="num">Value</th><th>Ref</th><th>Binding</th><th>Updated</th></tr></thead>
-        <tbody id="pointRows"></tbody>
-      </table></div>
-    </section>
-    <section class="panel">
-      <h2>History <span class="hint" id="histHint">click a point above</span>
-      </h2>
-      <div id="histRangeControl"></div><p id="histRangeStatus" class="hint" role="status"></p>
-      <div class="chart short" id="histChart"></div>
-    </section>
+    <aside class="fdd-drawer" id="fddDrawer" hidden aria-label="Tune this rule">
+      <h2><span id="fddDrawerTitle">Tune</span> <button class="btn" id="fddDrawerClose" type="button">Close</button></h2>
+      <section class="tuners-panel" id="fddTunersPanel"></section>
+    </aside>
+    <details class="panel fdd-more" id="fddMore">
+      <summary>More: fault-history heat map, FDD charts, every rule and its inputs</summary>
+      <div class="stats" id="fddStats"></div>
+      <section class="panel" id="fddResultsPanel" hidden>
+        <h2>Faults <span class="hint" id="fddResultsHint">written by the open-fdd hook · sensor sweeps show per-sensor results</span>
+          <label class="hint"><input type="checkbox" id="fddFaultedOnly"> faulted sensors only</label></h2>
+        <div id="fddRangeControl"></div>
+        <p id="fddRangeStatus" class="hint" role="status"></p>
+        <label class="hint"><input type="checkbox" id="fddHeatAll"> all rows (default: the most-faulted)</label>
+        <p class="hint" id="fddHeatNote"></p>
+        <div class="chart" id="fddLanes"></div>
+        <div class="tablewrap"><table class="bac">
+          <thead><tr><th>Rule</th><th>Equip</th><th>Latest</th><th>Run</th></tr></thead>
+          <tbody id="fddResultRows"></tbody>
+        </table></div>
+      </section>
+      <section class="panel">
+        <h2>FDD charts <span class="hint">signals on top, bool fault lane at the bottom</span></h2>
+        <div id="fddChartsRangeControl"></div><p id="fddChartsRangeStatus" class="hint" role="status"></p>
+      </section>
+      <div id="fddBody"></div>
+      <section class="panel">
+        <h2>Rule inputs <span class="hint" id="fddHint">rules from sql/fdd/registry.yaml · inputs found by NF class or Haystack markers</span>
+          <label class="hint"><input type="checkbox" id="fddRunnableOnly"> runnable only</label>
+        </h2>
+        <div class="tablewrap"><table class="bac">
+          <thead><tr><th>Rule</th><th>Equip</th><th>Inputs</th><th>Status</th></tr></thead>
+          <tbody id="fddRows"></tbody>
+        </table></div>
+      </section>
+    </details>
   </section>
 
   <!-- BACnet server: what NF serves, read back over BACnet -->
