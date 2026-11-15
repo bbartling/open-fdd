@@ -154,3 +154,17 @@ def test_the_leg_uses_the_package_rule_functions():
     src = inspect.getsource(leg)
     assert "reference_from_frames" in src and "open_fdd.nf.sparql_data" in src
     assert "def fault" not in src and "hours_true" not in src  # no fault math in the leg
+
+
+def test_a_unit_with_no_bound_run_proof_is_skipped_by_the_client_too():
+    """Every fourth unit has no resolved run proof (NULL). The client frames are stamped resolved like the oracle's,
+    so the client skips that unit rather than falling back to its own fan status (the 4x3+ stress tiers hit this)."""
+    ds = generate(0, 4, 1, "basic")
+    no_proof = ds.equipment[3]["equipment_id"]
+    rules = ["FC1", "SV-RANGE"]
+    sparql, _ = leg.sparql_reference(ds, rules)
+    oracle = reference(ds, rules)
+    for r in rules:
+        assert sparql[r][no_proof]["status"] == "SKIPPED_NO_RUN_PROOF", (r, sparql[r][no_proof])
+    assert not leg.oracle_mismatches(sparql, oracle)
+
