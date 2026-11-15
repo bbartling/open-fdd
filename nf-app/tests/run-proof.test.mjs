@@ -141,3 +141,19 @@ test("a ref matching one record's id and another's name at the same site binds n
   assert.equal(nf, false);
 });
 
+test("collision fixture: a ref matching one id and another's dis binds nothing, though both have proof", () => {
+  const recs = JSON.parse(fs.readFileSync(new URL("../../tests/fixtures/run_proof_collision.json", import.meta.url), "utf8")).records;
+  ctx.collision = recs;
+  const got = vm.runInContext(`(() => {
+    const of = (t) => collision.filter((x) => x.pointType === t);
+    const model = { sites: of("SITE"), equips: of("EQUIPMENT"), devices: [], points: of("POINT").map(toPoint) };
+    const r = (id) => resolveRunProof(model.equips.find((e) => idOf(e) === id), model, catalog);
+    return { v1: r("VAV-1").found, v2: r("VAV-2").found, v2equip: r("VAV-2").equip,
+      ttl: modelToTurtle(model, "urn:test:", { nfBase: "" }).turtle };
+  })()`, ctx);
+  assert.equal(got.v1, false);
+  assert.equal(got.v2, true);   // control: the proof points are real
+  assert.equal(got.v2equip, "B");
+  assert.doesNotMatch(got.ttl, /local:v1[^.]*phIoT:airRef local:c0000000/);
+});
+

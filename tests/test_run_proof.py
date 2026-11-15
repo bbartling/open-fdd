@@ -328,3 +328,26 @@ other:unit a phIoT:equip ; rdfs:label "unit" ; phIoT:siteRef local:s1 .
     g.parse(data=ttl, format="turtle")
     names = [n.names() for n in nodes_from_graph(g)]
     assert sum("unit" in ns for ns in names) <= 1
+
+
+def test_a_ref_matching_one_id_and_another_dis_binds_nothing_in_both_resolvers():
+    rdflib = pytest.importorskip("rdflib")
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is required")
+    fx = ROOT / "tests" / "fixtures" / "run_proof_collision.json"
+    recs = json.loads(fx.read_text(encoding="utf-8"))["records"]
+    of = lambda t: [r for r in recs if r["pointType"] == t]  # noqa: E731
+    model_nodes = nodes_from_model(Model(of("SITE"), of("EQUIPMENT"), [], [to_point(r) for r in of("POINT")]))
+    out = ROOT / "tests" / "fixtures" / "_run_proof_collision.ttl"
+    try:
+        subprocess.run([node, str(ROOT / "tools/rdf-check/gen_ttl.js"), str(fx), str(out)], check=True, capture_output=True)
+        g = rdflib.Graph()
+        g.parse(str(out), format="turtle")
+    finally:
+        out.unlink(missing_ok=True)
+    for nodes in (model_nodes, nodes_from_graph(g)):
+        got = {k.split("/", 1)[1]: v for k, v in _resolve_all(nodes).items()}   # the RDF site key is its label
+        assert got["VAV-1"] is None, got          # ambiguous: binds nothing even though both candidates have proof
+        assert got["VAV-2"] is not None and got["VAV-2"][2] == "B", got      # control: an unambiguous ref to a proven unit does bind
+

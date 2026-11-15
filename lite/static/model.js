@@ -135,9 +135,13 @@ function modelToTurtle(model, base, opts = {}) {
   for (const d of model.devices) register("device", d);
   /** Subject a ref points at, or null (unknown / ambiguous). `site` = the referrer's siteRef. */
   const resolve = (kind, id, site) => {
-    // ids and display-name aliases together (as runProofFeeders matches), scoped to the referrer's site: a ref that
-    // matches two records there (one by id, one by name) is ambiguous and binds nothing
-    const all = [...(subjects[kind].get(id) || []), ...(named[kind].get(id) || [])];
+    // "feeder" refs (airRef / chilledWaterRef / hotWaterRef / isFedBy / feeds) match ids and display-name aliases
+    // together, as runProofFeeders does: a ref matching two records at the site (one by id, one by name) binds nothing.
+    // Every other ref (siteRef, equipRef) is an id: the alias is only a fallback when no record has that id.
+    const feeder = kind === "feeder";
+    if (feeder) kind = "equip";
+    const all = feeder ? [...(subjects[kind].get(id) || []), ...(named[kind].get(id) || [])]
+      : (subjects[kind].get(id) || named[kind].get(id) || []);
     const list = [...new Map(all.map((x) => [x.subject, x])).values()];
     const scoped = kind === "site" ? list : list.filter((x) => x.site === site);
     const pick = scoped.length ? scoped : !site ? list : list.filter((x) => !x.site);   // an entity without a siteRef is shared
@@ -161,9 +165,9 @@ function modelToTurtle(model, base, opts = {}) {
     const links = (v) => (Array.isArray(v) ? v : String(v || "").split(",")).map((x) => String(x).trim().replace(/^@/, "")).filter(Boolean);
     entity(subjectOf(e), "phIoT:equip", e.name, markersOf(e), refsOf(a.siteRef, [
       ["phIoT:siteRef", "site", a.siteRef],
-      ...["airRef", "chilledWaterRef", "hotWaterRef"].filter((r) => a[r]).map((r) => [`phIoT:${r}`, "equip", String(a[r]).trim().replace(/^@/, "")]),
-      ...links(a.isFedBy).map((id) => ["brick:isFedBy", "equip", id]),
-      ...links(a.feeds).map((id) => ["brick:feeds", "equip", id]),
+      ...["airRef", "chilledWaterRef", "hotWaterRef"].filter((r) => a[r]).map((r) => [`phIoT:${r}`, "feeder", String(a[r]).trim().replace(/^@/, "")]),
+      ...links(a.isFedBy).map((id) => ["brick:isFedBy", "feeder", id]),
+      ...links(a.feeds).map((id) => ["brick:feeds", "feeder", id]),
     ]));
   }
   for (const d of model.devices) {
