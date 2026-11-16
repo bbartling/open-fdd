@@ -118,6 +118,44 @@ def test_statuses_with_local_vocabularies(tmp_path):
     assert rows["Link from a point to its stored history"].graph_uses == 6
 
 
+def test_graph_uses_count_versioned_haystack_iris(tmp_path):
+    from rdflib import URIRef
+
+    g = _example_graph()
+    old = URIRef("https://project-haystack.org/def/phIoT/ahu")
+    new = URIRef("https://project-haystack.org/def/phIoT/4.0.0#ahu")
+    for s_, p_, _ in list(g.triples((None, None, old))):
+        g.remove((s_, p_, old))
+        g.add((s_, p_, new))
+    srcs = load_sources(tmp_path / "empty", extra_files=_mini(tmp_path))
+    rows = {r.requirement: r for r in audit_requirements(read_requirements(EXAMPLE_REQ), srcs, g)}
+    assert rows["Air handling unit (Haystack)"].graph_uses == 1
+
+
+def test_offline_parsing_rejects_external_resources(tmp_path):
+    from open_fdd.ontology_audit.sources import parse_rdf
+
+    remote = tmp_path / "remote.jsonld"
+    remote.write_text(json.dumps({"@context": "https://example.invalid/ctx.jsonld", "@id": "urn:x:a",
+                                  "name": "a"}), encoding="utf-8")
+    nested = tmp_path / "nested.jsonld"
+    nested.write_text(json.dumps({"@graph": [{"@context": ["file:///etc/passwd"], "@id": "urn:x:b"}]}),
+                      encoding="utf-8")
+    xml = tmp_path / "ent.rdf"
+    xml.write_text('<?xml version="1.0"?><!DOCTYPE r [<!ENTITY e SYSTEM "file:///etc/passwd">]>'
+                   '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>', encoding="utf-8")
+    for path in (remote, nested, xml):
+        with pytest.raises(ValueError):
+            parse_rdf(path)
+    inline = tmp_path / "inline.jsonld"
+    inline.write_text(json.dumps({"@context": {"name": "http://schema.org/name"}, "@id": "urn:x:c", "name": "c"}),
+                      encoding="utf-8")
+    assert len(parse_rdf(inline)) == 1
+    (src,) = [s for s in load_sources(tmp_path / "none", extra_files=[remote]) if s.name == "local:remote"]
+    assert src.status == "SOURCE_UNAVAILABLE" and "external" in src.detail
+    assert main(["--graph", str(remote), "--out", str(tmp_path / "o")]) == 2
+
+
 def test_canonical_haystack_iris():
     assert canonical_iri("https://project-haystack.org/def/phIoT/4.0.0#ahu") == \
         canonical_iri("https://project-haystack.org/def/phIoT/ahu") == "https://project-haystack.org/def/phIoT/ahu"
@@ -177,6 +215,18 @@ def test_refresh_checks_the_hash(tmp_path, monkeypatch):
     (got,) = sources_mod.refresh(tmp_path, log=None)
     assert got.status == "SOURCE_UNAVAILABLE" and "differs" in got.detail
     assert not (tmp_path / spec["file"]).exists() and not list(tmp_path.glob("*.part"))
+
+
+def test_unreadable_pinned_source_does_not_stop_the_audit(tmp_path, monkeypatch):
+    spec = _pin(monkeypatch, MINI_BRICK)
+    (tmp_path / spec["file"]).write_bytes(MINI_BRICK.encode("utf-8"))
+
+    def denied(path):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(sources_mod, "sha256_file", denied)
+    (src,) = load_sources(tmp_path)
+    assert src.status == "SOURCE_UNAVAILABLE" and "unreadable" in src.detail
 
 
 def test_manifest_pins_every_source():
@@ -250,6 +300,16 @@ def test_shacl_shapes_pass_the_example_and_catch_a_missing_site_ref():
     assert res["conforms"] is False and any("siteRef" in v["message"] for v in res["violations"])
 
 
+def test_shacl_validation_failure_is_a_clean_error(monkeypatch):
+    pyshacl = pytest.importorskip("pyshacl")
+
+    from open_fdd.ontology_audit.shacl import validate_shacl
+
+    monkeypatch.setattr(pyshacl, "validate", lambda *a, **k: (False, Exception("VALUES not supported"), ""))
+    with pytest.raises(ValueError, match="failed to run"):
+        validate_shacl(_example_graph())
+
+
 def test_shacl_without_pyshacl_reports_unavailable(monkeypatch):
     from open_fdd.ontology_audit import shacl
 
@@ -300,6 +360,49 @@ def test_cli_errors_and_sources(tmp_path, capsys):
     assert main([str(tmp_path / "missing.csv"), "--out", str(tmp_path)]) == 2
     assert main(["--sources"]) == 0
     assert {s["name"] for s in json.loads(capsys.readouterr().out)} == {"brick", "s223p", "haystack"}
+
+
+NF_VARS = ("NF_URL", "NFURL", "NF_LAN_URL", "NF_ENV_FILE", "NF_CLIENT_ID", "NF_CLIENT_SECRET", "NF_CONSOLE_USER",
+           "NF_CONSOLE_PASSWORD", "NF_CA_FILE")
+
+
+def test_from_nf_without_configuration_exits_2(tmp_path, monkeypatch, capsys):
+    for var in NF_VARS:
+        monkeypatch.delenv(var, raising=False)
+    assert main(["--from-nf", "--out", str(tmp_path)]) == 2
+    assert "NF" in capsys.readouterr().err
+
+
+def test_from_nf_url_keeps_credentials_from_the_environment(monkeypatch):
+    from open_fdd.nf import client as nf_client
+    from open_fdd.nf import sparql_data
+    from open_fdd.ontology_audit import nf_adapter
+
+    seen = {}
+
+    def fake_from_env(cls, via=None, env_file=None, env=None, **kw):
+        seen.update(via=via, env=dict(env or {}))
+        return object()
+
+    monkeypatch.setenv("NF_CLIENT_ID", "id-from-env")
+    monkeypatch.setattr(nf_client.NFClient, "from_env", classmethod(fake_from_env))
+    monkeypatch.setattr(sparql_data, "hook_transport", lambda client, app: ("t", app))
+    monkeypatch.setattr(sparql_data, "rdf_turtle", lambda transport: ("@prefix x: <urn:x:> .", transport[1]))
+    turtle, app = nf_adapter.fetch_turtle(url="https://nf.example.test", via="portal", app="lite")
+    assert seen["env"]["NF_URL"] == "https://nf.example.test" and seen["env"]["NF_CLIENT_ID"] == "id-from-env"
+    assert seen["via"] is None and app == sparql_data.APP_LITE
+
+
+def test_check_ttl_exempts_only_literal_rule_refs(tmp_path):
+    pytest.importorskip("pyoxigraph")
+    script = ROOT / "tools" / "rdf-check" / "check_ttl.py"
+    ok = subprocess.run([sys.executable, str(script), str(EXAMPLE_TTL)], capture_output=True, text=True)
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    bad = tmp_path / "literal_siteref.ttl"
+    bad.write_text(EXAMPLE_TTL.read_text(encoding="utf-8").replace(
+        "phIoT:siteRef local:22222222-0000-4000-8000-000000000001", 'phIoT:siteRef "site-1"', 1), encoding="utf-8")
+    res = subprocess.run([sys.executable, str(script), str(bad)], capture_output=True, text=True)
+    assert res.returncode == 1 and "dangling ref" in res.stdout
 
 
 def test_audit_does_not_import_the_nf_client():

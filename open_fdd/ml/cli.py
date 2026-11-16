@@ -115,7 +115,7 @@ def _cmd_detect(args) -> int:
         if train.empty:
             raise ValueError("no training rows: pass --train or a --train-until inside the data")
         det.fit(train)
-    learned = list(getattr(det, "roles", []) or [])
+    learned = list(getattr(det, "roles", []) or []) if det.needs_training else []
     if learned:
         from open_fdd.ml.detectors import canonical_roles
 

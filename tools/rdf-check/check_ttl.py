@@ -25,7 +25,8 @@ HAS_TAG = [p for p in g.predicates() if str(p).endswith("hasTag")][0]
 typed = {s for s in g.subjects(RDF.type, None) if not isinstance(s, BNode)}
 
 for s, p, o in g.triples((None, None, None)):
-    if p in REF and not isinstance(o, Literal) and o not in typed:
+    literal_rule = str(p).endswith("ruleRef") and isinstance(o, Literal)  # rule ids are literals; other refs are entities
+    if p in REF and not literal_rule and o not in typed:
         problems.append(f"dangling ref: {s} {p} {o}")
 used_local = {o for _, _, o in g if is_local(o)} | {s for s in g.subjects() if is_local(s)}
 for n in sorted(used_local - typed):

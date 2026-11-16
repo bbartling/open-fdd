@@ -154,6 +154,14 @@ def test_grey_box_without_usable_residuals_raises():
         GreyBox().fit(_synthetic_ahu(n=10, seed=3))
 
 
+def test_grey_box_refit_drops_the_earlier_baseline():
+    det = GreyBox().fit(_synthetic_ahu(seed=3))
+    assert det.thresholds_
+    with pytest.raises(ValueError, match="learned no residual"):
+        det.fit(_synthetic_ahu(n=10, seed=4))
+    assert det.thresholds_ == {}
+
+
 def test_rolling_adapter_uses_existing_detectors():
     frame = _synthetic_ahu(seed=6)
     frame.iloc[500, frame.columns.get_loc("return-air-temp")] += 5.0
@@ -302,6 +310,19 @@ def test_cli_detect_rejects_a_folder_missing_a_trained_role(tmp_path, capsys):
     (target / "column_map.json").write_text(json.dumps(cmap), encoding="utf-8")
     assert main(["detect", str(target), "--method", "pca", "--train", str(train), "--out", str(tmp_path / "o")]) == 2
     assert "mixed-air-temp" in capsys.readouterr().err
+
+
+def test_cli_detect_untrained_method_accepts_a_partial_folder(tmp_path):
+    from open_fdd.ml.cli import main
+
+    full = _device_folder(tmp_path)
+    part = tmp_path / "AHU_3"
+    part.mkdir()
+    pd.read_csv(full / "history_wide.csv").drop(columns=["mixed_air_temp"]).to_csv(part / "history_wide.csv", index=False)
+    cmap = json.loads((full / "column_map.json").read_text(encoding="utf-8"))
+    cmap["points"].pop("mixed-air-temp")
+    (part / "column_map.json").write_text(json.dumps(cmap), encoding="utf-8")
+    assert main(["detect", str(part), "--method", "zscore", "--out", str(tmp_path / "z")]) == 0
 
 
 def test_cli_benchmark_without_cache_is_a_clean_error(tmp_path, capsys):

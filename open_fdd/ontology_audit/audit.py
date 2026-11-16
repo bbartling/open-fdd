@@ -47,20 +47,21 @@ def _from_term(row: AuditRow, term) -> None:
 
 
 def _graph_uses(graph, iri: str) -> int:
+    """Uses as predicate or object; ``graph`` is already normalized (canonical Haystack IRIs)."""
     from rdflib import URIRef
 
-    variants = {iri, canonical_iri(iri)}
-    n = 0
-    for v in variants:
-        u = URIRef(v)
-        n += sum(1 for _ in graph.triples((None, None, u))) + sum(1 for _ in graph.triples((None, u, None)))
-    return n
+    u = URIRef(canonical_iri(iri))
+    return sum(1 for _ in graph.triples((None, None, u))) + sum(1 for _ in graph.triples((None, u, None)))
 
 
 def audit_requirements(requirements: Iterable[Requirement], sources: list, graph=None, *,
                        candidate_limit: int = 3) -> list[AuditRow]:
     """Check each requirement against the loaded sources (and count its URI's uses in ``graph`` when given)."""
     index = TermIndex.build(sources)
+    if graph is not None:
+        from open_fdd.ontology_audit.doctor import normalize_graph
+
+        graph = normalize_graph(graph)
     any_loaded = any(s.loaded for s in sources)
     out = []
     for req in requirements:

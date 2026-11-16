@@ -42,11 +42,9 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _parse_graph(path: Path):
-    from rdflib import Graph
+    from open_fdd.ontology_audit.sources import parse_rdf
 
-    from open_fdd.ontology_audit.sources import RDF_SUFFIXES
-
-    return Graph().parse(str(path), format=RDF_SUFFIXES.get(path.suffix.lower(), "turtle"))
+    return parse_rdf(path)
 
 
 def run(args) -> int:
@@ -100,11 +98,9 @@ def _run(args) -> int:
     if graph is not None:
         shacl = None
         if args.shacl:
-            from rdflib import Graph
-
             from open_fdd.ontology_audit.shacl import validate_shacl
 
-            shapes = None if args.shacl == "default" else Graph().parse(args.shacl)
+            shapes = None if args.shacl == "default" else _parse_graph(Path(args.shacl))
             shacl = validate_shacl(graph, shapes)
         report = doctor(graph, sources)
         paths = write_doctor(report, args.out, shacl)

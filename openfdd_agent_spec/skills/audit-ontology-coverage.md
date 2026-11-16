@@ -26,4 +26,5 @@ Issue #1569. Tool list: `docs/pypi-agent-tools.md`. Nothing here assigns rules, 
 app's `rdf` hook and saves `nf_model.ttl` in the report folder. That is a consumer of the NF export, not a second producer.
 
 Change the example graph only by editing `tests/fixtures/ontology_audit/two_sat_ahu_model.json` and regenerating with
-`node tools/rdf-check/gen_ttl.js` (a test fails on drift). Tests: `pytest tests/test_ontology_audit.py`.
+`node tools/rdf-check/gen_ttl.js tests/fixtures/ontology_audit/two_sat_ahu_model.json open_fdd/ontology_audit/data/example_building.ttl`
+(a test fails on drift). Tests: `pytest tests/test_ontology_audit.py`.

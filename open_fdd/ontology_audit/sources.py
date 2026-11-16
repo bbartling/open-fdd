@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import urllib.request
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -82,13 +83,18 @@ def refresh(ontology_dir: Path | None = None, names: Iterable[str] | None = None
             src.status, src.detail = "CACHED", "already cached"
             out.append(src)
             continue
-        tmp = dest.with_suffix(dest.suffix + ".part")
+        fd, tmp_name = tempfile.mkstemp(prefix=dest.name + ".", suffix=".part", dir=target)
+        tmp = Path(tmp_name)
         try:
             req = urllib.request.Request(spec["url"], headers={"User-Agent": "open-fdd-ontology-audit"})
-            with urllib.request.urlopen(req, timeout=timeout) as resp, open(tmp, "wb") as f:  # noqa: S310 - pinned URL
+            with urllib.request.urlopen(req, timeout=timeout) as resp, os.fdopen(fd, "wb") as f:  # noqa: S310
                 while chunk := resp.read(1 << 20):
                     f.write(chunk)
         except OSError as exc:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
             tmp.unlink(missing_ok=True)
             src.detail = f"download failed: {exc}"
             out.append(src)
@@ -114,11 +120,43 @@ def _from_spec(spec: dict[str, Any], path: Path) -> LoadedSource:
                         path=str(path))
 
 
-def _parse(path: Path):
+def _external_contexts(node) -> list[str]:
+    """Remote / file ``@context`` references anywhere in a JSON-LD document."""
+    found: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "@context":
+                for ctx in value if isinstance(value, list) else [value]:
+                    if isinstance(ctx, str):
+                        found.append(ctx)
+                    else:
+                        found.extend(_external_contexts(ctx))
+            else:
+                found.extend(_external_contexts(value))
+    elif isinstance(node, list):
+        for item in node:
+            found.extend(_external_contexts(item))
+    return found
+
+
+def parse_rdf(path: Path):
+    """Parse a local RDF file without any network or file side loads.
+
+    JSON-LD with a remote or file ``@context`` and RDF/XML with a DOCTYPE (external entities) are rejected with
+    ``ValueError``: offline means only this file's own bytes, which are what the recorded hash covers.
+    """
     from rdflib import Graph
 
+    path = Path(path)
     fmt = RDF_SUFFIXES.get(path.suffix.lower(), "turtle")
-    return Graph().parse(str(path), format=fmt)
+    data = path.read_bytes()
+    if fmt == "json-ld":
+        external = _external_contexts(json.loads(data.decode("utf-8")))
+        if external:
+            raise ValueError(f"{path.name}: external JSON-LD @context not loaded offline: {', '.join(external[:3])}")
+    if fmt == "xml" and b"<!DOCTYPE" in data[:4096].upper():
+        raise ValueError(f"{path.name}: RDF/XML with a DOCTYPE (external entities) is not loaded")
+    return Graph().parse(data=data, format=fmt)
 
 
 def _namespaces_of(graph) -> list[str]:
@@ -152,14 +190,17 @@ def load_sources(ontology_dir: Path | None = None, names: Iterable[str] | None =
         src = _from_spec(spec, path)
         if not path.is_file():
             src.detail = f"not cached: run with --refresh (downloads {spec['url']})"
-        elif (got := sha256_file(path)) != spec["sha256"]:
-            src.detail = f"sha256 {got} differs from the pinned {spec['sha256']}"
-        else:
-            try:
-                src.graph = _parse(path)
+            out.append(src)
+            continue
+        try:
+            got = sha256_file(path)
+            if got != spec["sha256"]:
+                src.detail = f"sha256 {got} differs from the pinned {spec['sha256']}"
+            else:
+                src.graph = parse_rdf(path)
                 src.status, src.detail = "LOADED", f"{len(src.graph)} triples"
-            except Exception as exc:  # noqa: BLE001 - report, do not crash the audit
-                src.detail = f"parse failed: {exc}"
+        except Exception as exc:  # noqa: BLE001 - one bad source must not stop the audit
+            src.detail = f"unreadable: {exc}"
         out.append(src)
     local = [p for p in sorted(base.glob("*")) if p.suffix.lower() in RDF_SUFFIXES and p.name not in pinned_files] \
         if base.is_dir() else []
@@ -169,7 +210,7 @@ def load_sources(ontology_dir: Path | None = None, names: Iterable[str] | None =
                            path=str(path))
         try:
             src.sha256 = sha256_file(path)
-            src.graph = _parse(path)
+            src.graph = parse_rdf(path)
             src.namespaces = _namespaces_of(src.graph)
             src.status, src.detail = "LOADED", f"{len(src.graph)} triples"
         except Exception as exc:  # noqa: BLE001

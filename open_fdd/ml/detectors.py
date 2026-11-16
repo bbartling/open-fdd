@@ -211,6 +211,7 @@ class GreyBox(Detector):
         return out
 
     def fit(self, normal: pd.DataFrame) -> "GreyBox":
+        self.tables_, self.centers_, self.thresholds_ = {}, {}, {}  # a refit never keeps an earlier baseline
         rows = normal[active_mask(canonical_roles(normal))]
         raw = self._raw(rows)
         if not raw:

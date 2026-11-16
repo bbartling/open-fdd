@@ -32,6 +32,8 @@ def validate_shacl(graph, shapes=None) -> dict[str, Any]:
         shapes = Graph().parse(data=default_shapes_text(), format="turtle")
     conforms, results, _ = validate(normalize_graph(graph), shacl_graph=shapes, inference="none",
                                     allow_warnings=True)
+    if not hasattr(results, "subjects"):  # pySHACL returns a ValidationFailure instead of a report graph
+        raise ValueError(f"SHACL validation failed to run: {results}")
     sh = Namespace("http://www.w3.org/ns/shacl#")
     violations = []
     for r in results.subjects(URIRef(str(sh) + "focusNode"), None):
