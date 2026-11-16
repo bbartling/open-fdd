@@ -27,7 +27,15 @@ const DAYS = 8;
 // open-fdd app option "timezone". Without the profile every site carries tz and /sites returns it.
 const REAL_NF = process.env.MOCK_PROFILE === "real-nf";
 const APP_TZ_OPTION = process.env.MOCK_APP_TIMEZONE || "";
-const NOW = Math.floor(Date.now() / 300e3) * 300e3;
+// MOCK_NOW=2026-11-18T20:00:00Z freezes the history clock (tests use this so a trailing
+// 2-day window cannot fall over a weekend; see #1647). Unset = wall clock.
+function mockNowMs() {
+  const raw = process.env.MOCK_NOW;
+  const ms = raw ? Date.parse(raw) : Date.now();
+  if (!Number.isFinite(ms)) throw new Error(`MOCK_NOW is not a valid time: ${raw}`);
+  return Math.floor(ms / 300e3) * 300e3;
+}
+const NOW = mockNowMs();
 const START = NOW - DAYS * 86400e3;
 
 // ---- synthetic signals (°F, %, inH₂O, cfm, kW) -------------------------------------------
