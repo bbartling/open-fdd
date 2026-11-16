@@ -3,9 +3,9 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
-## Unreleased
+## open-fdd 4.5.11 - 2026-11-16 (PyPI only; app stays 5.0.20)
 
-PyPI package only (next open-fdd release; the version is bumped when it is released). App unchanged (5.0.20).
+PyPI package only. App unchanged (5.0.20).
 Additive only: no module, CLI or doc was removed.
 
 - **ML FDD tools, benchmarked on public data.** New optional extra `open-fdd[ml]` and command `open-fdd-ml`
