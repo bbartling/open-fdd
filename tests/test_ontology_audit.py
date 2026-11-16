@@ -144,7 +144,10 @@ def test_offline_parsing_rejects_external_resources(tmp_path):
     xml = tmp_path / "ent.rdf"
     xml.write_text('<?xml version="1.0"?><!DOCTYPE r [<!ENTITY e SYSTEM "file:///etc/passwd">]>'
                    '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>', encoding="utf-8")
-    for path in (remote, nested, xml):
+    imported = tmp_path / "import.jsonld"
+    imported.write_text(json.dumps({"@context": {"@import": "https://example.invalid/context"}, "@id": "urn:x:d"}),
+                        encoding="utf-8")
+    for path in (remote, nested, xml, imported):
         with pytest.raises(ValueError):
             parse_rdf(path)
     inline = tmp_path / "inline.jsonld"
@@ -154,6 +157,17 @@ def test_offline_parsing_rejects_external_resources(tmp_path):
     (src,) = [s for s in load_sources(tmp_path / "none", extra_files=[remote]) if s.name == "local:remote"]
     assert src.status == "SOURCE_UNAVAILABLE" and "external" in src.detail
     assert main(["--graph", str(remote), "--out", str(tmp_path / "o")]) == 2
+
+
+def test_relative_iris_resolve_against_the_file(tmp_path):
+    from rdflib import URIRef
+
+    from open_fdd.ontology_audit.sources import parse_rdf
+
+    vocab = tmp_path / "vocab.ttl"
+    vocab.write_text("<#AHU> a <http://www.w3.org/2002/07/owl#Class> .\n", encoding="utf-8")
+    (subject,) = set(parse_rdf(vocab).subjects())
+    assert subject == URIRef(vocab.resolve().as_uri() + "#AHU")
 
 
 def test_canonical_haystack_iris():

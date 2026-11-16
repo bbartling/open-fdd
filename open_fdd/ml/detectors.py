@@ -232,6 +232,8 @@ class GreyBox(Detector):
         return self
 
     def residuals(self, frame: pd.DataFrame) -> pd.DataFrame:
+        if not self.thresholds_:  # never fitted, or the last fit failed: never report "no faults" silently
+            raise RuntimeError("grey_box is not fitted: call fit() on known-good data first")
         raw = self._raw(frame)
         cols = {}
         for key, table in self.tables_.items():

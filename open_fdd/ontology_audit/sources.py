@@ -125,7 +125,9 @@ def _external_contexts(node) -> list[str]:
     found: list[str] = []
     if isinstance(node, dict):
         for key, value in node.items():
-            if key == "@context":
+            if key == "@import" and isinstance(value, str):  # JSON-LD 1.1 context import is a fetch too
+                found.append(value)
+            elif key == "@context":
                 for ctx in value if isinstance(value, list) else [value]:
                     if isinstance(ctx, str):
                         found.append(ctx)
@@ -156,7 +158,8 @@ def parse_rdf(path: Path):
             raise ValueError(f"{path.name}: external JSON-LD @context not loaded offline: {', '.join(external[:3])}")
     if fmt == "xml" and b"<!DOCTYPE" in data[:4096].upper():
         raise ValueError(f"{path.name}: RDF/XML with a DOCTYPE (external entities) is not loaded")
-    return Graph().parse(data=data, format=fmt)
+    # the file URI as base, so relative IRIs such as <#AHU> resolve to the file, not the working directory
+    return Graph().parse(data=data, format=fmt, publicID=path.resolve().as_uri())
 
 
 def _namespaces_of(graph) -> list[str]:

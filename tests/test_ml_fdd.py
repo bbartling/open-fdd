@@ -160,6 +160,10 @@ def test_grey_box_refit_drops_the_earlier_baseline():
     with pytest.raises(ValueError, match="learned no residual"):
         det.fit(_synthetic_ahu(n=10, seed=4))
     assert det.thresholds_ == {}
+    with pytest.raises(RuntimeError, match="not fitted"):
+        det.flags(_synthetic_ahu(seed=5))
+    with pytest.raises(RuntimeError, match="not fitted"):
+        GreyBox().scores(_synthetic_ahu(seed=5))
 
 
 def test_rolling_adapter_uses_existing_detectors():
