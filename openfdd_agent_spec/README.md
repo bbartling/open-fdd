@@ -13,7 +13,7 @@ Skills: [add-rcx-chart](skills/add-rcx-chart.md), [add-or-tune-fdd-rule](skills/
 [model-a-site-in-nf](skills/model-a-site-in-nf.md), [deploy-to-nf-box](skills/deploy-to-nf-box.md),
 [security-checks](skills/security-checks.md), [typescript](skills/typescript.md),
 [bacnet-validate](skills/bacnet-validate.md), [nf-gotchas](skills/nf-gotchas.md), [pypi-nf-agent](skills/pypi-nf-agent.md),
-[install-upgrade-troubleshoot](skills/install-upgrade-troubleshoot.md).
+[install-upgrade-troubleshoot](skills/install-upgrade-troubleshoot.md), [ml-fdd](skills/ml-fdd.md), [audit-ontology-coverage](skills/audit-ontology-coverage.md).
 
 ## How agents use it
 

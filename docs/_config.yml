@@ -62,6 +62,7 @@ exclude:
   - development.md
   - plot-spec.md
   - changelog.md
+  - ml/*.md
 
 mermaid:
   version: "10.9.1"

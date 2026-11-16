@@ -87,8 +87,7 @@ python3 -m pytest tests -q
 
 ### FDD rules in SQL and pandas
 
-The fault rules also work on their own, without NF: as SQL on PostgreSQL / TimescaleDB, or as pandas in Python.
-Every rule runs in SI units. Imperial data (°F, inH₂O, cfm) is converted to SI before the rules run.
+The rules also run without NF: SQL on PostgreSQL / TimescaleDB, or pandas in Python. Imperial data (°F, inH₂O, cfm) is converted to SI first.
 
 | | SQL (PostgreSQL / TimescaleDB) | pandas (Python, used for testing) |
 |---|---|---|
@@ -96,16 +95,20 @@ Every rule runs in SI units. Imperial data (°F, inH₂O, cfm) is converted to S
 | Cookbook | [SQL cookbook](https://bbartling.github.io/open-fdd/rules/sql-cookbook.html): each rule's inputs, SI parameters and full SQL | [pandas cookbook](https://bbartling.github.io/open-fdd/rules/pandas-cookbook.html): source plus a runnable example per rule |
 | Thresholds | [`sql/fdd/tuning_catalog.json`](sql/fdd/tuning_catalog.json): defaults for every rule | SI defaults in each rule; any difference from SQL is listed in the parity report |
 
-The two implementations are checked against each other in CI. The [pandas vs SQL parity report](https://bbartling.github.io/open-fdd/rules/parity.html) shows which rules match and explains each known difference.
+CI checks the two against each other; the [parity report](https://bbartling.github.io/open-fdd/rules/parity.html) explains each known difference.
 
-## Python package
+## AI agent tools (Python)
 
 ```bash
-pip install open-fdd
+pip install open-fdd                          # ECM / ROI calculators and workbooks
+pip install "open-fdd[nf,anomaly,ml]"         # NF + SPARQL client, anomaly screening, ML detectors
 ```
 
-Pandas versions of the fault rules plus command-line tools for working with NF data, reports and ECM analysis.
-The package is versioned separately from the NF app. See [Python tools](https://bbartling.github.io/open-fdd/python-tools.html).
+Extras: `oracle` (pandas rules), `nf`, `analytics`, `anomaly`, `ml`, `ml-copod`, `ontology`, `ontology-shacl`, `reporting`, `rdf`, `duckdb`, `postgres`, `ecm-web`.
+Commands: `open-fdd-nf`, `open-fdd-anomaly`, `open-fdd-ml`, `open-fdd-report`, `open-fdd-ecm`, `open-fdd-ontology-audit`, `open-fdd-version`.
+Every tool with an example: [PyPI agent tools](https://bbartling.github.io/open-fdd/pypi-agent-tools.html).
+The ML detectors are benchmarked on public LBNL AHU data: [results](docs/ml/lbnl-ahu-benchmark.md).
+The package (4.x) is versioned separately from the NF app (5.x).
 
 ## Support
 

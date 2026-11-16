@@ -1,0 +1,12 @@
+category,requirement,description,candidate_URI,vocabulary,reviewer_notes
+Equipment,Air handling unit,Equipment that conditions and delivers air,brick:Air_Handling_Unit,Brick,
+Equipment,Air handling unit (Haystack),Haystack marker for an AHU,phIoT:ahu,Haystack,
+Point,Supply air temperature sensor,Measures the temperature of the air leaving the unit,brick:Supply_Air_Temperature_Sensor,Brick,
+Point,Mixed air temperature sensor,Measures the temperature of the mixed air,,,
+Topology,Duct connection between two pieces of equipment,Air flows from one connectable to another,s223:Duct,ASHRAE 223P,
+Topology,Equipment feeds equipment,Downstream relationship,brick:feeds,Brick,
+History,Link from a point to its stored history,Time series reference with an id and a store,ref:hasExternalReference,Brick,
+Typo check,Supply air temperature sensr,Misspelled URI to show a mapping review,brick:Supply_Air_Temperature_Sensr,Brick,
+FDD output,Fault hours of one rule on one equipment,Hours with a confirmed fault in the analysis window,,,
+FDD output,Assessed zero versus missing coverage,A rule that ran and found nothing versus one that could not run,,,
+FDD output,Rule reference on a result point,Stable rule id such as SV-RATE,urn:openfdd:ns#ruleRef,Open-FDD,

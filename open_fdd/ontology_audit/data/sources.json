@@ -1,0 +1,37 @@
+{
+  "manifest": "open-fdd ontology sources v1",
+  "note": "Pinned snapshots. --refresh downloads only these, checks sha256 and refuses a file whose hash differs.",
+  "sources": [
+    {
+      "name": "brick",
+      "vocabulary": "Brick",
+      "version": "1.5.0",
+      "url": "https://github.com/BrickSchema/Brick/releases/download/v1.5.0/Brick.ttl",
+      "sha256": "f665c93e5426a66257a8f34173ceb87a4674b9b15286e0390a5a61cfb905f8a9",
+      "license": "BSD-3-Clause",
+      "file": "Brick-1.5.0.ttl",
+      "namespaces": ["https://brickschema.org/schema/Brick#", "https://brickschema.org/schema/Brick/ref#",
+                     "https://brickschema.org/schema/BrickTag#"]
+    },
+    {
+      "name": "s223p",
+      "vocabulary": "ASHRAE 223P",
+      "version": "open223 models.open223.info@3a47c5eb980eb6d87728eb10cefb38ad6bc83f13 (ontology git:master@6fdc11c 2026-10-06)",
+      "url": "https://raw.githubusercontent.com/open223/models.open223.info/3a47c5eb980eb6d87728eb10cefb38ad6bc83f13/ontologies/223p.ttl",
+      "sha256": "08f80bd6e15052f28cdfd354bdf46ff96e5e1afdba36a4dbed5186fc1ea51c41",
+      "license": "see https://data.ashrae.org/standard223/ (community copy from open223, not endorsed by ASHRAE)",
+      "file": "223p-6fdc11c.ttl",
+      "namespaces": ["http://data.ashrae.org/standard223#"]
+    },
+    {
+      "name": "haystack",
+      "vocabulary": "Project Haystack",
+      "version": "defs 4.0.0",
+      "url": "https://www.project-haystack.org/download/defs.ttl",
+      "sha256": "d1d634e9d9d5191f30b9e4a92cc8a555801242665d6b8f79a29ce0bccfb18678",
+      "license": "AFL-3.0",
+      "file": "haystack-defs-4.0.0.ttl",
+      "namespaces": ["https://project-haystack.org/def/"]
+    }
+  ]
+}

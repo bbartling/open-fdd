@@ -1,0 +1,14 @@
+{
+  "note": "Synthetic, generic NF model: one AHU with two discharge-air temperature sensors bound to one role, a fault-result point and a weather point. Turtle: node tools/rdf-check/gen_ttl.js <this> example_building.ttl",
+  "records": [
+    { "uuid": "22222222-0000-4000-8000-000000000001", "name": "Site 1", "pointType": "SITE", "attrs": { "id": "site-1" } },
+    { "uuid": "22222222-0000-4000-8000-000000000002", "name": "AHU-1", "pointType": "EQUIPMENT", "attrs": { "id": "AHU-1", "siteRef": "site-1", "markers": "equip,ahu" } },
+    { "uuid": "22222222-0000-4000-8000-000000000003", "name": "CTRL-1", "pointType": "DEVICE", "attrs": { "id": "CTRL-1", "siteRef": "site-1", "equipRef": "AHU-1", "markers": "device,bacnet,controller" } },
+    { "uuid": "22222222-0000-4000-8000-000000000010", "name": "SAT-1", "pointType": "POINT", "attrs": { "siteRef": "site-1", "equipRef": "AHU-1", "deviceRef": "CTRL-1", "markers": "point,sensor,discharge,air,temp,his,cur", "kind": "Number", "unit": "degC", "dis": "Discharge air temp 1", "ofddRole": "discharge-air-temp" } },
+    { "uuid": "22222222-0000-4000-8000-000000000011", "name": "SAT-2", "pointType": "POINT", "attrs": { "siteRef": "site-1", "equipRef": "AHU-1", "deviceRef": "CTRL-1", "markers": "point,sensor,discharge,air,temp,his,cur", "kind": "Number", "unit": "degC", "dis": "Discharge air temp 2", "ofddRole": "discharge-air-temp" } },
+    { "uuid": "22222222-0000-4000-8000-000000000012", "name": "MAT", "pointType": "POINT", "attrs": { "siteRef": "site-1", "equipRef": "AHU-1", "markers": "point,sensor,mixed,air,temp,his,cur", "kind": "Number", "unit": "degC" } },
+    { "uuid": "22222222-0000-4000-8000-000000000013", "name": "SF-CMD", "pointType": "POINT", "attrs": { "siteRef": "site-1", "equipRef": "AHU-1", "markers": "point,cmd,discharge,fan,run,his,cur", "kind": "Bool" } },
+    { "uuid": "22222222-0000-4000-8000-000000000020", "name": "FDD SV-RATE AHU-1", "pointType": "POINT", "attrs": { "siteRef": "site-1", "equipRef": "AHU-1", "markers": "point,fdd,fault,his", "kind": "Number", "unit": "h", "ruleRef": "SV-RATE", "dis": "SV-RATE fault hours" } },
+    { "uuid": "22222222-0000-4000-8000-000000000030", "name": "WX-OAT", "pointType": "POINT", "attrs": { "siteRef": "site-1", "weatherStationRef": "wx-1", "markers": "point,sensor,weather,outside,air,temp,his", "kind": "Number", "unit": "degC" } }
+  ]
+}

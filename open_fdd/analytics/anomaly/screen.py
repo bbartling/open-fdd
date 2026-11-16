@@ -24,6 +24,9 @@ from open_fdd.analytics.anomaly.detectors_ml import IFOREST_CONTAMINATION, STL_T
 from open_fdd.analytics.anomaly.io import load_device_folder
 
 VALID_METHODS = ("zscore", "mad", "stl", "iforest")
+#: ``pandas`` (default) or ``sql``: where the z-score runs. ``sql`` runs ``sql/analytics/anomaly_zscore.sql`` on an
+#: in-process SQLite core (``open_fdd.analytics.sql_anomaly``); the other methods always run in Python.
+VALID_ENGINES = ("pandas", "sql")
 SCOREBOARD_COLUMNS = [
     "point",
     "role",
@@ -132,6 +135,7 @@ def _write_readme(
     median_dt: pd.Timedelta,
     top_n: int,
     max_days: int,
+    engine: str = "pandas",
 ) -> None:
     method_rows = {
         "zscore": f"| zscore | SQL-portable (pandas/numpy) | abs Z-score > {ZSCORE_THRESHOLD:g} |",
@@ -155,6 +159,9 @@ def _write_readme(
         "",
         "Z-score and MAD are **SQL-portable** rolling statistics (no sklearn/statsmodels).",
         "STL and Isolation Forest are **Python-only** and require `open-fdd[anomaly]`.",
+        f"Z-score engine: **{engine}**"
+        + (" (`sql/analytics/anomaly_zscore.sql` on in-process SQLite, each point's non-missing samples)."
+           if engine == "sql" else " (pandas)."),
         "",
         "## Methods selected",
         "",
@@ -227,13 +234,17 @@ def screen_folder(
     max_days: int = 10,
     methods: list[str] | tuple[str, ...] | None = None,
     command: str | None = None,
+    engine: str = "pandas",
 ) -> ScreenResult:
     """Screen AHU IO points and write the scoreboard, README, and plots.
 
     Support plots cover every non-skipped point. Day zooms cover the top
-    ``top_n`` points and at most ``max_days`` UTC days each.
+    ``top_n`` points and at most ``max_days`` UTC days each. ``engine="sql"``
+    computes the z-score with the portable SQL query instead of pandas.
     """
     chosen = _parse_methods(methods)
+    if engine not in VALID_ENGINES:
+        raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(VALID_ENGINES)}")
     destination = Path(out_dir)
     destination.mkdir(parents=True, exist_ok=True)
 
@@ -241,6 +252,14 @@ def screen_folder(
     window = samples_per_day(device.frame.index)
     period = max(window, 2)
     median_dt = median_sample_delta(device.frame.index)
+
+    sql_zscore: pd.DataFrame | None = None
+    if engine == "sql" and "zscore" in chosen:
+        from open_fdd.analytics.sql_anomaly import zscore_flags_sql
+
+        columns = list(dict.fromkeys(column for _role, column in device.points))
+        numeric = device.frame[columns].apply(pd.to_numeric, errors="coerce")
+        sql_zscore = zscore_flags_sql(numeric, window=window, threshold=ZSCORE_THRESHOLD, engine="sqlite")
 
     rows: list[dict[str, object]] = []
     flags_by_point: dict[str, dict[str, pd.Series]] = {}
@@ -274,7 +293,10 @@ def screen_folder(
             continue
         point_flags: dict[str, pd.Series] = {}
         for method in chosen:
-            flags = _flags_for_method(method, series, window=window, period=period)
+            if method == "zscore" and sql_zscore is not None:
+                flags = sql_zscore[column].astype(bool)
+            else:
+                flags = _flags_for_method(method, series, window=window, period=period)
             point_flags[method] = flags
             rows.append(
                 {
@@ -300,6 +322,7 @@ def screen_folder(
         median_dt=median_dt,
         top_n=int(top_n),
         max_days=int(max_days),
+        engine=engine,
     )
 
     top_points = _rank_points(scoreboard, int(top_n))

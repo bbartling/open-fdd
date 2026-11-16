@@ -1,0 +1,147 @@
+@prefix ph: <https://project-haystack.org/def/ph/> .
+@prefix phScience: <https://project-haystack.org/def/phScience/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phIct: <https://project-haystack.org/def/phIct/> .
+@prefix ref: <https://brickschema.org/schema/Brick/ref#> .
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix schema: <https://schema.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix local: <urn:test:> .
+
+local:22222222-0000-4000-8000-000000000001
+    a phIoT:site ;
+    rdfs:label "Site 1" ;
+    ph:hasTag phIoT:site .
+
+local:22222222-0000-4000-8000-000000000002
+    a phIoT:equip ;
+    rdfs:label "AHU-1" ;
+    ph:hasTag phIoT:equip, phIoT:ahu ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 .
+
+local:22222222-0000-4000-8000-000000000003
+    a phIct:device ;
+    rdfs:label "CTRL-1" ;
+    ph:hasTag phIct:device, phIct:bacnet, phIct:controller ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 ;
+    phIoT:equipRef local:22222222-0000-4000-8000-000000000002 .
+
+local:wx-1
+    a phIoT:weatherStation ;
+    rdfs:label "wx-1" ;
+    ph:hasTag phIoT:weatherStation .
+
+local:22222222-0000-4000-8000-000000000010
+    a phIoT:point ;
+    rdfs:label "Discharge air temp 1" ;
+    ph:hasTag phIoT:point, phIoT:sensor, phIoT:discharge, phScience:air, phScience:temp, phIoT:his, phIoT:cur ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 ;
+    phIoT:equipRef local:22222222-0000-4000-8000-000000000002 ;
+    phIct:deviceRef local:22222222-0000-4000-8000-000000000003 ;
+    ph:unit "degC" ;
+    ph:kind "Number" ;
+    local:ofddRole "discharge-air-temp" ;
+    ref:hasExternalReference [ a ref:TimeseriesReference ;
+            rdfs:label "NF history" ;
+            ref:hasTimeseriesId "22222222-0000-4000-8000-000000000010" ;
+            ref:storedAt local:store_nf ;
+            schema:url <http://nf.example.test/api/v1/point/data?uuids=22222222-0000-4000-8000-000000000010> ] .
+
+local:22222222-0000-4000-8000-000000000011
+    a phIoT:point ;
+    rdfs:label "Discharge air temp 2" ;
+    ph:hasTag phIoT:point, phIoT:sensor, phIoT:discharge, phScience:air, phScience:temp, phIoT:his, phIoT:cur ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 ;
+    phIoT:equipRef local:22222222-0000-4000-8000-000000000002 ;
+    phIct:deviceRef local:22222222-0000-4000-8000-000000000003 ;
+    ph:unit "degC" ;
+    ph:kind "Number" ;
+    local:ofddRole "discharge-air-temp" ;
+    ref:hasExternalReference [ a ref:TimeseriesReference ;
+            rdfs:label "NF history" ;
+            ref:hasTimeseriesId "22222222-0000-4000-8000-000000000011" ;
+            ref:storedAt local:store_nf ;
+            schema:url <http://nf.example.test/api/v1/point/data?uuids=22222222-0000-4000-8000-000000000011> ] .
+
+local:22222222-0000-4000-8000-000000000012
+    a phIoT:point ;
+    rdfs:label "MAT" ;
+    ph:hasTag phIoT:point, phIoT:sensor, phIoT:mixed, phScience:air, phScience:temp, phIoT:his, phIoT:cur ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 ;
+    phIoT:equipRef local:22222222-0000-4000-8000-000000000002 ;
+    ph:unit "degC" ;
+    ph:kind "Number" ;
+    ref:hasExternalReference [ a ref:TimeseriesReference ;
+            rdfs:label "NF history" ;
+            ref:hasTimeseriesId "22222222-0000-4000-8000-000000000012" ;
+            ref:storedAt local:store_nf ;
+            schema:url <http://nf.example.test/api/v1/point/data?uuids=22222222-0000-4000-8000-000000000012> ] .
+
+local:22222222-0000-4000-8000-000000000013
+    a phIoT:point ;
+    rdfs:label "SF-CMD" ;
+    ph:hasTag phIoT:point, phIoT:cmd, phIoT:discharge, phIoT:fan, phIoT:run, phIoT:his, phIoT:cur ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 ;
+    phIoT:equipRef local:22222222-0000-4000-8000-000000000002 ;
+    ph:kind "Bool" ;
+    ref:hasExternalReference [ a ref:TimeseriesReference ;
+            rdfs:label "NF history" ;
+            ref:hasTimeseriesId "22222222-0000-4000-8000-000000000013" ;
+            ref:storedAt local:store_nf ;
+            schema:url <http://nf.example.test/api/v1/point/data?uuids=22222222-0000-4000-8000-000000000013> ] .
+
+local:22222222-0000-4000-8000-000000000020
+    a phIoT:point ;
+    rdfs:label "SV-RATE fault hours" ;
+    ph:hasTag phIoT:point, local:fdd, local:fault, phIoT:his ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 ;
+    phIoT:equipRef local:22222222-0000-4000-8000-000000000002 ;
+    ph:unit "h" ;
+    ph:kind "Number" ;
+    local:ruleRef "SV-RATE" ;
+    ref:hasExternalReference [ a ref:TimeseriesReference ;
+            rdfs:label "NF history" ;
+            ref:hasTimeseriesId "22222222-0000-4000-8000-000000000020" ;
+            ref:storedAt local:store_nf ;
+            schema:url <http://nf.example.test/api/v1/point/data?uuids=22222222-0000-4000-8000-000000000020> ] .
+
+local:22222222-0000-4000-8000-000000000030
+    a phIoT:point ;
+    rdfs:label "WX-OAT" ;
+    ph:hasTag phIoT:point, phIoT:sensor, phIoT:weather, phIoT:outside, phScience:air, phScience:temp, phIoT:his ;
+    phIoT:siteRef local:22222222-0000-4000-8000-000000000001 ;
+    phIoT:weatherStationRef local:wx-1 ;
+    ph:unit "degC" ;
+    ph:kind "Number" ;
+    ref:hasExternalReference [ a ref:TimeseriesReference ;
+            rdfs:label "NF history" ;
+            ref:hasTimeseriesId "22222222-0000-4000-8000-000000000030" ;
+            ref:storedAt local:store_nf ;
+            schema:url <http://nf.example.test/api/v1/point/data?uuids=22222222-0000-4000-8000-000000000030> ] .
+
+local:store_nf
+    a ref:Database ;
+    rdfs:label "Normal Framework point history" ;
+    schema:description "Time series read with GET /api/v1/point/data?uuids=<ref:hasTimeseriesId>" ;
+    schema:url <http://nf.example.test> .
+
+local:ofddRole
+    a rdf:Property ;
+    rdfs:label "ofddRole" ;
+    rdfs:comment "Open-FDD rule input role of the point (explicit binding)" .
+
+local:ruleRef
+    a rdf:Property ;
+    rdfs:label "ruleRef" ;
+    rdfs:comment "Open-FDD rule this result point belongs to" .
+
+local:fault
+    a ph:marker ;
+    rdfs:label "fault" ;
+    rdfs:comment "site-specific tag (not in the Haystack libs)" .
+
+local:fdd
+    a ph:marker ;
+    rdfs:label "fdd" ;
+    rdfs:comment "site-specific tag (not in the Haystack libs)" .

@@ -17,6 +17,7 @@ modeled equipment, points and history, runs SQL fault rules in SI units, and wri
 | [Lite vs Full](editions.html) | The two NF app editions, charts and CSV export |
 | [Normal Framework](normal-framework.html) | Install, upgrade, security and the API, linking to the NF docs |
 | [Legacy](legacy.html) | Unsupported earlier deployments |
+| [PyPI agent tools](pypi-agent-tools.html) | Every Python tool on PyPI: rules, NF and SPARQL clients, analytics, anomaly, ML, reports, ECM / ROI |
 
 Source and release history: [GitHub](https://github.com/bbartling/open-fdd) and
 [releases](https://github.com/bbartling/open-fdd/releases).
