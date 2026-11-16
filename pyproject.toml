@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "4.5.10"
+version = "4.5.11"
 description = "Open-FDD Python tools: pandas reference FDD rules (SI), Normal Framework data access for AI agents, reports and ECM workbooks."
 readme = "README.md"
 license = { text = "MIT" }
@@ -39,8 +39,11 @@ keywords = [
     "ai-agent",
     "reporting",
 ]
+# Floors are the latest stable releases tested for 4.5.11 (no upper bounds, as before; pydantic keeps <3).
+# Libraries whose latest release dropped an older Python keep a floor for that Python behind a marker:
+# pandas 3.x / scikit-learn 1.9 / matplotlib 3.11 / duckdb 2.x need 3.11+, numpy 2.5 / scipy 1.18 need 3.12+.
 dependencies = [
-    "openpyxl>=3.1.0",
+    "openpyxl>=3.1.5",
 ]
 
 [project.urls]
@@ -54,28 +57,36 @@ open-fdd-report = "open_fdd.reporting.cli:main"
 open-fdd-version = "open_fdd.version:main"
 open-fdd-anomaly = "open_fdd.analytics.anomaly.cli:main"
 open-fdd-nf = "open_fdd.nf.cli:main"
+open-fdd-ml = "open_fdd.ml.cli:main"
 
 [project.optional-dependencies]
 ecm-web = [
-    "fastapi>=0.115",
-    "uvicorn>=0.34",
-    "pydantic>=2.4,<3",
+    "fastapi>=0.163.1; python_version >= '3.11'",
+    "fastapi>=0.162.5; python_version < '3.11'",
+    "uvicorn>=0.54.0",
+    "pydantic>=2.14.3,<3",
 ]
 oracle = [
-    "pandas>=2.0.0",
-    "numpy>=1.26.0",
-    "pyyaml>=6.0",
+    "pandas>=3.1.1; python_version >= '3.11'",
+    "pandas>=2.3.3; python_version < '3.11'",
+    "numpy>=2.5.5; python_version >= '3.12'",
+    "numpy>=2.4.6; python_version == '3.11'",
+    "numpy>=2.2.6; python_version < '3.11'",
+    "pyyaml>=6.0.3",
 ]
 reporting = [
     "open-fdd[oracle]",
-    "python-docx>=1.1.0",
-    "openpyxl>=3.1.0",
-    "matplotlib>=3.8.0",
-    "plotly>=5.22.0",
-    "kaleido>=0.2.1",
+    "python-docx>=1.2.0",
+    "openpyxl>=3.1.5",
+    "matplotlib>=3.11.2; python_version >= '3.11'",
+    "matplotlib>=3.10.9; python_version < '3.11'",
+    "plotly>=7.1.0",
+    "kaleido>=1.5.1",
+    "requests>=2.34.2",
 ]
 analytics = [
     "open-fdd[oracle]",
+    "requests>=2.34.2",
 ]
 # Read a Normal Framework box: SI frames + the pandas rules (client itself is stdlib only).
 nf = [
@@ -83,39 +94,64 @@ nf = [
 ]
 # Read the NF app's RDF/Turtle export.
 rdf = [
-    "rdflib>=7.0",
+    "rdflib>=7.6.0",
 ]
-# Offline SQL parity replay (borrowing sql/fdd on DuckDB).
+# Offline SQL parity replay (borrowing sql/fdd on DuckDB); also the in-process DuckDB engine of the SQL analytics.
 duckdb = [
-    "duckdb>=1.0.0",
+    "duckdb>=2.0.0; python_version >= '3.11'",
+    "duckdb>=1.5.6; python_version < '3.11'",
 ]
 # Standalone PostgreSQL parity driver.
 postgres = [
-    "psycopg[binary]>=3.1",
+    "psycopg[binary]>=3.3.9",
 ]
 anomaly = [
-    "pandas>=2.0.0",
-    "numpy>=1.26.0",
-    "matplotlib>=3.9.0",
-    "statsmodels>=0.14.0",
-    "scikit-learn>=1.3.0",
+    "open-fdd[oracle]",
+    "matplotlib>=3.11.2; python_version >= '3.11'",
+    "matplotlib>=3.10.9; python_version < '3.11'",
+    "statsmodels>=0.15.0",
+    "scikit-learn>=1.9.1; python_version >= '3.11'",
+    "scikit-learn>=1.7.2; python_version < '3.11'",
+    "scipy>=1.18.1; python_version >= '3.12'",
+    "scipy>=1.17.1; python_version == '3.11'",
+    "scipy>=1.15.3; python_version < '3.11'",
+    "requests>=2.34.2",
+]
+# ML FDD benchmark (LBNL data) and detectors: open-fdd-ml. Core install unchanged.
+ml = [
+    "open-fdd[oracle]",
+    "matplotlib>=3.11.2; python_version >= '3.11'",
+    "matplotlib>=3.10.9; python_version < '3.11'",
+    "scikit-learn>=1.9.1; python_version >= '3.11'",
+    "scikit-learn>=1.7.2; python_version < '3.11'",
+    "scipy>=1.18.1; python_version >= '3.12'",
+    "scipy>=1.17.1; python_version == '3.11'",
+    "scipy>=1.15.3; python_version < '3.11'",
+]
+# COPOD for open-fdd-ml (pyod pulls numba + llvmlite, kept out of the ml extra).
+ml-copod = [
+    "open-fdd[ml]",
+    "pyod>=3.6.8",
 ]
 test = [
-    "pytest>=7.0",
+    "pytest>=9.2.0",
     "open-fdd[reporting]",
     "open-fdd[anomaly]",
-    "duckdb>=1.0.0; python_version < '3.14'",
+    "open-fdd[ml]",
+    "duckdb>=2.0.0; python_version >= '3.11'",
+    "duckdb>=1.5.6; python_version < '3.11'",
 ]
 dev = [
-    "pytest>=7.0",
-    "build>=1.2.0",
-    "twine>=6.0.0",
+    "pytest>=9.2.0",
+    "build>=1.6.1",
+    "twine>=7.0.0",
     "open-fdd[reporting]",
     "open-fdd[anomaly]",
+    "open-fdd[ml]",
 ]
 release = [
-    "build>=1.2.0",
-    "twine>=6.0.0",
+    "build>=1.6.1",
+    "twine>=7.0.0",
 ]
 
 [tool.setuptools.packages.find]

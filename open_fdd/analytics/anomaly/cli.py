@@ -12,6 +12,10 @@ Example::
 Defaults: ``--top-n 5 --max-days 10 --methods zscore,mad,stl,iforest``.
 Z-score and MAD are SQL-portable (pandas/numpy). STL and Isolation Forest
 are Python-only and require ``pip install "open-fdd[anomaly]"``.
+
+``screen --engine sql`` computes the z-score with ``sql/analytics/anomaly_zscore.sql``
+on an in-process SQLite core (standard library), the query Open-FDD databases run
+(issue #1649); flags match the pandas detector on each point's non-missing samples.
 """
 
 from __future__ import annotations
@@ -58,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--methods",
         default=DEFAULT_METHODS,
         help=f"Comma-separated detectors (default {DEFAULT_METHODS})",
+    )
+    screen.add_argument(
+        "--engine",
+        choices=("pandas", "sql"),
+        default="pandas",
+        help="Where the z-score runs: pandas (default) or sql (portable SQL on in-process SQLite)",
     )
     report = sub.add_parser(
         "report",
@@ -162,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_days=int(args.max_days),
                 methods=methods,
                 command=command,
+                engine=str(args.engine),
             )
         else:
             from open_fdd.reporting.single_system_typst import build_single_system_report

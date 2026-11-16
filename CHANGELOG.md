@@ -7,6 +7,52 @@ Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) 
 
 (nothing yet)
 
+## open-fdd 4.5.11 (PyPI) - 2026-11-16
+
+App unchanged (5.0.20). Additive only: no module, CLI or doc was removed.
+
+- **ML FDD tools, benchmarked on public data.** New optional extra `open-fdd[ml]` and command `open-fdd-ml`
+  (`download`, `benchmark`, `detect`): PCA + SPE with per-role contributions, gray-box residuals (mixed-air balance,
+  cooling coil delta-T, SAT error), mode-gated one-class SVM, COPOD (`open-fdd[ml-copod]`, pyod), and the existing z-score
+  / MAD, scored with LBNL-style metrics (TPR, FPR, detection delay) against the pandas rule pack on the LBNL single-duct
+  AHU data (CC BY 4.0, downloaded to a cache, never committed). Results and method: `docs/ml/lbnl-ahu-benchmark.md`
+  (gray-box 43.3 % mean TPR at 3.2 % FPR vs tuned rules 36.4 % at 3.1 %; one-class SVM 59.9 % at 4.7 %; PCA, COPOD,
+  z-score and MAD do worse than the rules).
+- **SQL z-score (#1649).** `sql/analytics/anomaly_zscore.sql` ports the archived 4.x z-score to the v5 SI core
+  (`fdd.point` + `fdd.input_sample`) as portable SQL (PostgreSQL / Timescale, DuckDB, SQLite), packaged as
+  `open_fdd/data/anomaly_zscore.sql`, with `open_fdd.analytics.sql_anomaly`. Flags equal `rolling_zscore_flags` on the
+  seeded parity dataset (basic and edge) on SQLite, DuckDB and PostgreSQL (the parity workflow's postgres job now runs it
+  and fails on a skip). `open-fdd-anomaly screen --engine sql` uses it.
+- **Docs.** New published page *PyPI agent tools* (every command and module) linked from the README and the docs home;
+  `docs/python-tools.md` gains anomaly / SQL / ML sections; agent skill `ml-fdd`.
+- **Dependencies.** Floors raised to the latest stable releases (no upper bounds, as before). Where the latest release
+  dropped Python 3.10 or 3.11, a marker keeps the newest release that supports it:
+
+  | Package | Old floor | New floor |
+  |---|---|---|
+  | openpyxl (core) | 3.1.0 | 3.1.5 |
+  | pandas | 2.0.0 | 3.1.1 (3.10: 2.3.3) |
+  | numpy | 1.26.0 | 2.5.5 (3.11: 2.4.6, 3.10: 2.2.6) |
+  | PyYAML | 6.0 | 6.0.3 |
+  | scikit-learn | 1.3.0 | 1.9.1 (3.10: 1.7.2) |
+  | SciPy | not declared | 1.18.1 (3.11: 1.17.1, 3.10: 1.15.3) |
+  | statsmodels | 0.14.0 | 0.15.0 |
+  | matplotlib | 3.8.0 / 3.9.0 | 3.11.2 (3.10: 3.10.9) |
+  | plotly | 5.22.0 | 7.1.0 |
+  | kaleido | 0.2.1 | 1.5.1 |
+  | python-docx | 1.1.0 | 1.2.0 |
+  | requests | not declared (used by Open-Meteo fetch) | 2.34.2 |
+  | rdflib | 7.0 | 7.6.0 |
+  | duckdb | 1.0.0 (test: Python < 3.14 only) | 2.0.0 (3.10: 1.5.6; test extra now on 3.11+) |
+  | psycopg[binary] | 3.1 | 3.3.9 |
+  | fastapi | 0.115 | 0.163.1 (3.10: 0.162.5) |
+  | uvicorn | 0.34 | 0.54.0 |
+  | pydantic | 2.4 (< 3) | 2.14.3 (< 3) |
+  | pyod (new `ml-copod`) | - | 3.6.8 |
+  | pytest | 7.0 | 9.2.0 |
+  | build | 1.2.0 | 1.6.1 |
+  | twine | 6.0.0 | 7.0.0 |
+
 ## 5.0.20 - 2026-11-14 (app) / open-fdd 4.5.10 (PyPI)
 
 - **Overview is the RCx dashboard.** The RCx and Points tabs are gone: Overview shows the site summary, the RCx panels for every modeled device at once (no device picker on the charts), and the Points section (live cards, I/O, every point, history) with the only device picker. A panel appears only when the model has its equipment (no chiller, hot-water plant, DX/compressor or zones = no such panel); empty cards and groups are hidden. Old `#rcx` and `#points` links open Overview. No "All devices" choice anywhere; devices sort alphabetically with natural numbers. The RCx math is unchanged.

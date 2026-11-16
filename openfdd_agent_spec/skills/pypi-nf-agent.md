@@ -28,4 +28,8 @@ Full guide: `docs/python-tools.md`. The package is 4.x; the NF app is 5.x (`open
    `unknown`; `unknown` (no data) is never `ok`. An ambiguous `--equip` is an error listing the candidates: add `--site`
    or pass the uuid. Details: `docs/python-tools.md`.
 
+10. **Offline anomaly and ML** (no NF needed): `open-fdd-anomaly screen FOLDER --out DIR [--engine sql]` (z-score in
+    portable SQL with `--engine sql`), `open-fdd-ml detect | benchmark | download` (`open-fdd[ml]`). See the `ml-fdd` skill
+    and `docs/pypi-agent-tools.md` for every tool.
+
 Python: `NFClient.from_env()` -> `load_model` -> `equipment_frames(client, model, start, end)` -> `run_rules(frames)`.

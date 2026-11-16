@@ -34,6 +34,11 @@ openfdd-backups/
 /reports/
 *.db
 
+# ---- ML benchmark data (LBNL downloads go to ~/.cache/open-fdd/lbnl; never commit them) ----
+lbnl-cache/
+*_annual.csv
+!tests/fixtures/lbnl_sdahu/*.csv
+
 # ---- editor / OS / agent scratch ------------------------------------------------------
 .DS_Store
 .worktrees/
