@@ -8,11 +8,12 @@ nav_order: 16
 Install the PyPI package with the extras needed for your task:
 
 ```bash
-pip install open-fdd[nf]          # NF client, pandas frames, reference rules
-pip install open-fdd[reporting]   # reports
-pip install open-fdd[rdf]         # Turtle reader
-pip install open-fdd[anomaly]     # open-fdd-anomaly screening and reports
-pip install open-fdd[ml]          # open-fdd-ml: ML detectors and the LBNL benchmark
+pip install "open-fdd[nf]"        # NF client, pandas frames, reference rules
+pip install "open-fdd[reporting]" # reports
+pip install "open-fdd[rdf]"       # Turtle reader
+pip install "open-fdd[anomaly]"   # open-fdd-anomaly screening and reports
+pip install "open-fdd[ml]"        # open-fdd-ml: ML detectors and the LBNL benchmark
+pip install "open-fdd[ontology]"  # open-fdd-ontology-audit (add ontology-shacl for SHACL)
 ```
 
 The full list of commands and modules is on the [PyPI agent tools](https://bbartling.github.io/open-fdd/pypi-agent-tools.html) page.
@@ -72,8 +73,25 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 
 ```bash
 open-fdd-ml download                     # LBNL single-duct AHU subset (CC BY 4.0) -> ~/.cache/open-fdd/lbnl
-open-fdd-ml benchmark --out bench.md     # rule pack vs PCA/SPE, gray-box, one-class SVM, COPOD, z-score, MAD
+open-fdd-ml benchmark --out bench.md     # rule pack vs PCA/SPE, gray-box, one-class SVM, z-score, MAD
+# COPOD needs pip install "open-fdd[ml-copod]" (pyod); with open-fdd[ml] alone that row is skipped
 open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ahu1_ml
 ```
 
 Method, data, mapping and results: [docs/ml/lbnl-ahu-benchmark.md](ml/lbnl-ahu-benchmark.md).
+
+## Ontology audit and model doctor (`open-fdd-ontology-audit`)
+
+Offline and read-only; NF is optional (#1569).
+
+```bash
+open-fdd-ontology-audit --example --out ./r                         # synthetic sheet + two-sensor AHU graph
+open-fdd-ontology-audit req.xlsx --refresh --out ./r                # pinned Brick / 223P / Haystack, sha256-checked
+open-fdd-ontology-audit req.xlsx --graph building.ttl --shacl --out ./r
+open-fdd-ontology-audit --from-nf --out ./r                          # optional: the app's RDF export (open-fdd[nf])
+```
+
+Requirement statuses: `VERIFIED_TERM` (URI declared in the snapshot, not a semantic endorsement), `CANDIDATE_REVIEW`
+(label match only), `MAPPING_REVIEW` (namespace known, term absent), `EXTENSION_REVIEW`, `SOURCE_UNAVAILABLE`.
+Reports: `audit.xlsx/csv/json`, `doctor.md/json`, `terms.csv`. It never assigns rules or writes tags.
+

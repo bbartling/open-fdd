@@ -149,6 +149,11 @@ def test_grey_box_residuals_catch_a_stuck_damper():
     assert healthy < 0.05 and stuck > healthy + 0.2
 
 
+def test_grey_box_without_usable_residuals_raises():
+    with pytest.raises(ValueError, match="learned no residual"):
+        GreyBox().fit(_synthetic_ahu(n=10, seed=3))
+
+
 def test_rolling_adapter_uses_existing_detectors():
     frame = _synthetic_ahu(seed=6)
     frame.iloc[500, frame.columns.get_loc("return-air-temp")] += 5.0
@@ -223,6 +228,40 @@ def test_benchmark_requires_fault_free_first():
         run_benchmark(frames=_fixture_frames(), files=FIXTURE_FILES[::-1], log=None)
 
 
+def test_benchmark_uses_only_the_selected_files():
+    from open_fdd.ml.benchmark import run_benchmark
+
+    frames = _fixture_frames()
+    only_normal = run_benchmark(frames=frames, files=FIXTURE_FILES[:1], methods=["zscore"], log=None)
+    assert {s["fault_file"] for s in only_normal.scores} == {FIXTURE_FILES[0].name}
+    with pytest.raises(ValueError, match="no frame"):
+        run_benchmark(frames={FIXTURE_FILES[0].name: frames[FIXTURE_FILES[0].name]}, files=FIXTURE_FILES, log=None)
+
+
+def test_range_reader_rejects_a_server_that_ignores_ranges(monkeypatch):
+    class Resp:
+        def __init__(self, status, headers, body=b""):
+            self.status, self.headers, self._body = status, headers, body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self, n=-1):
+            return self._body
+
+    replies = [Resp(200, {"Content-Length": "100", "Accept-Ranges": "bytes"}), Resp(200, {}, b"x" * 100)]
+    monkeypatch.setattr(lbnl.urllib.request, "urlopen", lambda req, timeout=None: replies.pop(0))
+    reader = lbnl._HttpRangeFile("https://example.invalid/a.zip")
+    with pytest.raises(OSError, match="206"):
+        reader.read(10)
+    monkeypatch.setattr(lbnl.urllib.request, "urlopen", lambda req, timeout=None: Resp(200, {}))
+    with pytest.raises(OSError, match="Content-Length"):
+        lbnl._HttpRangeFile("https://example.invalid/a.zip")
+
+
 # ---- CLI --------------------------------------------------------------------------------------------------------
 
 def _device_folder(tmp_path: Path) -> Path:
@@ -248,6 +287,21 @@ def test_cli_detect_writes_flags_and_contributions(tmp_path):
     assert (out / "flags.csv").is_file() and (out / "contributions.csv").is_file()
     assert main(["detect", str(folder), "--method", "grey_box", "--train-until", "2018-07-05",
                  "--out", str(tmp_path / "gb")]) == 0
+
+
+def test_cli_detect_rejects_a_folder_missing_a_trained_role(tmp_path, capsys):
+    from open_fdd.ml.cli import main
+
+    train = _device_folder(tmp_path)
+    target = tmp_path / "AHU_2"
+    target.mkdir()
+    wide = pd.read_csv(train / "history_wide.csv").drop(columns=["mixed_air_temp"])
+    wide.to_csv(target / "history_wide.csv", index=False)
+    cmap = json.loads((train / "column_map.json").read_text(encoding="utf-8"))
+    cmap["points"].pop("mixed-air-temp")
+    (target / "column_map.json").write_text(json.dumps(cmap), encoding="utf-8")
+    assert main(["detect", str(target), "--method", "pca", "--train", str(train), "--out", str(tmp_path / "o")]) == 2
+    assert "mixed-air-temp" in capsys.readouterr().err
 
 
 def test_cli_benchmark_without_cache_is_a_clean_error(tmp_path, capsys):

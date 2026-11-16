@@ -1,7 +1,7 @@
 # ML FDD benchmark on the LBNL single-duct AHU data
 
 This page records how the `open-fdd[ml]` detectors and the Open-FDD pandas rule pack were tested on public, labeled
-fault data, and what came out. Every number below was produced by `open-fdd-ml benchmark` (open-fdd 4.5.11) on the
+fault data, and what came out. Every number below was produced by `open-fdd-ml benchmark` (this branch of open-fdd) on the
 files listed here; nothing is estimated or copied from a paper. Where a method does worse than the rules, the table says so.
 
 ## Data

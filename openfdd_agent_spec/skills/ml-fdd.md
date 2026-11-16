@@ -19,4 +19,10 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
    proves SQL == `rolling_zscore_flags` on the seeded parity dataset (Postgres in the parity workflow's postgres job).
 4. Keep `open_fdd.ml` out of the core import path (a test checks `import open_fdd` loads no sklearn). COPOD needs `pyod`
    (`open-fdd[ml-copod]`, pulls numba); its tests skip without it.
-5. Tests: `pytest tests/test_ml_fdd.py tests/test_sql_anomaly_zscore.py`. Results tables hold measured numbers only.
+5. **Anomaly CLI** (`open-fdd[anomaly]`): `open-fdd-anomaly screen FOLDER --out DIR` (z-score, MAD, STL, Isolation
+   Forest; `--engine pandas|sql`), `open-fdd-anomaly report FOLDER --out DIR --month YYYY-MM [--compile]` (Typst / PDF).
+   Anomalies are single-signal outliers, not faults: the benchmark shows z-score / MAD flag healthy hours as often.
+6. **Dependencies**: floors only, at the latest stable releases (pandas 3.1.1, numpy 2.5.5, scikit-learn 1.9.1,
+   SciPy 1.18.1, statsmodels 0.15.0, DuckDB 2.0.0, pyod 3.6.8, ...; see `CHANGELOG.md`), with `python_version` markers
+   where a release dropped 3.10 / 3.11. Keep the 3.10-3.15 matrix green; add a marker, never an `==` pin.
+7. Tests: `pytest tests/test_ml_fdd.py tests/test_sql_anomaly_zscore.py`. Results tables hold measured numbers only.

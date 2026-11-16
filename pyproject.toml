@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-fdd"
-version = "4.5.11"
+version = "4.5.10"
 description = "Open-FDD Python tools: pandas reference FDD rules (SI), Normal Framework data access for AI agents, reports and ECM workbooks."
 readme = "README.md"
 license = { text = "MIT" }
@@ -39,7 +39,7 @@ keywords = [
     "ai-agent",
     "reporting",
 ]
-# Floors are the latest stable releases tested for 4.5.11 (no upper bounds, as before; pydantic keeps <3).
+# Floors are the latest stable releases tested on 2026-11-16 (no upper bounds, as before; pydantic keeps <3).
 # Libraries whose latest release dropped an older Python keep a floor for that Python behind a marker:
 # pandas 3.x / scikit-learn 1.9 / matplotlib 3.11 / duckdb 2.x need 3.11+, numpy 2.5 / scipy 1.18 need 3.12+.
 dependencies = [
@@ -58,6 +58,7 @@ open-fdd-version = "open_fdd.version:main"
 open-fdd-anomaly = "open_fdd.analytics.anomaly.cli:main"
 open-fdd-nf = "open_fdd.nf.cli:main"
 open-fdd-ml = "open_fdd.ml.cli:main"
+open-fdd-ontology-audit = "open_fdd.ontology_audit.cli:main"
 
 [project.optional-dependencies]
 ecm-web = [
@@ -133,11 +134,21 @@ ml-copod = [
     "open-fdd[ml]",
     "pyod>=3.6.8",
 ]
+# open-fdd-ontology-audit: requirements coverage audit and model doctor (#1569); SHACL is optional
+ontology = [
+    "rdflib>=7.6.0",
+    "openpyxl>=3.1.5",
+]
+ontology-shacl = [
+    "open-fdd[ontology]",
+    "pyshacl>=0.40.2",
+]
 test = [
     "pytest>=9.2.0",
     "open-fdd[reporting]",
     "open-fdd[anomaly]",
     "open-fdd[ml]",
+    "open-fdd[ontology-shacl]",
     "duckdb>=2.0.0; python_version >= '3.11'",
     "duckdb>=1.5.6; python_version < '3.11'",
 ]
@@ -148,6 +159,7 @@ dev = [
     "open-fdd[reporting]",
     "open-fdd[anomaly]",
     "open-fdd[ml]",
+    "open-fdd[ontology-shacl]",
 ]
 release = [
     "build>=1.6.1",
@@ -159,6 +171,7 @@ include = ["open_fdd*"]
 
 [tool.setuptools.package-data]
 "open_fdd" = ["data/*.json", "data/*.sql"]
+"open_fdd.ontology_audit" = ["data/*.json", "data/*.csv", "data/*.ttl"]
 "open_fdd.ecm_engineering" = [
     "data/*.xlsx",
     "data/*.json",

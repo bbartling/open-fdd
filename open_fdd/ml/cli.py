@@ -115,6 +115,14 @@ def _cmd_detect(args) -> int:
         if train.empty:
             raise ValueError("no training rows: pass --train or a --train-until inside the data")
         det.fit(train)
+    learned = list(getattr(det, "roles", []) or [])
+    if learned:
+        from open_fdd.ml.detectors import canonical_roles
+
+        target_cols = set(canonical_roles(frame).columns)
+        lacking = [r for r in learned if r not in target_cols]
+        if lacking:
+            raise ValueError(f"the folder lacks role(s) the model was trained on: {', '.join(lacking)}")
     flags = det.flags(frame)
     out = args.out
     out.mkdir(parents=True, exist_ok=True)

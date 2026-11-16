@@ -225,6 +225,9 @@ class GreyBox(Detector):
             self.tables_[key] = table
             self.centers_[key] = float(resid.median())
             self.thresholds_[key] = float(np.quantile((resid - self.centers_[key]).abs(), self.quantile))
+        if not self.thresholds_:
+            raise ValueError("gray-box learned no residual: needs the mixed-air / coil roles and enough active "
+                             "rows per bin on known-good data")
         return self
 
     def residuals(self, frame: pd.DataFrame) -> pd.DataFrame:

@@ -177,15 +177,24 @@ def zscore_flags_sql(frame, *, window: int, threshold: float = 3.0, engine: str 
     if index.tz is None:
         index = index.tz_localize("UTC")
     ts_ms = (index.tz_convert("UTC").as_unit("ns").asi8 // 1_000_000).astype("int64")
+    import numpy as np
+
     points, samples = [], []
     keys = {}
+    positions: dict[str, dict[int, int]] = {}
     for i, column in enumerate(frame.columns):
         values = pd.to_numeric(frame[column], errors="coerce")
         key = f"p{i}"
         keys[key] = column
         points.append({"site_id": DEFAULT_SITE, "point_key": key, "equipment_id": None, "role": str(column)})
         ok = values.notna().to_numpy()
-        samples.extend((DEFAULT_SITE, key, int(t), float(v)) for t, v in zip(ts_ms[ok], values.to_numpy()[ok]))
+        rows_ok = np.flatnonzero(ok)
+        ts_ok = ts_ms[ok]
+        # (point, ms timestamp) is the row identity in SQL: two non-missing samples of one point must not share it
+        if len(np.unique(ts_ok)) != len(ts_ok):
+            raise ValueError(f"column {column!r} has non-missing samples with the same millisecond timestamp")
+        positions[key] = {int(t): int(r) for t, r in zip(ts_ok, rows_ok)}
+        samples.extend((DEFAULT_SITE, key, int(t), float(v)) for t, v in zip(ts_ok, values.to_numpy()[ok]))
     conn = _connect(engine)
     try:
         create_core(conn, engine)
@@ -194,12 +203,12 @@ def zscore_flags_sql(frame, *, window: int, threshold: float = 3.0, engine: str 
     finally:
         conn.close()
     out = pd.DataFrame(False, index=frame.index, columns=frame.columns)
-    pos = {int(t): j for j, t in enumerate(ts_ms)}
     for row in rows:
         if not row["is_anomaly"]:
             continue
         t = row["ts"]
         t_ms = int(t) if engine == "sqlite" else int(pd.Timestamp(t).tz_localize("UTC").value // 1_000_000) \
             if pd.Timestamp(t).tzinfo is None else int(pd.Timestamp(t).value // 1_000_000)
-        out.iat[pos[t_ms], frame.columns.get_loc(keys[row["point_key"]])] = True
+        key = row["point_key"]
+        out.iat[positions[key][t_ms], frame.columns.get_loc(keys[key])] = True
     return out

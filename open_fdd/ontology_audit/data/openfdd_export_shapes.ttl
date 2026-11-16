@@ -1,0 +1,27 @@
+# SHACL shapes for the Open-FDD NF model export (Haystack IRIs in canonical, unversioned form).
+# Synthetic, public: they check structure only (refs and history links), not site content.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix ref: <https://brickschema.org/schema/Brick/ref#> .
+@prefix ofddsh: <urn:openfdd:shapes#> .
+
+ofddsh:PointShape a sh:NodeShape ;
+    sh:targetClass phIoT:point ;
+    sh:property [ sh:path phIoT:siteRef ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:message "a point needs exactly one siteRef" ] ;
+    sh:property [ sh:path phIoT:equipRef ; sh:maxCount 1 ; sh:message "a point has at most one equipRef" ] ;
+    sh:property [ sh:path ref:hasExternalReference ; sh:minCount 1 ; sh:node ofddsh:HistoryRefShape ;
+                  sh:message "a point needs a history reference" ] .
+
+ofddsh:HistoryRefShape a sh:NodeShape ;
+    sh:property [ sh:path ref:hasTimeseriesId ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+                  sh:message "a history reference needs exactly one string ref:hasTimeseriesId" ] ;
+    sh:property [ sh:path ref:storedAt ; sh:minCount 1 ; sh:message "a history reference needs ref:storedAt" ] .
+
+ofddsh:EquipShape a sh:NodeShape ;
+    sh:targetClass phIoT:equip ;
+    sh:property [ sh:path phIoT:siteRef ; sh:minCount 1 ; sh:maxCount 1 ;
+                  sh:message "equipment needs exactly one siteRef" ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:message "equipment needs a label" ] .

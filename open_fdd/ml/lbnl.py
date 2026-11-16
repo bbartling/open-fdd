@@ -99,7 +99,13 @@ class _HttpRangeFile(io.RawIOBase):
         self.pos = 0
         req = urllib.request.Request(url, method="HEAD")
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - fixed https URL
-            self.size = int(resp.headers["Content-Length"])
+            length = resp.headers.get("Content-Length")
+            ranges = (resp.headers.get("Accept-Ranges") or "").lower()
+        if not length or not length.isdigit():
+            raise OSError(f"{url}: no Content-Length, cannot read the zip by ranges")
+        if ranges and ranges != "bytes":
+            raise OSError(f"{url}: server does not accept byte ranges")
+        self.size = int(length)
 
     def readable(self) -> bool:
         return True
@@ -126,7 +132,11 @@ class _HttpRangeFile(io.RawIOBase):
         end = min(self.pos + want, self.size) - 1
         req = urllib.request.Request(self.url, headers={"Range": f"bytes={self.pos}-{end}"})
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:  # noqa: S310
-            data = resp.read()
+            if resp.status != 206:
+                raise OSError(f"{self.url}: expected HTTP 206 for a byte range, got {resp.status}")
+            data = resp.read(end - self.pos + 2)
+        if len(data) != end - self.pos + 1:
+            raise OSError(f"{self.url}: range {self.pos}-{end} returned {len(data)} bytes")
         buffer[: len(data)] = data
         self.pos += len(data)
         return len(data)

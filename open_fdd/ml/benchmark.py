@@ -105,6 +105,11 @@ def run_benchmark(
             frames[f.name] = lbnl.load_sdahu_csv(path)
             say(f"loaded {f.name}: {len(frames[f.name])} rows in {time.time() - t0:.1f}s")
 
+    selected = [f.name for f in files]
+    missing = [name for name in selected if name not in frames]
+    if missing:
+        raise ValueError(f"no frame for selected file(s): {', '.join(missing)}")
+    frames = {name: frames[name] for name in selected}
     normal_name = files[0].name
     normal = frames[normal_name]
     train_rows = normal[~test_weeks(normal.index)]

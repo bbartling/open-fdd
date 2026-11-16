@@ -20,6 +20,7 @@ find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`
 | `deploy/nf-caddy/` | Optional Caddy front door |
 | `open_fdd/`, `tests/parity/` | PyPI pandas reference rules and the pandas == SQL parity tests |
 | `open_fdd/ml/`, `sql/analytics/` | PyPI ML FDD tools (`open-fdd-ml`, LBNL benchmark) and portable SQL analytics (z-score) |
+| `open_fdd/ontology_audit/` | PyPI ontology coverage audit and RDF model doctor (`open-fdd-ontology-audit`, #1569), offline, read-only |
 | `tools/rdf-check/` | Turtle export checker |
 | `tools/bacnet-scan/` | Read-only BACnet/IP site scanner (CSV + RDF); run it on a PC, never on the NF box |
 | `docs/operations/nf/` | NF runbooks (internal, not published): Caddy front door, NF upgrade, Haystack tagging, BACnet validation, NF gotchas |

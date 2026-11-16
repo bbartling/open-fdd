@@ -104,8 +104,8 @@ pip install open-fdd                          # ECM / ROI calculators and workbo
 pip install "open-fdd[nf,anomaly,ml]"         # NF + SPARQL client, anomaly screening, ML detectors
 ```
 
-Extras: `oracle` (pandas rules), `nf`, `analytics`, `anomaly`, `ml`, `ml-copod`, `reporting`, `rdf`, `duckdb`, `postgres`, `ecm-web`.
-Commands: `open-fdd-nf`, `open-fdd-anomaly`, `open-fdd-ml`, `open-fdd-report`, `open-fdd-ecm`, `open-fdd-version`.
+Extras: `oracle` (pandas rules), `nf`, `analytics`, `anomaly`, `ml`, `ml-copod`, `ontology`, `ontology-shacl`, `reporting`, `rdf`, `duckdb`, `postgres`, `ecm-web`.
+Commands: `open-fdd-nf`, `open-fdd-anomaly`, `open-fdd-ml`, `open-fdd-report`, `open-fdd-ecm`, `open-fdd-ontology-audit`, `open-fdd-version`.
 Every tool with an example: [PyPI agent tools](https://bbartling.github.io/open-fdd/pypi-agent-tools.html).
 The ML detectors are benchmarked on public LBNL AHU data: [results](docs/ml/lbnl-ahu-benchmark.md).
 The package (4.x) is versioned separately from the NF app (5.x).

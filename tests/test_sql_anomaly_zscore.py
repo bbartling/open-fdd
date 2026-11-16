@@ -181,3 +181,13 @@ def test_screen_engine_sql_matches_pandas(tmp_path):
     assert "Z-score engine: **sql**" in (tmp_path / "sql" / "README.md").read_text(encoding="utf-8")
     with pytest.raises(ValueError):
         screen_folder(folder, tmp_path / "x", methods=["zscore"], engine="spark")
+
+
+def test_wide_frame_helper_keeps_row_identity_with_repeated_timestamps():
+    t = pd.to_datetime(["2026-01-05 00:00", "2026-01-05 00:05", "2026-01-05 00:10", "2026-01-05 00:10"], utc=True)
+    frame = pd.DataFrame({"a": [0.0, 0.0, 10.0, float("nan")]}, index=t)
+    got = zscore_flags_sql(frame, window=3, threshold=1.0, engine="sqlite")
+    assert got["a"].tolist() == [False, False, True, False]
+    frame.iloc[3, 0] = 1.0
+    with pytest.raises(ValueError, match="same millisecond"):
+        zscore_flags_sql(frame, window=3, threshold=1.0, engine="sqlite")
