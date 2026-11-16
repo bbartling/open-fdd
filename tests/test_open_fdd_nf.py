@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -34,6 +35,10 @@ from open_fdd.nf.units import to_si  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 NODE = shutil.which("node")
+
+# Mid-week, mid-occupancy in the mock (weekdays 12:00-23:00 UTC). A trailing 2-day
+# window ending here always includes a full occupied period. See #1647.
+FROZEN_NOW = datetime(2026, 11, 18, 20, 0, tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------- units
@@ -228,8 +233,9 @@ def mock_url():
     if not NODE:
         pytest.skip("node is required for the mock NF")
     port = _free_port()
+    env = {**os.environ, "MOCK_NOW": FROZEN_NOW.strftime("%Y-%m-%dT%H:%M:%SZ")}
     proc = subprocess.Popen([NODE, str(ROOT / "nf-app" / "dev" / "mock-nf.mjs"), str(port)],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=ROOT)
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=ROOT, env=env)
     url = f"http://127.0.0.1:{port}"
     try:
         for _ in range(100):
@@ -258,8 +264,17 @@ def model(client):
 
 @pytest.fixture(scope="module")
 def window():
-    end = datetime.now(timezone.utc).replace(microsecond=0)
-    return end - timedelta(days=2), end
+    return FROZEN_NOW - timedelta(days=2), FROZEN_NOW
+
+
+@pytest.fixture(autouse=True)
+def _pin_default_range_clock(monkeypatch):
+    """CLI --days and default_range() also end at FROZEN_NOW, not wall-clock now."""
+    from open_fdd.nf.model import default_range as _default_range
+    monkeypatch.setattr(
+        "open_fdd.nf.model.default_range",
+        lambda days, now=None: _default_range(days, now=now or FROZEN_NOW),
+    )
 
 
 def test_client_info_and_sites(client):
