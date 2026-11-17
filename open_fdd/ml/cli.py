@@ -23,11 +23,26 @@ from pathlib import Path
 DETECT_METHODS = ("pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
 
 
+FOLDER_EPILOG = """device folder format (read by open-fdd-ml detect and open-fdd-anomaly screen/report):
+  history_wide.csv   timestamp_utc (ISO 8601, UTC) + one column per point, SI values:
+                     degC, Pa, fractions 0-1 (commands may be 0-100 %), status 0/1
+  column_map.json    {"equipType": "AHU", "points": {"discharge-air-temp": "SAT", "fan-status": "SF_S"}}
+                     roles are Haystack-style names or their short aliases (--list-roles)
+
+examples:
+  open-fdd-ml make-folder trend.csv --out AHU_1 --time-col Time --tz America/Chicago \\
+      --map discharge-air-temp=SAT --map mixed-air-temp=MAT --map outside-air-temp=OAT --map fan-status=SF_S
+  open-fdd-ml make-folder --from-lbnl ~/.cache/open-fdd/lbnl/AHU_annual.csv --from 2018-06-01 --to 2018-06-30 --out AHU_1
+  open-fdd-ml make-folder --example --out demo_AHU
+"""
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="open-fdd-ml",
         description="ML FDD benchmark (LBNL data) and ML detectors. "
-                    "`open-fdd-ml methods [FOLDER]` lists each method's required roles and which can run on FOLDER.",
+                    "`open-fdd-ml methods [FOLDER]` lists each method's required roles and which can run on FOLDER. "
+                    "`open-fdd-ml make-folder --help` describes the device folder format and builds one.",
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -47,6 +62,25 @@ def build_parser() -> argparse.ArgumentParser:
     meth = sub.add_parser("methods", help="List each detector's required roles; with FOLDER, which can run there and why not")
     meth.add_argument("folder", type=Path, nargs="?", default=None, help="Device folder to check (optional)")
     meth.add_argument("--json", action="store_true", help="Print JSON instead of text")
+    mk = sub.add_parser(
+        "make-folder",
+        help="Build a device folder (history_wide.csv + column_map.json) from a CSV, an LBNL file or an example",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=FOLDER_EPILOG,
+    )
+    mk.add_argument("csv", type=Path, nargs="?", default=None, help="Wide CSV with a time column and one column per point")
+    mk.add_argument("--out", type=Path, default=None, help="Folder to write")
+    mk.add_argument("--map", action="append", default=[], metavar="ROLE=COLUMN",
+                    help="Role for a CSV column, repeatable (e.g. --map discharge-air-temp=SAT --map fan-status=SF_S)")
+    mk.add_argument("--time-col", default="timestamp_utc", help="Time column of CSV (default timestamp_utc)")
+    mk.add_argument("--tz", default="UTC", help="Zone of naive time stamps in CSV (default UTC), e.g. America/Chicago")
+    mk.add_argument("--equip-type", default="AHU", help="equipType for column_map.json (default AHU)")
+    mk.add_argument("--from-lbnl", type=Path, default=None, metavar="FILE",
+                    help="An LBNL SDAHU CSV from open-fdd-ml download (roles and SI units are mapped for you)")
+    mk.add_argument("--from", dest="start", default=None, help="First UTC date to keep (YYYY-MM-DD)")
+    mk.add_argument("--to", dest="end", default=None, help="Last UTC date to keep (YYYY-MM-DD, inclusive)")
+    mk.add_argument("--example", action="store_true", help="Write a small synthetic two-day AHU folder")
+    mk.add_argument("--list-roles", action="store_true", help="Print the role names (short alias -> role) and exit")
 
     det = sub.add_parser("detect", help="Fit a detector on known-good rows of a device folder and flag the rest")
     det.add_argument("folder", type=Path, help="Device folder (history_wide.csv + column_map.json), SI values")
@@ -163,6 +197,37 @@ def _cmd_detect(args) -> int:
     return 0
 
 
+def _cmd_make_folder(args) -> int:
+    from open_fdd.ml import folder as fm
+
+    if args.list_roles:
+        for short, role in fm.role_names().items():
+            print(f"{short:28s} {role}")
+        return 0
+    if args.out is None:
+        raise ValueError("--out is required")
+    chosen = [bool(args.example), args.from_lbnl is not None, args.csv is not None]
+    if sum(chosen) != 1:
+        raise ValueError("pass exactly one source: CSV, --from-lbnl FILE or --example")
+    if args.example:
+        path = fm.example_folder(args.out)
+    elif args.from_lbnl is not None:
+        path = fm.folder_from_lbnl(args.from_lbnl, args.out, start=args.start, end=args.end)
+    else:
+        mapping = {}
+        for item in args.map:
+            role, sep, column = str(item).partition("=")
+            if not sep or not role.strip() or not column.strip():
+                raise ValueError(f"--map needs ROLE=COLUMN, got {item!r}")
+            mapping[role.strip()] = column.strip()
+        path, warnings = fm.folder_from_csv(args.csv, args.out, mapping=mapping, time_col=args.time_col, tz=args.tz,
+                                            equip_type=args.equip_type, start=args.start, end=args.end)
+        for warning in warnings:
+            print(f"warning: {warning}", file=sys.stderr)
+    print(json.dumps({"folder": str(path), "files": ["history_wide.csv", "column_map.json"]}))
+    return 0
+
+
 def _cmd_methods(args) -> int:
     from open_fdd.ml.applicability import METHOD_REQUIREMENTS, applicability, requirements_text
 
@@ -189,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else 0
     handlers = {"download": _cmd_download, "benchmark": _cmd_benchmark, "detect": _cmd_detect,
-                "methods": _cmd_methods}
+                "methods": _cmd_methods, "make-folder": _cmd_make_folder}
     if args.command not in handlers:
         parser.print_help()
         return 2
