@@ -75,7 +75,8 @@ Published-data quirks found while mapping, and how they are handled:
    gray-box residuals); `nu` / contamination 0.01 (one-class SVM, COPOD).
 3. **Active rows**: supply fan proven on (`fan-status`) and occupied.
 4. **Evaluation sample** (Frank, Lin, Granderson et al. 2019): a one-hour window in a test week with the unit active for
-   at least half of it, flagged when at least 25 % of its active 5-minute points are flagged (15 minutes of persistence).
+   at least half of its elapsed time (counted at the 5-minute cadence, not from rows present), flagged when at least
+   25 % of its active points are flagged (a share of active time: 15 minutes only in a fully active hour).
 5. **Labels**: every sample of a faulted file is a fault sample; every sample of the fault-free file is normal.
    FPR comes from the fault-free file, TPR and detection delay from each faulted file. Faults that are physically
    invisible in some hours (a valve stuck at 50 % when no cooling is needed, a damper stuck at its normal minimum)
