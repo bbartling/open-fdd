@@ -89,7 +89,7 @@ Published-data quirks found while mapping, and how they are handled:
 | `rules (tuned)` | The same minus rules whose one-hour FPR on the fault-free *training* weeks exceeds 5 % (advisories an engineer silences on a healthy unit); same training data as the ML rows |
 | `pca` | PCA on 7 standardized roles (90 % variance), SPE above the training 99th percentile, per-role contributions |
 | `grey_box` | Residuals against binned medians learned on normal data: OA fraction from the mixed-air balance vs damper command, cooling coil air-side delta-T vs valve command, SAT minus setpoint while the valve modulates |
-| `ocsvm` | One-class SVM (scikit-learn) per operating mode (min OA, economizer only, mechanical at min OA, economizer + mechanical), seeded 4000-row subsample per mode |
+| `ocsvm` | One-class SVM (scikit-learn) per operating mode (min OA, economizer only, mechanical at min OA, economizer + mechanical), seeded 4000-row subsample per mode. A refit replaces every mode model; a mode with no model in the latest fit is unassessed (`ModeGated.assessment()`), and a failed fit leaves the detector unfitted |
 | `copod` | COPOD (pyod) per operating mode, roles constant within a mode dropped |
 | `zscore`, `mad` | The existing `open_fdd.analytics.anomaly` rolling detectors on each role, one-day window, no training |
 
