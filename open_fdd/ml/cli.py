@@ -139,6 +139,9 @@ def _cmd_detect(args) -> int:
         "train_rows": int(len(train)) if det.needs_training else 0,
         "roles": list(getattr(det, "roles", []) or frame.columns),
     }
+    from open_fdd.analytics.anomaly.activity import activity
+
+    summary["activity"] = activity(frame, policy="proof").receipt()
     if args.method == "pca" and isinstance(det, PCASPE):
         contrib = det.contributions(frame)
         contrib.to_csv(out / "contributions.csv", index_label="timestamp_utc")

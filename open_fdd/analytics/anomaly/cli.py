@@ -69,6 +69,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="pandas",
         help="Where the z-score runs: pandas (default) or sql (portable SQL on in-process SQLite)",
     )
+    screen.add_argument(
+        "--activity",
+        choices=("proof", "ungated"),
+        default="proof",
+        help=(
+            "proof (default): screen equipment points only while operating proof is on, the same policy as "
+            "open-fdd-ml detect; site/weather points are always screened. ungated: screen every row on purpose"
+        ),
+    )
     report = sub.add_parser(
         "report",
         help="Offline single-system or building-folder AHU FDD/RCx Typst sources",
@@ -173,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                 methods=methods,
                 command=command,
                 engine=str(args.engine),
+                activity_policy=str(args.activity),
             )
         else:
             from open_fdd.reporting.single_system_typst import build_single_system_report

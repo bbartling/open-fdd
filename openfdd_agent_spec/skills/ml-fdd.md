@@ -22,6 +22,9 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
 5. **Anomaly CLI** (`open-fdd[anomaly]`): `open-fdd-anomaly screen FOLDER --out DIR` (z-score, MAD, STL, Isolation
    Forest; `--engine pandas|sql`), `open-fdd-anomaly report FOLDER --out DIR --month YYYY-MM [--compile]` (Typst / PDF).
    Anomalies are single-signal outliers, not faults: the benchmark shows z-score / MAD flag healthy hours as often.
+   `screen` and `detect` share one activity policy (default `--activity proof`): equipment points are assessed only
+   while operating proof is on. Read `activity.json` / `summary.json` `activity` before calling a zero-flag result
+   clean: `no_run_proof`, `no_active_rows` or a small `assessed_rows` means unassessed, not healthy.
 6. **Dependencies**: floors only, at the latest stable releases (pandas 3.1.1, numpy 2.5.5, scikit-learn 1.9.1,
    SciPy 1.18.1, statsmodels 0.15.0, DuckDB 2.0.0, pyod 3.6.8, ...; see `CHANGELOG.md`), with `python_version` markers
    where a release dropped 3.10 / 3.11. Keep the 3.10-3.15 matrix green; add a marker, never an `==` pin.
