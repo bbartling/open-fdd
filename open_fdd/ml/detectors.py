@@ -35,6 +35,8 @@ FEATURE_ROLES: tuple[str, ...] = (
     "cooling-valve",
     "fan-cmd",
     "duct-static-pressure",
+    "zone-air-temp",
+    "heating-valve",
 )
 
 #: Short role names (sql/fdd/role_map.json keys) accepted as aliases.
@@ -52,9 +54,53 @@ ROLE_ALIASES: dict[str, str] = {
     "duct_static": "duct-static-pressure",
     "duct_static_sp": "duct-static-pressure-sp",
     "occ_mode": "occupied",
+    "zone_t": "zone-air-temp",
+    "compressor_status": "compressor-status",
 }
 
 METHODS: tuple[str, ...] = ("pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
+
+#: Gray-box residual families: ``{name: (required role sets (one of each tuple), roles that must be absent)}``.
+#: The mixed-air families are the AHU ones. ``heat_rise`` / ``cool_drop`` are the single-zone family (furnace,
+#: RTU, heat pump): supply minus zone (else return) air temperature against the heating or cooling command. They
+#: run only when there is no mixed-air temperature, so an AHU keeps exactly the mixed-air residuals.
+GREY_BOX_RESIDUALS: dict[str, tuple[tuple[tuple[str, ...], ...], tuple[str, ...]]] = {
+    "oa_fraction": (
+        (("mixed-air-temp",), ("return-air-temp",), ("outside-air-temp",), ("outside-air-damper",)),
+        (),
+    ),
+    "coil_delta_t": ((("mixed-air-temp",), ("discharge-air-temp",), ("cooling-valve",)), ()),
+    "sat_error": ((("discharge-air-temp",), ("discharge-air-temp-sp",), ("cooling-valve",)), ()),
+    "heat_rise": (
+        (("discharge-air-temp",), ("zone-air-temp", "return-air-temp"), ("heating-valve",)),
+        ("mixed-air-temp",),
+    ),
+    "cool_drop": (
+        (("discharge-air-temp",), ("zone-air-temp", "return-air-temp"), ("cooling-valve", "compressor-status")),
+        ("mixed-air-temp",),
+    ),
+}
+
+
+def grey_box_families(columns) -> dict[str, list[str]]:
+    """The gray-box residuals a set of role columns allows, with the roles each one would use."""
+    have = set(columns)
+    out: dict[str, list[str]] = {}
+    for name, (needs, absent) in GREY_BOX_RESIDUALS.items():
+        if any(role in have for role in absent):
+            continue
+        picked = [next((r for r in options if r in have), None) for options in needs]
+        if all(picked):
+            out[name] = [str(r) for r in picked]
+    return out
+
+
+def _fraction(values: pd.Series) -> pd.Series:
+    """A 0-100 % command as a 0-1 fraction (values already in 0-1 are left alone)."""
+    finite = values.dropna()
+    if not finite.empty and float(finite.max()) > 1.5:
+        return values / 100.0
+    return values
 DEFAULT_QUANTILE = 0.99
 
 
@@ -208,6 +254,13 @@ class GreyBox(Detector):
             valve = num("cooling-valve")
             err = (num("discharge-air-temp") - num("discharge-air-temp-sp")).where((valve > 0.05) & (valve < 0.95))
             out["sat_error"] = (pd.Series(0.0, index=f.index), err, 1.0)
+        families = grey_box_families(f.columns)
+        if "heat_rise" in families:
+            sat, ref, cmd = families["heat_rise"]
+            out["heat_rise"] = (_fraction(num(cmd)), num(sat) - num(ref), self.bin_width)
+        if "cool_drop" in families:
+            sat, ref, cmd = families["cool_drop"]
+            out["cool_drop"] = (_fraction(num(cmd)), num(ref) - num(sat), self.bin_width)
         return out
 
     def fit(self, normal: pd.DataFrame) -> "GreyBox":
@@ -215,7 +268,11 @@ class GreyBox(Detector):
         rows = normal[active_mask(canonical_roles(normal))]
         raw = self._raw(rows)
         if not raw:
-            raise ValueError("grey_box needs MAT/RAT/OAT/damper or MAT/SAT/cooling valve roles")
+            raise ValueError(
+                "grey_box needs one residual family: MAT/RAT/OAT/damper, MAT/SAT/cooling valve, SAT/SAT setpoint/"
+                "cooling valve, or (no MAT) SAT + zone or return temp + heating valve, or + cooling valve or "
+                "compressor status; see `open-fdd-ml methods FOLDER`"
+            )
         for key, (x, y, width) in raw.items():
             ok = x.notna() & y.notna()
             table = _binned_median(x[ok], y[ok], width)
