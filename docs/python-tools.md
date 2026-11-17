@@ -53,6 +53,14 @@ results = run_all(next(iter(frames.values())))
 Frames contain SI values mapped to Haystack roles. The pandas rules are reference implementations. The production
 engine is SQL. See [parity](rules/parity.html).
 
+A frame built outside the package, or one without `df.attrs`, needs its equipment context. Pass it explicitly, as
+in `run_all(df, equipment_type="AHU", equipment_id="AHU-1")`; `run_rule` takes the same keywords. Explicit keywords
+win over `df.attrs['equipment_type' | 'equipment_id' | 'site_id' | 'building_id']`, and `df` is not modified.
+Columns must use the Haystack role names (`discharge-air-temp`, not `sat`). An unstamped frame has type `UNKNOWN`,
+so every rule is `NOT_APPLICABLE_EQUIPMENT_TYPE`. `summarize(results)` (also from `open_fdd.rules`) groups the
+statuses and lists the most-needed missing roles. When nothing was assessed it adds one `explanation` line, for
+example `no rule was assessed: no equipment type: pass equipment_type= ...`.
+
 The package also provides ECM workbooks, reports, anomaly screening, and RDF readers. Use the CLI help for command
 options. Source and installation extras are in the repository's pyproject.toml.
 
