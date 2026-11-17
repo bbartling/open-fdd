@@ -82,6 +82,9 @@ with `open-fdd[anomaly]`. The default `zscore,mad,stl` runs whatever is installe
 default. Naming a method whose dependency is missing exits 2 and names the extra. Isolation Forest flags
 `--iforest-contamination` (default 0.01) of every point's samples by construction, so it is opt-in. Its scoreboard rows
 carry `method_note` `fixed_fraction_<rate>`; read them as a ranking, not a count of events.
+MAD's denominator is floored at one resolution step of the series (the 5th percentile of gaps between distinct
+values) and at `1e-3 * |median|`, so sensor quantization is not an outlier. A point whose 1st-99th percentile range
+is within 5 resolution steps or `2e-3 * |median|` is skipped as `near_constant`, like `binary_like`.
 
 **Activity.** `screen` and `open-fdd-ml detect` share one policy (`open_fdd.analytics.anomaly.activity`). Each row
 is `on`, `off`, `unoccupied` or `unknown`. The proof source is chosen per folder: an own status role first

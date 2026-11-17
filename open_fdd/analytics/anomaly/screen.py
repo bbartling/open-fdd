@@ -25,6 +25,7 @@ from open_fdd.analytics.anomaly.detectors import (
     anomaly_minutes,
     dedupe_events,
     is_binary_like,
+    is_near_constant,
     median_sample_delta,
     rolling_mad_flags,
     rolling_zscore_flags,
@@ -519,6 +520,21 @@ def screen_folder(
                     "anomaly_minutes": 0.0,
                     "event_count": 0,
                     "skipped_reason": "binary_like",
+                    "gate": _gate(role)[0],
+                    "assessed_rows": 0,
+                    "method_note": "",
+                }
+            )
+            continue
+        if is_near_constant(series):
+            rows.append(
+                {
+                    "point": column,
+                    "role": role,
+                    "method": "",
+                    "anomaly_minutes": 0.0,
+                    "event_count": 0,
+                    "skipped_reason": "near_constant",
                     "gate": _gate(role)[0],
                     "assessed_rows": 0,
                     "method_note": "",
