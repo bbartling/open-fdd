@@ -59,7 +59,8 @@ options. Source and installation extras are in the repository's pyproject.toml.
 ## Anomaly screening and SQL z-score
 
 ```bash
-open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out                          # z-score, MAD, STL, Isolation Forest
+open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out                          # z-score, MAD, STL (if installed)
+open-fdd-anomaly screen ./AHU_1 --out ./anomaly_if --methods zscore,iforest  # Isolation Forest is opt-in
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sql
 ```
 
@@ -68,6 +69,12 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 `open_fdd.analytics.anomaly.detectors.rolling_zscore_flags` on each point's non-missing samples
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.
+
+**Methods.** z-score and MAD need only pandas. STL needs statsmodels and Isolation Forest needs scikit-learn; both come
+with `open-fdd[anomaly]`. The default `zscore,mad,stl` runs whatever is installed, and the README lists a skipped
+default. Naming a method whose dependency is missing exits 2 and names the extra. Isolation Forest flags
+`--iforest-contamination` (default 0.01) of every point's samples by construction, so it is opt-in. Its scoreboard rows
+carry `method_note` `fixed_fraction_<rate>`; read them as a ranking, not a count of events.
 
 **Activity.** `screen` and `open-fdd-ml detect` share one policy (`open_fdd.analytics.anomaly.activity`). Each row
 is `on`, `off`, `unoccupied` or `unknown`. The proof source is chosen per folder: an own status role first
