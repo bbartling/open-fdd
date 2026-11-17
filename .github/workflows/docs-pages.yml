@@ -5,7 +5,7 @@ name: Docs (GitHub Pages)
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, "release/**"]
     paths:
       - "docs/**"
       - "nf-app/static/fdd-catalog.json"
@@ -20,7 +20,7 @@ on:
       - "tests/parity/test_parity.py"
       - ".github/workflows/docs-pages.yml"
   pull_request:
-    branches: [master, main]
+    branches: [master, main, "release/**"]
     paths:
       - "docs/**"
       - "nf-app/static/fdd-catalog.json"
@@ -93,7 +93,8 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name != 'pull_request'
+    # Release-branch pushes build and link-check the site but never publish it.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
