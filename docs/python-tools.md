@@ -79,6 +79,10 @@ open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ah
 # learning methods need --train, --train-until or --exploratory-self-fit; zscore/mad need no training
 ```
 
+`summary.json` lists `roles_used`, `roles_missing` and `roles_configured`, where `roles` is the scored set. `flags.csv` names
+what drove each flagged row: `flagged_roles` for zscore and mad, `top_role` / `top_share` for PCA, and `top_residual` and
+`ratio_<residual>` for the gray-box method.
+
 Method, data, mapping and results: [docs/ml/lbnl-ahu-benchmark.md](ml/lbnl-ahu-benchmark.md).
 
 ## Ontology audit and model doctor (`open-fdd-ontology-audit`)

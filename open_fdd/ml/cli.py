@@ -134,6 +134,70 @@ def _identical_overlap(train, frame):
     return a.index[same.to_numpy()], int(len(common_idx))
 
 
+#: Roles behind each AHU gray-box residual (the single-zone families come from ``grey_box_families`` when present).
+_GREY_BOX_ROLES = {
+    "oa_fraction": ["mixed-air-temp", "return-air-temp", "outside-air-temp", "outside-air-damper"],
+    "coil_delta_t": ["mixed-air-temp", "discharge-air-temp", "cooling-valve"],
+    "sat_error": ["discharge-air-temp", "discharge-air-temp-sp", "cooling-valve"],
+}
+
+
+def _role_report(det, frame) -> dict:
+    """Configured, used and missing roles (#1660): ``roles`` is the set actually scored."""
+    from open_fdd.ml import detectors as dm
+
+    present = set(dm.canonical_roles(frame).columns)
+    if isinstance(det, dm.GreyBox):
+        families = getattr(dm, "grey_box_families", None)
+        role_sets = {**_GREY_BOX_ROLES, **(families(present) if families else {})}
+        fitted = set(getattr(det, "thresholds_", {}) or {})
+        usable = sorted(k for k in det._raw(frame) if k in fitted)
+        used = sorted({r for k in usable for r in role_sets.get(k, [])})
+        configured = sorted({r for roles in _GREY_BOX_ROLES.values() for r in roles} |
+                            {r for roles in role_sets.values() for r in roles})
+        return {"roles": used, "roles_used": used, "roles_configured": configured,
+                "roles_missing": [r for r in configured if r not in present], "residuals_used": usable}
+    configured = list(getattr(det, "feature_roles", None) or getattr(det, "roles", None) or dm.FEATURE_ROLES)
+    used = det.scored_roles(frame) if isinstance(det, dm.RollingAnomaly) else list(getattr(det, "roles", []) or [])
+    return {"roles": used, "roles_used": used, "roles_configured": configured,
+            "roles_missing": [r for r in configured if r not in present]}
+
+
+def _row_argmax(values):
+    """Column name of each row's largest value; empty where the row has no value."""
+    has = values.notna().any(axis=1)
+    top = values.fillna(float("-inf")).idxmax(axis=1)
+    return top.where(has, "")
+
+
+def _explanations(det, frame, flags):
+    """Per-row explanation columns for flags.csv (#1660); blank on rows that are not flagged."""
+    import pandas as pd
+
+    from open_fdd.ml.detectors import PCASPE, GreyBox, RollingAnomaly
+
+    out = pd.DataFrame(index=frame.index)
+    on = flags.reindex(frame.index).fillna(False).astype(bool)
+    if isinstance(det, PCASPE):
+        contrib = det.contributions(frame)
+        top = _row_argmax(contrib)
+        out["top_role"] = top.where(on, "")
+        out["top_share"] = contrib.max(axis=1).round(4).where(on)
+    elif isinstance(det, GreyBox):
+        resid = det.residuals(frame)
+        ratios = pd.DataFrame({k: resid[k].abs() / max(det.thresholds_[k], 1e-9) for k in resid.columns},
+                              index=frame.index)
+        for k in ratios.columns:
+            out[f"ratio_{k}"] = ratios[k].round(4)
+        top = _row_argmax(ratios) if len(ratios.columns) else None
+        out["top_residual"] = top.where(on, "") if top is not None else ""
+    elif isinstance(det, RollingAnomaly):
+        per = det.role_flags(frame)
+        names = per.apply(lambda row: ";".join(c for c in per.columns if row[c]), axis=1) if len(per.columns) else ""
+        out["flagged_roles"] = names.where(on, "") if len(per.columns) else ""
+    return out
+
+
 def _cmd_detect(args) -> int:
     import pandas as pd
 
@@ -205,6 +269,9 @@ def _cmd_detect(args) -> int:
     scores = det.scores(frame) if args.method in {"pca", "grey_box"} else None
     if scores is not None:
         table["score"] = scores
+    explain = _explanations(det, frame, flags)
+    for col in explain.columns:
+        table[col] = explain[col]
     table.to_csv(out / "flags.csv", index_label="timestamp_utc")
     scored = phase.isin(["evaluation", "exploratory_self_fit"])
     summary = {
@@ -221,7 +288,7 @@ def _cmd_detect(args) -> int:
         "evaluation": _span(frame[scored.to_numpy()]),
         "train_rows": int(len(train)) if det.needs_training else 0,
         "training": training,
-        "roles": list(getattr(det, "roles", []) or frame.columns),
+        **_role_report(det, frame),
         "units": "SI (device-folder contract)",
     }
     if overlap:
@@ -229,9 +296,12 @@ def _cmd_detect(args) -> int:
     if args.method == "pca" and isinstance(det, PCASPE):
         contrib = det.contributions(frame)
         contrib.to_csv(out / "contributions.csv", index_label="timestamp_utc")
-        top = contrib[flags & scored].mean().sort_values(ascending=False)
+        picked = contrib[(flags & scored).to_numpy()].dropna(how="all")
+        top = picked.mean().sort_values(ascending=False) if len(picked) else pd.Series(dtype=float)
         summary["spe_threshold"] = det.threshold_
         summary["top_contributors"] = {k: round(float(v), 4) for k, v in top.head(5).items() if pd.notna(v)}
+        summary["contribution_population"] = {"basis": "flagged scored rows", "rows": int(len(picked)),
+                                              **_span(picked)}
         try:
             plot_contributions(contrib, flags & scored, out / "contributions.png")
         except ImportError:

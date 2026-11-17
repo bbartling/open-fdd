@@ -385,6 +385,27 @@ class RollingAnomaly(Detector):
     def scores(self, frame: pd.DataFrame) -> pd.Series:
         return self.flags(frame).astype(float)
 
+    def scored_roles(self, frame: pd.DataFrame) -> list[str]:
+        """Roles this detector actually screens on ``frame`` (present and not binary-like)."""
+        from open_fdd.analytics.anomaly.detectors import is_binary_like
+
+        f = canonical_roles(frame)
+        return [r for r in self.roles if r in f.columns and not is_binary_like(pd.to_numeric(f[r], errors="coerce"))]
+
+    def role_flags(self, frame: pd.DataFrame) -> pd.DataFrame:
+        """One boolean column per scored role (already gated by :func:`active_mask`); ``flags`` is their OR."""
+        from open_fdd.analytics.anomaly.detectors import rolling_mad_flags, rolling_zscore_flags, samples_per_day
+
+        f = canonical_roles(frame)
+        act = active_mask(f)
+        window = samples_per_day(f.index)
+        fn = rolling_zscore_flags if self.kind == "zscore" else rolling_mad_flags
+        cols = {}
+        for role in self.scored_roles(f):
+            series = pd.to_numeric(f[role], errors="coerce")
+            cols[role] = fn(series, window=window).reindex(f.index).fillna(False).astype(bool) & act
+        return pd.DataFrame(cols, index=f.index)
+
 
 def copod_available() -> bool:
     try:
@@ -420,12 +441,19 @@ def plot_contributions(contrib: pd.DataFrame, flags: pd.Series, path, title: str
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    sel = contrib[flags.reindex(contrib.index).fillna(False).astype(bool)]
-    share = sel.mean().sort_values(ascending=True) if not sel.empty else contrib.mean().sort_values(ascending=True)
-    fig, ax = plt.subplots(figsize=(6, 0.4 * len(share) + 1.2))
-    ax.barh(share.index, share.to_numpy() * 100.0)
-    ax.set_xlabel("mean share of SPE on flagged samples (%)")
-    ax.set_title(title)
+    sel = contrib[flags.reindex(contrib.index).fillna(False).astype(bool)].dropna(how="all")
+    if sel.empty:
+        # zero alarms: say so instead of plotting whole-frame shares under a "flagged samples" label (#1660)
+        fig, ax = plt.subplots(figsize=(6, 1.6))
+        ax.axis("off")
+        ax.text(0.5, 0.5, "No flagged samples: no contributions to show", ha="center", va="center")
+        ax.set_title(title)
+    else:
+        share = sel.mean().sort_values(ascending=True)
+        fig, ax = plt.subplots(figsize=(6, 0.4 * len(share) + 1.2))
+        ax.barh(share.index, share.to_numpy() * 100.0)
+        ax.set_xlabel(f"mean share of SPE on {len(sel)} flagged samples (%)")
+        ax.set_title(f"{title}\n{sel.index.min()} to {sel.index.max()}", fontsize=9)
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
