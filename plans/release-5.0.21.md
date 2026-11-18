@@ -59,7 +59,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1641 | C | Generic coil performance rule | OPEN | | |
 | 1642 | C | Divergences + implementation-aware pins | OPEN | | |
 | 1646 | C | Tuners, motor-status wording, RCx coverage | OPEN | | after #1671/#1672 |
-| 1671 | C | One visible timer per rule; tuner migration | OPEN | | |
+| 1671 | C | One visible timer per rule; tuner migration | PR DRAFT | #1708 (`fix/1671-one-timer`, stacked on #1700) | internal_constants; byte-identical SQL; Node 790/790, Python 540/7 |
 | 1672 | C | Sliders/booleans, SI validation, scoped persistence | OPEN | | after #1671 |
 | 1649 | C | SQL analytics restoration + pandas parity | OPEN | | phase 2 |
 | 1643 | C | Fast Overview, lazy heavy views | OPEN | | phase 3 |
@@ -88,12 +88,13 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1676 | Claude | #1669 | merged `125afb6a` | done |
 | #1699 | Claude | #1670 SCHED-247 | ready | Grok acceptance, CI |
 | #1701 | Claude | this ledger | open | merge any time (plans only) |
-| #1702 | Claude | #1631 sweep as-of proof | draft, stacked on #1700; head 68e34033 (py3.10 f-string fix) | merge after #1700 |
+| #1702 | Claude | #1631 sweep as-of proof | draft, stacked on #1700; head 36a0a66b | merge after #1700 |
+| #1708 | Claude | #1671 one timer per rule | draft, stacked on #1700 | merge after #1700 |
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
 | #1706 | Claude | #1636 occupancy calendar | ready | Grok acceptance, CI |
-| #1700 | Claude | #1673 SV-STALE split | ready; head 61df50c0 (Timescale parity test fix) | Grok acceptance, CI |
+| #1700 | Claude | #1673 SV-STALE split | ready; head 47478f87 (Timescale parity harness fixes) | Grok acceptance, CI |
 | #1677 #1678 #1679 #1683 #1690 #1692 #1693 | Grok | ML/tooling | merged (Claude review ACCEPT, CI green) | done |
 | #1680 #1684 #1685 #1686 #1689 #1697 | Grok | tooling | Claude ACCEPT (nits posted) | merge when CI green / stack base lands |
 | #1687 #1694 #1698 | Grok | ml detect | Claude ACCEPT; conflicts after the squash merges | Grok merges release into branch |
@@ -138,4 +139,5 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
   - #1700: the Timescale parity test now passes `sweep_series` to pglite (both engines were correct for their inputs);
   - #1702: an f-string that only parsed on Python 3.12+.
 - Next: #1671 tuner contract.
-
+- ~06:30: #1700 head 47478f87 (the Python Timescale parity harness drops the sweep_series declaration, like the pandas oracle); #1702 merged it in.
+  Opened #1708 (#1671) as a draft stacked on #1700. Next: #1672 sliders.
