@@ -297,6 +297,9 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
        SELECT timestamp_utc, ${wcols.map(quoteId).join(", ")} FROM pg_temp.history
        WHERE ${wcols.map((n) => `${quoteId(n)} IS NOT NULL`).join(" OR ")}`);
   }
+  // Autovacuum never analyzes temp tables: without statistics the planner guesses row counts and can pick nested-loop
+  // joins for the rules' window / as-of CTEs (minutes instead of seconds on a week of 5-min data). Analyze what we loaded.
+  for (const t of Object.keys(pack.contract)) await client.query(`ANALYZE pg_temp.${quoteId(t)}`);
   const si = {};
   for (const [role, uuid] of roles) si[role] = roleFactors(role, uuid, { unitsByUuid, fractionRoles, booleanRoles }).unit;
   return { rows, sensorRows, roles: roles.map(([r]) => r), si };

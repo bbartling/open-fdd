@@ -35,16 +35,16 @@ sensor_series AS (
 -- (a proof row sorts before a sample at the same instant); a running count of proof rows tags every sample with the
 -- latest proof row at or before it; that row's proof is used when it is less than MAX_GAP_HOURS older than the sample.
 sample_times AS (
-  SELECT DISTINCT equipment_id, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds
+  SELECT DISTINCT equipment_id, timestamp_utc, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds
   FROM sensor_history
   WHERE value IS NOT NULL
     AND sensor_role IN ({{ASSESSABLE_ROLES}})
 ),
 proof_stream AS (
-  SELECT equipment_id, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds, 0 AS stream_kind, energized
+  SELECT equipment_id, timestamp_utc, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds, 0 AS stream_kind, energized
   FROM base_proof
   UNION ALL
-  SELECT equipment_id, epoch_seconds, 1 AS stream_kind, NULL AS energized
+  SELECT equipment_id, timestamp_utc, epoch_seconds, 1 AS stream_kind, NULL AS energized
   FROM sample_times
 ),
 proof_tagged AS (
@@ -60,7 +60,7 @@ proof_carried AS (
   FROM proof_tagged
 ),
 proof_asof AS (
-  SELECT equipment_id, epoch_seconds,
+  SELECT equipment_id, timestamp_utc,
     CASE WHEN proof_epoch IS NOT NULL AND proof_epoch > epoch_seconds - {{MAX_GAP_HOURS}} * 3600.0
       THEN proof_energized ELSE NULL END AS energized
   FROM proof_carried
@@ -80,7 +80,7 @@ sensor_rows AS (
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   LEFT JOIN proof_asof pa
-    ON pa.equipment_id = s.equipment_id AND pa.epoch_seconds = EXTRACT(EPOCH FROM s.timestamp_utc)
+    ON pa.equipment_id = s.equipment_id AND pa.timestamp_utc = s.timestamp_utc
   WHERE s.value IS NOT NULL
     AND s.sensor_role IN ({{ASSESSABLE_ROLES}})
 ),
