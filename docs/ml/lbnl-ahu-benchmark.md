@@ -175,6 +175,8 @@ reproduced row for row on Windows (Python 3.14) before merge.
 ```bash
 open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ahu1_ml
 open-fdd-ml detect ./AHU_1 --method pca --train ./AHU_1_known_good --out ./ahu1_ml_pca   # + contributions.png
+# pca/grey_box/ocsvm/copod need exactly one of --train, --train-until or --exploratory-self-fit (output labeled
+# exploratory). flags.csv has a phase column; summary.json counts evaluation rows only and records the training receipt.
 ```
 
 `AHU_1` is the device folder `open-fdd-anomaly` reads (`history_wide.csv` in SI and `column_map.json`). Train only on
