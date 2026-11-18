@@ -34,6 +34,13 @@ folder files.
 Not in this slice: SQL and pandas before/after replay of a proposed tuner change and inputs resolved through the RDF
 bindings. No alert-reduction number is claimed here.
 
+## Synthetic end-to-end demo
+
+`python -m open_fdd.ml.review_demo ./review-demo` runs the whole workflow from an installed wheel with no NF,
+database or network: it writes a seeded synthetic SI device folder (`AHU-DEMO`, damper stuck from day 8), two saved
+SQL episodes (a real fault and an alert on a healthy day), their reviews, a labeled corpus and its evaluation, and
+prints a summary. Two episodes cannot support a claim, so `eval.json` reports `claim_supported: false`.
+
 ## Scoring reviews on a labeled held-out corpus
 
 `python -m open_fdd.ml.review_eval labeled.json --out eval.json` scores saved reviews against independent labels
