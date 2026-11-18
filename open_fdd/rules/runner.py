@@ -165,24 +165,11 @@ def _missing_roles(rule: cb.CookbookRule, df: pd.DataFrame) -> list[str]:
             return ["building-zone-load-satisfied|building-ahu-load-satisfied"]
         return []
     if rule.id == "SCHED-247":
-        proofs = (
-            "fan-status",
-            "pump-status",
-            "chw-pump-status",
-            "hw-pump-status",
-            "chiller-status",
-            "compressor-status",
-            "tower-fan-cmd",
-            "cw-fan-cmd",
-            "fan-cmd",
-            "chw-pump-cmd",
-            "hw-pump-cmd",
-            "duct-static-pressure",
-            "chw-diff-pressure",
-        )
+        # #1670: the same ranked proof roles as the SQL rule; pressure is never proof for always-on.
+        proofs = cb.SCHED247_STATUS_ROLES + cb.SCHED247_COMMAND_ROLES
         if any(r in df.columns and df[r].notna().any() for r in proofs):
             return []
-        return ["fan_or_pump_status_or_cmd_or_pressure"]
+        return ["fan_or_pump_status_or_cmd"]
     if rule.sensor_sweep:
         present = [r for r in cb.SWEEP_SENSOR_ROLES if r in df.columns and df[r].notna().any()]
         return [] if present else ["any sensor role from sweep list"]
@@ -305,15 +292,7 @@ def _plot_series_for_rule(rule: cb.CookbookRule, d: pd.DataFrame) -> dict[str, p
             if c in d.columns and d[c].notna().any():
                 out[c] = d[c]
     if rule.id == "SCHED-247":
-        for c in (
-            "fan-status",
-            "pump-status",
-            "chw-pump-status",
-            "hw-pump-status",
-            "fan-cmd",
-            "chw-pump-cmd",
-            "hw-pump-cmd",
-        ):
+        for c in cb.SCHED247_STATUS_ROLES + cb.SCHED247_COMMAND_ROLES:
             if c in d.columns and d[c].notna().any():
                 out[c] = d[c]
     _attach_motor_status_lane(out, d)
@@ -681,6 +660,13 @@ def run_cookbook_rule(
             active_mask=active if use_active else None,
             params_fingerprint=fp,
         )
+        if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
+            # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
+            result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"
+            result.fault_hours = None
+            result.fault_pct = None
+            result.notes = (f"NOT ASSESSED — {metrics['assessment']}: {metrics.get('proven_on_hours', 0) + metrics.get('proven_off_hours', 0):.1f} h "
+                            f"of known run proof in a {metrics.get('window_hours', 0):.1f} h window (needs 90% of max(window, 24 h))")
         if sweep_result is not None:
             result.raw_fault = sweep_result["raw_mask"]
             result.confirmed_fault = sweep_result["confirmed_mask"]
