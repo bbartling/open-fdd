@@ -21,6 +21,7 @@ pip install "open-fdd[nf,anomaly,ml]"      # add extras as needed (table below)
 |---|---|---|---|
 | Rules (`open_fdd.rules`) | pandas twins of the SQL fault rules, SI, same gates as the app | `oracle` | `from open_fdd.rules import run_all` |
 | NF client (`open-fdd-nf`) | Read an NF box: model, roles, SI history, run the rules, summary report | `nf` | `open-fdd-nf rules --days 7` |
+| NF device folder (`open-fdd-nf export-folder`) | One equipment's SI history + roles from the NF model as the `history_wide.csv` + `column_map.json` folder `open-fdd-anomaly` and `open-fdd-ml` read; stops on a unit it cannot convert (`--allow-skips` to keep the rest), lists unit-less and unmapped points | `nf` | `open-fdd-nf export-folder --equip AHU-1 --days 14 --out AHU_1` |
 | SPARQL to DataFrame (`open-fdd-nf sparql`, `open_fdd.nf.sparql_data`) | SPARQL on the site model, matched points' history as SI DataFrames, then the rules | `nf` (`rdf` on Lite) | `open-fdd-nf sparql "SELECT ..." --days 7 --rows` |
 | NF analytics (`open-fdd-nf analyze`) | Weekly runtime, cooling OAT bins, economizer, fault timeline, run on the box | `nf` | `open-fdd-nf analyze weekly-runtime --days 28` |
 | Analytics (`open_fdd.analytics`) | Motor hours, OAT bins, VAV health, metering and degree days, M&V change point, weather and psychrometrics | `analytics` | `from open_fdd.analytics import motor_run_hours_table` |

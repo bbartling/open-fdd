@@ -4115,7 +4115,7 @@ rules:
     description: Always-on fan or pump runtime
     required_roles: []
     optional_roles: [fan_status, pump_status, chiller_status, fan_cmd]
-    output_columns: [equipment_id, fault_hours]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, window_hours, proven_on_hours, proven_off_hours, unknown_hours, assessment]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
