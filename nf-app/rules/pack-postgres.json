@@ -2084,7 +2084,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2148,7 +2148,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2217,7 +2217,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2314,7 +2314,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2411,7 +2411,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2486,7 +2486,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2603,7 +2603,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2711,7 +2711,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2808,7 +2808,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -2905,7 +2905,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3013,7 +3013,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3077,7 +3077,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3135,7 +3135,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3204,7 +3204,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3255,7 +3255,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3297,7 +3297,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3423,7 +3423,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3495,7 +3495,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3581,7 +3581,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3676,7 +3676,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3762,7 +3762,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3848,7 +3848,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3945,7 +3945,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -3987,7 +3987,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4082,7 +4082,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4184,7 +4184,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4242,7 +4242,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4300,7 +4300,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4391,7 +4391,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4494,7 +4494,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4541,7 +4541,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4588,7 +4588,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4668,7 +4668,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4715,7 +4715,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4788,7 +4788,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4846,7 +4846,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4915,7 +4915,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -4973,7 +4973,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5045,7 +5045,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5085,7 +5085,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5213,7 +5213,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5271,7 +5271,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5307,7 +5307,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5376,7 +5376,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5434,7 +5434,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5481,7 +5481,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5550,7 +5550,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5608,7 +5608,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5705,7 +5705,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5763,7 +5763,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
@@ -5821,7 +5821,7 @@
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
-      "label": "Require run proof",
+      "label": "Require motor status",
       "min": 0.0,
       "max": 1.0,
       "step": 1.0,
