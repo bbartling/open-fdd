@@ -88,7 +88,10 @@ The gray-box method needs one residual family. The AHU families are the mixed-ai
 delta-T, and SAT error while the valve modulates. With no mixed-air temperature it uses the single-zone family
 instead (furnace, RTU, heat pump): supply minus zone (or return) temperature against the heating valve
 (`heat_rise`), or against the cooling valve or compressor status (`cool_drop`). A 0-100 % command is read as a
-fraction.
+fraction. A role that is mapped but has no data on active rows does not count, so an empty `zone-air-temp` falls back
+to `return-air-temp`. For the trained methods `methods FOLDER` runs a dry `fit` on the folder, so `can_run` means
+`fit` succeeds on it (one-class SVM and COPOD need 50 active rows in one operating mode), and the reason is the
+detector's own error.
 
 ## Ontology audit and model doctor (`open-fdd-ontology-audit`)
 

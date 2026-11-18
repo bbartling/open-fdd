@@ -82,9 +82,19 @@ GREY_BOX_RESIDUALS: dict[str, tuple[tuple[tuple[str, ...], ...], tuple[str, ...]
 }
 
 
+def _roles_with_data(frame: pd.DataFrame) -> list[str]:
+    """Columns of a role frame that carry at least one numeric value (a mapped but empty role does not count)."""
+    return [c for c in frame.columns if pd.to_numeric(frame[c], errors="coerce").notna().any()]
+
+
 def grey_box_families(columns) -> dict[str, list[str]]:
-    """The gray-box residuals a set of role columns allows, with the roles each one would use."""
-    have = set(columns)
+    """The gray-box residuals a set of role columns allows, with the roles each one would use.
+
+    ``columns`` is a list of role names or a role frame; with a frame only roles that carry data count, so an
+    empty ``zone-air-temp`` falls back to a usable ``return-air-temp`` and an empty mixed-air role does not block
+    the single-zone families.
+    """
+    have = set(_roles_with_data(columns)) if isinstance(columns, pd.DataFrame) else set(columns)
     out: dict[str, list[str]] = {}
     for name, (needs, absent) in GREY_BOX_RESIDUALS.items():
         if any(role in have for role in absent):
@@ -161,7 +171,9 @@ class PCASPE(Detector):
     def fit(self, normal: pd.DataFrame) -> "PCASPE":
         normal = canonical_roles(normal)
         rows = normal[active_mask(normal)]
-        candidates = [r for r in self.feature_roles if r in rows.columns]
+        # a mapped role with no active data (all NaN) would empty the joint dropna; leave it out
+        with_data = set(_roles_with_data(rows))
+        candidates = [r for r in self.feature_roles if r in with_data]
         x = _features(rows, candidates).dropna()
         std = x.std(ddof=0)
         self.roles = [r for r in candidates if float(std.get(r, 0.0)) > 1e-9]
@@ -236,6 +248,7 @@ class GreyBox(Detector):
     tables_: dict[str, pd.Series] = field(default_factory=dict)
     centers_: dict[str, float] = field(default_factory=dict)
     thresholds_: dict[str, float] = field(default_factory=dict)
+    families_: dict[str, list[str]] = field(default_factory=dict)
     name: str = "grey_box"
 
     def _raw(self, frame: pd.DataFrame) -> dict[str, tuple[pd.Series, pd.Series, float]]:
@@ -254,7 +267,8 @@ class GreyBox(Detector):
             valve = num("cooling-valve")
             err = (num("discharge-air-temp") - num("discharge-air-temp-sp")).where((valve > 0.05) & (valve < 0.95))
             out["sat_error"] = (pd.Series(0.0, index=f.index), err, 1.0)
-        families = grey_box_families(f.columns)
+        # scoring uses the single-zone roles picked at fit time; fitting picks the roles that carry data
+        families = self.families_ if self.families_ else grey_box_families(f)
         if "heat_rise" in families:
             sat, ref, cmd = families["heat_rise"]
             out["heat_rise"] = (_fraction(num(cmd)), num(sat) - num(ref), self.bin_width)
@@ -265,6 +279,7 @@ class GreyBox(Detector):
 
     def fit(self, normal: pd.DataFrame) -> "GreyBox":
         self.tables_, self.centers_, self.thresholds_ = {}, {}, {}  # a refit never keeps an earlier baseline
+        self.families_ = {}
         rows = normal[active_mask(canonical_roles(normal))]
         raw = self._raw(rows)
         if not raw:
@@ -283,6 +298,8 @@ class GreyBox(Detector):
             self.tables_[key] = table
             self.centers_[key] = float(resid.median())
             self.thresholds_[key] = float(np.quantile((resid - self.centers_[key]).abs(), self.quantile))
+        picked = grey_box_families(canonical_roles(rows))
+        self.families_ = {k: v for k, v in picked.items() if k in self.thresholds_ and k in ("heat_rise", "cool_drop")}
         if not self.thresholds_:
             raise ValueError("gray-box learned no residual: needs the mixed-air / coil roles and enough active "
                              "rows per bin on known-good data")
@@ -354,7 +371,9 @@ class ModeGated(Detector):
     def fit(self, normal: pd.DataFrame) -> "ModeGated":
         normal = canonical_roles(normal)
         rows = normal[active_mask(normal)]
-        candidates = [r for r in self.feature_roles if r in rows.columns]
+        # a mapped role with no active data (all NaN) would empty the joint dropna; leave it out
+        with_data = set(_roles_with_data(rows))
+        candidates = [r for r in self.feature_roles if r in with_data]
         x = _features(rows, candidates).dropna()
         std = x.std(ddof=0)
         self.roles = [r for r in candidates if float(std.get(r, 0.0)) > 1e-9]
