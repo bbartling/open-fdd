@@ -26,24 +26,57 @@ sensor_series AS (
   WHERE sensor_role IN ({{ASSESSABLE_ROLES}})
   GROUP BY equipment_id, series_id, sensor_role
 ),
+-- #1631: bounded as-of proof per (equipment, sample time) with window functions (no correlated subquery, so it scales on
+-- PostgreSQL / TimescaleDB): proof rows and the distinct sample times of one equipment are interleaved in time order
+-- (a proof row sorts before a sample at the same instant); a running count of proof rows tags every sample with the
+-- latest proof row at or before it; that row's proof is used when it is less than MAX_GAP_HOURS older than the sample.
+sample_times AS (
+  SELECT DISTINCT equipment_id, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds
+  FROM sensor_history
+  WHERE value IS NOT NULL
+    AND sensor_role IN ({{ASSESSABLE_ROLES}})
+),
+proof_stream AS (
+  SELECT equipment_id, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds, 0 AS stream_kind, energized
+  FROM base_proof
+  UNION ALL
+  SELECT equipment_id, epoch_seconds, 1 AS stream_kind, NULL AS energized
+  FROM sample_times
+),
+proof_tagged AS (
+  SELECT proof_stream.*,
+    SUM(CASE WHEN stream_kind = 0 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY equipment_id ORDER BY epoch_seconds, stream_kind ROWS UNBOUNDED PRECEDING) AS proof_group
+  FROM proof_stream
+),
+proof_carried AS (
+  SELECT proof_tagged.*,
+    MAX(CASE WHEN stream_kind = 0 THEN epoch_seconds END) OVER (PARTITION BY equipment_id, proof_group) AS proof_epoch,
+    MAX(CASE WHEN stream_kind = 0 THEN energized END) OVER (PARTITION BY equipment_id, proof_group) AS proof_energized
+  FROM proof_tagged
+),
+proof_asof AS (
+  SELECT equipment_id, epoch_seconds,
+    CASE WHEN proof_epoch IS NOT NULL AND proof_epoch > epoch_seconds - {{MAX_GAP_HOURS}} * 3600.0
+      THEN proof_energized ELSE NULL END AS energized
+  FROM proof_carried
+  WHERE stream_kind = 1
+),
 sensor_rows AS (
   SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,
     CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch
       THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,
-    -- #1631: the proof of a sample is the latest proof row at or before it, held for at most MAX_GAP_HOURS. No such row
-    -- (or a NULL proof) is UNKNOWN: it cannot create a fault. With the gate off every sample is eligible.
-    COALESCE((SELECT bx.energized FROM base_proof bx
-      WHERE bx.equipment_id = s.equipment_id
-        AND EXTRACT(EPOCH FROM bx.timestamp_utc) <= EXTRACT(EPOCH FROM s.timestamp_utc)
-        AND EXTRACT(EPOCH FROM bx.timestamp_utc) > EXTRACT(EPOCH FROM s.timestamp_utc) - {{MAX_GAP_HOURS}} * 3600.0
-      ORDER BY bx.timestamp_utc DESC LIMIT 1),
-      CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 ELSE 0 END) AS energized,
+    -- #1631: the proof of a sample is the latest proof row at or before it, held for at most MAX_GAP_HOURS (proof_asof).
+    -- No such row (or a NULL proof) is UNKNOWN: it cannot create a fault. With the gate off every sample is eligible.
+    COALESCE(pa.energized, CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 ELSE 0 END) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
     fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
+  LEFT JOIN proof_asof pa
+    ON pa.equipment_id = s.equipment_id AND pa.epoch_seconds = EXTRACT(EPOCH FROM s.timestamp_utc)
   WHERE s.value IS NOT NULL
     AND s.sensor_role IN ({{ASSESSABLE_ROLES}})
 ),
