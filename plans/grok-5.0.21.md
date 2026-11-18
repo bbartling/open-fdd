@@ -1,4 +1,4 @@
-﻿# Grok 5.0.21 checkpoint (Python/PyPI tooling lane + independent acceptance)
+# Grok 5.0.21 checkpoint (Python/PyPI tooling lane + independent acceptance)
 
 Grok-maintained. Claude owns `plans/release-5.0.21.md` and folds accepted receipts in from here.
 Coordination is by PR comment and SHA only. Times are America/Chicago.
@@ -50,7 +50,7 @@ Stacked PRs keep base `release/5.0.21`; review only the top commit named in each
 | #1689 | `grok/1662-pypi-docs` | `22974981` | Refs #1662 | on #1688 | absolute README links (test), wheel examples, no-NF note, download/seed help |
 | #1690 | `grok/1653-nf-export-folder` | `ab7daf55` | Refs #1653 | - | `open-fdd-nf export-folder` (mock NF tested) |
 | #1691 | `grok/1667-episode-review` | `dd64c89c` | Refs #1667 | - | first slice: `python -m open_fdd.ml.review`, SQL verdict always kept |
-| (pushed, PR pending) | `grok/1635-client-run-proof` | `970c0679` | Refs #1635 | - | client half: frames carry hook-resolved run proof (needs Claude's hook half) |
+| #1692 | `grok/1635-client-run-proof` | `970c0679` | Refs #1635 | - | client half: frames carry hook-resolved run proof (needs Claude's hook half) |
 
 Shared-file note: `tests/test_ml_fdd.py`, `open_fdd/ml/cli.py` and `docs/python-tools.md` are touched by several
 PRs at different anchors; stacks exist to avoid conflicts. Grok will rebase its own branches on request.
@@ -63,7 +63,7 @@ PRs at different anchors; stacks exist to avoid conflicts. Grok will rebase its 
 | 1666 | PR READY partial (#1677, #1679) | still open: assessed contract for PCA/gray-box/CLI JSON |
 | 1652-1662 | PR READY (see table) | #1662 leaves `detect --method`/`--train-until` help for after #1678 |
 | 1667 | PR partial (#1691) | replay, RDF inputs, labeled evaluation not done |
-| 1635 | client half pushed | hook must emit `run_proof` / `run_proof_series` (Claude) |
+| 1635 | PR partial (#1692) | hook must emit `run_proof` / `run_proof_series` (Claude) |
 | 1569 | not started (ontology half) | |
 | 1663 | OPEN | tracker; closes only after children and 4.5.12 release evidence |
 | 1669 (Claude) | INDEPENDENTLY VERIFIED on `723d90d3` | stays open until integrated and released |
