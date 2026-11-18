@@ -223,6 +223,18 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
                     per[equip] = {"sql": float("nan"), "pandas": None, "status": ref.get("status")}   # never finite: no match
                     proof_mismatches.append(f"{rule}/{equip}: pandas skipped for no run proof, SQL assessed")
                 continue
+            # #1670: a rule that reports its own assessment must agree on whether it assessed at all
+            ref_status = str(ref.get("status") or "")
+            if row is not None and "assessment" in row:
+                sql_assessed = row.get("assessment") == "assessed"
+                if sql_assessed and ref_status.startswith("NOT_ASSESSED"):
+                    per[equip] = {"sql": float("nan"), "pandas": None, "status": ref_status}
+                    proof_mismatches.append(f"{rule}/{equip}: pandas not assessed, SQL assessed")
+                    continue
+                if not sql_assessed and ref_status.startswith(("FAULT", "PASS")):
+                    per[equip] = {"sql": float("nan"), "pandas": ref.get("pandas"), "status": ref_status}
+                    proof_mismatches.append(f"{rule}/{equip}: SQL {row.get('assessment')}, pandas assessed")
+                    continue
             # sensor aggregates included: a null-hours, zero-coverage SQL row is SQL's skip
             if (row is not None and row.get("fault_hours") is None and "covered_hours" in row
                     and not row.get("covered_hours") and str(ref.get("status") or "").startswith(("FAULT", "PASS"))):

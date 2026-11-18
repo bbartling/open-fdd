@@ -385,7 +385,11 @@ function resultValue(packRule, row) {
       return { ...base, coverage: coverage || 0, status: 'not-assessed', reason: 'no covered time in the window (covered_hours 0)' };
     }
     const value = num(row[column]);
-    if (value == null) return { ...base, coverage, status: 'not-assessed', reason: `${column} is null` };
+    if (value == null) {
+      // #1670: rules that report why they did not assess (SCHED-247 insufficient_proof / no_proof) say so
+      const why = typeof row.assessment === 'string' && row.assessment !== 'assessed' ? row.assessment : `${column} is null`;
+      return { ...base, coverage, status: 'not-assessed', reason: why };
+    }
     return { ...base, value, coverage, status: value > 0 ? 'fault' : 'ok', reason: '' };
   }
   const column = cols.find((c) => c !== 'equipment_id') || '';
