@@ -2309,7 +2309,7 @@ RULES: list[CookbookRule] = [
             CookbookParam("coil_delta", "Minimum heating rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("COIL-PERF", "Coil performance (heating and cooling)", "ahu", ["ahu"], [],
-        "Coil valve commanded open (opposite valve shut) but the air temperature change across the coil is below min_dt.",
+        "Coil valve open, opposite valve shut, air temperature change below min_dt.",
         coil_perf, params=[
             CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
             CookbookParam("valve_shut", "Opposite valve shut", "frac", 0.0, 0.2, 0.01, 0.05),

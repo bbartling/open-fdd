@@ -227,7 +227,7 @@ Fan command and proven status disagree.
 
 ### COIL-PERF {#coil-perf}
 
-Coil valve commanded open (opposite valve shut) but the air temperature change across the coil is below min_dt.
+Coil valve open, opposite valve shut, air temperature change below min_dt.
 
 **Coil performance (heating and cooling)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `coil_perf` · [SQL entry](sql-cookbook.html#coil-perf)
 
