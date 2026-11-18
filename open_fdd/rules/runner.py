@@ -521,8 +521,13 @@ def run_cookbook_rule(
 
             rp_series, rp_src = derive_run_proof(d)
             if rp_series is not None:
-                active = proof_on(rp_series)
+                # #1631: the fallback proof gets the rule's startup delay too, like the hydronic proof it replaces
+                from open_fdd.rules.operational_gate import apply_startup_delay
+
+                delay = float(params.get("startup_delay_min", (spec.startup_delay_seconds if spec else 0.0) / 60.0)) * 60.0
+                active = apply_startup_delay(proof_on(rp_series), poll_seconds, delay)
                 gate_meta = {**gate_meta, "missing_proof": False, "gate_applied": True, "gate_source": rp_src,
+                             "startup_delay_seconds": delay,
                              "active_sample_count": int(active.sum()),
                              "active_coverage_pct": round(100.0 * float(active.mean()), 1) if len(active) else 0.0}
         if gate_meta.get("missing_proof"):

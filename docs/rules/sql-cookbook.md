@@ -443,7 +443,7 @@ Mech cooling without integrated economizer
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-3): weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns
+**Parity** [match](parity.html#econ-3); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
 
 ### ECON-4 {#econ-4}
@@ -596,6 +596,10 @@ Economizer OK but not economizing
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
+| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_amps` | `chiller-amps` | Current | A | none (declare A) | - | optional |
+| `chiller_power` | `chiller-power` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
 
 **Parameters**
 
@@ -623,7 +627,7 @@ Economizer OK but not economizing
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-7): weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns
+**Parity** [known divergence](parity.html#econ-7): a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642
 
 
 ### FC1 {#fc1}
@@ -1384,8 +1388,10 @@ Mechanical cooling below 15.6 °C web OAT
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---:|---|
 | `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_amps` | `chiller-amps` | Current | A | none (declare A) | - | optional |
+| `chiller_power` | `chiller-power` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
 
 **Parameters**
 
@@ -1403,7 +1409,7 @@ Mechanical cooling below 15.6 °C web OAT
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#mech-oat-1): pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve
+**Parity** [match](parity.html#mech-oat-1); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
 
 ### OA-1 {#oa-1}

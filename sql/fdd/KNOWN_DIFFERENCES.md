@@ -92,6 +92,15 @@ rule and equipment (`sql_active_hours`, `pandas_active_hours`) and lists every p
 differs". This is informational, not a failure. On basic 4x3: 31 pairs, e.g. CHW-2 / AHU-1 SQL 42.0 h vs pandas 21.2 h
 and DMP-1 / AHU-2 SQL 34.5 h vs pandas 49.3 h. Aligning these gates in SQL (so `fault_pct` equals pandas) is a follow-up.
 
+## Run proof from an analog command with no unit (#1631)
+
+The NF hooks' run-proof resolver (`nf-app/static/run-proof.js`) skips an equipment's numeric **analog** command (speed,
+VFD, position, ...) with no percent or 0-1 fraction unit as a proof candidate, because its 0-100 or 0-1 scale cannot be
+told apart against the 0-1 proof threshold; the next candidate (another own command, then a feeder) wins. Start/stop
+(run / enable) commands stay usable as 0/1 even with no unit or `kind`. pandas frames are SI without point units, so
+`open_fdd.run_proof` keeps such a command; the parity datasets bind the resolved proof as a column, so the engines matrix
+is not affected.
+
 ## Percent / fraction contract (#1541)
 
 Every command and position role is a fraction 0-1, every status is 0/1, and humidity is %RH 0-100, declared by `sql/fdd/input_contract.json` (`role_scales.json` is generated for compatibility). No SQL rule and no pandas rule guesses a scale by magnitude any more (the `> 1.0` / `>= 1.5` branches, `pid_hunt_1`'s reverse guess and the pandas `num <= 1.5` / series-level `auto` guesses are gone). The pandas oracle's `norm_cmd` is a plain pass-through for fractions; only RCx analytics (`open_fdd/analytics`) keeps a series-level guess, for legacy mixed-scale exports. Removing the element-wise (SQL) vs series-level (pandas) guesses also removed three parity divergences: AHU-SIMUL, CHW-2 and FCU-VALVE-PASS-CLG now match. A caller that feeds the SQL directly must supply fractions and 0/1.

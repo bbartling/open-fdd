@@ -323,6 +323,28 @@ def select_list(body):
 def build_timeline_pg(pg_sql):
     """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
 
+    #1631: a run-proof gated rule (an ``rp`` CTE with ``no_run_proof``) leaves equipment with no proof bound out of its
+    timeline, the same answer as its summary row (SKIPPED: fault_hours NULL, covered_hours 0), instead of a timeline of
+    held, never-confirmed rows that reads as assessed.
+    """
+    tl = _build_timeline_pg(pg_sql)
+    if not re.search(r"\bno_run_proof\b", pg_sql) or not re.search(r"\brp AS \(", strip_comments(pg_sql)):
+        return tl
+    last = tl.rstrip().rfind("\nSELECT ")
+    head, sel = tl[:last + 1], tl[last + 1:]
+    col = "f.equipment_id" if re.search(r"\bFROM final f\b", sel) else "equipment_id"
+    cond = f"{col} NOT IN (SELECT rpx.equipment_id FROM rp rpx WHERE rpx.no_run_proof = 1)"
+    k = sel.rfind("ORDER BY")
+    if k < 0:
+        raise NoTimeline("timeline select has no ORDER BY")
+    before, after = sel[:k].rstrip(), sel[k:]
+    joiner = " AND " if re.search(r"\bWHERE\b", before[before.rfind("FROM"):]) else " WHERE "
+    return head + before + joiner + cond + " " + after
+
+
+def _build_timeline_pg(pg_sql):
+    """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
+
     Per-sensor SV rules expose series_id and sensor_role, and preserve silence-tail intervals exactly.
     """
     s = strip_comments(pg_sql)
@@ -364,11 +386,13 @@ def build_timeline_pg(pg_sql):
         if after == ["cov"]:
             gate = re.search(r"WHEN\s+(\S+)\s*<\s*0\.5\s+THEN\s+SUM", tail)
             thr = re.search(r"MAX\(c\.cov_pct\)\s*<\s*(\S+)\s+THEN\s+0\.0", tail)
-            if not (gate and thr and "FROM final f" in tail and "LEFT JOIN cov c" in tail):
+            # #1631: the GL36 templates no longer bypass the coverage floor when the run-proof gate is off (no `gate`)
+            if not (thr and "FROM final f" in tail and "LEFT JOIN cov c" in tail):
                 raise NoTimeline("coverage-gated rule with an unrecognised final SELECT")
             tween = s[c + 1:main].rstrip()
+            bypass = f"WHEN {gate.group(1)} < 0.5 THEN f.confirmed " if gate else ""
             sel = (f"SELECT f.equipment_id, {_TS.format(t='f.timestamp_utc')},\n"
-                   f"  CASE WHEN {gate.group(1)} < 0.5 THEN f.confirmed WHEN c.cov_pct < {thr.group(1)} THEN 0 ELSE f.confirmed END AS confirmed,\n"
+                   f"  CASE {bypass}WHEN c.cov_pct < {thr.group(1)} THEN 0 ELSE f.confirmed END AS confirmed,\n"
                    f"  f.held_seconds\n"
                    f"FROM final f LEFT JOIN cov c ON f.equipment_id = c.equipment_id ORDER BY f.equipment_id, f.timestamp_utc")
             return head + tween + "\n" + sel + "\n"

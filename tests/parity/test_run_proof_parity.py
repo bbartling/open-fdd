@@ -57,8 +57,9 @@ def runs(ds):
 
 
 def _legacy_toggle_in_sql(rule: str) -> bool:
-    """The rule's own pre-#1608 gate also answers to the switch in SQL (19 templates; the other 33 always apply it). In pandas
-    require_run_proof=0 leaves the rule's own gate alone, so only rules WITHOUT the coupling compare exactly when ungated."""
+    """The rule's own gate also answers to the switch in SQL. Since #1631 no GL36 template does (they keep their fan
+    condition, holdoff and coverage floor, as pandas: require_run_proof=0 leaves the rule's own gate alone); only the
+    sensor sweeps, which are not compared here, still use the switch more than twice."""
     sql = (ROOT / "sql/fdd/postgres/rules" / SQL_FILE[rule]).read_text(encoding="utf-8")
     return sql.count("{{REQUIRE_RUN_PROOF}}") > 2
 
