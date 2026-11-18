@@ -73,6 +73,15 @@ The preparation host's installed `open-fdd` distribution is 4.4.1 (62 diagnostic
 - The focused SV fixtures cover per-role isolation, long and trailing silence (SV-STALE only), de-energized silence, expected series with no sample (`nf-app/tests/sv-stale-gap.test.mjs`), irregular 7-minute sampling and spike role attribution on both SQL engines. They are synthetic screening proofs, not field-data accuracy or every boundary value. The separate Timescale suite provides additional dialect/runtime qualification.
 - Sensor-sweep tolerance metadata may span different physical quantities. Temperature display conversions are a convenience, not permission to apply Celsius offsets to humidity or pressure tolerances. Resolve per-role quantities explicitly for a warehouse UI.
 
+## Run proof from an analog command with no unit (#1631)
+
+The NF hooks' run-proof resolver (`nf-app/static/run-proof.js`) skips an equipment's numeric **analog** command (speed,
+VFD, position, ...) with no percent or 0-1 fraction unit as a proof candidate, because its 0-100 or 0-1 scale cannot be
+told apart against the 0-1 proof threshold; the next candidate (another own command, then a feeder) wins. Start/stop
+(run / enable) commands stay usable as 0/1 even with no unit or `kind`. pandas frames are SI without point units, so
+`open_fdd.run_proof` keeps such a command; the parity datasets bind the resolved proof as a column, so the engines matrix
+is not affected.
+
 ## Percent / fraction contract (#1541)
 
 Every command and position role is a fraction 0-1, every status is 0/1, and humidity is %RH 0-100, declared by `sql/fdd/input_contract.json` (`role_scales.json` is generated for compatibility). No SQL rule and no pandas rule guesses a scale by magnitude any more (the `> 1.0` / `>= 1.5` branches, `pid_hunt_1`'s reverse guess and the pandas `num <= 1.5` / series-level `auto` guesses are gone). The pandas oracle's `norm_cmd` is a plain pass-through for fractions; only RCx analytics (`open_fdd/analytics`) keeps a series-level guess, for legacy mixed-scale exports. Removing the element-wise (SQL) vs series-level (pandas) guesses also removed three parity divergences: AHU-SIMUL, CHW-2 and FCU-VALVE-PASS-CLG now match. A caller that feeds the SQL directly must supply fractions and 0/1.

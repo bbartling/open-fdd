@@ -10,19 +10,25 @@ WITH rp AS (
   FROM history
   GROUP BY equipment_id
 ),
-wx AS (
-  SELECT
-    timestamp_utc,
-    MAX(web_oa_t) AS wx_web_oa_t
-  FROM weather
-  GROUP BY timestamp_utc
+-- #1642: the weather sidecar is joined as-of, per variable: the latest web sample at or before the history row, used for at
+-- most WEB_ASOF_BOUND_SECONDS (web cadence + margin; the OAT-METEO join and pandas weather_on_grid). An exact timestamp
+-- join left 2 of 3 rows without weather on a 5-min grid with 15-min weather, and those rows broke confirmation.
+wx_web_oa_t AS (
+  SELECT timestamp_utc AS ref_ts, ref_val,
+    LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) AS next_ref_ts
+  FROM (
+    SELECT timestamp_utc, MAX(web_oa_t) AS ref_val
+    FROM weather
+    WHERE web_oa_t IS NOT NULL
+    GROUP BY timestamp_utc
+  ) wx_web_oa_t_points
 ),
 h AS (
   SELECT
     run_proof,
     h.equipment_id,
     h.timestamp_utc,
-    COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
+    COALESCE(h.web_oa_t, wx_web_oa_t.ref_val) AS web_oa_t,
     h.oa_damper_pct AS oa_d,
     h.fan_cmd,
     h.fan_status,
@@ -32,8 +38,10 @@ h AS (
       ELSE 1
     END AS fan_on
   FROM history h
-  LEFT JOIN wx
-    ON h.timestamp_utc = wx.timestamp_utc
+  LEFT JOIN wx_web_oa_t
+    ON h.timestamp_utc >= wx_web_oa_t.ref_ts
+   AND (wx_web_oa_t.next_ref_ts IS NULL OR h.timestamp_utc < wx_web_oa_t.next_ref_ts)
+   AND EXTRACT(EPOCH FROM (h.timestamp_utc - wx_web_oa_t.ref_ts)) <= {{WEB_ASOF_BOUND_SECONDS}}
 ),
 base AS (
   SELECT

@@ -1797,6 +1797,49 @@ def install_schema_gate(c, m: dict, a, prior: dict | None, app_id: str, environ,
     return lvl, text, lvl != "DRIFT"
 
 
+def push_schema_gate(c, m: dict, environ=None, allow_pending: bool = False) -> int:
+    """#1633: `push` reads the installed Timescale schema first (read-only, the same check as install and doctor) and
+    refuses before any write when it cannot confirm that the database is at the schema this release needs. Returns
+    0 to continue, EXIT_FAILED to stop. --allow-schema-upgrade-pending pushes anyway, loudly."""
+    app_id = m["application"]["id"]
+    prior = c.app(app_id)
+    if not prior or not timescale_selected(prior):
+        return 0
+    lvl, text = push_schema_verdict(c, m, prior, app_id, environ)
+    if lvl != "FAIL":
+        if text:
+            print(f"push: Timescale schema preflight: {text}")
+        return 0
+    if allow_pending:
+        print(f"push: WARNING: Timescale schema preflight failed and --allow-schema-upgrade-pending was given: {text}. "
+              "Scheduled fdd runs fail until nf-app/timescale/install.sql is applied as the database owner.")
+        return 0
+    print(f"push: STOPPED: Timescale schema preflight failed: {text}")
+    print("push: nothing was written. Apply nf-app/timescale/install.sql as the database owner (installer role) first, "
+          "or pass --allow-schema-upgrade-pending to push anyway.")
+    return EXIT_FAILED
+
+
+def push_schema_verdict(c, m: dict, prior: dict, app_id: str, environ=None, clock=time.monotonic,
+                        sleep=time.sleep) -> tuple[str, str]:
+    """(level, text) of push's read-only schema check against THIS release's required schema (local
+    hooks/lib/timescale.js SCHEMA_VERSION). The installed probe's own `ok` / `required` describe the release already on
+    the box, so its PASS is taken only when the schema it reports installed is at least what this push needs (an older
+    probe would otherwise approve pushing code that needs a newer schema). Push never bootstraps the probe: an app
+    without it, or a probe run with no usable answer, uses the NF_TIMESCALE_PREFLIGHT_DSN path."""
+    if not has_probe_hook(prior):
+        return timescale_schema_check(prior, environ)
+    got = probe_run(c, app_id, clock, sleep)
+    if got is None:
+        return timescale_schema_check(prior, environ)
+    lvl, text = probe_verdict(got)
+    want, installed = local_required_schema(m), got.get("installed")
+    if lvl != "SKIP" and want is not None and isinstance(installed, int) and installed < want:
+        return "FAIL", (f"Timescale schema version {installed}; this release requires {want} (the installed schema probe "
+                        f"only checks for {got.get('required')}). Run nf-app/timescale/install.sql as installer/owner")
+    return lvl, text
+
+
 def schema_preflight(c, app: dict, app_id: str, environ=None, **kw) -> tuple[str, str]:
     """Schema check order: the NF-side probe when the installed app has it, else the NF_TIMESCALE_PREFLIGHT_DSN path
     (psql), else a refusal that names both remedies. SKIP on Lite or a non-Timescale engine."""
@@ -2119,6 +2162,9 @@ def build_parser() -> argparse.ArgumentParser:
                     help="install: run the read-only checks (login, schema probe, hand edits) and say what would happen, "
                          "e.g. \"would bootstrap the schema probe\"; writes nothing. Refused for every other action "
                          "(they have no dry run); use status or diff for a read-only look")
+    ap.add_argument("--allow-schema-upgrade-pending", action="store_true",
+                    help="push: push even when the Timescale schema preflight fails (the database is older than this "
+                         "release needs, or the check cannot run); the scheduled fdd runs fail until install.sql is applied")
     ap.add_argument("--skip-verify-run", action="store_true",
                     help="install: do not run the scheduled hooks once to verify")
     ap.add_argument("--remove-old", action="store_true",
@@ -2175,6 +2221,9 @@ def main(argv: list[str] | None = None) -> int:
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
+        rc = push_schema_gate(c, m, env, a.allow_schema_upgrade_pending)   # before any write (#1633)
+        if rc:
+            return rc
         return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, force=a.force, save_remote=a.save_remote)
     if a.action == "run":
         return cmd_run(c, m, a.hooks, a.wait, a.resume, args=parse_args(a.hook_args) or None)

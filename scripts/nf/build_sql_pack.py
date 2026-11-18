@@ -323,6 +323,28 @@ def select_list(body):
 def build_timeline_pg(pg_sql):
     """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
 
+    #1631: a run-proof gated rule (an ``rp`` CTE with ``no_run_proof``) leaves equipment with no proof bound out of its
+    timeline, the same answer as its summary row (SKIPPED: fault_hours NULL, covered_hours 0), instead of a timeline of
+    held, never-confirmed rows that reads as assessed.
+    """
+    tl = _build_timeline_pg(pg_sql)
+    if not re.search(r"\bno_run_proof\b", pg_sql) or not re.search(r"\brp AS \(", strip_comments(pg_sql)):
+        return tl
+    last = tl.rstrip().rfind("\nSELECT ")
+    head, sel = tl[:last + 1], tl[last + 1:]
+    col = "f.equipment_id" if re.search(r"\bFROM final f\b", sel) else "equipment_id"
+    cond = f"{col} NOT IN (SELECT rpx.equipment_id FROM rp rpx WHERE rpx.no_run_proof = 1)"
+    k = sel.rfind("ORDER BY")
+    if k < 0:
+        raise NoTimeline("timeline select has no ORDER BY")
+    before, after = sel[:k].rstrip(), sel[k:]
+    joiner = " AND " if re.search(r"\bWHERE\b", before[before.rfind("FROM"):]) else " WHERE "
+    return head + before + joiner + cond + " " + after
+
+
+def _build_timeline_pg(pg_sql):
+    """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
+
     Per-sensor SV rules expose series_id and sensor_role, and preserve silence-tail intervals exactly.
     """
     s = strip_comments(pg_sql)
