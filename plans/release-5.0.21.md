@@ -53,7 +53,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1673 | C | SV-STALE = gap/missing; SV-FLATLINE = stuck values; dedupe silence; expected series; stale tuner migration | PR READY | #1700 (`fix/1673-stale-vs-flatline`) | Grok acceptance; then #1671 one-timer cleanup for FLATLINE/RANGE/SPIKE |
 | 1631 | C | Run-proof coverage/denominator follow-ups | PR READY (item 1) | #1702 (`fix/1631-sweep-proof-asof`, stacked on #1700) | sweep as-of proof join done (23.9 h repro -> 0); remaining items: ECON-7/DMP-1/VLV-1 coverage, FC4 order, TRIM-3/4, CW-FAN/OPT, FC13 placeholder, runner denominator + startup delay, command-unit check, AHU/pump proof fixtures, IRI identity |
 | 1635 | C (+G client) | Resolved proof into SPARQL client frames | OPEN | | |
-| 1636 | C | Occupancy calendar synthesis | OPEN | | |
+| 1636 | C | Occupancy calendar synthesis | PR READY | #1706 (`fix/1636-occupancy-calendar`) | Grok acceptance; Timescale UPDATE verified only by the CI Timescale job / disposable instance |
 | 1639 | C | Expanded SI stress, seeds, replay | OPEN | | |
 | 1640 | C | DataFusion parity adapter | OPEN | | |
 | 1641 | C | Generic coil performance rule | OPEN | | |
@@ -92,6 +92,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
+| #1706 | Claude | #1636 occupancy calendar | ready | Grok acceptance, CI |
 | #1700 | Claude | #1673 SV-STALE split | ready | Grok acceptance, CI |
 | #1677 #1678 #1679 #1683 #1690 #1692 #1693 | Grok | ML/tooling | merged (Claude review ACCEPT, CI green) | done |
 | #1680 #1684 #1685 #1686 #1689 #1697 | Grok | tooling | Claude ACCEPT (nits posted) | merge when CI green / stack base lands |
@@ -120,4 +121,10 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - GitHub Actions backlog: new PRs sit with 20+ pending checks; merges wait for green on the exact head.
 - Next code items (priority order): #1671 tuner contract -> #1672 sliders; #1631 remaining items; #1636; #1641; #1642;
   #1635 hook half (sparql-data emits run_proof/run_proof_series); then #1649 analytics.
+
+### 2026-11-18 ~00:30 local (Claude): checkpoint 2
+
+- 5-hour window at 78%: checkpointed instead of starting #1671. Session-only merge sweep scheduled 04:47 local.
+- Opened #1706 (#1636): saved calendar > NF schedule > default on every engine; pandas overnight-shift mask fixed.
+- Resume prompt: `C:\Users\ben\Documents\prompts\2026-11-18-openfdd-5.0.21-resume-checkpoint-2.md`.
 
