@@ -1105,9 +1105,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
     "zone_t_lo": 21.111111111,
     "zone_t_hi": 23.888888889,
     "require_occupied": 1.0,
@@ -1135,9 +1132,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
     "setback_hi": 20.0,
     "confirm_seconds": 900
    },
@@ -1219,9 +1213,7 @@
    "confirm_seconds": 900,
    "parameters": {
     "oat_err": 2.777778,
-    "confirm_seconds": 900,
-    "web_cadence_seconds": 1200,
-    "web_asof_margin_seconds": 300
+    "confirm_seconds": 900
    },
    "run_proof": "exempt",
    "run_proof_note": "compares two outside-air sources; no running equipment is judged"
@@ -1248,11 +1240,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "eps_sat": 0.638888889,
     "econ_min_pos": 0.05,
     "econ_full_open": 0.9,
@@ -1282,8 +1271,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "econ2_oat_hi": 17.222222,
     "econ2_damper": 0.42,
@@ -1312,11 +1299,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "eps_dsp": 29.8608,
     "eps_vfd_spd": 0.13,
     "confirm_seconds": 300
@@ -1345,10 +1329,7 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_rat": 0.638888889,
     "eps_oat": 0.638888889,
@@ -1380,10 +1361,7 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "mode_delay_min": 10.0,
     "eps_rat": 0.638888889,
     "eps_oat": 0.638888889,
     "eps_mat": 0.638888889,
@@ -1414,10 +1392,7 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
     "htg_full_min": 0.9,
@@ -1447,11 +1422,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "supply_tol": 0.638888889,
     "eps_sat": 0.638888889,
     "eps_mat": 0.638888889,
@@ -1485,11 +1457,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "eps_sat": 0.638888889,
     "eps_oat": 0.638888889,
     "mix_tol": 0.638888889,
@@ -1522,11 +1491,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "eps_oat": 0.638888889,
     "eps_mat": 0.638888889,
     "econ_full_open": 0.9,
@@ -1558,11 +1524,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "eps_sat": 0.638888889,
     "eps_oat": 0.638888889,
     "econ_full_open": 0.9,
@@ -1595,11 +1558,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "supply_tol": 0.638888889,
     "eps_sat": 0.638888889,
     "eps_mat": 0.638888889,
@@ -1633,8 +1593,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "econ1_oat_min": 12.777778,
     "econ1_damper_max": 0.05
@@ -1663,8 +1621,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "oa_min_pct": 21.0,
     "oat_rat_delta_min": 1.222222,
@@ -1718,14 +1674,11 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "range_scale_temperature": 1.0,
     "range_scale_humidity": 1.0,
-    "range_scale_pressure": 1.0,
-    "max_silence_hours": 0.5
+    "range_scale_pressure": 1.0
    },
    "run_proof": "gated"
   },
@@ -1770,13 +1723,9 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "confirm_seconds": 300.0,
     "flatline_tol": 0.055556,
-    "flatline_hours": 1.0,
-    "max_silence_hours": 0.5
+    "flatline_hours": 1.0
    },
    "run_proof": "gated"
   },
@@ -1818,15 +1767,12 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "spike_scale_pressure": 1.0,
     "spike_scale_humidity": 1.0,
     "spike_scale_temperature": 1.0,
     "confirm_seconds": 300.0,
-    "spike_scale": 1.0,
-    "max_silence_hours": 0.5
+    "spike_scale": 1.0
    },
    "run_proof": "gated"
   },
@@ -1897,9 +1843,7 @@
    "parameters": {
     "require_run_proof": 1.0,
     "sensor_span": 100.0,
-    "max_gap_hours": 1.0,
     "confirm_seconds": 600.0,
-    "persistence_min": 10.0,
     "steady_fault_per_hour": 3.333333
    },
    "run_proof": "gated"
@@ -1931,17 +1875,13 @@
    "unmapped_roles": [],
    "confirm_seconds": 0,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "confirm_seconds": 0.0,
     "window_hours": 1.0,
     "change_deadband_pct": 1.0,
     "minimum_span_pct": 20.0,
     "total_variation_fault_pct": 500.0,
     "minimum_equivalent_cycles": 2.5,
-    "minimum_reversals": 4.0,
-    "minimum_coverage_pct": 80.0
+    "minimum_reversals": 4.0
    },
    "run_proof": "gated"
   },
@@ -1965,11 +1905,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 3600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "confirm_seconds": 3600.0,
     "delta_os_max": 5.0
    },
@@ -1997,10 +1934,7 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_sat": 0.638888889,
     "eps_mat": 0.638888889,
@@ -2034,11 +1968,8 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "oat_rat_delta_min": 2.777777778,
-    "mode_delay_min": 10.0,
     "fan_on_min": 0.01,
     "eps_airflow": 0.15,
     "confirm_seconds": 600.0,
@@ -2071,11 +2002,8 @@
    "confirm_seconds": 600,
    "parameters": {
     "clg_on_min": 0.01,
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "htg_on_min": 0.01,
     "eps_cclt": 0.638888889,
     "eps_ccet": 0.638888889,
@@ -2111,11 +2039,8 @@
    "confirm_seconds": 600,
    "parameters": {
     "htg_on_min": 0.01,
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "fan_on_min": 0.01,
-    "mode_delay_min": 10.0,
     "eps_hclt": 0.638888889,
     "eps_hcet": 0.638888889,
     "econ_min_pos": 0.05,
@@ -2148,8 +2073,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "sat_dev_err": 2.777778
@@ -2176,9 +2099,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
     "confirm_seconds": 300.0,
     "duct_high_margin": 62.21,
     "pressure_on_min": 49.768
@@ -2206,8 +2126,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "valve_open_pct": 0.1
@@ -2236,8 +2154,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "econ3_db_min": 15.555556,
@@ -2270,8 +2186,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "preheat_over": 1.222222,
@@ -2299,8 +2213,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "econ6_oat_max": -3.888889,
@@ -2330,8 +2242,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "econ7_db_min": 1.666667,
@@ -2411,8 +2321,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "min_oa_frac": 0.15,
@@ -2441,8 +2349,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "leak_delta": 1.111111
@@ -2471,8 +2377,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "sat_err": 1.111111,
@@ -2501,8 +2405,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "reheat_oat": 25.555555556,
@@ -2531,10 +2433,7 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "confirm_seconds": 900.0,
     "full_open_pct": 0.975,
     "flow_on_min": 11.798675,
     "sustain_hours": 1.5
@@ -2561,8 +2460,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "flow_bias": 23.59735,
@@ -2589,8 +2486,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "free_cool_oat": 18.333333333,
     "reheat_pct": 0.25,
@@ -2620,8 +2515,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "reheat_cmd": 0.3,
@@ -2678,10 +2571,7 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
-    "confirm_seconds": 900.0,
     "high_min_flow_sp": 117.98675,
     "flow_on_min": 11.798675,
     "fixed_flow_hours": 1.0,
@@ -2710,8 +2600,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "reset_err": 1.666667,
     "reset_sat_at_ref": 11.111111,
@@ -2742,9 +2630,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
-    "require_operational_gate": 1.0,
     "confirm_seconds": 1800.0,
     "load_sat_hi": 0.5
    },
@@ -2777,8 +2662,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "min_dt": 2.222222
@@ -2808,8 +2691,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "dp_margin": 15168.465,
@@ -2840,8 +2721,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "sp_band": 1.222222
@@ -2869,8 +2748,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 300,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 300.0,
     "flow_hi": 69.39922,
@@ -2902,8 +2779,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "cw_approach": 3.888889,
@@ -2936,8 +2811,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "approach_max": 4.444444,
@@ -2970,8 +2843,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 900,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 900.0,
     "cw_approach": 3.888889,
@@ -3001,8 +2872,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 600,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 600.0,
     "min_sat": 29.444444,
@@ -3052,8 +2921,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 1800.0,
     "duct_hi": 335.934,
@@ -3083,8 +2950,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 1800.0,
     "hwst_hi": 71.111111,
@@ -3115,8 +2980,6 @@
    "unmapped_roles": [],
    "confirm_seconds": 1800,
    "parameters": {
-    "minimum_active_coverage_pct": 5.0,
-    "startup_delay_min": 0.0,
     "require_run_proof": 1.0,
     "confirm_seconds": 1800.0,
     "chw_lo": 7.222222,
