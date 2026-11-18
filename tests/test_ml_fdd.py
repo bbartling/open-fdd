@@ -389,6 +389,109 @@ def test_cli_detect_untrained_method_accepts_a_partial_folder(tmp_path):
     assert main(["detect", str(part), "--method", "zscore", "--out", str(tmp_path / "z")]) == 0
 
 
+def _folder_from_frame(tmp_path: Path, name: str, frame) -> Path:
+    folder = tmp_path / name
+    folder.mkdir()
+    out = frame.copy()
+    out.columns = [c.replace("-", "_") for c in out.columns]
+    out.to_csv(folder / "history_wide.csv", index_label="timestamp_utc")
+    points = {role: role.replace("-", "_") for role in frame.columns}
+    (folder / "column_map.json").write_text(json.dumps({"equipType": "AHU", "points": points}), encoding="utf-8")
+    return folder
+
+
+def _detect(tmp_path: Path, *argv: str):
+    """Run ``open-fdd-ml detect``; return (exit code, summary or None, flags frame or None)."""
+    from open_fdd.ml.cli import main
+
+    out = tmp_path / f"out{len(list(tmp_path.glob('out*')))}"
+    code = main(["detect", *argv, "--out", str(out)])
+    if code != 0:
+        return code, None, None
+    summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
+    return code, summary, pd.read_csv(out / "flags.csv")
+
+
+def test_cli_detect_learning_methods_require_a_training_source(tmp_path, capsys):
+    """#1665: no silent self-fit. Learning methods exit 2 without --train/--train-until/--exploratory-self-fit."""
+    folder = _device_folder(tmp_path)
+    for method in ("pca", "grey_box", "ocsvm"):
+        code, _, _ = _detect(tmp_path, str(folder), "--method", method)
+        assert code == 2, method
+        assert "--exploratory-self-fit" in capsys.readouterr().err
+    code, summary, _ = _detect(tmp_path, str(folder), "--method", "zscore")
+    assert code == 0 and summary["training"]["used"] is False and summary["train_rows"] == 0
+    code, _, _ = _detect(tmp_path, str(folder), "--method", "pca", "--train", str(folder), "--train-until", "2018-07-05")
+    assert code == 2  # mutually exclusive training sources
+
+
+def test_cli_detect_cutoff_labels_phases_and_counts_evaluation_only(tmp_path):
+    folder = _device_folder(tmp_path)
+    code, summary, flags = _detect(tmp_path, str(folder), "--method", "pca", "--train-until", "2018-07-05")
+    assert code == 0
+    assert flags["phase"].value_counts().to_dict() == {"train": 288, "evaluation": 288}
+    ev = flags[flags["phase"] == "evaluation"]
+    assert summary["folder_rows"] == 576 and summary["rows"] == 288 and summary["train_rows"] == 288
+    assert summary["flagged_rows"] == int(ev["flag"].sum()) and summary["active_rows"] == int(ev["active"].sum())
+    assert summary["counts_cover"] == "evaluation rows only" and summary["exploratory"] is False
+    t = summary["training"]
+    assert t["source"] == "cutoff" and t["rows"] == 288 and t["active_rows"] > 0 and "operator-asserted" in t["assertion"]
+    assert pd.Timestamp(t["end_utc"]) < pd.Timestamp(t["cutoff_utc"]) <= pd.Timestamp(summary["evaluation"]["start_utc"])
+    assert summary["seed"] == 0 and summary["open_fdd_version"]
+
+
+def test_cli_detect_rejects_empty_or_unusable_training_selections(tmp_path, capsys):
+    folder = _device_folder(tmp_path)
+    for cut, msg in (("2018-07-01", "no training rows"), ("2018-07-30", "no evaluation rows"),
+                     ("not-a-date", "not a date")):
+        code, _, _ = _detect(tmp_path, str(folder), "--method", "pca", "--train-until", cut)
+        assert code == 2 and msg in capsys.readouterr().err, cut
+    off = _synthetic_ahu(n=600, seed=30)
+    off.iloc[:300, off.columns.get_loc("fan-status")] = 0.0
+    off_folder = _folder_from_frame(tmp_path, "AHU_OFF", off)
+    code, _, _ = _detect(tmp_path, str(off_folder), "--method", "pca", "--train-until", str(off.index[300].date()))
+    assert code == 2 and "no active rows" in capsys.readouterr().err
+    code, _, _ = _detect(tmp_path, str(folder), "--method", "pca", "--train", str(folder))
+    assert code == 2 and "folder being scored" in capsys.readouterr().err
+
+
+def test_cli_detect_discloses_and_excludes_training_overlap(tmp_path, capsys):
+    frame = _synthetic_ahu(n=1200, seed=31)
+    target = _folder_from_frame(tmp_path, "AHU_T", frame)
+    copy = _folder_from_frame(tmp_path, "AHU_COPY", frame)
+    code, _, _ = _detect(tmp_path, str(target), "--method", "pca", "--train", str(copy))
+    assert code == 2 and "no held-out evaluation rows" in capsys.readouterr().err
+    first_half = _folder_from_frame(tmp_path, "AHU_H", frame.iloc[:600])
+    code, summary, flags = _detect(tmp_path, str(target), "--method", "pca", "--train", str(first_half))
+    assert code == 0
+    assert flags["phase"].value_counts().to_dict() == {"train_overlap": 600, "evaluation": 600}
+    assert summary["training_overlap"]["identical_rows_excluded"] == 600 and summary["rows"] == 600
+    other_device = _folder_from_frame(tmp_path, "AHU_OTHER", _synthetic_ahu(n=1200, seed=32))
+    code, summary, flags = _detect(tmp_path, str(target), "--method", "pca", "--train", str(other_device))
+    assert code == 0 and summary["training_overlap"]["common_timestamps"] == 1200
+    assert summary["training_overlap"]["identical_rows_excluded"] == 0 and summary["rows"] == 1200
+
+
+def test_cli_detect_persistent_fault_never_enters_the_cutoff_baseline(tmp_path):
+    """A fault present in every evaluation row: the cutoff fit stays healthy and flags it; a self-fit absorbs it."""
+    healthy = _synthetic_ahu(n=2016, seed=33)
+    faulty = _synthetic_ahu(n=2016, seed=34, sat_bias=3.0)
+    faulty.index = healthy.index + (healthy.index[-1] - healthy.index[0]) + pd.Timedelta(minutes=5)
+    frame = pd.concat([healthy, faulty])
+    folder = _folder_from_frame(tmp_path, "AHU_F", frame)
+    cut = str(faulty.index[0])
+    code, summary, flags = _detect(tmp_path, str(folder), "--method", "pca", "--train-until", cut)
+    assert code == 0
+    assert pd.Timestamp(summary["training"]["end_utc"]) < faulty.index[0]
+    cutoff_rate = summary["flagged_rows"] / summary["active_rows"]
+    code, self_summary, self_flags = _detect(tmp_path, str(folder), "--method", "pca", "--exploratory-self-fit")
+    assert code == 0 and self_summary["exploratory"] is True and "warning" in self_summary["training"]
+    assert set(self_flags["phase"]) == {"exploratory_self_fit"}
+    ev = self_flags.set_index("timestamp_utc").loc[flags.loc[flags["phase"] == "evaluation", "timestamp_utc"]]
+    self_rate = ev["flag"].sum() / ev["active"].sum()
+    assert cutoff_rate > 0.1 and cutoff_rate > 3 * self_rate
+
+
 def test_cli_benchmark_without_cache_is_a_clean_error(tmp_path, capsys):
     from open_fdd.ml.cli import main
 

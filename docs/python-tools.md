@@ -75,7 +75,8 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 open-fdd-ml download                     # LBNL single-duct AHU subset (CC BY 4.0) -> ~/.cache/open-fdd/lbnl
 open-fdd-ml benchmark --out bench.md     # rule pack vs PCA/SPE, gray-box, one-class SVM, z-score, MAD
 # COPOD needs pip install "open-fdd[ml-copod]" (pyod); with open-fdd[ml] alone that row is skipped
-open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ahu1_ml
+open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ahu1_ml   # fit before, score after
+# learning methods need --train, --train-until or --exploratory-self-fit; zscore/mad need no training
 ```
 
 Method, data, mapping and results: [docs/ml/lbnl-ahu-benchmark.md](ml/lbnl-ahu-benchmark.md).

@@ -11,7 +11,11 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
    A new detector merges only with a benchmark row and its fault-free FPR. If it loses to `rules (tuned)`, say so.
 2. **Detect on a device folder** (`history_wide.csv` in SI + `column_map.json`, same as `open-fdd-anomaly`):
    `open-fdd-ml detect FOLDER --method pca|grey_box|ocsvm|copod|zscore|mad --train-until YYYY-MM-DD --out DIR`.
-   Fit only on rows known to be healthy. PCA writes `contributions.csv/png` (which role drove the alarm).
+   Learning methods need exactly one training source: `--train KNOWN_GOOD_FOLDER`, `--train-until` (fit before,
+   score after) or `--exploratory-self-fit` (never call its flags faults against a healthy baseline). Without one
+   the command exits 2. `flags.csv` has a `phase` column; `summary.json` counts evaluation rows only and records
+   the training source, span, active rows, overlap with the target and seed. A supplied training folder is the
+   operator's assertion of healthy data, not a verified maintenance label. PCA writes `contributions.csv/png`.
 3. **SQL z-score**: `open-fdd-anomaly screen FOLDER --out DIR --methods zscore --engine sql` runs
    `sql/analytics/anomaly_zscore.sql` (portable: PostgreSQL/Timescale, DuckDB, SQLite) over `fdd.point` +
    `fdd.input_sample`. Python: `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., ...)`.
