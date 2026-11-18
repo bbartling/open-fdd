@@ -99,3 +99,68 @@ def test_methods_command(tmp_path, capsys):
     assert main(["methods", str(folder), "--json"]) == 0
     got = {r["method"]: r for r in json.loads(capsys.readouterr().out)["methods"]}
     assert got["grey_box"]["can_run"] and got["zscore"]["can_run"]
+
+
+def _ahu_two_modes(n_per_mode=40, seed=1):
+    """80 active AHU rows split evenly over two operating modes (min OA and economizer only)."""
+    rng = np.random.default_rng(seed)
+    n = 2 * n_per_mode
+    idx = pd.date_range("2026-01-05", periods=n, freq="5min", tz="UTC")
+    damper = np.r_[np.full(n_per_mode, 0.1), np.full(n_per_mode, 0.8)]
+    return pd.DataFrame(
+        {
+            "sat": 13 + rng.normal(0, 0.3, n),
+            "mat": 18 + rng.normal(0, 0.5, n),
+            "rat": 22 + rng.normal(0, 0.3, n),
+            "oa_t": 10 + rng.normal(0, 1.0, n),
+            "oa_damper_pct": damper,
+            "clg_valve_pct": 0.0,
+            "fan_status": 1.0,
+        },
+        index=idx,
+    )
+
+
+def test_mode_gated_needs_50_rows_in_one_mode_like_fit():
+    """80 active rows but 40 per mode: applicability agrees with fit (which raises), instead of can_run=True."""
+    pytest.importorskip("sklearn")
+    from open_fdd.ml.detectors import ModeGated
+
+    frame = _ahu_two_modes()
+    with pytest.raises(ValueError, match="50 normal rows"):
+        ModeGated(kind="ocsvm").fit(frame)
+    row = {r["method"]: r for r in applicability(frame)}["ocsvm"]
+    assert not row["can_run"] and "50 normal rows" in row["reason"]
+    enough = _ahu_two_modes(n_per_mode=60)
+    assert {r["method"]: r for r in applicability(enough)}["ocsvm"]["can_run"]
+
+
+def test_an_empty_mapped_role_is_ignored_and_applicability_matches_fit():
+    """zone-air-temp mapped but all NaN: PCA fits on the roles with data, gray-box uses return-air-temp."""
+    from open_fdd.ml.detectors import PCASPE
+
+    frame = _furnace()
+    frame["rat"] = frame["zone_t"] + np.random.default_rng(5).normal(0, 0.1, len(frame))
+    frame["zone_t"] = np.nan
+    assert grey_box_families(frame.rename(columns={"sat": "discharge-air-temp", "zone_t": "zone-air-temp",
+                                                   "rat": "return-air-temp", "htg_valve_pct": "heating-valve"}))[
+        "heat_rise"
+    ] == ["discharge-air-temp", "return-air-temp", "heating-valve"]
+    det = GreyBox().fit(frame)
+    assert set(det.thresholds_) == {"heat_rise"}
+    assert det.families_["heat_rise"][1] == "return-air-temp"
+    pca = PCASPE().fit(frame)
+    assert "zone-air-temp" not in pca.roles
+    rows = {r["method"]: r for r in applicability(frame)}
+    assert rows["grey_box"]["can_run"] and "return-air-temp" in rows["grey_box"]["roles"]
+    assert rows["pca"]["can_run"] and "zone-air-temp" not in rows["pca"]["roles"]
+    for method in ("pca", "grey_box"):
+        assert rows[method]["can_run"] == (rows[method]["reason"] == "")
+
+
+def test_an_all_nan_feature_frame_cannot_run():
+    frame = _furnace()
+    for col in ("sat", "zone_t", "htg_valve_pct", "oa_t"):
+        frame[col] = np.nan
+    rows = {r["method"]: r for r in applicability(frame)}
+    assert not any(rows[m]["can_run"] for m in ("pca", "grey_box", "ocsvm", "zscore", "mad"))

@@ -71,6 +71,10 @@ def test_plant_roles_are_si_and_conservative():
         assert role in cat.ASSESSABLE_ROLES_BY_SWEEP["SV-RANGE"]
     assert cat.unit_declares_quantity("L/s", "volume_flow") and not cat.unit_declares_quantity("gpm", "volume_flow")
     assert cat.unit_declares_quantity("kW", "power") and not cat.unit_declares_quantity("W", "power")
+    # #1669: the canonical 0-100 %RH token is relative humidity; a 0-1 fraction is not
+    assert cat.unit_declares_quantity("percent_0_100", "relative_humidity")
+    assert not cat.unit_declares_quantity("fraction", "relative_humidity")
+    assert not cat.unit_declares_quantity("percent_0_1", "relative_humidity")
     rng = render_rule.render("SV-RANGE")
     for sql_role in ("chw_flow", "chw_dp", "cw_supply_t", "cw_return_t", "chiller_power"):
         assert f"sensor_role = '{sql_role}'" in rng

@@ -51,7 +51,7 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
     WHEN quantity = 'absolute_temperature' THEN
       fdd.norm_unit(unit) IN ('c', 'degc', 'celsius')
     WHEN quantity = 'relative_humidity' THEN
-      fdd.norm_unit(unit) IN ('pct', 'percent', 'rh', 'percentrelativehumidity')
+      fdd.norm_unit(unit) IN ('pct', 'percent', 'percent0100', 'rh', 'percentrelativehumidity')
       OR position('%' IN unit) > 0
     WHEN quantity = 'air_pressure' THEN
       fdd.norm_unit(unit) IN ('pa', 'pascal')

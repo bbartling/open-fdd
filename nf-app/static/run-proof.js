@@ -19,14 +19,44 @@ const runProofList = (v) => (Array.isArray(v) ? v : String(v ?? "").split(",")).
 /** Names a ref may use for an equip record: its id, name, NF uuid, display name. */
 const runProofNames = (rec) => new Set([idOf(rec), rec.name, rec.uuid, (rec.attrs || {}).dis].filter(Boolean).map(runProofRefId));
 
-/** The equip's OWN proof: { source: "status" | "command", role, point } or null. */
+const RUN_PROOF_PERCENT = /^(%|percent|pct)$/i;
+const RUN_PROOF_FRACTION = /^(ratio|fraction|frac|0-1|0\.\.1|0 to 1|unitless ratio)$/i;
+const RUN_PROOF_START_STOP = /(^|[-_ ])(run|enable|enabled|start|stop|startstop|onoff|on-off)([-_ ]|$)/i;
+const RUN_PROOF_ANALOG = /(^|[-_ ])(speed|vfd|freq|frequency|position|pos|output|signal)([-_ ]|$)/i;
+
+/**
+ * #1631: can this COMMAND point be the run proof? The proof is judged against a 0-1 threshold, so the command's scale
+ * must be known. Usable: a boolean point; a percent or 0-1 fraction unit; a start/stop (run / enable) command, which is
+ * 0/1 even when the model leaves `kind` unset. Refused: a numeric analog command (speed, VFD, position ...) with no
+ * percent or fraction unit, whose 0-100 or 0-1 scale cannot be told apart. '' when usable, else the reason.
+ * @returns {string}
+ */
+function runProofCommandProblem(point) {
+  if (!point) return "no point";
+  if (/^bool/i.test(String(point.kind || ""))) return "";
+  const unit = String(point.units || "").trim();
+  if (RUN_PROOF_PERCENT.test(unit) || RUN_PROOF_FRACTION.test(unit)) return "";
+  const words = [point.cls || "", ...(point.tags || [])].join(" ");
+  if (RUN_PROOF_START_STOP.test(words) && !RUN_PROOF_ANALOG.test(words)) return "";
+  return unit ? `command ${point.name || point.uuid} has unit "${unit}", not a percent or 0-1 fraction`
+    : `command ${point.name || point.uuid} is an analog output with no unit (0-100 or 0-1 cannot be told apart)`;
+}
+
+/** The equip's OWN proof: { source: "status" | "command", role, point } or null. Every bound point of a role is a
+ * candidate, in contract order; a command whose scale is unknown is skipped (#1631) and listed in `refused`. */
 /** @returns {{ source: string, role: string, point: any } | null} */
-function ownRunProof(equipRec, model, catalog) {
+function ownRunProof(equipRec, model, catalog, refused = []) {
   const own = catalog.run_proof.own;
   const roles = [...own.status, ...own.command];
   const bound = bindRoles(roles, equipPool(equipRec, model), catalog);
   for (const source of ["status", "command"]) {
-    for (const role of own[source]) if (bound[role] && bound[role].length) return { source, role, point: bound[role][0] };
+    for (const role of own[source]) {
+      for (const point of bound[role] || []) {
+        const why = source === "command" ? runProofCommandProblem(point) : "";
+        if (!why) return { source, role, point };
+        refused.push({ equip: idOf(equipRec), role, point: point.name || point.uuid, reason: why });
+      }
+    }
   }
   return null;
 }
@@ -55,14 +85,16 @@ function runProofFeeders(equipRec, model, catalog) {
 /**
  * The run proof of one equip.
  * @returns {{ found: boolean, tier?: string, source?: string, role?: string, point?: any,
- *             equip?: string, via?: string, reason?: string }}
+ *             equip?: string, via?: string, reason?: string,
+ *             refused?: Array<{ equip: string, role: string, point: string, reason: string }> }}
  */
 function resolveRunProof(equipRec, model, catalog) {
-  const own = ownRunProof(equipRec, model, catalog);
-  if (own) return { found: true, tier: "own", source: own.source, role: own.role, point: own.point, equip: idOf(equipRec), via: "self" };
+  const refused = [];   // commands skipped for an unknown scale (#1631); the next candidate wins
+  const own = ownRunProof(equipRec, model, catalog, refused);
+  if (own) return { found: true, tier: "own", source: own.source, role: own.role, point: own.point, equip: idOf(equipRec), via: "self", refused };
   for (const { rec, via } of runProofFeeders(equipRec, model, catalog)) {
-    const hit = ownRunProof(rec, model, catalog);
-    if (hit) return { found: true, tier: "feeder", source: hit.source, role: hit.role, point: hit.point, equip: idOf(rec), via };
+    const hit = ownRunProof(rec, model, catalog, refused);
+    if (hit) return { found: true, tier: "feeder", source: hit.source, role: hit.role, point: hit.point, equip: idOf(rec), via, refused };
   }
-  return { found: false, reason: catalog.run_proof.skip_reason };
+  return { found: false, reason: catalog.run_proof.skip_reason, refused };
 }
