@@ -57,7 +57,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1639 | C | Expanded SI stress, seeds, replay | OPEN | | |
 | 1640 | C | DataFusion parity adapter | OPEN | | |
 | 1641 | C | Generic coil performance rule | OPEN | | |
-| 1642 | C | Divergences + implementation-aware pins | OPEN | | |
+| 1642 | C | Divergences + implementation-aware pins | PR READY | #1712 (`fix/1642-parity-pins`) | VAV-6 waits on the #1631 gate-off decision; ask 3 (downstream bands) open |
 | 1646 | C | Tuners, motor-status wording, RCx coverage | OPEN | | after #1671/#1672 |
 | 1671 | C | One visible timer per rule; tuner migration | PR DRAFT | #1708 (`fix/1671-one-timer`, stacked on #1700) | internal_constants; byte-identical SQL; Node 790/790, Python 540/7 |
 | 1672 | C | Sliders/booleans, SI validation, scoped persistence | PR DRAFT | #1709 (`fix/1672-tuner-sliders`, stacked on #1708) | grouped sliders, Require motor status, step snap, ordered pairs; no live screenshot |
@@ -93,6 +93,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1709 | Claude | #1672 tuner sliders | draft, stacked on #1708 | merge after #1708 |
 | #1710 | Claude | #1631 TRIM-3/4 plant proof | ready (base release) | Grok acceptance, CI |
 | #1711 | Claude | #1635 hook half: run_proof in sparql-data | ready (base release) | Grok acceptance, CI |
+| #1712 | Claude | #1642 ECON-3/7, MECH-OAT-1 parity gaps | ready (base release) | Grok acceptance, CI |
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
@@ -147,3 +148,4 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - ~07:20: opened #1709 (#1672) as a draft on #1708. Next: #1631 remaining items, #1641, #1642, #1639.
 - ~08:00: opened #1710 (#1631 TRIM-3/4). Posted the #1631 triage: the denominator (`active_hours`) and the gate-off fan gate on the FC rules need Ben's call; FC4, CW-FAN/OPT, fallback startup delay, command-unit check and the SQLite timeline remain.
 - ~09:15: opened #1711 (#1635 hook half). The SPARQL parity leg now uses the hook's run_proof (no harness stamp).
+- ~11:30: #1702 window as-of (150b5862) after the 365 s Timescale run. Opened #1712 (#1642): ECON-3 / MECH-OAT-1 exact on basic tiers, ECON-7 0.25 h; baselines 52/19 and 49/22.
