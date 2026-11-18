@@ -74,7 +74,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1634 | C | True `--dry-run` | PR READY | #1703 (`fix/1634-dry-run-guard`) | refuses --dry-run outside install; Grok acceptance |
 | 1638 | C | Errored/unfinished run health | PR READY | #1705 (`fix/1638-errored-run-health`) | Grok acceptance; live check with a failing hook on disposable NF (#1624) |
 | 1668 | C | NF mock/fakes contract + installer fixes | OPEN | | phase 3 |
-| 1569 | C (+G tool) | Ontology extension namespace/SHACL/doctor | OPEN | | phase 4 |
+| 1569 | C (+G tool) | Ontology extension namespace/SHACL/doctor | PARTIAL | #1697 merged 9c8075fd (Python `--extensions` audit) | RDF half (namespace, TTL labels/definitions, SHACL) open; phase 4 |
 | 1652-1662, 1665-1667 | G | Python/PyPI/ML tooling | OPEN | Grok PRs | Claude reviews |
 | 1663 | G | 4.5.12 tracker | OPEN | | after children + release |
 
@@ -88,12 +88,12 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1676 | Claude | #1669 | merged `125afb6a` | done |
 | #1699 | Claude | #1670 SCHED-247 | ready | Grok acceptance, CI |
 | #1701 | Claude | this ledger | open | merge any time (plans only) |
-| #1702 | Claude | #1631 sweep as-of proof | draft, stacked on #1700 | rebase/merge after #1700 |
+| #1702 | Claude | #1631 sweep as-of proof | draft, stacked on #1700; head 68e34033 (py3.10 f-string fix) | merge after #1700 |
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
 | #1706 | Claude | #1636 occupancy calendar | ready | Grok acceptance, CI |
-| #1700 | Claude | #1673 SV-STALE split | ready | Grok acceptance, CI |
+| #1700 | Claude | #1673 SV-STALE split | ready; head 61df50c0 (Timescale parity test fix) | Grok acceptance, CI |
 | #1677 #1678 #1679 #1683 #1690 #1692 #1693 | Grok | ML/tooling | merged (Claude review ACCEPT, CI green) | done |
 | #1680 #1684 #1685 #1686 #1689 #1697 | Grok | tooling | Claude ACCEPT (nits posted) | merge when CI green / stack base lands |
 | #1687 #1694 #1698 | Grok | ml detect | Claude ACCEPT; conflicts after the squash merges | Grok merges release into branch |
@@ -127,4 +127,15 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - 5-hour window at 78%: checkpointed instead of starting #1671. Session-only merge sweep scheduled 04:47 local.
 - Opened #1706 (#1636): saved calendar > NF schedule > default on every engine; pandas overnight-shift mask fixed.
 - Resume prompt: `C:\Users\ben\Documents\prompts\2026-11-18-openfdd-5.0.21-resume-checkpoint-2.md`.
+
+### 2026-11-18 ~03:00 local (Claude): merge sweep 1
+
+- Merged #1697 (Grok, #1569 Python half) as 9c8075fd; the squash patch-id equals the reviewed head `d313eca5`.
+- Nothing else qualified: Grok has been offline since ~20:50, so no Claude PR has acceptance yet. #1664 has a
+  conditional OK on an older head. The Grok stacks are blocked on changes requested (#1681, #1682, #1688, #1691,
+  #1695, #1696) or conflicts (#1687, #1694, #1698).
+- CI fixes:
+  - #1700: the Timescale parity test now passes `sweep_series` to pglite (both engines were correct for their inputs);
+  - #1702: an f-string that only parsed on Python 3.12+.
+- Next: #1671 tuner contract.
 
