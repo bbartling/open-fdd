@@ -40,17 +40,21 @@ h AS (
 ),
 modes AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
-    DATE_TRUNC('hour', timestamp_utc) AS clock_hour,
+    h.equipment_id,
+    h.timestamp_utc,
+    DATE_TRUNC('hour', h.timestamp_utc) AS clock_hour,
     CASE
       WHEN fan IS NULL OR fan < {{FAN_ON_MIN}} THEN 0
       WHEN clg IS NOT NULL AND clg > 0.1 THEN 3
       WHEN oa_d IS NOT NULL AND oa_d > 0.5 THEN 2
       ELSE 1
-    END AS op_mode
+    END AS op_mode,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN rps.run_proof > 0.05 THEN 1 ELSE 0 END AS proven
   FROM h
+  LEFT JOIN rps USING (equipment_id, timestamp_utc)
 ),
+-- #1631: entries are counted over PROVEN samples only (the sequence skips unproven time, so a transition across
+-- unproven time is not an entry and an unproven flap cannot reach the hourly count); pandas fc4 does the same.
 entries AS (
   SELECT
     equipment_id,
@@ -64,18 +68,28 @@ entries AS (
       ELSE 0
     END AS is_entry
   FROM modes
+  WHERE proven = 1
+),
+hourly_counts AS (
+  SELECT
+    equipment_id,
+    clock_hour,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 1 THEN 1 ELSE 0 END) AS entries_min_oa,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 2 THEN 1 ELSE 0 END) AS entries_econ,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 3 THEN 1 ELSE 0 END) AS entries_mech
+  FROM entries
+  GROUP BY equipment_id, clock_hour
 ),
 hourly AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
-    SUM(CASE WHEN is_entry = 1 AND op_mode = 1 THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, clock_hour) AS entries_min_oa,
-    SUM(CASE WHEN is_entry = 1 AND op_mode = 2 THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, clock_hour) AS entries_econ,
-    SUM(CASE WHEN is_entry = 1 AND op_mode = 3 THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, clock_hour) AS entries_mech
-  FROM entries
+    m.equipment_id,
+    m.timestamp_utc,
+    COALESCE(hc.entries_min_oa, 0) AS entries_min_oa,
+    COALESCE(hc.entries_econ, 0) AS entries_econ,
+    COALESCE(hc.entries_mech, 0) AS entries_mech
+  FROM modes m
+  LEFT JOIN hourly_counts hc
+    ON hc.equipment_id = m.equipment_id AND hc.clock_hour = m.clock_hour
 ),
 base AS (
   SELECT
