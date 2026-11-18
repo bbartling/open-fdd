@@ -90,7 +90,10 @@ def main() -> None:
         "tolerance_hours": 1e-6,
         "cases": [{"equipment_id": name, "rows": r, "expected": exp} for name, r, exp in CASES],
     }
-    OUT.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+    # compact: one line per case, so the fixture stays reviewable in a diff
+    head = json.dumps({k: v for k, v in doc.items() if k != "cases"}, indent=1)
+    cases = ",\n".join("  " + json.dumps(c, separators=(",", ":")) for c in doc["cases"])
+    OUT.write_text(head[:-2] + ',\n "cases": [\n' + cases + "\n ]\n}\n", encoding="utf-8")
     print(f"wrote {OUT} ({len(CASES)} cases)")
 
 
