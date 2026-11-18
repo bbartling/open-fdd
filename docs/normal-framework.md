@@ -56,7 +56,7 @@ field, so a clone of this repo (whose apps live in `nf-app/` and `lite/`) is not
 console URL, a console login for the integrator and, for Full, the Timescale connection (the `install.sql` step runs as the
 database owner; see the install reference). Health checks need no SSH: `doctor` over the console API, the app's settings page and
 the NF console hook runs. What was tested offline: the bundle contents against the manifest, byte for byte, and B on live sites. What needs a live
-NF site: A, C and D (`docs/prompts/2026-11-12-install-methods-checklist.md`).
+NF site: A, C and D (checklist in [#1567](https://github.com/bbartling/open-fdd/issues/1567#issuecomment-6967806025)).
 
 ## Verify
 
