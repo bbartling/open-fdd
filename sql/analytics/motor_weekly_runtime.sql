@@ -17,7 +17,12 @@
 --   * each sample owns the interval to the point's next sample. An interval longer than {max_gap_ms} is unknown and
 --     counts 0 hours (it is not clipped); the last sample owns 0;
 --   * the interval is booked to the UTC week (Monday 00:00) of its starting sample; weeks with no ON time are omitted;
---   * partial_week is true when the samples in that week span less than 6 days.
+--   * partial_week is true when the samples in that week span less than 6 days;
+--   * avg_oat_c is the mean outdoor temperature over the week's counted ON intervals. {oats} is an inline table
+--     (equipment_id, point_key) of each equipment's outdoor-air point (web before BAS, chosen by the caller); the
+--     reading used is the latest one at or before the interval start and at most {max_gap_ms} old, carried forward
+--     with window functions. pandas reindexes the OAT to the exact sample time, so the two agree when the OAT is
+--     sampled at the motor's sample times.
 -- 345600000 ms is Monday 1970-01-05 00:00 UTC and 604800000 ms is one week, so t - ((t - 345600000) % 604800000) is
 -- the start of t's week (for timestamps after 1970-01-05).
 --
@@ -72,6 +77,36 @@ counted AS (
                    AND dt_ms > 0 AND dt_ms <= {max_gap_ms}
               THEN dt_ms ELSE 0 END AS on_ms
   FROM series
+),
+oatsrc AS (
+{oats}
+),
+oat_win AS (
+  SELECT os.equipment_id, {ts_ms} AS t, CAST(s.value AS DOUBLE PRECISION) AS value
+  FROM fdd.input_sample s
+  JOIN oatsrc os ON os.point_key = s.point_key
+  WHERE s.site_id = {site_id}
+),
+stream AS (
+  -- motor samples and OAT readings in one time-ordered stream per equipment; a reading sorts before a sample at the
+  -- same time, so "at or before" holds
+  SELECT equipment_id, role, family, t, week_ms, on_ms, 2 AS src, CAST(NULL AS DOUBLE PRECISION) AS oat
+  FROM counted
+  UNION ALL
+  SELECT equipment_id, NULL, NULL, t, NULL, NULL, 1, value
+  FROM oat_win
+  WHERE 1 = 1{window_filter}
+),
+grouped AS (
+  SELECT equipment_id, role, family, t, week_ms, on_ms, src, oat,
+         COUNT(oat) OVER (PARTITION BY equipment_id ORDER BY t, src ROWS UNBOUNDED PRECEDING) AS grp
+  FROM stream
+),
+carried AS (
+  SELECT equipment_id, role, family, t, week_ms, on_ms, src,
+         MAX(oat) OVER (PARTITION BY equipment_id, grp) AS oat,
+         MAX(CASE WHEN src = 1 THEN t END) OVER (PARTITION BY equipment_id, grp) AS oat_t
+  FROM grouped
 )
 SELECT equipment_id,
        role AS signal,
@@ -79,8 +114,10 @@ SELECT equipment_id,
        week_ms AS week_start_ms,
        SUM(on_ms) / 3600000.0 AS run_hours,
        COUNT(*) AS n_samples,
-       CASE WHEN MAX(t) - MIN(t) < 518400000 THEN 1 ELSE 0 END AS partial_week
-FROM counted
+       CASE WHEN MAX(t) - MIN(t) < 518400000 THEN 1 ELSE 0 END AS partial_week,
+       AVG(CASE WHEN on_ms > 0 AND oat IS NOT NULL AND t - oat_t <= {max_gap_ms} THEN oat END) AS avg_oat_c
+FROM carried
+WHERE src = 2
 GROUP BY equipment_id, role, family, week_ms
 HAVING SUM(on_ms) > 0
 ORDER BY equipment_id, motor_family, week_start_ms

@@ -40,7 +40,37 @@ MOTOR_ROLES = {
 CHILLER_TYPES = {"CHW_PLANT", "CHILLER"}
 CHILLER_RUN_ORDER = ("chw-pump-status", "pump-status", "chw-pump-cmd", "pump-cmd")
 
-COLUMNS = ("equipment_id", "signal", "motor_family", "week_start_ms", "run_hours", "n_samples", "partial_week")
+COLUMNS = ("equipment_id", "signal", "motor_family", "week_start_ms", "run_hours", "n_samples", "partial_week",
+           "avg_oat_c")
+
+#: Outdoor-air roles, in the order pandas resolves them (web weather before BAS).
+OAT_ROLES = ("web-outside-air-temp", "bas-outside-air-temp", "outside-air-temp")
+
+
+def _inline(columns: list[tuple[str, str]], rows: list[tuple]) -> str:
+    """A typed inline table as SELECT ... UNION ALL ...; zero rows render as a typed empty SELECT.
+
+    Strings are quoted, integers cast, floats must be finite: no caller text reaches SQL unquoted.
+    """
+
+    def lit(value, sql_type):
+        if value is None:
+            return f"CAST(NULL AS {sql_type})"
+        if sql_type == "TEXT":
+            return _quote(value)
+        if sql_type == "INTEGER":
+            return str(int(value))
+        v = float(value)
+        if not math.isfinite(v):
+            raise ValueError("inline numbers must be finite")
+        return f"CAST({v!r} AS DOUBLE PRECISION)"
+
+    if not rows:
+        cols = ", ".join(f"{lit(None, t)} AS {c}" for c, t in columns)
+        return f"  SELECT {cols} WHERE 1 = 0"
+    return "\n  UNION ALL\n".join(
+        "  SELECT " + ", ".join(f"{lit(v, t)} AS {c}" for v, (c, t) in zip(row, columns)) for row in rows
+    )
 
 
 def runtime_sql_template() -> str:
@@ -56,11 +86,13 @@ def render_runtime_sql(
     start_ms: int | None = None,
     end_ms: int | None = None,
     max_gap_seconds: float = ELAPSED_MAX_GAP_SECONDS,
+    oats: Iterable[tuple[str, str]] = (),
 ) -> str:
     """Render the query with checked literals (no string from the caller reaches SQL unquoted).
 
     ``start_ms`` / ``end_ms`` bound the samples read (UTC epoch ms, end exclusive); an interval is only measured
-    between samples inside the window.
+    between samples inside the window. ``oats`` is (equipment_id, point_key) of each equipment's outdoor-air point;
+    without one, ``avg_oat_c`` is NULL.
     """
     if engine not in TS_MS:
         raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(ENGINES)}")
@@ -86,6 +118,7 @@ def render_runtime_sql(
         window_filter=window_filter,
         ts_ms=TS_MS[engine],
         max_gap_ms=int(round(gap * 1000.0)),
+        oats=_inline([("equipment_id", "TEXT"), ("point_key", "TEXT")], list(oats)),
     )
 
 
@@ -105,12 +138,16 @@ def run_runtime_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
         rec["run_hours"] = float(rec["run_hours"])
         rec["n_samples"] = int(rec["n_samples"])
         rec["partial_week"] = bool(rec["partial_week"])
+        rec["avg_oat_c"] = None if rec["avg_oat_c"] is None else float(rec["avg_oat_c"])
         out.append(rec)
     return out
 
 
-def _core_from_frames(frames: dict, role_map: dict) -> tuple[list[dict], list[tuple]]:
-    """Points and samples for the bound motor roles of each frame (missing values are not samples)."""
+def _core_from_frames(frames: dict, role_map: dict) -> tuple[list[dict], list[tuple], list[tuple]]:
+    """Points, samples and (equipment_id, OAT point_key) for the bound motor and outdoor-air roles of each frame.
+
+    Missing values are not samples. An equipment's OAT point is its first bound role in :data:`OAT_ROLES`.
+    """
     import numpy as np
     import pandas as pd
 
@@ -120,6 +157,7 @@ def _core_from_frames(frames: dict, role_map: dict) -> tuple[list[dict], list[tu
     role_map = coerce_role_map(role_map, frames)
     points: list[dict] = []
     samples: list[tuple] = []
+    oats: list[tuple] = []
     for eq_id, raw in frames.items():
         if raw is None or raw.empty or not isinstance(raw.index, pd.DatetimeIndex):
             continue
@@ -128,24 +166,36 @@ def _core_from_frames(frames: dict, role_map: dict) -> tuple[list[dict], list[tu
         if index.tz is None:
             index = index.tz_localize("UTC")
         ts_ms = (index.tz_convert("UTC").as_unit("ns").asi8 // 1_000_000).astype("int64")
-        for sql_role, role in MOTOR_ROLES.items():
+
+        def add(role: str, sql_role: str) -> str | None:
             if role not in mapped.columns:
-                continue
+                return None
             values = pd.to_numeric(mapped[role], errors="coerce").to_numpy(dtype=float)
             ok = ~np.isnan(values)
             if not ok.any():
-                continue
+                return None
             key = f"{eq_id}/{sql_role}"
             points.append({"site_id": DEFAULT_SITE, "point_key": key, "equipment_id": str(eq_id), "role": sql_role})
             samples.extend((DEFAULT_SITE, key, int(t), float(v)) for t, v in zip(ts_ms[ok], values[ok]))
-    return points, samples
+            return key
+
+        has_motor = False
+        for sql_role, role in MOTOR_ROLES.items():
+            has_motor = (add(role, sql_role) is not None) or has_motor
+        if has_motor:
+            for role in OAT_ROLES:
+                key = add(role, role.replace("-", "_"))
+                if key is not None:
+                    oats.append((str(eq_id), key))
+                    break
+    return points, samples, oats
 
 
 def motor_run_hours_weekly_sql(frames: dict, role_map: dict, *, engine: str = "sqlite"):
     """Weekly motor run hours computed by the SQL query, with the columns of ``motor_run_hours_weekly``.
 
-    ``plant_group`` and ``label`` come from the same equipment metadata helpers the pandas function uses;
-    ``avg_oat_c`` is not computed here (None).
+    ``plant_group`` and ``label`` come from the same equipment metadata helpers the pandas function uses.
+    ``avg_oat_c`` uses the frame's own outdoor-air column (web, else BAS); a separate ``weather`` frame is not read.
     """
     import pandas as pd
 
@@ -157,13 +207,13 @@ def motor_run_hours_weekly_sql(frames: dict, role_map: dict, *, engine: str = "s
     from open_fdd.analytics.role_map import coerce_role_map
 
     role_map = coerce_role_map(role_map, frames)
-    points, samples = _core_from_frames(frames, role_map)
+    points, samples, oats = _core_from_frames(frames, role_map)
     conn = _connect(engine)
     try:
         create_core(conn, engine)
         if points:
             load_core(conn, engine, points, samples)
-        rows = run_runtime_sql(conn, engine) if points else []
+        rows = run_runtime_sql(conn, engine, oats=oats) if points else []
     finally:
         conn.close()
     # A chilled-water plant or chiller reports its first pump signal as the chiller's run (as plant discovery does).
@@ -197,7 +247,7 @@ def motor_run_hours_weekly_sql(frames: dict, role_map: dict, *, engine: str = "s
                 "plant_group": plant,
                 "label": f"{eq_id} · {role}",
                 "hours": round(r["run_hours"], 2),
-                "avg_oat_c": None,
+                "avg_oat_c": r["avg_oat_c"],
                 "partial_week": r["partial_week"],
             }
         )

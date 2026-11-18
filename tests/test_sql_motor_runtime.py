@@ -32,7 +32,8 @@ MS = 1000
 H = 3_600_000
 MON = pd.Timestamp("2026-03-02", tz="UTC")  # a Monday
 T0 = int(MON.value // 1_000_000)
-COMPARE = ["week_start", "week_label", "equipment_id", "signal", "motor_kind", "plant_group", "hours", "partial_week"]
+COMPARE = ["week_start", "week_label", "equipment_id", "signal", "motor_kind", "plant_group", "hours", "avg_oat_c",
+           "partial_week"]
 
 
 def _postgres_configured() -> bool:
@@ -45,18 +46,19 @@ def _frames():
     idx = pd.date_range(MON, periods=12 * 24 * 17, freq="5min")
     hour = idx.hour
     fan = ((hour >= 6) & (hour < 18)).astype(float)
-    ahu = pd.DataFrame({"sf_status": fan, "sf_cmd": np.roll(fan, 3)}, index=idx)
+    oat = 10.0 + 8.0 * np.sin(np.arange(len(idx)) / 288.0 * 2 * np.pi)
+    ahu = pd.DataFrame({"sf_status": fan, "sf_cmd": np.roll(fan, 3), "oat": oat}, index=idx)
     ahu = ahu.drop(ahu.index[(ahu.index >= "2026-03-04 08:00") & (ahu.index < "2026-03-04 10:00")])
     ahu.attrs["equipment_type"] = "AHU"
-    hw = pd.DataFrame({"p1": (rng.random(len(idx)) > 0.4).astype(float) * 100.0}, index=idx)
+    hw = pd.DataFrame({"p1": (rng.random(len(idx)) > 0.4).astype(float) * 100.0, "wx": oat + 1.5}, index=idx)
     hw.attrs["equipment_type"] = "BOILER"
     chw_on = (rng.random(len(idx)) > 0.3).astype(float)
     chw = pd.DataFrame({"pmp_s": chw_on, "pmp_c": np.ones(len(idx))}, index=idx)
     chw.attrs["equipment_type"] = "CHW_PLANT"
     frames = {"AHU-1": ahu, "HW-1": hw, "CHW-1": chw}
     role_map = {
-        "AHU-1": {"fan-status": "sf_status", "fan-cmd": "sf_cmd"},
-        "HW-1": {"hw-pump-cmd": "p1"},
+        "AHU-1": {"fan-status": "sf_status", "fan-cmd": "sf_cmd", "outside-air-temp": "oat"},
+        "HW-1": {"hw-pump-cmd": "p1", "web-outside-air-temp": "wx"},
         "CHW-1": {"chw-pump-status": "pmp_s", "chw-pump-cmd": "pmp_c"},
     }
     return frames, role_map
@@ -165,6 +167,17 @@ def test_window_bounds_the_samples():
     assert rows[0]["partial_week"] is True
 
 
+def test_avg_oat_is_the_as_of_reading_over_on_intervals():
+    points = [_pt("f", "AHU-1", "fan_status"), _pt("o", "AHU-1", "outside_air_temp")]
+    samples = [("local", "f", T0 + i * H // 2, v) for i, v in enumerate([1, 1, 0, 1, 1])]
+    samples += [("local", "o", T0, 10.0), ("local", "o", T0 + H, 20.0)]  # hourly OAT, carried to the half hours
+    rows = _run(points, samples, oats=[("AHU-1", "o")])
+    # ON intervals start at 0.0 h (OAT 10), 0.5 h (10, carried) and 1.5 h (20, carried); the 2.0 h sample owns 0
+    assert rows[0]["run_hours"] == pytest.approx(1.5)
+    assert rows[0]["avg_oat_c"] == pytest.approx((10.0 + 10.0 + 20.0) / 3)
+    assert _run(points, samples)[0]["avg_oat_c"] is None  # no OAT point bound
+
+
 def test_no_motor_roles_gives_no_rows():
     frames = {"AHU-1": pd.DataFrame({"sat": [12.0, 13.0]}, index=pd.date_range(MON, periods=2, freq="5min"))}
     out = motor_run_hours_weekly_sql(frames, {"AHU-1": {"sat": "sat"}})
@@ -175,8 +188,8 @@ def test_no_motor_roles_gives_no_rows():
 def test_postgres_matches_sqlite():
     psycopg = pytest.importorskip("psycopg")
     frames, role_map = _frames()
-    points, samples = _core_from_frames(frames, role_map)
-    lite = _run(points, samples)
+    points, samples, oats = _core_from_frames(frames, role_map)
+    lite = _run(points, samples, oats=oats)
     base = os.environ["POSTGRES_TEST_URL"]
     dbname = f"openfdd_runtime_{secrets.token_hex(6)}"
     with psycopg.connect(base, autocommit=True) as admin:
@@ -187,11 +200,14 @@ def test_postgres_matches_sqlite():
             conn.execute("SET TIME ZONE 'UTC'")
             create_core(conn, "postgres")
             load_core(conn, "postgres", points, samples)
-            rows = run_runtime_sql(conn, "postgres")
+            rows = run_runtime_sql(conn, "postgres", oats=oats)
     finally:
         with psycopg.connect(base, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
     assert len(rows) == len(lite) == 9
     for a, b in zip(rows, lite):
-        assert {k: a[k] for k in a if k != "run_hours"} == {k: b[k] for k in b if k != "run_hours"}
+        assert {k: a[k] for k in a if k not in ("run_hours", "avg_oat_c")} == {k: b[k] for k in b if k not in ("run_hours", "avg_oat_c")}
         assert a["run_hours"] == pytest.approx(b["run_hours"], abs=1e-9)
+        assert (a["avg_oat_c"] is None) == (b["avg_oat_c"] is None)
+        if a["avg_oat_c"] is not None:
+            assert a["avg_oat_c"] == pytest.approx(b["avg_oat_c"], abs=1e-9)

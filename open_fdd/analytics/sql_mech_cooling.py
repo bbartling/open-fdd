@@ -20,14 +20,13 @@ from typing import Any, Iterable, Mapping
 from open_fdd.analytics.runtime_intervals import ELAPSED_MAX_GAP_SECONDS
 from open_fdd.analytics.si_thresholds import MECH_OAT_BIN_EDGES_C, MECH_OAT_BIN_LABELS
 from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _connect, _quote, create_core, load_core
-from open_fdd.analytics.sql_runtime import TS_MS
+from open_fdd.analytics.sql_runtime import OAT_ROLES, TS_MS, _inline
 
 CHILLER_AMPS_MIN = 5.0
 CHILLER_POWER_KW_MIN = 1.0
 
 COMPRESSOR_STAGES = ("compressor-stage-1", "compressor-stage-2", "cool-stage", "dx-stage")
 HP_COOLING_MODE = ("heat-pump-cooling-status", "unit-cooling-status")
-OAT_ROLES = ("web-outside-air-temp", "bas-outside-air-temp", "outside-air-temp")
 
 
 @dataclass(frozen=True)
@@ -111,30 +110,6 @@ def build_plan(devices: Iterable[tuple[str, str, Mapping[str, str]]]) -> Plan:
         if oat is not None:
             plan.oats.append((eq_id, oat))
     return plan
-
-
-def _inline(columns: list[tuple[str, str]], rows: list[tuple]) -> str:
-    """A typed inline table as SELECT ... UNION ALL ...; zero rows render as a typed empty SELECT."""
-
-    def lit(value, sql_type):
-        if value is None:
-            return f"CAST(NULL AS {sql_type})"
-        if sql_type == "TEXT":
-            return _quote(value)
-        if sql_type == "INTEGER":
-            return str(int(value))
-        v = float(value)
-        if not math.isfinite(v):
-            raise ValueError("thresholds must be finite")
-        return f"CAST({v!r} AS DOUBLE PRECISION)"
-
-    if not rows:
-        cols = ", ".join(f"{lit(None, t)} AS {c}" for c, t in columns)
-        return f"  SELECT {cols} WHERE 1 = 0"
-    parts = []
-    for row in rows:
-        parts.append("  SELECT " + ", ".join(f"{lit(v, t)} AS {c}" for v, (c, t) in zip(row, columns)))
-    return "\n  UNION ALL\n".join(parts)
 
 
 def mech_bins_sql_template() -> str:
