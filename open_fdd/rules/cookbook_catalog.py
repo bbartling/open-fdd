@@ -89,82 +89,95 @@ def _pressure_on_mask(d: pd.DataFrame, p: dict) -> pd.Series | None:
     return None
 
 
-def _sched247_role_mask(d: pd.DataFrame, roles: tuple[str, ...], *, command: bool) -> tuple[pd.Series | None, str | None]:
-    for role in roles:
-        if role not in d.columns or not d[role].notna().any():
+# #1670: one ranked proof list, the same in SQL (sched247_always_on.sql) and here. Statuses first, then
+# commands; run when > 0.05 (the run-proof threshold, sql/fdd/run_proof.json).
+SCHED247_STATUS_ROLES = ("fan-status", "pump-status", "chw-pump-status", "chiller-status", "compressor-status",
+                         "chiller-current")
+SCHED247_COMMAND_ROLES = ("tower-fan-cmd", "fan-cmd", "chw-pump-cmd")
+SCHED247_ON_THRESHOLD = 0.05
+# #1670: an always-on verdict needs known proof for 90% of the observed window, and never less than one day.
+SCHED247_MIN_COMPLETENESS = 0.9
+SCHED247_MIN_WINDOW_SECONDS = 86400.0
+
+
+def _sched247_ranked_proof(d: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Per sample: (on, known). The first non-null status wins over any command; neither is unknown (not OFF)."""
+    on = pd.Series(np.nan, index=d.index, dtype=float)
+    source = pd.Series("", index=d.index, dtype=object)
+    for role in SCHED247_STATUS_ROLES:
+        if role not in d.columns:
             continue
-        if command:
-            mask = norm_cmd(d[role]).fillna(0) > SCHED247_CMD_ON_FRAC
-        else:
-            mask = as_bool(d[role])
-        return mask.reindex(d.index).fillna(False).astype(bool), role
-    return None, None
+        vals = pd.to_numeric(d[role], errors="coerce")
+        fill = on.isna() & vals.notna()
+        on = on.where(~fill, (vals > SCHED247_ON_THRESHOLD).astype(float))
+        source = source.where(~fill, role)
+    for role in SCHED247_COMMAND_ROLES:
+        if role not in d.columns:
+            continue
+        vals = norm_cmd(d[role])
+        fill = on.isna() & vals.notna()
+        on = on.where(~fill, (vals > SCHED247_ON_THRESHOLD).astype(float))
+        source = source.where(~fill, f"{role} (cmd)")
+    return on, source
 
 
 def _sched247(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Always-on runtime using ranked proof (status/current > command).
+    """Always-on runtime from ranked proof (#1670).
 
-    Pressure is inferred evidence only — it does not OR into the FAULT mask
-    (4.3 migration). Structured proof fields are stored on ``d.attrs``.
+    Per sample the first non-null status wins over the command (run when > 0.05, the run-proof threshold); a
+    sample with neither is UNKNOWN, never a proven OFF. Durations are elapsed holds (gap > 1 h and the last
+    sample hold nothing). The verdict needs proven time >= 0.9 * max(observed window, 24 h); otherwise the rule
+    is not assessed (``d.attrs['sched247_proof']['assessment']``). A qualifying equipment
+    (proven_on / proven >= always_on_pct, time-weighted) faults on its proven-ON samples.
+    Pressure is inferred evidence only — it does not OR into the FAULT mask (4.3 migration).
     """
-    from open_fdd.rules.base import hours_true
+    from open_fdd.rules.base import _eligible_hold_seconds, hours_true
 
     thr = _f(p, "always_on_pct", 0.95)
-    status, status_role = _sched247_role_mask(
-        d,
-        (
-            "fan-status",
-            "pump-status",
-            "chw-pump-status",
-            "hw-pump-status",
-            "chiller-status",
-            "compressor-status",
-            "fan-current",
-            "pump-current",
-            "chiller-current",
-        ),
-        command=False,
-    )
-    command, command_role = _sched247_role_mask(
-        d,
-        ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd", "chw-pump-cmd", "hw-pump-cmd"),
-        command=True,
-    )
-    inferred = _pressure_on_mask(d, p)
-    if inferred is not None:
-        inferred = inferred.reindex(d.index).fillna(False).astype(bool)
-
-    if status is not None:
-        proven = status
-        proof_source = status_role or "status"
-        proof_confidence = 0.7 if (status_role or "").endswith("-current") else 1.0
-    elif command is not None:
-        proven = command
-        proof_source = f"{command_role} (cmd)"
-        proof_confidence = 0.5
+    on, source = _sched247_ranked_proof(d)
+    known = on.notna()
+    proven = (on == 1.0) & known
+    held = _eligible_hold_seconds(d.index)
+    if held is None:  # positional frame: poll-spaced samples
+        held = pd.Series(float(poll), index=d.index)
+        if len(held):
+            held.iloc[-1] = 0.0
+        window_s = float(poll) * max(len(d) - 1, 0)
     else:
-        proven = _false(d.index)
-        proof_source = "none"
-        proof_confidence = 0.0
+        window_s = float((d.index.max() - d.index.min()).total_seconds()) if len(d) else 0.0
+    on_s = float(held[proven].sum())
+    off_s = float(held[known & ~proven].sum())
+    if on_s + off_s <= 0.0:
+        assessment = "no_proof"
+    elif on_s + off_s < SCHED247_MIN_COMPLETENESS * max(window_s, SCHED247_MIN_WINDOW_SECONDS):
+        assessment = "insufficient_proof"
+    else:
+        assessment = "assessed"
 
-    conflict = _false(d.index)
-    if status is not None and command is not None:
-        conflict = status.astype(bool) != command.astype(bool)
-
-    proven_h = hours_true(proven, poll)
-    inferred_h = hours_true(inferred, poll) if inferred is not None else 0.0
-    conflict_h = hours_true(conflict, poll)
+    inferred = _pressure_on_mask(d, p)
+    inferred_h = hours_true(inferred.reindex(d.index).fillna(False).astype(bool), poll) if inferred is not None else 0.0
+    status_known = source.ne("") & ~source.str.endswith("(cmd)")
+    cmd_on = None
+    for role in SCHED247_COMMAND_ROLES:
+        if role in d.columns and d[role].notna().any():
+            cmd_on = norm_cmd(d[role]) > SCHED247_ON_THRESHOLD
+            break
+    conflict = status_known & proven.ne(cmd_on) if cmd_on is not None else _false(d.index)
+    used = sorted({s for s in source.unique() if s})
     d.attrs["sched247_proof"] = {
-        "proof_source": proof_source,
-        "proof_confidence": proof_confidence,
-        "proven_runtime_hours": round(float(proven_h), 3),
+        "proof_source": ", ".join(used) if used else "none",
+        "proof_confidence": 1.0 if status_known.any() else (0.5 if known.any() else 0.0),
+        "proven_runtime_hours": round(on_s / 3600.0, 3),
         "inferred_runtime_hours": round(float(inferred_h), 3),
-        "conflicting_signal_hours": round(float(conflict_h), 3),
+        "conflicting_signal_hours": round(hours_true(conflict, poll), 3),
+        "window_hours": window_s / 3600.0,
+        "proven_on_hours": on_s / 3600.0,
+        "proven_off_hours": off_s / 3600.0,
+        "unknown_hours": max(window_s - on_s - off_s, 0.0) / 3600.0,
+        "assessment": assessment,
     }
-
-    frac = float(proven.mean()) if len(proven) else 0.0
-    if proof_source != "none" and frac >= thr:
-        return proven.reindex(d.index).fillna(False)
+    if assessment == "assessed" and on_s / (on_s + off_s) >= thr:
+        return proven
     return _false(d.index)
 
 
