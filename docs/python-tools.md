@@ -83,8 +83,10 @@ default. Naming a method whose dependency is missing exits 2 and names the extra
 `--iforest-contamination` (default 0.01) of every point's samples by construction, so it is opt-in. Its scoreboard rows
 carry `method_note` `fixed_fraction_<rate>`; read them as a ranking, not a count of events.
 MAD's denominator is floored at one resolution step of the series (the 5th percentile of gaps between distinct
-values) and at `1e-3 * |median|`, so sensor quantization is not an outlier. A point whose 1st-99th percentile range
-is within 5 resolution steps or `2e-3 * |median|` is skipped as `near_constant`, like `binary_like`.
+values) and at `1e-3 * |median|`, so sensor quantization is not an outlier. A point whose full min-to-max range is
+within 5 resolution steps or `2e-3 * |median|` is skipped as `near_constant`, like `binary_like`. The full range is
+used on purpose: the skip applies before every method, so one short excursion on a flat signal keeps the point in the
+screen. The resolution step is measured on the whole series (offline screening), while the MAD window is trailing.
 
 **Activity.** `screen` and `open-fdd-ml detect` share one policy (`open_fdd.analytics.anomaly.activity`). Each row
 is `on`, `off`, `unoccupied` or `unknown`. The proof source is chosen per folder: an own status role first

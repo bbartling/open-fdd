@@ -90,12 +90,16 @@ def resolution(y: pd.Series) -> float:
 
 
 def is_near_constant(y: pd.Series) -> bool:
-    """True when the series only moves by a few resolution steps or a tiny fraction of its level (#1657)."""
+    """True when the series only moves by a few resolution steps or a tiny fraction of its level (#1657).
+
+    The spread is the full min-to-max range, not a percentile band: the screen skips a near-constant point before
+    every method, so a short excursion on an otherwise flat signal (a damper that drops to 0 for a few samples, a
+    closed valve that spikes open) must keep the point in the screen.
+    """
     values = _numeric(y).dropna()
     if values.empty:
         return False
-    lo, hi = (float(v) for v in values.quantile([0.01, 0.99]))
-    spread = hi - lo
+    spread = float(values.max()) - float(values.min())
     limit = max(NEAR_CONSTANT_STEPS * resolution(values), NEAR_CONSTANT_RELATIVE * abs(float(values.median())))
     return spread <= limit
 
