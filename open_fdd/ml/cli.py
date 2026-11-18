@@ -3,6 +3,7 @@
 Examples::
 
     open-fdd-ml download                              # LBNL single-duct AHU subset -> ~/.cache/open-fdd/lbnl
+    open-fdd-ml export --out ./lbnl_long              # history_long.csv (roles, SI) + labels.csv for open-fdd-scorecard
     open-fdd-ml benchmark --out bench.md --json bench.json
     open-fdd-ml detect ./AHU_1 --method pca --train-until 2026-06-01 --out ./ahu1_ml
     open-fdd-ml detect ./AHU_1 --method grey_box --train ./AHU_1_known_good --out ./ahu1_ml
@@ -35,6 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
     dl.add_argument("--cache", type=Path, default=None, help="Cache dir (default $OPENFDD_ML_CACHE or ~/.cache/open-fdd/lbnl)")
     dl.add_argument("--files", default=None, help="Comma-separated file names (default: the benchmark subset)")
     dl.add_argument("--force", action="store_true", help="Download again even when cached")
+
+    ex = sub.add_parser("export", help="Write cached LBNL files as long-format SI history + labels.csv for any SQL DB")
+    ex.add_argument("--cache", type=Path, default=None, help="Cache dir with the LBNL CSVs")
+    ex.add_argument("--files", default=None, help="Comma-separated file names (default: the benchmark subset)")
+    ex.add_argument("--download", action="store_true", help="Download missing files first")
+    ex.add_argument("--step-minutes", type=int, default=5)
+    ex.add_argument("--out", type=Path, required=True, help="Output directory")
 
     bench = sub.add_parser("benchmark", help="Score the rule pack and the ML detectors on the cached LBNL subset")
     bench.add_argument("--cache", type=Path, default=None, help="Cache dir with the LBNL CSVs")
@@ -86,6 +94,25 @@ def _cmd_download(args) -> int:
 
     names = [n.strip() for n in args.files.split(",")] if args.files else None
     for path in lbnl.download(names, args.cache, force=args.force):
+        print(path)
+    print(lbnl.ATTRIBUTION)
+    return 0
+
+
+def _cmd_export(args) -> int:
+    from open_fdd.ml import lbnl
+
+    names = [n.strip() for n in args.files.split(",")] if args.files else [f.name for f in lbnl.SDAHU_SUBSET]
+    cache = Path(args.cache) if args.cache else lbnl.default_cache_dir()
+    if args.download:
+        lbnl.download(names, cache)
+    missing = [n for n in names if not (cache / n).is_file()]
+    if missing:
+        print(f"not in the cache {cache}: {', '.join(missing)} (run open-fdd-ml download or pass --download)",
+              file=sys.stderr)
+        return 2
+    paths = lbnl.export_long([cache / n for n in names], args.out, step_minutes=args.step_minutes)
+    for path in paths.values():
         print(path)
     print(lbnl.ATTRIBUTION)
     return 0
@@ -249,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else 0
-    handlers = {"download": _cmd_download, "benchmark": _cmd_benchmark, "detect": _cmd_detect}
+    handlers = {"download": _cmd_download, "export": _cmd_export, "benchmark": _cmd_benchmark, "detect": _cmd_detect}
     if args.command not in handlers:
         parser.print_help()
         return 2
