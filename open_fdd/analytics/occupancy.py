@@ -82,22 +82,29 @@ def occupied_mask(index: pd.DatetimeIndex, schedule: OccupancySchedule) -> pd.Se
         local = index.tz_convert(schedule.timezone) if index.tz is not None else index.tz_localize("UTC").tz_convert(schedule.timezone)
     except Exception:
         local = index
-    day_keys = local.dayofweek.map(lambda i: DAYS[int(i)])  # Mon=0
-    minutes = local.hour * 60 + local.minute
-    out = []
-    for dk, mins in zip(day_keys, minutes):
-        day = schedule.days.get(str(dk), DaySchedule(occupied=False))
+    # A day whose end <= start runs past midnight INTO THE NEXT DAY (Mon 22:00-06:00 = Mon 22:00 .. Tue 06:00), the
+    # same as nf-app/static/occupancy.js calendarSchedule (#1636): the hook's synthesized occ_mode and this mask agree.
+    windows = []
+    for d in DAYS:
+        day = schedule.days.get(d, DaySchedule(occupied=False))
         if not day.occupied:
-            out.append(False)
+            windows.append(None)
             continue
         sh, sm = _parse_hhmm(day.start)
         eh, em = _parse_hhmm(day.end)
-        start_m, end_m = sh * 60 + sm, eh * 60 + em
-        if end_m <= start_m:
-            # overnight window
-            out.append(mins >= start_m or mins < end_m)
-        else:
-            out.append(start_m <= mins < end_m)
+        windows.append((sh * 60 + sm, eh * 60 + em))
+    minutes = local.hour * 60 + local.minute
+    out = []
+    for dow, mins in zip(local.dayofweek, minutes):
+        i = int(dow)                                    # Mon=0
+        today, yesterday = windows[i], windows[(i - 1) % 7]
+        occ = False
+        if today is not None:
+            start_m, end_m = today
+            occ = start_m <= mins < end_m if end_m > start_m else mins >= start_m
+        if not occ and yesterday is not None and yesterday[1] <= yesterday[0]:
+            occ = mins < yesterday[1]                   # the spill of yesterday's overnight shift
+        out.append(occ)
     return pd.Series(out, index=index, dtype=bool)
 
 
