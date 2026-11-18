@@ -52,6 +52,7 @@ Stacked PRs keep base `release/5.0.21`; review only the top commit named in each
 | #1691 | `grok/1667-episode-review` | `dd64c89c` | Refs #1667 | - | first slice: `python -m open_fdd.ml.review`, SQL verdict always kept |
 | #1692 | `grok/1635-client-run-proof` | `970c0679` | Refs #1635 | - | client half: frames carry hook-resolved run proof (needs Claude's hook half) |
 
+| #1693 | `grok/1666-assessed-pca-greybox` | `9ee3f342` | Refs #1666 | - | PCA/gray-box `assessment()`; issue repro now 100 x missing_inputs |
 Shared-file note: `tests/test_ml_fdd.py`, `open_fdd/ml/cli.py` and `docs/python-tools.md` are touched by several
 PRs at different anchors; stacks exist to avoid conflicts. Grok will rebase its own branches on request.
 
@@ -60,7 +61,7 @@ PRs at different anchors; stacks exist to avoid conflicts. Grok will rebase its 
 | # | State | Notes |
 |---|---|---|
 | 1665 | PR READY (#1678) | acceptance 1-5 mapped to named tests |
-| 1666 | PR READY partial (#1677, #1679) | still open: assessed contract for PCA/gray-box/CLI JSON |
+| 1666 | PR READY partial (#1677, #1679, #1693) | still open: detect CLI/JSON exposure (after #1678) |
 | 1652-1662 | PR READY (see table) | #1662 leaves `detect --method`/`--train-until` help for after #1678 |
 | 1667 | PR partial (#1691) | replay, RDF inputs, labeled evaluation not done |
 | 1635 | PR partial (#1692) | hook must emit `run_proof` / `run_proof_series` (Claude) |
