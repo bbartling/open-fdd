@@ -182,6 +182,66 @@ def test_ocsvm_is_mode_gated():
     assert biased > healthy + 0.3
 
 
+def _mode_rows(mode: str, n: int = 60, seed: int = 20) -> "pd.DataFrame":
+    """``n`` synthetic AHU rows that are all in one operating mode (see ``operating_mode``)."""
+    frame = _synthetic_ahu(n=4000, seed=seed)
+    rows = frame[operating_mode(frame) == mode]
+    assert len(rows) >= n, f"synthetic AHU has only {len(rows)} {mode} rows"
+    return rows.iloc[:n]
+
+
+def test_mode_gated_refit_replaces_every_mode_model():
+    """#1666: old-mode fit -> new-mode refit -> old-mode scoring is unassessed, never served by the old model."""
+    pytest.importorskip("sklearn")
+    det = make_detector("ocsvm")
+    det.fit(_mode_rows("econ_only"))
+    assert set(det.models_) == {"econ_only"} and det.fit_revision_ == 1
+    det.fit(_mode_rows("mech_min_oa"))
+    assert set(det.models_) == {"mech_min_oa"}, "a refit kept a model from the earlier fit"
+    assert set(det.mode_columns_) == {"mech_min_oa"}
+    assert det.fit_revision_ == 2
+    assert det.fit_receipt_["status"] == "fitted"
+    assert {m: v["revision"] for m, v in det.fit_receipt_["modes"].items()} == {"mech_min_oa": 2}
+    old_mode = _mode_rows("econ_only", seed=21)
+    assessment = det.assessment(old_mode)
+    assert (assessment == "unsupported_mode").all()
+    assert not det.assessed_mask(old_mode).any()
+    assert not det.flags(old_mode).any()  # unassessed rows carry no flag; the assessment says why
+
+
+def test_mode_gated_failed_refit_leaves_no_usable_model():
+    pytest.importorskip("sklearn")
+    det = make_detector("ocsvm").fit(_mode_rows("econ_only"))
+    with pytest.raises(ValueError, match="no operating mode had 50"):
+        det.fit(_mode_rows("econ_only", n=20, seed=22))
+    assert not det.is_fitted and det.models_ == {} and det.roles == []
+    assert det.fit_receipt_["status"] == "failed" and det.fit_revision_ == 1
+    assert "econ_only" in det.fit_receipt_["skipped_modes"]
+    for call in (det.flags, det.scores, det.assessment):
+        with pytest.raises(RuntimeError, match="not fitted"):
+            call(_mode_rows("econ_only", seed=23))
+    with pytest.raises(RuntimeError, match="not fitted"):
+        make_detector("ocsvm").flags(_mode_rows("econ_only", seed=23))
+
+
+def test_mode_gated_assessment_reasons():
+    pytest.importorskip("sklearn")
+    det = make_detector("ocsvm").fit(_synthetic_ahu(seed=24))
+    frame = _synthetic_ahu(n=300, seed=25)
+    frame.iloc[:10, frame.columns.get_loc("fan-status")] = 0.0
+    frame.iloc[10:20, frame.columns.get_loc(det.roles[0])] = np.nan
+    assessment = det.assessment(frame)
+    assert (assessment.iloc[:10] == "inactive").all()
+    assert (assessment.iloc[10:20] == "missing_inputs").all()
+    supported = operating_mode(frame).isin(list(det.models_))
+    rest = assessment.iloc[20:]
+    assert (rest[supported.iloc[20:]] == "assessed").all()
+    assert (rest[~supported.iloc[20:]] == "unsupported_mode").all()
+    flags = det.flags(frame)
+    assert not flags[assessment != "assessed"].any()
+    assert det.fit_receipt_["roles"] == det.roles and det.fit_receipt_["seed"] == 0
+
+
 def test_copod_optional():
     if not copod_available():
         with pytest.raises(ImportError):
