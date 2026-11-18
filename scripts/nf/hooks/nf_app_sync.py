@@ -2097,7 +2097,8 @@ def build_parser() -> argparse.ArgumentParser:
                     help="push/install: first download the hand-edited box copies to DIR (same folder layout) for review")
     ap.add_argument("--dry-run", action="store_true",
                     help="install: run the read-only checks (login, schema probe, hand edits) and say what would happen, "
-                         "e.g. \"would bootstrap the schema probe\"; writes nothing")
+                         "e.g. \"would bootstrap the schema probe\"; writes nothing. Refused for every other action "
+                         "(they have no dry run); use status or diff for a read-only look")
     ap.add_argument("--skip-verify-run", action="store_true",
                     help="install: do not run the scheduled hooks once to verify")
     ap.add_argument("--remove-old", action="store_true",
@@ -2117,8 +2118,19 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def argument_problem(a: argparse.Namespace) -> str | None:
+    """A flag combination that would not do what it says, refused before any login or write (#1634)."""
+    if getattr(a, "dry_run", False) and a.action != "install":
+        return (f"--dry-run applies to install only; `{a.action}` has no dry run and would act for real. "
+                "For a read-only look use `status` or `diff` (pull without writing).")
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     a = build_parser().parse_args(argv)
+    problem = argument_problem(a)
+    if problem:
+        raise SystemExit(problem)
     if a.env.expanduser().is_file():
         env = load_env(a.env)
         if not env.get("NF_TIMESCALE_PREFLIGHT_DSN") and os.environ.get("NF_TIMESCALE_PREFLIGHT_DSN"):
