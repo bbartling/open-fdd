@@ -123,7 +123,7 @@ jobs:
           POSTGRES_TEST_URL: postgres://postgres:example@localhost:5432/postgres
         run: |
           set -o pipefail
-          python -m pytest tests/parity/test_engine_matrix.py tests/test_sql_anomaly_zscore.py tests/test_sql_motor_runtime.py -q -rA 2>&1 | tee "$RUNNER_TEMP/pg-parity.log"
+          python -m pytest tests/parity/test_engine_matrix.py tests/test_sql_anomaly_zscore.py tests/test_sql_motor_runtime.py tests/test_sql_mech_cooling.py -q -rA 2>&1 | tee "$RUNNER_TEMP/pg-parity.log"
           if grep -Eq "SKIPPED|skipped|deselected" "$RUNNER_TEMP/pg-parity.log"; then echo "Postgres parity tests skipped: failing the lane"; exit 1; fi
           # the PostgreSQL test must have actually run and passed against the service container, not just "not skipped"
           grep -Eq "^PASSED .*test_postgres_4x3_basic_and_edge_parity" "$RUNNER_TEMP/pg-parity.log" || { echo "standalone PostgreSQL parity did not run"; exit 1; }
@@ -131,5 +131,6 @@ jobs:
           grep -Eq "^PASSED .*test_postgres_zscore_matches_pandas" "$RUNNER_TEMP/pg-parity.log" || { echo "PostgreSQL z-score parity did not run"; exit 1; }
           # and the SQL weekly motor run hours (#1649)
           grep -Eq "^PASSED .*test_postgres_matches_sqlite" "$RUNNER_TEMP/pg-parity.log" || { echo "PostgreSQL motor runtime parity did not run"; exit 1; }
+          grep -Eq "^PASSED .*test_postgres_mech_bins_match_pandas" "$RUNNER_TEMP/pg-parity.log" || { echo "PostgreSQL mechanical-cooling bins parity did not run"; exit 1; }
           python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile basic
           python tests/parity/stress.py --engines pglite,postgres,duckdb --equips 2 --days 3 --profile edge

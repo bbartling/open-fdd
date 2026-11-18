@@ -80,7 +80,10 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 Weekly motor run hours are SQL too: `sql/analytics/motor_weekly_runtime.sql` reads bound fan and pump roles (status
 before command) and matches `open_fdd.analytics.core.motor_run_hours_weekly` (`tests/test_sql_motor_runtime.py`). Use
 `open_fdd.analytics.sql_runtime.run_runtime_sql(conn, engine)` on a core database, or `motor_run_hours_weekly_sql(frames,
-role_map)` on frames.
+role_map)` on frames. Mechanical-cooling hours by outdoor-air bin are `sql/analytics/mech_cooling_oat_bins.sql`: the
+proof ladder (chiller / compressor status, command, stages, amps or kW; heat pumps only in cooling mode) is built from
+bound roles in `open_fdd.analytics.sql_mech_cooling`, and the rows match `core.mech_cooling_oat_bins`
+(`tests/test_sql_mech_cooling.py`).
 
 ## ML FDD (`open-fdd-ml`)
 
