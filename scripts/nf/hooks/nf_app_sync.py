@@ -1945,6 +1945,24 @@ def hand_edit_line(drift: dict) -> tuple[str, str, str]:
 WEATHER_HOOK_IDS = ("weather", "open-meteo-weather")
 
 
+def scheduled_success_gap(hook: dict, runs: list[dict], now: datetime.datetime) -> str | None:
+    """#1638: text when a scheduled hook has had no successful run (STATE_SUCCESS and not ok:false) within two of its
+    intervals, else None. On-request hooks and hooks without a simple schedule are not judged."""
+    if hook.get("mode") == ON_REQUEST:
+        return None
+    interval = rrule_interval_seconds(((hook.get("schedule") or {}).get("rrule")))
+    if not interval or not runs:
+        return None
+    ok = next((r for r in runs if r.get("state") == "STATE_SUCCESS" and not result_failure(r)), None)
+    started = parse_ts(ok.get("startTime")) if ok else None
+    if ok and started is None:
+        return None                      # a success without a readable start time cannot be aged
+    if started and (now - started).total_seconds() <= 2 * interval:
+        return None
+    since = f"the last success started {ok.get('startTime')}" if started else f"none in the last {len(runs)} runs"
+    return f"no successful run within two intervals ({2 * interval // 60} min): {since}"
+
+
 def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -> int:
     app_id = m["application"]["id"]
     bad = 0
@@ -1993,7 +2011,7 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line("PASS", "deps", "none declared")
     for h in a.get("hooks", []):
         try:
-            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=1&include_results=true")
+            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=20&include_results=true")
         except SystemExit as e:
             line("WARN", f"hook {h['id']}", f"could not read runs ({e})")
             continue
@@ -2005,13 +2023,15 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
             line("PASS" if h.get("mode") == ON_REQUEST else "WARN", f"hook {h['id']}", "never run")
             continue
         text = run_error_text(last)
+        stale = scheduled_success_gap(h, runs.get("runs") or [], now or datetime.datetime.now(datetime.timezone.utc))
         if last.get("state") == "STATE_SUCCESS" and not result_failure(last):
-            line("PASS", f"hook {h['id']}", f"last run {last['state']}")
+            line("FAIL" if stale else "PASS", f"hook {h['id']}", stale or f"last run {last['state']}")
         elif h.get("mode") == ON_REQUEST and last.get("state") == "STATE_SUCCESS":
             line("WARN", f"hook {h['id']}", f"last run returned ok:false ({result_failure(last)}), usually missing args")
         else:
-            line("FAIL", f"hook {h['id']}", f"last run {last.get('state')}: "
-                 f"{(result_failure(last) or text or '')[:160].strip()}")
+            # #1638: an errored run may carry no endTime; it is a failure with its start time, never "still running"
+            line("FAIL", f"hook {h['id']}", f"last run {last.get('state')} (started {last.get('startTime') or 'unknown'}): "
+                 f"{(result_failure(last) or text or '')[:160].strip()}" + (f"; {stale}" if stale else ""))
         if h["id"] == "fdd" and (unit_skips := fdd_unit_skip_text(last)):
             line("WARN", "fdd units", unit_skips)
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
