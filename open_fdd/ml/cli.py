@@ -28,7 +28,11 @@ DETECT_METHODS = ("pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="open-fdd-ml", description="ML FDD benchmark (LBNL data) and ML detectors.")
+    parser = argparse.ArgumentParser(
+        prog="open-fdd-ml",
+        description="ML FDD benchmark (LBNL data) and ML detectors. "
+                    "`open-fdd-ml methods [FOLDER]` lists each method's required roles and which can run on FOLDER.",
+    )
     sub = parser.add_subparsers(dest="command")
 
     dl = sub.add_parser("download", help="Fetch the LBNL single-duct AHU subset into the cache (CC BY 4.0)")
@@ -44,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--seed", type=int, default=0)
     bench.add_argument("--out", type=Path, default=None, help="Write the Markdown table here (default: stdout)")
     bench.add_argument("--json", type=Path, default=None, help="Write every score and detail as JSON")
+    meth = sub.add_parser("methods", help="List each detector's required roles; with FOLDER, which can run there and why not")
+    meth.add_argument("folder", type=Path, nargs="?", default=None, help="Device folder to check (optional)")
+    meth.add_argument("--json", action="store_true", help="Print JSON instead of text")
 
     det = sub.add_parser("detect", help="Fit a detector on known-good rows of a device folder and flag the rest",
                          description="Learning methods (pca, grey_box, ocsvm, copod) need exactly one training source: "
@@ -320,13 +327,33 @@ def _cmd_detect(args) -> int:
     return 0
 
 
+def _cmd_methods(args) -> int:
+    from open_fdd.ml.applicability import METHOD_REQUIREMENTS, applicability, requirements_text
+
+    if args.folder is None:
+        print(json.dumps(METHOD_REQUIREMENTS, indent=1) if args.json else requirements_text())
+        return 0
+    rows = applicability(role_frame_from_folder(args.folder))
+    if args.json:
+        print(json.dumps({"folder": str(args.folder), "methods": rows}, indent=1))
+        return 0
+    print(requirements_text())
+    print(f"\n{args.folder}:")
+    for row in rows:
+        state = "can run" if row["can_run"] else "cannot run"
+        detail = f"roles {', '.join(row['roles'])}" if row["can_run"] else row["reason"]
+        print(f"  {row['method']:9s} {state}: {detail}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else 0
-    handlers = {"download": _cmd_download, "benchmark": _cmd_benchmark, "detect": _cmd_detect}
+    handlers = {"download": _cmd_download, "benchmark": _cmd_benchmark, "detect": _cmd_detect,
+                "methods": _cmd_methods}
     if args.command not in handlers:
         parser.print_help()
         return 2
