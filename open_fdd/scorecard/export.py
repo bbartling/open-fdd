@@ -154,15 +154,22 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
         (out / "history_long.csv").write_text(",".join(HISTORY_FIELDS) + "\n", encoding="utf-8")
     (out / "role_map.json").write_text(json.dumps(role_map, indent=2, sort_keys=True), encoding="utf-8")
 
-    # Blank verdict sheet: one row per FAULT window.
+    # Blank verdict sheet: one row per FAULT EPISODE (back-to-back FAULT windows of one rule on one unit merged),
+    # so a reviewer judges an event once; the verdict applies to every window inside it.
+    episodes: list[list[str]] = []
+    for r in sorted((r for r in res_rows if r["status"] == "FAULT"),
+                    key=lambda r: (r["equipment_id"], r["rule_id"], r["window_start"])):
+        last = episodes[-1] if episodes else None
+        if last and last[0] == r["equipment_id"] and last[1] == r["rule_id"] and r["window_start"] <= last[3]:
+            last[3] = max(last[3], r["window_end"])
+        else:
+            episodes.append([r["equipment_id"], r["rule_id"], r["window_start"], r["window_end"]])
     with open(out / "verdicts.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=list(TEMPLATE_FIELDS))
         w.writeheader()
-        for r in res_rows:
-            if r["status"] == "FAULT":
-                w.writerow({"equipment_id": r["equipment_id"], "start_ts": r["window_start"],
-                            "end_ts": r["window_end"], "label": "", "rule_id": r["rule_id"], "fault_type": "",
-                            "source": "reviewer", "reviewer": "", "notes": ""})
+        for eq, rule, start, end in episodes:
+            w.writerow({"equipment_id": eq, "start_ts": start, "end_ts": end, "label": "", "rule_id": rule,
+                        "fault_type": "", "source": "reviewer", "reviewer": "", "notes": ""})
 
     manifest = {
         "format": FORMAT, "version": VERSION,
@@ -176,7 +183,8 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     private = {"alias_to_equipment": {v: k for k, v in aliases.items()}, "shift_days": int(shift_days)}
     (private_dir / "reidentify.json").write_text(json.dumps(private, indent=2), encoding="utf-8")
-    return {"results": len(res_rows), "faults": sum(len(v) for v in faults.values()), "history_rows": n_hist,
+    return {"results": len(res_rows), "faults": sum(len(v) for v in faults.values()), "fault_episodes": len(episodes),
+            "history_rows": n_hist,
             "dropped_unmapped_point_rows": dropped_points, "equipment": len(aliases) if alias else None}
 
 

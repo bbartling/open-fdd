@@ -22,6 +22,11 @@ from that rule is real. With `--prior card.json` (for example a scorecard comput
 precision is a Beta prior worth `--prior-weight` verdicts, so a site starts from the public estimate and moves to its
 own data as verdicts accumulate.
 
+**Prevalence matters.** Precision measured on a labeled dataset depends on its fault / normal mix (LBNL has many
+faulted files per fault-free file). Recall and FPR do not. Pass `--prevalence 0.05` (your expected share of truly
+faulted windows) to get `precision_at_prevalence = recall·π / (recall·π + FPR·(1−π))` (rates smoothed as (k+0.5)/(n+1), so zero false positives in a short sample is not read as certainty); a prior card computed this way
+is what `--prior` should use at a site.
+
 ## Run it inside your database
 
 `open-fdd-scorecard sql` prints portable SQL (PostgreSQL, TimescaleDB, SQLite). Create two views,
@@ -47,7 +52,7 @@ zip -r bundle.zip bundle/          # send only this
   maps verdicts back to real equipment ids and times, to store next to the results.
 
 Bundle files: `manifest.json` (format, version, privacy flags, SHA-256 of every file), `rule_results.csv`,
-`labels.csv`, `verdicts.csv` (blank sheet, one row per FAULT window, not checksummed), `history_long.csv`
+`labels.csv`, `verdicts.csv` (blank sheet, one row per FAULT episode: back-to-back FAULT windows of one rule on one unit, not checksummed), `history_long.csv`
 (`ts, equipment_id, role, value`), `role_map.json` (roles per alias). Optional `config.json`.
 
 ### Privacy and security properties

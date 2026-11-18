@@ -241,7 +241,9 @@ def test_export_bundle_privacy_checksums_and_unalias(tmp_path, capsys):
     assert rep["ok"], rep
     # reviewer fills the verdict sheet; checksums still pass (verdicts.csv is not checksummed)
     rows = list(csv.DictReader((bdir / "verdicts.csv").read_text().splitlines()))
-    assert len(rows) == 5
+    assert len(rows) == 4  # AHU-F FC1 02:00-04:00 is one episode
+    assert any(r["start_ts"].startswith("2026-12-31T02:00") and r["end_ts"].startswith("2026-12-31T04:00")
+               for r in rows)
     for r in rows:
         r["label"] = "confirmed" if r["equipment_id"] == "EQ-0001" else "false_positive"
     with open(bdir / "verdicts.csv", "w", newline="") as fh:
@@ -259,3 +261,14 @@ def test_export_bundle_privacy_checksums_and_unalias(tmp_path, capsys):
     (bdir / "rule_results.csv").write_text((bdir / "rule_results.csv").read_text() + "x,y,z\n")
     assert not bundle.check(bdir)["ok"]
     assert main(["run", "--bundle", str(bdir)]) == 1
+
+
+def test_prevalence_reweights_precision_and_feeds_prior():
+    card = score(RESULTS, LABELS, prevalence=0.1)
+    fc1 = _by_rule(card)["FC1"]
+    r, f = 2.5 / 4, 1.5 / 3  # Jeffreys-smoothed recall (2 of 3) and FPR (1 of 2)
+    assert fc1["precision_at_prevalence"] == pytest.approx((r * 0.1) / (r * 0.1 + f * 0.9))
+    site = _by_rule(score(RESULTS, LABELS, prior=card, prior_weight=10))["FC1"]
+    assert site["prior_precision"] == pytest.approx(fc1["precision_at_prevalence"])
+    with pytest.raises(ValueError):
+        score(RESULTS, LABELS, prevalence=1.5)

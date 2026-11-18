@@ -146,19 +146,29 @@ def _ratio(a: int, b: int) -> float | None:
 
 
 def _lead_times(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    """Per rule: hours from each fault label's start to the first FAULT window overlapping it (detection delay)."""
+    """Per rule: detection delay for each fault label, in hours.
+
+    Measured from the later of the label start and the rule's first ASSESSED window (FAULT or PASS) inside the label,
+    to the first FAULT window, so a label that starts long before the evaluated period (e.g. a whole-year LBNL file
+    scored on two weeks) does not inflate the delay.
+    """
     q = """
-    SELECT r.rule_id, l.equipment_id, l.start_ts, MIN(r.window_start) AS first_fault
+    SELECT r.rule_id, l.equipment_id, l.start_ts,
+           MIN(r.window_start) AS first_assessed,
+           MIN(CASE WHEN r.status = 'FAULT' THEN r.window_start END) AS first_fault
     FROM scorecard_labels l
     JOIN scorecard_results r
       ON r.equipment_id = l.equipment_id AND l.start_ts < r.window_end AND l.end_ts > r.window_start
-     AND r.status = 'FAULT' AND (l.rule_id IS NULL OR l.rule_id = r.rule_id)
+     AND r.status IN ('FAULT', 'PASS') AND (l.rule_id IS NULL OR l.rule_id = r.rule_id)
     WHERE l.label = 'fault'
     GROUP BY r.rule_id, l.equipment_id, l.start_ts
     """
     out: dict[str, list[float]] = {}
-    for rule, _eq, start, first in conn.execute(q):
-        out.setdefault(rule, []).append(max(0.0, _hours(start, first)))
+    for rule, _eq, start, first_assessed, first_fault in conn.execute(q):
+        if first_fault is None:
+            continue
+        origin = max(start, first_assessed)
+        out.setdefault(rule, []).append(max(0.0, _hours(origin, first_fault)))
     stats = {}
     for rule, vals in out.items():
         vals.sort()
@@ -169,12 +179,21 @@ def _lead_times(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
 
 
 def score(results: Iterable[dict], labels: Iterable[dict], cfg: Config | None = None, *,
-          prior: dict[str, Any] | None = None, prior_weight: float = 20.0) -> dict[str, Any]:
+          prior: dict[str, Any] | None = None, prior_weight: float = 20.0,
+          prevalence: float | None = None) -> dict[str, Any]:
     """Score rule results against labels. Returns {"rules": [...], "review_queue": [...], "counts": {...}}.
 
     ``prior``: a previous scorecard (e.g. on LBNL data). Its per-rule precision becomes a Beta prior worth
-    ``prior_weight`` pseudo-verdicts: posterior precision = (TP + w * p0) / (TP + FP + w).
+    ``prior_weight`` pseudo-verdicts: posterior precision = (TP + w * p0) / (TP + FP + w). The prior's
+    ``precision_at_prevalence`` is used when present, else its raw ``precision``.
+
+    ``prevalence``: the share of windows expected to be truly faulted at the TARGET site. Precision measured on a
+    labeled dataset depends on that dataset's fault / normal mix (LBNL has many faulted files per fault-free file),
+    so ``precision_at_prevalence = recall * pi / (recall * pi + FPR * (1 - pi))`` re-weights it to the site's mix
+    (recall and FPR Jeffreys-smoothed: (k + 0.5) / (n + 1)).
     """
+    if prevalence is not None and not 0.0 < prevalence < 1.0:
+        raise ValueError("prevalence must be between 0 and 1")
     cfg = cfg or Config()
     conn = sqlite3.connect(":memory:")
     counts = _load(conn, results, labels, cfg)
@@ -188,7 +207,16 @@ def score(results: Iterable[dict], labels: Iterable[dict], cfg: Config | None = 
         row = dict(zip(cols, values))
         tp, fp, fn, tn = row["tp"], row["fp"], row["fn"], row["tn"]
         lo, hi = wilson_interval(tp, tp + fp)
-        p0 = prior_by_rule.get(row["rule_id"], {}).get("precision")
+        pr = prior_by_rule.get(row["rule_id"], {})
+        p0 = pr.get("precision_at_prevalence")
+        if p0 is None:
+            p0 = pr.get("precision")
+        recall, fpr = _ratio(tp, tp + fn), _ratio(fp, fp + tn)
+        at_prev = None
+        if prevalence is not None and recall is not None and fpr is not None:
+            # Jeffreys-smoothed rates, so 0 false positives in a short sample is not read as certainty.
+            r_s, f_s = (tp + 0.5) / (tp + fn + 1), (fp + 0.5) / (fp + tn + 1)
+            at_prev = r_s * prevalence / (r_s * prevalence + f_s * (1 - prevalence))
         posterior = None
         if p0 is not None and prior_weight > 0:
             posterior = (tp + prior_weight * p0) / (tp + fp + prior_weight)
@@ -197,8 +225,9 @@ def score(results: Iterable[dict], labels: Iterable[dict], cfg: Config | None = 
         row.update({
             "precision": _ratio(tp, tp + fp),
             "precision_ci95": [lo, hi],
-            "recall": _ratio(tp, tp + fn),
-            "fpr": _ratio(fp, fp + tn),
+            "recall": recall,
+            "fpr": fpr,
+            "precision_at_prevalence": at_prev,
             "false_positive_share": _ratio(fp, tp + fp),
             "prior_precision": p0,
             "p_true_fault": posterior,  # probability the next FAULT from this rule is real
@@ -218,7 +247,8 @@ def score(results: Iterable[dict], labels: Iterable[dict], cfg: Config | None = 
             ORDER BY r.window_start, r.equipment_id, r.rule_id""")
     ]
     conn.close()
-    return {"counts": counts, "prior_weight": prior_weight if prior else None, "rules": rules,
+    return {"counts": counts, "prior_weight": prior_weight if prior else None, "prevalence": prevalence,
+            "rules": rules,
             "review_queue": queue}
 
 

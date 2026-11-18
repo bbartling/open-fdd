@@ -61,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--config", type=Path, default=None, help="JSON column / value mapping")
     run.add_argument("--prior", type=Path, default=None, help="A previous scorecard JSON used as a Beta prior")
     run.add_argument("--prior-weight", type=float, default=20.0, help="Pseudo-verdicts the prior is worth")
+    run.add_argument("--prevalence", type=float, default=None,
+                     help="Expected share of truly faulted windows at the target site (re-weights precision)")
     run.add_argument("--json", type=Path, default=None)
     run.add_argument("--md", type=Path, default=None)
     run.add_argument("--queue", type=Path, default=None, help="CSV of unlabeled FAULT windows to review")
@@ -103,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         results, labels, cfg = read_csv(args.results), read_csv(args.labels), load_config(args.config)
     else:
         ap.error("run needs --bundle, or both --results and --labels")
-    card = score(results, labels, cfg, prior=prior, prior_weight=args.prior_weight)
+    card = score(results, labels, cfg, prior=prior, prior_weight=args.prior_weight, prevalence=args.prevalence)
     md = to_markdown(card)
     if args.json:
         args.json.write_text(json.dumps(card, indent=2), encoding="utf-8")
