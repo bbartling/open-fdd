@@ -30,13 +30,18 @@ sensor_rows AS (
   SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,
     CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch
       THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,
-    COALESCE(bp.energized, 1) AS energized,
+    -- #1631: the proof of a sample is the latest proof row at or before it, held for at most MAX_GAP_HOURS. No such row
+    -- (or a NULL proof) is UNKNOWN: it cannot create a fault. With the gate off every sample is eligible.
+    COALESCE((SELECT bx.energized FROM base_proof bx
+      WHERE bx.equipment_id = s.equipment_id
+        AND EXTRACT(EPOCH FROM bx.timestamp_utc) <= EXTRACT(EPOCH FROM s.timestamp_utc)
+        AND EXTRACT(EPOCH FROM bx.timestamp_utc) > EXTRACT(EPOCH FROM s.timestamp_utc) - {{MAX_GAP_HOURS}} * 3600.0
+      ORDER BY bx.timestamp_utc DESC LIMIT 1),
+      CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 ELSE 0 END) AS energized,
     COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
     EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
     fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
   FROM sensor_history s
-  LEFT JOIN base_proof bp
-    ON bp.equipment_id = s.equipment_id AND bp.timestamp_utc = s.timestamp_utc
   LEFT JOIN equipment_summary hs
     ON hs.equipment_id = s.equipment_id
   WHERE s.value IS NOT NULL
@@ -124,8 +129,8 @@ scored AS (
   GROUP BY equipment_id, series_id, sensor_role
 )
 SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id) = 1 THEN NULL ELSE CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END END AS fault_hours,
-  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id) = 1 THEN 0.0 ELSE COALESCE(scored.covered_hours, 0.0) END AS covered_hours
+  CASE WHEN COALESCE((SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id), CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 THEN 1 ELSE 0 END) = 1 THEN NULL ELSE CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END END AS fault_hours,
+  CASE WHEN COALESCE((SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id), CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 THEN 1 ELSE 0 END) = 1 THEN 0.0 ELSE COALESCE(scored.covered_hours, 0.0) END AS covered_hours
 FROM sensor_series ss
 LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
 ORDER BY ss.equipment_id, ss.series_id;

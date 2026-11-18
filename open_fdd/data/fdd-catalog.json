@@ -1066,6 +1066,12 @@
     "isFedBy": "brick:isFedBy",
     "feeds": "brick:feeds"
    }
+  },
+  "alignment": {
+   "mode": "asof_backward",
+   "max_age": "MAX_GAP_HOURS",
+   "unknown": "no proof sample at or before the sample within max_age, or a NULL proof: cannot create a fault, never energized",
+   "note": "#1631: a sample's proof is the latest proof sample of the same equipment at or before it, no older than MAX_GAP_HOURS (runtime_defaults.json). An exact-timestamp join is the zero-age special case (fail-closed)."
   }
  },
  "rules": [
