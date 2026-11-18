@@ -51,7 +51,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1669 | C | `percent_0_100` RH alias in all helper copies + units metadata; long-form sweep vector | INTEGRATED (READY FOR RELEASE) | #1676 -> `125afb6a` | Grok acceptance PASS on `723d90d3`; close after release |
 | 1670 | C | SCHED-247 OFF/unknown/completeness, honest observed duration | PR READY | #1699 (`fix/1670-sched247-proof`) | Grok acceptance; completeness policy 0.9 x max(window, 24 h) is an owner-visible semantic |
 | 1673 | C | SV-STALE = gap/missing; SV-FLATLINE = stuck values; dedupe silence; expected series; stale tuner migration | PR READY | #1700 (`fix/1673-stale-vs-flatline`) | Grok acceptance; then #1671 one-timer cleanup for FLATLINE/RANGE/SPIKE |
-| 1631 | C | Run-proof coverage/denominator follow-ups (sweep as-of proof join first) | OWNED | `fix/1631-sweep-proof-asof` | bounded as-of proof join in the sweeps (unknown cannot fault); no-history equipment = no proof |
+| 1631 | C | Run-proof coverage/denominator follow-ups | PR READY (item 1) | #1702 (`fix/1631-sweep-proof-asof`, stacked on #1700) | sweep as-of proof join done (23.9 h repro -> 0); remaining items: ECON-7/DMP-1/VLV-1 coverage, FC4 order, TRIM-3/4, CW-FAN/OPT, FC13 placeholder, runner denominator + startup delay, command-unit check, AHU/pump proof fixtures, IRI identity |
 | 1635 | C (+G client) | Resolved proof into SPARQL client frames | OPEN | | |
 | 1636 | C | Occupancy calendar synthesis | OPEN | | |
 | 1639 | C | Expanded SI stress, seeds, replay | OPEN | | |
@@ -65,14 +65,14 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1643 | C | Fast Overview, lazy heavy views | OPEN | | phase 3 |
 | 1644 | C | Split `hooks/fdd.js` into modules | OPEN | | phase 3 |
 | 1645 | C | Native DuckDB Standard, Parquet, notebook, Lite migration | OPEN | | phase 3; needs real NF targets |
-| 1567 | C | NF-native install paths, non-SSH docs | OPEN | | phase 3 |
+| 1567 | C | NF-native install paths, non-SSH docs | OPEN | | A/C/D live-NF checklist preserved on the issue (comment 6967806025) |
 | 1614 | C | Safe prune planning | OPEN | | phase 3 |
 | 1615 | C | Host health via NF API | OPEN | | phase 3 |
 | 1616 | C | Canonical skills, README/badges, link drift | OPEN | | phase 3 |
 | 1624 | C | Disposable real-NF CI | OPEN | | needs disposable NF |
-| 1633 | C | Timescale preflight before writes | OPEN | | phase 3 |
-| 1634 | C | True `--dry-run` | OPEN | | phase 3 |
-| 1638 | C | Errored/unfinished run health | OPEN | | phase 3 |
+| 1633 | C | Timescale preflight before app writes | PR READY | #1704 (`fix/1633-push-schema-preflight`) | Grok acceptance; release-notes line per SCHEMA_VERSION bump goes in the final release PR |
+| 1634 | C | True `--dry-run` | PR READY | #1703 (`fix/1634-dry-run-guard`) | refuses --dry-run outside install; Grok acceptance |
+| 1638 | C | Errored/unfinished run health | PR READY | #1705 (`fix/1638-errored-run-health`) | Grok acceptance; live check with a failing hook on disposable NF (#1624) |
 | 1668 | C | NF mock/fakes contract + installer fixes | OPEN | | phase 3 |
 | 1569 | C (+G tool) | Ontology extension namespace/SHACL/doctor | OPEN | | phase 4 |
 | 1652-1662, 1665-1667 | G | Python/PyPI/ML tooling | OPEN | Grok PRs | Claude reviews |
@@ -87,10 +87,15 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1675 | Claude | tutorial links | merged `b42f2f83` | done |
 | #1676 | Claude | #1669 | merged `125afb6a` | done |
 | #1699 | Claude | #1670 SCHED-247 | ready | Grok acceptance, CI |
+| #1701 | Claude | this ledger | open | merge any time (plans only) |
+| #1702 | Claude | #1631 sweep as-of proof | draft, stacked on #1700 | rebase/merge after #1700 |
+| #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
+| #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
+| #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
 | #1700 | Claude | #1673 SV-STALE split | ready | Grok acceptance, CI |
-| #1677 #1678 #1679 #1683 #1692 #1693 | Grok | ML/tooling | merged (Claude review ACCEPT, CI green) | done |
-| #1680 #1684 #1685 #1686 #1689 #1690 #1697 #1698 | Grok | tooling | Claude ACCEPT (nits posted) | merge when CI green / stack base lands |
-| #1687 #1694 | Grok | ml detect | Claude ACCEPT; conflicts after squash of #1678 | Grok merges release into branch |
+| #1677 #1678 #1679 #1683 #1690 #1692 #1693 | Grok | ML/tooling | merged (Claude review ACCEPT, CI green) | done |
+| #1680 #1684 #1685 #1686 #1689 #1697 | Grok | tooling | Claude ACCEPT (nits posted) | merge when CI green / stack base lands |
+| #1687 #1694 #1698 | Grok | ml detect | Claude ACCEPT; conflicts after the squash merges | Grok merges release into branch |
 | #1681 #1682 #1688 #1691 #1695 #1696 | Grok | ML | Claude CHANGES REQUESTED (verified blocking findings) | Grok fixes; #1684/#1685/#1688/#1689 wait on #1681, #1686 on #1682 |
 
 ## Checkpoints
@@ -108,4 +113,11 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
   most MAX_GAP_HOURS, older or absent = unknown (cannot fault); the client follows (#1631 / #1635).
 - pandas runner quality-nulled out-of-range sweep values (fixed in #1700).
 - Known local-only failures: `test_client_frames_are_the_oracle_frames` (pandas 3.0.6 index unit); CI passes.
+
+### 2026-11-18 ~03:30 local (Claude)
+
+- Opened #1702 (#1631 item 1), #1703 (#1634), #1704 (#1633), #1705 (#1638). #1700 (#1673) ready after its suite.
+- GitHub Actions backlog: new PRs sit with 20+ pending checks; merges wait for green on the exact head.
+- Next code items (priority order): #1671 tuner contract -> #1672 sliders; #1631 remaining items; #1636; #1641; #1642;
+  #1635 hook half (sparql-data emits run_proof/run_proof_series); then #1649 analytics.
 
