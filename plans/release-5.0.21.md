@@ -60,7 +60,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1642 | C | Divergences + implementation-aware pins | OPEN | | |
 | 1646 | C | Tuners, motor-status wording, RCx coverage | OPEN | | after #1671/#1672 |
 | 1671 | C | One visible timer per rule; tuner migration | PR DRAFT | #1708 (`fix/1671-one-timer`, stacked on #1700) | internal_constants; byte-identical SQL; Node 790/790, Python 540/7 |
-| 1672 | C | Sliders/booleans, SI validation, scoped persistence | OPEN | | after #1671 |
+| 1672 | C | Sliders/booleans, SI validation, scoped persistence | PR DRAFT | #1709 (`fix/1672-tuner-sliders`, stacked on #1708) | grouped sliders, Require motor status, step snap, ordered pairs; no live screenshot |
 | 1649 | C | SQL analytics restoration + pandas parity | OPEN | | phase 2 |
 | 1643 | C | Fast Overview, lazy heavy views | OPEN | | phase 3 |
 | 1644 | C | Split `hooks/fdd.js` into modules | OPEN | | phase 3 |
@@ -90,6 +90,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1701 | Claude | this ledger | open | merge any time (plans only) |
 | #1702 | Claude | #1631 sweep as-of proof | draft, stacked on #1700; head 36a0a66b | merge after #1700 |
 | #1708 | Claude | #1671 one timer per rule | draft, stacked on #1700 | merge after #1700 |
+| #1709 | Claude | #1672 tuner sliders | draft, stacked on #1708 | merge after #1708 |
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
@@ -141,3 +142,4 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - Next: #1671 tuner contract.
 - ~06:30: #1700 head 47478f87 (the Python Timescale parity harness drops the sweep_series declaration, like the pandas oracle); #1702 merged it in.
   Opened #1708 (#1671) as a draft stacked on #1700. Next: #1672 sliders.
+- ~07:20: opened #1709 (#1672) as a draft on #1708. Next: #1631 remaining items, #1641, #1642, #1639.
