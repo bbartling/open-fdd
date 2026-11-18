@@ -320,6 +320,10 @@ class ModeGated(Detector):
     roles: list[str] = field(default_factory=list)
     models_: dict[str, object] = field(default_factory=dict)
     mode_columns_: dict[str, list[int]] = field(default_factory=dict)
+    # Fit provenance. ``fit_revision_`` counts successful fits of this instance; ``fit_receipt_`` says which
+    # revision owns every fitted mode and why any mode was left out. A failed fit leaves the instance unfitted.
+    fit_revision_: int = 0
+    fit_receipt_: dict = field(default_factory=dict)
     name: str = "ocsvm"
 
     def __post_init__(self) -> None:
@@ -338,39 +342,97 @@ class ModeGated(Detector):
             return COPOD(contamination=self.nu)
         raise ValueError(f"unknown mode-gated model {self.kind!r}")
 
+    def _reset_fit(self) -> None:
+        self.roles, self.models_, self.mode_columns_, self.fit_receipt_ = [], {}, {}, {}
+
+    @property
+    def is_fitted(self) -> bool:
+        return bool(self.models_)
+
     def fit(self, normal: pd.DataFrame) -> "ModeGated":
+        """Fit one model per operating mode. A refit replaces the whole baseline (every mode model, feature-role
+        selection and per-mode column choice); a mode absent from the new fit is unsupported, never served by an
+        earlier fit. A failed fit leaves the instance unfitted so scoring raises instead of reporting no faults."""
+        self._reset_fit()
         normal = canonical_roles(normal)
         rows = normal[active_mask(normal)]
         candidates = [r for r in self.feature_roles if r in rows.columns]
         x = _features(rows, candidates).dropna()
         std = x.std(ddof=0)
-        self.roles = [r for r in candidates if float(std.get(r, 0.0)) > 1e-9]
-        if len(self.roles) < 2:
+        roles = [r for r in candidates if float(std.get(r, 0.0)) > 1e-9]
+        if len(roles) < 2:
+            self.fit_receipt_ = {"status": "failed", "reason": f"{self.kind} needs at least two non-constant feature roles"}
             raise ValueError(f"{self.kind} needs at least two non-constant feature roles")
-        x = x[self.roles]
+        x = x[roles]
         modes = operating_mode(rows.loc[x.index])
         rng = np.random.default_rng(self.seed)
+        revision = self.fit_revision_ + 1
+        models: dict[str, object] = {}
+        mode_columns: dict[str, list[int]] = {}
+        fitted: dict[str, dict] = {}
+        skipped: dict[str, str] = {}
         for mode in sorted(modes.unique()):
             part = x[modes == mode]
-            if len(part) < 50:
+            available = len(part)
+            if available < 50:
+                skipped[mode] = f"{available} complete active training rows (< 50)"
                 continue
-            if len(part) > self.max_train:
-                part = part.iloc[np.sort(rng.choice(len(part), self.max_train, replace=False))]
+            if available > self.max_train:
+                part = part.iloc[np.sort(rng.choice(available, self.max_train, replace=False))]
             # a role held constant in this mode (e.g. the damper at minimum) carries no information; COPOD's
             # skewness of a constant column is undefined, so drop such roles per mode
             spread = part.std(ddof=0).to_numpy()
             cols = [i for i, sd in enumerate(spread) if sd > 1e-9] if self.kind == "copod" else list(range(part.shape[1]))
             if len(cols) < 1:
+                skipped[mode] = "no non-constant feature role in this mode"
                 continue
             model = self._model()
             model.fit(part.to_numpy()[:, cols])
-            self.models_[mode] = model
-            self.mode_columns_[mode] = cols
-        if not self.models_:
+            models[mode] = model
+            mode_columns[mode] = cols
+            fitted[mode] = {"revision": revision, "available_rows": int(available), "fit_rows": int(len(part)),
+                            "roles": [roles[i] for i in cols]}
+        if not models:
+            self.fit_receipt_ = {"status": "failed", "reason": f"{self.kind}: no operating mode had 50 normal rows",
+                                 "skipped_modes": skipped}
             raise ValueError(f"{self.kind}: no operating mode had 50 normal rows")
+        # commit the new baseline only now, all at once
+        self.roles, self.models_, self.mode_columns_ = roles, models, mode_columns
+        self.fit_revision_ = revision
+        self.fit_receipt_ = {
+            "status": "fitted", "kind": self.kind, "revision": revision, "seed": self.seed, "roles": list(roles),
+            "training_rows": int(len(normal)), "active_training_rows": int(len(rows)), "complete_active_rows": int(len(x)),
+            "training_start": None if x.empty else str(x.index.min()),
+            "training_end": None if x.empty else str(x.index.max()),
+            "modes": fitted, "skipped_modes": skipped,
+        }
         return self
 
+    def _require_fitted(self) -> None:
+        if not self.models_:  # never fitted, or the last fit failed: never report "no faults" silently
+            raise RuntimeError(f"{self.kind} is not fitted: call fit() on known-good data first")
+
+    def assessment(self, frame: pd.DataFrame) -> pd.Series:
+        """Per row: ``"assessed"`` or why not (``"inactive"``, ``"missing_inputs"``, ``"unsupported_mode"``).
+
+        ``unsupported_mode`` is an operating mode with no model in the current fit (too few training rows, or
+        absent from the training data). Such rows are unassessed, not healthy."""
+        self._require_fitted()
+        frame = canonical_roles(frame)
+        act = active_mask(frame)
+        complete = _features(frame, self.roles).notna().all(axis=1)
+        modes = operating_mode(frame)
+        out = pd.Series("assessed", index=frame.index, dtype=object)
+        out[~modes.isin(list(self.models_))] = "unsupported_mode"
+        out[~complete] = "missing_inputs"
+        out[~act] = "inactive"
+        return out
+
+    def assessed_mask(self, frame: pd.DataFrame) -> pd.Series:
+        return self.assessment(frame) == "assessed"
+
     def flags(self, frame: pd.DataFrame) -> pd.Series:
+        self._require_fitted()
         frame = canonical_roles(frame)
         act = active_mask(frame)
         x = _features(frame, self.roles)
@@ -381,7 +443,7 @@ class ModeGated(Detector):
             sel = ok & (modes == mode)
             if not sel.any():
                 continue
-            values = x[sel].to_numpy()[:, self.mode_columns_.get(mode, list(range(len(self.roles))))]
+            values = x[sel].to_numpy()[:, self.mode_columns_[mode]]
             if self.kind == "ocsvm":
                 out[sel] = model.predict(values) < 0  # type: ignore[attr-defined]
             else:

@@ -53,6 +53,14 @@ results = run_all(next(iter(frames.values())))
 Frames contain SI values mapped to Haystack roles. The pandas rules are reference implementations. The production
 engine is SQL. See [parity](rules/parity.html).
 
+A frame built outside the package, or one without `df.attrs`, needs its equipment context. Pass it explicitly, as
+in `run_all(df, equipment_type="AHU", equipment_id="AHU-1")`; `run_rule` takes the same keywords. Explicit keywords
+win over `df.attrs['equipment_type' | 'equipment_id' | 'site_id' | 'building_id']`, and `df` is not modified.
+Columns must use the Haystack role names (`discharge-air-temp`, not `sat`). An unstamped frame has type `UNKNOWN`,
+so every rule is `NOT_APPLICABLE_EQUIPMENT_TYPE`. `summarize(results)` (also from `open_fdd.rules`) groups the
+statuses and lists the most-needed missing roles. When nothing was assessed it adds one `explanation` line, for
+example `no rule was assessed: no equipment type: pass equipment_type= ...`.
+
 The package also provides ECM workbooks, reports, anomaly screening, and RDF readers. Use the CLI help for command
 options. Source and installation extras are in the repository's pyproject.toml.
 
@@ -100,9 +108,16 @@ open-fdd-ontology-audit --example --out ./r                         # synthetic 
 open-fdd-ontology-audit req.xlsx --refresh --out ./r                # pinned Brick / 223P / Haystack, sha256-checked
 open-fdd-ontology-audit req.xlsx --graph building.ttl --shacl --out ./r
 open-fdd-ontology-audit --from-nf --out ./r                          # optional: the app's RDF export (open-fdd[nf])
+open-fdd-ontology-audit --extensions --out ./r                       # Open-FDD extension terms: parent, label, definition
 ```
 
 Requirement statuses: `VERIFIED_TERM` (URI declared in the snapshot, not a semantic endorsement), `CANDIDATE_REVIEW`
 (label match only), `MAPPING_REVIEW` (namespace known, term absent), `EXTENSION_REVIEW`, `SOURCE_UNAVAILABLE`.
 Reports: `audit.xlsx/csv/json`, `doctor.md/json`, `terms.csv`. It never assigns rules or writes tags.
+
+`--extensions [ext.ttl]` checks the Open-FDD extension terms in a Turtle file (default: the shipped
+`ofdd_engineering_quantities_v1.ttl`) against the #1569 policy and writes `extensions.json`. It flags a class or
+property declared in a standard namespace, one whose `rdfs:subClassOf` / `rdfs:subPropertyOf` chain never reaches a
+standard concept, a missing `rdfs:label` or `skos:definition` (or `rdfs:comment`), and an enum member with an
+undeclared type. It only reports and never edits the vocabulary.
 

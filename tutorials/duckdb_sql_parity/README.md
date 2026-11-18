@@ -1,5 +1,8 @@
 # DuckDB + pandas == SQL tutorial
 
+Start with [the browser tutorial](../duckdb_browser_afdd/README.md) to learn tables,
+views, and a small HVAC fault rule before comparing the Open-FDD rules below.
+
 A standalone, local tutorial for engineers borrowing Open-FDD fault rules.
 **No Normal Framework server, PostgreSQL instance, field hardware, or live BACnet
 connection is required.** The scripts use Open-FDD's seeded, SI-unit dataset.
