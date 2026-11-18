@@ -68,8 +68,9 @@ def canonical_roles(frame: pd.DataFrame) -> pd.DataFrame:
 def active_mask(frame: pd.DataFrame) -> pd.Series:
     """Rows the shared activity policy assesses (:mod:`open_fdd.analytics.anomaly.activity`, ``proof``).
 
-    Proof is an own status role (``fan-status`` first, ``> 0.5``), else a resolved ``run-proof`` column,
-    else an own command (``fan-cmd`` first, ``> 0.05``); ``occupied`` must be ``> 0.5`` when it has data.
+    Proof is the run-proof contract (``open_fdd.run_proof.derive_run_proof``): a resolved ``run-proof`` column,
+    else an own status role (``fan-status`` first), else an own command (``fan-cmd`` first), each ``> 0.05``;
+    ``occupied`` must be ``> 0.5`` when it has data.
     Rows without proof are not assessed: a frame with no proof role has no active rows.
     """
     from open_fdd.analytics.anomaly.activity import activity_mask
