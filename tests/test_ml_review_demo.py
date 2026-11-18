@@ -34,3 +34,18 @@ def test_demo_is_deterministic(tmp_path):
     ra = json.loads((a / "reviews" / "stuck.json").read_text(encoding="utf-8"))
     rb = json.loads((b / "reviews" / "stuck.json").read_text(encoding="utf-8"))
     assert ra["outcome"] == rb["outcome"] and ra["methods"] == rb["methods"]
+
+
+def test_demo_gates_the_off_hours_and_refuses_a_non_empty_out(tmp_path, capsys):
+    out = tmp_path / "demo"
+    assert main([str(out)]) == 0
+    printed = json.loads(capsys.readouterr().out)
+    # the fan is off 00:00-05:00 UTC daily: each one-day episode has 288 rows, 228 proven running
+    assert printed["active_rows"] == {"stuck": 228, "healthy_day": 228}
+    stuck = json.loads((out / "reviews" / "stuck.json").read_text(encoding="utf-8"))
+    assert stuck["window"]["proof_source"] == "fan-status" and stuck["training"]["proven_rows"] < stuck["window"]["rows"] * 6
+    assert len(printed) and "reviews" not in printed  # a short summary, not the full review JSON
+    ev = json.loads((out / "eval.json").read_text(encoding="utf-8"))
+    assert ev["exposure"]["test_device_weeks"] == round(4 / 7, 4)
+    assert main([str(out)]) == 2 and "not empty" in capsys.readouterr().err
+    assert main([str(out), "--force"]) == 0
