@@ -91,6 +91,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1702 | Claude | #1631 sweep as-of proof | draft, stacked on #1700; head 36a0a66b | merge after #1700 |
 | #1708 | Claude | #1671 one timer per rule | draft, stacked on #1700 | merge after #1700 |
 | #1709 | Claude | #1672 tuner sliders | draft, stacked on #1708 | merge after #1708 |
+| #1710 | Claude | #1631 TRIM-3/4 plant proof | ready (base release) | Grok acceptance, CI |
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
@@ -143,3 +144,4 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - ~06:30: #1700 head 47478f87 (the Python Timescale parity harness drops the sweep_series declaration, like the pandas oracle); #1702 merged it in.
   Opened #1708 (#1671) as a draft stacked on #1700. Next: #1672 sliders.
 - ~07:20: opened #1709 (#1672) as a draft on #1708. Next: #1631 remaining items, #1641, #1642, #1639.
+- ~08:00: opened #1710 (#1631 TRIM-3/4). Posted the #1631 triage: the denominator (`active_hours`) and the gate-off fan gate on the FC rules need Ben's call; FC4, CW-FAN/OPT, fallback startup delay, command-unit check and the SQLite timeline remain.
