@@ -77,6 +77,11 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.
 
+Weekly motor run hours are SQL too: `sql/analytics/motor_weekly_runtime.sql` reads bound fan and pump roles (status
+before command) and matches `open_fdd.analytics.core.motor_run_hours_weekly` (`tests/test_sql_motor_runtime.py`). Use
+`open_fdd.analytics.sql_runtime.run_runtime_sql(conn, engine)` on a core database, or `motor_run_hours_weekly_sql(frames,
+role_map)` on frames.
+
 ## ML FDD (`open-fdd-ml`)
 
 ```bash
