@@ -386,11 +386,13 @@ def _build_timeline_pg(pg_sql):
         if after == ["cov"]:
             gate = re.search(r"WHEN\s+(\S+)\s*<\s*0\.5\s+THEN\s+SUM", tail)
             thr = re.search(r"MAX\(c\.cov_pct\)\s*<\s*(\S+)\s+THEN\s+0\.0", tail)
-            if not (gate and thr and "FROM final f" in tail and "LEFT JOIN cov c" in tail):
+            # #1631: the GL36 templates no longer bypass the coverage floor when the run-proof gate is off (no `gate`)
+            if not (thr and "FROM final f" in tail and "LEFT JOIN cov c" in tail):
                 raise NoTimeline("coverage-gated rule with an unrecognised final SELECT")
             tween = s[c + 1:main].rstrip()
+            bypass = f"WHEN {gate.group(1)} < 0.5 THEN f.confirmed " if gate else ""
             sel = (f"SELECT f.equipment_id, {_TS.format(t='f.timestamp_utc')},\n"
-                   f"  CASE WHEN {gate.group(1)} < 0.5 THEN f.confirmed WHEN c.cov_pct < {thr.group(1)} THEN 0 ELSE f.confirmed END AS confirmed,\n"
+                   f"  CASE {bypass}WHEN c.cov_pct < {thr.group(1)} THEN 0 ELSE f.confirmed END AS confirmed,\n"
                    f"  f.held_seconds\n"
                    f"FROM final f LEFT JOIN cov c ON f.equipment_id = c.equipment_id ORDER BY f.equipment_id, f.timestamp_utc")
             return head + tween + "\n" + sel + "\n"
