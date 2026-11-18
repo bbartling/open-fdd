@@ -335,3 +335,35 @@ test("a windowHours-only request gets the bucket-aligned default window", () => 
   const v = hook.validateArgs(args, { now: Date.parse("2026-11-14T12:03:17Z") });
   assert.equal(v.form, "ASK");
 });
+
+// #1635: the answer carries the run proof the FDD hook resolves per equipment, so client rules gate like the hook / SQL.
+const SAT_ONLY_Q = `SELECT ?uuid WHERE { ?p a phIoT:point ; ref:hasExternalReference/ref:hasTimeseriesId ?uuid .
+  FILTER(STR(?uuid) = "${SAT}") }`;
+
+test("handle: run_proof is the FDD hook's resolution; a proof point off the page comes back in run_proof_series", async () => {
+  const { sdk } = mockSdk({ series: { [SAT]: ramp(12), [FAN]: ramp(12, (i) => (i < 6 ? 1 : 0)) } });
+  const ans = await hook.handle({ sdk, args: { query: SAT_ONLY_Q, ...range(1) } });
+  assert.equal(ans.ok, true, ans.error);
+  assert.deepEqual(Object.keys(ans.series), [SAT], "series holds only the page's points");
+  assert.equal(ans.run_proof.length, 1);
+  assert.deepEqual({ ...ans.run_proof[0], site: undefined }, { site: undefined, equip: "AHU-1", uuid: FAN, source: "command", tier: "own", via: "self", unit: "" });
+  assert.deepEqual(ans.run_proof_series[FAN].map(([, v]) => v), [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]);
+});
+
+test("handle: an equipment with no status or command bound gets the no-binding marker (uuid null)", async () => {
+  const records = fixture.records.filter((r) => r.uuid !== FAN);
+  const { sdk } = mockSdk({ records, series: { [SAT]: ramp(12) } });
+  const ans = await hook.handle({ sdk, args: { query: SAT_ONLY_Q, ...range(1) } });
+  assert.equal(ans.ok, true, ans.error);
+  assert.equal(ans.run_proof[0].uuid, null);
+  assert.deepEqual(ans.run_proof_series, {});
+});
+
+test("runProofOf: an explicit ofddRole run_proof pin wins; pinned own status is the last resort", () => {
+  const e = { site: "s", id: "U1" };
+  const pt = (uuid, role) => ({ uuid, equipRef: "U1", siteRef: "s", units: "", tags: [], rec: { attrs: { ofddRole: role } } });
+  const model = { equips: [], points: [pt("st", "fan_status"), pt("rp", "run_proof")] };
+  assert.equal(hook.runProofOf(model, [e])[0].uuid, "rp");
+  assert.equal(hook.runProofOf({ equips: [], points: [pt("st", "fan_status")] }, [e])[0].uuid, "st");
+  assert.equal(hook.runProofOf({ equips: [], points: [] }, [e])[0].uuid, null);
+});
