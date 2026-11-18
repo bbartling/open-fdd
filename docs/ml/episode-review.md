@@ -18,7 +18,7 @@ coverage, run proof, rule revision, input watermark) are copied into the review 
 |---|---|
 | `corroborated` | A baseline-learning method (gray-box, PCA, one-class SVM, COPOD), fitted on training rows that do not overlap the episode, assessed at least half of the episode's active rows and flagged at least 25 % of those |
 | `needs_review` | The methods assessed the episode and stayed quiet |
-| `insufficient_evidence` | No training source, training overlapping the episode, no rows or no active rows in the window, a SQL result marked unassessed (`assessed: false` or `run_proof: false`), or no method able to assess enough rows; `reasons` lists each one |
+| `insufficient_evidence` | No training source, training overlapping the episode, no rows in the window, no run proof in the window or the training rows (`no_run_proof`, `training_no_run_proof`), no proven running rows in the window, a SQL result marked unassessed (`assessed: false`, `run_proof: false`, `run_proof_source: null` or `skip_reason: no_run_proof`), or no method able to assess enough rows; `reasons` lists each one |
 
 A quiet or unsupported detector is not evidence of a false positive: the review never emits that label, keeps
 `sql_verdict` and `report_inclusion: keep`, and says why in `reasons`. Labeling a SQL episode a false positive needs
@@ -34,6 +34,13 @@ folder files.
 Not in this slice: SQL and pandas before/after replay of a proposed tuner change and inputs resolved through the RDF
 bindings. No alert-reduction number is claimed here.
 
+**Active rows** follow the run-proof contract (`sql/fdd/run_proof.json`, `open_fdd.run_proof.derive_run_proof`), the
+same proof the SQL and pandas rules gate on: a resolved `run-proof` column first, then the unit's own status roles,
+then its own command roles, running when above the contract threshold (`> 0.05`). A frame marked
+`run_proof_resolved` counts only its `run-proof` column. Rows with an `occupied` role at 0 are not active. Training
+rows are filtered the same way before any method is fitted. With no proof the review is `insufficient_evidence`; ML
+never scores rows the SQL rule did not judge.
+
 ## Synthetic end-to-end demo
 
 `python -m open_fdd.ml.review_demo ./review-demo` runs the whole workflow from an installed wheel with no NF,
@@ -45,7 +52,10 @@ prints a summary. Two episodes cannot support a claim, so `eval.json` reports `c
 
 `python -m open_fdd.ml.review_eval labeled.json --out eval.json` scores saved reviews against independent labels
 (maintenance records, functional tests, engineer review). The corpus is
-`{"device_weeks": <total or {equipment: weeks}>, "episodes": [...]}`, a bare list or JSON Lines. Each episode has
+`{"test_device_weeks": <total or {equipment: weeks}>, "episodes": [...]}`, a bare list or JSON Lines.
+`test_device_weeks` is the explicit exposure of the test period: every test equipment and its monitored weeks,
+including units that raised no alert. Its total is the one alerts-per-device-week denominator for the overall block
+and every category block; without it, burden is not reported (the older `device_weeks` key is ignored with a note). Each episode has
 `equipment`, `category`, `split` (`train`, `selection` or `test`), `label` (`fault`, `healthy` or `unknown`),
 `sql_verdict`, the `review` record (or `review_outcome`), and optional `label_onset_utc` / `sql_start_utc` for delay.
 List labeled genuine faults SQL never raised too (`sql_verdict` empty) so they count against recall.

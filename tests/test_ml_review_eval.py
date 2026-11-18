@@ -31,7 +31,7 @@ def _corpus():
         _ep(6, label="fault", sql=False, category="proof"),  # genuine fault SQL never raised
         _ep(7, label="fault", split="train", equip="AHU-1", start="2026-05-01T00:00:00Z"),
     ]
-    return {"device_weeks": {"AHU-2": 4, "AHU-1": 10}, "episodes": eps}
+    return {"test_device_weeks": {"AHU-2": 4}, "episodes": eps}
 
 
 def test_tiers_counts_and_burden():
@@ -130,3 +130,29 @@ def test_real_reviews_compose_and_keep_the_fault():
     assert "stuck" not in res["overall"]["tiers"]["reviewed_priority"]["missed"]
     assert res["overall"]["review_outcomes"]["corroborated"] >= 1
     assert res["claim_supported"] is False  # no train/selection split listed: holdout not demonstrated
+
+
+def test_alert_burden_uses_the_explicit_test_exposure_for_every_block():
+    """10 test AHUs at 1 week each and 5 alerts all on one unit: 0.5 alerts per device-week, not 5.0."""
+    eps = [_ep(i, label="fault", equip="AHU-1", category="sensor" if i < 3 else "coil") for i in range(5)]
+    corpus = {"test_device_weeks": {f"AHU-{k}": 1 for k in range(1, 11)}, "episodes": eps}
+    res = rv.evaluate(corpus, min_labeled=1)
+    assert res["overall"]["device_weeks"] == 10
+    assert res["overall"]["tiers"]["raw_sql"]["alerts_per_device_week"] == 0.5
+    for cat, n in (("sensor", 3), ("coil", 2)):
+        blk = res["by_category"][cat]
+        assert blk["device_weeks"] == 10  # the same denominator, not the affected unit's weeks
+        assert blk["tiers"]["raw_sql"]["alerts_per_device_week"] == round(n / 10, 4)
+    assert res["exposure"]["test_device_weeks"] == 10 and res["exposure"]["notes"] == []
+    total = rv.evaluate({"test_device_weeks": 10, "episodes": eps}, min_labeled=1)
+    assert total["overall"]["tiers"]["raw_sql"]["alerts_per_device_week"] == 0.5
+
+
+def test_exposure_must_be_explicit():
+    eps = [_ep(1, label="fault", equip="AHU-1"), _ep(2, label="healthy", equip="AHU-3")]
+    legacy = rv.evaluate({"device_weeks": {"AHU-1": 1}, "episodes": eps}, min_labeled=1)
+    assert legacy["overall"]["tiers"]["raw_sql"]["alerts_per_device_week"] is None
+    assert "test_device_weeks" in legacy["exposure"]["notes"][0]
+    partial = rv.evaluate({"test_device_weeks": {"AHU-1": 2}, "episodes": eps}, min_labeled=1)
+    assert any("AHU-3" in n for n in partial["exposure"]["notes"])
+    assert rv.evaluate({"episodes": eps}, min_labeled=1)["overall"]["device_weeks"] is None
