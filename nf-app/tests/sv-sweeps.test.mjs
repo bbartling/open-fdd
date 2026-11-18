@@ -116,12 +116,13 @@ async function queryBoth(input, ruleIds) {
   }
 }
 
-test("SV sweeps attribute trailing silence per sensor, including while de-energized", async () => {
+test("#1673: trailing silence is SV-STALE only, per sensor, including while de-energized", async () => {
   const out = await queryBoth(withSensorHistory(inputWithGap(), twoRoleSensors), SILENCE_SWEEPS);
-  // Last SAT observation is minute 35, equipment history ends at minute 240; threshold is 0.5 h.
+  // Last SAT observation is minute 35, equipment history ends at minute 240; stale_after_hours is 0.5 h.
   const expectedSilenceHours = (240 - 35) / 60 - 0.5;
+  assert.ok(around(sweepScore(out, "SV-STALE", "series-sat-1"), expectedSilenceHours), `SV-STALE/sat=${sweepScore(out, "SV-STALE", "series-sat-1")}`);
   for (const rule of SILENCE_SWEEPS) {
-    assert.ok(around(sweepScore(out, rule, "series-sat-1"), expectedSilenceHours), `${rule}/sat=${sweepScore(out, rule, "series-sat-1")}`);
+    if (rule !== "SV-STALE") assert.ok(around(sweepScore(out, rule, "series-sat-1"), 0), `${rule}/sat must not score the gap: ${sweepScore(out, rule, "series-sat-1")}`);
     assert.ok(around(sweepScore(out, rule, "series-rat-1"), 0), `${rule}/rat=${sweepScore(out, rule, "series-rat-1")}`);
   }
 });
@@ -136,10 +137,10 @@ test("trailing silence uses equipment end even when the last sensor timestamp ha
     ts: START + minute * 60_000, value: 12,
   }));
   const out = await queryBoth({ history, sensorHistory }, SILENCE_SWEEPS);
-  // The t=10 sensor row has no exact-time wide proof row; the equipment still ends at t=70.
-  for (const rule of SILENCE_SWEEPS) {
-    assert.ok(around(sweepScore(out, rule, "series-sat"), 0.5),
-      `${rule}: trailing silence should reach the independent equipment end`);
+  // The t=10 sensor row has no exact-time wide proof row; the equipment still ends at t=70 (gap 60 min - 30 min).
+  assert.ok(around(sweepScore(out, "SV-STALE", "series-sat"), 0.5), "SV-STALE: trailing silence should reach the independent equipment end");
+  for (const rule of SILENCE_SWEEPS.filter((r) => r !== "SV-STALE")) {
+    assert.ok(around(sweepScore(out, rule, "series-sat"), 0), `${rule}: the gap is not this rule's fault (#1673)`);
   }
 });
 
@@ -149,15 +150,17 @@ test("SV-SPIKE preserves the role that jumped", async () => {
   assert.ok(around(sweepScore(out, "SV-SPIKE", "series-sat-1"), 0), "normal sat must stay clear");
 });
 
-test("SV-STALE and SV-FLATLINE do not let a changing peer mask a stuck sensor", async () => {
-  const out = await queryBoth(withSensorHistory(inputWithFlatSat(), twoRoleSensors), ["SV-STALE", "SV-FLATLINE"]);
-  for (const rule of ["SV-STALE", "SV-FLATLINE"]) {
-    assert.ok(sweepScore(out, rule, "series-sat-1") > 0, `${rule}/sat should be faulted`);
-    assert.ok(around(sweepScore(out, rule, "series-rat-1"), 0), `${rule}/rat should remain clear`);
+test("#1673: a stuck sensor that is still polled is SV-FLATLINE only; a changing peer does not mask it", async () => {
+  const out = await queryBoth(withSensorHistory(inputWithFlatSat(), twoRoleSensors), ["SV-STALE", "SV-FLATLINE", "SV-RANGE", "SV-SPIKE"]);
+  assert.ok(sweepScore(out, "SV-FLATLINE", "series-sat-1") > 0, "SV-FLATLINE/sat should be faulted");
+  assert.ok(around(sweepScore(out, "SV-FLATLINE", "series-rat-1"), 0), "SV-FLATLINE/rat should remain clear");
+  for (const rule of ["SV-STALE", "SV-RANGE", "SV-SPIKE"]) {
+    assert.ok(around(sweepScore(out, rule, "series-sat-1"), 0), `${rule}: a polled stuck value is not ${rule}`);
+    assert.ok(sweepCovered(out, rule, "series-sat-1") > 0, `${rule}: the stuck sensor is still assessed`);
   }
 });
 
-test("SV-RANGE resets confirmation after a gap without losing its silent fault time", async () => {
+test("SV-RANGE resets confirmation after a gap and does not count the gap as fault time (#1673)", async () => {
   const input = withSensorHistory({
     history: [[0, 12], [7, 75], [60, 12], [62, 75], [64, 12]].map(([minute, sat]) => ({
       equipment_id: "eq-1", ts: START + minute * 60_000, sat, fan_status: 1,
@@ -166,9 +169,9 @@ test("SV-RANGE resets confirmation after a gap without losing its silent fault t
     equipment: [{ building_id: "site-1", equipment_id: "eq-1" }],
   }, [{ series_id: "series-sat-1", role: "sat", unit: "°C" }]);
   const out = await queryBoth(input, ["SV-RANGE"]);
-  // Count the first fault's 30-minute hold and 23-minute silence. The
-  // independent two-minute fault after the gap has not met five-minute confirmation.
-  assert.ok(around(sweepScore(out, "SV-RANGE", "series-sat-1"), 53 / 60), `sat=${sweepScore(out, "SV-RANGE", "series-sat-1")}`);
+  // Count the first fault's 30-minute hold only: the 23 minutes of silence beyond it are unknown here, not a range
+  // fault (SV-STALE scores gaps). The two-minute fault after the gap has not met five-minute confirmation.
+  assert.ok(around(sweepScore(out, "SV-RANGE", "series-sat-1"), 30 / 60), `sat=${sweepScore(out, "SV-RANGE", "series-sat-1")}`);
 });
 
 test("all five sweeps return separate rows and timelines for same-role sensors", async () => {
@@ -331,6 +334,12 @@ test("three same-role SI sensors isolate fault, healthy zero, insufficient histo
     assert.deepEqual(Object.keys(rows).sort(), ["sat-fault", "sat-healthy", "sat-short"], rule);
     assert.equal(rows["sat-healthy"].fault_hours, 0, `${rule}: healthy peer must preserve explicit 0`);
     assert.ok(Number(rows["sat-healthy"].covered_hours) > 0, `${rule}: healthy peer must be covered`);
+    if (rule === "SV-STALE") {
+      // #1673: a single sample at the window end leaves 180 min of missing data before it: 3 h covered, 2.5 h stale
+      assert.ok(around(rows["sat-short"].covered_hours, 3) && around(rows["sat-short"].fault_hours, 2.5), `SV-STALE sat-short ${JSON.stringify(rows["sat-short"])}`);
+      assert.equal(rows["sat-fault"].fault_hours, 0, "SV-STALE: a polled sensor is never stale, whatever its values");
+      continue;
+    }
     assert.equal(rows["sat-short"].covered_hours, 0, `${rule}: single-sample sensor has 0 coverage`);
     assert.equal(rows["sat-short"].fault_hours, null, `${rule}: insufficient history stays NULL (not 0)`);
   }

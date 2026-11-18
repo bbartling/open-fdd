@@ -845,7 +845,8 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
       const cacheKey = `${siteId}\u0001${ruleId}\u0001${siteR ? siteR.revision : ''}|${equipR ? equipR.revision : ''}|${ruleText}|${svHere ? svHere.configHash : ''}`;
       if (!ruleCache.has(cacheKey)) {
         try {
-          const merged = ruleTuning.mergeRuleParams(rTpl.controls, siteR && siteR.parameters, equipR && equipR.parameters, ruleId);
+          const merged = ruleTuning.mergeRuleParams(rTpl.controls, siteR && siteR.parameters, equipR && equipR.parameters, ruleId, rTpl.legacy);
+          for (const m of merged.migration) log(`${equipId}: ${ruleId} saved tuner ${m.layer}.${m.key} ${m.action}${m.to || m.by ? ' -> ' + (m.to || m.by) : ''}${m.reason ? ' (' + m.reason + ')' : ''}`);
           const values = ruleTuning.resolvePlaceholders(ruleTpls.runtime_defaults, rTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
           const roleLimitsOpt = roleLimits.SWEEP_RULES.includes(ruleId) && tpl.rules && tpl.rules[ruleId]
             ? {
@@ -1022,6 +1023,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         uuids.forEach((u) => seenUuids.add(u));
         let newestHere = null;        // newest sample of this equip's inputs (ms): from the engine's own source
         let loadedRows;
+        let declaredSweep = 0;        // bound sweep series expected over the window (#1673)
         let histByTs = null;          // ms -> history row (which required inputs exist at a timestamp); not on timescale
         let occ = null;               // synthesized occupancy: a runnable rule has occ_mode optional and no point is bound
         if (kind !== 'timescale' && !roles.occ_mode && runnable.some((r) => r.optional.includes('occ_mode'))) {
@@ -1045,6 +1047,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             .map((p) => [p.uuid, { name: p.name, dis: p.dis, kind: p.kind }]));
           loadedRows = await engine.load({ equipId, siteId, roleToUuid, unitsByUuid, pointMeta,
             sensorSeries: sensorPlan.sensorSeries, fractionRoles: [...si.scaled], booleanRoles: [...si.bool], from, to, stepSec: step });
+          declaredSweep = sensorPlan.sensorSeries.length;   // the engine also fills sweep_series over [from, to) (#1673)
           if (!loadedRows && engine.newestSample) {   // empty window: when did these points last have a sample at all?
             try { newestHere = await engine.newestSample(uuids); } catch (e) { log(`${equipId}: newest-sample lookup failed: ${errText(e)}`); }
           }
@@ -1056,17 +1059,27 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           for (const [role, count] of Object.entries(long.skipped)) summary.roles_skipped_by_unit[role] = (summary.roles_skipped_by_unit[role] || 0) + count;
           input.sensorSeries = long.sensorSeries;
           input.sensorHistory = long.sensorHistory;
+          // #1673: every bound sweep series was fetched (fetchHistory throws on a failed request), so each is expected
+          // over the requested window [from, to): SV-STALE assesses it even with no sample.
+          input.sweepSeries = long.sensorSeries.map(({ uuid, role, unit }) => ({ equipment_id: equipId, series_id: uuid,
+            sensor_role: role, unit, window_start: from, window_end: to }));
+          declaredSweep = input.sweepSeries.length;
           loadedRows = input.history.length + input.sensorHistory.length;
           histByTs = new Map(input.history.map((row) => [row.ts, row]));
-          if (loadedRows) await engine.load(input);
+          if (loadedRows || declaredSweep) await engine.load(input);
         }
         if (newestHere != null) sourceNewest = Math.max(sourceNewest == null ? -Infinity : sourceNewest, newestHere);
         if (!loadedRows) {
           if (newestHere == null) newestHere = newestLatest(Object.values(roles));   // history sources gave nothing: NF's latest values
           const detail = `no input data in window (newest sample at ${newestHere != null ? new Date(newestHere).toISOString() : 'unknown: none found'})`;
-          skip('no-data', detail);
-          log(`${equipId}: ${detail}, skipped (window ${summary.window.from} .. ${summary.window.to}, engine ${kind})`);
-          continue;
+          if (!declaredSweep || !runnable.some((r) => r.rule.id === 'SV-STALE')) {
+            skip('no-data', detail);
+            log(`${equipId}: ${detail}, skipped (window ${summary.window.from} .. ${summary.window.to}, engine ${kind})`);
+            continue;
+          }
+          // #1673: the bound sensors were expected and sent nothing: that is the missing data SV-STALE reports
+          log(`${equipId}: ${detail}; only SV-STALE runs (its ${declaredSweep} bound sensor series are expected)`);
+          runnable = runnable.filter((r) => r.rule.id === 'SV-STALE');
         }
         defaultReason = 'rule was not run for this equip (not applicable, or required roles missing)';
         summary.equips++;

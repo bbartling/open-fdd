@@ -3677,11 +3677,11 @@
       "run_proof": "gated"
     },
     {
-      "confirm_seconds": 300,
+      "confirm_seconds": 0,
       "controls_without_sql_effect": [],
       "dashboard_wired": false,
       "delete_python_candidate": false,
-      "description": "Stale data (no fresh samples)",
+      "description": "Stale data (no fresh samples for longer than the stale threshold)",
       "equipment_kinds": [
         "ahu",
         "vav",
@@ -3702,7 +3702,10 @@
         "hw_supply_t",
         "hw_return_t",
         "oa_h",
-        "run_proof"
+        "ra_h",
+        "zone_rh",
+        "ma_h",
+        "sa_h"
       ],
       "output_columns": [
         "equipment_id",
@@ -3713,96 +3716,47 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 5.0,
-          "unit": "min"
-        },
-        "stale_hours": {
-          "control": "slider",
-          "default": 2.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "stale_hours",
-          "kind": "dimensionless",
-          "label": "Stale window",
-          "max": 12.0,
-          "min": 0.25,
-          "sql_placeholder": "STALE_HOURS",
-          "step": 0.25,
-          "unit": "h"
-        },
-        "stale_tol": {
-          "control": "slider",
-          "default": 0.027778,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "stale_tol",
-          "kind": "temperature_difference",
-          "label": "Stale tolerance",
-          "max": 0.555556,
-          "min": 0.0,
-          "sql_placeholder": "STALE_TOL",
-          "step": 0.005556,
-          "unit": "degC"
-        },
-        "max_silence_hours": {
+        "stale_after_hours": {
           "control": "slider",
           "default": 0.5,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "max_silence_hours",
+          "key": "stale_after_hours",
           "kind": "dimensionless",
-          "label": "Max sensor silence",
+          "label": "Stale after",
           "max": 12.0,
           "min": 0.25,
-          "sql_placeholder": "MAX_SILENCE_HOURS",
+          "sql_placeholder": "STALE_AFTER_HOURS",
           "step": 0.25,
           "unit": "h"
-        },
-        "require_run_proof": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "require_run_proof",
-          "kind": "boolean",
-          "label": "Require run proof",
-          "max": 1.0,
-          "min": 0.0,
-          "step": 1.0,
-          "unit": "bool",
-          "sql_placeholder": "REQUIRE_RUN_PROOF"
         }
       },
       "parity_status": "sql_screening",
       "placeholders": [
-        "CONFIRM_ROWS",
-        "MAX_SILENCE_HOURS",
-        "MAX_SILENCE_SECONDS",
-        "REQUIRE_RUN_PROOF",
-        "STALE_SECONDS",
-        "STALE_TOL"
+        "STALE_AFTER_HOURS",
+        "STALE_AFTER_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SV-STALE",
       "sql_file": "sv_stale.sql",
-      "run_proof": "gated"
+      "run_proof": "exempt",
+      "run_proof_note": "missing-data monitoring: a gap is a fault whether or not the motor runs (#1673)",
+      "legacy_parameters": {
+        "aliases": {
+          "max_silence_hours": "stale_after_hours"
+        },
+        "retired": [
+          "stale_hours",
+          "stale_tol",
+          "confirm_min",
+          "require_run_proof",
+          "require_operational_gate"
+        ],
+        "note": "#1673: SV-STALE is missing data only. A saved max_silence_hours becomes stale_after_hours (an explicit stale_after_hours in the same scope wins). The value-span stale_hours / stale_tol, the confirm delay and the motor-status gate are retired and ignored when read; new saves reject them."
+      }
     },
     {
       "aliases": [

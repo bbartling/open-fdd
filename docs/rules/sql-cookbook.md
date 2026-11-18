@@ -18,7 +18,7 @@ unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More i
 
 ## Run proof gate {#run-proof}
 
-52 of the 77 rules count only samples while the equipment is **proven running**. The proof is the input role
+51 of the 77 rules count only samples while the equipment is **proven running**. The proof is the input role
 `run_proof`: the `history` column `run_proof` (0/1 or a 0-1 fraction; running when above 0.05). It is resolved from the model, never from a point name, in this order (first hit wins):
 
 1. **The equipment's own proof**: a bound status role (`fan_status` > `pump_status` > `chw_pump_status` > `chiller_status` > `compressor_status`), then a bound command role (`fan_cmd` > `chw_pump_cmd` > `cw_pump_cmd` > `tower_fan_cmd`).
@@ -55,6 +55,7 @@ Rules that are not gated, and why:
 | `OAT-METEO` | compares two outside-air sources; no running equipment is judged |
 | `SCHED-1` | runtime outside the schedule: the proof is the signal |
 | `SCHED-247` | always-on detection: the proof is the signal and off samples must be seen |
+| `SV-STALE` | missing-data monitoring: a gap is a fault whether or not the motor runs (#1673) |
 | `UTIL-INTERVAL` | utility meter data, no running equipment |
 | `UTIL-MONTHLY` | utility meter data, no running equipment |
 | `VAV-1` | zone comfort band while occupied; independent of the air handler running |
@@ -3210,9 +3211,9 @@ Sensor rate-of-change spike
 
 ### SV-STALE {#sv-stale}
 
-Stale data (no fresh samples)
+Stale data (no fresh samples for longer than the stale threshold)
 
-**Priority** P0 · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · [SQL file](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql) · [pandas twin](pandas-cookbook.html#sv-stale)
+**Priority** P0 · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** immediate · [SQL file](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql) · [pandas twin](pandas-cookbook.html#sv-stale)
 
 **Inputs**
 
@@ -3232,17 +3233,12 @@ Stale data (no fresh samples)
 | `zone_rh` | `zone-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `ma_h` | `mixed-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `sa_h` | `supply-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
-| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `stale_hours` | Stale window | 2 | 0.25 | 12 | h |
-| `stale_tol` | Stale tolerance | 0.027778 | 0 | 0.555556 | Δ°C |
+| `stale_after_hours` | Stale after | 0.5 | 0.25 | 12 | h |
 
 **Outputs**
 
@@ -3255,8 +3251,6 @@ Stale data (no fresh samples)
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 
 **Parity** [match](parity.html#sv-stale)
-
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
 
 ## Weather {#group-weather}
