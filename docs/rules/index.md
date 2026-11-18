@@ -40,14 +40,14 @@ each input, parameter and output.
 | [**CHW-4**](sql-cookbook.html#chw-4) | Flow high at max pump | chiller, chwPlant | 5 min | [pandas](pandas-cookbook.html#chw-4) | match |
 | [**CHW-NOLOAD-1**](sql-cookbook.html#chw-noload-1) | Chiller running with no building load | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#chw-noload-1) | known divergence |
 | [**CMD-1**](sql-cookbook.html#cmd-1) | Fan cmd/status mismatch | ahu | 10 min | [pandas](pandas-cookbook.html#cmd-1) | match |
-| [**COIL-PERF**](sql-cookbook.html#coil-perf) | Generic coil performance: a heating or cooling coil commanded open does not change the air temperature by min_dt | ahu | 15 min | [pandas](pandas-cookbook.html#coil-perf) | match |
+| [**COIL-PERF**](sql-cookbook.html#coil-perf) | Coil valve open but the air temperature changes less than min_dt | ahu | 15 min | [pandas](pandas-cookbook.html#coil-perf) | match |
 | [**CW-APR-1**](sql-cookbook.html#cw-apr-1) | High CW approach at full tower fan | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-apr-1) | match |
 | [**CW-FAN-1**](sql-cookbook.html#cw-fan-1) | Excess tower fan energy vs wet-bulb limit | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-fan-1) | match |
 | [**CW-OPT-1**](sql-cookbook.html#cw-opt-1) | Condenser water not optimized vs wet-bulb | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-opt-1) | match |
 | [**DMP-1**](sql-cookbook.html#dmp-1) | OA damper leakage | ahu | 15 min | [pandas](pandas-cookbook.html#dmp-1) | match |
 | [**ECON-1**](sql-cookbook.html#econ-1) | Economizer stuck closed when OAT favorable | ahu | 10 min | [pandas](pandas-cookbook.html#econ-1) | match |
 | [**ECON-2**](sql-cookbook.html#econ-2) | Economizing when outdoor air unfavorable | ahu | 5 min | [pandas](pandas-cookbook.html#econ-2) | match |
-| [**ECON-3**](sql-cookbook.html#econ-3) | Mech cooling without integrated economizer | ahu | 5 min | [pandas](pandas-cookbook.html#econ-3) | known divergence |
+| [**ECON-3**](sql-cookbook.html#econ-3) | Mech cooling without integrated economizer | ahu | 5 min | [pandas](pandas-cookbook.html#econ-3) | match |
 | [**ECON-4**](sql-cookbook.html#econ-4) | Low estimated OA fraction | ahu | 10 min | [pandas](pandas-cookbook.html#econ-4) | known divergence |
 | [**ECON-5**](sql-cookbook.html#econ-5) | Preheat over-conditioning | ahu | 10 min | [pandas](pandas-cookbook.html#econ-5) | match |
 | [**ECON-6**](sql-cookbook.html#econ-6) | Economizing in freezing weather | ahu | 10 min | [pandas](pandas-cookbook.html#econ-6) | match |
@@ -79,7 +79,7 @@ each input, parameter and output.
 | [**FCU-VALVE-PASS-CLG**](sql-cookbook.html#fcu-valve-pass-clg) | Cooling valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-clg) | match |
 | [**FCU-VALVE-PASS-HTG**](sql-cookbook.html#fcu-valve-pass-htg) | Heating valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-htg) | match |
 | [**HP-1**](sql-cookbook.html#hp-1) | Discharge cold when heating | heatpump | 10 min | [pandas](pandas-cookbook.html#hp-1) | known divergence |
-| [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | known divergence |
+| [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | match |
 | [**OA-1**](sql-cookbook.html#oa-1) | Low OA fraction | ahu | 15 min | [pandas](pandas-cookbook.html#oa-1) | known divergence |
 | [**OAT-METEO**](sql-cookbook.html#oat-meteo) | Equipment OAT vs weather-staged wx OAT | ahu | 15 min | [pandas](pandas-cookbook.html#oat-meteo) | known divergence |
 | [**PID-HUNT-1**](sql-cookbook.html#pid-hunt-1) | Suspected control-output hunting | ahu, vav, zone_other, chiller, boiler, heatpump | immediate | [pandas](pandas-cookbook.html#pid-hunt-1) | match |

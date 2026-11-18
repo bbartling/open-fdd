@@ -3486,7 +3486,7 @@ rules:
     pandas_function: null
     description: Economizer OK but not economizing
     required_roles: [oa_damper_pct, clg_valve_pct]
-    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd, run_proof]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd, run_proof, compressor_status, chiller_status, chiller_amps, chiller_power]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3593,7 +3593,7 @@ rules:
     pandas_function: null
     description: Mechanical cooling below 15.6 °C web OAT
     required_roles: [web_oa_t]
-    optional_roles: [clg_valve_pct, chiller_status]
+    optional_roles: [compressor_status, chiller_status, chiller_amps, chiller_power]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -5885,7 +5885,7 @@ rules:
     run_proof: gated
     sql_file: coil_perf.sql
     pandas_function: coil_perf
-    description: "Generic coil performance: a heating or cooling coil commanded open does not change the air temperature by min_dt"
+    description: "Coil valve open but the air temperature changes less than min_dt"
     required_roles: []
     optional_roles: [htg_valve_pct, reheat_valve_pct, clg_valve_pct, heating_coil_entering_temp, heating_coil_leaving_temp, cooling_coil_entering_temp, cooling_coil_leaving_temp, mat, sat, vav_inlet_t, vav_discharge_t, zone_t, zone_flow, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
