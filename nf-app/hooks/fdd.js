@@ -195,6 +195,22 @@ const FRACTION_UNIT = /^(ratio|fraction|frac|0-1|0\.\.1|0 to 1|unitless ratio)$/
 const isBoolKind = (kind) => /^bool/i.test(String(kind || ''));
 
 /**
+ * #1631: can a COMMAND point serve as the run proof? The run proof is judged against a 0-1 threshold, so the command's
+ * scale must be known: a boolean point, a percent unit (scaled to 0-1) or a fraction unit. A numeric command with no unit
+ * (or another unit) could be 0-100 or 0-1; it is not used as proof, and gated rules are SKIPPED no_run_proof with that
+ * reason instead of reading 1 % speed as running. A status point keeps the 0/1 contract of siPlan.
+ * @returns {string} '' when usable, else the reason
+ */
+function commandProofProblem(point) {
+  if (!point || isBoolKind(point.kind)) return '';
+  const unit = point.units || '';
+  const probe = ofddUnits.toSI(1, unit);
+  if (FRACTION_UNIT.test(unit) || (probe && probe.quantity === 'percent' && !/rh/i.test(unit))) return '';
+  return unit ? `the command proof's unit "${unit}" is not a percent or 0-1 fraction`
+    : 'the command proof has no unit (0-100 or 0-1 cannot be told apart)';
+}
+
+/**
  * Role scale (issue #1541) from the catalog (sql/fdd/role_scales.json -> fdd-catalog.json roles.<role>.scale):
  *   fraction | boolean | percent_rh | text | si:<unit>. null = the catalog does not declare one (legacy / tests).
  */
@@ -984,6 +1000,11 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         let proof = { found: false };
         if (runnable.some((r) => r.rule.run_proof === 'gated')) {
           proof = shared.resolveRunProof(equipRec, model, shared.catalog);
+          const why = proof.found && proof.source === 'command' ? commandProofProblem(proof.point) : '';
+          if (why) {
+            log(`${equipId}: run proof ${proof.point.name || proof.point.uuid} not used: ${why}`);
+            proof = { found: false, reason: why };
+          }
           if (proof.found && proof.point) roles.run_proof = proof.point;
         }
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
@@ -1105,7 +1126,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             && pack.rule_tuning_templates.rules[r.rule.id], tunedHere);
           const noProof = gateOn && !roles.run_proof;
           if (noProof && out.status === 'not-assessed') {
-            out.reason = `${shared.catalog.run_proof.skip_reason}: no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound`;
+            out.reason = `${shared.catalog.run_proof.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.run_proof.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`;
             summary.no_run_proof++;
           }
           const sensorFaultHours = row && row.sensor_fault_hours;
@@ -1441,4 +1462,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { commandProofProblem, applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
