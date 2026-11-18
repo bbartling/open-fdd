@@ -35,6 +35,8 @@ FEATURE_ROLES: tuple[str, ...] = (
     "cooling-valve",
     "fan-cmd",
     "duct-static-pressure",
+    "zone-air-temp",
+    "heating-valve",
 )
 
 #: Short role names (sql/fdd/role_map.json keys) accepted as aliases.
@@ -52,9 +54,63 @@ ROLE_ALIASES: dict[str, str] = {
     "duct_static": "duct-static-pressure",
     "duct_static_sp": "duct-static-pressure-sp",
     "occ_mode": "occupied",
+    "zone_t": "zone-air-temp",
+    "compressor_status": "compressor-status",
 }
 
 METHODS: tuple[str, ...] = ("pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
+
+#: Gray-box residual families: ``{name: (required role sets (one of each tuple), roles that must be absent)}``.
+#: The mixed-air families are the AHU ones. ``heat_rise`` / ``cool_drop`` are the single-zone family (furnace,
+#: RTU, heat pump): supply minus zone (else return) air temperature against the heating or cooling command. They
+#: run only when there is no mixed-air temperature, so an AHU keeps exactly the mixed-air residuals.
+GREY_BOX_RESIDUALS: dict[str, tuple[tuple[tuple[str, ...], ...], tuple[str, ...]]] = {
+    "oa_fraction": (
+        (("mixed-air-temp",), ("return-air-temp",), ("outside-air-temp",), ("outside-air-damper",)),
+        (),
+    ),
+    "coil_delta_t": ((("mixed-air-temp",), ("discharge-air-temp",), ("cooling-valve",)), ()),
+    "sat_error": ((("discharge-air-temp",), ("discharge-air-temp-sp",), ("cooling-valve",)), ()),
+    "heat_rise": (
+        (("discharge-air-temp",), ("zone-air-temp", "return-air-temp"), ("heating-valve",)),
+        ("mixed-air-temp",),
+    ),
+    "cool_drop": (
+        (("discharge-air-temp",), ("zone-air-temp", "return-air-temp"), ("cooling-valve", "compressor-status")),
+        ("mixed-air-temp",),
+    ),
+}
+
+
+def _roles_with_data(frame: pd.DataFrame) -> list[str]:
+    """Columns of a role frame that carry at least one numeric value (a mapped but empty role does not count)."""
+    return [c for c in frame.columns if pd.to_numeric(frame[c], errors="coerce").notna().any()]
+
+
+def grey_box_families(columns) -> dict[str, list[str]]:
+    """The gray-box residuals a set of role columns allows, with the roles each one would use.
+
+    ``columns`` is a list of role names or a role frame; with a frame only roles that carry data count, so an
+    empty ``zone-air-temp`` falls back to a usable ``return-air-temp`` and an empty mixed-air role does not block
+    the single-zone families.
+    """
+    have = set(_roles_with_data(columns)) if isinstance(columns, pd.DataFrame) else set(columns)
+    out: dict[str, list[str]] = {}
+    for name, (needs, absent) in GREY_BOX_RESIDUALS.items():
+        if any(role in have for role in absent):
+            continue
+        picked = [next((r for r in options if r in have), None) for options in needs]
+        if all(picked):
+            out[name] = [str(r) for r in picked]
+    return out
+
+
+def _fraction(values: pd.Series) -> pd.Series:
+    """A 0-100 % command as a 0-1 fraction (values already in 0-1 are left alone)."""
+    finite = values.dropna()
+    if not finite.empty and float(finite.max()) > 1.5:
+        return values / 100.0
+    return values
 DEFAULT_QUANTILE = 0.99
 
 
@@ -115,7 +171,9 @@ class PCASPE(Detector):
     def fit(self, normal: pd.DataFrame) -> "PCASPE":
         normal = canonical_roles(normal)
         rows = normal[active_mask(normal)]
-        candidates = [r for r in self.feature_roles if r in rows.columns]
+        # a mapped role with no active data (all NaN) would empty the joint dropna; leave it out
+        with_data = set(_roles_with_data(rows))
+        candidates = [r for r in self.feature_roles if r in with_data]
         x = _features(rows, candidates).dropna()
         std = x.std(ddof=0)
         self.roles = [r for r in candidates if float(std.get(r, 0.0)) > 1e-9]
@@ -206,6 +264,7 @@ class GreyBox(Detector):
     tables_: dict[str, pd.Series] = field(default_factory=dict)
     centers_: dict[str, float] = field(default_factory=dict)
     thresholds_: dict[str, float] = field(default_factory=dict)
+    families_: dict[str, list[str]] = field(default_factory=dict)
     name: str = "grey_box"
 
     def _raw(self, frame: pd.DataFrame) -> dict[str, tuple[pd.Series, pd.Series, float]]:
@@ -224,14 +283,27 @@ class GreyBox(Detector):
             valve = num("cooling-valve")
             err = (num("discharge-air-temp") - num("discharge-air-temp-sp")).where((valve > 0.05) & (valve < 0.95))
             out["sat_error"] = (pd.Series(0.0, index=f.index), err, 1.0)
+        # scoring uses the single-zone roles picked at fit time; fitting picks the roles that carry data
+        families = self.families_ if self.families_ else grey_box_families(f)
+        if "heat_rise" in families:
+            sat, ref, cmd = families["heat_rise"]
+            out["heat_rise"] = (_fraction(num(cmd)), num(sat) - num(ref), self.bin_width)
+        if "cool_drop" in families:
+            sat, ref, cmd = families["cool_drop"]
+            out["cool_drop"] = (_fraction(num(cmd)), num(ref) - num(sat), self.bin_width)
         return out
 
     def fit(self, normal: pd.DataFrame) -> "GreyBox":
         self.tables_, self.centers_, self.thresholds_ = {}, {}, {}  # a refit never keeps an earlier baseline
+        self.families_ = {}
         rows = normal[active_mask(canonical_roles(normal))]
         raw = self._raw(rows)
         if not raw:
-            raise ValueError("grey_box needs MAT/RAT/OAT/damper or MAT/SAT/cooling valve roles")
+            raise ValueError(
+                "grey_box needs one residual family: MAT/RAT/OAT/damper, MAT/SAT/cooling valve, SAT/SAT setpoint/"
+                "cooling valve, or (no MAT) SAT + zone or return temp + heating valve, or + cooling valve or "
+                "compressor status; see `open-fdd-ml methods FOLDER`"
+            )
         for key, (x, y, width) in raw.items():
             ok = x.notna() & y.notna()
             table = _binned_median(x[ok], y[ok], width)
@@ -242,6 +314,8 @@ class GreyBox(Detector):
             self.tables_[key] = table
             self.centers_[key] = float(resid.median())
             self.thresholds_[key] = float(np.quantile((resid - self.centers_[key]).abs(), self.quantile))
+        picked = grey_box_families(canonical_roles(rows))
+        self.families_ = {k: v for k, v in picked.items() if k in self.thresholds_ and k in ("heat_rise", "cool_drop")}
         if not self.thresholds_:
             raise ValueError("gray-box learned no residual: needs the mixed-air / coil roles and enough active "
                              "rows per bin on known-good data")
@@ -356,7 +430,9 @@ class ModeGated(Detector):
         self._reset_fit()
         normal = canonical_roles(normal)
         rows = normal[active_mask(normal)]
-        candidates = [r for r in self.feature_roles if r in rows.columns]
+        # a mapped role with no active data (all NaN) would empty the joint dropna; leave it out
+        with_data = set(_roles_with_data(rows))
+        candidates = [r for r in self.feature_roles if r in with_data]
         x = _features(rows, candidates).dropna()
         std = x.std(ddof=0)
         roles = [r for r in candidates if float(std.get(r, 0.0)) > 1e-9]

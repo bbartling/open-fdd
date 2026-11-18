@@ -33,3 +33,6 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
    SciPy 1.18.1, statsmodels 0.15.0, DuckDB 2.0.0, pyod 3.6.8, ...; see `CHANGELOG.md`), with `python_version` markers
    where a release dropped 3.10 / 3.11. Keep the 3.10-3.15 matrix green; add a marker, never an `==` pin.
 7. Tests: `pytest tests/test_ml_fdd.py tests/test_sql_anomaly_zscore.py`. Results tables hold measured numbers only.
+8. **Which methods apply**: run `open-fdd-ml methods FOLDER [--json]` before `detect`. It names the roles each
+   method needs and why a method cannot run on that folder. On a furnace, RTU or heat pump (no MAT), gray-box uses
+   the single-zone `heat_rise` / `cool_drop` residuals; their thresholds come from that unit's own training rows.

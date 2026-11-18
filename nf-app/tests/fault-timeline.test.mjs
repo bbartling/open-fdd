@@ -508,3 +508,35 @@ test("an invalid timezone option is skipped and named in the log, never used", a
   assert.notEqual(r.summary.timezones["site-a"].zone, "Mars/Olympus");
   assert.ok(r.logs.some((l) => /not an IANA zone name/.test(l)), r.logs.join("\n"));
 });
+
+test("#1636: a saved occupancy calendar wins over the NF schedule (holiday ignored), its revision is in the receipt", async () => {
+  // Same site-a fixture as the schedule test; the saved calendar says Mon-Fri 02:00-22:00 (no holidays)
+  const now = wall(2026, 10, 23, 20, 0, "America/Chicago");
+  const { http } = vavSetup(A, { nowMs: now });
+  const { createEngine } = require("../hooks/lib/engines.js");
+  const days = Object.fromEntries(["mon", "tue", "wed", "thu", "fri", "sat", "sun"].map((d) =>
+    [d, { occupied: d !== "sat" && d !== "sun", start: "02:00", end: "22:00" }]));
+  const row = { site_id: "site-a", rule_id: "OCC-CALENDAR", scope_key: "site", revision: 7,
+    parameters: { version: 1, calendar: { timezone: "America/Chicago", days } } };
+  const withCalendar = async (o) => ({ ...(await createEngine(o)), ruleConfigOverrides: async () => [row] });
+  const logs = [];
+  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, createEngine: withCalendar,
+    config: { engine: "sqlite", windowHours: 72, equips: ["VAV-9"] }, now });
+  assert.equal(summary.errors, 0, logs.join("\n"));
+  assert.ok(logs.some((l) => /occ_mode synthesized from calendar \(occupancy calendar 100 h\/week \(America\/Chicago\) rev 7/.test(l)), logs.join("\n"));
+  assert.deepEqual(summary.occupancy["site-a"], { source: "calendar", revision: 7 });
+  const w = written(http);
+  assert.equal(resultRec(w, "site-a", "VAV-1", "VAV-9").attrs.fddOccSource, "calendar");
+  const samples = w.data.get(timelineRec(w, "site-a", "VAV-1", "VAV-9").uuid);
+  const cell = (h, m, d) => samples.find(([t]) => t === wall(2026, 10, d, h, m, "America/Chicago"));
+  assert.equal(cell(3, 0, 21)[1], 1, "03:00 is occupied in the calendar (the NF schedule said unoccupied)");
+  assert.equal(cell(12, 0, 22)[1], 1, "the NF schedule's holiday does not apply: the calendar has none");
+  assert.equal(cell(23, 0, 21)[1], 0, "after 22:00: unoccupied limits");
+  // a reset calendar falls back to the NF schedule
+  const resetRow = { ...row, parameters: { version: 1, reset: true } };
+  const http2 = vavSetup(A, { nowMs: now }).http;
+  const logs2 = [];
+  await hook.runFdd({ sdk: { http: http2, logEvent: (m) => logs2.push(m) }, config: { engine: "sqlite", windowHours: 72, equips: ["VAV-9"] }, now,
+    createEngine: async (o) => ({ ...(await createEngine(o)), ruleConfigOverrides: async () => [resetRow] }) });
+  assert.ok(logs2.some((l) => /occ_mode synthesized from schedule/.test(l)), logs2.join("\n"));
+});

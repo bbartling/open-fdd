@@ -1797,6 +1797,49 @@ def install_schema_gate(c, m: dict, a, prior: dict | None, app_id: str, environ,
     return lvl, text, lvl != "DRIFT"
 
 
+def push_schema_gate(c, m: dict, environ=None, allow_pending: bool = False) -> int:
+    """#1633: `push` reads the installed Timescale schema first (read-only, the same check as install and doctor) and
+    refuses before any write when it cannot confirm that the database is at the schema this release needs. Returns
+    0 to continue, EXIT_FAILED to stop. --allow-schema-upgrade-pending pushes anyway, loudly."""
+    app_id = m["application"]["id"]
+    prior = c.app(app_id)
+    if not prior or not timescale_selected(prior):
+        return 0
+    lvl, text = push_schema_verdict(c, m, prior, app_id, environ)
+    if lvl != "FAIL":
+        if text:
+            print(f"push: Timescale schema preflight: {text}")
+        return 0
+    if allow_pending:
+        print(f"push: WARNING: Timescale schema preflight failed and --allow-schema-upgrade-pending was given: {text}. "
+              "Scheduled fdd runs fail until nf-app/timescale/install.sql is applied as the database owner.")
+        return 0
+    print(f"push: STOPPED: Timescale schema preflight failed: {text}")
+    print("push: nothing was written. Apply nf-app/timescale/install.sql as the database owner (installer role) first, "
+          "or pass --allow-schema-upgrade-pending to push anyway.")
+    return EXIT_FAILED
+
+
+def push_schema_verdict(c, m: dict, prior: dict, app_id: str, environ=None, clock=time.monotonic,
+                        sleep=time.sleep) -> tuple[str, str]:
+    """(level, text) of push's read-only schema check against THIS release's required schema (local
+    hooks/lib/timescale.js SCHEMA_VERSION). The installed probe's own `ok` / `required` describe the release already on
+    the box, so its PASS is taken only when the schema it reports installed is at least what this push needs (an older
+    probe would otherwise approve pushing code that needs a newer schema). Push never bootstraps the probe: an app
+    without it, or a probe run with no usable answer, uses the NF_TIMESCALE_PREFLIGHT_DSN path."""
+    if not has_probe_hook(prior):
+        return timescale_schema_check(prior, environ)
+    got = probe_run(c, app_id, clock, sleep)
+    if got is None:
+        return timescale_schema_check(prior, environ)
+    lvl, text = probe_verdict(got)
+    want, installed = local_required_schema(m), got.get("installed")
+    if lvl != "SKIP" and want is not None and isinstance(installed, int) and installed < want:
+        return "FAIL", (f"Timescale schema version {installed}; this release requires {want} (the installed schema probe "
+                        f"only checks for {got.get('required')}). Run nf-app/timescale/install.sql as installer/owner")
+    return lvl, text
+
+
 def schema_preflight(c, app: dict, app_id: str, environ=None, **kw) -> tuple[str, str]:
     """Schema check order: the NF-side probe when the installed app has it, else the NF_TIMESCALE_PREFLIGHT_DSN path
     (psql), else a refusal that names both remedies. SKIP on Lite or a non-Timescale engine."""
@@ -1945,6 +1988,24 @@ def hand_edit_line(drift: dict) -> tuple[str, str, str]:
 WEATHER_HOOK_IDS = ("weather", "open-meteo-weather")
 
 
+def scheduled_success_gap(hook: dict, runs: list[dict], now: datetime.datetime) -> str | None:
+    """#1638: text when a scheduled hook has had no successful run (STATE_SUCCESS and not ok:false) within two of its
+    intervals, else None. On-request hooks and hooks without a simple schedule are not judged."""
+    if hook.get("mode") == ON_REQUEST:
+        return None
+    interval = rrule_interval_seconds(((hook.get("schedule") or {}).get("rrule")))
+    if not interval or not runs:
+        return None
+    ok = next((r for r in runs if r.get("state") == "STATE_SUCCESS" and not result_failure(r)), None)
+    started = parse_ts(ok.get("startTime")) if ok else None
+    if ok and started is None:
+        return None                      # a success without a readable start time cannot be aged
+    if started and (now - started).total_seconds() <= 2 * interval:
+        return None
+    since = f"the last success started {ok.get('startTime')}" if started else f"none in the last {len(runs)} runs"
+    return f"no successful run within two intervals ({2 * interval // 60} min): {since}"
+
+
 def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -> int:
     app_id = m["application"]["id"]
     bad = 0
@@ -1993,7 +2054,7 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line("PASS", "deps", "none declared")
     for h in a.get("hooks", []):
         try:
-            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=1&include_results=true")
+            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=20&include_results=true")
         except SystemExit as e:
             line("WARN", f"hook {h['id']}", f"could not read runs ({e})")
             continue
@@ -2005,13 +2066,15 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
             line("PASS" if h.get("mode") == ON_REQUEST else "WARN", f"hook {h['id']}", "never run")
             continue
         text = run_error_text(last)
+        stale = scheduled_success_gap(h, runs.get("runs") or [], now or datetime.datetime.now(datetime.timezone.utc))
         if last.get("state") == "STATE_SUCCESS" and not result_failure(last):
-            line("PASS", f"hook {h['id']}", f"last run {last['state']}")
+            line("FAIL" if stale else "PASS", f"hook {h['id']}", stale or f"last run {last['state']}")
         elif h.get("mode") == ON_REQUEST and last.get("state") == "STATE_SUCCESS":
             line("WARN", f"hook {h['id']}", f"last run returned ok:false ({result_failure(last)}), usually missing args")
         else:
-            line("FAIL", f"hook {h['id']}", f"last run {last.get('state')}: "
-                 f"{(result_failure(last) or text or '')[:160].strip()}")
+            # #1638: an errored run may carry no endTime; it is a failure with its start time, never "still running"
+            line("FAIL", f"hook {h['id']}", f"last run {last.get('state')} (started {last.get('startTime') or 'unknown'}): "
+                 f"{(result_failure(last) or text or '')[:160].strip()}" + (f"; {stale}" if stale else ""))
         if h["id"] == "fdd" and (unit_skips := fdd_unit_skip_text(last)):
             line("WARN", "fdd units", unit_skips)
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
@@ -2097,7 +2160,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="push/install: first download the hand-edited box copies to DIR (same folder layout) for review")
     ap.add_argument("--dry-run", action="store_true",
                     help="install: run the read-only checks (login, schema probe, hand edits) and say what would happen, "
-                         "e.g. \"would bootstrap the schema probe\"; writes nothing")
+                         "e.g. \"would bootstrap the schema probe\"; writes nothing. Refused for every other action "
+                         "(they have no dry run); use status or diff for a read-only look")
+    ap.add_argument("--allow-schema-upgrade-pending", action="store_true",
+                    help="push: push even when the Timescale schema preflight fails (the database is older than this "
+                         "release needs, or the check cannot run); the scheduled fdd runs fail until install.sql is applied")
     ap.add_argument("--skip-verify-run", action="store_true",
                     help="install: do not run the scheduled hooks once to verify")
     ap.add_argument("--remove-old", action="store_true",
@@ -2117,8 +2184,19 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def argument_problem(a: argparse.Namespace) -> str | None:
+    """A flag combination that would not do what it says, refused before any login or write (#1634)."""
+    if getattr(a, "dry_run", False) and a.action != "install":
+        return (f"--dry-run applies to install only; `{a.action}` has no dry run and would act for real. "
+                "For a read-only look use `status` or `diff` (pull without writing).")
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     a = build_parser().parse_args(argv)
+    problem = argument_problem(a)
+    if problem:
+        raise SystemExit(problem)
     if a.env.expanduser().is_file():
         env = load_env(a.env)
         if not env.get("NF_TIMESCALE_PREFLIGHT_DSN") and os.environ.get("NF_TIMESCALE_PREFLIGHT_DSN"):
@@ -2143,6 +2221,9 @@ def main(argv: list[str] | None = None) -> int:
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
+        rc = push_schema_gate(c, m, env, a.allow_schema_upgrade_pending)   # before any write (#1633)
+        if rc:
+            return rc
         return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, force=a.force, save_remote=a.save_remote)
     if a.action == "run":
         return cmd_run(c, m, a.hooks, a.wait, a.resume, args=parse_args(a.hook_args) or None)

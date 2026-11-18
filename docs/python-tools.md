@@ -99,6 +99,19 @@ per-row assessment (zscore, mad) give `assessed_rows: null` and an `assessment_n
 
 Method, data, mapping and results: [docs/ml/lbnl-ahu-benchmark.md](ml/lbnl-ahu-benchmark.md).
 
+`open-fdd-ml methods` lists the roles each method needs, and `open-fdd-ml methods ./AHU_1 [--json]` says which
+methods can run on that folder and why the others cannot. PCA, one-class SVM and COPOD need two non-constant
+feature roles (`discharge-air-temp`, `mixed-air-temp`, `return-air-temp`, `outside-air-temp`,
+`outside-air-damper`, `cooling-valve`, `fan-cmd`, `duct-static-pressure`, `zone-air-temp`, `heating-valve`).
+The gray-box method needs one residual family. The AHU families are the mixed-air balance, the cooling-coil
+delta-T, and SAT error while the valve modulates. With no mixed-air temperature it uses the single-zone family
+instead (furnace, RTU, heat pump): supply minus zone (or return) temperature against the heating valve
+(`heat_rise`), or against the cooling valve or compressor status (`cool_drop`). A 0-100 % command is read as a
+fraction. A role that is mapped but has no data on active rows does not count, so an empty `zone-air-temp` falls back
+to `return-air-temp`. For the trained methods `methods FOLDER` runs a dry `fit` on the folder, so `can_run` means
+`fit` succeeds on it (one-class SVM and COPOD need 50 active rows in one operating mode), and the reason is the
+detector's own error.
+
 ## Ontology audit and model doctor (`open-fdd-ontology-audit`)
 
 Offline and read-only; NF is optional (#1569).
