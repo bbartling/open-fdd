@@ -167,6 +167,22 @@ class PCASPE(Detector):
         s = self.scores(frame)
         return (s > self.threshold_).fillna(False) & active_mask(canonical_roles(frame))
 
+    def assessment(self, frame: pd.DataFrame) -> pd.Series:
+        """Per row: ``"assessed"``, ``"inactive"`` or ``"missing_inputs"`` (a fitted role is absent or NaN) (#1666).
+
+        A row that is not assessed carries no flag; this says why, so "no flag" is never read as "healthy"."""
+        if self.loadings_ is None:
+            raise RuntimeError("pca is not fitted: call fit() on known-good data first")
+        return _assessment(self.scores(frame), active_mask(canonical_roles(frame)))
+
+    def assessed_mask(self, frame: pd.DataFrame) -> pd.Series:
+        return self.assessment(frame) == "assessed"
+
+    def missing_roles(self, frame: pd.DataFrame) -> list[str]:
+        """Fitted roles the frame does not have at all."""
+        cols = set(canonical_roles(frame).columns)
+        return [r for r in self.roles if r not in cols]
+
 
 def _binned_median(x: pd.Series, y: pd.Series, width: float) -> pd.Series:
     bins = (x / width).round().astype("Int64")
@@ -250,6 +266,34 @@ class GreyBox(Detector):
 
     def flags(self, frame: pd.DataFrame) -> pd.Series:
         return (self.scores(frame) > 1.0).fillna(False) & active_mask(canonical_roles(frame))
+
+    def assessment(self, frame: pd.DataFrame) -> pd.Series:
+        """Per row: ``"assessed"`` (at least one trained residual computed), ``"inactive"``, ``"missing_inputs"``
+        (no trained residual's input roles are in the frame) or ``"no_residual"`` (inputs present, but every residual is
+        NaN on that row: a missing sample, or outside its validity range such as |OAT - RAT| < 2 K or a saturated
+        valve). A fitted model scored on a frame lacking every trained residual's inputs is unassessed, not
+        fault-free (#1666)."""
+        out = _assessment(self.scores(frame), active_mask(canonical_roles(frame)))
+        if len(self.missing_residuals(frame)) < len(self.tables_):
+            out[out == "missing_inputs"] = "no_residual"
+        return out
+
+    def assessed_mask(self, frame: pd.DataFrame) -> pd.Series:
+        return self.assessment(frame) == "assessed"
+
+    def missing_residuals(self, frame: pd.DataFrame) -> list[str]:
+        """Trained residual families the frame cannot compute at all (their input roles are absent)."""
+        if not self.thresholds_:
+            raise RuntimeError("grey_box is not fitted: call fit() on known-good data first")
+        available = set(self._raw(frame))
+        return [k for k in self.tables_ if k not in available]
+
+
+def _assessment(scores: pd.Series, active: pd.Series) -> pd.Series:
+    out = pd.Series("assessed", index=scores.index, dtype=object)
+    out[scores.isna().to_numpy()] = "missing_inputs"
+    out[~active.reindex(scores.index).fillna(False).astype(bool).to_numpy()] = "inactive"
+    return out
 
 
 def operating_mode(frame: pd.DataFrame) -> pd.Series:
