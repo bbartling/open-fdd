@@ -89,9 +89,16 @@ open-fdd-ontology-audit --example --out ./r                         # synthetic 
 open-fdd-ontology-audit req.xlsx --refresh --out ./r                # pinned Brick / 223P / Haystack, sha256-checked
 open-fdd-ontology-audit req.xlsx --graph building.ttl --shacl --out ./r
 open-fdd-ontology-audit --from-nf --out ./r                          # optional: the app's RDF export (open-fdd[nf])
+open-fdd-ontology-audit --extensions --out ./r                       # Open-FDD extension terms: parent, label, definition
 ```
 
 Requirement statuses: `VERIFIED_TERM` (URI declared in the snapshot, not a semantic endorsement), `CANDIDATE_REVIEW`
 (label match only), `MAPPING_REVIEW` (namespace known, term absent), `EXTENSION_REVIEW`, `SOURCE_UNAVAILABLE`.
 Reports: `audit.xlsx/csv/json`, `doctor.md/json`, `terms.csv`. It never assigns rules or writes tags.
+
+`--extensions [ext.ttl]` checks the Open-FDD extension terms in a Turtle file (default: the shipped
+`ofdd_engineering_quantities_v1.ttl`) against the #1569 policy and writes `extensions.json`. It flags a class or
+property declared in a standard namespace, one whose `rdfs:subClassOf` / `rdfs:subPropertyOf` chain never reaches a
+standard concept, a missing `rdfs:label` or `skos:definition` (or `rdfs:comment`), and an enum member with an
+undeclared type. It only reports and never edits the vocabulary.
 
