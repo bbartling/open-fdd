@@ -45,7 +45,10 @@ never scores rows the SQL rule did not judge.
 
 `python -m open_fdd.ml.review_eval labeled.json --out eval.json` scores saved reviews against independent labels
 (maintenance records, functional tests, engineer review). The corpus is
-`{"device_weeks": <total or {equipment: weeks}>, "episodes": [...]}`, a bare list or JSON Lines. Each episode has
+`{"test_device_weeks": <total or {equipment: weeks}>, "episodes": [...]}`, a bare list or JSON Lines.
+`test_device_weeks` is the explicit exposure of the test period: every test equipment and its monitored weeks,
+including units that raised no alert. Its total is the one alerts-per-device-week denominator for the overall block
+and every category block; without it, burden is not reported (the older `device_weeks` key is ignored with a note). Each episode has
 `equipment`, `category`, `split` (`train`, `selection` or `test`), `label` (`fault`, `healthy` or `unknown`),
 `sql_verdict`, the `review` record (or `review_outcome`), and optional `label_onset_utc` / `sql_start_utc` for delay.
 List labeled genuine faults SQL never raised too (`sql_verdict` empty) so they count against recall.

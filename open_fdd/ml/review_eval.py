@@ -2,8 +2,11 @@
 
     python -m open_fdd.ml.review_eval labeled.json --out eval.json
 
-``labeled.json`` is an object ``{"device_weeks": <total or {equipment: weeks}>, "episodes": [...]}`` (a bare list
-or JSON Lines file of episodes also works; alert burden is then not reported). Each episode has:
+``labeled.json`` is an object ``{"test_device_weeks": <total or {equipment: weeks}>, "episodes": [...]}`` (a bare
+list or JSON Lines file of episodes also works; alert burden is then not reported). ``test_device_weeks`` is the
+explicit exposure of the **test period**: every test equipment and the weeks it was monitored, including units that
+raised no alert. One denominator, its total, is used for the overall block and every category block. The older,
+ambiguous ``device_weeks`` key is not used for burden (it is reported as a note). Each episode has:
 
 * ``equipment``, ``category`` (fault category such as ``sensor``, ``proof``, ``coil``) and ``split``
   (``train``, ``selection`` or ``test``; only ``test`` is scored).
@@ -163,14 +166,27 @@ def _holdout_checks(episodes: list[dict]) -> dict:
     return out
 
 
-def _device_weeks(corpus: dict, equipment: Iterable[str]) -> float | None:
-    dw = corpus.get("device_weeks")
+def _test_device_weeks(corpus: dict) -> tuple[float | None, list[str]]:
+    """``(total, notes)``: the explicit test-period exposure; ``None`` when it is not given.
+
+    A dict ``{equipment: weeks}`` is summed over every listed equipment, not only the ones with episodes, so a unit
+    that raised nothing still counts in the denominator.
+    """
+    dw = corpus.get("test_device_weeks")
+    notes: list[str] = []
+    if isinstance(dw, bool):
+        dw = None
     if isinstance(dw, (int, float)):
-        return float(dw) or None
+        return (float(dw) or None), notes
     if isinstance(dw, dict):
-        total = sum(float(dw.get(eq, 0) or 0) for eq in set(equipment))
-        return total or None
-    return None
+        total = sum(float(v or 0) for v in dw.values())
+        return (total or None), notes
+    if "device_weeks" in corpus:
+        notes.append("device_weeks is ignored: give test_device_weeks (the test-period exposure of every test "
+                     "equipment) to report alerts per device-week")
+    else:
+        notes.append("no test_device_weeks: alerts per device-week not reported")
+    return None, notes
 
 
 def evaluate(corpus: dict, *, methods: Iterable[str] | None = None, min_labeled: int = 20) -> dict:
@@ -186,8 +202,15 @@ def evaluate(corpus: dict, *, methods: Iterable[str] | None = None, min_labeled:
     tiers = ["raw_sql", "reviewed_priority"] + [f"method:{m}" for m in methods]
     categories = sorted({e["category"] for e in test})
 
+    dw, exposure_notes = _test_device_weeks(corpus)
+    tested = {e["equipment"] for e in test}
+    listed = corpus.get("test_device_weeks")
+    if isinstance(listed, dict):
+        unlisted = sorted(tested - set(listed))
+        if unlisted:
+            exposure_notes.append(f"test equipment without exposure in test_device_weeks: {', '.join(unlisted)}")
+
     def block(eps: list[dict]) -> dict:
-        dw = _device_weeks(corpus, (e["equipment"] for e in eps))
         sql = [e for e in eps if _sql_alert(e)]
         outcomes = {o: sum(1 for e in sql if _outcome(e) == o)
                     for o in ("corroborated", "needs_review", "insufficient_evidence")}
@@ -220,6 +243,9 @@ def evaluate(corpus: dict, *, methods: Iterable[str] | None = None, min_labeled:
         "by_category": {c: block([e for e in test if e["category"] == c]) for c in categories},
         "claim_supported": not reasons,
         "claim_reasons": reasons,
+        "exposure": {"test_device_weeks": dw, "notes": exposure_notes,
+                     "denominator": "one total for the overall and every category block"},
+        "claim_notes": ["the equipment holdout is reported (holdout.shared_equipment) but not required for the claim"],
         "policy_note": "the review never removes a SQL alert; reviewed_priority is a triage tier, and an episode "
                        "is only a false alert when its independent label is healthy",
         "open_fdd_version": getattr(open_fdd, "__version__", None),
