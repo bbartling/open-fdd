@@ -18,7 +18,7 @@ coverage, run proof, rule revision, input watermark) are copied into the review 
 |---|---|
 | `corroborated` | A baseline-learning method (gray-box, PCA, one-class SVM, COPOD), fitted on training rows that do not overlap the episode, assessed at least half of the episode's active rows and flagged at least 25 % of those |
 | `needs_review` | The methods assessed the episode and stayed quiet |
-| `insufficient_evidence` | No training source, training overlapping the episode, no rows or no active rows in the window, a SQL result marked unassessed (`assessed: false` or `run_proof: false`), or no method able to assess enough rows; `reasons` lists each one |
+| `insufficient_evidence` | No training source, training overlapping the episode, no rows in the window, no run proof in the window or the training rows (`no_run_proof`, `training_no_run_proof`), no proven running rows in the window, a SQL result marked unassessed (`assessed: false`, `run_proof: false`, `run_proof_source: null` or `skip_reason: no_run_proof`), or no method able to assess enough rows; `reasons` lists each one |
 
 A quiet or unsupported detector is not evidence of a false positive: the review never emits that label, keeps
 `sql_verdict` and `report_inclusion: keep`, and says why in `reasons`. Labeling a SQL episode a false positive needs
@@ -34,3 +34,10 @@ folder files.
 Not in this slice: SQL and pandas before/after replay of a proposed tuner change, inputs resolved through the RDF
 bindings, and the labeled held-out evaluation of alert reduction that #1667 asks for. No alert-reduction number is
 claimed here.
+
+**Active rows** follow the run-proof contract (`sql/fdd/run_proof.json`, `open_fdd.run_proof.derive_run_proof`), the
+same proof the SQL and pandas rules gate on: a resolved `run-proof` column first, then the unit's own status roles,
+then its own command roles, running when above the contract threshold (`> 0.05`). A frame marked
+`run_proof_resolved` counts only its `run-proof` column. Rows with an `occupied` role at 0 are not active. Training
+rows are filtered the same way before any method is fitted. With no proof the review is `insufficient_evidence`; ML
+never scores rows the SQL rule did not judge.

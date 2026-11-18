@@ -13,8 +13,8 @@ The review never removes or rewrites the SQL verdict. Its ``outcome`` is one of:
   assessed enough of the episode's active rows and flagged at least ``corroborate_share`` of them.
 * ``needs_review``: the methods assessed the episode and stayed quiet. A quiet or unsupported detector cannot make a
   SQL fault a false positive; that label needs independent healthy or maintenance evidence, so it is never emitted.
-* ``insufficient_evidence``: no training source, a training range that overlaps the episode, no data or no active rows
-  in the window, an unassessed SQL episode, or no method able to assess enough of it. ``reasons`` says which.
+* ``insufficient_evidence``: no training source, a training range that overlaps the episode, no data, no run proof or no
+  proven running rows in the window, an unassessed SQL episode, or no method able to assess enough of it. ``reasons`` says which.
 
 Tuning replay (SQL and pandas before/after) and RDF-resolved inputs are later slices of #1667.
 """
@@ -87,11 +87,38 @@ def _assessed(det, frame, active):
     return pd.Series(False, index=frame.index)
 
 
+def _proof_active(frame):
+    """``(active, source)``: rows proven running under the run-proof contract, ``(None, "")`` with no proof.
+
+    The proof is :func:`open_fdd.run_proof.derive_run_proof` (a resolved ``run-proof`` column first, then the own
+    status roles, then the own command roles, honouring ``attrs["run_proof_resolved"]``), running when above the
+    contract threshold (:func:`open_fdd.run_proof.proof_on`). A missing proof sample is not running. When an
+    ``occupied`` role has data, unoccupied rows are not active either.
+    """
+    import pandas as pd
+
+    from open_fdd.run_proof import derive_run_proof, proof_on
+
+    f = frame.rename(columns={"run_proof": "run-proof"}) if "run_proof" in frame.columns and "run-proof" not in frame.columns else frame
+    f.attrs = dict(frame.attrs)
+    series, source = derive_run_proof(f)
+    if series is None:
+        return None, ""
+    active = proof_on(pd.to_numeric(series, errors="coerce"))
+    if "occupied" in f.columns:
+        occ = pd.to_numeric(f["occupied"], errors="coerce")
+        if occ.notna().any():
+            active &= occ.gt(0.5).fillna(False)
+    return active.astype(bool), source
+
+
 def review_episode(episode: dict, frame, *, train=None, training: dict | None = None,
                    methods: tuple[str, ...] = DEFAULT_METHODS, seed: int = 0, min_assessed: float = 0.5,
                    corroborate_share: float = 0.25) -> dict:
     """The review record for ``episode`` on the role ``frame`` (SI, UTC index). Pure: no files."""
-    from open_fdd.ml.detectors import active_mask, canonical_roles, make_detector
+    import pandas as pd
+
+    from open_fdd.ml.detectors import canonical_roles, make_detector
 
     frame = canonical_roles(frame)
     training = dict(training or {"source": "none"})
@@ -99,7 +126,9 @@ def review_episode(episode: dict, frame, *, train=None, training: dict | None = 
     if end <= start:
         raise ValueError(f"episode end_utc {end} is not after start_utc {start}")
     window = frame[(frame.index >= start) & (frame.index < end)]
-    active = active_mask(window)
+    window.attrs = dict(frame.attrs)
+    proof, proof_source = _proof_active(window)
+    active = proof if proof is not None else pd.Series(False, index=window.index)
     reasons: list[dict] = []
 
     def gate(code: str, detail: str) -> None:
@@ -109,9 +138,22 @@ def review_episode(episode: dict, frame, *, train=None, training: dict | None = 
         gate("not_a_fault_episode", f"verdict is {episode.get('verdict')!r}; only saved faults are reviewed")
     if episode.get("assessed") is False or episode.get("run_proof") is False:
         gate("sql_episode_unassessed", "the saved SQL result says it was not assessed or lacked run proof")
+    elif ("run_proof_source" in episode and episode.get("run_proof_source") in (None, "")) or str(
+        episode.get("skip_reason", "")
+    ) == "no_run_proof":
+        gate("sql_episode_unassessed", "the saved SQL result has no run proof (run_proof_source null or "
+             "skip_reason no_run_proof)")
     if train is None or len(train) == 0:
         gate("training_source_missing", "no --train folder or --train-until cutoff: no known-good baseline to compare")
     else:
+        train = canonical_roles(train)
+        train_proof, train_source = _proof_active(train)
+        if train_proof is None:
+            gate("training_no_run_proof", "the training rows have no run proof (run-proof, status or command role); "
+                 "a baseline must be learned on proven running rows only")
+        else:
+            training.update(proof_source=train_source, proven_rows=int(train_proof.sum()))
+            train = train[train_proof.to_numpy()]
         t0, t1 = train.index.min(), train.index.max()
         training.update(start_utc=str(t0), end_utc=str(t1), rows=int(len(train)))
         if t1 >= start and t0 < end:
@@ -119,8 +161,11 @@ def review_episode(episode: dict, frame, *, train=None, training: dict | None = 
                  f"training rows {t0}..{t1} overlap the episode {start}..{end}; the fault could be in the baseline")
     if window.empty:
         gate("no_data_in_window", f"the folder has no rows between {start} and {end}")
+    elif proof is None:
+        gate("no_run_proof", "the window has no run proof (no run-proof, status or command role with data); ML "
+             "scores proven running rows only, so it cannot judge rows SQL never judged")
     elif not active.any():
-        gate("no_active_rows", "the unit was never running (fan status/command) in the window; ML scores active rows only")
+        gate("no_active_rows", "the run proof never says running in the window; ML scores proven running rows only")
 
     method_records: dict[str, dict] = {}
     if not reasons:
@@ -186,7 +231,7 @@ def review_episode(episode: dict, frame, *, train=None, training: dict | None = 
         "reasons": reasons,
         "episode": episode,
         "window": {"start_utc": str(start), "end_utc": str(end), "rows": int(len(window)),
-                   "active_rows": int(active.sum()) if len(window) else 0},
+                   "active_rows": int(active.sum()) if len(window) else 0, "proof_source": proof_source or None},
         "training": training,
         "methods": method_records,
         "policy": {"min_assessed": min_assessed, "corroborate_share": corroborate_share, "seed": seed,

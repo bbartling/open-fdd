@@ -141,3 +141,49 @@ def test_cli_writes_a_reproducible_review(tmp_path, capsys):
     bad.write_text(json.dumps({"rule_id": "X"}), encoding="utf-8")
     assert main([str(bad), str(folder), "--train-until", "2026-01-11"]) == 2
     assert "lacks" in capsys.readouterr().err
+
+
+def test_no_proof_point_is_insufficient_evidence_not_scored():
+    """A frame with no run-proof, status or command role: ML does not score rows SQL never judged."""
+    frame = _history().drop(columns=["fan-status", "fan-cmd"])
+    train = _history()[_history().index < CUT]
+    r = review_episode(_episode(), frame, train=train, training={"source": "cutoff"})
+    assert r["outcome"] == "insufficient_evidence"
+    assert any(x["code"] == "no_run_proof" for x in r["reasons"])
+    assert r["window"]["active_rows"] == 0 and r["methods"] == {}
+
+
+def test_off_period_rows_are_not_assessed():
+    """The fan is off for half of the episode day: only the proven running rows are assessed."""
+    frame = _history()
+    off = (frame.index >= pd.Timestamp("2026-01-13T12:00:00Z")) & (frame.index < pd.Timestamp("2026-01-14T00:00:00Z"))
+    frame.loc[off, "fan-status"] = 0.0
+    frame.loc[off, "fan-cmd"] = 0.0
+    r = review_episode(_episode(), frame, train=frame[frame.index < CUT], training={"source": "cutoff"})
+    assert r["window"]["rows"] == DAY and r["window"]["active_rows"] == DAY // 2
+    assert r["window"]["proof_source"] == "fan-status"
+    for rec in r["methods"].values():
+        if "assessed_rows" in rec:
+            assert rec["active_rows"] == DAY // 2 and rec["assessed_rows"] <= DAY // 2
+    # a fractional status (0.3) is running under the contract (> 0.05), as for the rules
+    frac = _history()
+    frac["fan-status"] = 0.3
+    r2 = review_episode(_episode(), frac, train=frac[frac.index < CUT], training={"source": "cutoff"})
+    assert r2["window"]["active_rows"] == DAY
+
+
+def test_resolved_run_proof_column_and_episode_without_proof():
+    frame = _history().drop(columns=["fan-status", "fan-cmd"])
+    frame["run-proof"] = 1.0
+    frame.loc[frame.index >= pd.Timestamp("2026-01-13T18:00:00Z"), "run-proof"] = 0.0
+    r = review_episode(_episode(), frame, train=frame[frame.index < CUT], training={"source": "cutoff"})
+    assert r["window"]["proof_source"] == "run-proof" and r["window"]["active_rows"] == 3 * DAY // 4
+    assert r["training"]["proof_source"] == "run-proof"
+    r = review_episode(_episode(run_proof_source=None), _history(), train=_history()[_history().index < CUT],
+                       training={"source": "cutoff"})
+    assert r["outcome"] == "insufficient_evidence"
+    assert any(x["code"] == "sql_episode_unassessed" for x in r["reasons"])
+    resolved = _history()
+    resolved.attrs["run_proof_resolved"] = True  # the binding layer found no proof: status columns do not count
+    r = review_episode(_episode(), resolved, train=_history()[_history().index < CUT], training={"source": "cutoff"})
+    assert any(x["code"] == "no_run_proof" for x in r["reasons"])
