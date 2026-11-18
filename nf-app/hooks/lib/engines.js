@@ -59,7 +59,7 @@ const unitDeclaresQuantity = (unit, quantity) => {
   const n = normUnit(unit);
   if (quantity === "absolute_temperature") return ["c", "degc", "celsius"].includes(n) ? 1 : 0;
   if (quantity === "relative_humidity") {
-    return ["pct", "percent", "rh", "percentrelativehumidity"].includes(n) || String(unit).includes("%") ? 1 : 0;
+    return ["pct", "percent", "percent0100", "rh", "percentrelativehumidity"].includes(n) || String(unit).includes("%") ? 1 : 0;
   }
   if (quantity === "air_pressure") {
     return ["pa", "pascal"].includes(n) ? 1 : 0;

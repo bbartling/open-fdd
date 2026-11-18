@@ -179,7 +179,7 @@ CREATE OR REPLACE MACRO fdd.unit_declares_quantity(unit, quantity) AS (
     WHEN unit IS NULL OR TRIM(CAST(unit AS VARCHAR)) = '' THEN false
     WHEN quantity = 'absolute_temperature' THEN fdd.norm_unit(unit) IN ('c', 'degc', 'celsius')
     WHEN quantity = 'relative_humidity' THEN (
-      fdd.norm_unit(unit) IN ('pct', 'percent', 'rh', 'percentrelativehumidity')
+      fdd.norm_unit(unit) IN ('pct', 'percent', 'percent0100', 'rh', 'percentrelativehumidity')
       OR STRPOS(CAST(unit AS VARCHAR), '%') > 0
     )
     WHEN quantity = 'air_pressure' THEN fdd.norm_unit(unit) IN ('pa', 'pascal')
