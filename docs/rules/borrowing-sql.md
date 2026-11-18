@@ -75,6 +75,8 @@ for eq, fh, _cov, _pct in con.execute(pack["rules"]["FC1"]["sql"]).fetchall():
 
 ## Runnable DuckDB and SPARQL tutorial
 
+The [beginner DuckDB browser tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_browser_afdd) loads fake AHU readings, explains tables and views, and runs a small SQL temperature rule. Change one threshold and see the assessment update on the same data.
+
 The [standalone DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) includes executable pandas-versus-SQL assertions for FC1, FC2 and CMD-1, plus SPARQL point discovery joined to a DuckDB long-form historian. Both scripts run locally without an NF server. Follow its README for PowerShell or Linux setup.
 
 ## Setup by database

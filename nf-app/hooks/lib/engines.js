@@ -59,7 +59,7 @@ const unitDeclaresQuantity = (unit, quantity) => {
   const n = normUnit(unit);
   if (quantity === "absolute_temperature") return ["c", "degc", "celsius"].includes(n) ? 1 : 0;
   if (quantity === "relative_humidity") {
-    return ["pct", "percent", "rh", "percentrelativehumidity"].includes(n) || String(unit).includes("%") ? 1 : 0;
+    return ["pct", "percent", "percent0100", "rh", "percentrelativehumidity"].includes(n) || String(unit).includes("%") ? 1 : 0;
   }
   if (quantity === "air_pressure") {
     return ["pa", "pascal"].includes(n) ? 1 : 0;
@@ -346,6 +346,21 @@ async function createTimescale(pack, opts = {}) {
       await ts.syncPoints(client, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) });
       const { rows, sensorRows } = await ts.loadHistory(client, { pack, ...args });
       return rows || sensorRows;
+    },
+    /**
+     * #1636: write a synthesized occ_mode (1 occupied / 0 not, from at(ms)) onto this equipment's session history rows,
+     * after load(). Only called when no occ_mode point is bound. Returns the number of rows updated.
+     */
+    async occupancy(equipId, at) {
+      const res = await client.query("SELECT DISTINCT timestamp_utc FROM pg_temp.history WHERE equipment_id = $1", [equipId]);
+      if (!res.rows.length) return 0;
+      const ts = res.rows.map((r) => new Date(r.timestamp_utc));
+      const upd = await client.query(
+        `UPDATE pg_temp.history h SET occ_mode = v.occ
+         FROM unnest($2::timestamptz[], $3::float8[]) AS v(ts, occ)
+         WHERE h.equipment_id = $1 AND h.timestamp_utc = v.ts`,
+        [equipId, ts.map((d) => d.toISOString()), ts.map((d) => (at(d.getTime()) ? 1 : 0))]);
+      return upd.rowCount;
     },
     /** Mirror the bound points of one equipment into fdd.point (load() does this itself). */
     syncPoints: (args) => ts.syncPoints(client, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) }),
