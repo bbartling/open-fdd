@@ -1805,7 +1805,7 @@ def push_schema_gate(c, m: dict, environ=None, allow_pending: bool = False) -> i
     prior = c.app(app_id)
     if not prior or not timescale_selected(prior):
         return 0
-    lvl, text = schema_preflight(c, prior, app_id, environ)
+    lvl, text = push_schema_verdict(c, m, prior, app_id, environ)
     if lvl != "FAIL":
         if text:
             print(f"push: Timescale schema preflight: {text}")
@@ -1818,6 +1818,26 @@ def push_schema_gate(c, m: dict, environ=None, allow_pending: bool = False) -> i
     print("push: nothing was written. Apply nf-app/timescale/install.sql as the database owner (installer role) first, "
           "or pass --allow-schema-upgrade-pending to push anyway.")
     return EXIT_FAILED
+
+
+def push_schema_verdict(c, m: dict, prior: dict, app_id: str, environ=None, clock=time.monotonic,
+                        sleep=time.sleep) -> tuple[str, str]:
+    """(level, text) of push's read-only schema check against THIS release's required schema (local
+    hooks/lib/timescale.js SCHEMA_VERSION). The installed probe's own `ok` / `required` describe the release already on
+    the box, so its PASS is taken only when the schema it reports installed is at least what this push needs (an older
+    probe would otherwise approve pushing code that needs a newer schema). Push never bootstraps the probe: an app
+    without it, or a probe run with no usable answer, uses the NF_TIMESCALE_PREFLIGHT_DSN path."""
+    if not has_probe_hook(prior):
+        return timescale_schema_check(prior, environ)
+    got = probe_run(c, app_id, clock, sleep)
+    if got is None:
+        return timescale_schema_check(prior, environ)
+    lvl, text = probe_verdict(got)
+    want, installed = local_required_schema(m), got.get("installed")
+    if lvl != "SKIP" and want is not None and isinstance(installed, int) and installed < want:
+        return "FAIL", (f"Timescale schema version {installed}; this release requires {want} (the installed schema probe "
+                        f"only checks for {got.get('required')}). Run nf-app/timescale/install.sql as installer/owner")
+    return lvl, text
 
 
 def schema_preflight(c, app: dict, app_id: str, environ=None, **kw) -> tuple[str, str]:

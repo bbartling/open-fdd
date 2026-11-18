@@ -1046,6 +1046,27 @@ def test_push_override_is_loud_and_a_passing_schema_continues(no_psql_no_dsn, tm
     assert "Timescale schema preflight: Timescale schema version 5" in capsys.readouterr().out
 
 
+def _needs_schema(m, version):
+    rel = m["files"]["/hooks/lib/timescale.js"]
+    path = m["_dir"] / rel
+    path.write_text(f"const SCHEMA_VERSION = {version};\n", encoding="utf-8")
+    assert sync.local_required_schema(m) == version
+
+
+def test_push_checks_this_release_s_schema_not_the_installed_probe_s(no_psql_no_dsn, tmp_path, capsys):
+    """Grok's repro on #1704: an older probe on the box (checks 5, reports ok) must not approve code needing schema 6."""
+    m = boot_manifest(tmp_path)
+    _needs_schema(m, 6)
+    nf = probe_box({"ok": True, "installed": 5, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "push: STOPPED" in out and "version 5" in out and "requires 6" in out and "only checks for 5" in out
+    assert _writes(nf) == []
+    # the database is already at 6 though the old probe only checks 5: nothing to stop
+    nf = probe_box({"ok": True, "installed": 6, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == 0
+
+
 def test_push_without_timescale_or_a_new_app_has_no_schema_check(no_psql_no_dsn, tmp_path):
     m = make_manifest(tmp_path)
     assert sync.push_schema_gate(fake(), m, {}) == 0                                      # app not installed yet
