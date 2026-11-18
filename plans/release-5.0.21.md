@@ -48,10 +48,10 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 
 | # | Owner | Scope | State | Branch / PR | Next |
 |---|---|---|---|---|---|
-| 1669 | C | `percent_0_100` RH alias in all helper copies + units metadata; long-form sweep vector | OWNED | `fix/1669-rh-percent-alias` | implement + regression |
-| 1670 | C | SCHED-247 OFF/unknown/completeness, honest observed duration | OPEN | | read rule + repro |
-| 1673 | C | SV-STALE = gap/missing; SV-FLATLINE = stuck values; dedupe silence; expected series | OPEN | | design after #1671 contract |
-| 1631 | C | Run-proof coverage/denominator follow-ups | OPEN | | |
+| 1669 | C | `percent_0_100` RH alias in all helper copies + units metadata; long-form sweep vector | INTEGRATED (READY FOR RELEASE) | #1676 -> `125afb6a` | Grok acceptance PASS on `723d90d3`; close after release |
+| 1670 | C | SCHED-247 OFF/unknown/completeness, honest observed duration | PR READY | #1699 (`fix/1670-sched247-proof`) | Grok acceptance; completeness policy 0.9 x max(window, 24 h) is an owner-visible semantic |
+| 1673 | C | SV-STALE = gap/missing; SV-FLATLINE = stuck values; dedupe silence; expected series; stale tuner migration | PR READY | #1700 (`fix/1673-stale-vs-flatline`) | Grok acceptance; then #1671 one-timer cleanup for FLATLINE/RANGE/SPIKE |
+| 1631 | C | Run-proof coverage/denominator follow-ups (sweep as-of proof join first) | OWNED | `fix/1631-sweep-proof-asof` | bounded as-of proof join in the sweeps (unknown cannot fault); no-history equipment = no proof |
 | 1635 | C (+G client) | Resolved proof into SPARQL client frames | OPEN | | |
 | 1636 | C | Occupancy calendar synthesis | OPEN | | |
 | 1639 | C | Expanded SI stress, seeds, replay | OPEN | | |
@@ -80,9 +80,18 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 
 ## PRs
 
-| PR | Base | Purpose | State | Next |
+| PR | Author | Purpose | State | Next |
 |---|---|---|---|---|
-| #1664 | `release/5.0.21` (retargeted from master 2026-11-17) | delete two stale `docs/prompts` notes | head updated from base (`01591268`); checks rerunning | independent review, then merge |
+| #1664 | owner | delete two stale `docs/prompts` notes (+ checklist moved to #1567) | Grok OK; doc fix `c80c3478` = Grok option (a); CI backlog | merge when green |
+| #1674 | Claude | ledger + CI routing | merged `fc140966` | done |
+| #1675 | Claude | tutorial links | merged `b42f2f83` | done |
+| #1676 | Claude | #1669 | merged `125afb6a` | done |
+| #1699 | Claude | #1670 SCHED-247 | ready | Grok acceptance, CI |
+| #1700 | Claude | #1673 SV-STALE split | ready | Grok acceptance, CI |
+| #1677 #1678 #1679 #1683 #1692 #1693 | Grok | ML/tooling | merged (Claude review ACCEPT, CI green) | done |
+| #1680 #1684 #1685 #1686 #1689 #1690 #1697 #1698 | Grok | tooling | Claude ACCEPT (nits posted) | merge when CI green / stack base lands |
+| #1687 #1694 | Grok | ml detect | Claude ACCEPT; conflicts after squash of #1678 | Grok merges release into branch |
+| #1681 #1682 #1688 #1691 #1695 #1696 | Grok | ML | Claude CHANGES REQUESTED (verified blocking findings) | Grok fixes; #1684/#1685/#1688/#1689 wait on #1681, #1686 on #1682 |
 
 ## Checkpoints
 
@@ -90,3 +99,13 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 
 - Branch `chore/5.0.21-ledger-ci` from `7642f407`: this ledger + CI routing.
 - Next: open the ledger/CI PR, the tutorial-links PR, then `fix/1669-rh-percent-alias`.
+
+### 2026-11-18 ~02:00 local (Claude, resumed after the weekly reset)
+
+- Writer slot: Claude. Checkout on `chore/5.0.21-ledger-update`, then `fix/1631-sweep-proof-asof`.
+- Review finding routed to the SQL lane: the sweep proof join is fail-open (`COALESCE(energized, 1)` on an exact
+  timestamp join) while the SPARQL client is fail-closed (exact join). Decision: bounded as-of join, proof held for at
+  most MAX_GAP_HOURS, older or absent = unknown (cannot fault); the client follows (#1631 / #1635).
+- pandas runner quality-nulled out-of-range sweep values (fixed in #1700).
+- Known local-only failures: `test_client_frames_are_the_oracle_frames` (pandas 3.0.6 index unit); CI passes.
+
