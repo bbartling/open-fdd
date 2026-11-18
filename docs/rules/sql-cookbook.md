@@ -1535,6 +1535,11 @@ Always-on fan or pump runtime
 | `fault_hours` | h | confirmed fault time |
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
+| `window_hours` | h | observed window: first to last input sample |
+| `proven_on_hours` | h | time with run proof ON |
+| `proven_off_hours` | h | time with run proof OFF |
+| `unknown_hours` | h | window time with no known run proof (missing proof or gaps) |
+| `assessment` | - | assessed, insufficient_proof or no_proof |
 
 **Parity** [match](parity.html#sched-247)
 

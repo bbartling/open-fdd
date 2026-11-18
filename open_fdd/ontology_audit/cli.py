@@ -7,6 +7,7 @@
     open-fdd-ontology-audit --example --out reports                              # the shipped synthetic example
     open-fdd-ontology-audit --from-nf --out reports                              # optional: NF box (open-fdd[nf])
     open-fdd-ontology-audit --sources                                            # list the pinned sources
+    open-fdd-ontology-audit --extensions [ext.ttl] [--out reports]             # Open-FDD term completeness
 
 Exit code 0 on success (whatever the statuses), 2 on an error.
 """
@@ -38,6 +39,9 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--no-xlsx", action="store_true")
     p.add_argument("--example", action="store_true", help="use the shipped synthetic requirements and building graph")
     p.add_argument("--sources", action="store_true", help="print the pinned source manifest and exit")
+    p.add_argument("--extensions", nargs="?", const="shipped", metavar="TTL",
+                   help="check Open-FDD extension terms for a standard parent, label and definition "
+                        "(default: the shipped vocabulary) and exit")
     return p
 
 
@@ -52,6 +56,17 @@ def run(args) -> int:
 
     if args.sources:
         print(json.dumps(SOURCES, indent=1))
+        return 0
+    if args.extensions:
+        from open_fdd.ontology_audit.extensions import check_extensions, shipped_vocabulary
+
+        graph = shipped_vocabulary() if args.extensions == "shipped" else _parse_graph(Path(args.extensions))
+        report = check_extensions(graph)
+        if args.out is not None:
+            args.out.mkdir(parents=True, exist_ok=True)
+            (args.out / "extensions.json").write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8")
+        print(json.dumps({"extensions": report["term_counts"], "issues": report["issue_counts"],
+                          "complete": report["complete"]}))
         return 0
     if args.example:
         data = files("open_fdd.ontology_audit").joinpath("data")
