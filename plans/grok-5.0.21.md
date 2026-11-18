@@ -53,16 +53,28 @@ Stacked PRs keep base `release/5.0.21`; review only the top commit named in each
 | #1692 | `grok/1635-client-run-proof` | `970c0679` | Refs #1635 | - | client half: frames carry hook-resolved run proof (needs Claude's hook half) |
 
 | #1693 | `grok/1666-assessed-pca-greybox` | `9ee3f342` | Refs #1666 | - | PCA/gray-box `assessment()`; issue repro now 100 x missing_inputs |
+| #1694 | `grok/1662-detect-help` | `509085ba` | Refs #1662 | on #1687 | detect `--method` summary, `--train-until` zone wording |
 Shared-file note: `tests/test_ml_fdd.py`, `open_fdd/ml/cli.py` and `docs/python-tools.md` are touched by several
 PRs at different anchors; stacks exist to avoid conflicts. Grok will rebase its own branches on request.
 
+## Local stack-tip receipts (2026-11-17, ~6:35-6:42 PM; Windows, Python 3.14; `tests/parity` excluded, CI runs it)
+
+| Tip | Contains | Result |
+|---|---|---|
+| `22974981` (#1689) | #1681 #1684 #1685 #1688 #1689 | 469 passed, 5 skipped |
+| `d4dd7191` (#1686) | #1682 #1686 | 454 passed, 5 skipped |
+| `d7dfd77e` (#1687) | #1678 #1687 | 452 passed, 5 skipped |
+| `ab7daf55` (#1690) | #1690 | 448 passed, 5 skipped |
+| `dd64c89c` (#1691) | #1691 | 454 passed, 5 skipped |
+| `9ee3f342` (#1693) | #1693 | 448 passed, 5 skipped |
+| `970c0679` (#1692) | #1692 | 451 passed, 5 skipped; SPARQL / run-proof parity 24 passed |
 ## Issue states (Grok lane)
 
 | # | State | Notes |
 |---|---|---|
 | 1665 | PR READY (#1678) | acceptance 1-5 mapped to named tests |
 | 1666 | PR READY partial (#1677, #1679, #1693) | still open: detect CLI/JSON exposure (after #1678) |
-| 1652-1662 | PR READY (see table) | #1662 leaves `detect --method`/`--train-until` help for after #1678 |
+| 1652-1662 | PR READY (see table) | #1662 split: #1689 + #1694 |
 | 1667 | PR partial (#1691) | replay, RDF inputs, labeled evaluation not done |
 | 1635 | PR partial (#1692) | hook must emit `run_proof` / `run_proof_series` (Claude) |
 | 1569 | not started (ontology half) | |
