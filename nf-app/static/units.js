@@ -56,7 +56,7 @@
   add(["kBtu"], "energy", "kWh", (x) => x * F.kwh_per_kbtu);
   add(["MMBtu"], "energy", "kWh", (x) => x * F.kwh_per_mmbtu);
   add(["therm", "therms"], "energy", "kWh", (x) => x * F.kwh_per_therm);
-  add(["%", "%RH", "percent", "pct", "percent-relative-humidity"], "percent", "%", id);
+  add(["%", "%RH", "percent", "pct", "percent-relative-humidity", "percent_0_100"], "percent", "%", id);
   add(["ppm"], "concentration", "ppm", id);
 
   /** Value in canonical SI, or null when the unit is unknown/empty (caller keeps it as-is). */
