@@ -156,3 +156,19 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - ~09:15: opened #1711 (#1635 hook half). The SPARQL parity leg now uses the hook's run_proof (no harness stamp).
 - ~11:30: #1702 window as-of (150b5862) after the 365 s Timescale run. Opened #1712 (#1642): ECON-3 / MECH-OAT-1 exact on basic tiers, ECON-7 0.25 h; baselines 52/19 and 49/22.
 - ~15:30: Ben approved both #1631 design calls ("Yes, as proposed"). #1714 fan gate; active_hours built (PR after the full suite). #1710 gained CW-FAN/OPT. #1713-#1718 opened; Grok tasked on #1701 (review, own PR fixes, Linux tests).
+
+### 2026-11-18 resume after the 5-hour reset (Claude)
+
+- Merged (Grok-accepted exact heads, squash patch identical, issues READY FOR RELEASE): #1699 (#1670), #1703 (#1634),
+  #1705 (#1638), #1664, #1706 (#1636), #1711 (#1635 hook half).
+- Grok accepted, waiting on CI: #1704 (re-review after the push-schema fix), #1712, #1713, #1714, #1715, #1716, #1702.
+- Grok's changes requested, addressed and awaiting re-review:
+  - #1710: CW-APR-1 had the same legacy ELSE 0;
+  - #1718: start/stop commands stay usable; the refusal moved inside the resolver loop;
+  - #1719: the fault_pct denominator is reported in the parity verdict and documented; aligning the gates is a follow-up.
+- Claude re-reviewed Grok's release merges into #1687, #1694 and #1698: every reviewed line is unchanged or now in
+  release; accepted at daecdb0c / 8595c6b7 / 07338a4f.
+- #1700 merged release (fdd.js: declaredSweep + #1636 occupancy); #1702, #1708 and #1709 brought up to date. Timescale suite
+  45/45 locally against a disposable container.
+- A recurring session merge sweep runs at :17 and :52.
+
