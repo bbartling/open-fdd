@@ -228,6 +228,11 @@ OUTPUT_COLUMNS = {
     "covered_hours": ("h", "time with data the rule could read (data coverage)"),
     "active_hours": ("h", "covered time while the run proof was on (the fault_pct denominator of gated rules, #1631)"),
     "status": ("-", "assessment status text"),
+    "window_hours": ("h", "observed window: first to last input sample"),
+    "proven_on_hours": ("h", "time with run proof ON"),
+    "proven_off_hours": ("h", "time with run proof OFF"),
+    "unknown_hours": ("h", "window time with no known run proof (missing proof or gaps)"),
+    "assessment": ("-", "assessed, insufficient_proof or no_proof"),
 }
 
 

@@ -1362,6 +1362,11 @@ Flags fans or pumps that stay on for nearly the entire analysis window (24/7 run
 | `fault_hours` | h | confirmed fault time |
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
+| `window_hours` | h | observed window: first to last input sample |
+| `proven_on_hours` | h | time with run proof ON |
+| `proven_off_hours` | h | time with run proof OFF |
+| `unknown_hours` | h | window time with no known run proof (missing proof or gaps) |
+| `assessment` | - | assessed, insufficient_proof or no_proof |
 
 **Parity** [match](parity.html#sched-247)
 

@@ -149,13 +149,13 @@ def client_frames(ds: Dataset, query: str = QUERY, *, source: str = "nf", **fetc
     # The SV sweep population comes from the points' own metadata (the ``sensor`` marker), as on a real site; it is
     # checked against the dataset's registered sensors by ``sweep_mismatches`` instead of being overwritten here.
     fr = sd.frames(answer, weather="separate", window_sec=ds.step_seconds, sweep_marker="sensor")
-    if any(c["name"] == "run_proof" for c in ds.history_columns):
-        # The dataset's run_proof column is the RESOLVED proof (#1608), bound as a point like the hook binds it; a unit
-        # whose proof is unbound (NULL, every fourth unit) has no samples. Stamp the frames resolved, as pandas_ref does
-        # for the oracle, so the client does not fall back to the unit's own fan status and assess what the oracle and
-        # SQL skip. (Only the 4x3+ stress tiers have such a unit; the 2x3 PR tier does not.)
-        for df in fr.values():
-            df.attrs["run_proof_resolved"] = True
+    # #1635: the hook answers the run proof it resolves per equipment, and frames() stamps it (the dataset's resolved
+    # run_proof column is bound as a point pinned ofddRole run_proof; a unit whose proof is unbound has no samples, so
+    # gated rules are SKIPPED there as in the oracle and SQL). The harness no longer stamps the frames itself.
+    if "run_proof" not in answer:
+        raise AssertionError("the sparql-data hook answered no run_proof (#1635)")
+    if any(df.attrs.get("run_proof_resolved") is not True for df in fr.values()):
+        raise AssertionError("frames() did not stamp the hook's run proof (#1635)")
     wx = sd.weather_frame(answer)
     return answer, {k[1]: v for k, v in fr.items()}, (None if wx is None else weather_on_grid(wx, ds.step_seconds)), calls
 
