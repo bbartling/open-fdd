@@ -49,12 +49,19 @@ def build_parser() -> argparse.ArgumentParser:
                          description="Learning methods (pca, grey_box, ocsvm, copod) need exactly one training source: "
                                      "--train, --train-until or --exploratory-self-fit. zscore and mad need none.")
     det.add_argument("folder", type=Path, help="Device folder (history_wide.csv + column_map.json), SI values")
-    det.add_argument("--method", choices=DETECT_METHODS, default="pca")
+    det.add_argument("--method", choices=DETECT_METHODS, default="pca", metavar="METHOD",
+                     help="pca (default): PCA / SPE on the feature roles, with per-role contributions; "
+                          "grey_box: physics residuals (mixed-air balance, coil delta-T, SAT error); "
+                          "ocsvm / copod: one novelty model per operating mode (copod needs pyod); "
+                          "zscore / mad: rolling per-role screens, no training. "
+                          "The first four need a training source")
     source = det.add_mutually_exclusive_group()
     source.add_argument("--train", type=Path, default=None,
                         help="Device folder of history the operator asserts is known-good, to fit on")
     source.add_argument("--train-until", default=None,
-                        help="Fit on rows of FOLDER before this UTC date/time (YYYY-MM-DD); score only the rows after")
+                        help="Fit on rows of FOLDER before this date/time (YYYY-MM-DD[THH:MM]) and score only the rows "
+                             "after. It is compared with timestamp_utc; a value without a zone is read as "
+                             "UTC, the same convention as timestamps written without a zone (e.g. LBNL files)")
     source.add_argument("--exploratory-self-fit", action="store_true",
                         help="Fit on the same rows being scored (exploration only; the output is labeled exploratory "
                              "and a recurring fault can become the baseline)")
