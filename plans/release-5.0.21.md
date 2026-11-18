@@ -94,6 +94,12 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1710 | Claude | #1631 TRIM-3/4 plant proof | ready (base release) | Grok acceptance, CI |
 | #1711 | Claude | #1635 hook half: run_proof in sparql-data | ready (base release) | Grok acceptance, CI |
 | #1712 | Claude | #1642 ECON-3/7, MECH-OAT-1 parity gaps | ready (base release) | Grok acceptance, CI |
+| #1713 | Claude | CI: docs-pages concurrency per PR | ready | Grok acceptance |
+| #1714 | Claude | #1631 gate-off keeps GL36 fan gate (Ben call 2) | ready | Grok acceptance, CI |
+| #1715 | Claude | #1631 timeline empty when no proof | ready | Grok acceptance, CI |
+| #1716 | Claude | #1631 FC4 entries over proven samples | ready | Grok acceptance, CI |
+| #1717 | Claude | #1631 fallback proof startup delay | ready | Grok acceptance, CI |
+| #1718 | Claude | #1631 command proof needs a unit | ready | Grok acceptance, CI |
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
@@ -149,3 +155,4 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 - ~08:00: opened #1710 (#1631 TRIM-3/4). Posted the #1631 triage: the denominator (`active_hours`) and the gate-off fan gate on the FC rules need Ben's call; FC4, CW-FAN/OPT, fallback startup delay, command-unit check and the SQLite timeline remain.
 - ~09:15: opened #1711 (#1635 hook half). The SPARQL parity leg now uses the hook's run_proof (no harness stamp).
 - ~11:30: #1702 window as-of (150b5862) after the 365 s Timescale run. Opened #1712 (#1642): ECON-3 / MECH-OAT-1 exact on basic tiers, ECON-7 0.25 h; baselines 52/19 and 49/22.
+- ~15:30: Ben approved both #1631 design calls ("Yes, as proposed"). #1714 fan gate; active_hours built (PR after the full suite). #1710 gained CW-FAN/OPT. #1713-#1718 opened; Grok tasked on #1701 (review, own PR fixes, Linux tests).
