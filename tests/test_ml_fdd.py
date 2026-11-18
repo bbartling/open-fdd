@@ -106,6 +106,48 @@ def test_window_decisions_persistence_and_activity():
     assert metrics.window_decisions(flags, inactive).size == 1  # the idle hour is not a sample
 
 
+def test_window_decisions_one_sample_does_not_qualify_an_hour():
+    """#1666: one observed 5-minute sample is 1/12 of the hour's elapsed time, below the 50 % eligibility."""
+    idx = pd.DatetimeIndex(["2026-01-05T00:00:00Z"])
+    flags = pd.Series([True], index=idx)
+    active = pd.Series([True], index=idx)
+    assert metrics.window_decisions(flags, active).size == 0
+    cov = metrics.window_coverage(flags, active)
+    assert cov["observed"].tolist() == [1] and cov["expected"].tolist() == [12.0]
+    assert not bool(cov["eligible"].iloc[0]) and pd.isna(cov["decision"].iloc[0])
+    # a declared hourly cadence makes one sample a fully observed hour
+    assert metrics.window_decisions(flags, active, cadence="1h").tolist() == [True]
+
+
+def test_window_coverage_gaps_duplicates_proof_and_boundaries():
+    base = pd.date_range("2026-01-05", periods=48, freq="5min", tz="UTC")  # four hours
+    keep = np.ones(48, dtype=bool)
+    keep[3:9] = False      # hour 0: 6 of 12 present (middle gap) -> exactly 50 %, eligible
+    keep[19:24] = False    # hour 1: 7 of 12 present (end gap) -> eligible
+    keep[24:31] = False    # hour 2: 5 of 12 present (start gap) -> ineligible
+    idx = base[keep]
+    flags = pd.Series(False, index=idx)
+    active = pd.Series(True, index=idx)
+    active[idx >= base[36]] = False
+    active[idx >= base[42]] = True       # hour 3: 6 of 12 active (proof gap) -> eligible
+    flags[idx == base[43]] = True
+    flags[idx == base[44]] = True        # 2 of 6 active flagged = 33 % of active time (10 of 60 minutes)
+    dup = pd.Series([True], index=[base[0]])
+    flags = pd.concat([flags, dup])      # a duplicate timestamp counts once (last value wins)
+    active = pd.concat([active, pd.Series([True], index=[base[0]])])
+    cov = metrics.window_coverage(flags, active, cadence="5min")
+    assert cov["observed"].tolist() == [6, 7, 5, 12]
+    assert cov["active"].tolist() == [6, 7, 5, 6]
+    assert cov["eligible"].tolist() == [True, True, False, True]
+    assert cov["decision"].iloc[0] == False and pd.isna(cov["decision"].iloc[2]) and cov["decision"].iloc[3] == True
+    dec = metrics.window_decisions(flags, active)  # inferred cadence matches the declared one
+    assert dec.tolist() == [False, False, True]  # hour 0: 1 of 6 active flagged (17 %) is below 25 %
+    # boundary: data starting at :40 leaves 4 samples in its first hour -> not an evaluation sample
+    late = pd.date_range("2026-01-05T00:40", periods=16, freq="5min", tz="UTC")
+    cov = metrics.window_coverage(pd.Series(False, index=late), pd.Series(True, index=late))
+    assert cov["observed"].tolist() == [4, 12] and cov["eligible"].tolist() == [False, True]
+
+
 def test_score_file_rate_and_delay():
     idx = pd.date_range("2026-01-05", periods=4, freq="1h", tz="UTC")
     dec = pd.Series([False, False, True, True], index=idx)
@@ -182,6 +224,66 @@ def test_ocsvm_is_mode_gated():
     assert biased > healthy + 0.3
 
 
+def _mode_rows(mode: str, n: int = 60, seed: int = 20) -> "pd.DataFrame":
+    """``n`` synthetic AHU rows that are all in one operating mode (see ``operating_mode``)."""
+    frame = _synthetic_ahu(n=4000, seed=seed)
+    rows = frame[operating_mode(frame) == mode]
+    assert len(rows) >= n, f"synthetic AHU has only {len(rows)} {mode} rows"
+    return rows.iloc[:n]
+
+
+def test_mode_gated_refit_replaces_every_mode_model():
+    """#1666: old-mode fit -> new-mode refit -> old-mode scoring is unassessed, never served by the old model."""
+    pytest.importorskip("sklearn")
+    det = make_detector("ocsvm")
+    det.fit(_mode_rows("econ_only"))
+    assert set(det.models_) == {"econ_only"} and det.fit_revision_ == 1
+    det.fit(_mode_rows("mech_min_oa"))
+    assert set(det.models_) == {"mech_min_oa"}, "a refit kept a model from the earlier fit"
+    assert set(det.mode_columns_) == {"mech_min_oa"}
+    assert det.fit_revision_ == 2
+    assert det.fit_receipt_["status"] == "fitted"
+    assert {m: v["revision"] for m, v in det.fit_receipt_["modes"].items()} == {"mech_min_oa": 2}
+    old_mode = _mode_rows("econ_only", seed=21)
+    assessment = det.assessment(old_mode)
+    assert (assessment == "unsupported_mode").all()
+    assert not det.assessed_mask(old_mode).any()
+    assert not det.flags(old_mode).any()  # unassessed rows carry no flag; the assessment says why
+
+
+def test_mode_gated_failed_refit_leaves_no_usable_model():
+    pytest.importorskip("sklearn")
+    det = make_detector("ocsvm").fit(_mode_rows("econ_only"))
+    with pytest.raises(ValueError, match="no operating mode had 50"):
+        det.fit(_mode_rows("econ_only", n=20, seed=22))
+    assert not det.is_fitted and det.models_ == {} and det.roles == []
+    assert det.fit_receipt_["status"] == "failed" and det.fit_revision_ == 1
+    assert "econ_only" in det.fit_receipt_["skipped_modes"]
+    for call in (det.flags, det.scores, det.assessment):
+        with pytest.raises(RuntimeError, match="not fitted"):
+            call(_mode_rows("econ_only", seed=23))
+    with pytest.raises(RuntimeError, match="not fitted"):
+        make_detector("ocsvm").flags(_mode_rows("econ_only", seed=23))
+
+
+def test_mode_gated_assessment_reasons():
+    pytest.importorskip("sklearn")
+    det = make_detector("ocsvm").fit(_synthetic_ahu(seed=24))
+    frame = _synthetic_ahu(n=300, seed=25)
+    frame.iloc[:10, frame.columns.get_loc("fan-status")] = 0.0
+    frame.iloc[10:20, frame.columns.get_loc(det.roles[0])] = np.nan
+    assessment = det.assessment(frame)
+    assert (assessment.iloc[:10] == "inactive").all()
+    assert (assessment.iloc[10:20] == "missing_inputs").all()
+    supported = operating_mode(frame).isin(list(det.models_))
+    rest = assessment.iloc[20:]
+    assert (rest[supported.iloc[20:]] == "assessed").all()
+    assert (rest[~supported.iloc[20:]] == "unsupported_mode").all()
+    flags = det.flags(frame)
+    assert not flags[assessment != "assessed"].any()
+    assert det.fit_receipt_["roles"] == det.roles and det.fit_receipt_["seed"] == 0
+
+
 def test_copod_optional():
     if not copod_available():
         with pytest.raises(ImportError):
@@ -231,6 +333,11 @@ def test_benchmark_on_fixture_is_deterministic():
     text = to_markdown(first)
     assert "| `rules (tuned)` |" in text and "FPR % (fault-free)" in text
     json.dumps(first.to_json(), default=str)
+    # #1666: excluded coverage is published next to the rates; samples never exceed eligible test windows
+    assert set(first.coverage) == {f.name for f in FIXTURE_FILES}
+    for name, cov in first.coverage.items():
+        assert cov["eligible"] + cov["excluded_not_active_enough"] == cov["test_windows_observed"]
+        assert all(s["samples"] == cov["eligible"] for s in first.scores if s["fault_file"] == name)
 
 
 def test_benchmark_requires_fault_free_first():

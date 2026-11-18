@@ -208,7 +208,7 @@ def unit_declares_quantity(unit: str | None, quantity: str) -> bool:
     if quantity == "absolute_temperature":
         return t in {"c", "degc", "celsius"}
     if quantity == "relative_humidity":
-        return t in {"pct", "percent", "rh", "percentrelativehumidity"} or "%" in raw
+        return t in {"pct", "percent", "percent0100", "rh", "percentrelativehumidity"} or "%" in raw
     if quantity == "air_pressure":
         return t in {"pa", "pascal"}
     if quantity == "volume_flow":
