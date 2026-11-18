@@ -220,6 +220,8 @@ def score(results: Iterable[dict], labels: Iterable[dict], cfg: Config | None = 
         posterior = None
         if p0 is not None and prior_weight > 0:
             posterior = (tp + prior_weight * p0) / (tp + fp + prior_weight)
+        elif at_prev is not None:  # no prior: the prevalence-adjusted estimate is the best single number
+            posterior = at_prev
         elif tp + fp:
             posterior = tp / (tp + fp)
         row.update({

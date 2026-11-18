@@ -268,6 +268,7 @@ def test_prevalence_reweights_precision_and_feeds_prior():
     fc1 = _by_rule(card)["FC1"]
     r, f = 2.5 / 4, 1.5 / 3  # Jeffreys-smoothed recall (2 of 3) and FPR (1 of 2)
     assert fc1["precision_at_prevalence"] == pytest.approx((r * 0.1) / (r * 0.1 + f * 0.9))
+    assert fc1["p_true_fault"] == pytest.approx(fc1["precision_at_prevalence"])
     site = _by_rule(score(RESULTS, LABELS, prior=card, prior_weight=10))["FC1"]
     assert site["prior_precision"] == pytest.approx(fc1["precision_at_prevalence"])
     with pytest.raises(ValueError):
