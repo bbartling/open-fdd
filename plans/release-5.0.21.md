@@ -52,7 +52,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | 1670 | C | SCHED-247 OFF/unknown/completeness, honest observed duration | PR READY | #1699 (`fix/1670-sched247-proof`) | Grok acceptance; completeness policy 0.9 x max(window, 24 h) is an owner-visible semantic |
 | 1673 | C | SV-STALE = gap/missing; SV-FLATLINE = stuck values; dedupe silence; expected series; stale tuner migration | PR READY | #1700 (`fix/1673-stale-vs-flatline`) | Grok acceptance; then #1671 one-timer cleanup for FLATLINE/RANGE/SPIKE |
 | 1631 | C | Run-proof coverage/denominator follow-ups | PR READY (item 1) | #1702 (`fix/1631-sweep-proof-asof`, stacked on #1700) | sweep as-of proof join done (23.9 h repro -> 0); remaining items: ECON-7/DMP-1/VLV-1 coverage, FC4 order, TRIM-3/4, CW-FAN/OPT, FC13 placeholder, runner denominator + startup delay, command-unit check, AHU/pump proof fixtures, IRI identity |
-| 1635 | C (+G client) | Resolved proof into SPARQL client frames | OPEN | | |
+| 1635 | C (+G client) | Resolved proof into SPARQL client frames | PR READY | client #1692 merged; hook #1711 | alignment (exact vs as-of) after #1702 |
 | 1636 | C | Occupancy calendar synthesis | PR READY | #1706 (`fix/1636-occupancy-calendar`) | Grok acceptance; Timescale UPDATE verified only by the CI Timescale job / disposable instance |
 | 1639 | C | Expanded SI stress, seeds, replay | OPEN | | |
 | 1640 | C | DataFusion parity adapter | OPEN | | |
@@ -92,6 +92,7 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
 | #1708 | Claude | #1671 one timer per rule | draft, stacked on #1700 | merge after #1700 |
 | #1709 | Claude | #1672 tuner sliders | draft, stacked on #1708 | merge after #1708 |
 | #1710 | Claude | #1631 TRIM-3/4 plant proof | ready (base release) | Grok acceptance, CI |
+| #1711 | Claude | #1635 hook half: run_proof in sparql-data | ready (base release) | Grok acceptance, CI |
 | #1703 | Claude | #1634 dry-run guard | ready | Grok acceptance, CI |
 | #1704 | Claude | #1633 push schema gate | ready | Grok acceptance, CI |
 | #1705 | Claude | #1638 doctor run health | ready | Grok acceptance, CI |
@@ -145,3 +146,4 @@ Owner C = Claude, G = Grok. "Next" is the next concrete action.
   Opened #1708 (#1671) as a draft stacked on #1700. Next: #1672 sliders.
 - ~07:20: opened #1709 (#1672) as a draft on #1708. Next: #1631 remaining items, #1641, #1642, #1639.
 - ~08:00: opened #1710 (#1631 TRIM-3/4). Posted the #1631 triage: the denominator (`active_hours`) and the gate-off fan gate on the FC rules need Ben's call; FC4, CW-FAN/OPT, fallback startup delay, command-unit check and the SQLite timeline remain.
+- ~09:15: opened #1711 (#1635 hook half). The SPARQL parity leg now uses the hook's run_proof (no harness stamp).
