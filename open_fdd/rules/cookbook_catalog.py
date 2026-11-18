@@ -1489,6 +1489,57 @@ def fcu_htg_coil(d, p, poll):
     return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < coil_delta)
 
 
+def coil_perf(d, p, poll):
+    """Generic coil performance (#1641), twin of sql/fdd/postgres/rules/coil_perf.sql.
+
+    Per sample: heating mode when the heating valve (heating-valve, else reheat-valve) >= valve_open and the cooling
+    valve, if bound, <= valve_shut; cooling mode when the cooling valve >= valve_open and the heating / reheat valves, if
+    bound, <= valve_shut. The temperature pair is the first complete one of: coil entering/leaving sensors, mixed ->
+    discharge air, VAV inlet -> discharge, zone -> discharge. Fault: heating with (leave - enter) < min_dt, or cooling
+    with (enter - leave) < min_dt, fan on (status, else command), and airflow above flow_on_min where it is bound.
+    No coil valve or no temperature pair with data -> ``d.attrs["coil_perf_assessment"]`` says why (the runner reports
+    NOT_ASSESSED, never a silent pass)."""
+    def col(name):
+        return pd.to_numeric(d[name], errors="coerce") if name in d.columns else pd.Series(np.nan, index=d.index)
+
+    def cmd(name):
+        return norm_cmd(d[name]) if name in d.columns else pd.Series(np.nan, index=d.index)
+
+    valve_open, valve_shut = _f(p, "valve_open", 0.8), _f(p, "valve_shut", 0.05)
+    min_dt = _f(p, "min_dt", 3.0)
+    htg_v, rh_v, clg = cmd("heating-valve"), cmd("reheat-valve"), cmd("cooling-valve")
+    htg = htg_v.where(htg_v.notna(), rh_v)
+
+    def ladder(pairs):
+        out = pd.Series(np.nan, index=d.index)
+        for leave, enter, sign in pairs:
+            diff = sign * (col(leave) - col(enter))
+            out = out.where(out.notna(), diff)
+        return out
+
+    rise = ladder([("heating-coil-leaving-temp", "heating-coil-entering-temp", 1), ("discharge-air-temp", "mixed-air-temp", 1),
+                   ("vav-discharge-air-temp", "vav-inlet-air-temp", 1), ("discharge-air-temp", "zone-air-temp", 1)])
+    drop = ladder([("cooling-coil-leaving-temp", "cooling-coil-entering-temp", -1), ("discharge-air-temp", "mixed-air-temp", -1),
+                   ("vav-discharge-air-temp", "vav-inlet-air-temp", -1), ("discharge-air-temp", "zone-air-temp", -1)])
+    if not (htg.notna().any() or clg.notna().any()):
+        d.attrs["coil_perf_assessment"] = "no_coil_valve"
+    elif not (rise.notna().any() or drop.notna().any()):
+        d.attrs["coil_perf_assessment"] = "no_temperature_pair"
+    else:
+        d.attrs["coil_perf_assessment"] = "assessed"
+
+    status, fan_cmd = col("fan-status"), cmd("fan-cmd")
+    fan_on = pd.Series(True, index=d.index)
+    fan_on = fan_on.where(fan_cmd.isna(), fan_cmd > _gl36_value(p, "fan_on_min", None, FAN_ON_MIN))
+    fan_on = fan_on.where(status.isna(), status > 0.05)
+    flow = col("zone-airflow")
+    flow_ok = flow.isna() | (flow > _f(p, "flow_on_min", 11.798675))
+
+    heat = htg.notna() & (htg >= valve_open) & (clg.isna() | (clg <= valve_shut)) & rise.notna() & (rise < min_dt)
+    cool = (clg.notna() & (clg >= valve_open) & (htg_v.isna() | (htg_v <= valve_shut)) & (rh_v.isna() | (rh_v <= valve_shut))
+            & drop.notna() & (drop < min_dt))
+    return (fan_on & flow_ok & (heat | cool)).fillna(False)
+
 def fcu_clg_coil(d, p, poll):
     cool = norm_cmd(d["cooling-valve"])
     heat = norm_cmd(d["heating-valve"])
@@ -2257,6 +2308,17 @@ RULES: list[CookbookRule] = [
             CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
             CookbookParam("coil_delta", "Minimum heating rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("COIL-PERF", "Coil performance (heating and cooling)", "ahu", ["ahu"], [],
+        "Coil valve commanded open (opposite valve shut) but the air temperature change across the coil is below min_dt.",
+        coil_perf, params=[
+            CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
+            CookbookParam("valve_shut", "Opposite valve shut", "frac", 0.0, 0.2, 0.01, 0.05),
+            CookbookParam("min_dt", "Minimum coil temperature change", "°C", 0.555556, 11.111111, 0.277778, 3.0),
+            CONFIRM_PARAM()],
+        optional_roles=["heating-valve", "reheat-valve", "cooling-valve", "heating-coil-entering-temp",
+                        "heating-coil-leaving-temp", "cooling-coil-entering-temp", "cooling-coil-leaving-temp",
+                        "mixed-air-temp", "discharge-air-temp", "vav-inlet-air-temp", "vav-discharge-air-temp",
+                        "zone-air-temp", "zone-airflow", "fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
         "Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.",

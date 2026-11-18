@@ -14,9 +14,9 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 
 | | Rules |
 |---|---:|
-| SQL rules | **77** |
-| With a pandas twin | **71** |
-| Match on the synthetic suite | **50** |
+| SQL rules | **78** |
+| With a pandas twin | **72** |
+| Match on the synthetic suite | **51** |
 | Known divergence | **21** |
 | SQL only (no twin) | **6** |
 
@@ -46,6 +46,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="chw-4"></a>[CHW-4](sql-cookbook.html#chw-4) | match |  |
 | <a id="chw-noload-1"></a>[CHW-NOLOAD-1](sql-cookbook.html#chw-noload-1) | known divergence | pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve |
 | <a id="cmd-1"></a>[CMD-1](sql-cookbook.html#cmd-1) | match |  |
+| <a id="coil-perf"></a>[COIL-PERF](sql-cookbook.html#coil-perf) | match |  |
 | <a id="cw-apr-1"></a>[CW-APR-1](sql-cookbook.html#cw-apr-1) | match |  |
 | <a id="cw-fan-1"></a>[CW-FAN-1](sql-cookbook.html#cw-fan-1) | match |  |
 | <a id="cw-opt-1"></a>[CW-OPT-1](sql-cookbook.html#cw-opt-1) | match |  |
