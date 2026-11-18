@@ -312,6 +312,7 @@ def test_python_sqlite3_udf_registration_smoke(pglite_basic_4x3):
             "sensor_history": (pack["contract"]["sensor_history"], ds.sensor_history),
             "utility_interval": (pack["contract"]["utility_interval"], ds.utility_interval),
             "utility_monthly": (pack["contract"]["utility_monthly"], ds.utility_monthly),
+            "sweep_series": (pack["contract"]["sweep_series"], []),   # optional (#1673): empty = observed series
         }
         for table, (spec, rows) in input_map.items():
             ddl = ", ".join(f'"{c["name"]}" {sq_type[c["type"]]}' for c in spec)
