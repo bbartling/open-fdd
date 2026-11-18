@@ -1,4 +1,4 @@
-// #1631: CW-FAN-1 / CW-OPT-1 kept a legacy plant-proof CASE (pump / chiller status, CHW flow, CHW pump command) whose
+// #1631: CW-FAN-1 / CW-OPT-1 / CW-APR-1 kept a legacy plant-proof CASE (pump / chiller status, CHW flow, CHW pump command) whose
 // ELSE branch was 0, so a resolved run_proof that was ON could never unlock them when none of those points is bound.
 // Same contract as TRIM-3 / TRIM-4 (#1710): an unbound legacy point is unknown and the run_proof gate decides; a bound
 // legacy point that reads OFF still blocks the fault.
@@ -17,7 +17,8 @@ const START = Date.UTC(2026, 0, 1);
 
 // Six hours at five minutes. Wet bulb 20 C. CW-OPT-1 faults when the condenser supply is below wb + approach - slack
 // (cw 21 C); CW-FAN-1 when the tower fan is at least 95 % and the supply is above wb + approach + excess (cw 30 C).
-const CASES = { "CW-OPT-1": { cw_supply_t: 21 }, "CW-FAN-1": { cw_supply_t: 30, tower_fan_cmd: 1 } };
+const CASES = { "CW-OPT-1": { cw_supply_t: 21 }, "CW-FAN-1": { cw_supply_t: 30, tower_fan_cmd: 1 },
+  "CW-APR-1": { cw_supply_t: 30, tower_fan_cmd: 1 } };   // CW-APR-1 (Grok, #1710): approach 10 K at full fan
 
 function input(ruleId, { runProof, pumpStatus }) {
   const extra = CASES[ruleId];
