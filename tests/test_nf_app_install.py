@@ -6,6 +6,7 @@ A fake NF (in-memory console) stands in for the box; a tiny local HTTP server an
 from __future__ import annotations
 
 import base64
+import datetime
 import importlib.util
 import json
 import ssl
@@ -1091,3 +1092,47 @@ def test_cli_push_runs_the_gate_first(monkeypatch, tmp_path):
     monkeypatch.setattr(sync, "push_schema_gate", lambda c, m, env, allow: calls.append(("gate", allow)) or 0)
     assert sync.main(["--env", str(env), "push", "app.json", "--allow-schema-upgrade-pending"]) == 0
     assert calls == [("gate", True), "push"]
+
+
+# ---------------------------------------------------------------- #1638: errored and stale scheduled hook runs
+
+HOURLY = {"id": "fdd", "schedule": {"rrule": "FREQ=HOURLY;INTERVAL=1"}}
+T0 = datetime.datetime(2026, 11, 9, 15, 0, tzinfo=datetime.timezone.utc)
+err = {"state": "STATE_FAILED", "startTime": "2026-11-09T14:00:00Z",
+       "results": {"g": {"state": 4, "error": {"message": "openfdd schema upgrade not applied (must be owner of table point)"}}}}
+
+
+def ok_run(ts):
+    return {"state": "STATE_SUCCESS", "startTime": ts, "endTime": ts, "results": {"g": {"events": []}}}
+
+
+def test_scheduled_hook_without_a_success_in_two_intervals_fails():
+    runs = [dict(err, startTime=f"2026-11-09T{h:02d}:00:00Z") for h in (14, 13, 12)] + [ok_run("2026-11-09T11:00:00Z")]
+    text = sync.scheduled_success_gap(HOURLY, runs, T0)
+    assert text and "two intervals (120 min)" in text and "2026-11-09T11:00:00Z" in text
+    assert sync.scheduled_success_gap(HOURLY, [err] * 3, T0).endswith("none in the last 3 runs")
+    # a recent success clears it; on-request and unscheduled hooks are not judged
+    assert sync.scheduled_success_gap(HOURLY, [err, ok_run("2026-11-09T13:30:00Z")], T0) is None
+    assert sync.scheduled_success_gap({"id": "x", "mode": sync.ON_REQUEST}, [err] * 3, T0) is None
+    assert sync.scheduled_success_gap({"id": "x"}, [err] * 3, T0) is None
+    # ok:false in a STATE_SUCCESS run is not a success
+    bad = ok_run("2026-11-09T14:30:00Z")
+    bad["results"]["g"]["result"] = {"ok": False, "error": "no fresh results"}
+    assert sync.scheduled_success_gap(HOURLY, [bad], T0)
+
+
+def test_doctor_reports_an_errored_run_without_end_time_as_failed_and_a_success_clears_it(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(sync, "timescale_schema_check", lambda *_args, **_kwargs: ("PASS", "Timescale schema version 3"))
+    m, nf = doctor_nf(tmp_path, sites=[{"id": "s", "latitude": 43.0, "longitude": -89.0}],
+                      redirect=(302, {"Location": "https://h/api/v1/apps/static/new-app/"}), timescale=True)
+    fdd = next(h for h in nf.store["new-app"]["hooks"] if h["id"] == "fdd")
+    fdd["schedule"] = {"rrule": "FREQ=HOURLY;INTERVAL=1"}
+    nf.runs[("new-app", "fdd")] = [dict(err, pid=3), dict(err, pid=2, startTime="2026-11-09T13:00:00Z"),
+                                   dict(ok_run("2026-11-09T10:00:00Z"), pid=1)]
+    assert sync.cmd_doctor(nf, m, now=T0) == 1
+    out = capsys.readouterr().out
+    assert "[FAIL] hook fdd: last run STATE_FAILED (started 2026-11-09T14:00:00Z)" in out, out
+    assert "schema upgrade not applied" in out and "no successful run within two intervals" in out
+    nf.runs[("new-app", "fdd")].insert(0, dict(ok_run("2026-11-09T14:55:00Z"), pid=4))
+    sync.cmd_doctor(nf, m, now=T0)
+    assert "[PASS] hook fdd: last run STATE_SUCCESS" in capsys.readouterr().out
