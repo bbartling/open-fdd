@@ -18,12 +18,19 @@
 // Answer: {ok, kind, vars, rows: [{var: text}], rows_total, rows_truncated, uuid_var, points_total, point_offset,
 //   next_point_offset | null, points: {uuid: {dis, unit, kind, cls, tags, equip, site, weather, role}},
 //   equips: [{site, id, dis, tags}], source, bucket,
-//   window_sec, from, to, complete, next_from | null, series: {uuid: [[epoch_ms, value], ...]}, samples}.
+//   window_sec, from, to, complete, next_from | null, series: {uuid: [[epoch_ms, value], ...]}, samples,
+//   run_proof: [{site, equip, uuid | null, source, tier, via, unit}], run_proof_series: {uuid: [[epoch_ms, value], ...]}}.
+// run_proof (#1635) is the run proof the FDD hook resolves for each returned equipment (own status, own command, or
+// the feeding equipment's; static/run-proof.js); uuid null = none bound, so client rules gated on it are SKIPPED
+// no_run_proof like the hook and SQL. Proof points that are not on this page come back in run_proof_series, cut on the
+// same timestamp as series.
 // Values are in each point's stored unit (convert to SI on the client: open_fdd.nf.sparql_data). When the answer would
 // pass maxBytes it is cut on a timestamp: every point is complete before next_from, page on from there. More points
 // than pointLimit page with pointOffset; nothing is dropped silently. Errors are {ok: false, error, error_code?}.
 // Nothing site-specific here.
+const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 const rdf = require('./rdf.js');
 const { Worker } = require('worker_threads');
 const crypto = require('crypto');
@@ -246,6 +253,53 @@ const meta = (p) => {
     equip: p.equipRef || '', site: p.siteRef || '', weather: p.weatherStationRef || '', role: a.ofddRole || '' };
 };
 
+/** model.js + fdd.js + run-proof.js in a sandbox (the FDD hook's own resolver, #1635), loaded once. */
+let proofShared = null;
+function runProofShared() {
+  if (proofShared) return proofShared;
+  const STATIC = path.join(__dirname, '..', 'static');
+  const ctx = vm.createContext({ console });
+  for (const f of ['model.js', 'fdd.js', 'run-proof.js']) {
+    vm.runInContext(fs.readFileSync(path.join(STATIC, f), 'utf8'), ctx, { filename: f });
+  }
+  proofShared = {
+    resolveRunProof: vm.runInContext('resolveRunProof', ctx),
+    idOf: vm.runInContext('idOf', ctx),
+    catalog: JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8')),
+  };
+  return proofShared;
+}
+
+/**
+ * The resolved run proof of each returned equipment (#1635): [{site, equip, uuid | null, source, tier, via, unit}].
+ * The same resolution as the FDD hook (own status, own command, then the feeding equipment's).
+ */
+function runProofOf(model, equips) {
+  const { resolveRunProof, idOf, catalog } = runProofShared();
+  const own = catalog.run_proof.own;
+  const pinned = (e, role) => model.points.find((p) => p.uuid && p.equipRef === e.id && (p.siteRef || '') === e.site
+    && (((p.rec || {}).attrs || {}).ofddRole) === role);
+  return equips.map((e) => {
+    // 1. a point the model binds outright as run_proof (NF attr ofddRole, the client's explicit binding) is the proof
+    const explicit = pinned(e, 'run_proof');
+    if (explicit) return { site: e.site, equip: e.id, uuid: explicit.uuid, source: 'run_proof', tier: 'own', via: 'self', unit: explicit.units || '' };
+    // 2. the FDD hook's resolution (own status, own command, then the feeding equipment's), by class / markers
+    const rec = model.equips.find((r) => idOf(r) === e.id && (((r.attrs || {}).siteRef) || '') === e.site);
+    const proof = rec ? resolveRunProof(rec, model, catalog) : { found: false };
+    if (proof.found && proof.point && proof.point.uuid) {
+      return { site: e.site, equip: e.id, uuid: proof.point.uuid, source: proof.source, tier: proof.tier, via: proof.via, unit: proof.point.units || '' };
+    }
+    // 3. an own status / command the model pins by ofddRole (the roles the client binds), in contract order
+    for (const source of ['status', 'command']) {
+      for (const role of own[source]) {
+        const pt = pinned(e, role);
+        if (pt) return { site: e.site, equip: e.id, uuid: pt.uuid, source, tier: 'own', via: 'self', unit: pt.units || '' };
+      }
+    }
+    return { site: e.site, equip: e.id, uuid: null, source: null, tier: null, via: null, unit: null };
+  });
+}
+
 /** The equipment records the page's points belong to: [{site, id, dis, tags}] (for role binding by equipment kind). */
 function equipsOf(model, points, idOf) {
   const want = new Set(points.filter((p) => p.equipRef).map((p) => `${p.siteRef}\u0000${p.equipRef}`));
@@ -300,9 +354,15 @@ async function handle({ sdk, args = {}, config: rawConfig = {}, now = () => Date
       const conn = settings.parseTimescale(settings.normalizeConfig(rawConfig).timescale);
       if (source === 'auto') source = conn && a.windowSec ? 'timescale' : 'nf';
       if (source === 'timescale' && !conn) throw new Error('source timescale: Timescale connection settings not found (full edition only): ' + settings.TIMESCALE_WHERE);
-      const series = !page.length ? {} : source === 'timescale'
-        ? await timescaleSeries(deps.ts || require('./lib/timescale.js'), conn, page, a, settings.normalizeConfig(rawConfig).history)
-        : await nfSeries(sdk.http, page, a);
+      const equips = equipsOf(model, page.map((u) => byUuid.get(u)), shared.idOf);
+      const runProof = runProofOf(model, equips);
+      // proof points that are not on this page are fetched with it and returned in run_proof_series (#1635)
+      const onPage = new Set(page);
+      const proofOnly = [...new Set(runProof.map((r) => r.uuid).filter((u) => u && !onPage.has(u)))].sort();
+      const fetchIds = [...page, ...proofOnly];
+      const fetched = !fetchIds.length ? {} : source === 'timescale'
+        ? await timescaleSeries(deps.ts || require('./lib/timescale.js'), conn, fetchIds, a, settings.normalizeConfig(rawConfig).history)
+        : await nfSeries(sdk.http, fetchIds, a);
       result = {
         ok: true, ms: 0, base, snapshot, kind: 'select', vars: r.vars,
         ...(a.includeRows ? { rows: r.rows.slice(0, a.maxRows).map((row) => Object.fromEntries(r.vars.map((v, i) => [v, row[i]]))) } : {}),
@@ -310,15 +370,17 @@ async function handle({ sdk, args = {}, config: rawConfig = {}, now = () => Date
         uuid_var: uuidVar, points_total: uuids.length, point_offset: a.pointOffset, point_limit: a.pointLimit,
         next_point_offset: a.pointOffset + a.pointLimit < uuids.length ? a.pointOffset + a.pointLimit : null,
         points: Object.fromEntries(page.map((u) => [u, meta(byUuid.get(u))])),
-        equips: equipsOf(model, page.map((u) => byUuid.get(u)), shared.idOf),
+        equips, run_proof: runProof,
         source, bucket: a.bucket, window_sec: a.windowSec, from: a.from, to: a.to,
       };
       const fixed = bytes(result) + 300 + page.reduce((n,u)=>n+bytes(u)+4,0);
       if (fixed >= a.maxBytes) throw Object.assign(new Error('answer without data is already over maxBytes; use fewer points (pointLimit) or includeRows=false'), { code: 'too_large' });
-      const fit = fitSeries(series, a.maxBytes - fixed);
+      const fit = fitSeries(fetched, a.maxBytes - fixed);
       if (!fit.complete && fit.nextFrom <= a.fromMs) throw Object.assign(new Error('one timestamp of data is over maxBytes; use fewer points (pointLimit)'), { code: 'too_large' });
+      const series = {}, runProofSeries = {};
+      for (const [u, s] of Object.entries(fit.series)) (onPage.has(u) ? series : runProofSeries)[u] = s;
       Object.assign(result, { complete: fit.complete, next_from: fit.nextFrom == null ? null : new Date(fit.nextFrom).toISOString(),
-        samples: fit.samples, series: fit.series });
+        samples: fit.samples, series, run_proof_series: runProofSeries });
     }
     result.ms = now() - t0;
     if (bytes(result) > a.maxBytes) throw new Error('answer exceeds UTF-8 byte limit; lower pointLimit or includeRows=false');
@@ -331,5 +393,5 @@ async function handle({ sdk, args = {}, config: rawConfig = {}, now = () => Date
 
 module.exports = Object.assign(
   async (ctx) => handle({ sdk: ctx.sdk, args: argsOf(ctx), config: ctx.config || {} }),
-  { handle, argsOf, validateArgs, withPrefixes, pickPoints, sampleValue, fitSeries, nfSeries, evaluate, LIMITS },
+  { handle, argsOf, validateArgs, withPrefixes, pickPoints, sampleValue, fitSeries, nfSeries, evaluate, runProofOf, LIMITS },
 );
