@@ -1005,6 +1005,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         let proof = { found: false };
         if (runnable.some((r) => r.rule.run_proof === 'gated')) {
           proof = shared.resolveRunProof(equipRec, model, shared.catalog);
+          // #1631: commands with an unknown scale are skipped by the resolver (the next candidate wins); say so
+          for (const r of proof.refused || []) log(`${equipId}: run proof candidate ${r.equip}/${r.point} (${r.role}) not used: ${r.reason}`);
+          if (!proof.found && (proof.refused || []).length) proof = { ...proof, reason: proof.refused.map((r) => r.reason).join('; ') };
           if (proof.found && proof.point) roles.run_proof = proof.point;
         }
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
@@ -1131,7 +1134,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             && pack.rule_tuning_templates.rules[r.rule.id], tunedHere);
           const noProof = gateOn && !roles.run_proof;
           if (noProof && out.status === 'not-assessed') {
-            out.reason = `${shared.catalog.run_proof.skip_reason}: no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound`;
+            out.reason = `${shared.catalog.run_proof.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.run_proof.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`;
             summary.no_run_proof++;
           }
           const sensorFaultHours = row && row.sensor_fault_hours;
