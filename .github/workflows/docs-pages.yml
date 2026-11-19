@@ -8,6 +8,14 @@ on:
     branches: [master, main, "release/**"]
     paths:
       - "docs/**"
+      - "README.md"
+      - "openfdd_agent_spec/skills/**"
+      - ".agents/skills/**"
+      - ".claude/skills/**"
+      - "scripts/check_skills_sync.py"
+      - "tests/test_skills_sync.py"
+      - "VERSION"
+      - "nf-app/package.json"
       - "nf-app/static/fdd-catalog.json"
       - "scripts/nf/gen_rule_docs.py"
       - "scripts/nf/gen_cookbook.py"
@@ -23,6 +31,14 @@ on:
     branches: [master, main, "release/**"]
     paths:
       - "docs/**"
+      - "README.md"
+      - "openfdd_agent_spec/skills/**"
+      - ".agents/skills/**"
+      - ".claude/skills/**"
+      - "scripts/check_skills_sync.py"
+      - "tests/test_skills_sync.py"
+      - "VERSION"
+      - "nf-app/package.json"
       - "nf-app/static/fdd-catalog.json"
       - "scripts/nf/gen_rule_docs.py"
       - "scripts/nf/gen_cookbook.py"
@@ -74,8 +90,10 @@ jobs:
 
       - name: Check the generated Rule Cookbook is current (SQL, pandas, parity)
         run: |
-          python3 -m pip install --quiet pandas numpy pyyaml
+          python3 -m pip install --quiet pandas numpy pyyaml pytest
           python3 scripts/nf/gen_cookbook.py --check
+          python3 scripts/check_skills_sync.py
+          python3 -m pytest -q tests/test_skills_sync.py
 
       - name: Jekyll build
         run: bundle exec jekyll build --trace --strict_front_matter

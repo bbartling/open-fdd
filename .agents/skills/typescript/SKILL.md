@@ -1,6 +1,6 @@
 ---
 name: typescript
-description: JSDoc type check (tsc) of the app JS. Pointer to the Open-FDD agent spec.
+description: Type-check the app's plain JavaScript with JSDoc and tsc; where configs live and how to add a file.
 ---
 # typescript
 
