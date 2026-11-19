@@ -1029,7 +1029,17 @@ def fc4(d, p, poll):
         ts = pd.DatetimeIndex(to_utc_datetime(d["timestamp"], errors="coerce"))
     else:
         return _false(d.index)
-    entries = (modes.eq(1) & modes.shift().ne(1))
+    proven = pd.Series(True, index=d.index)
+    if float(p.get("require_run_proof", 1.0)) >= 0.5:
+        # #1631: entries are counted over proven samples only (twin of fc4_os_hunting.sql): the sequence skips unproven
+        # time, so a transition across it is not an entry. No proof bound at all is SKIPPED by the runner before this.
+        from open_fdd.run_proof import derive_run_proof, proof_on
+
+        proof, _src = derive_run_proof(d)
+        if proof is not None:
+            proven = proof_on(proof).reindex(d.index).fillna(False).astype(bool)
+    sub = modes[proven.values]
+    entries = (sub.eq(1) & sub.shift().ne(1)).reindex(modes.index, fill_value=False)
     entries.index = ts
     hourly = entries.resample("1h").sum()
     flagged_hours = hourly[(hourly > delta_os_max).any(axis=1)].index
