@@ -57,8 +57,9 @@ def runs(ds):
 
 
 def _legacy_toggle_in_sql(rule: str) -> bool:
-    """The rule's own pre-#1608 gate also answers to the switch in SQL (19 templates; the other 33 always apply it). In pandas
-    require_run_proof=0 leaves the rule's own gate alone, so only rules WITHOUT the coupling compare exactly when ungated."""
+    """The rule's own gate also answers to the switch in SQL. Since #1631 no GL36 template does (they keep their fan
+    condition, holdoff and coverage floor, as pandas: require_run_proof=0 leaves the rule's own gate alone); only the
+    sensor sweeps, which are not compared here, still use the switch more than twice."""
     sql = (ROOT / "sql/fdd/postgres/rules" / SQL_FILE[rule]).read_text(encoding="utf-8")
     return sql.count("{{REQUIRE_RUN_PROOF}}") > 2
 
@@ -109,8 +110,18 @@ def test_no_proof_is_skipped_on_both_sides_and_only_with_the_gate_on(runs):
                 f"{rule}: SQL must assess the feeder-proven unit too"
 
 
+def test_sv_stale_is_not_gated_in_sql_or_pandas(ds):
+    """#1673: missing-data monitoring does not depend on the motor: AHU-4 (no run proof) is assessed on both sides."""
+    sql = _sql(ds, ["SV-STALE"])
+    ref = reference(ds, rules=["SV-STALE"])
+    assert "SV-STALE" not in run_proof_gated_ids()
+    assert ref["SV-STALE"]["AHU-4"]["status"] in ("PASS", "FAULT")
+    rows = [r for r in sql["SV-STALE"] if r["equipment_id"] == "AHU-4"]
+    assert rows and all(r["fault_hours"] is not None and r["covered_hours"] > 0 for r in rows)
+
+
 def test_sweeps_honour_the_gate_in_sql_and_pandas(ds):
-    sweeps = ["SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE", "SV-RATE"]
+    sweeps = ["SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-RATE"]   # SV-STALE is exempt (#1673)
     on, off = _sql(ds, sweeps), _sql(ds, sweeps, require_run_proof=0)
     ref = reference(ds, rules=sweeps)
     for rule in sweeps:

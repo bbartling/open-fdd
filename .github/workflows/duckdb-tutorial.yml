@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Install tutorial dependencies
         run: python -m pip install -e ".[oracle]" duckdb "rdflib>=7.0" matplotlib
       - name: Verify in-memory DataFrame exploration and plots

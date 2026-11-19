@@ -57,8 +57,11 @@ def test_assessable_sensor_roles_are_shared_by_sql_pandas_and_hook():
     pack = json.loads((root / "nf-app/rules/pack-postgres.json").read_text(encoding="utf-8"))
     for rule in ("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE", "SV-RATE"):
         template = (root / "sql/fdd/postgres/rules" / f"{rule.lower().replace('-', '_')}.sql").read_text(encoding="utf-8")
-        assert template.count("{{ASSESSABLE_ROLES}}") == 2, rule
+        # SV-STALE (#1673) also filters sweep_series and the observed window; the gated sweeps also filter the sample
+        # times of their as-of run proof (#1631 sample_times)
+        uses = 3
+        assert template.count("{{ASSESSABLE_ROLES}}") == uses, rule
         sql = pack["rules"][rule]["sql"]
         assert "{{ASSESSABLE_ROLES}}" not in sql, rule
         allowed = ", ".join(f"'{role}'" for role in expected_sql[rule])
-        assert sql.count(f"sensor_role IN ({allowed})") == 2, rule
+        assert sql.count(f"sensor_role IN ({allowed})") == uses, rule

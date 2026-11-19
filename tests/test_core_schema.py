@@ -70,7 +70,7 @@ def test_catalog_pins_the_keys_downstream_relies_on():
                                           "rule_hash, config_hash)")
     assert primary["fdd.rule_config"] == "PRIMARY KEY (site_id, rule_id, scope_key, revision)"
     status = next(c["definition"] for c in tables["fdd.rule_result"]["constraints"] if "status" in c["definition"])
-    for value in ("PASS", "FAULT", "INCONCLUSIVE", "SKIPPED", "ERROR", "STALE"):
+    for value in ("PASS", "FAULT", "INCONCLUSIVE", "SKIPPED", "ERROR", "STALE", "METRIC"):
         assert f"'{value}'" in status
 
 

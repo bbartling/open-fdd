@@ -14,10 +14,10 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 
 | | Rules |
 |---|---:|
-| SQL rules | **77** |
-| With a pandas twin | **71** |
-| Match on the synthetic suite | **50** |
-| Known divergence | **21** |
+| SQL rules | **78** |
+| With a pandas twin | **72** |
+| Match on the synthetic suite | **53** |
+| Known divergence | **19** |
 | SQL only (no twin) | **6** |
 
 **Units.** Parity is checked in SI. Imperial input is converted to SI at ingest, so SQL on imperial input equals SQL on SI input by
@@ -46,17 +46,18 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="chw-4"></a>[CHW-4](sql-cookbook.html#chw-4) | match |  |
 | <a id="chw-noload-1"></a>[CHW-NOLOAD-1](sql-cookbook.html#chw-noload-1) | known divergence | pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve |
 | <a id="cmd-1"></a>[CMD-1](sql-cookbook.html#cmd-1) | match |  |
+| <a id="coil-perf"></a>[COIL-PERF](sql-cookbook.html#coil-perf) | match |  |
 | <a id="cw-apr-1"></a>[CW-APR-1](sql-cookbook.html#cw-apr-1) | match |  |
 | <a id="cw-fan-1"></a>[CW-FAN-1](sql-cookbook.html#cw-fan-1) | match |  |
 | <a id="cw-opt-1"></a>[CW-OPT-1](sql-cookbook.html#cw-opt-1) | match |  |
 | <a id="dmp-1"></a>[DMP-1](sql-cookbook.html#dmp-1) | match |  |
 | <a id="econ-1"></a>[ECON-1](sql-cookbook.html#econ-1) | match |  |
 | <a id="econ-2"></a>[ECON-2](sql-cookbook.html#econ-2) | match |  |
-| <a id="econ-3"></a>[ECON-3](sql-cookbook.html#econ-3) | known divergence | weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns |
+| <a id="econ-3"></a>[ECON-3](sql-cookbook.html#econ-3) | match | match; differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly. |
 | <a id="econ-4"></a>[ECON-4](sql-cookbook.html#econ-4) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
 | <a id="econ-5"></a>[ECON-5](sql-cookbook.html#econ-5) | match |  |
 | <a id="econ-6"></a>[ECON-6](sql-cookbook.html#econ-6) | match |  |
-| <a id="econ-7"></a>[ECON-7](sql-cookbook.html#econ-7) | known divergence | weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns |
+| <a id="econ-7"></a>[ECON-7](sql-cookbook.html#econ-7) | known divergence | a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642 |
 | <a id="fan-runtime-hours"></a>[FAN-RUNTIME-HOURS](sql-cookbook.html#fan-runtime-hours) | SQL only | aggregate or utility analytic, no pandas function |
 | <a id="fault-elapsed-hours"></a>[FAULT-ELAPSED-HOURS](sql-cookbook.html#fault-elapsed-hours) | SQL only | aggregate or utility analytic, no pandas function |
 | <a id="fc1"></a>[FC1](sql-cookbook.html#fc1) | match |  |
@@ -84,7 +85,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fcu-valve-pass-clg"></a>[FCU-VALVE-PASS-CLG](sql-cookbook.html#fcu-valve-pass-clg) | match | match; differs only on edge data: Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults. |
 | <a id="fcu-valve-pass-htg"></a>[FCU-VALVE-PASS-HTG](sql-cookbook.html#fcu-valve-pass-htg) | match |  |
 | <a id="hp-1"></a>[HP-1](sql-cookbook.html#hp-1) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | known divergence | pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve |
+| <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | match | match; differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly. |
 | <a id="oa-1"></a>[OA-1](sql-cookbook.html#oa-1) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
 | <a id="oat-meteo"></a>[OAT-METEO](sql-cookbook.html#oat-meteo) | known divergence | weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns |
 | <a id="pid-hunt-1"></a>[PID-HUNT-1](sql-cookbook.html#pid-hunt-1) | match |  |
@@ -126,9 +127,9 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [AHU-SATDEV](#ahu-satdev) | all | 4.5 h &plusmn; 0.01 | 5.6667 h &plusmn; 0.01 |
 | [CHW-1](#chw-1) | all | 0.3333 h &plusmn; 0.01 | 0.5 h &plusmn; 0.01 |
 | [CHW-NOLOAD-1](#chw-noload-1) | all | 3.0833 h &plusmn; 0.01 | 5.1667 h &plusmn; 0.01 |
-| [ECON-3](#econ-3) | all | 11.5 h &plusmn; 0.01 | 24.5833 h &plusmn; 0.01 |
+| [ECON-3](#econ-3) | edge | - | - |
 | [ECON-4](#econ-4) | all | 1.0833 h &plusmn; 0.01 | 2.8333 h &plusmn; 0.01 |
-| [ECON-7](#econ-7) | all | 14.8333 h &plusmn; 0.01 | 27.6667 h &plusmn; 0.01 |
+| [ECON-7](#econ-7) | all | 0.25 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
 | [FC13-SAT-HIGH](#fc13-sat-high) | all | 10.0833 h &plusmn; 0.01 | 26.0833 h &plusmn; 0.01 |
 | [FC14](#fc14) | all | 62.5 h &plusmn; 0.01 | 292.917 h &plusmn; 0.01 |
 | [FC3](#fc3) | edge | - | - |
@@ -141,7 +142,7 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [FCU-MODE-CYCLE](#fcu-mode-cycle) | all | 1 h &plusmn; 0.01 | 1.75 h &plusmn; 0.01 |
 | [FCU-VALVE-PASS-CLG](#fcu-valve-pass-clg) | edge | - | - |
 | [HP-1](#hp-1) | all | 2.9167 h &plusmn; 0.01 | 3 h &plusmn; 0.01 |
-| [MECH-OAT-1](#mech-oat-1) | all | 56.1667 h &plusmn; 0.01 | 208.667 h &plusmn; 0.01 |
+| [MECH-OAT-1](#mech-oat-1) | edge | - | - |
 | [OA-1](#oa-1) | all | 0.1667 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
 | [OAT-METEO](#oat-meteo) | all | 77 h &plusmn; 0.01 | 359.333 h &plusmn; 0.01 |
 | [SV-RATE](#sv-rate) | all | 44 h &plusmn; 0.01 | 199.25 h &plusmn; 0.01 |

@@ -314,7 +314,7 @@ def test_timescale_schema_version_matches_runtime_constant():
     match = re.search(r"const SCHEMA_VERSION = (\d+);", source.read_text(encoding="utf-8"))
     install = (source.parents[2] / "timescale" / "install.sql").read_text(encoding="utf-8")
     stamped = re.search(r"VALUES \('schema_version', to_jsonb\((\d+)\)\)", install)
-    assert match and stamped and int(match.group(1)) == int(stamped.group(1)) == 5
+    assert match and stamped and int(match.group(1)) == int(stamped.group(1)) == 6   # v6: METRIC status (#1707)
 
 
 @pytest.mark.parametrize(("verify_rc", "restored"), [(sync.EXIT_FAILED, True), (sync.EXIT_STILL_RUNNING, False)])

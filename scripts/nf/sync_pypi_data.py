@@ -37,8 +37,12 @@ def parity_contract() -> bytes:
     tuning = json.loads((ROOT / "sql/fdd/tuning_catalog.json").read_text(encoding="utf-8"))
     cols = [{"name": c["name"], "type": c["type"]} for c in pack["contract"]["history"]
             if c["name"] not in ("equipment_id", "timestamp_utc")]
-    confirm = {r["rule_id"]: float((r["parameters"].get("confirm_min") or {}).get("default", 0.0))
-               for r in sorted(tuning["rules"], key=lambda r: r["rule_id"])}
+    def default_confirm_min(r):
+        # #1671: a rule whose confirm delay is a fixed internal constant keeps that value
+        if "confirm_min" in r["parameters"]:
+            return float(r["parameters"]["confirm_min"].get("default", 0.0))
+        return float((r.get("internal_constants") or {}).get("CONFIRM_SECONDS", 0.0)) / 60.0
+    confirm = {r["rule_id"]: default_confirm_min(r) for r in sorted(tuning["rules"], key=lambda r: r["rule_id"])}
     doc = {"_doc": "Derived by scripts/nf/sync_pypi_data.py. history_columns = SQL input contract (history table, "
                    "without equipment_id/timestamp_utc); confirm_min = default confirm delay in minutes per rule.",
            "history_columns": cols, "confirm_min": confirm}

@@ -505,7 +505,15 @@ def run_cookbook_rule(
             equipment_type=eq_type,
             params_fingerprint=fp,
         )
+    pre_quality = d
     d = apply_normalized(d, quality, attach_raw_and_flags=False)
+    if rule.sensor_sweep:
+        # #1673: the SQL sweeps judge the stored SI values (masked only by unit). A value quality calls out of range is
+        # exactly what SV-RANGE / SV-SPIKE assess; nulling it first hid it, and turned it into a gap (now SV-STALE's).
+        swept = [c for c in cb.SWEEP_SENSOR_ROLES if c in pre_quality.columns and c in d.columns]
+        if swept:
+            d = d.copy()
+            d[swept] = pre_quality[swept]
 
     try:
         active, gate_meta = resolve_operational_mask(
@@ -521,8 +529,13 @@ def run_cookbook_rule(
 
             rp_series, rp_src = derive_run_proof(d)
             if rp_series is not None:
-                active = proof_on(rp_series)
+                # #1631: the fallback proof gets the rule's startup delay too, like the hydronic proof it replaces
+                from open_fdd.rules.operational_gate import apply_startup_delay
+
+                delay = float(params.get("startup_delay_min", (spec.startup_delay_seconds if spec else 0.0) / 60.0)) * 60.0
+                active = apply_startup_delay(proof_on(rp_series), poll_seconds, delay)
                 gate_meta = {**gate_meta, "missing_proof": False, "gate_applied": True, "gate_source": rp_src,
+                             "startup_delay_seconds": delay,
                              "active_sample_count": int(active.sum()),
                              "active_coverage_pct": round(100.0 * float(active.mean()), 1) if len(active) else 0.0}
         if gate_meta.get("missing_proof"):
@@ -659,7 +672,19 @@ def run_cookbook_rule(
             plot_series=_plot_series_for_rule(rule, d),
             active_mask=active if use_active else None,
             params_fingerprint=fp,
+            # #1723 (#1631 design call 1): the fault_pct denominator of a run-proof gated rule is its proven-on time,
+            # every sample when the gate is off, exactly the SQL active_hours (proof_active).
+            pct_mask=(proof_ok if proof_ok is not None
+                      else pd.Series(True, index=d.index) if rule.id in run_proof_gated_ids() else None),
         )
+        if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
+            # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero
+            why = d.attrs["coil_perf_assessment"]
+            result.status = f"NOT_ASSESSED_{why.upper()}"
+            result.fault_hours = None
+            result.fault_pct = None
+            result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
+            result.metrics["assessment"] = why
         if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
             # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
             result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"

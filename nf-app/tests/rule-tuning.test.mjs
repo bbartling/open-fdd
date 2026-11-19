@@ -43,9 +43,12 @@ test("JS renderRuleSql matches Python sql/fdd/render_rule.py byte-for-byte with 
     { ruleId: "FC1", params: { eps_dsp: 75, confirm_min: 20 } },
     { ruleId: "ECON-4", params: { oa_min_pct: 25, oat_rat_delta_min: 1.5 } },
     { ruleId: "FC2", params: { mix_tol: 1.8, eps_mat: 1.2 } },
-    { ruleId: "OAT-METEO", params: { oat_err: 3.5, web_asof_margin_seconds: 900 } },
+    { ruleId: "OAT-METEO", params: { oat_err: 3.5, confirm_min: 25 } },
     { ruleId: "CHW-4", params: { confirm_min: 10 } },
-    { ruleId: "SV-RANGE", params: { range_scale_humidity: 1.15, max_silence_hours: 12 } },
+    { ruleId: "SV-RANGE", params: { range_scale_humidity: 1.15, confirm_min: 12 } },
+    // #1725: the legacy supply_tol master sets EPS_SAT only when eps_sat is not saved, in JS and Python alike
+    { ruleId: "FC8", params: { eps_sat: 1.666667, supply_tol: 0.277778 } },
+    { ruleId: "FC8", params: { supply_tol: 0.277778 } },
   ];
   const tplRoot = pack.rule_tuning_templates;
   for (const c of cases) {
@@ -54,7 +57,7 @@ test("JS renderRuleSql matches Python sql/fdd/render_rule.py byte-for-byte with 
     pyOut = JSON.parse(execFileSync(pyBin, ["-c", pyScript], { encoding: "utf8" }));
     const ruleTpl = tplRoot.rules[c.ruleId];
     const merged = RT.mergeRuleParams(ruleTpl.controls, { version: 1, params: c.params }, null, c.ruleId);
-    const values = RT.resolvePlaceholders(tplRoot.runtime_defaults, ruleTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
+    const values = RT.resolvePlaceholders(RT.ruleDefaults(tplRoot, ruleTpl), ruleTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
     let roleLimitsOpt = null;
     if (RL.SWEEP_RULES.includes(c.ruleId)) {
       roleLimitsOpt = {
@@ -205,7 +208,7 @@ test("hooks/fdd.js composes per-rule + SV-LIMITS overrides and isolates same rev
     { site_id: "site-a", rule_id: "VAV-1", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, params: { confirm_min: 15 } } },
     { site_id: "site-b", rule_id: "VAV-1", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, params: { confirm_min: 25 } } },
     { site_id: "site-a", rule_id: "SV-LIMITS", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, roles: { "zone-air-temp": { lo: 12, hi: 28 } } } },
-    { site_id: "site-a", rule_id: "SV-RANGE", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, params: { max_silence_hours: 12 } } },
+    { site_id: "site-a", rule_id: "SV-RANGE", scope_key: "equip:VAV-1", revision: 1, parameters: { version: 1, params: { confirm_min: 37 } } },
   ];
   const overrides = await fddHook.loadRoleLimitOverrides({
     engine: { ruleConfigOverrides: async () => rows },
@@ -219,7 +222,7 @@ test("hooks/fdd.js composes per-rule + SV-LIMITS overrides and isolates same rev
   assert.equal(bVav1.parameters.rule_params.effective.confirm_min, 25);
 
   const aSvRange = overrides.forRule("site-a", "VAV-1", "SV-RANGE");
-  assert.ok(aSvRange.sql.includes("43200"));
+  assert.ok(aSvRange.sql.includes(">= 2220"), "the saved 37-minute confirm delay reaches the SQL");
   assert.equal(aSvRange.parameters.role_limits.equipment_revision, 1);
   assert.ok(aSvRange.configRevision >= 1);
   assert.ok(aSvRange.ruleHash && aSvRange.configHash);

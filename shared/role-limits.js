@@ -14,10 +14,11 @@
   const LIMITS_RULE_ID = 'SV-LIMITS';
   const SITE_SCOPE = 'site';
   const EQUIP_SCOPE_PREFIX = 'equip:';
-  const SWEEP_RULES = ['SV-RANGE', 'SV-SPIKE', 'SV-FLATLINE', 'SV-STALE', 'SV-RATE'];
+  // #1673: SV-STALE is a missing-data rule with no per-role value limit; stale_tol is retired (kept readable, used by no rule).
+  const SWEEP_RULES = ['SV-RANGE', 'SV-SPIKE', 'SV-FLATLINE', 'SV-RATE'];
   const FIELD_KIND = { lo: 'absolute', hi: 'absolute', spike_delta: 'difference', flat_tol: 'difference', stale_tol: 'difference', rate_per_h: 'rate' };
-  const FIELD_RULES = { lo: ['SV-RANGE'], hi: ['SV-RANGE'], spike_delta: ['SV-SPIKE'], flat_tol: ['SV-FLATLINE'], stale_tol: ['SV-STALE'], rate_per_h: ['SV-RATE'] };
-  const FRAGMENT_KEYS = { 'SV-RANGE': 'SV_RANGE_BANDS', 'SV-SPIKE': 'SV_SPIKE_BANDS', 'SV-FLATLINE': 'SV_FLATLINE_TOL', 'SV-STALE': 'SV_STALE_TOL', 'SV-RATE': 'SV_RATE_THRESHOLD' };
+  const FIELD_RULES = { lo: ['SV-RANGE'], hi: ['SV-RANGE'], spike_delta: ['SV-SPIKE'], flat_tol: ['SV-FLATLINE'], stale_tol: [], rate_per_h: ['SV-RATE'] };
+  const FRAGMENT_KEYS = { 'SV-RANGE': 'SV_RANGE_BANDS', 'SV-SPIKE': 'SV_SPIKE_BANDS', 'SV-FLATLINE': 'SV_FLATLINE_TOL', 'SV-RATE': 'SV_RATE_THRESHOLD' };
   const QUANTITIES = ['absolute_temperature', 'relative_humidity', 'air_pressure', 'volume_flow', 'power'];
   const DEFAULT_KEYS = ['flat_tol_temperature', 'stale_tol_temperature', 'rate_per_h', 'flat_s', 'stale_s'];
   const ROLE_KEYS = ['role', 'quantity', 'lo', 'hi', 'spike_delta', 'flat_tol', 'stale_tol', 'rate_per_h', 'source'];
@@ -98,9 +99,9 @@
         const e = roles[name];
         if (!e) throw new Error(`${ruleId}: assessed role ${name} has no limits entry`);
         if (ruleId === 'SV-SPIKE' && e.spike_delta === null) throw new Error(`${ruleId}: role ${name} needs spike_delta`);
-        if (ruleId === 'SV-FLATLINE' || ruleId === 'SV-STALE') {
+        if (ruleId === 'SV-FLATLINE') {
           if (!['absolute_temperature', 'relative_humidity'].includes(e.quantity)) throw new Error(`${ruleId}: role ${name} quantity ${e.quantity} has no declared tolerance`);
-          const field = ruleId === 'SV-FLATLINE' ? 'flat_tol' : 'stale_tol';
+          const field = 'flat_tol';
           if (e.quantity === 'relative_humidity' && e[field] === null) throw new Error(`${ruleId}: humidity role ${name} needs ${field}`);
         }
       }
@@ -261,8 +262,8 @@
         return `(sensor_role = '${sqlRoles[e.role]}' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= {{MAX_SILENCE_SECONDS}} AND ABS(value - previous_value) > ${lim})`;
       }).join(' OR ');
     }
-    if (ruleId === 'SV-FLATLINE' || ruleId === 'SV-STALE') {
-      const [field, tuner] = ruleId === 'SV-FLATLINE' ? ['flat_tol', '{{FLATLINE_TOL}}'] : ['stale_tol', '{{STALE_TOL}}'];
+    if (ruleId === 'SV-FLATLINE') {
+      const [field, tuner] = ['flat_tol', '{{FLATLINE_TOL}}'];
       const groups = new Map();
       for (const e of entries) {
         const v = explicitRoleValue(e, field, limits);

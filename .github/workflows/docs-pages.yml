@@ -41,9 +41,11 @@ permissions:
   pages: write
   id-token: write
 
+# Per workflow + event + ref/head_ref, so one PR cannot cancel another. cancel-in-progress is on except for
+# master and tag pushes, which must not drop an in-flight production deploy.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
@@ -55,9 +57,13 @@ jobs:
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.2"
+          ruby-version: "3.4"
           bundler-cache: true
           working-directory: docs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
 
       - name: Lock Ruby dependencies
         run: bundle lock

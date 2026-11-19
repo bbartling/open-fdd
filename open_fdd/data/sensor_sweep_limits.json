@@ -6,7 +6,7 @@
     "stale_tol_temperature": 0.027778,
     "rate_per_h": 3.333333,
     "flat_s": 3600,
-    "stale_s": 7200
+    "stale_s": 1800
   },
   "quantity_fallback": {
     "absolute_temperature": {

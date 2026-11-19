@@ -1,4 +1,4 @@
-# Python version matrix for the PyPI package open-fdd (3.10 - 3.15).
+# Python version matrix for the PyPI package open-fdd (3.11 - 3.15; 3.14 is the default in the other workflows).
 # Separate from publish-open-fdd.yml, which builds and publishes on open-fdd-v* tags.
 
 name: Python matrix
@@ -27,6 +27,10 @@ permissions:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   test:
     name: Python ${{ matrix.python-version }}
@@ -34,7 +38,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,7 +52,6 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-          allow-prereleases: true
           cache: pip
 
       - name: Install package, test deps and nf-app engines

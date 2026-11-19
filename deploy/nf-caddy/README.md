@@ -9,7 +9,7 @@ sit behind a login; plain HTTP for a trusted LAN, self-signed HTTPS for producti
 - NF's Envoy listens on **loopback only**: in NF's compose set `ENVOY_BIND_ADDRESS=127.0.0.1`
   (NF port is `8090` on small installs, `8080` on others; set `NF_UPSTREAM` and `NF_PORT` to match).
   The portal tunnel, app hooks and the NF MCP keep using loopback.
-- Caddy (`caddy:2.11.7-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` only.
+- Caddy (`caddy:2.11.9-alpine`, host network, `mem_limit: 64m`) binds `LAN_IP` only.
 
 | Request | Access |
 |---|---|
@@ -71,7 +71,7 @@ route (for example an overloaded NF): it looks the same as an idle close.
 ```bash
 cp .env.example .env                 # set LAN_IP (this box), NF_UPSTREAM, NF_PORT, APP_ID
 cp auth.caddy.example auth.caddy     # then replace its line with a real hash:
-docker run --rm caddy:2.11.7-alpine caddy hash-password -p 'choose-a-password'
+docker run --rm caddy:2.11.9-alpine caddy hash-password -p 'choose-a-password'
 #   auth.caddy = one line:  admin <hash>      (never commit it; it is gitignored)
 docker compose up -d
 ```
@@ -126,7 +126,7 @@ Never print the password or the hash. Do these on the box that runs NF and Caddy
    `caddy hash-password` exits with `EOF` (verified):
 
    ```bash
-   printf '%s\n' "$NF_PASS" | docker run --rm -i caddy:2.11.7-alpine caddy hash-password
+   printf '%s\n' "$NF_PASS" | docker run --rm -i caddy:2.11.9-alpine caddy hash-password
    ```
 
 3. Put it in `auth.caddy` as one line `<user> <hash>` (the file is not in git).
@@ -166,7 +166,7 @@ files public. Pick one:
 ## Operate
 
 - Restart after edits: `docker compose restart caddy` (admin API is off, no live reload).
-- Validate: `docker run --rm -e LAN_IP=192.0.2.10 -e NF_UPSTREAM=127.0.0.1:8090 -v "$PWD:/etc/caddy:ro" caddy:2.11.7-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile`
+- Validate: `docker run --rm -e LAN_IP=192.0.2.10 -e NF_UPSTREAM=127.0.0.1:8090 -v "$PWD:/etc/caddy:ro" caddy:2.11.9-alpine caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile`
   (needs an `auth.caddy` and, for the TLS file, certs). Check both `Caddyfile` and `Caddyfile.tls`; the scratch
   setup is a dummy `auth.caddy` line and a self-signed cert pair (the HTTPS section's command). In Git Bash on
   Windows prefix `docker run` and `openssl` with `MSYS_NO_PATHCONV=1`.

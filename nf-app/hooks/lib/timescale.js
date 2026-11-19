@@ -67,7 +67,7 @@ async function connect(config = {}) {
 }
 
 /** schema_version of install.sql this release needs (4 = shared core schema: fdd.point / fdd.rule_result / fdd.rule_config). */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;   // 6 (5.0.21): status METRIC for statistic rules (#1707)
 
 /** Installed openfdd schema_version, 0 when the schema / config table / key is absent (pre-scoped release = 0). */
 async function schemaVersion(client) {
@@ -278,6 +278,16 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
     );
     sensorRows = res.rowCount;
   }
+  // #1673: every bound sweep series is expected over the requested window [from, to), so SV-STALE assesses a series
+  // that has no stored sample at all (missing data), not only the series that happen to have rows.
+  if (sensorSeries.length && pack.contract.sweep_series) {
+    await client.query(
+      `INSERT INTO pg_temp.sweep_series (equipment_id, series_id, sensor_role, unit, window_start, window_end)
+       SELECT $1::text, b.uuid, b.role, b.unit, $2::timestamptz, $3::timestamptz
+       FROM jsonb_to_recordset($4::jsonb) AS b(uuid text, role text, unit text)`,
+      [equipId, iso(from), iso(to), JSON.stringify(sensorSeries.map(({ uuid, role, unit }) => ({ uuid, role, unit })))],
+    );
+  }
 
   // weather = the outdoor-air roles of the same grid (same as fdd.js buildInput)
   const wcols = pack.contract.weather.map((c) => c.name).filter((n) => n !== "timestamp_utc" && histCols.has(n));
@@ -287,6 +297,9 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
        SELECT timestamp_utc, ${wcols.map(quoteId).join(", ")} FROM pg_temp.history
        WHERE ${wcols.map((n) => `${quoteId(n)} IS NOT NULL`).join(" OR ")}`);
   }
+  // Autovacuum never analyzes temp tables: without statistics the planner guesses row counts and can pick nested-loop
+  // joins for the rules' window / as-of CTEs (minutes instead of seconds on a week of 5-min data). Analyze what we loaded.
+  for (const t of Object.keys(pack.contract)) await client.query(`ANALYZE pg_temp.${quoteId(t)}`);
   const si = {};
   for (const [role, uuid] of roles) si[role] = roleFactors(role, uuid, { unitsByUuid, fractionRoles, booleanRoles }).unit;
   return { rows, sensorRows, roles: roles.map(([r]) => r), si };
@@ -351,7 +364,7 @@ const RESULT_KEY = ["site_id", "equipment_id", "rule_id", "subject_key", "window
  * are required (window_end > window_start); rule_hash / config_hash '' when the caller has none.
  */
 function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale", windowStart, windowEnd, pollSeconds = 300,
-  ruleHash = "", configHash = "", configRevision = null, parameters = {} }) {
+  ruleHash = "", configHash = "", configRevision = null, parameters = {}, metric = false }) {
   if (windowStart == null || windowEnd == null) throw new Error("toResultRow: windowStart and windowEnd are required");
   const known = new Set(["equipment_id", "series_id", "sensor_role", "fault_pct", "fault_hours", "covered_hours"]);
   const metrics = {};
@@ -369,8 +382,9 @@ function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale
     site_id: site || "", equipment_id: equip, rule_id: ruleId, subject_key: row.series_id || "",
     window_start: iso(windowStart), window_end: iso(windowEnd), rule_hash: ruleHash, config_hash: configHash, config_revision: configRevision,
     effective_parameters: parameters, poll_seconds: pollSeconds,
-    status: faultHours == null ? "INCONCLUSIVE" : faultHours > 0 ? "FAULT" : "PASS",
-    reason: faultHours != null ? null : sensorNotAssessed ? "sensor not assessed (no covered time)" : "rule reports no fault_hours",
+    // #1707: a statistic rule (no fault_hours output) is METRIC, never INCONCLUSIVE; its numbers live in metrics
+    status: metric ? "METRIC" : faultHours == null ? "INCONCLUSIVE" : faultHours > 0 ? "FAULT" : "PASS",
+    reason: metric || faultHours != null ? null : sensorNotAssessed ? "sensor not assessed (no covered time)" : "rule reports no fault_hours",
     fault_hours: faultHours, covered_hours: num(row.covered_hours), fault_pct: num(row.fault_pct), role: row.sensor_role || null,
     engine, metrics, diagnostics: Object.keys(outputs).length ? { outputs } : {}, created_at: iso(runTs),
   };

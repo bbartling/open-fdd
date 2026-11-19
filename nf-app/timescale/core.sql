@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS fdd.rule_result (
   config_revision      bigint,
   effective_parameters jsonb NOT NULL DEFAULT '{}',             -- includes confirm_min
   poll_seconds         double precision NOT NULL DEFAULT 300 CHECK (poll_seconds >= 1 AND poll_seconds < 'Infinity'),
-  status               text NOT NULL CHECK (status IN ('PASS','FAULT','INCONCLUSIVE','SKIPPED','ERROR','STALE')),
+  status               text NOT NULL CHECK (status IN ('PASS','FAULT','INCONCLUSIVE','SKIPPED','ERROR','STALE','METRIC')),   -- METRIC: a statistic rule (no fault_hours), #1707
   reason               text,
   fault_hours          double precision,                        -- NULL = not assessable
   covered_hours        double precision,

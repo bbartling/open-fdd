@@ -156,6 +156,8 @@ def reference_from_frames(frames: Mapping[str, Any], weather, poll_seconds: floa
             item = {"pandas": None if ph is None else float(ph), "status": status}
             if res is not None:  # samples the rule assessed after its operational gate (motor status / command)
                 item["active_samples"] = int(res.sample_count or 0)
+                if (res.metrics or {}).get("active_hours") is not None:
+                    item["active_hours"] = float(res.metrics["active_hours"])   # #1723: the fault_pct denominator
             evidence = (res.metrics.get("sv_sweep_evidence") or []) if res is not None and rule.startswith("SV-") else None
             if evidence is not None:
                 roles = {hs_to_sql.get(r["role"], r["role"]): float(r["fault_hours"])
