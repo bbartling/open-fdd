@@ -386,9 +386,9 @@ function webMaxAgeMs(t, bas, web) {
 /**
  * BAS vs web outdoor air from one aligned grid g = { t, cols: { bas, web } } (degC): the paired samples
  * (bas_vs_web_points.sql) and their statistics (bas_vs_web_oat.sql). Returns { rows: [{t, bas, web, d}], band,
- * stats: { n, bias, mae, maxAbs, withinBand } }.
+ * stats: { n, bias, mae, maxAbs, withinBand } }. maxAgeMs overrides the as-of limit (default webMaxAgeMs).
  */
-async function basFromGrid(engine, g, { bandC = BAS_WEB_BAND_C } = {}) {
+async function basFromGrid(engine, g, { bandC = BAS_WEB_BAND_C, maxAgeMs = null } = {}) {
   const t = g.t, empty = { rows: [], band: bandC, stats: { n: 0, bias: null, mae: null, maxAbs: null, withinBand: null } };
   const bas = g.cols.bas || [], web = g.cols.web || [];
   const samples = [];
@@ -397,7 +397,7 @@ async function basFromGrid(engine, g, { bandC = BAS_WEB_BAND_C } = {}) {
   }
   if (!samples.some((s) => s[0] === "bas") || !samples.some((s) => s[0] === "web")) return empty;
   const eng = engine === "pglite" ? "postgres" : engine;
-  const pairs = [["E", "bas", "web", Math.floor(webMaxAgeMs(t, bas, web))]];
+  const pairs = [["E", "bas", "web", Math.floor(maxAgeMs == null ? webMaxAgeMs(t, bas, web) : maxAgeMs)]];
   const db = await openCore(engine, [{ point_key: "bas", equipment_id: "E", role: "oa_t" },
     { point_key: "web", equipment_id: null, role: "web_oa_t" }], samples);
   try {
