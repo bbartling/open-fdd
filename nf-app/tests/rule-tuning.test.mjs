@@ -46,6 +46,9 @@ test("JS renderRuleSql matches Python sql/fdd/render_rule.py byte-for-byte with 
     { ruleId: "OAT-METEO", params: { oat_err: 3.5, confirm_min: 25 } },
     { ruleId: "CHW-4", params: { confirm_min: 10 } },
     { ruleId: "SV-RANGE", params: { range_scale_humidity: 1.15, confirm_min: 12 } },
+    // #1725: the legacy supply_tol master sets EPS_SAT only when eps_sat is not saved, in JS and Python alike
+    { ruleId: "FC8", params: { eps_sat: 1.666667, supply_tol: 0.277778 } },
+    { ruleId: "FC8", params: { supply_tol: 0.277778 } },
   ];
   const tplRoot = pack.rule_tuning_templates;
   for (const c of cases) {
