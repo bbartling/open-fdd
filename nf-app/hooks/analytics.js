@@ -113,6 +113,7 @@ function loadSandbox(http, nowMs, tzSources) {
       runtime: (g, specs) => require('./lib/sql-analytics.js').runtimeFromGrid('sqlite', g, specs),
       mech: (g, specs) => require('./lib/sql-analytics.js').mechFromGrid('sqlite', g, specs),
       econ: (g) => require('./lib/sql-analytics.js').econFromGrid('sqlite', g),
+      bas: (g) => require('./lib/sql-analytics.js').basFromGrid('sqlite', g),
     },
     api: async (p) => (await http.get(p)).data,
   });

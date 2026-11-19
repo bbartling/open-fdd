@@ -20,7 +20,7 @@ function load() {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa,
     localStorage: { getItem: () => ctx.units },             // ofddUnits.displaySystem()
     // #1649: the views run the SQL analytics; in a page they reach them through the analytics hook, here in-process
-    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs), econ: (g) => SA.econFromGrid("sqlite", g) } });
+    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs), econ: (g) => SA.econFromGrid("sqlite", g), bas: (g) => SA.basFromGrid("sqlite", g) } });
   ctx.units = "imperial";
   ctx.pickWindow = () => 3600;                // one value per hour
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
@@ -177,22 +177,22 @@ test("economizerRows: fan gate, identifiable delta, OA fraction, damper mixing r
   assert.deepEqual([s.n, s.nIdent, s.medianResid, s.maeResid], [4, 4, 5, 5]);
 });
 
-test("basVsWeb: web joined as-of within its cadence, delta, band stats, histogram", () => {
+test("BAS vs web (SQL): web joined as-of within its cadence, delta, band stats; histogram", async () => {
   const { rcxOverviewMath: m } = setup().ctx;
   const t = Array.from({ length: 8 }, (_, i) => T0 + i * HOUR);
   const bas = [50, 51, 52, 53, 54, 55, 56, 57];
   const web = [50, null, null, 50, null, null, 50, null];       // 3 h cadence
-  assert.equal(m.webMaxAgeMs(t, web), 4.5 * HOUR);
-  const r = m.basVsWeb(t, bas, web);
-  assert.deepEqual(arr(r.rows, (x) => x.d), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(SA.webMaxAgeMs(t, bas, web), 4.5 * HOUR);       // max(1.5 x 3 h web, 2 x 1 h BAS), as pandas
+  const r = await SA.basFromGrid("sqlite", { t, cols: { bas, web } });
+  assert.deepEqual(r.rows.map((x) => x.d), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.equal(r.band, 2);                                      // delta degC (= 3.6 delta degF)
   assert.equal(r.stats.n, 8);
   assert.equal(r.stats.bias, 3.5);
   assert.equal(r.stats.maxAbs, 7);
   assert.equal(r.stats.withinBand, 3 / 8);                      // |d| <= 2 degC: 0, 1, 2
-  // stale web (older than the bound) is not joined
-  const stale = m.asOfFill(t, [10, null, null, null, null, null, null, null], 2 * HOUR);
-  assert.deepEqual(arr(stale), [10, 10, 10, null, null, null, null, null]);
+  // stale web (older than the bound) is not joined: one reading, BAS hourly -> limit 2 h, three samples pair
+  const stale = await SA.basFromGrid("sqlite", { t, cols: { bas, web: [10, null, null, null, null, null, null, null] } });
+  assert.deepEqual(stale.rows.map((x) => x.t), t.slice(0, 3));
   // histogram: contiguous bins, ends clamped
   const h = m.deltaHist([0.2, 0.4, 1.6, -0.7, 100], 1);
   assert.deepEqual(arr(h.labels).slice(0, 3), ["-1", "0", "1"]);

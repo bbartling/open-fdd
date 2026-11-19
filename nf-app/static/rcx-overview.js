@@ -736,7 +736,7 @@
     const eq = ctx.equips[0];                      // primary reference: first bound equip's oa_t
     const bas = ctx.first(eq, "oa_t"), web = ctx.first(eq, "web_oa_t");
     const g = await ctx.aligned({ bas, web }, { hours: ctx.hours });
-    return { eq, ...M.basVsWeb(g.t, g.cols.bas, g.cols.web), g, web };
+    return { eq, ...(await ctx.sqlAnalytics.bas(g)), g, web };   // bas_vs_web_points.sql + bas_vs_web_oat.sql
   }
   const BAS_ROLES = { required: ["oa_t", "web_oa_t"], optional: [] };
 

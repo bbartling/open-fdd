@@ -49,7 +49,8 @@ out = {
   "mech_empty": render_mech_bins_sql(eng, Plan([], [], [], {})),
   "econ": render_economizer_sql(eng, ${JSON.stringify(roles)}, start_ms=1, end_ms=2),
   "basweb": render_bas_web_sql(eng, ${JSON.stringify(pairs)}, band_c=1.5, start_ms=1772416800000),
-  "econ_pts": __import__("open_fdd.analytics.sql_economizer", fromlist=["x"]).render_economizer_points_sql(eng, ${JSON.stringify(roles)}, start_ms=1, end_ms=2),
+  "basweb_pts": __import__("open_fdd.analytics.sql_bas_web", fromlist=["x"]).render_bas_web_points_sql(eng, ${JSON.stringify(pairs)}, start_ms=1772416800000, end_ms=1773021600000),
+  "econ_pts":__import__("open_fdd.analytics.sql_economizer", fromlist=["x"]).render_economizer_points_sql(eng, ${JSON.stringify(roles)}, start_ms=1, end_ms=2),
 }
 print(json.dumps(out))
 `);
@@ -61,6 +62,7 @@ print(json.dumps(out))
     assert.equal(SA.renderMechBins(engine, { candidates: [], gates: [], oats: [] }), want.mech_empty);
     assert.equal(SA.renderEconomizer(engine, roles, { startMs: 1, endMs: 2 }), want.econ);
     assert.equal(SA.renderBasWeb(engine, pairs, { bandC: 1.5, startMs: 1772416800000 }), want.basweb);
+    assert.equal(SA.renderBasWebPoints(engine, pairs, { startMs: 1772416800000, endMs: 1773021600000 }), want.basweb_pts);
     assert.equal(SA.renderEconomizerPoints(engine, roles, { startMs: 1, endMs: 2 }), want.econ_pts);
   });
 }

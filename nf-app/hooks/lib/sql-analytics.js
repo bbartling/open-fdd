@@ -162,7 +162,16 @@ function renderEconomizerPoints(engine, roles, { siteId = "local", dtMinC = ECON
 }
 
 /** sql_bas_web.render_bas_web_sql (pairs = [[equipment_id, bas_key, web_key, max_age_ms]]). */
-function renderBasWeb(engine, pairs, { siteId = "local", bandC = BAS_WEB_BAND_C, startMs = null, endMs = null } = {}) {
+function renderBasWeb(engine, pairs, opts = {}) {
+  return renderBasWebTemplate("bas_vs_web_oat", engine, pairs, opts);
+}
+
+/** sql_bas_web.render_bas_web_points_sql: the paired samples bas_vs_web_oat.sql aggregates (same arguments). */
+function renderBasWebPoints(engine, pairs, opts = {}) {
+  return renderBasWebTemplate("bas_vs_web_points", engine, pairs, opts);
+}
+
+function renderBasWebTemplate(name, engine, pairs, { siteId = "local", bandC = BAS_WEB_BAND_C, startMs = null, endMs = null } = {}) {
   checkEngine(engine);
   for (const p of pairs) if (!(Number(p[3]) >= 0)) throw new Error("max_age_ms must be >= 0");
   const band = Number(bandC);
@@ -171,7 +180,7 @@ function renderBasWeb(engine, pairs, { siteId = "local", bandC = BAS_WEB_BAND_C,
   let wf = "", wwf = "";
   if (startMs != null) { wf += ` AND t >= ${intOf(startMs)}`; wwf += ` AND w.t >= ${intOf(startMs)} - w.max_age_ms`; }
   if (endMs != null) { wf += ` AND t < ${intOf(endMs)}`; wwf += ` AND w.t < ${intOf(endMs)}`; }
-  return render("bas_vs_web_oat", {
+  return render(name, {
     pairs: inline([["equipment_id", "TEXT"], ["bas_key", "TEXT"], ["web_key", "TEXT"], ["max_age_ms", "INTEGER"]], pairs),
     ts_ms: TS_MS[engine],
     site_id: quote(siteId),
@@ -371,8 +380,52 @@ async function econFromGrid(engine, g) {
   }
 }
 
+/**
+ * As-of age limit for the web reading, ms: max(1.5 x median web interval, 2 x median BAS interval), each over its
+ * non-null samples (weather_resolver.default_web_max_age_seconds).
+ */
+function webMaxAgeMs(t, bas, web) {
+  const medianStep = (v) => {
+    const ts = t.filter((_, j) => v[j] != null && Number.isFinite(Number(v[j])));
+    if (ts.length < 2) return 0;
+    const d = ts.slice(1).map((x, j) => x - ts[j]).sort((a, b) => a - b), m = d.length >> 1;
+    return d.length % 2 ? d[m] : (d[m - 1] + d[m]) / 2;
+  };
+  return Math.max(1.5 * medianStep(web), 2 * medianStep(bas));
+}
+
+/**
+ * BAS vs web outdoor air from one aligned grid g = { t, cols: { bas, web } } (degC): the paired samples
+ * (bas_vs_web_points.sql) and their statistics (bas_vs_web_oat.sql). Returns { rows: [{t, bas, web, d}], band,
+ * stats: { n, bias, mae, maxAbs, withinBand } }.
+ */
+async function basFromGrid(engine, g, { bandC = BAS_WEB_BAND_C } = {}) {
+  const t = g.t, empty = { rows: [], band: bandC, stats: { n: 0, bias: null, mae: null, maxAbs: null, withinBand: null } };
+  const bas = g.cols.bas || [], web = g.cols.web || [];
+  const samples = [];
+  for (const [key, v] of [["bas", bas], ["web", web]]) {
+    for (let j = 0; j < t.length; j++) if (v[j] != null && Number.isFinite(Number(v[j]))) samples.push([key, t[j], Number(v[j])]);
+  }
+  if (!samples.some((s) => s[0] === "bas") || !samples.some((s) => s[0] === "web")) return empty;
+  const eng = engine === "pglite" ? "postgres" : engine;
+  const pairs = [["E", "bas", "web", Math.floor(webMaxAgeMs(t, bas, web))]];
+  const db = await openCore(engine, [{ point_key: "bas", equipment_id: "E", role: "oa_t" },
+    { point_key: "web", equipment_id: null, role: "web_oa_t" }], samples);
+  try {
+    const rows = (await db.query(renderBasWebPoints(eng, pairs))).map((r) =>
+      ({ t: Number(r.t), bas: Number(r.bas), web: Number(r.web), d: Number(r.d) }));
+    const s = (await db.query(renderBasWeb(eng, pairs, { bandC })))[0];
+    if (!s) return { ...empty, rows };
+    const n = Number(s.n);
+    return { rows, band: bandC, stats: { n, bias: Number(s.bias), mae: Number(s.mae), maxAbs: Number(s.max_abs),
+      withinBand: Number(s.n_within) / n } };
+  } finally {
+    await db.close();
+  }
+}
+
 module.exports = {
-  runtimeFromGrid, mechFromGrid, econFromGrid,
+  runtimeFromGrid, mechFromGrid, econFromGrid, basFromGrid, webMaxAgeMs, renderBasWebPoints,
   TS_MS, MECH_OAT_BIN_EDGES_C, MECH_OAT_BIN_LABELS, ELAPSED_MAX_GAP_SECONDS, ECON_DIAG_DT_MIN_C, BAS_WEB_BAND_C,
   pyRepr, inline, render, renderRuntime, renderMechBins, renderEconomizer, renderEconomizerPoints, renderBasWeb, openCore,
 };
