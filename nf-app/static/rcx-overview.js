@@ -1,38 +1,24 @@
 // Overview RCx views for the Open-FDD NF app (port of archive central-v4 overview-rcx-charts.js).
 //
-// Central computed these server side (runtime, mechanical-cooling, economizer, bas-vs-web-oat).
-// Here the same math runs in the browser on NF history: ctx.aligned() gives one time grid for
-// several roles, resampled by NF. Pure math lives on globalThis.rcxOverviewMath (tests use it);
-// only rcxView() registrations leave this file. Nothing site-specific: equips, roles and
-// units all come from NF + fdd-catalog.json.
-//
-// Thresholds kept from the SQL pack (sql/analytics/postgres/queries):
-//   * ON threshold: command/status fraction > 0.05 (rcxStats.frac normalizes percent to 0-1),
-//     as in motor_weekly_runtime.sql / mechanical_cooling_oat_bins.sql / economizer_deltas.sql.
-//   * Gap cap: a sample interval only counts when it is <= 3600 s. Hours (weekly runtime, after-hours
-//     split, cooling bins) integrate on the FINE grid (ctx.alignedFine, 300 s window), never on the
-//     ~360-point display grid (ctx.aligned): a coarse AVERAGE bucket smears a short pulse or hides a
-//     short cooling event. Intervals run to the signal's own next non-null sample (4.x LEAD()), so a
-//     null stretch is uncovered, not "off".
-//   * Economizer: fan_status > 0.05 gate, |OAT-RAT| >= 50/9 delta degC (= 10 delta degF) to be identifiable.
-//   * BAS vs web OAT: band +-2 delta degC (= 3.6 delta degF); web value is carried as-of (last value)
-//     for at most ~1.5 x its own cadence.
-// Units: ctx.series/aligned hand over canonical SI (degC, Pa, L/s, ...), so all the math and every
-// threshold here is SI. Values are mapped to the user's display system (ctx.disp / ctx.dispDelta)
-// only when a chart or note is built.
+// #1649: the analytics are SQL, never JS math. Weekly / daily run hours, mechanical-cooling OAT bins, the economizer
+// points and metrics and BAS vs web outdoor air are sql/analytics/*.sql (parity-tested against pandas on SQLite,
+// DuckDB and PostgreSQL), reached through ctx.sqlAnalytics: in the analytics hook it runs in-process (sql.js), in the
+// browser static/sql-analytics-client.js sends the aligned grid to that hook. This file builds the grids, draws the
+// charts and maps SI to the display system (ctx.disp / ctx.dispDelta) only for charts and notes.
+// Hours integrate on the FINE grid (ctx.alignedFine, 300 s window), never on the ~360-point display grid: a coarse
+// AVERAGE bucket smears a short pulse or hides a short cooling event. Nothing site-specific: equips, roles and units
+// all come from NF + fdd-catalog.json. Display constants kept for captions: ON (0.05) and ECON_DT_MIN_C (50/9 delta
+// degC), the same values the SQL uses.
 // Needs rcx.js (rcxView, rcxStats, rcxFaultData, rcxWithFaultLane), model.js (has),
 // charts.js (pickWindow), theme.js (ofddRender).
 (function () {
   "use strict";
 
   const ON = 0.05;                      // on-threshold on a 0-1 command/status fraction
-  const GAP_MAX_SEC = 3600;             // longest interval a sample may stand for
   const ECON_DT_MIN_C = 50 / 9;         // |OAT-RAT| (delta degC) for an identifiable economizer sample
-  const BAS_BAND_C = 2;                 // BAS vs web OAT band (delta degC)
   const OAT_EDGES_C = [10, 15.555555555555556, 21.11111111111111, 26.666666666666668, 32.22222222222222];
   const WEEK_MS = 7 * 86400e3;
   const isNum = (x) => x != null && Number.isFinite(x);
-  const median = (xs) => rcxStats.quantile(xs, 0.5);
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   // ================= pure math (globalThis.rcxOverviewMath) =============================
@@ -51,59 +37,6 @@
     return `${y}-W${String(wk).padStart(2, "0")}`;
   }
 
-  /**
-   * Weight of one sample interval: how much of it the motor counts as running.
-   *   duty = true  (Bool status/command): the resampled average IS the on-fraction -> weight = frac.
-   *   duty = false (analog command): on at all (> 0.05) -> whole interval, as the SQL pack does.
-   * Fractions <= 0.05 count as off.
-   */
-  function onWeight(v, duty) {
-    if (!isNum(v)) return 0;
-    const f = rcxStats.frac(v);
-    if (!(f > ON)) return 0;
-    return duty ? Math.min(f, 1) : 1;
-  }
-
-  /**
-   * Run hours per ISO week from one signal on a time grid.
-   * t = [ms], v = [value|null], oat = [value|null] (optional, average OAT while running).
-   * Interval i is [t[i], t[i+1]) and belongs to the week of t[i]; intervals longer than
-   * gapMaxSec are skipped (data gap). Returns Map(weekStartMs -> { hours, oat, n, partial })
-   * partial = the observed span inside that week is under 6 days (central's partial_week).
-   */
-  function weeklyRuntime(t, v, { duty = false, gapMaxSec = GAP_MAX_SEC, oat = null, weekOf = weekStart, occ = null } = {}) {
-    const weeks = new Map();
-    const get = (k) => {
-      if (!weeks.has(k)) weeks.set(k, { hours: 0, inH: 0, afterH: 0, oatSum: 0, oatN: 0, n: 0, first: Infinity, last: -Infinity });
-      return weeks.get(k);
-    };
-    // 4.x LEAD() runs over the signal's own rows: a null sample is not a row, so a null stretch is neither
-    // "off" nor covered. The interval from the last real sample before it to the next real one is simply
-    // long, and the gap cap drops it (a short null hole under the cap is bridged, as in the SQL).
-    const rows = [];
-    for (let i = 0; i < t.length; i++) if (isNum(v[i])) rows.push(i);
-    for (let j = 0; j < rows.length; j++) {
-      const i = rows[j];
-      const w = get(weekOf(t[i]));
-      w.n++; w.first = Math.min(w.first, t[i]); w.last = Math.max(w.last, t[i]);
-      if (j + 1 >= rows.length) continue;
-      const dt = (t[rows[j + 1]] - t[i]) / 1000;
-      if (!(dt > 0 && dt <= gapMaxSec)) continue;
-      const wt = onWeight(v[i], duty);
-      if (!wt) continue;
-      const h = (wt * dt) / 3600;
-      w.hours += h;
-      if (occ) { if (occ(t[i])) w.inH += h; else w.afterH += h; }   // an interval belongs to the occupancy at its start
-      if (oat && isNum(oat[i])) { w.oatSum += oat[i]; w.oatN++; }
-    }
-    const out = new Map();
-    for (const [k, w] of [...weeks].sort((a, b) => a[0] - b[0])) {
-      out.set(k, { hours: w.hours, inHours: occ ? w.inH : null, afterHours: occ ? w.afterH : null,
-        oat: w.oatN ? w.oatSum / w.oatN : null, n: w.n, partial: w.last - w.first < 6 * 86400e3 });
-    }
-    return out;
-  }
-
   /** Bin edges in degC (50/60/70/80/90 degF). */
   const oatEdges = () => OAT_EDGES_C.slice();
   /**
@@ -113,99 +46,6 @@
   function oatBinLabels(toDisp = (c) => c) {
     const e = oatEdges().map((x) => Math.round(toDisp(x)));
     return [`<${e[0]}`, ...e.slice(1).map((x, i) => `${e[i]}-${x}`), `>=${e[e.length - 1]}`];
-  }
-  const oatBinIndex = (oat, edges) => { const i = edges.findIndex((e) => oat < e); return i < 0 ? edges.length : i; };
-
-  /**
-   * Hours the cooling device was on, per OAT bin (mechanical_cooling_oat_bins.sql). oat in degC;
-   * toDisp only relabels the bins for the display system.
-   * Only intervals where the device is on (weight > 0) and OAT is known count.
-   * Returns { labels, hours: [h per label] }.
-   */
-  /** @param {any} t @param {any} active @param {any} oat @param {{toDisp?: (c: number) => number, duty?: boolean, gapMaxSec?: number}} [o] */
-  function mechBins(t, active, oat, { toDisp, duty = false, gapMaxSec = GAP_MAX_SEC } = {}) {
-    const edges = oatEdges(), labels = oatBinLabels(toDisp), hours = labels.map(() => 0);
-    // Like the SQL: only rows where the device signal AND the OAT both exist (joined), and the interval runs
-    // to the next joined row, so a null stretch is uncovered (gap cap), never "off".
-    const rows = [];
-    for (let i = 0; i < t.length; i++) if (isNum(active[i]) && isNum(oat[i])) rows.push(i);
-    for (let j = 0; j + 1 < rows.length; j++) {
-      const i = rows[j], dt = (t[rows[j + 1]] - t[i]) / 1000;
-      if (!(dt > 0 && dt <= gapMaxSec)) continue;
-      const w = onWeight(active[i], duty);
-      if (w) hours[oatBinIndex(oat[i], edges)] += (w * dt) / 3600;
-    }
-    return { labels, hours };
-  }
-
-  /**
-   * Economizer samples (economizer_deltas.sql + economizer.rs). Row inputs are parallel arrays on
-   * one grid: oa_t, rat, mat, sat?, fan (fan_status), damper? (oa_damper_pct, 0-1 or 0-100).
-   * Kept: fan on (> 0.05) and oa_t/rat/mat present. Per sample (temps in degC, deltas in delta degC):
-   *   dOR = OAT - RAT, dMR = MAT - RAT, identifiable = |dOR| >= dtMin,
-   *   oaFrac% = 100 dMR / dOR (identifiable, clamped -20..120),
-   *   matPred = RAT + damperFrac * dOR, matResid = MAT - matPred (needs a damper).
-   */
-  function economizerRows(g, { dtMin = ECON_DT_MIN_C } = {}) {
-    const rows = [];
-    for (let i = 0; i < g.t.length; i++) {
-      const [oa, rat, mat, fan] = [g.oa_t[i], g.rat[i], g.mat[i], g.fan[i]];
-      if (!isNum(oa) || !isNum(rat) || !isNum(mat) || !isNum(fan) || !(rcxStats.frac(fan) > ON)) continue;
-      const dOR = oa - rat, dMR = mat - rat, ident = Math.abs(dOR) >= dtMin;
-      const dmp = g.damper && isNum(g.damper[i]) ? rcxStats.frac(g.damper[i]) : null;
-      const matPred = dmp == null ? null : rat + dmp * dOR;
-      rows.push({
-        t: g.t[i], oa, rat, mat, sat: g.sat && isNum(g.sat[i]) ? g.sat[i] : null,
-        damperPct: dmp == null ? null : dmp * 100, dOR, dMR, ident,
-        oaFrac: ident ? Math.max(-20, Math.min(120, (100 * dMR) / dOR)) : null,
-        matPred, matResid: matPred == null ? null : mat - matPred,
-      });
-    }
-    return rows;
-  }
-
-  function economizerSummary(rows) {
-    const ident = rows.filter((r) => r.ident), resid = ident.map((r) => r.matResid).filter(isNum);
-    return { n: rows.length, nIdent: ident.length, medianResid: median(resid),
-      maeResid: resid.length ? resid.reduce((a, b) => a + Math.abs(b), 0) / resid.length : null };
-  }
-
-  /** Last non-null value at or before each t, no older than maxAgeMs (as-of join). */
-  function asOfFill(t, v, maxAgeMs) {
-    const out = new Array(t.length).fill(null);
-    let last = null, lastT = -Infinity;
-    for (let i = 0; i < t.length; i++) {
-      if (isNum(v[i])) { last = v[i]; lastT = t[i]; }
-      if (last != null && t[i] - lastT <= maxAgeMs) out[i] = last;
-    }
-    return out;
-  }
-
-  /** As-of bound for a slow series: 1.5 x its own cadence, at least two grid steps. */
-  function webMaxAgeMs(t, v) {
-    const seen = t.filter((_, i) => isNum(v[i]));
-    const gaps = seen.slice(1).map((x, i) => x - seen[i]);
-    const step = median(t.slice(1).map((x, i) => x - t[i]));
-    return Math.max(1.5 * (median(gaps) || 0), 2 * (step || 0));
-  }
-
-  /**
-   * BAS vs web outdoor-air temperature (bas_vs_web_oat.sql): web is joined as-of to each BAS
-   * sample; delta = BAS - web. All temperatures in degC, bandC in delta degC.
-   * Returns { rows: [{t, bas, web, d}], stats: { n, bias, mae, maxAbs, withinBand } }.
-   */
-  function basVsWeb(t, bas, web, { bandC = BAS_BAND_C } = {}) {
-    const webAs = asOfFill(t, web, webMaxAgeMs(t, web)), band = bandC;
-    const rows = [];
-    for (let i = 0; i < t.length; i++) {
-      if (isNum(bas[i]) && webAs[i] != null) rows.push({ t: t[i], bas: bas[i], web: webAs[i], d: bas[i] - webAs[i] });
-    }
-    const ds = rows.map((r) => r.d), n = ds.length;
-    return { rows, band, stats: {
-      n, bias: rcxStats.mean(ds), mae: n ? ds.reduce((a, b) => a + Math.abs(b), 0) / n : null,
-      maxAbs: n ? Math.max(...ds.map(Math.abs)) : null,
-      withinBand: n ? ds.filter((d) => Math.abs(d) <= band).length / n : null,
-    } };
   }
 
   /** Histogram of deltas, contiguous bins of `width`, ends clamped at +-maxBins bins. */
@@ -233,9 +73,7 @@
   }
 
   globalThis.rcxOverviewMath = {
-    weekStart, isoWeekLabel, onWeight, weeklyRuntime, oatEdges, oatBinLabels, mechBins,
-    economizerRows, economizerSummary, asOfFill, webMaxAgeMs, basVsWeb, deltaHist, mergeFaultLanes,
-    ECON_DT_MIN_C, BAS_BAND_C, ON,
+    weekStart, isoWeekLabel, oatEdges, oatBinLabels, deltaHist, mergeFaultLanes, ECON_DT_MIN_C, ON,
   };
   const M = globalThis.rcxOverviewMath;
   // Data entry points (no drawing) for the agent analytics hook (hooks/analytics.js); the views above use the same ones.
@@ -341,7 +179,7 @@
 
   /**
    * Weekly runtime per equip on the FINE grid (shared by the chart and the agent analytics hook): { perEq, sites }.
-   * perEq = [{ eq, site, role, weeks: Map(weekStartMs -> weeklyRuntime row) }], sites = Map(siteRef -> schedule info).
+   * perEq = [{ eq, site, role, weeks: Map(weekStartMs -> SQL runtime row: hours, inHours, afterHours, oat, n, partial) }], sites = Map(siteRef -> schedule info).
    * Hours integrate on the fine grid (alignedFine), schedules are read once per call (read only).
    */
   async function weeklyData(ctx, eqs, role) {
@@ -503,14 +341,27 @@
   }
 
   /**
-   * Run hours per calendar day from one signal on a time grid (the weekly-runtime integration, bucketed by day).
-   * t = [ms], v = [value|null]; opts = { duty (Bool signal: resampled average = on-fraction), tz, gapMaxSec }.
-   * Interval i is [t[i], t[i+1]) and belongs to the day of t[i]; intervals longer than gapMaxSec are skipped (data gap);
-   * a sample counts as on above 5 % (onWeight). -> [{ day: "YYYY-MM-DD", dayMs, hours, n }] oldest first.
+   * Run hours per calendar day (site zone) for grid columns `keys`, from the SQL weekly-runtime analytic
+   * (motor_weekly_runtime.sql) bucketed by day: each distinct day of the grid is a bucket boundary. Same definition as
+   * the weekly hours: an interval [t[i], t[i+1]) belongs to the day of t[i], on = value > 5 %, intervals over the gap
+   * cap are dropped. Every day with samples gets a row (hours 0 when the SQL has no running time that day).
+   * -> per key: [{ day: "YYYY-MM-DD", dayMs, hours }] oldest first.
    */
-  function dailyRuntime(t, v, { duty = false, tz = null, gapMaxSec = GAP_MAX_SEC } = {}) {
-    const m = weeklyRuntime(t, v, { duty, gapMaxSec, weekOf: dayKeyer(tz) });
-    return [...m].map(([dayMs, w]) => ({ day: new Date(dayMs).toISOString().slice(0, 10), dayMs, hours: w.hours, n: w.n }));
+  async function dailyRuntimes(sa, g, keys, { tz = null } = {}) {
+    if (!sa) throw new Error("SQL analytics engine unavailable (ctx.sqlAnalytics)");
+    // dayKeyer labels a local date as that date's UTC midnight, which is not an instant in the site zone; the SQL needs
+    // real bucket starts. The first grid time of each local day is one: every sample of that day is at or after it.
+    const dayOf = dayKeyer(tz), firstOf = new Map();
+    for (const x of g.t) { const d = dayOf(x); if (!firstOf.has(d)) firstOf.set(d, x); }
+    const byKey = await sa.runtime(g, keys.map((k) => ({ key: k, motor: k, oat: null, weekOf: (ms) => firstOf.get(dayOf(ms)) })));
+    return keys.map((k) => {
+      const v = g.cols[k] || [], days = new Set(), hours = byKey.get(k) || new Map();
+      g.t.forEach((x, j) => { if (isNum(v[j])) days.add(dayOf(x)); });
+      return [...days].sort((a, b) => a - b).map((dayMs) => {
+        const w = hours.get(firstOf.get(dayMs));
+        return { day: new Date(dayMs).toISOString().slice(0, 10), dayMs, hours: w ? w.hours : 0 };
+      });
+    });
   }
 
   /** Signal a motor's run hours are computed from: the first of motor.signals that binds (status before command). */
@@ -537,7 +388,8 @@
         const cols = {};
         list.forEach((x, i) => { cols[`m${i}`] = x.sig.p; });
         const g = await ctx.alignedFine(cols, { hours: ctx.hours });
-        const per = list.map((x, i) => ({ ...x, days: dailyRuntime(g.t, g.cols[`m${i}`], { duty: x.sig.p.kind === "Bool", tz: ctx.siteTz }) }));
+        const daily = await dailyRuntimes(ctx.sqlAnalytics, g, list.map((_, i) => `m${i}`), { tz: ctx.siteTz });
+        const per = list.map((x, i) => ({ ...x, days: daily[i] }));
         const days = [...new Map(per.flatMap((p) => p.days.map((d) => [d.dayMs, d.day]))).entries()].sort((a, b) => a[0] - b[0]);
         if (!days.length || !per.some((p) => p.days.some((d) => d.hours > 0))) return "no running time in this window";
         const series = per.map((p) => {
@@ -567,7 +419,7 @@
   // Plant motors are drawn by their weekly charts (same clean style, min-run line); the daily versions stay registered only.
   for (const motor of MOTORS.slice(1)) dailyRuntimeView(motor, `runtime-daily-${motor.id}`, { tabHidden: true });
 
-  M.dailyRuntime = dailyRuntime;
+  M.dailyRuntimes = dailyRuntimes;
   M.dayKeyer = dayKeyer;
 
   // ================= mechanical cooling x OAT bins =====================================
@@ -685,8 +537,7 @@
         xAxis: { type: "value", name: `OAT - RAT (${unit})`, scale: true, nameLocation: "middle", nameGap: 26 },
         yAxis: { type: "value", name: `MAT - RAT (${unit})`, scale: true }, series,
       }, null, "economizer_free_cooling_delta");
-      const s = M.economizerSummary(rows);
-      return `fan on, |OAT-RAT| >= ${dmin.value.toFixed(1)} ${unit} · ${s.nIdent} samples`;
+      return `fan on, |OAT-RAT| >= ${dmin.value.toFixed(1)} ${unit} · ${rows.filter((r) => r.ident).length} samples`;
     },
   });
 
@@ -704,8 +555,9 @@
       const lanes = await faultLanes(ctx, ECON_RULES, ctx.equips);
       draw(ctx, el, { tooltip: { trigger: "axis" }, legend: { top: 0 }, grid: baseGrid({ bottom: 56 }),
         xAxis: { type: "time" }, yAxis: { type: "value", name: `residual (${unit})`, scale: true }, series }, lanes, "economizer_mat_residual");
-      const med = M.economizerSummary(per.flatMap((p) => p.rows.filter((r) => r.ident)));
-      return `MAT - (RAT + damper% x (OAT - RAT)), fan on, identifiable · median ${med.medianResid == null ? "n/a" : ctx.dispDelta(med.medianResid, TEMP).value.toFixed(2)} ${unit}`;
+      // per equip, from economizer_metrics.sql (the SQL summary, never recomputed here)
+      const meds = per.map((p) => `${eqName(p.eq)} ${p.summary.medianResid == null ? "n/a" : ctx.dispDelta(p.summary.medianResid, TEMP).value.toFixed(2)}`);
+      return `MAT - (RAT + damper% x (OAT - RAT)), fan on, identifiable · median residual ${meds.join(", ")} ${unit}`;
     },
   });
 

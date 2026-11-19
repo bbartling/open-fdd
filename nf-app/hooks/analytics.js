@@ -14,14 +14,17 @@
 //   get_fdd_fault_timeline      {site?, equip, rule, days=1, dense?}  confirmed | ok | unknown per assessed timestamp,
 //                                                            from the FDD hook's timeline point (never fault_pct)
 //   resolve_equipment_roles     {equipUuid} | {siteRef, equipRef}     the roles fdd.js binds for one equip
+//   sql_grid                    {kind, grid, specs?}         the dashboard's SQL analytics on a grid the browser sends
 //   explain_missing_rcx_view    {viewId, site?, equip?}      why an RCx view is not available here
 // `site` / `siteRef` and `equip` / `equipRef` / `equipUuid` are synonyms (equip matches an NF uuid first, then a Haystack
 // id or name). A single-equip tool whose equip matches several sites is an ERROR listing the candidates, never a guess;
 // the list tools simply return every matching equip, each under its own equipUuid.
 //
-// The math is the dashboard's: static/rcx.js + rcx-overview.js (+ schedule.js, fdd.js, model.js) run unchanged in a vm
-// sandbox, the same way hooks/fdd.js shares model.js / fdd.js (browser fetchSeries -> sdk.http GET /api/v1/point/data).
-// Numbers integrate on the fine grid (ctx.alignedFine), never on the ~360-point display grid.
+// The numbers are the SQL analytics (#1649: sql/analytics/*.sql, run in-process by hooks/lib/sql-analytics.js on sql.js).
+// The dashboard's grid building (static/rcx.js + rcx-overview.js + schedule.js, fdd.js, model.js) runs unchanged in a
+// vm sandbox, the same way hooks/fdd.js shares model.js / fdd.js (browser fetchSeries -> sdk.http GET /api/v1/point/data),
+// with ctx.sqlAnalytics bound to the in-process SQL. Hours integrate on the fine grid (ctx.alignedFine), never on the
+// ~360-point display grid. sql_grid serves the same SQL to the browser (static/sql-analytics-client.js).
 //
 // READ ONLY, enforced: every call goes through readOnlyHttp(), a proxy that lets GET and the read POSTs
 // (/api/v1/point/query, /api/v1/auth/token) through and throws on every other method or route. The hook never writes
@@ -186,7 +189,7 @@ function daysOf(args, dflt) {
 }
 const viewOf = (g, pred) => Array.from(g('RCX_VIEWS')).find(pred);
 
-/** Local-Monday label "YYYY-Www" for a week start (the week key of weeklyRuntime). */
+/** Local-Monday label "YYYY-Www" for a week start (the week key of the SQL weekly runtime). */
 function weekLabel(g, startMs, tz) {
   const S = g('ofddSchedule'), M = g('rcxOverviewMath');
   const p = tz ? S.localParts(startMs + 6 * 3600e3, tz) : null;           // noon-ish: the civil date of that Monday

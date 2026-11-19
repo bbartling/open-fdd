@@ -54,7 +54,7 @@ test("the calendar as a schedule: wall clock in the site zone, Sunday night spil
   assert.equal(at("2026-11-18T00:00:00Z"), false, "Tue 18:00 CST: closed");
 });
 
-test("weekly bucketing in the site zone: DST weeks keep the calendar's hours; a partial week is flagged", () => {
+test("weekly bucketing in the site zone: DST weeks keep the calendar's hours; a partial week is flagged", async () => {
   const tz = "America/Chicago", s = O.calendarSchedule(O.defaultCalendar(tz));
   for (const iso of ["2026-03-04T12:00:00Z", "2026-10-28T12:00:00Z", "2026-11-09T12:00:00Z"]) {       // spring-forward, fall-back, normal
     const k = S.localWeekStartMs(Date.parse(iso), tz);
@@ -66,12 +66,13 @@ test("weekly bucketing in the site zone: DST weeks keep the calendar's hours; a 
   // a runtime series over 9 days starting Wednesday: the first week is partial, the second complete
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, Intl, localStorage: { getItem: () => "si" } });
   for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "schedule.js", "occupancy.js", "charts.js", "rcx.js", "rcx-overview.js"]) vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
-  const M = vm.runInContext("rcxOverviewMath", ctx);
+  void vm.runInContext("rcxOverviewMath", ctx);
   const t0 = Date.parse("2026-11-04T06:00:00Z"), t = [], v = [];
   for (let i = 0; i < 12 * 24 * 12; i++) { t.push(t0 + i * 300e3); v.push(1); }
   let cur = 0, lo = Infinity, hi = -Infinity;
   const weekOf = (ms) => { if (ms >= lo && ms < hi) return cur; cur = S.localWeekStartMs(ms, tz); lo = cur; hi = S.localWeekStartMs(cur + 8 * 86400e3, tz); return cur; };
-  const weeks = M.weeklyRuntime(t, v, { duty: false, gapMaxSec: 900, weekOf, occ: (ms) => S.occupied(s, ms, tz) });
+  const SA = createRequire(import.meta.url)("../hooks/lib/sql-analytics.js");
+  const weeks = (await SA.runtimeFromGrid("sqlite", { t, cols: { m: v } }, [{ key: 0, motor: "m", oat: null, weekOf, occ: (ms) => S.occupied(s, ms, tz) }])).get(0);
   const ks = [...weeks.keys()].sort((a, b) => a - b);
   assert.equal(new Date(ks[0]).toISOString(), "2026-11-02T06:00:00.000Z", "Monday 00:00 CST");
   assert.equal(weeks.get(ks[0]).partial, true);
