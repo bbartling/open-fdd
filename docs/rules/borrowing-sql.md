@@ -9,6 +9,8 @@ nav_order: 3
 The 77 rule SQL files are ordinary PostgreSQL 14+. They use no `time_bucket`, hypertables or continuous aggregates. Timescale is
 only the runtime that builds the wide `history` input, so any database that can build that table can run them.
 
+The RCx analytics (weekly runtime, cooling bins, economizer, BAS vs web OAT) are portable SQL too: see [Using the SQL analytics in your own database](borrowing-analytics.html).
+
 ## Quick start (DuckDB, no server)
 
 Checked on `generate(seed=0, equips=2, days=3, profile="basic")`: FC1, FC2 and CMD-1 match the pandas reference within 1e-6 h.
