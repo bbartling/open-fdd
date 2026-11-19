@@ -143,3 +143,35 @@ def test_postgres_bas_web_matches_pandas():
         assert got[eq]["n"] == want["n"]
         for k in ("bias", "mae", "max_abs", "within_band"):
             assert got[eq][k] == pytest.approx(want[k], abs=1e-9)
+
+
+# ---- per-sample pairs (#1649: the NF chart points) ---------------------------------------------------------------
+@pytest.mark.parametrize("engine", ["sqlite", "duckdb"])
+def test_points_match_the_pandas_pairs(engine):
+    from open_fdd.analytics.sql_bas_web import bas_web_points_sql_template, run_bas_web_points_sql
+    from open_fdd.analytics.weather_resolver import bas_vs_web_pairs
+
+    repo = (ROOT / "sql" / "analytics" / "bas_vs_web_points.sql").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert bas_web_points_sql_template().replace("\r\n", "\n") == repo
+    web, bas_by_eq = _series()
+    points, samples = _core(web, bas_by_eq)
+    pairs = [(eq, f"{eq}/oat", "web", int(default_web_max_age_seconds(s, web) * 1000)) for eq, s in bas_by_eq.items()]
+    if engine == "duckdb":
+        conn = pytest.importorskip("duckdb").connect(":memory:")
+    else:
+        conn = sqlite3.connect(":memory:")
+    try:
+        create_core(conn, engine)
+        load_core(conn, engine, points, samples)
+        got = run_bas_web_points_sql(conn, engine, pairs)
+        stats = {r["equipment_id"]: r for r in run_bas_web_sql(conn, engine, pairs)}
+    finally:
+        conn.close()
+    for eq, bas in bas_by_eq.items():
+        want = bas_vs_web_pairs(bas, web)
+        mine = [r for r in got if r["equipment_id"] == eq]
+        assert len(mine) == len(want) == stats[eq]["n"]
+        assert [r["t"] for r in mine] == list(_ms(want["t"]))
+        for k in ("bas", "web", "d"):
+            assert [r[k] for r in mine] == pytest.approx(list(want[k]), abs=1e-9), (eq, k)
+        assert sum(r["d"] for r in mine) / len(mine) == pytest.approx(stats[eq]["bias"], abs=1e-9)

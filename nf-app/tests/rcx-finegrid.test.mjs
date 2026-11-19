@@ -6,6 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { createRequire } from "node:module";
+const SA = createRequire(import.meta.url)("../hooks/lib/sql-analytics.js");
 import { twoSite as fx, TRUTH, fetchSeriesStub, fakeSdkHttp, pickWindow, resample, seriesOf } from "./fixtures/two_site.mjs";
 
 const dir = new URL("../static/", import.meta.url);
@@ -16,7 +18,9 @@ const near = (a, b, msg, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${msg}
 
 /** A browser-like vm context with the app's classic scripts; NF history + schedules come from the fixture. */
 function load({ units = "si" } = {}) {
-  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, Intl, localStorage: { getItem: () => units } });
+  // #1649: the views run the SQL analytics; in a page they reach them through the analytics hook, here in-process
+  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, Intl, localStorage: { getItem: () => units },
+    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs), econ: (g) => SA.econFromGrid("sqlite", g), bas: (g) => SA.basFromGrid("sqlite", g) } });
   ctx.pickWindow = pickWindow;
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
   ctx.ofddChart = (el) => ({ el });
@@ -161,10 +165,11 @@ test("null fan_status gap: not 'off' (no after-hours), not covered (the long int
   // the union-grid shortcut (another series ticking inside the hole) would give the 5 min back: the math must not
   const M = ctx.get("rcxOverviewMath");
   const t = [0, 300e3, 600e3, 900e3, 1200e3, 1500e3], fan = [1, 1, null, null, null, 1], oat = [5, 5, 5, 5, 5, 5];
-  near(M.weeklyRuntime(t, fan, { duty: true }).get(M.weekStart(0)).hours, 1500 / 3600, "a null hole UNDER the 3600 s cap is bridged by the last real sample (4.x LEAD), not counted as off");
+  const wk = { key: 0, motor: "m", oat: null, weekOf: M.weekStart };
+  near((await SA.runtimeFromGrid("sqlite", { t, cols: { m: fan } }, [wk])).get(0).get(M.weekStart(0)).hours, 1500 / 3600, "a null hole UNDER the 3600 s cap is bridged by the last real sample (4.x LEAD), not counted as off");
   const long = [0, 300e3, 600e3, 7200e3 + 600e3];
-  assert.equal(M.weeklyRuntime(long, [1, 1, null, 1], { duty: true }).get(M.weekStart(0)).hours, 300 / 3600, "hole over the cap: only the first interval counts");
-  assert.equal(M.mechBins(long, [1, 1, 1, 1], [5, 5, null, 5], { duty: true }).hours[0], 300 / 3600, "bins: no OAT row = no interval, and a gap is not stretched");
+  assert.equal((await SA.runtimeFromGrid("sqlite", { t: long, cols: { m: [1, 1, null, 1] } }, [wk])).get(0).get(M.weekStart(0)).hours, 300 / 3600, "hole over the cap: only the first interval counts");
+  assert.equal((await SA.mechFromGrid("sqlite", { t: long, cols: { a: [1, 1, 1, 1], o: [5, 5, null, 5] } }, [{ key: 0, proof: "a", oat: "o" }])).get(0)[0], 600 / 3600, "bins: OAT carried as-of over the null (pandas), the 600 -> 7800 s gap is not stretched");
   void oat;
 });
 
@@ -178,10 +183,11 @@ test("short cooling event: 1/3 h lands in the <10 bin on the fine grid; a coarse
   const fine = await rc.alignedFine(pts, { hours: 672 }), coarse = await rc.aligned(pts, { hours: 672 });
   assert.equal(fine.windowSec, 300);
   assert.equal(coarse.t[1] - coarse.t[0] > 300e3, true, `display grid is coarse (${pickWindow(672)} s)`);
-  const f = M.mechBins(fine.t, fine.cols.a, fine.cols.o, { duty: true }), c = M.mechBins(coarse.t, coarse.cols.a, coarse.cols.o, { duty: true });
-  near(f.hours[0], 1 / 3, "fine <10 bin");
-  near(f.hours[0], TRUTH["site-a"].cooling.belowTenHours, "fine <10 bin == TRUTH");
-  assert.ok(Math.abs(c.hours[0] - 1 / 3) > 0.1, `coarse grid distorts the event (${c.hours[0]} h vs 1/3 h)`);
+  const spec = [{ key: 0, proof: "a", oat: "o" }];
+  const f = (await SA.mechFromGrid("sqlite", fine, spec)).get(0), c = (await SA.mechFromGrid("sqlite", coarse, spec)).get(0);
+  near(f[0], 1 / 3, "fine <10 bin");
+  near(f[0], TRUTH["site-a"].cooling.belowTenHours, "fine <10 bin == TRUTH");
+  assert.ok(Math.abs(c[0] - 1 / 3) > 0.1, `coarse grid distorts the event (${c[0]} h vs 1/3 h)`);
   // the view itself (what the user sees) bins on the fine grid, for both sites, all six bins
   for (const [siteRef, S] of [["site-a", A], ["site-b", B]]) {
     const cx = load();

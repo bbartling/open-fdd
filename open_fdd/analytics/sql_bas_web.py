@@ -17,8 +17,15 @@ from open_fdd.analytics.weather_resolver import BAS_WEB_BAND_C
 COLUMNS = ("equipment_id", "n", "bias", "mae", "max_abs", "n_within")
 
 
+POINT_COLUMNS = ("equipment_id", "t", "bas", "web", "d")
+
+
 def bas_web_sql_template() -> str:
     return resources.files("open_fdd").joinpath("data/bas_vs_web_oat.sql").read_text(encoding="utf-8")
+
+
+def bas_web_points_sql_template() -> str:
+    return resources.files("open_fdd").joinpath("data/bas_vs_web_points.sql").read_text(encoding="utf-8")
 
 
 def render_bas_web_sql(
@@ -29,6 +36,7 @@ def render_bas_web_sql(
     band_c: float = BAS_WEB_BAND_C,
     start_ms: int | None = None,
     end_ms: int | None = None,
+    _template: str | None = None,
 ) -> str:
     """``pairs``: (equipment_id, BAS point_key, web point_key, as-of age limit in ms)."""
     if engine not in TS_MS:
@@ -48,7 +56,8 @@ def render_bas_web_sql(
     if end_ms is not None:
         window_filter += f" AND t < {int(end_ms)}"
         web_window_filter += f" AND w.t < {int(end_ms)}"
-    body = "\n".join(ln for ln in bas_web_sql_template().splitlines() if not ln.lstrip().startswith("--"))
+    template = bas_web_sql_template() if _template is None else _template
+    body = "\n".join(ln for ln in template.splitlines() if not ln.lstrip().startswith("--"))
     return body.format(
         pairs=_inline([("equipment_id", "TEXT"), ("bas_key", "TEXT"), ("web_key", "TEXT"), ("max_age_ms", "INTEGER")],
                       rows),
@@ -79,5 +88,33 @@ def run_bas_web_sql(conn: Any, engine: str, pairs: Iterable[tuple[str, str, str,
         for k in ("bias", "mae", "max_abs"):
             rec[k] = float(rec[k])
         rec["within_band"] = int(rec.pop("n_within")) / rec["n"]
+        out.append(rec)
+    return out
+
+
+def render_bas_web_points_sql(engine: str, pairs: Iterable[tuple[str, str, str, int]], **kwargs: Any) -> str:
+    """``sql/analytics/bas_vs_web_points.sql``: the paired samples bas_vs_web_oat.sql aggregates (same arguments)."""
+    kwargs.pop("band_c", None)
+    return render_bas_web_sql(engine, pairs, _template=bas_web_points_sql_template(), **kwargs)
+
+
+def run_bas_web_points_sql(conn: Any, engine: str, pairs: Iterable[tuple[str, str, str, int]], **kwargs: Any) -> list[dict]:
+    """One dict per paired BAS sample: equipment_id, t (epoch ms), bas, web, d = bas - web."""
+    rows_in = list(pairs)
+    if not rows_in:
+        return []
+    sql = render_bas_web_points_sql(engine, rows_in, **kwargs)
+    if engine == "postgres":
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+    else:
+        rows = conn.execute(sql).fetchall()
+    out = []
+    for row in rows:
+        rec = dict(zip(POINT_COLUMNS, row))
+        rec["t"] = int(rec["t"])
+        for k in ("bas", "web", "d"):
+            rec[k] = float(rec[k])
         out.append(rec)
     return out

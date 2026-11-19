@@ -157,6 +157,24 @@ def default_web_max_age_seconds(bas: pd.Series, web: pd.Series) -> float:
     return max(1.5 * median_step(web), 2.0 * median_step(bas))
 
 
+def bas_vs_web_pairs(bas: pd.Series, web: pd.Series, *, max_age_seconds: float | None = None) -> pd.DataFrame:
+    """Each BAS sample with the latest web reading at or before it, at most ``max_age_seconds`` old (default
+    :func:`default_web_max_age_seconds`): columns t, bas, web, d = bas - web (degC); unpaired samples are dropped.
+    The SQL twin is ``sql/analytics/bas_vs_web_points.sql``.
+    """
+    b = pd.to_numeric(bas, errors="coerce").dropna().sort_index()
+    w = pd.to_numeric(web, errors="coerce").dropna().sort_index()
+    age = default_web_max_age_seconds(b, w) if max_age_seconds is None else float(max_age_seconds)
+    if b.empty or w.empty:
+        return pd.DataFrame({"t": pd.DatetimeIndex([], tz="UTC"), "bas": [], "web": [], "d": []})
+    left = pd.DataFrame({"t": pd.DatetimeIndex(b.index), "bas": b.to_numpy(dtype=float)})
+    right = pd.DataFrame({"t": pd.DatetimeIndex(w.index), "web": w.to_numpy(dtype=float)})
+    joined = pd.merge_asof(left, right, on="t", direction="backward",
+                           tolerance=pd.Timedelta(seconds=age), allow_exact_matches=True)
+    joined["d"] = joined["bas"] - joined["web"]
+    return joined.dropna(subset=["d"]).reset_index(drop=True)
+
+
 def bas_vs_web_oat_stats(
     bas: pd.Series,
     web: pd.Series,
@@ -164,25 +182,17 @@ def bas_vs_web_oat_stats(
     max_age_seconds: float | None = None,
     band_c: float = BAS_WEB_BAND_C,
 ) -> dict[str, Any]:
-    """BAS minus web outdoor-air temperature, web joined as-of to each BAS sample (degC; delta degC).
+    """BAS minus web outdoor-air temperature over :func:`bas_vs_web_pairs` (degC; delta degC).
 
-    A BAS sample is paired with the latest web reading at or before it that is at most ``max_age_seconds`` old (default
-    :func:`default_web_max_age_seconds`); unpaired samples are not assessed. Returns n, bias (mean delta), mae, max_abs
-    and within_band (share of |delta| <= ``band_c``); the statistics are None when n is 0. The SQL twin is
-    ``sql/analytics/bas_vs_web_oat.sql``.
+    Returns n, bias (mean delta), mae, max_abs and within_band (share of |delta| <= ``band_c``); the statistics are
+    None when n is 0. The SQL twin is ``sql/analytics/bas_vs_web_oat.sql``.
     """
     b = pd.to_numeric(bas, errors="coerce").dropna().sort_index()
     w = pd.to_numeric(web, errors="coerce").dropna().sort_index()
     age = default_web_max_age_seconds(b, w) if max_age_seconds is None else float(max_age_seconds)
     out: dict[str, Any] = {"n": 0, "bias": None, "mae": None, "max_abs": None, "within_band": None,
                            "max_age_seconds": age, "band_c": float(band_c)}
-    if b.empty or w.empty:
-        return out
-    left = pd.DataFrame({"t": pd.DatetimeIndex(b.index), "bas": b.to_numpy(dtype=float)})
-    right = pd.DataFrame({"t": pd.DatetimeIndex(w.index), "web": w.to_numpy(dtype=float)})
-    joined = pd.merge_asof(left, right, on="t", direction="backward",
-                           tolerance=pd.Timedelta(seconds=age), allow_exact_matches=True)
-    d = (joined["bas"] - joined["web"]).dropna()
+    d = bas_vs_web_pairs(b, w, max_age_seconds=age)["d"]
     if d.empty:
         return out
     out.update(n=int(len(d)), bias=float(d.mean()), mae=float(d.abs().mean()), max_abs=float(d.abs().max()),
