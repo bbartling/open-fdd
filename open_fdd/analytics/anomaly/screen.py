@@ -90,6 +90,7 @@ class ScreenResult:
     methods: list[str] = field(default_factory=list)
     activity: dict[str, object] = field(default_factory=dict)
     methods_skipped: dict[str, str] = field(default_factory=dict)
+    summary: dict[str, object] = field(default_factory=dict)
 
 
 def _package_version(name: str) -> str:
@@ -134,20 +135,68 @@ def _flags_for_method(
     raise ValueError(f"unknown method: {method}")
 
 
-def _utc_dates(index: pd.DatetimeIndex) -> pd.Series:
+def _utc_dates(index: pd.DatetimeIndex, tz: str = "UTC") -> pd.Series:
+    """Calendar date of each stamp in ``tz`` (default UTC; naive stamps are read as UTC)."""
     if getattr(index, "tz", None) is not None:
-        stamped = index.tz_convert("UTC")
+        stamped = index.tz_convert(tz)
+    elif tz != "UTC":
+        stamped = index.tz_localize("UTC").tz_convert(tz)
     else:
         stamped = index
     return pd.Series([ts.date() for ts in stamped], index=index)
+
+
+def check_tz(tz: str) -> str:
+    """Validate an IANA zone name (``UTC``, ``America/Chicago`` ...); raise ``ValueError`` if unknown."""
+    try:
+        pd.Timestamp("2026-01-01", tz=str(tz))
+    except Exception as exc:  # noqa: BLE001 - pandas raises several types for an unknown zone
+        raise ValueError(f"unknown time zone {tz!r}: use an IANA name such as America/Chicago") from exc
+    return str(tz)
+
+
+MAX_WINDOWS = 200
+
+
+def flagged_windows(flags: pd.Series, median_dt: pd.Timedelta, tz: str = "UTC") -> list[dict[str, object]]:
+    """Contiguous flagged runs as ``{start, end, minutes}``; ``end`` is the last flagged stamp plus one interval."""
+    bit = flags.fillna(False).astype(bool)
+    if not bool(bit.any()):
+        return []
+    index = bit.index
+    if getattr(index, "tz", None) is None:
+        index = index.tz_localize("UTC")
+    index = index.tz_convert(tz)
+    values = bit.to_numpy()
+    starts = values & ~pd.Series(values).shift(1, fill_value=False).to_numpy()
+    out: list[dict[str, object]] = []
+    step = median_dt.total_seconds() / 60.0
+    run_start = None
+    count = 0
+    for i, flag in enumerate(values):
+        if starts[i]:
+            run_start, count = i, 0
+        if flag:
+            count += 1
+            last = i
+            if i + 1 == len(values) or not values[i + 1]:
+                out.append(
+                    {
+                        "start": index[run_start].isoformat(),
+                        "end": (index[last] + median_dt).isoformat(),
+                        "minutes": round(count * step, 3),
+                    }
+                )
+    return out
 
 
 def worst_days(
     flags_by_method: dict[str, pd.Series],
     median_dt: pd.Timedelta,
     max_days: int,
+    tz: str = "UTC",
 ) -> list[date]:
-    """Calendar days (UTC) with the most anomaly minutes, union across methods."""
+    """Calendar days (in ``tz``, default UTC) with the most anomaly minutes, union across methods."""
     if max_days <= 0 or not flags_by_method:
         return []
     union: pd.Series | None = None
@@ -157,7 +206,7 @@ def worst_days(
     if union is None or not bool(union.any()):
         return []
     minutes = median_dt.total_seconds() / 60.0
-    daily = union.groupby(_utc_dates(union.index)).sum() * minutes
+    daily = union.groupby(_utc_dates(union.index, tz)).sum() * minutes
     daily = daily[daily > 0].sort_values(ascending=False)
     picked: list[date] = []
     for day in daily.head(int(max_days)).index:
@@ -189,6 +238,8 @@ def _write_readme(
     activity_receipt: dict[str, object] | None = None,
     methods_skipped: dict[str, str] | None = None,
     contamination: float = IFOREST_CONTAMINATION,
+    tz: str = "UTC",
+    plots: bool = True,
 ) -> None:
     method_rows = {
         "zscore": f"| zscore | SQL-portable (pandas/numpy) | abs Z-score > {ZSCORE_THRESHOLD:g} |",
@@ -208,8 +259,12 @@ def _write_readme(
         "",
         f"Command: `{command or 'open-fdd-anomaly screen <folder> --out <outdir>'}`",
         "",
-        "Calendar days are **UTC** dates from `timestamp_utc`.",
-        "This run does not convert to a building-local zone such as America/Chicago.",
+        (
+            "Calendar days are **UTC** dates from `timestamp_utc` (pass `--tz` for a local zone)."
+            if tz == "UTC"
+            else f"Calendar days, day zooms and `summary.json` windows are in **{tz}** (from `timestamp_utc`)."
+        ),
+        "`summary.json` holds every point, method and flagged window for scripts and scheduled runs.",
         "",
         "Z-score and MAD are **SQL-portable** rolling statistics (no sklearn/statsmodels).",
         "STL and Isolation Forest are **Python-only** and require `open-fdd[anomaly]`.",
@@ -258,8 +313,14 @@ def _write_readme(
             "",
             f"Trailing window: **{window}** samples (about one day at the median spacing).",
             f"Median sample interval: **{median_dt}**.",
-            f"Day zooms: top **{top_n}** points, up to **{max_days}** UTC days each.",
-            "Support plots (line, histogram, box) cover every screened point that was not skipped.",
+            (
+                f"Day zooms: top **{top_n}** points, up to **{max_days}** {tz} days each."
+                if plots
+                else "Plots: **off** (`--no-plots`)."
+            ),
+            "Support plots (line, histogram, box) cover every screened point that was not skipped."
+            if plots
+            else "",
             "",
             "## Versions",
             "",
@@ -274,6 +335,54 @@ def _write_readme(
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _summary(
+    *,
+    folder,
+    scoreboard: pd.DataFrame,
+    flags_by_point: dict[str, dict[str, pd.Series]],
+    median_dt: pd.Timedelta,
+    tz: str,
+    methods: list[str],
+    methods_skipped: dict[str, str],
+    activity_receipt: dict[str, object],
+    top_points: list[str],
+    days_by_point: dict[str, list[date]],
+    plots: bool,
+    engine: str,
+) -> dict[str, object]:
+    """Machine-readable result of one run (``summary.json``, ``--json``)."""
+    rows = []
+    for rec in scoreboard.to_dict(orient="records"):
+        point, method = str(rec["point"]), str(rec.get("method") or "")
+        flags = flags_by_point.get(point, {}).get(method) if method else None
+        windows = flagged_windows(flags, median_dt, tz) if flags is not None else []
+        entry = {k: (None if isinstance(v, float) and pd.isna(v) else v) for k, v in rec.items()}
+        entry["windows"] = windows[:MAX_WINDOWS]
+        entry["windows_total"] = len(windows)
+        if flags is not None and bool(flags.any()):
+            minutes = median_dt.total_seconds() / 60.0
+            daily = flags.fillna(False).astype(bool).groupby(_utc_dates(flags.index, tz)).sum() * minutes
+            entry["minutes_by_day"] = {str(day): float(v) for day, v in daily.items() if v > 0}
+        else:
+            entry["minutes_by_day"] = {}
+        rows.append(entry)
+    return {
+        "version": 1,
+        "folder": str(folder),
+        "tz": tz,
+        "engine": engine,
+        "methods": list(methods),
+        "methods_skipped": dict(methods_skipped),
+        "median_sample_minutes": median_dt.total_seconds() / 60.0,
+        "activity": dict(activity_receipt),
+        "plots": plots,
+        "flagged_points": sorted({r["point"] for r in rows if (r.get("anomaly_minutes") or 0) > 0}),
+        "top_points": list(top_points),
+        "days_by_point": {p: [d.isoformat() for d in days] for p, days in days_by_point.items()},
+        "points": rows,
+    }
+
+
 def _write_plots(
     destination: Path,
     *,
@@ -282,6 +391,7 @@ def _write_plots(
     flags_by_point: dict[str, dict[str, pd.Series]],
     top_points: list[str],
     days_by_point: dict[str, list[date]],
+    tz: str = "UTC",
 ) -> None:
     from open_fdd.analytics.anomaly.plots import (
         point_slug,
@@ -306,6 +416,7 @@ def _write_plots(
                 flags,
                 day,
                 destination / "days" / slug / f"{day.isoformat()}.png",
+                tz=tz,
             )
 
 
@@ -320,6 +431,8 @@ def screen_folder(
     engine: str = "pandas",
     activity_policy: str = DEFAULT_POLICY,
     iforest_contamination: float = IFOREST_CONTAMINATION,
+    plots: bool = True,
+    tz: str = "UTC",
 ) -> ScreenResult:
     """Screen AHU IO points and write the scoreboard, README, and plots.
 
@@ -334,6 +447,7 @@ def screen_folder(
     written to ``activity.json`` and the README.
     """
     chosen = _parse_methods(methods)
+    tz = check_tz(tz)
     skipped_methods = default_methods()[1] if methods is None else {}
     rate = float(iforest_contamination)
     if not 0.0 < rate <= 0.5:
@@ -482,21 +596,40 @@ def screen_folder(
         activity_receipt=receipt,
         methods_skipped=skipped_methods,
         contamination=rate,
+        tz=tz,
+        plots=bool(plots),
     )
 
     top_points = _rank_points(scoreboard, int(top_n))
     days_by_point = {
-        point: worst_days(flags_by_point.get(point, {}), median_dt, int(max_days))
+        point: worst_days(flags_by_point.get(point, {}), median_dt, int(max_days), tz)
         for point in top_points
     }
-    _write_plots(
-        destination,
+    if plots:
+        _write_plots(
+            destination,
+            scoreboard=scoreboard,
+            screened=screened,
+            flags_by_point=flags_by_point,
+            top_points=top_points,
+            days_by_point=days_by_point,
+            tz=tz,
+        )
+    summary = _summary(
+        folder=folder,
         scoreboard=scoreboard,
-        screened=screened,
         flags_by_point=flags_by_point,
+        median_dt=median_dt,
+        tz=tz,
+        methods=chosen,
+        methods_skipped=skipped_methods,
+        activity_receipt=receipt,
         top_points=top_points,
         days_by_point=days_by_point,
+        plots=bool(plots),
+        engine=engine,
     )
+    (destination / "summary.json").write_text(json.dumps(summary, indent=1, default=str), encoding="utf-8")
     return ScreenResult(
         scoreboard=scoreboard,
         out_dir=destination,
@@ -506,4 +639,5 @@ def screen_folder(
         methods=chosen,
         activity=receipt,
         methods_skipped=skipped_methods,
+        summary=summary,
     )

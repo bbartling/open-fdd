@@ -88,6 +88,7 @@ repeats the format.
 ```bash
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out                          # z-score, MAD, STL (if installed)
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_if --methods zscore,iforest  # Isolation Forest is opt-in
+open-fdd-anomaly screen ./AHU_1 --out ./nightly --no-plots --json --tz America/Chicago   # scheduled run: JSON on stdout
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sql
 ```
 
@@ -96,6 +97,12 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 `open_fdd.analytics.anomaly.detectors.rolling_zscore_flags` on each point's non-missing samples
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.
+
+**Output.** Every run writes `summary.json` to `--out`. It holds the methods run and skipped, the activity receipt, and for
+each point and method the minutes, events, skip reason, `minutes_by_day` and the flagged `windows` (`start`/`end`
+ISO 8601 in the chosen zone, capped at 200 per row with `windows_total`). `--json` prints it to stdout, or
+`--json PATH` writes a copy. `--no-plots` skips every PNG. `--tz` (an IANA zone, default UTC) sets the calendar days,
+the day-zoom files and axes, and the JSON windows. A DST day is 23 or 25 hours.
 
 **Methods.** z-score and MAD need only pandas. STL needs statsmodels and Isolation Forest needs scikit-learn; both come
 with `open-fdd[anomaly]`. The default `zscore,mad,stl` runs whatever is installed, and the README lists a skipped

@@ -72,6 +72,20 @@ def build_parser() -> argparse.ArgumentParser:
         help=METHODS_HELP,
     )
     screen.add_argument(
+        "--json",
+        nargs="?",
+        const="-",
+        default=None,
+        metavar="PATH",
+        help="Print the run summary as JSON on stdout, or write it to PATH (summary.json is always written to --out)",
+    )
+    screen.add_argument("--no-plots", action="store_true", help="Skip every PNG (scoreboard, support plots, day zooms)")
+    screen.add_argument(
+        "--tz",
+        default="UTC",
+        help="IANA zone for calendar days, day zooms and JSON windows, e.g. America/Chicago (default UTC)",
+    )
+    screen.add_argument(
         "--iforest-contamination",
         type=float,
         default=0.01,
@@ -192,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "screen":
             from open_fdd.analytics.anomaly.screen import screen_folder
 
-            screen_folder(
+            result = screen_folder(
                 args.folder,
                 args.out,
                 top_n=int(args.top_n),
@@ -202,7 +216,18 @@ def main(argv: list[str] | None = None) -> int:
                 engine=str(args.engine),
                 activity_policy=str(args.activity),
                 iforest_contamination=float(args.iforest_contamination),
+                plots=not bool(args.no_plots),
+                tz=str(args.tz),
             )
+            if args.json:
+                import json
+
+                text = json.dumps(result.summary, indent=1, default=str)
+                if args.json == "-":
+                    print(text)
+                else:
+                    Path(args.json).parent.mkdir(parents=True, exist_ok=True)
+                    Path(args.json).write_text(text, encoding="utf-8")
         else:
             from open_fdd.reporting.single_system_typst import build_single_system_report
 
