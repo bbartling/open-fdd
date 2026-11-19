@@ -413,4 +413,4 @@ async function createEngine({ kind, pack, ...opts }) {
   throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite" or "timescale")`);
 }
 
-module.exports = { createEngine, HELPERS };
+module.exports = { createEngine, HELPERS, loadSqlJs };
