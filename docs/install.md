@@ -156,6 +156,26 @@ the framework's release instructions and verify its console before installing Op
 upgrade, and rollback steps, see the [NF Compose guide](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-upgrade-compose.md).
 App uninstall is not a substitute for an NF backup.
 
+Points the app leaves behind are cleaned up with `prune-points`, which is a dry run unless `--yes` is given:
+
+```bash
+python3 scripts/nf/hooks/nf_app_sync.py --env <protected-env-file> prune-points nf-app/app.json                 # list only
+python3 scripts/nf/hooks/nf_app_sync.py --env <protected-env-file> prune-points nf-app/app.json --stale-days 30 --yes
+```
+
+It lists two groups and deletes nothing else:
+
+- **Orphans:** automation-layer points whose `attrs.application_id` is this manifest's id or one of its `replaces`
+  ids, and that app is no longer installed.
+- **Stale results:** `fdd-result` / `fdd-fault-timeline` points of the installed app whose model record is flagged
+  `fddStatus: stale` (the release no longer runs that rule for that equipment) and whose newest value is older than
+  `--stale-days` (default 30).
+
+Points of any other app, BACnet or field layers and hand-made points are never candidates. More than `--max-delete`
+candidates (default 500) stops with nothing changed. `--yes` deletes exactly the listed uuids through the NF point
+API, which removes the point and its NF history in every layer; Timescale tables are not touched. Without the tool,
+the same uuids can be deleted with the NF MCP `delete_points` tool (dry run first).
+
 ## Hooks
 
 Full schedules `fdd` hourly and `weather` every 20 minutes. `sparql` is on request. Lite schedules `weather`

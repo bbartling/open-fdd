@@ -69,7 +69,8 @@ NF site: A, C and D (checklist in [#1567](https://github.com/bbartling/open-fdd/
 
 Run `doctor`, read the release notes, then run `install` from the exact release tag you intend to deploy. Pin each site to a reviewed
 revision, not `master`. `install --remove-old` lists predecessor apps; add `--yes` to remove them. `uninstall` removes the current app and
-keeps hook-created history. Back up NF before changing the host.
+keeps hook-created history. `prune-points` lists the app's orphan and long-stale result points (dry run; `--yes` deletes exactly
+the listed uuids, never points of other apps or field layers). Back up NF before changing the host.
 
 ## Results and API
 
