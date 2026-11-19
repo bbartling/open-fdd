@@ -83,7 +83,9 @@ before command) and matches `open_fdd.analytics.core.motor_run_hours_weekly` (`t
 role_map)` on frames. Mechanical-cooling hours by outdoor-air bin are `sql/analytics/mech_cooling_oat_bins.sql`: the
 proof ladder (chiller / compressor status, command, stages, amps or kW; heat pumps only in cooling mode) is built from
 bound roles in `open_fdd.analytics.sql_mech_cooling`, and the rows match `core.mech_cooling_oat_bins`
-(`tests/test_sql_mech_cooling.py`).
+(`tests/test_sql_mech_cooling.py`). Economizer metrics per air handler (fan-on hours, identifiable samples, median and mean
+absolute MAT residual against the damper mixing model) are `sql/analytics/economizer_metrics.sql` and match
+`core.economizer_free_cooling_diagnostics` (`tests/test_sql_economizer.py`).
 
 ## ML FDD (`open-fdd-ml`)
 
