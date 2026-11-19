@@ -150,6 +150,8 @@ async function handleRuleParams({ ts, client, a, pack, log }) {
   }
   const [siteLayer, equipLayer] = layers(candidate);
   const merged = ruleTuning.mergeRuleParams(ruleTpl.controls, siteLayer, equipLayer, a.rule_id, ruleTpl.legacy);
+  // #1672: a low/high pair (zone_t_lo < zone_t_hi, ...) must stay ordered after the change; fail closed before any write
+  if (['preview', 'save', 'rollback'].includes(a.action)) ruleTuning.checkOrderedPairs(ruleTpl.controls, merged.effective, a.rule_id);
   const values = ruleTuning.resolvePlaceholders(ruleTuning.ruleDefaults(ruleTplRoot, ruleTpl), ruleTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
 
   // Verify full SQL rendering (including active SV-LIMITS if this is a sweep rule) before saving
