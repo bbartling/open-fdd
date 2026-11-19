@@ -284,6 +284,44 @@ def _write_csv(path, rows):
     return path
 
 
+def test_export_drops_owner_free_text_and_invalid_history_values(tmp_path):
+    import csv
+    from open_fdd.scorecard import export
+    secret = "PRIVATE-OWNER-NOTE"
+    results = _write_csv(tmp_path / "r.csv", [
+        _res("AHU-F", "FC1", "2026-01-01T02:00:00Z", "FAULT"),
+        _res("AHU-F", "FC1", "2026-01-01T03:00:00Z", secret)])
+    labels = _write_csv(tmp_path / "l.csv", [{
+        "equipment_id": "AHU-F", "start_ts": "2026-01-01T02:00:00Z", "end_ts": "2026-01-01T04:00:00Z",
+        "label": "confirmed", "rule_id": "FC1", "source": secret, "fault_type": secret,
+        "reviewer": secret, "notes": secret}])
+    history = _write_csv(tmp_path / "h.csv", [
+        {"ts": "2026-01-01T02:30:00Z", "equipment_id": "AHU-F", "point": "p", "value": v}
+        for v in (21.0, secret, "nan", "inf")])
+    pmap = _write_csv(tmp_path / "p.csv", [{"point": "p", "role": "supply-air-temp"}])
+    out = tmp_path / "bundle"
+    stats = export.build(results=results, labels=labels, history=history, point_map=pmap,
+                         out=out, private_dir=tmp_path / "private", shift_days=28)
+    assert stats["dropped_invalid_value_rows"] == 3 and stats["history_rows"] == 1
+    assert secret not in "".join(p.read_text() for p in out.iterdir())
+    assert {r["status"] for r in csv.DictReader((out / "rule_results.csv").open())} == {"FAULT", "NA"}
+    exported_label = next(csv.DictReader((out / "labels.csv").open()))
+    assert exported_label["label"] == "fault"
+    assert all(exported_label[k] == "" for k in ("source", "fault_type", "reviewer", "notes"))
+
+
+@pytest.mark.parametrize("field", ["label", "rule_id"])
+def test_export_rejects_unmapped_labels_and_free_text_rule_ids(tmp_path, field):
+    from open_fdd.scorecard import export
+    results = _write_csv(tmp_path / "r.csv", [_res("E", "FC1", "2026-01-01T02:00:00Z", "FAULT")])
+    row = {"equipment_id": "E", "start_ts": "2026-01-01T02:00:00Z", "end_ts": "2026-01-01T04:00:00Z",
+           "label": "fault", "rule_id": "FC1"}
+    row[field] = "private owner note"
+    labels = _write_csv(tmp_path / "l.csv", [row])
+    with pytest.raises(ValueError, match="not mapped|rule_id"):
+        export.build(results=results, labels=labels, out=tmp_path / "bundle", private_dir=tmp_path / "private")
+
+
 def test_export_keys_equipment_by_site_and_normalizes_snake_roles(tmp_path):
     """Same equipment id at two sites -> two aliases; snake_case roles accepted; site ids never leave."""
     import csv

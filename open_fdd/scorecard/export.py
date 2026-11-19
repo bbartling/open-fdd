@@ -19,6 +19,8 @@ import bisect
 import csv
 import hashlib
 import json
+import math
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -49,6 +51,15 @@ def _shift(ts: str, delta: timedelta) -> str:
 
 
 SITE_SEP = "\x1f"  # joins site id + equipment id into one private key; never written to the bundle
+
+
+def _rule_id(value: str, *, optional: bool = False) -> str:
+    value = str(value or "").strip()
+    if optional and not value:
+        return ""
+    if not re.fullmatch(r"[A-Z][A-Z0-9]*(?:[-_][A-Z0-9]+)*", value):
+        raise ValueError("rule_id must be an uppercase rule identifier, not free text")
+    return value
 
 
 def _norm_role(role: str) -> str | None:
@@ -134,13 +145,14 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
     res_rows, faults = [], {}
     for line, r in _rows(results, "results"):
         raw = str(r[rc["status"]]).strip()
-        status = cfg.status_map.get(raw, cfg.status_map.get(raw.upper(), raw.upper()))
+        status = cfg.status_map.get(raw, cfg.status_map.get(raw.upper(), "NA"))
+        status = status if status in ("FAULT", "PASS") else "NA"
         eq = key(r, rc["equipment_id"])
         try:
             s, e = _ts(r[rc["window_start"]]), _ts(r[rc["window_end"]])
         except ValueError as exc:
             raise ValueError(f"results line {line}: {exc}") from None
-        res_rows.append({"equipment_id": a(eq), "rule_id": r[rc["rule_id"]], "window_start": _shift(s, delta),
+        res_rows.append({"equipment_id": a(eq), "rule_id": _rule_id(r[rc["rule_id"]]), "window_start": _shift(s, delta),
                          "window_end": _shift(e, delta), "status": status})
         if status == "FAULT":
             faults.setdefault(eq, []).append((s, e))
@@ -152,19 +164,25 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
     lab_rows = []
     if labels:
         lc = cfg.labels
-        for _, r in _rows(labels, "labels"):
+        for line, r in _rows(labels, "labels"):
+            raw_label = str(r.get(lc["label"], "") or "").strip()
+            if not raw_label:
+                continue  # unfilled verdicts are not owner labels
+            label = cfg.label_map.get(raw_label, cfg.label_map.get(raw_label.lower()))
+            if label not in ("fault", "normal"):
+                raise ValueError(f"labels line {line}: label is not mapped to fault/normal (set label_map)")
             lab_rows.append({"equipment_id": a(key(r, lc["equipment_id"])),
                              "start_ts": _shift(_ts(r[lc["start_ts"]]), delta),
-                             "end_ts": _shift(_ts(r[lc["end_ts"]]), delta), "label": r.get(lc["label"], ""),
-                             "rule_id": r.get(lc["rule_id"], "") or "", "fault_type": r.get(lc["fault_type"], "") or "",
-                             "source": r.get(lc["source"], "") or "", "reviewer": "", "notes": ""})
+                             "end_ts": _shift(_ts(r[lc["end_ts"]]), delta), "label": label,
+                             "rule_id": _rule_id(r.get(lc["rule_id"], ""), optional=True), "fault_type": "",
+                             "source": "", "reviewer": "", "notes": ""})
     with open(out / "labels.csv", "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=list(TEMPLATE_FIELDS))
         w.writeheader()
         w.writerows(lab_rows)
 
     role_map: dict[str, dict[str, Any]] = {}
-    n_hist = dropped_points = 0
+    n_hist = dropped_points = dropped_values = 0
     if history is not None:
         pad = timedelta(hours=window_hours)
         spans: dict[str, list[tuple[str, str]]] = {}
@@ -195,7 +213,15 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
                 i = bisect.bisect_right(starts[eq], ts) - 1
                 if i < 0 or ts > sp[i][1]:
                     continue
-                w.writerow([_shift(ts, delta), a(eq), role, r["value"]])
+                try:
+                    value = float(r["value"])
+                except (TypeError, ValueError):
+                    dropped_values += 1
+                    continue
+                if not math.isfinite(value):
+                    dropped_values += 1
+                    continue
+                w.writerow([_shift(ts, delta), a(eq), role, value])
                 role_map.setdefault(a(eq), {"kind": "", "roles": []})
                 if role not in role_map[a(eq)]["roles"]:
                     role_map[a(eq)]["roles"].append(role)
@@ -240,6 +266,7 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
     (private_dir / "reidentify.json").write_text(json.dumps(private, indent=2), encoding="utf-8")
     return {"results": len(res_rows), "faults": sum(len(v) for v in faults.values()), "fault_episodes": len(episodes),
             "history_rows": n_hist,
+            "dropped_invalid_value_rows": dropped_values,
             "dropped_unmapped_point_rows": dropped_points, "equipment": len(aliases) if alias else None,
             "renamed_roles": sorted(renamed_roles)}
 

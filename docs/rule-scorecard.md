@@ -55,7 +55,7 @@ zip -r bundle.zip bundle/          # send only this
   `--site-column`). Equipment is then keyed by site + equipment, so `AHU_1` at two sites gets two aliases; the site
   id is dropped from the bundle and comes back only through `unalias` (as a `site_id` column).
 - Role names: the point map may use the snake_case spelling (`zone_air_temp`); it is written as `zone-air-temp`.
-  Inputs are checked before anything is written, and a malformed row is reported with its file and line number.
+  The point map is checked before writing; malformed CSV rows report their file and line number.
 - Reviewer side: `open-fdd-scorecard check bundle/`, look at `history_long.csv` around each FAULT, fill in
   `bundle/verdicts.csv` (`label`, `fault_type`, `reviewer`, `notes`), send `verdicts.csv` back, and
   `open-fdd-scorecard run --bundle bundle/ --md card.md`.
@@ -72,6 +72,10 @@ Bundle files: `manifest.json` (format, version, privacy flags, SHA-256 of every 
 - Point names never leave: history is mapped to Open-FDD role names; unmapped points are dropped; `check` rejects
   anything that does not look like a role name.
 - Equipment ids become `EQ-0001`-style aliases; site ids and every extra column are dropped.
+- Exported statuses are `FAULT`, `PASS` or `NA`; labels must map to `fault` or `normal`. Rule ids must use uppercase
+  letters/digits with hyphens or underscores. Owner label source, fault type, reviewer and notes are stripped.
+- History values must be finite numbers; rejected values are counted as `dropped_invalid_value_rows`.
+  `--source-note` and `--no-alias` explicitly disclose owner-supplied text/identifiers; review these before sharing.
 - Optional uniform time shift (use whole weeks so hour of day and day of week, which rules depend on, are kept);
   the manifest's `created_utc` is shifted too, so the export date does not reveal the shift.
 - Data minimization: only history within `--window-hours` of a FAULT window is exported.
