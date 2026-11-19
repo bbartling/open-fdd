@@ -102,7 +102,8 @@ class Verdict:
     #: "rule/equipment" pairs where one side skipped for no run proof and the other assessed. Always a failure, even
     #: for a known-divergent rule: the known-difference list covers fault-hour deltas, never proof disagreements.
     proof_mismatches: list = field(default_factory=list)
-    #: #1631 (informational): "rule/equipment: SQL active_hours X h vs pandas active Y h" beyond ``active_tol_h``
+    #: #1723: "rule/equipment: SQL active_hours X h vs pandas active Y h" beyond ``active_tol_h``. A failure since pandas
+    #: divides run-proof gated rules by the same proven-on time (it was informational under #1631).
     active_hours_mismatches: list = field(default_factory=list)
 
     @property
@@ -254,9 +255,11 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
             if row is None or row.get("fault_hours") is None:
                 continue
             item = {"sql": float(row["fault_hours"]), "pandas": ref.get("pandas"), "status": ref.get("status")}
-            if row.get("active_hours") is not None and ref.get("active_samples") is not None:
+            # #1723: compare denominators only where pandas assessed the rule (a pandas SKIPPED has no denominator)
+            if row.get("active_hours") is not None and ref.get("active_samples") is not None and ref.get("pandas") is not None:
                 sa = float(row["active_hours"])
-                pa = float(ref["active_samples"]) * policy.poll_seconds / 3600.0
+                pa = (float(ref["active_hours"]) if ref.get("active_hours") is not None
+                      else float(ref["active_samples"]) * policy.poll_seconds / 3600.0)
                 item["sql_active_hours"], item["pandas_active_hours"] = sa, pa
                 if abs(sa - pa) > policy.active_tol_h:
                     active_mismatches.append(f"{rule}/{equip}: SQL active_hours {sa:.2f} h vs pandas active {pa:.2f} h")
@@ -277,6 +280,6 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
         compared=v["compared"], twins=len(ref_rows), matched=v["matched"], known_divergent=v["known_divergent"],
         unexpected_rules=v["unexpected_rules"], diverged=diverged,
         now_matching_but_listed=sorted(r for r in policy.known if r in per_rule and r not in diverged),
-        no_twin=sorted(r for r in sql_rows if r not in ref_rows), per_rule=per_rule, ok=v["ok"] and not violations and not proof_mismatches,
+        no_twin=sorted(r for r in sql_rows if r not in ref_rows), per_rule=per_rule, ok=v["ok"] and not violations and not proof_mismatches and not active_mismatches,
         deltas={r: rule_delta(per) for r, per in per_rule.items() if r in policy.known}, pin_violations=violations,
         no_run_proof=agreed, proof_mismatches=proof_mismatches, active_hours_mismatches=sorted(active_mismatches))

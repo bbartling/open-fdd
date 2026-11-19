@@ -672,6 +672,10 @@ def run_cookbook_rule(
             plot_series=_plot_series_for_rule(rule, d),
             active_mask=active if use_active else None,
             params_fingerprint=fp,
+            # #1723 (#1631 design call 1): the fault_pct denominator of a run-proof gated rule is its proven-on time,
+            # every sample when the gate is off, exactly the SQL active_hours (proof_active).
+            pct_mask=(proof_ok if proof_ok is not None
+                      else pd.Series(True, index=d.index) if rule.id in run_proof_gated_ids() else None),
         )
         if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
             # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero

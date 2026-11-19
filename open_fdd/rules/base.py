@@ -320,6 +320,7 @@ def finalize_result(
     plot_series: dict[str, pd.Series] | None = None,
     active_mask: pd.Series | None = None,
     params_fingerprint: str = "",
+    pct_mask: pd.Series | None = None,
 ) -> RuleResult:
     raw = raw.fillna(False).astype(bool)
     if active_mask is not None:
@@ -334,9 +335,15 @@ def finalize_result(
     fault_n = int(confirmed.sum())
     active_h = hours_true(active, poll_seconds)
     fault_h = hours_true(confirmed, poll_seconds)
-    pct = 100.0 * fault_h / active_h if active_h else 0.0
+    denom_h = active_h
+    if pct_mask is not None:
+        # #1723: run-proof gated rules divide by proven-on time (the SQL active_hours), not the rule's own gate time
+        denom_h = hours_true(pct_mask.reindex(raw.index).fillna(False).astype(bool), poll_seconds)
+    pct = 100.0 * fault_h / denom_h if denom_h else 0.0
     status: RuleStatus = "FAULT" if fault_n > 0 else "PASS"
     metrics_out = dict(metrics or {})
+    if pct_mask is not None:
+        metrics_out["active_hours"] = round(denom_h, 6)
     metrics_out.setdefault("active_sample_count", n_active)
     metrics_out.setdefault("total_sample_count", n_total)
     return RuleResult(
