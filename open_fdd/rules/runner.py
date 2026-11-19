@@ -673,6 +673,14 @@ def run_cookbook_rule(
             active_mask=active if use_active else None,
             params_fingerprint=fp,
         )
+        if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
+            # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero
+            why = d.attrs["coil_perf_assessment"]
+            result.status = f"NOT_ASSESSED_{why.upper()}"
+            result.fault_hours = None
+            result.fault_pct = None
+            result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
+            result.metrics["assessment"] = why
         if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
             # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
             result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"
