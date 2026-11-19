@@ -186,3 +186,70 @@ def economizer_metrics_sql(frames: dict, role_map: dict, *, engine: str = "sqlit
         finally:
             conn.close()
     return rows_to_metrics(rows, info, dt_min_c=dt_min_c)
+
+
+# ---------------------------------------------------------------- per-sample points (#1649: the economizer charts)
+
+POINT_COLUMNS = ("equipment_id", "t", "oat", "rat", "mat", "d_or", "d_mr", "identifiable", "damper_pct", "mat_resid")
+
+
+def economizer_points_sql_template() -> str:
+    return resources.files("open_fdd").joinpath("data/economizer_points.sql").read_text(encoding="utf-8")
+
+
+def render_economizer_points_sql(
+    engine: str,
+    roles: Iterable[tuple[str, str, str]],
+    *,
+    site_id: str = DEFAULT_SITE,
+    dt_min_c: float = ECON_DIAG_DT_MIN_C,
+    start_ms: int | None = None,
+    end_ms: int | None = None,
+) -> str:
+    """Per-sample economizer points (fan on, OAT and RAT present); same roles and checks as the metrics query."""
+    if engine not in TS_MS:
+        raise ValueError(f"unknown engine {engine!r}")
+    rows = list(roles)
+    for _eq, role, _key in rows:
+        if role not in ROLES:
+            raise ValueError(f"unknown economizer role {role!r}")
+    dt = float(dt_min_c)
+    if not math.isfinite(dt) or dt < 0:
+        raise ValueError("dt_min_c must be a non-negative number")
+    if start_ms is not None and end_ms is not None and int(end_ms) <= int(start_ms):
+        raise ValueError("end_ms must be after start_ms")
+    window_filter = ""
+    if start_ms is not None:
+        window_filter += f" AND t >= {int(start_ms)}"
+    if end_ms is not None:
+        window_filter += f" AND t < {int(end_ms)}"
+    body = "\n".join(ln for ln in economizer_points_sql_template().splitlines() if not ln.lstrip().startswith("--"))
+    return body.format(
+        roles=_inline([("equipment_id", "TEXT"), ("role", "TEXT"), ("point_key", "TEXT")], rows),
+        ts_ms=TS_MS[engine],
+        site_id=_quote(site_id),
+        window_filter=window_filter,
+        dt_min=repr(dt),
+    )
+
+
+def run_economizer_points_sql(conn: Any, engine: str, roles: Iterable[tuple[str, str, str]], **kwargs: Any) -> list[dict]:
+    rows_in = list(roles)
+    if not rows_in:
+        return []
+    sql = render_economizer_points_sql(engine, rows_in, **kwargs)
+    if engine == "postgres":
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+    else:
+        rows = conn.execute(sql).fetchall()
+    out = []
+    for row in rows:
+        rec = dict(zip(POINT_COLUMNS, row))
+        rec["t"] = int(rec["t"]) if not hasattr(rec["t"], "timestamp") else int(rec["t"].timestamp() * 1000)
+        rec["identifiable"] = bool(rec["identifiable"])
+        for k in ("oat", "rat", "mat", "d_or", "d_mr", "damper_pct", "mat_resid"):
+            rec[k] = None if rec[k] is None else float(rec[k])
+        out.append(rec)
+    return out

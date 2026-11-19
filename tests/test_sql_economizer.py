@@ -165,3 +165,37 @@ def test_postgres_economizer_matches_pandas():
         with psycopg.connect(base, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
     pd.testing.assert_frame_equal(_sorted(rows_to_metrics(rows, info)), _want(frames, role_map), check_dtype=False)
+
+
+# ---- per-sample points (#1649: the economizer charts) -------------------------------------------------------------
+
+def test_points_match_the_pandas_diagnostics_points():
+    from open_fdd.analytics.sql_economizer import economizer_points_sql_template, run_economizer_points_sql
+
+    repo = (ROOT / "sql" / "analytics" / "economizer_points.sql").read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert economizer_points_sql_template().replace("\r\n", "\n") == repo
+    frames, role_map = _frames()
+    roles, points, samples, info = plan_from_frames(frames, role_map)
+    conn = sqlite3.connect(":memory:")
+    create_core(conn, "sqlite")
+    load_core(conn, "sqlite", points, samples)
+    got = run_economizer_points_sql(conn, "sqlite", roles)
+    conn.close()
+    pts = economizer_free_cooling_diagnostics(frames, role_map, max_points_per_eq=10 ** 9)["points"]
+    pts = pts[pts["oat_f"].notna() & pts["rat_f"].notna()]
+    assert len(got) == len(pts) and len(got) > 500
+    want = {(r.equipment_id, int(pd.Timestamp(r.timestamp).value // 1_000_000)): r for r in pts.itertuples()}
+    for g in got:
+        w = want[(g["equipment_id"], g["t"])]
+        assert abs(g["d_or"] - w.delta_or_f) < 1e-9 and g["identifiable"] == bool(w.identifiable)
+        assert (g["d_mr"] is None) == pd.isna(w.delta_mr_f)
+        if g["d_mr"] is not None:
+            assert abs(g["d_mr"] - w.delta_mr_f) < 1e-9
+        assert (g["damper_pct"] is None) == pd.isna(w.damper_fb_pct)
+        if g["damper_pct"] is not None:
+            assert abs(g["damper_pct"] - w.damper_fb_pct) < 1e-9
+        resid = getattr(w, "mat_resid_f")
+        if g["mat_resid"] is None:
+            assert pd.isna(resid) or not g["identifiable"]
+        else:
+            assert abs(g["mat_resid"] - resid) < 1e-9
