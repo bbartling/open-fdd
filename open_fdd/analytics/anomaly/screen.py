@@ -9,12 +9,14 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from open_fdd.analytics.anomaly.activity import (
     ACTIVITY_POLICIES,
     DEFAULT_POLICY,
     SKIP_NO_ACTIVE,
+    SKIP_NO_KNOWN_PROOF,
     SKIP_NO_PROOF,
     activity,
     is_site_role,
@@ -301,7 +303,8 @@ def _write_readme(
                 f"unoccupied {a.get('unoccupied_rows')}, unknown {a.get('unknown_rows')}.",
                 f"Assessed equipment rows: **{a.get('assessed_rows')}** ({float(a.get('assessed_fraction') or 0):.1%}).",
                 "Equipment points with no assessable rows are listed with `skipped_reason` "
-                f"`{SKIP_NO_PROOF}` (no proof role) or `{SKIP_NO_ACTIVE}` (proof never on); they were not assessed.",
+                f"`{SKIP_NO_PROOF}` (no proof role), `{SKIP_NO_KNOWN_PROOF}` (a proof role with no known value on any row) "
+                f"or `{SKIP_NO_ACTIVE}` (proof never on); they were not assessed.",
                 "The scoreboard's `gate` column says how each point was gated and `assessed_rows` how many rows it had.",
             ]
         )
@@ -470,7 +473,11 @@ def screen_folder(
         index=every.frame.index,
     )
     act = activity(role_frame, policy=activity_policy)
-    running = act.state.eq("on").reindex(device.frame.index).fillna(False).astype(bool)
+    on_rows = act.state.eq("on")
+    if on_rows.index.equals(device.frame.index):
+        running = pd.Series(on_rows.to_numpy(dtype=bool), index=device.frame.index)
+    else:
+        running = on_rows[~on_rows.index.duplicated()].reindex(device.frame.index).fillna(False).astype(bool)
 
     def _gate(role: str) -> tuple[str, pd.Series]:
         if activity_policy == "ungated":
@@ -535,7 +542,7 @@ def screen_folder(
                     "method": "",
                     "anomaly_minutes": 0.0,
                     "event_count": 0,
-                    "skipped_reason": SKIP_NO_PROOF if act.source == "none" else SKIP_NO_ACTIVE,
+                    "skipped_reason": act.skip_reason(),
                     "gate": gate,
                     "assessed_rows": 0,
                     "method_note": "",
@@ -550,7 +557,10 @@ def screen_folder(
             else:
                 flags = _flags_for_method(method, gated, window=window, period=period, contamination=rate)
                 if gated is not series:
-                    flags = flags.reindex(series.index, fill_value=False)
+                    # positional: a device folder may carry duplicate timestamps, which reindex cannot align
+                    full = np.zeros(len(series), dtype=bool)
+                    full[np.flatnonzero(assessed.to_numpy())] = flags.to_numpy(dtype=bool)
+                    flags = pd.Series(full, index=series.index)
             flags = (flags.astype(bool) & assessed.to_numpy()).astype(bool)
             point_flags[method] = flags
             rows.append(

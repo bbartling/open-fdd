@@ -8,7 +8,7 @@ on:
       - "nf-app/rules/pack-postgres.json"
       - ".github/workflows/duckdb-tutorial.yml"
   push:
-    branches: [master]
+    branches: [master, "release/**"]
     paths:
       - "tutorials/duckdb_sql_parity/**"
       - "open_fdd/parity/**"

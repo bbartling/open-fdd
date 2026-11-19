@@ -5,7 +5,7 @@ name: Docs (GitHub Pages)
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, "release/**"]
     paths:
       - "docs/**"
       - "nf-app/static/fdd-catalog.json"
@@ -20,7 +20,7 @@ on:
       - "tests/parity/test_parity.py"
       - ".github/workflows/docs-pages.yml"
   pull_request:
-    branches: [master, main]
+    branches: [master, main, "release/**"]
     paths:
       - "docs/**"
       - "nf-app/static/fdd-catalog.json"
@@ -41,8 +41,10 @@ permissions:
   pages: write
   id-token: write
 
+# Deploys (pushes to master) are serialized in one group. A pull request's build gets its own group per branch: with one
+# shared group GitHub keeps a single pending run, so every PR build cancelled the one queued before it.
 concurrency:
-  group: pages
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.head_ref) || format('pages-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
@@ -93,7 +95,8 @@ jobs:
 
   deploy:
     needs: build
-    if: github.event_name != 'pull_request'
+    # Release-branch pushes build and link-check the site but never publish it.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

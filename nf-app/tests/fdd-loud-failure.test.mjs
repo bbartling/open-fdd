@@ -209,3 +209,17 @@ test("history hook: empty result is ok with a reason and the newest source times
     tsLib.connect = realConnect;
   }
 });
+
+test("#1673: bound sweep sensors with no sample in the window are SV-STALE, not a silent no-data skip", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { createEngine } = require("../hooks/lib/engines.js");
+  const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
+  const http = fakeHttp({ points: [FANC(), FANS(), OAT], noHistory: true });
+  const logs = [];
+  const s = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, config: {}, pack: litePack, createEngine, now: NOW });
+  assert.ok(logs.some((l) => /only SV-STALE runs/.test(l)), logs.join("\n"));
+  assert.equal(s.skipped.filter((x) => x.kind === "no-data").length, 0, "the equipment is assessed for missing data");
+  const stale = http.writes.points.filter((r) => r.layer === "model" && r.attrs.ruleRef === "SV-STALE");
+  assert.ok(stale.length >= 1, "an SV-STALE result is published");
+  assert.ok(stale.some((r) => r.attrs.fddStatus === "fault"), JSON.stringify(stale.map((r) => r.attrs)));
+});
