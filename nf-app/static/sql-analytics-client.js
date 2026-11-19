@@ -55,16 +55,70 @@
     return { t: uniform ? { t0: t[0], step, n: t.length } : t, cols };
   }
 
+  // Supported request size: a year of the 300 s fine grid per series, at most 256 series and 2 M cells per request.
+  // The hook decodes untrusted JSON: every dimension is checked BEFORE anything is allocated, and a request over
+  // budget fails with a clear error (never a silent truncation of real history).
+  const LIMITS = { rows: 110000, cols: 256, cells: 2000000 };
+  const isCount = (n, max) => Number.isSafeInteger(n) && n >= 0 && n <= max;
+
   function decodeGrid(w) {
-    const t = Array.isArray(w.t) ? w.t.map(Number) : Array.from({ length: w.t.n }, (_, i) => w.t.t0 + i * w.t.step);
+    const bad = (m) => { throw new Error(`sql_grid: ${m}`); };
+    if (!w || typeof w !== "object") bad("grid must be an object");
+    let n;
+    if (Array.isArray(w.t)) {
+      if (w.t.length > LIMITS.rows) bad(`${w.t.length} times exceeds the supported ${LIMITS.rows}`);
+      n = w.t.length;
+    } else if (w.t && typeof w.t === "object") {
+      if (!isCount(w.t.n, LIMITS.rows)) bad(`t.n must be an integer 0..${LIMITS.rows}`);
+      if (!Number.isFinite(w.t.t0) || !Number.isFinite(w.t.step) || !(w.t.step > 0)) bad("t0 must be finite and step positive");
+      n = w.t.n;
+    } else bad("t must be an array or {t0, step, n}");
+    const entries = Object.entries(w.cols && typeof w.cols === "object" ? w.cols : {});
+    if (entries.length > LIMITS.cols) bad(`${entries.length} columns exceeds the supported ${LIMITS.cols}`);
+    if (entries.length * n > LIMITS.cells) bad(`${entries.length} x ${n} cells exceeds the supported ${LIMITS.cells}`);
+    // validate every run (finite or null value, positive integer count, counts summing to n) before expanding any
+    for (const [k, runs] of entries) {
+      if (!Array.isArray(runs) || runs.length > n) bad(`column ${k}: runs must be an array of at most ${n} runs`);
+      let sum = 0;
+      for (const r of runs) {
+        if (!Array.isArray(r) || r.length !== 2) bad(`column ${k}: each run is [value, count]`);
+        if (r[0] !== null && !Number.isFinite(r[0])) bad(`column ${k}: values must be finite numbers or null`);
+        if (!Number.isSafeInteger(r[1]) || r[1] < 1) bad(`column ${k}: run counts must be positive integers`);
+        sum += r[1];
+        if (sum > n) bad(`column ${k}: runs cover more than ${n} times`);
+      }
+      if (sum !== n) bad(`column ${k} has ${sum} values for ${n} times`);
+    }
+    const t = Array.isArray(w.t) ? w.t : Array.from({ length: n }, (_, i) => w.t.t0 + i * w.t.step);
+    for (let i = 0; i < n; i++) {
+      if (!Number.isFinite(t[i])) bad("times must be finite numbers (epoch ms)");
+      if (i && !(t[i] > t[i - 1])) bad("times must be strictly increasing");
+    }
     const cols = {};
-    for (const [k, runs] of Object.entries(w.cols || {})) {
-      const v = [];
-      for (const [x, n] of runs) for (let i = 0; i < n; i++) v.push(x);
-      if (v.length !== t.length) throw new Error(`sql_grid: column ${k} has ${v.length} values for ${t.length} times`);
+    for (const [k, runs] of entries) {
+      const v = new Array(n);
+      let j = 0;
+      for (const [x, c] of runs) { v.fill(x, j, j + c); j += c; }
       cols[k] = v;
     }
-    return { t, cols };
+    return { t: t.slice(), cols };
+  }
+
+  /** Plain runtime / mech specs from JSON, bounded like the grid (weeks and occupied intervals are finite ms). */
+  function checkSpecs(specs) {
+    const bad = (m) => { throw new Error(`sql_grid: ${m}`); };
+    if (!Array.isArray(specs) || specs.length > LIMITS.cols) bad(`specs must be an array of at most ${LIMITS.cols}`);
+    for (const s of specs) {
+      if (!s || typeof s !== "object") bad("each spec is an object");
+      for (const k of ["weeks", "occupied"]) {
+        const max = LIMITS.rows;
+        const a = s[k];
+        if (a == null) continue;
+        if (!Array.isArray(a) || a.length > max) bad(`spec ${k} must be an array of at most ${max}`);
+        for (const x of a.flat()) if (!Number.isFinite(x)) bad(`spec ${k} must hold finite epoch ms`);
+      }
+    }
+    return specs;
   }
 
   // results: runtime / mech are Maps (key -> Map(weekStart -> row) / key -> hours per bin); JSON carries entries
@@ -119,7 +173,7 @@
     })();
   }
 
-  const api = { plainRuntimeSpecs, encodeGrid, decodeGrid, encodeResult, decodeResult, makeClient, hookCall };
+  const api = { plainRuntimeSpecs, encodeGrid, decodeGrid, checkSpecs, LIMITS, encodeResult, decodeResult, makeClient, hookCall };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else {
     root.ofddSqlAnalyticsWire = api;

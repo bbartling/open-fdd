@@ -38,6 +38,7 @@ const vm = require('vm');
 const STATIC = path.join(__dirname, '..', 'static');
 const { queryPoints } = require('./lib/paging.js');
 const MAX_RESULT_CHARS = 200000;
+const SQL_GRID_MAX_CHARS = 32 * 1024 * 1024;   // sql_grid: raw JSON per argument (the decoded grid has its own limits)
 const FINE_SEC = 300;                   // the pack grid: native cadence of the FDD timeline points
 const FINE_MAX_SAMPLES = 9000;          // per series per request (NF caps at ~10000)
 const MAX_DAYS = 366;
@@ -403,11 +404,17 @@ async function sqlGrid(args) {
   const wire = require('../static/sql-analytics-client.js');
   const SA = require('./lib/sql-analytics.js');
   const kind = String(args.kind || '');
-  const parse = (k) => { try { return JSON.parse(String(args[k])); } catch (_) { throw new ToolError(`sql_grid: args.${k} is not JSON`); } };
-  const g = wire.decodeGrid(parse('grid'));
-  const run = { runtime: () => SA.runtimeFromGrid('sqlite', g, parse('specs')), mech: () => SA.mechFromGrid('sqlite', g, parse('specs')),
+  if (!['runtime', 'mech', 'econ', 'bas'].includes(kind)) throw new ToolError('sql_grid: args.kind must be runtime, mech, econ or bas');
+  const parse = (k) => {
+    const raw = String(args[k] ?? '');
+    if (raw.length > SQL_GRID_MAX_CHARS) throw new ToolError(`sql_grid: args.${k} is over ${SQL_GRID_MAX_CHARS} characters`);
+    try { return JSON.parse(raw); } catch (_) { throw new ToolError(`sql_grid: args.${k} is not JSON`); }
+  };
+  const asTool = (f) => { try { return f(); } catch (e) { throw e instanceof ToolError ? e : new ToolError(errText(e)); } };
+  const g = asTool(() => wire.decodeGrid(parse('grid')));
+  const specs = kind === 'runtime' || kind === 'mech' ? asTool(() => wire.checkSpecs(parse('specs'))) : null;
+  const run = { runtime: () => SA.runtimeFromGrid('sqlite', g, specs), mech: () => SA.mechFromGrid('sqlite', g, specs),
     econ: () => SA.econFromGrid('sqlite', g), bas: () => SA.basFromGrid('sqlite', g) }[kind];
-  if (!run) throw new ToolError('sql_grid: args.kind must be runtime, mech, econ or bas');
   return { kind, result: wire.encodeResult(kind, await run()) };
 }
 

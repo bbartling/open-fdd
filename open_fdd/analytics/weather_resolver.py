@@ -198,13 +198,3 @@ def bas_vs_web_oat_stats(
     out.update(n=int(len(d)), bias=float(d.mean()), mae=float(d.abs().mean()), max_abs=float(d.abs().max()),
                within_band=float((d.abs() <= float(band_c)).mean()))
     return out
-    left = pd.DataFrame({"t": pd.DatetimeIndex(b.index), "bas": b.to_numpy(dtype=float)})
-    right = pd.DataFrame({"t": pd.DatetimeIndex(w.index), "web": w.to_numpy(dtype=float)})
-    joined = pd.merge_asof(left, right, on="t", direction="backward",
-                           tolerance=pd.Timedelta(seconds=age), allow_exact_matches=True)
-    d = (joined["bas"] - joined["web"]).dropna()
-    if d.empty:
-        return out
-    out.update(n=int(len(d)), bias=float(d.mean()), mae=float(d.abs().mean()), max_abs=float(d.abs().max()),
-               within_band=float((d.abs() <= float(band_c)).mean()))
-    return out

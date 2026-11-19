@@ -69,6 +69,42 @@ test("runtime / mech / econ / bas through the hook equal the in-process SQL", as
   assert.ok(Math.abs(bas.stats.bias - 0.7) < 0.5 && bas.rows.length === bas.stats.n);
 });
 
+test("sql_grid validates every dimension BEFORE expanding anything (untrusted StartHook JSON)", async () => {
+  const L = wire.LIMITS;
+  const cases = [
+    [{ t: [1], cols: { fan: [[1, 1e9]] } }, /cover more than 1/],                       // the review's billion-value run
+    [{ t: { t0: 0, step: 300e3, n: 1e9 }, cols: {} }, /t\.n must be an integer/],
+    [{ t: { t0: 0, step: 300e3, n: L.rows }, cols: Object.fromEntries(Array.from({ length: 19 }, (_, i) => [`c${i}`, [[1, L.rows]]])) }, /cells exceeds/],
+    [{ t: { t0: 0, step: 300e3, n: 2.5 }, cols: {} }, /t\.n must be an integer/],
+    [{ t: { t0: 0, step: 0, n: 3 }, cols: {} }, /step positive/],
+    [{ t: { t0: 0, step: -1, n: 3 }, cols: {} }, /step positive/],
+    [{ t: [1, 2, 3], cols: { a: [[1, 1.5], [2, 1.5]] } }, /positive integers/],
+    [{ t: [1, 2, 3], cols: { a: [[1, -1], [2, 4]] } }, /positive integers/],
+    [{ t: [1, 2, 3], cols: { a: [[1, 2]] } }, /2 values for 3 times/],
+    [{ t: [1, 2, 3], cols: { a: [["x", 3]] } }, /finite numbers or null/],
+    [{ t: [1, 1, 3], cols: { a: [[1, 3]] } }, /strictly increasing/],
+    [{ t: [1, null, 3], cols: { a: [[1, 3]] } }, /finite numbers/],
+    [{ t: [3, 2, 1], cols: {} }, /strictly increasing/],
+  ];
+  const push = Array.prototype.push, fill = Array.prototype.fill;
+  let probes = 0;
+  Array.prototype.push = function (...a) { if (++probes > 1000) throw new Error("probe: expanded"); return push.apply(this, a); };
+  Array.prototype.fill = function (...a) { if (++probes > 1000) throw new Error("probe: expanded"); return fill.apply(this, a); };
+  try {
+    for (const [grid, re] of cases) { probes = 0; assert.throws(() => wire.decodeGrid(grid), re, JSON.stringify(grid).slice(0, 80)); }
+  } finally { Array.prototype.push = push; Array.prototype.fill = fill; }
+  // through the hook: a clear ToolError answer, never a crash or a truncated result
+  const ans = await hook.handle({ sdk: { logEvent: () => {} }, args: { tool: "sql_grid", kind: "econ", grid: JSON.stringify(cases[0][0]) } });
+  assert.equal(ans.ok, false);
+  assert.match(ans.error, /sql_grid: column fan: runs cover more than 1 times/);
+  const specs = await hook.handle({ sdk: { logEvent: () => {} }, args: { tool: "sql_grid", kind: "runtime", grid: JSON.stringify({ t: [1, 2], cols: { m: [[1, 2]] } }),
+    specs: JSON.stringify([{ key: 0, motor: "m", weeks: [1, "x"] }]) } });
+  assert.match(specs.error, /finite epoch ms/);
+  // the largest supported request still decodes
+  const big = wire.decodeGrid({ t: { t0: 0, step: 300e3, n: L.rows }, cols: { a: [[1, L.rows]] } });
+  assert.equal(big.cols.a.length, L.rows);
+});
+
 test("sql_grid refuses a bad kind or grid; the client turns that into an error", async () => {
   const bad = await hook.handle({ sdk: { logEvent: () => {} }, args: { tool: "sql_grid", kind: "oracle", grid: "{\"t\":[],\"cols\":{}}" } });
   assert.equal(bad.ok, false);
