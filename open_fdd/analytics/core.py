@@ -803,6 +803,8 @@ def motor_run_hours_weekly(
     weather: pd.DataFrame | None = None,
     prefer_web_oat: bool = True,
     include_all_mapped: bool = False,
+    week_starts: Any = None,
+    occupied_intervals: Any = None,
 ) -> pd.DataFrame:
     """Weekly on-hours per motor, split by plant_group (air / boiler / chiller).
 
@@ -815,6 +817,15 @@ def motor_run_hours_weekly(
     ``include_all_mapped`` keeps the same weekly math and also emits every mapped
     fan or pump family that plant discovery omitted (pumps on air handlers, fans
     on FCU / VAV / other stubs). Overview export leaves this off.
+
+    ``week_starts`` replaces the UTC Monday weeks with the caller's boundaries, e.g. the site's local Mondays (DST-aware):
+    a list of timestamps, or ``{equipment_id: list}``. An interval belongs to the last start at or before its own start;
+    samples before the first start are not counted. ``week_start`` is that boundary in UTC (naive) and ``week_label`` its
+    date in the boundary's own time zone.
+
+    ``occupied_intervals`` (a list of ``(start, end)`` timestamps, end exclusive, or ``{equipment_id: list}``) adds
+    ``in_hours`` and ``after_hours``: each counted interval goes to the occupancy state at its start. The columns are only
+    present when the argument is given. The SQL twin is ``sql/analytics/motor_weekly_runtime.sql``.
     """
     from open_fdd.analytics.poll import infer_poll_seconds
     from open_fdd.analytics.role_map import coerce_role_map
@@ -860,42 +871,47 @@ def motor_run_hours_weekly(
         dur.index = idx
         hours = on * (dur / 3600.0)
         hours.index = idx
-        weekly = hours.resample("W-MON", label="left", closed="left").sum()
+        keys = _week_keys(idx, _per_equipment(week_starts, eq_id))
+        keep = keys.notna().to_numpy()
+        weekly = hours[keep].groupby(keys[keep].to_numpy()).sum()
         oat = oat_by_eq.get(eq_id)
-        oat_on = None
+        weekly_oat = None
         if oat is not None:
             oat_aligned = oat.reindex(idx)
             oat_on = oat_aligned.where((on > 0.05) & (dur > 0))     # the intervals that were counted
-        weekly_oat = (
-            oat_on.resample("W-MON", label="left", closed="left").mean()
-            if oat_on is not None
-            else None
-        )
-        seen = pd.Series(idx, index=idx).resample("W-MON", label="left", closed="left")
+            weekly_oat = oat_on[keep].groupby(keys[keep].to_numpy()).mean()
+        seen = pd.Series(idx, index=idx)[keep].groupby(keys[keep].to_numpy())
         span_days = ((seen.max() - seen.min()).dt.total_seconds() / 86400.0).to_dict()
+        occ = _per_equipment(occupied_intervals, eq_id) if occupied_intervals is not None else None
+        weekly_in = None
+        if occupied_intervals is not None:
+            occupied = _occupied_mask(idx, occ or [])
+            weekly_in = hours.where(occupied, 0.0)[keep].groupby(keys[keep].to_numpy()).sum()
         for ts, h in weekly.items():
             if pd.isna(h) or float(h) <= 0:
                 continue
-            week = pd.Timestamp(ts)
-            if week.tzinfo is not None:
-                week = week.tz_convert("UTC").tz_localize(None)
+            start = pd.Timestamp(ts)
+            week = start.tz_convert("UTC").tz_localize(None) if start.tzinfo is not None else start
             avg_oat = None
             if weekly_oat is not None and ts in weekly_oat.index and pd.notna(weekly_oat.loc[ts]):
                 avg_oat = float(weekly_oat.loc[ts])
-            rows.append(
-                {
-                    "week_start": week.normalize(),
-                    "week_label": week.strftime("%Y-%m-%d"),
-                    "equipment_id": eq_id,
-                    "signal": spec["signal"],
-                    "motor_kind": spec["motor_kind"],
-                    "plant_group": spec["plant_group"],
-                    "label": spec["label"],
-                    "hours": round(float(h), 2),
-                    "avg_oat_c": avg_oat,
-                    "partial_week": bool(span_days.get(ts, 0.0) < 6.0),
-                }
-            )
+            row = {
+                "week_start": week.normalize() if week_starts is None else week,
+                "week_label": start.strftime("%Y-%m-%d"),
+                "equipment_id": eq_id,
+                "signal": spec["signal"],
+                "motor_kind": spec["motor_kind"],
+                "plant_group": spec["plant_group"],
+                "label": spec["label"],
+                "hours": round(float(h), 2),
+                "avg_oat_c": avg_oat,
+                "partial_week": bool(span_days.get(ts, 0.0) < 6.0),
+            }
+            if weekly_in is not None:
+                in_h = float(weekly_in.get(ts, 0.0))
+                row["in_hours"] = round(in_h, 2)
+                row["after_hours"] = round(float(h) - in_h, 2)
+            rows.append(row)
     cols = [
         "week_start",
         "week_label",
@@ -908,11 +924,55 @@ def motor_run_hours_weekly(
         "avg_oat_c",
         "partial_week",
     ]
+    if occupied_intervals is not None:
+        cols += ["in_hours", "after_hours"]
     if not rows:
         return pd.DataFrame(columns=cols)
-    return pd.DataFrame(rows).sort_values(
+    return pd.DataFrame(rows)[cols].sort_values(
         ["plant_group", "week_start", "motor_kind", "equipment_id", "signal"]
     )
+
+
+def _per_equipment(value: Any, equipment_id: str) -> Any:
+    """``value`` itself, or ``value[equipment_id]`` when it is a per-equipment dict (None when the equipment is absent)."""
+    if isinstance(value, dict):
+        return value.get(equipment_id)
+    return value
+
+
+def _utc_ns(values: Any) -> np.ndarray:
+    """Timestamps as int64 UTC nanoseconds (naive values are UTC)."""
+    idx = pd.DatetimeIndex(pd.to_datetime(list(values)))
+    if idx.tz is None:
+        idx = idx.tz_localize("UTC")
+    return idx.tz_convert("UTC").as_unit("ns").asi8
+
+
+def _week_keys(idx: pd.DatetimeIndex, starts: Any) -> pd.Series:
+    """Per-row week key: the UTC Monday 00:00 of the row (no ``starts``), or the last caller start at or before it.
+
+    Rows before the first caller start get NaT (not counted). Keys keep the starts' own time zone for the label.
+    """
+    if starts is None:
+        utc = idx.tz_convert("UTC") if idx.tz is not None else idx
+        monday = utc.normalize() - pd.to_timedelta(utc.dayofweek, unit="D")
+        return pd.Series(monday, index=idx)
+    ordered = sorted(pd.Timestamp(s) for s in starts)
+    if not ordered:
+        return pd.Series(pd.NaT, index=idx)
+    pos = np.searchsorted(_utc_ns(ordered), _utc_ns(idx), side="right") - 1
+    keys = [ordered[p] if p >= 0 else pd.NaT for p in pos]
+    return pd.Series(keys, index=idx, dtype=object)
+
+
+def _occupied_mask(idx: pd.DatetimeIndex, intervals: Any) -> pd.Series:
+    """True where a row's time lies in any (start, end) interval (end exclusive)."""
+    t = _utc_ns(idx)
+    mask = np.zeros(len(t), dtype=bool)
+    for start, end in intervals:
+        s, e = _utc_ns([start, end])
+        mask |= (t >= s) & (t < e)
+    return pd.Series(mask, index=idx)
 
 
 def _first_on_mask(df: pd.DataFrame, roles: tuple[str, ...]) -> pd.Series | None:

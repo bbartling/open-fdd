@@ -192,3 +192,31 @@ def test_wide_frame_helper_keeps_row_identity_with_repeated_timestamps():
     frame.iloc[3, 0] = 1.0
     with pytest.raises(ValueError, match="same millisecond"):
         zscore_flags_sql(frame, window=3, threshold=1.0, engine="sqlite")
+
+
+# ---- window contract boundaries (#1649): pandas and SQL must agree on every one ---------------------------------------
+
+def _both(values, window, threshold, engine):
+    from open_fdd.analytics.anomaly.detectors import rolling_zscore_flags
+
+    idx = pd.date_range("2026-01-05", periods=len(values), freq="5min", tz="UTC")
+    frame = pd.DataFrame({"x": values}, index=idx)
+    want = rolling_zscore_flags(frame["x"], window=window, threshold=threshold).tolist()
+    got = zscore_flags_sql(frame, window=window, threshold=threshold, engine=engine)["x"].tolist()
+    assert got == want
+    return got
+
+
+@pytest.mark.parametrize("engine", ["sqlite", "duckdb"])
+def test_window_contract_boundaries(engine):
+    if engine == "duckdb":
+        pytest.importorskip("duckdb")
+    # current sample included: window 4 of [0, 0, 0, 1] gives |z| = 1.5 exactly, the (n - 1) / sqrt(n) ceiling
+    assert _both([0.0, 0.0, 0.0, 1.0], 4, 1.5, engine) == [False] * 4          # strict: 1.5 is not > 1.5
+    assert _both([0.0, 0.0, 0.0, 1.0], 4, 1.4999, engine) == [False] * 3 + [True]
+    # a huge spike in a window of 10 cannot reach threshold 3 (ceiling 9 / sqrt(10) = 2.85), in 11 it can (3.015)
+    assert not any(_both([20.0] * 9 + [1e6], 10, 3.0, engine))
+    assert _both([20.0] * 10 + [1e6], 11, 3.0, engine)[-1]
+    # a window that is not full, or has no spread, never flags
+    assert not any(_both([0.0, 0.0, 50.0], 4, 0.1, engine))
+    assert not any(_both([7.0] * 12, 4, 0.0001, engine))

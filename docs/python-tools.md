@@ -129,6 +129,17 @@ across off periods; read STL results on intermittently running equipment with th
 `activity.json`, the README and the scoreboard's `gate` / `assessed_rows` columns record the choice and the counts;
 `open-fdd-ml detect` writes the same receipt under `activity` in `summary.json`.
 
+Weekly motor run hours are SQL too: `sql/analytics/motor_weekly_runtime.sql` reads bound fan and pump roles (status
+before command) and matches `open_fdd.analytics.core.motor_run_hours_weekly` (`tests/test_sql_motor_runtime.py`). Use
+`open_fdd.analytics.sql_runtime.run_runtime_sql(conn, engine)` on a core database, or `motor_run_hours_weekly_sql(frames,
+role_map)` on frames. Mechanical-cooling hours by outdoor-air bin are `sql/analytics/mech_cooling_oat_bins.sql`: the
+proof ladder (chiller / compressor status, command, stages, amps or kW; heat pumps only in cooling mode) is built from
+bound roles in `open_fdd.analytics.sql_mech_cooling`, and the rows match `core.mech_cooling_oat_bins`
+(`tests/test_sql_mech_cooling.py`). Economizer metrics per air handler (fan-on hours, identifiable samples, median and mean
+absolute MAT residual against the damper mixing model) are `sql/analytics/economizer_metrics.sql` and match
+`core.economizer_free_cooling_diagnostics` (`tests/test_sql_economizer.py`). BAS vs web outdoor-air statistics (bias, MAE, max |delta|, share within 2 delta degC, web joined
+as-of) are `sql/analytics/bas_vs_web_oat.sql`, with `weather_resolver.bas_vs_web_oat_stats` as the pandas reference.
+
 ## ML FDD (`open-fdd-ml`)
 
 ```bash
