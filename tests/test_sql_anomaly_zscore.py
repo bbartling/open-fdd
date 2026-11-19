@@ -175,8 +175,9 @@ def test_screen_engine_sql_matches_pandas(tmp_path):
     hist.to_csv(folder / "history_wide.csv", index=False)
     (folder / "column_map.json").write_text(json.dumps({"equipType": "AHU", "points": {"sat": "SAT", "mat": "MAT"}}),
                                             encoding="utf-8")
-    a = screen_folder(folder, tmp_path / "pandas", methods=["zscore"], top_n=0, max_days=0)
-    b = screen_folder(folder, tmp_path / "sql", methods=["zscore"], top_n=0, max_days=0, engine="sql")
+    # No run proof in this fixture: screen every row on purpose (#1656).
+    a = screen_folder(folder, tmp_path / "pandas", methods=["zscore"], top_n=0, max_days=0, activity_policy="ungated")
+    b = screen_folder(folder, tmp_path / "sql", methods=["zscore"], top_n=0, max_days=0, engine="sql", activity_policy="ungated")
     pd.testing.assert_frame_equal(a.scoreboard, b.scoreboard)
     assert "Z-score engine: **sql**" in (tmp_path / "sql" / "README.md").read_text(encoding="utf-8")
     with pytest.raises(ValueError):

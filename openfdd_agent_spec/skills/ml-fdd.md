@@ -9,7 +9,8 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
 1. **Benchmark first.** `open-fdd-ml download` (LBNL single-duct AHU subset, CC BY 4.0, into
    `$OPENFDD_ML_CACHE` or `~/.cache/open-fdd/lbnl`; never commit it), then `open-fdd-ml benchmark --out b.md --json b.json`.
    A new detector merges only with a benchmark row and its fault-free FPR. If it loses to `rules (tuned)`, say so.
-2. **Detect on a device folder** (`history_wide.csv` in SI + `column_map.json`, same as `open-fdd-anomaly`):
+2. **Detect on a device folder** (`history_wide.csv` in SI + `column_map.json`, same as `open-fdd-anomaly`; build one
+   with `open-fdd-ml make-folder CSV --map ROLE=COLUMN ... --out DIR`, `--from-lbnl FILE` or `--example`):
    `open-fdd-ml detect FOLDER --method pca|grey_box|ocsvm|copod|zscore|mad --train-until YYYY-MM-DD --out DIR`.
    Learning methods need exactly one training source: `--train KNOWN_GOOD_FOLDER`, `--train-until` (fit before,
    score after) or `--exploratory-self-fit` (never call its flags faults against a healthy baseline). Without one
@@ -29,6 +30,10 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
 5. **Anomaly CLI** (`open-fdd[anomaly]`): `open-fdd-anomaly screen FOLDER --out DIR` (z-score, MAD, STL, Isolation
    Forest; `--engine pandas|sql`), `open-fdd-anomaly report FOLDER --out DIR --month YYYY-MM [--compile]` (Typst / PDF).
    Anomalies are single-signal outliers, not faults: the benchmark shows z-score / MAD flag healthy hours as often.
+   For agents and scheduled runs use `--no-plots --json --tz <IANA zone>`, and read `summary.json` rather than the PNGs.
+   `screen` and `detect` share one activity policy (default `--activity proof`): equipment points are assessed only
+   while operating proof is on. Read `activity.json` / `summary.json` `activity` before calling a zero-flag result
+   clean: `no_run_proof`, `no_active_rows` or a small `assessed_rows` means unassessed, not healthy.
 6. **Dependencies**: floors only, at the latest stable releases (pandas 3.1.1, numpy 2.5.5, scikit-learn 1.9.1,
    SciPy 1.18.1, statsmodels 0.15.0, DuckDB 2.0.0, pyod 3.6.8, ...; see `CHANGELOG.md`), with `python_version` markers
    where a release dropped 3.10 / 3.11. Keep the 3.10-3.15 matrix green; add a marker, never an `==` pin.

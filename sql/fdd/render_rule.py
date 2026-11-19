@@ -46,15 +46,15 @@ def _sweep_fragments(rule, role_limits, sql_by_name, names):
             lim = _num(e['spike_delta']) + (' * ' + scale if scale else '')
             terms.append(f"(sensor_role = '{sql_by_name[e['role']]}' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= {{{{MAX_SILENCE_SECONDS}}}} AND ABS(value - previous_value) > {lim})")
         frag['SV_SPIKE_BANDS'] = ' OR '.join(terms)
-    elif rid in ('SV-FLATLINE', 'SV-STALE'):
-        field, tuner = ('flat_tol', '{{FLATLINE_TOL}}') if rid == 'SV-FLATLINE' else ('stale_tol', '{{STALE_TOL}}')
+    elif rid == 'SV-FLATLINE':   # SV-STALE (#1673) is a missing-data rule: no per-role value tolerance
+        field, tuner = 'flat_tol', '{{FLATLINE_TOL}}'
         groups = {}
         for e in entries:
             v = sweep_catalog.explicit_role_value(e, field, role_limits)
             if v is not None:
                 groups.setdefault(_num(v), []).append(sql_by_name[e['role']])
         whens = ''.join(" WHEN sensor_role IN (" + ','.join("'" + r + "'" for r in roles) + ") THEN " + v for v, roles in groups.items())
-        frag['SV_FLATLINE_TOL' if rid == 'SV-FLATLINE' else 'SV_STALE_TOL'] = f'CASE{whens} ELSE {tuner} END' if whens else tuner
+        frag['SV_FLATLINE_TOL'] = f'CASE{whens} ELSE {tuner} END' if whens else tuner
     elif rid == 'SV-RATE':
         base = '({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0)'
         whens = ''
@@ -70,7 +70,7 @@ def _sweep_fragments(rule, role_limits, sql_by_name, names):
 # NF hook (nf-app/hooks/lib/role-limits.js) fill it the same way; with the shipped limits the result is byte-identical
 # to render() (scripts/nf/build_sql_pack.py checks it, nf-app/tests/role-limits.test.mjs checks the JS twin).
 FRAGMENT_KEYS = {'SV-RANGE': 'SV_RANGE_BANDS', 'SV-SPIKE': 'SV_SPIKE_BANDS', 'SV-FLATLINE': 'SV_FLATLINE_TOL',
-                 'SV-STALE': 'SV_STALE_TOL', 'SV-RATE': 'SV_RATE_THRESHOLD'}
+                 'SV-RATE': 'SV_RATE_THRESHOLD'}
 _PLACEHOLDER = re.compile(r'\{\{([A-Z_0-9]+)\}\}')
 
 def sentinel(key):
@@ -94,7 +94,7 @@ def render_template(rule_id, poll_seconds=300, overrides=None, parameter_control
     probe = _sweep_fragments({'rule_id': rule_id}, sweep_catalog.load_role_limits(), inverse, set(names))[key]
     # every placeholder a fragment can reference, whatever the limits (CASE arms appear only with explicit values)
     probe += ' {{MAX_SILENCE_SECONDS}} {{SENSOR_SPAN}} ' + ' '.join(_RANGE_SCALE.values()) + ' ' + ' '.join(_SPIKE_SCALE.values())
-    probe += ' {{FLATLINE_TOL}}' if rule_id == 'SV-FLATLINE' else ' {{STALE_TOL}}' if rule_id == 'SV-STALE' else ''
+    probe += ' {{FLATLINE_TOL}}' if rule_id == 'SV-FLATLINE' else ''
     probe += ' {{STEADY_FAULT_PER_HOUR}}' if rule_id == 'SV-RATE' else ''
     for k in sorted(set(_PLACEHOLDER.findall(probe))):
         if k in values:
@@ -119,6 +119,8 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
     if not math.isfinite(poll_seconds) or poll_seconds < 1:
         raise ValueError('poll_seconds must be finite and >= 1')
     values = json.loads((ROOT / 'runtime_defaults.json').read_text())
+    # #1671: fixed per-rule safeguards that are no longer user tuners (the shipped defaults; see tuning_catalog.json)
+    values.update(rule.get('internal_constants') or {})
     controls = parameter_controls if parameter_controls is not None else rule['parameters']
     chosen = {k: d['default'] for k,d in controls.items()}
     overrides = dict(overrides or {})
@@ -126,6 +128,15 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
     if 'require_operational_gate' in overrides and 'require_operational_gate' not in controls and 'require_run_proof' in controls:
         legacy = overrides.pop('require_operational_gate')
         overrides.setdefault('require_run_proof', legacy)
+    # #1673: keys a rule renamed (aliases) or retired; the new name wins over its alias, a retired key is refused
+    legacy = rule.get('legacy_parameters') or {}
+    for old, new in legacy.get('aliases', {}).items():
+        if old in overrides and old not in controls and new in controls:
+            value = overrides.pop(old)
+            overrides.setdefault(new, value)
+    for old in legacy.get('retired', []):
+        if old in overrides and old not in controls:
+            raise ValueError(f'{rule_id}.{old} was retired: {legacy.get("note", "")}')
     for key,value in overrides.items():
         if key not in controls:
             raise ValueError(f'Unknown tuner {key} for {rule_id}; use catalog keys (confirm_min is minutes)')
@@ -149,7 +160,8 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
         values['EPS_SAT'] = chosen['supply_tol']
     values['MODE_DELAY_MIN'] = max(values.get('MODE_DELAY_MIN',0), values.get('STARTUP_DELAY_MIN',0))
     values['POLL_SECONDS'] = poll_seconds
-    values['CONFIRM_SECONDS'] = chosen['confirm_min'] * 60
+    # a rule with no confirm control (SV-STALE, #1673) keeps the runtime default, like the JS twin (rule-tuning.js)
+    values['CONFIRM_SECONDS'] = chosen['confirm_min'] * 60 if 'confirm_min' in chosen else values.get('CONFIRM_SECONDS', 600)
     values['CONFIRM_ROWS'] = max(1,math.ceil(values['CONFIRM_SECONDS']/poll_seconds))
     for key,value in list(values.items()):
         if key.endswith('_HOURS') and value > 0:

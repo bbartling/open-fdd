@@ -474,6 +474,15 @@ def _sweep_segments(d: pd.DataFrame, masks: dict[str, pd.Series], poll: float, p
 
 def _publish_elapsed_sweep(d: pd.DataFrame, masks: dict[str, pd.Series], *, poll: float, p: dict, rule_tag: str) -> pd.Series:
     segments = _sweep_segments(d, masks, poll, p)
+    # #1673: the part of a gap beyond max_silence_hours is unknown for value sweeps (not covered, not a fault);
+    # missing data is SV-STALE's alone.
+    for rows in segments.values():
+        for row in rows:
+            row["silence_seconds"] = 0.0
+    return _publish_segments(d, segments, poll=poll, rule_tag=rule_tag)
+
+
+def _publish_segments(d: pd.DataFrame, segments: dict[str, list[dict]], *, poll: float, rule_tag: str) -> pd.Series:
     event_masks = {role: _false(d.index) for role in segments}
     for role, rows in segments.items():
         for row in rows:
@@ -835,33 +844,41 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 
 def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Measure stable periods and long silent tails independently per sensor."""
-    hours = _f(p, "stale_hours", 2.0)
-    tolerance = _f(p, "stale_tol", 0.027778)
-    max_silence = _f(p, "max_silence_hours", 0.5)
+    """Missing data (#1673): a sensor is stale while it has no valid sample for longer than ``stale_after_hours``.
+
+    No value test (a stuck value that is still polled is SV-FLATLINE) and no run-proof gate. Every assessable sensor
+    column of the frame is an expected series, so a column with no valid sample is assessed over the whole window.
+    The window is the frame's first timestamp to its observed end; the window start, every valid sample and the end
+    split it into intervals, and an interval longer than the threshold contributes (interval - threshold) of fault
+    time. A saved legacy ``max_silence_hours`` is the same threshold. Twin of ``sql/fdd/postgres/rules/sv_stale.sql``.
+    """
+    threshold = max(0.0, _f(p, "stale_after_hours", _f(p, "max_silence_hours", 0.5))) * 3600.0
     units_map = _units_map(d)
     limits = _sweep_limits(d)
-    present = [
-        r
-        for r in FLATLINE_SENSOR_ROLES
-        if r in d.columns and sweep_assessable_role(r, None, units_map, rule_id="SV-STALE", limits=limits)
-    ]
-    per_role: dict[str, pd.Series] = {}
-    energized = _sweep_energized(d, p)
-    for role in present:
-        s = pd.to_numeric(d[role], errors="coerce")
-        if not s.notna().any():
+    segments: dict[str, list[dict]] = {}
+    if not len(d.index):
+        return _false(d.index)
+    if isinstance(d.index, pd.DatetimeIndex):
+        start = float(_index_epoch_seconds(pd.DatetimeIndex([d.index.min()]))[0])
+        end = float(_observed_end_seconds(d))
+    else:
+        start, end = 0.0, max(0, len(d.index) - 1) * max(float(poll), 1.0)
+    anchor = d.index.min() if isinstance(d.index, pd.DatetimeIndex) else d.index[0]
+    for role in FLATLINE_SENSOR_ROLES:
+        if role not in d.columns or not sweep_assessable_role(role, None, units_map, rule_id="SV-STALE", limits=limits):
             continue
-        role_tol = stale_tolerance_for_role(role, tolerance, limits)
-        per_role[role] = _window_flatline_mask(
-            s,
-            hours=hours,
-            tolerance=role_tol,
-            max_silence_hours=max_silence,
-            poll=poll,
-            gate=energized.reindex(s.index).fillna(False),
-        )
-    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-STALE")
+        valid, epochs = _valid_series_times(pd.to_numeric(d[role], errors="coerce"), poll)
+        points = [(start, anchor)] + [(float(e), ts) for ts, e in zip(valid.index, epochs) if start <= float(e) <= end]
+        points.append((end, None))
+        rows = []
+        for (t0, label), (t1, _) in zip(points, points[1:]):
+            dt = t1 - t0
+            if dt <= 0:
+                continue
+            rows.append({"timestamp": label, "raw_fault": False, "normal_seconds": min(dt, threshold),
+                         "silence_seconds": max(0.0, dt - threshold), "break_before": False})
+        segments[role] = rows
+    return _publish_segments(d, segments, poll=poll, rule_tag="SV-STALE")
 
 
 def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
@@ -1012,7 +1029,17 @@ def fc4(d, p, poll):
         ts = pd.DatetimeIndex(to_utc_datetime(d["timestamp"], errors="coerce"))
     else:
         return _false(d.index)
-    entries = (modes.eq(1) & modes.shift().ne(1))
+    proven = pd.Series(True, index=d.index)
+    if float(p.get("require_run_proof", 1.0)) >= 0.5:
+        # #1631: entries are counted over proven samples only (twin of fc4_os_hunting.sql): the sequence skips unproven
+        # time, so a transition across it is not an entry. No proof bound at all is SKIPPED by the runner before this.
+        from open_fdd.run_proof import derive_run_proof, proof_on
+
+        proof, _src = derive_run_proof(d)
+        if proof is not None:
+            proven = proof_on(proof).reindex(d.index).fillna(False).astype(bool)
+    sub = modes[proven.values]
+    entries = (sub.eq(1) & sub.shift().ne(1)).reindex(modes.index, fill_value=False)
     entries.index = ts
     hourly = entries.resample("1h").sum()
     flagged_hours = hourly[(hourly > delta_os_max).any(axis=1)].index
@@ -1489,6 +1516,57 @@ def fcu_htg_coil(d, p, poll):
     return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < coil_delta)
 
 
+def coil_perf(d, p, poll):
+    """Generic coil performance (#1641), twin of sql/fdd/postgres/rules/coil_perf.sql.
+
+    Per sample: heating mode when the heating valve (heating-valve, else reheat-valve) >= valve_open and the cooling
+    valve, if bound, <= valve_shut; cooling mode when the cooling valve >= valve_open and the heating / reheat valves, if
+    bound, <= valve_shut. The temperature pair is the first complete one of: coil entering/leaving sensors, mixed ->
+    discharge air, VAV inlet -> discharge, zone -> discharge. Fault: heating with (leave - enter) < min_dt, or cooling
+    with (enter - leave) < min_dt, fan on (status, else command), and airflow above flow_on_min where it is bound.
+    No coil valve or no temperature pair with data -> ``d.attrs["coil_perf_assessment"]`` says why (the runner reports
+    NOT_ASSESSED, never a silent pass)."""
+    def col(name):
+        return pd.to_numeric(d[name], errors="coerce") if name in d.columns else pd.Series(np.nan, index=d.index)
+
+    def cmd(name):
+        return norm_cmd(d[name]) if name in d.columns else pd.Series(np.nan, index=d.index)
+
+    valve_open, valve_shut = _f(p, "valve_open", 0.8), _f(p, "valve_shut", 0.05)
+    min_dt = _f(p, "min_dt", 3.0)
+    htg_v, rh_v, clg = cmd("heating-valve"), cmd("reheat-valve"), cmd("cooling-valve")
+    htg = htg_v.where(htg_v.notna(), rh_v)
+
+    def ladder(pairs):
+        out = pd.Series(np.nan, index=d.index)
+        for leave, enter, sign in pairs:
+            diff = sign * (col(leave) - col(enter))
+            out = out.where(out.notna(), diff)
+        return out
+
+    rise = ladder([("heating-coil-leaving-temp", "heating-coil-entering-temp", 1), ("discharge-air-temp", "mixed-air-temp", 1),
+                   ("vav-discharge-air-temp", "vav-inlet-air-temp", 1), ("discharge-air-temp", "zone-air-temp", 1)])
+    drop = ladder([("cooling-coil-leaving-temp", "cooling-coil-entering-temp", -1), ("discharge-air-temp", "mixed-air-temp", -1),
+                   ("vav-discharge-air-temp", "vav-inlet-air-temp", -1), ("discharge-air-temp", "zone-air-temp", -1)])
+    if not (htg.notna().any() or clg.notna().any()):
+        d.attrs["coil_perf_assessment"] = "no_coil_valve"
+    elif not (rise.notna().any() or drop.notna().any()):
+        d.attrs["coil_perf_assessment"] = "no_temperature_pair"
+    else:
+        d.attrs["coil_perf_assessment"] = "assessed"
+
+    status, fan_cmd = col("fan-status"), cmd("fan-cmd")
+    fan_on = pd.Series(True, index=d.index)
+    fan_on = fan_on.where(fan_cmd.isna(), fan_cmd > _gl36_value(p, "fan_on_min", None, FAN_ON_MIN))
+    fan_on = fan_on.where(status.isna(), status > 0.05)
+    flow = col("zone-airflow")
+    flow_ok = flow.isna() | (flow > _f(p, "flow_on_min", 11.798675))
+
+    heat = htg.notna() & (htg >= valve_open) & (clg.isna() | (clg <= valve_shut)) & rise.notna() & (rise < min_dt)
+    cool = (clg.notna() & (clg >= valve_open) & (htg_v.isna() | (htg_v <= valve_shut)) & (rh_v.isna() | (rh_v <= valve_shut))
+            & drop.notna() & (drop < min_dt))
+    return (fan_on & flow_ok & (heat | cool)).fillna(False)
+
 def fcu_clg_coil(d, p, poll):
     cool = norm_cmd(d["cooling-valve"])
     heat = norm_cmd(d["heating-valve"])
@@ -1906,15 +1984,12 @@ RULES: list[CookbookRule] = [
         ], sensor_sweep=True, confirm_seconds=300,
     ),
     CookbookRule(
-        "SV-STALE", "Stale data (no fresh samples)", "sensor",
+        "SV-STALE", "Stale data (no fresh samples for longer than the stale threshold)", "sensor",
         ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
-        "All modeled sensors unchanged over the stale window — data feed likely dropped.",
+        "A sensor sent no valid sample for longer than the stale threshold (gap or missing series); not gated by run proof.",
         _sweep_stale, params=[
-            CookbookParam("stale_hours", "Stale window", "h", 0.25, 12.0, 0.25, 2.0),
-            CookbookParam("stale_tol", "Stale tolerance", "Δ°C", 0.0, 0.555556, 0.005556, 0.027778),
-            CookbookParam("max_silence_hours", "Max sensor silence", "h", 0.25, 12.0, 0.25, 0.5),
-            CONFIRM_PARAM(),
-        ], sensor_sweep=True, confirm_seconds=300,
+            CookbookParam("stale_after_hours", "Stale after", "h", 0.25, 12.0, 0.25, 0.5),
+        ], sensor_sweep=True, confirm_seconds=0,
     ),
     CookbookRule(
         "SV-RATE",
@@ -2257,6 +2332,17 @@ RULES: list[CookbookRule] = [
             CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
             CookbookParam("coil_delta", "Minimum heating rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
             CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("COIL-PERF", "Coil performance (heating and cooling)", "ahu", ["ahu"], [],
+        "Coil valve open, opposite valve shut, air temperature change below min_dt.",
+        coil_perf, params=[
+            CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
+            CookbookParam("valve_shut", "Opposite valve shut", "frac", 0.0, 0.2, 0.01, 0.05),
+            CookbookParam("min_dt", "Minimum coil temperature change", "°C", 0.555556, 11.111111, 0.277778, 3.0),
+            CONFIRM_PARAM()],
+        optional_roles=["heating-valve", "reheat-valve", "cooling-valve", "heating-coil-entering-temp",
+                        "heating-coil-leaving-temp", "cooling-coil-entering-temp", "cooling-coil-leaving-temp",
+                        "mixed-air-temp", "discharge-air-temp", "vav-inlet-air-temp", "vav-discharge-air-temp",
+                        "zone-air-temp", "zone-airflow", "fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
         "Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.",
@@ -2578,7 +2664,7 @@ RULE_SUMMARY_OVERRIDES: dict[str, str] = {
     "SV-RANGE": "Flags any modeled sensor reading outside its physical hard range.",
     "SV-FLATLINE": "Flags a sensor that stays stuck within a tiny band for too long.",
     "SV-SPIKE": "Flags an implausible sample-to-sample jump for the sensor type.",
-    "SV-STALE": "Flags when all modeled sensors stop updating — likely a dead data feed.",
+    "SV-STALE": "Flags a sensor that sent no valid sample for longer than the stale threshold — missing data.",
     "SV-RATE": "Flags implausible sustained sensor rates of change using location- and state-aware thresholds.",
     "PID-HUNT-1": "Flags control outputs that oscillate enough to suggest loop hunting.",
     "SCHED-247": "Flags fans or pumps that stay on for nearly the entire analysis window (24/7 runtime).",

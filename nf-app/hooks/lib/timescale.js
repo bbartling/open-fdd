@@ -278,6 +278,16 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
     );
     sensorRows = res.rowCount;
   }
+  // #1673: every bound sweep series is expected over the requested window [from, to), so SV-STALE assesses a series
+  // that has no stored sample at all (missing data), not only the series that happen to have rows.
+  if (sensorSeries.length && pack.contract.sweep_series) {
+    await client.query(
+      `INSERT INTO pg_temp.sweep_series (equipment_id, series_id, sensor_role, unit, window_start, window_end)
+       SELECT $1::text, b.uuid, b.role, b.unit, $2::timestamptz, $3::timestamptz
+       FROM jsonb_to_recordset($4::jsonb) AS b(uuid text, role text, unit text)`,
+      [equipId, iso(from), iso(to), JSON.stringify(sensorSeries.map(({ uuid, role, unit }) => ({ uuid, role, unit })))],
+    );
+  }
 
   // weather = the outdoor-air roles of the same grid (same as fdd.js buildInput)
   const wcols = pack.contract.weather.map((c) => c.name).filter((n) => n !== "timestamp_utc" && histCols.has(n));
@@ -287,6 +297,9 @@ async function loadHistory(client, { pack, equipId, siteId = "", roleToUuid, uni
        SELECT timestamp_utc, ${wcols.map(quoteId).join(", ")} FROM pg_temp.history
        WHERE ${wcols.map((n) => `${quoteId(n)} IS NOT NULL`).join(" OR ")}`);
   }
+  // Autovacuum never analyzes temp tables: without statistics the planner guesses row counts and can pick nested-loop
+  // joins for the rules' window / as-of CTEs (minutes instead of seconds on a week of 5-min data). Analyze what we loaded.
+  for (const t of Object.keys(pack.contract)) await client.query(`ANALYZE pg_temp.${quoteId(t)}`);
   const si = {};
   for (const [role, uuid] of roles) si[role] = roleFactors(role, uuid, { unitsByUuid, fractionRoles, booleanRoles }).unit;
   return { rows, sensorRows, roles: roles.map(([r]) => r), si };

@@ -156,9 +156,12 @@
         const maxDisp = round(rt.fromSi(ctrl.max, editUnit, ctrl.kind), 4);
         throw new Error(`${ctrl.label || key}: ${shown} ${editUnit} is outside [${minDisp}, ${maxDisp}] ${editUnit}`);
       }
-      params[key] = si;
+      params[key] = rt.snapToStep(ctrl, si);   // #1672: values land on the catalog step grid (in SI)
     }
-    return rt.normalizeRuleOverride({ version: 1, params }, controls, ruleId);
+    const clean = rt.normalizeRuleOverride({ version: 1, params }, controls, ruleId, { legacy: (ruleTplFor(ruleId) || {}).legacy });
+    // #1672: low/high pairs stay ordered (the tuning hook checks the merged layers again before it writes)
+    rt.checkOrderedPairs(controls, { ...(effectiveParams || {}), ...clean.params }, ruleId);
+    return clean;
   }
 
   /** Clear only `allowedFields` (for `allowedRoles`, or all roles if null) from an SV-LIMITS doc, preserving siblings. */
@@ -201,12 +204,18 @@
     return unit || "";
   }
 
+  /** The pack's tuning template of one rule (controls, legacy keys), or null. */
+  function ruleTplFor(ruleId) {
+    const spec = root.ofddPlotSpecData && root.ofddPlotSpecData.rule_tuning && root.ofddPlotSpecData.rule_tuning.rules;
+    return (spec && spec[ruleId]) || null;
+  }
+
   function shippedControlEffective(ruleId) {
     const rt = RT();
     const spec = root.ofddPlotSpecData && root.ofddPlotSpecData.rule_tuning && root.ofddPlotSpecData.rule_tuning.rules;
     const ruleTpl = spec && spec[ruleId];
     if (!ruleTpl || !ruleTpl.controls) return null;
-    const merged = rt.mergeRuleParams(ruleTpl.controls, null, null, ruleId);
+    const merged = rt.mergeRuleParams(ruleTpl.controls, null, null, ruleId, ruleTpl.legacy);
     return { controls: ruleTpl.controls, effective: { params: merged.effective, sources: merged.sources }, active: {}, history: [] };
   }
 
@@ -361,11 +370,20 @@
     const controls = (paramResp && paramResp.controls) || {};
     const effParams = (paramResp && paramResp.effective && paramResp.effective.params) || {};
     const paramSources = (paramResp && paramResp.effective && paramResp.effective.sources) || {};
+    // #1673: saved keys a release renamed or retired, as the hook migrated them when reading (shown, never hidden)
+    const migration = (paramResp && paramResp.effective && paramResp.effective.migration) || [];
+    const migrationHtml = migration.length
+      ? `<div class="tun-banner" role="note">Saved settings from an older release: ${migration.map((m) => escFn(
+        `${m.layer} ${m.key} ${m.action === "renamed" ? `is now ${m.to}` : m.action === "superseded" ? `ignored (${m.by} is set)`
+          : m.action === "invalid" ? `ignored (${m.reason})` : "is retired and ignored"}`)).join("; ")}. Save a revision to store the new form.</div>`
+      : "";
 
     let controlsHtml = "";
     if (wantParams && Object.keys(controls).length) {
-      controlsHtml += `<div class="tuners-grid">`;
-      for (const [key, ctrl] of Object.entries(controls)) {
+      // #1672: one card per catalog control, grouped (duration, thresholds, tolerances, other, then the gates); every
+      // numeric control is a slider on the SI step grid plus a number box in display units, booleans are checkboxes.
+      const cardFor = (key) => {
+        const ctrl = controls[key];
         const src = paramSources[key] || "shipped";
         const srcCls = src === "site" ? "src-site" : src === "equip" ? "src-equipment" : "";
         const effSi = effParams[key] ?? ctrl.default;
@@ -373,27 +391,33 @@
           const checked = Object.prototype.hasOwnProperty.call(draft.params, key)
             ? !!draft.params[key].checked
             : !!Number(effSi);
-          controlsHtml += `<div class="tun-card ${srcCls}">`
-            + `<label><span>${escFn(ctrl.label || key)}</span><span class="hint">${escFn(src)}</span></label>`
+          return `<div class="tun-card tun-gate ${srcCls}">`
             + `<label class="tun-card-check"><input type="checkbox" data-param-bool="${escFn(key)}"${checked ? " checked" : ""}${readOnly ? " disabled" : ""}> `
-            + `<span>${checked ? "Enabled (1)" : "Disabled (0)"}</span></label>`
-            + `<div class="hint">default ${ctrl.default ? "enabled" : "disabled"}</div></div>`;
-        } else {
-          const unit = rt.preferredDisplayUnit(ctrl, sys, ctx.ruleId);
-          const uLabel = unitNice(unit);
-          const shown = round(rt.fromSi(effSi, unit, ctrl.kind), 4);
-          const minDisp = round(rt.fromSi(ctrl.min, unit, ctrl.kind), 4);
-          const maxDisp = round(rt.fromSi(ctrl.max, unit, ctrl.kind), 4);
-          const defDisp = round(rt.fromSi(ctrl.default, unit, ctrl.kind), 4);
-          const dEntry = draft.params[key];
-          const val = dEntry ? (dEntry.unit === unit ? dEntry.text : round(rt.fromSi(rt.toSi(Number(dEntry.text), dEntry.unit, ctrl.kind), unit, ctrl.kind), 4)) : shown;
-          controlsHtml += `<div class="tun-card ${srcCls}">`
-            + `<label for="tun-p-${escFn(key)}"><span>${escFn(ctrl.label || key)}</span><span class="hint">${escFn(uLabel)} · ${escFn(src)}</span></label>`
-            + `<input id="tun-p-${escFn(key)}" type="number" step="any" data-param="${escFn(key)}" data-unit="${escFn(unit)}" value="${escFn(val)}"${readOnly ? " disabled" : ""}>`
-            + `<div class="hint">default ${escFn(defDisp)} ${escFn(uLabel)} · range ${escFn(minDisp)}–${escFn(maxDisp)} · SI ${escFn(round(effSi, 6))}</div></div>`;
+            + `<span>${escFn(ctrl.label || key)}</span></label>`
+            + `<div class="hint">${checked ? "on" : "off"} · default ${ctrl.default ? "on" : "off"} · ${escFn(src)}</div></div>`;
         }
+        const unit = rt.preferredDisplayUnit(ctrl, sys, ctx.ruleId);
+        const uLabel = unitNice(unit);
+        const shown = round(rt.fromSi(effSi, unit, ctrl.kind), 4);
+        const minDisp = round(rt.fromSi(ctrl.min, unit, ctrl.kind), 4);
+        const maxDisp = round(rt.fromSi(ctrl.max, unit, ctrl.kind), 4);
+        const defDisp = round(rt.fromSi(ctrl.default, unit, ctrl.kind), 4);
+        const dEntry = draft.params[key];
+        const draftSi = dEntry && Number.isFinite(Number(dEntry.text)) ? rt.toSi(Number(dEntry.text), dEntry.unit, ctrl.kind) : null;
+        const val = dEntry ? (dEntry.unit === unit ? dEntry.text : round(rt.fromSi(draftSi, unit, ctrl.kind), 4)) : shown;
+        const sliderSi = draftSi != null ? Math.min(ctrl.max, Math.max(ctrl.min, draftSi)) : effSi;
+        return `<div class="tun-card ${srcCls}">`
+          + `<label for="tun-p-${escFn(key)}"><span>${escFn(ctrl.label || key)}</span><span class="hint">${escFn(uLabel)} · ${escFn(src)}</span></label>`
+          + `<div class="tun-slider-row">`
+          + `<input type="range" aria-label="${escFn(ctrl.label || key)} slider" data-param-range="${escFn(key)}" data-unit="${escFn(unit)}" min="${ctrl.min}" max="${ctrl.max}" step="${ctrl.step}" value="${sliderSi}"${readOnly ? " disabled" : ""}>`
+          + `<input id="tun-p-${escFn(key)}" type="number" step="any" data-param="${escFn(key)}" data-unit="${escFn(unit)}" value="${escFn(val)}"${readOnly ? " disabled" : ""}>`
+          + `</div>`
+          + `<div class="hint">default ${escFn(defDisp)} ${escFn(uLabel)} · range ${escFn(minDisp)}–${escFn(maxDisp)} · SI ${escFn(round(effSi, 6))}</div></div>`;
+      };
+      for (const group of rt.groupControls(controls)) {
+        controlsHtml += `<h4 class="tuners-subhead" data-group="${escFn(group.id)}">${escFn(group.label)}</h4>`
+          + `<div class="tuners-grid">${group.keys.map(cardFor).join("")}</div>`;
       }
-      controlsHtml += `</div>`;
     }
 
     let sweepHtml = "";
@@ -439,6 +463,7 @@
       + `</div>`
       + (readOnly ? `<div class="tun-banner">${escFn(st.readOnlyReason)} Showing shipped defaults read-only.</div>` : "")
       + (st.status ? `<div class="tun-banner${st.statusIsErr ? " err" : ""}" id="tunStatus" role="status">${escFn(st.status)}</div>` : `<div class="hint" id="tunStatus" role="status"></div>`)
+      + migrationHtml
       + controlsHtml
       + sweepHtml
       + `<div class="exbar">`
@@ -483,8 +508,23 @@
     host.oninput = (ev) => {
       const t = /** @type {any} */ (ev.target);
       if (!t || !t.dataset) return;
-      if (t.dataset.param) {
+      if (t.dataset.paramRange) {
+        // #1672: the slider moves in SI on the catalog step grid; the number box shows the same value in display units
+        const key = t.dataset.paramRange;
+        const ctrl = meta.controls[key];
+        const si = RT().snapToStep(ctrl, Number(t.value));
+        const text = String(round(RT().fromSi(si, t.dataset.unit, ctrl.kind), 4));
+        draft.params[key] = { text, unit: t.dataset.unit };
+        const box = /** @type {HTMLInputElement | null} */ (document.getElementById(`tun-p-${key}`));
+        if (box) box.value = text;
+      } else if (t.dataset.param) {
         draft.params[t.dataset.param] = { text: t.value, unit: t.dataset.unit };
+        const ctrl = meta.controls[t.dataset.param];
+        const n = Number(t.value);
+        const slider = host.querySelector(`input[data-param-range="${t.dataset.param}"]`);
+        if (slider && ctrl && t.value !== "" && Number.isFinite(n)) {
+          /** @type {HTMLInputElement} */ (slider).value = String(Math.min(ctrl.max, Math.max(ctrl.min, RT().toSi(n, t.dataset.unit, ctrl.kind))));
+        }
       } else if (t.dataset.role && t.dataset.field) {
         draft.sweeps[t.dataset.role] = { ...(draft.sweeps[t.dataset.role] || {}), [t.dataset.field]: { text: t.value, unit: t.dataset.unit } };
       }

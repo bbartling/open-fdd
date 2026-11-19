@@ -9,9 +9,11 @@ Example::
 ``report --compile`` writes ``report.pdf`` in the output directory when the
 ``typst`` binary is on ``PATH``.
 
-Defaults: ``--top-n 5 --max-days 10 --methods zscore,mad,stl,iforest``.
-Z-score and MAD are SQL-portable (pandas/numpy). STL and Isolation Forest
-are Python-only and require ``pip install "open-fdd[anomaly]"``.
+Defaults: ``--top-n 5 --max-days 10``; methods ``zscore,mad,stl``, each only when its dependency
+imports (a skipped default is listed in the README). Z-score and MAD are SQL-portable
+(pandas/numpy). STL (statsmodels) and Isolation Forest (scikit-learn) are Python-only and need
+``pip install "open-fdd[anomaly]"``. Isolation Forest is opt-in (``--methods ...,iforest``): it
+flags a fixed fraction of every point by construction.
 
 ``screen --engine sql`` computes the z-score with ``sql/analytics/anomaly_zscore.sql``
 on an in-process SQLite core (standard library), the query Open-FDD databases run
@@ -24,7 +26,13 @@ import argparse
 import sys
 from pathlib import Path
 
-DEFAULT_METHODS = "zscore,mad,stl,iforest"
+DEFAULT_METHODS = "zscore,mad,stl"
+METHODS_HELP = (
+    "Comma-separated detectors. zscore, mad: pandas only. stl: needs statsmodels, "
+    "iforest: needs scikit-learn (both in pip install \"open-fdd[anomaly]\"). "
+    "Default: zscore,mad,stl, skipping stl when statsmodels is missing. iforest is opt-in: it flags "
+    "--iforest-contamination of every point by construction"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,14 +68,43 @@ def build_parser() -> argparse.ArgumentParser:
     )
     screen.add_argument(
         "--methods",
-        default=DEFAULT_METHODS,
-        help=f"Comma-separated detectors (default {DEFAULT_METHODS})",
+        default=None,
+        help=METHODS_HELP,
+    )
+    screen.add_argument(
+        "--json",
+        nargs="?",
+        const="-",
+        default=None,
+        metavar="PATH",
+        help="Print the run summary as JSON on stdout, or write it to PATH (summary.json is always written to --out)",
+    )
+    screen.add_argument("--no-plots", action="store_true", help="Skip every PNG (scoreboard, support plots, day zooms)")
+    screen.add_argument(
+        "--tz",
+        default="UTC",
+        help="IANA zone for calendar days, day zooms and JSON windows, e.g. America/Chicago (default UTC)",
+    )
+    screen.add_argument(
+        "--iforest-contamination",
+        type=float,
+        default=0.01,
+        help="Fraction of samples iforest flags on every point (default 0.01)",
     )
     screen.add_argument(
         "--engine",
         choices=("pandas", "sql"),
         default="pandas",
         help="Where the z-score runs: pandas (default) or sql (portable SQL on in-process SQLite)",
+    )
+    screen.add_argument(
+        "--activity",
+        choices=("proof", "ungated"),
+        default="proof",
+        help=(
+            "proof (default): screen equipment points only while operating proof is on, the same policy as "
+            "open-fdd-ml detect; site/weather points are always screened. ungated: screen every row on purpose"
+        ),
     )
     report = sub.add_parser(
         "report",
@@ -159,13 +196,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 2
 
-    methods = [part.strip().lower() for part in str(args.methods).split(",") if part.strip()]
+    methods = (
+        None
+        if args.methods is None
+        else [part.strip().lower() for part in str(args.methods).split(",") if part.strip()]
+    )
     command = "open-fdd-anomaly " + " ".join(argv if argv is not None else sys.argv[1:])
     try:
         if args.command == "screen":
             from open_fdd.analytics.anomaly.screen import screen_folder
 
-            screen_folder(
+            result = screen_folder(
                 args.folder,
                 args.out,
                 top_n=int(args.top_n),
@@ -173,7 +214,20 @@ def main(argv: list[str] | None = None) -> int:
                 methods=methods,
                 command=command,
                 engine=str(args.engine),
+                activity_policy=str(args.activity),
+                iforest_contamination=float(args.iforest_contamination),
+                plots=not bool(args.no_plots),
+                tz=str(args.tz),
             )
+            if args.json:
+                import json
+
+                text = json.dumps(result.summary, indent=1, default=str)
+                if args.json == "-":
+                    print(text)
+                else:
+                    Path(args.json).parent.mkdir(parents=True, exist_ok=True)
+                    Path(args.json).write_text(text, encoding="utf-8")
         else:
             from open_fdd.reporting.single_system_typst import build_single_system_report
 

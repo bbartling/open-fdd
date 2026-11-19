@@ -105,7 +105,7 @@ Published-data quirks found while mapping, and how they are handled:
 | `ocsvm` | 4.7 | 100.0 | 100.0 | 14.0 | 43.1 | 51.1 | 99.8 | 11.0 | 59.9 |
 | `copod` | 1.7 | 1.2 | 1.5 | 1.7 | 1.5 | 0.2 | 1.3 | 1.8 | 1.3 |
 | `zscore` | 14.1 | 16.3 | 11.2 | 14.8 | 12.5 | 12.5 | 13.4 | 14.5 | 13.6 |
-| `mad` | 58.1 | 62.2 | 46.4 | 62.2 | 61.9 | 63.4 | 56.5 | 61.5 | 59.2 |
+| `mad` | 57.1 | 61.9 | 45.8 | 61.7 | 61.4 | 63.1 | 56.5 | 61.0 | 58.8 |
 
 Evaluation samples: one-hour windows in even ISO weeks with the fan on and occupied (2328 windows in the fault-free file).
 

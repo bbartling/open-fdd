@@ -505,7 +505,15 @@ def run_cookbook_rule(
             equipment_type=eq_type,
             params_fingerprint=fp,
         )
+    pre_quality = d
     d = apply_normalized(d, quality, attach_raw_and_flags=False)
+    if rule.sensor_sweep:
+        # #1673: the SQL sweeps judge the stored SI values (masked only by unit). A value quality calls out of range is
+        # exactly what SV-RANGE / SV-SPIKE assess; nulling it first hid it, and turned it into a gap (now SV-STALE's).
+        swept = [c for c in cb.SWEEP_SENSOR_ROLES if c in pre_quality.columns and c in d.columns]
+        if swept:
+            d = d.copy()
+            d[swept] = pre_quality[swept]
 
     try:
         active, gate_meta = resolve_operational_mask(
@@ -665,6 +673,14 @@ def run_cookbook_rule(
             active_mask=active if use_active else None,
             params_fingerprint=fp,
         )
+        if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
+            # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero
+            why = d.attrs["coil_perf_assessment"]
+            result.status = f"NOT_ASSESSED_{why.upper()}"
+            result.fault_hours = None
+            result.fault_pct = None
+            result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
+            result.metrics["assessment"] = why
         if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
             # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
             result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"

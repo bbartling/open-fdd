@@ -17,6 +17,7 @@
  *   history:   [{ equipment_id, ts /* epoch ms *\/, <col>: number | string | null }],
  *   weather:   [{ ts, oa_t, web_oa_t, web_oa_dp }],
  *   sensorHistory?: [{ equipment_id, series_id, sensor_role, unit, ts, value }],   // long-form sweep input (SI values)
+ *   sweepSeries?: [{ equipment_id, series_id, sensor_role, unit, window_start, window_end }], // epoch ms; bound series fetched OK (#1673)
  *   utilityInterval?: [{ ts, kwh }], utilityMonthly?: [{ billing_period, kwh }]   // optional
  * }
  * Contract columns (pack.contract) that are not listed exist as typed NULL columns.
@@ -114,6 +115,7 @@ const TABLE_INPUT_KEY = {
   history: "history", weather: "weather", utility_interval: "utilityInterval",
   utility_monthly: "utilityMonthly",
   sensor_history: "sensorHistory",
+  sweep_series: "sweepSeries",   // #1673: expected sweep series + requested window (SV-STALE)
 };
 // Which input key feeds a contract column (timestamp_utc is fed from `ts`, epoch ms).
 const inputKey = (col) => (col === "timestamp_utc" ? "ts" : col);
@@ -285,6 +287,9 @@ async function createPglite(pack) {
         }
       }
       await db.exec("CREATE INDEX history_eq_ts ON history(equipment_id, timestamp_utc)");
+      // Planner statistics for the window / as-of joins (#1631): without them PGlite guesses row counts and the sweep
+      // rules' joins degrade to nested loops (seconds -> tens of seconds on a week of 5-min data).
+      for (const table of Object.keys(cols)) await db.exec(`ANALYZE ${table}`);
       loaded = true;
     },
     async query(ruleId) {

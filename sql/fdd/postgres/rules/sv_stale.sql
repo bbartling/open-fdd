@@ -1,146 +1,79 @@
-WITH rp AS (
-  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
-  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
-  SELECT equipment_id,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof
-  FROM history
+-- SV-STALE (#1673): missing data. A sensor series is stale while it has no valid sample for longer than
+-- STALE_AFTER_HOURS. This rule has no value test (a stuck value that is still polled is SV-FLATLINE) and no
+-- run-proof gate (data monitoring does not depend on the motor).
+--
+-- Expected series: `sweep_series` lists every bound series the caller fetched successfully, with its requested
+-- window [window_start, window_end). A bound series with no sample at all is therefore assessed (it faults for
+-- the whole window beyond STALE_AFTER_HOURS). A series the caller could not fetch is not listed and is not
+-- assessed. Callers that do not fill `sweep_series` get the series present in `sensor_history`, over the
+-- equipment's observed window (first to last timestamp in history and sensor_history).
+--
+-- Per series, the window start, every valid sample and the window end split the window into intervals. An
+-- interval longer than STALE_AFTER_SECONDS contributes (interval - STALE_AFTER_SECONDS) of fault time, starting
+-- STALE_AFTER_SECONDS after its first point. covered_hours is the whole window.
+WITH eq_window AS (
+  SELECT equipment_id, MIN(epoch_seconds) AS start_epoch, MAX(epoch_seconds) AS end_epoch
+  FROM (
+    SELECT equipment_id, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds FROM history
+    UNION ALL
+    SELECT equipment_id, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds FROM sensor_history
+    WHERE sensor_role IN ({{ASSESSABLE_ROLES}})
+  ) observed
   GROUP BY equipment_id
 ),
-base_proof AS (
-  SELECT h.*,
-    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN h.run_proof > 0.05 THEN 1 ELSE 0 END AS energized
-  FROM history h
+declared AS (
+  SELECT equipment_id, series_id, MIN(sensor_role) AS sensor_role,
+    MIN(EXTRACT(EPOCH FROM window_start)) AS start_epoch, MAX(EXTRACT(EPOCH FROM window_end)) AS end_epoch
+  FROM sweep_series
+  WHERE sensor_role IN ({{ASSESSABLE_ROLES}})
+  GROUP BY equipment_id, series_id
 ),
-base_history AS (
-  SELECT base_proof.*,
-    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,
-    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct
-  FROM base_proof
-),
-equipment_summary AS (
-  SELECT equipment_id,
-    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,
-    100.0 * AVG(energized) AS coverage_pct
-  FROM base_proof
-  GROUP BY equipment_id
-),
-sensor_series AS (
-  SELECT equipment_id, series_id, sensor_role
+observed_series AS (
+  SELECT equipment_id, series_id, MIN(sensor_role) AS sensor_role
   FROM sensor_history
   WHERE sensor_role IN ({{ASSESSABLE_ROLES}})
-  GROUP BY equipment_id, series_id, sensor_role
+  GROUP BY equipment_id, series_id
 ),
-sensor_rows AS (
-  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,
-    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch
-      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,
-    COALESCE(bh.energized, 1) AS energized,
-    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,
-    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,
-    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value
-  FROM sensor_history s
-  LEFT JOIN base_history bh
-    ON bh.equipment_id = s.equipment_id AND bh.timestamp_utc = s.timestamp_utc
-  LEFT JOIN equipment_summary hs
-    ON hs.equipment_id = s.equipment_id
-  WHERE s.value IS NOT NULL
-    AND s.sensor_role IN ({{ASSESSABLE_ROLES}})
+expected AS (
+  SELECT equipment_id, series_id, sensor_role, start_epoch, end_epoch FROM declared
+  UNION ALL
+  SELECT o.equipment_id, o.series_id, o.sensor_role, w.start_epoch, w.end_epoch
+  FROM observed_series o
+  JOIN eq_window w ON w.equipment_id = o.equipment_id
+  LEFT JOIN declared d ON d.equipment_id = o.equipment_id AND d.series_id = o.series_id
+  WHERE d.series_id IS NULL
 ),
-prior AS (
-  SELECT sensor_rows.*,
-    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,
-    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,
-    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch
-  FROM sensor_rows
+points AS (
+  SELECT e.equipment_id, e.series_id, e.sensor_role, EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds
+  FROM expected e
+  JOIN sensor_history s ON s.equipment_id = e.equipment_id AND s.series_id = e.series_id
+  WHERE fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) IS NOT NULL
+    AND EXTRACT(EPOCH FROM s.timestamp_utc) >= e.start_epoch
+    AND EXTRACT(EPOCH FROM s.timestamp_utc) <= e.end_epoch
+  UNION ALL
+  SELECT equipment_id, series_id, sensor_role, start_epoch AS epoch_seconds FROM expected
+  UNION ALL
+  SELECT equipment_id, series_id, sensor_role, end_epoch AS epoch_seconds FROM expected
 ),
-prior_groups AS (
-  SELECT prior.*,
-    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > {{MAX_SILENCE_SECONDS}} THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment
-  FROM prior
+steps AS (
+  SELECT points.*,
+    LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS next_epoch
+  FROM points
 ),
-valid AS (
-  SELECT * FROM prior_groups WHERE value IS NOT NULL
-),
-windowed AS (
-  SELECT valid.*,
-    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{STALE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_epoch,
-    MIN(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{STALE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_min,
-    MAX(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{STALE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_max,
-    FIRST_VALUE(previous_value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{STALE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_prev_value,
-    FIRST_VALUE(previous_epoch) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{STALE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_prev_epoch
-  FROM valid
-),
-segments0 AS (
-  SELECT windowed.*,
-    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id, data_segment) AS segment_start_epoch
-  FROM windowed
-),
-elapsed_window AS (
-  SELECT segments0.*,
-    CASE WHEN window_first_epoch > epoch_seconds - {{STALE_SECONDS}}
-           AND window_first_prev_epoch <= epoch_seconds - {{STALE_SECONDS}}
-           AND window_first_prev_epoch >= segment_start_epoch
-           AND window_first_prev_value < window_min
-         THEN window_first_prev_value ELSE window_min END AS elapsed_window_min,
-    CASE WHEN window_first_epoch > epoch_seconds - {{STALE_SECONDS}}
-           AND window_first_prev_epoch <= epoch_seconds - {{STALE_SECONDS}}
-           AND window_first_prev_epoch >= segment_start_epoch
-           AND window_first_prev_value > window_max
-         THEN window_first_prev_value ELSE window_max END AS elapsed_window_max
-  FROM segments0
-),
-signals AS (
-  SELECT elapsed_window.*,
-    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0
-         ELSE next_epoch - epoch_seconds END AS dt_seconds,
-    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - {{STALE_SECONDS}}) AND (elapsed_window_max - elapsed_window_min <= {{SV_STALE_TOL}}) AND energized = 1)) THEN 1 ELSE 0 END AS INT) AS raw_fault
-  FROM elapsed_window
-),
-segments AS (
-  SELECT signals.*,
-    CASE WHEN dt_seconds <= 0 THEN 0.0
-         WHEN dt_seconds < {{MAX_SILENCE_SECONDS}} THEN dt_seconds
-         ELSE {{MAX_SILENCE_SECONDS}} END AS normal_seconds,
-    CASE WHEN dt_seconds > {{MAX_SILENCE_SECONDS}}
-         THEN dt_seconds - {{MAX_SILENCE_SECONDS}} ELSE 0.0 END AS silence_seconds
-  FROM signals
-),
-lagged AS (
-  SELECT segments.*,
-    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault
-  FROM segments
-),
-streak_groups AS (
-  SELECT segments.*,
-    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0
-             THEN 1 ELSE 0 END) OVER (
-      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
-    ) AS streak_group
-  FROM lagged segments
-),
-streaks AS (
-  SELECT streak_groups.*,
-    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (
-      PARTITION BY equipment_id, series_id, data_segment, streak_group
-      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING
-    ) AS fault_streak_seconds
-  FROM streak_groups
-),
-confirmed_rows AS (
-  SELECT streaks.*,
-    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS normal_confirmed
-  FROM streaks
+intervals AS (
+  SELECT equipment_id, series_id, sensor_role, epoch_seconds, next_epoch - epoch_seconds AS dt_seconds
+  FROM steps
+  WHERE next_epoch IS NOT NULL AND next_epoch > epoch_seconds
 ),
 final AS (
-  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,
-    normal_confirmed AS confirmed, normal_seconds AS held_seconds
-  FROM confirmed_rows WHERE normal_seconds > 0
+  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch, 0 AS confirmed,
+    CASE WHEN dt_seconds > {{STALE_AFTER_SECONDS}} THEN {{STALE_AFTER_SECONDS}} ELSE dt_seconds END AS held_seconds
+  FROM intervals
   UNION ALL
-  SELECT equipment_id, series_id, sensor_role,
-    epoch_seconds + {{MAX_SILENCE_SECONDS}} AS segment_epoch,
-    1 AS confirmed, silence_seconds AS held_seconds
-  FROM confirmed_rows WHERE silence_seconds > 0
+  SELECT equipment_id, series_id, sensor_role, epoch_seconds + {{STALE_AFTER_SECONDS}} AS segment_epoch, 1 AS confirmed,
+    dt_seconds - {{STALE_AFTER_SECONDS}} AS held_seconds
+  FROM intervals
+  WHERE dt_seconds > {{STALE_AFTER_SECONDS}}
 ),
 scored AS (
   SELECT equipment_id, series_id, sensor_role,
@@ -149,9 +82,9 @@ scored AS (
   FROM final
   GROUP BY equipment_id, series_id, sensor_role
 )
-SELECT ss.equipment_id, ss.series_id, ss.sensor_role,
-  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id) = 1 THEN NULL ELSE CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END END AS fault_hours,
-  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id) = 1 THEN 0.0 ELSE COALESCE(scored.covered_hours, 0.0) END AS covered_hours
-FROM sensor_series ss
-LEFT JOIN scored USING (equipment_id, series_id, sensor_role)
-ORDER BY ss.equipment_id, ss.series_id;
+SELECT e.equipment_id, e.series_id, e.sensor_role,
+  CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END AS fault_hours,
+  COALESCE(scored.covered_hours, 0.0) AS covered_hours
+FROM expected e
+LEFT JOIN scored ON scored.equipment_id = e.equipment_id AND scored.series_id = e.series_id
+ORDER BY e.equipment_id, e.series_id;
