@@ -7,7 +7,9 @@ Protocol (deterministic; see docs/ml/lbnl-ahu-benchmark.md):
 2. Split by ISO week: odd weeks train, even weeks test. Detectors that learn are fitted on the *fault-free* file's
    odd weeks only (active rows). Nothing learns from a faulted file.
 3. Every method produces 5-minute flags for every file. Flags become one-hour evaluation samples (operating at
-   least half the hour; flagged when at least 25 % of the active points are flagged). Only even (test) weeks count.
+   least half the hour's elapsed time at the 5-minute cadence; flagged when at least 25 % of the active points are
+   flagged). Only even (test) weeks count. ``coverage`` reports, per file, the observed test windows and how many
+   were excluded as not active enough, so excluded coverage is visible next to every rate.
 4. FPR comes from the fault-free file, TPR and detection delay from each faulted file.
 
 Rule rows: ``rules (all)`` is the union of every AHU rule that confirmed a fault; ``rules (tuned)`` drops rules
@@ -27,7 +29,7 @@ import pandas as pd
 from open_fdd.ml import lbnl
 from open_fdd.ml.baseline import RulePackRun, run_rule_pack
 from open_fdd.ml.detectors import FEATURE_ROLES, active_mask, copod_available, make_detector
-from open_fdd.ml.metrics import DEFAULT_PERSISTENCE, DEFAULT_WINDOW, score_file, window_decisions
+from open_fdd.ml.metrics import DEFAULT_PERSISTENCE, DEFAULT_WINDOW, score_file, window_coverage, window_decisions
 
 DEFAULT_METHODS = ("rules", "pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
 METHOD_ORDER = ("rules (all)", "rules (tuned)", "pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
@@ -56,6 +58,7 @@ class BenchmarkResult:
     timing_s: dict[str, float] = field(default_factory=dict)
     settings: dict = field(default_factory=dict)
     data_checks: list[str] = field(default_factory=list)
+    coverage: dict[str, dict[str, int]] = field(default_factory=dict)  # file -> observed/eligible/excluded windows
 
     def table(self) -> pd.DataFrame:
         frame = pd.DataFrame(self.scores)
@@ -67,6 +70,7 @@ class BenchmarkResult:
             "suppressed_rules": self.suppressed_rules, "rule_hits": self.rule_hits,
             "skipped_methods": self.skipped_methods, "pca_contributions": self.pca_contributions,
             "timing_s": self.timing_s, "settings": self.settings, "data_checks": self.data_checks,
+            "coverage": self.coverage,
         }
 
 
@@ -115,9 +119,15 @@ def run_benchmark(
     train_rows = normal[~test_weeks(normal.index)]
     actives = {name: active_mask(frame) for name, frame in frames.items()}
     by_name = {f.name: f for f in files}
+    cadence = pd.Timedelta(minutes=5)
+    for name, frame in frames.items():
+        cov = window_coverage(pd.Series(False, index=frame.index), actives[name], window=window, cadence=cadence)
+        cov = cov[test_weeks(cov.index).to_numpy()]
+        result.coverage[name] = {"test_windows_observed": int(len(cov)), "eligible": int(cov["eligible"].sum()),
+                                 "excluded_not_active_enough": int((~cov["eligible"]).sum())}
 
     def decisions(name: str, flags: pd.Series) -> pd.Series:
-        dec = window_decisions(flags, actives[name], window=window, persistence=persistence)
+        dec = window_decisions(flags, actives[name], window=window, persistence=persistence, cadence=cadence)
         return dec[test_weeks(dec.index)]
 
     def record(method: str, name: str, flags: pd.Series) -> None:
@@ -131,7 +141,7 @@ def run_benchmark(
         runs: dict[str, RulePackRun] = {name: run_rule_pack(frame) for name, frame in frames.items()}
         result.rule_status = runs[normal_name].status
         for rule, mask in runs[normal_name].flags.items():
-            dec = window_decisions(mask, actives[normal_name], window=window, persistence=persistence)
+            dec = window_decisions(mask, actives[normal_name], window=window, persistence=persistence, cadence=cadence)
             train = dec[~test_weeks(dec.index)]
             fpr = float(train.mean()) if train.size else 0.0
             if fpr > suppress_fpr:

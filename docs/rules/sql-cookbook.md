@@ -18,7 +18,7 @@ unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More i
 
 ## Run proof gate {#run-proof}
 
-52 of the 77 rules count only samples while the equipment is **proven running**. The proof is the input role
+51 of the 77 rules count only samples while the equipment is **proven running**. The proof is the input role
 `run_proof`: the `history` column `run_proof` (0/1 or a 0-1 fraction; running when above 0.05). It is resolved from the model, never from a point name, in this order (first hit wins):
 
 1. **The equipment's own proof**: a bound status role (`fan_status` > `pump_status` > `chw_pump_status` > `chiller_status` > `compressor_status`), then a bound command role (`fan_cmd` > `chw_pump_cmd` > `cw_pump_cmd` > `tower_fan_cmd`).
@@ -55,6 +55,7 @@ Rules that are not gated, and why:
 | `OAT-METEO` | compares two outside-air sources; no running equipment is judged |
 | `SCHED-1` | runtime outside the schedule: the proof is the signal |
 | `SCHED-247` | always-on detection: the proof is the signal and off samples must be seen |
+| `SV-STALE` | missing-data monitoring: a gap is a fault whether or not the motor runs (#1673) |
 | `UTIL-INTERVAL` | utility meter data, no running equipment |
 | `UTIL-MONTHLY` | utility meter data, no running equipment |
 | `VAV-1` | zone comfort band while occupied; independent of the air handler running |
@@ -437,7 +438,7 @@ Mech cooling without integrated economizer
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-3): weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns
+**Parity** [match](parity.html#econ-3); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
 
 ### ECON-4 {#econ-4}
@@ -587,6 +588,10 @@ Economizer OK but not economizing
 | `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
+| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_amps` | `chiller-amps` | Current | A | none (declare A) | - | optional |
+| `chiller_power` | `chiller-power` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
 
 **Parameters**
 
@@ -613,7 +618,7 @@ Economizer OK but not economizing
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-7): weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns
+**Parity** [known divergence](parity.html#econ-7): a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642
 
 
 ### FC1 {#fc1}
@@ -1359,8 +1364,10 @@ Mechanical cooling below 15.6 °C web OAT
 | Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---:|---|
 | `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
 | `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_amps` | `chiller-amps` | Current | A | none (declare A) | - | optional |
+| `chiller_power` | `chiller-power` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
 
 **Parameters**
 
@@ -1378,7 +1385,7 @@ Mechanical cooling below 15.6 °C web OAT
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [known divergence](parity.html#mech-oat-1): pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve
+**Parity** [match](parity.html#mech-oat-1); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
 
 ### OA-1 {#oa-1}
@@ -1534,6 +1541,11 @@ Always-on fan or pump runtime
 | `fault_hours` | h | confirmed fault time |
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
+| `window_hours` | h | observed window: first to last input sample |
+| `proven_on_hours` | h | time with run proof ON |
+| `proven_off_hours` | h | time with run proof OFF |
+| `unknown_hours` | h | window time with no known run proof (missing proof or gaps) |
+| `assessment` | - | assessed, insufficient_proof or no_proof |
 
 **Parity** [match](parity.html#sched-247)
 
@@ -3210,9 +3222,9 @@ Sensor rate-of-change spike
 
 ### SV-STALE {#sv-stale}
 
-Stale data (no fresh samples)
+Stale data (no fresh samples for longer than the stale threshold)
 
-**Priority** P0 · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · [SQL file](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql) · [pandas twin](pandas-cookbook.html#sv-stale)
+**Priority** P0 · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** immediate · [SQL file](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/sv_stale.sql) · [pandas twin](pandas-cookbook.html#sv-stale)
 
 **Inputs**
 
@@ -3232,17 +3244,12 @@ Stale data (no fresh samples)
 | `zone_rh` | `zone-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `ma_h` | `mixed-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `sa_h` | `supply-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
-| `run_proof` | `run-proof` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `stale_hours` | Stale window | 2 | 0.25 | 12 | h |
-| `stale_tol` | Stale tolerance | 0.027778 | 0 | 0.555556 | Δ°C |
+| `stale_after_hours` | Stale after | 0.5 | 0.25 | 12 | h |
 
 **Outputs**
 
@@ -3255,8 +3262,6 @@ Stale data (no fresh samples)
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 
 **Parity** [match](parity.html#sv-stale)
-
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
 
 ## Weather {#group-weather}

@@ -1,28 +1,61 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- mech_oat_1.sql — Mechanical cooling below 15.6 °C web OAT
--- Proof: chiller_status OR cooling valve (pandas mechanical_proof_mask).
-WITH h AS (
+-- Proof (#1642, pandas mechanical_proof_mask / mech_cooling_run_mask): compressor or chiller operation, never a cooling
+-- valve alone. Candidates in order: compressor_status, chiller_status, chiller_amps > MECH_AMPS_MIN (5 A), chiller_power > MECH_POWER_KW_MIN (1 kW). Per
+-- equipment the first candidate that is ever on is the proof (else the first one bound, which stays off); with none bound
+-- there is no proof and no fault. Web dry bulb: the equipment's web_oa_t, else the weather sidecar joined as-of (latest
+-- sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old, as pandas weather_on_grid). Never BAS oa_t.
+WITH wx_web_oa_t AS (
+  SELECT timestamp_utc AS ref_ts, ref_val,
+    LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) AS next_ref_ts
+  FROM (
+    SELECT timestamp_utc, MAX(web_oa_t) AS ref_val
+    FROM weather
+    WHERE web_oa_t IS NOT NULL
+    GROUP BY timestamp_utc
+  ) wx_web_oa_t_points
+),
+h AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
-    web_oa_t,
-    clg_valve_pct AS clg,
-    CASE WHEN chiller_status IS NULL THEN NULL WHEN chiller_status > 0.05 THEN 1.0 ELSE 0.0 END AS chill_on
-  FROM history
+    h.equipment_id,
+    h.timestamp_utc,
+    COALESCE(h.web_oa_t, wx_web_oa_t.ref_val) AS web_oa_t,
+    CASE WHEN h.compressor_status IS NULL THEN NULL WHEN h.compressor_status > 0.05 THEN 1 ELSE 0 END AS c1,
+    CASE WHEN h.chiller_status IS NULL THEN NULL WHEN h.chiller_status > 0.05 THEN 1 ELSE 0 END AS c2,
+    CASE WHEN h.chiller_amps IS NULL THEN NULL WHEN h.chiller_amps > {{MECH_AMPS_MIN}} THEN 1 ELSE 0 END AS c3,
+    CASE WHEN h.chiller_power IS NULL THEN NULL WHEN h.chiller_power > {{MECH_POWER_KW_MIN}} THEN 1 ELSE 0 END AS c4
+  FROM history h
+  LEFT JOIN wx_web_oa_t
+    ON h.timestamp_utc >= wx_web_oa_t.ref_ts
+   AND (wx_web_oa_t.next_ref_ts IS NULL OR h.timestamp_utc < wx_web_oa_t.next_ref_ts)
+   AND EXTRACT(EPOCH FROM (h.timestamp_utc - wx_web_oa_t.ref_ts)) <= {{WEB_ASOF_BOUND_SECONDS}}
+),
+proof_pick AS (
+  SELECT equipment_id,
+    CASE
+      WHEN MAX(c1) = 1 THEN 1 WHEN MAX(c2) = 1 THEN 2 WHEN MAX(c3) = 1 THEN 3 WHEN MAX(c4) = 1 THEN 4
+      WHEN COUNT(c1) > 0 THEN 1 WHEN COUNT(c2) > 0 THEN 2 WHEN COUNT(c3) > 0 THEN 3 WHEN COUNT(c4) > 0 THEN 4
+      ELSE 0
+    END AS proof_kind
+  FROM h
+  GROUP BY equipment_id
 ),
 base AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
+    h.equipment_id,
+    h.timestamp_utc,
     CAST(CASE
-      WHEN web_oa_t IS NULL THEN 0
-      WHEN web_oa_t >= {{MECH_OAT_MAX}} THEN 0
-      WHEN chill_on IS NOT NULL AND chill_on > 0.05 THEN 1
-      WHEN clg IS NOT NULL AND clg > 0.05 THEN 1
+      WHEN h.web_oa_t IS NULL THEN 0
+      WHEN h.web_oa_t >= {{MECH_OAT_MAX}} THEN 0
+      WHEN pp.proof_kind = 1 AND h.c1 = 1 THEN 1
+      WHEN pp.proof_kind = 2 AND h.c2 = 1 THEN 1
+      WHEN pp.proof_kind = 3 AND h.c3 = 1 THEN 1
+      WHEN pp.proof_kind = 4 AND h.c4 = 1 THEN 1
       ELSE 0
     END AS INT) AS raw_fault
   FROM h
+  JOIN proof_pick pp ON pp.equipment_id = h.equipment_id
 ),
 elapsed_hold AS (
   -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:

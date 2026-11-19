@@ -46,7 +46,7 @@ each input, parameter and output.
 | [**DMP-1**](sql-cookbook.html#dmp-1) | OA damper leakage | ahu | 15 min | [pandas](pandas-cookbook.html#dmp-1) | match |
 | [**ECON-1**](sql-cookbook.html#econ-1) | Economizer stuck closed when OAT favorable | ahu | 10 min | [pandas](pandas-cookbook.html#econ-1) | match |
 | [**ECON-2**](sql-cookbook.html#econ-2) | Economizing when outdoor air unfavorable | ahu | 5 min | [pandas](pandas-cookbook.html#econ-2) | match |
-| [**ECON-3**](sql-cookbook.html#econ-3) | Mech cooling without integrated economizer | ahu | 5 min | [pandas](pandas-cookbook.html#econ-3) | known divergence |
+| [**ECON-3**](sql-cookbook.html#econ-3) | Mech cooling without integrated economizer | ahu | 5 min | [pandas](pandas-cookbook.html#econ-3) | match |
 | [**ECON-4**](sql-cookbook.html#econ-4) | Low estimated OA fraction | ahu | 10 min | [pandas](pandas-cookbook.html#econ-4) | known divergence |
 | [**ECON-5**](sql-cookbook.html#econ-5) | Preheat over-conditioning | ahu | 10 min | [pandas](pandas-cookbook.html#econ-5) | match |
 | [**ECON-6**](sql-cookbook.html#econ-6) | Economizing in freezing weather | ahu | 10 min | [pandas](pandas-cookbook.html#econ-6) | match |
@@ -78,7 +78,7 @@ each input, parameter and output.
 | [**FCU-VALVE-PASS-CLG**](sql-cookbook.html#fcu-valve-pass-clg) | Cooling valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-clg) | match |
 | [**FCU-VALVE-PASS-HTG**](sql-cookbook.html#fcu-valve-pass-htg) | Heating valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-htg) | match |
 | [**HP-1**](sql-cookbook.html#hp-1) | Discharge cold when heating | heatpump | 10 min | [pandas](pandas-cookbook.html#hp-1) | known divergence |
-| [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | known divergence |
+| [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | match |
 | [**OA-1**](sql-cookbook.html#oa-1) | Low OA fraction | ahu | 15 min | [pandas](pandas-cookbook.html#oa-1) | known divergence |
 | [**OAT-METEO**](sql-cookbook.html#oat-meteo) | Equipment OAT vs weather-staged wx OAT | ahu | 15 min | [pandas](pandas-cookbook.html#oat-meteo) | known divergence |
 | [**PID-HUNT-1**](sql-cookbook.html#pid-hunt-1) | Suspected control-output hunting | ahu, vav, zone_other, chiller, boiler, heatpump | immediate | [pandas](pandas-cookbook.html#pid-hunt-1) | match |
@@ -89,7 +89,7 @@ each input, parameter and output.
 | [**SV-RANGE**](sql-cookbook.html#sv-range) | Sensor out of hard range | ahu, vav, chiller, boiler, weather, zone_other, heatpump, meter | 5 min | [pandas](pandas-cookbook.html#sv-range) | match |
 | [**SV-RATE**](sql-cookbook.html#sv-rate) | Context-aware sensor rate of change | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 10 min | [pandas](pandas-cookbook.html#sv-rate) | known divergence |
 | [**SV-SPIKE**](sql-cookbook.html#sv-spike) | Sensor rate-of-change spike | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 5 min | [pandas](pandas-cookbook.html#sv-spike) | match |
-| [**SV-STALE**](sql-cookbook.html#sv-stale) | Stale data (no fresh samples) | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 5 min | [pandas](pandas-cookbook.html#sv-stale) | match |
+| [**SV-STALE**](sql-cookbook.html#sv-stale) | Stale data (no fresh samples for longer than the stale threshold) | ahu, vav, chiller, boiler, weather, zone_other, heatpump | immediate | [pandas](pandas-cookbook.html#sv-stale) | match |
 | [**TRIM-1**](sql-cookbook.html#trim-1) | Duct static trim advisory | ahu | 30 min | [pandas](pandas-cookbook.html#trim-1) | known divergence |
 | [**TRIM-3**](sql-cookbook.html#trim-3) | HWST trim advisory | boiler | 30 min | [pandas](pandas-cookbook.html#trim-3) | match |
 | [**TRIM-4**](sql-cookbook.html#trim-4) | CHW plant reset advisory | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#trim-4) | match |

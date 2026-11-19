@@ -75,7 +75,8 @@ Published-data quirks found while mapping, and how they are handled:
    gray-box residuals); `nu` / contamination 0.01 (one-class SVM, COPOD).
 3. **Active rows**: supply fan proven on (`fan-status`) and occupied.
 4. **Evaluation sample** (Frank, Lin, Granderson et al. 2019): a one-hour window in a test week with the unit active for
-   at least half of it, flagged when at least 25 % of its active 5-minute points are flagged (15 minutes of persistence).
+   at least half of its elapsed time (counted at the 5-minute cadence, not from rows present), flagged when at least
+   25 % of its active points are flagged (a share of active time: 15 minutes only in a fully active hour).
 5. **Labels**: every sample of a faulted file is a fault sample; every sample of the fault-free file is normal.
    FPR comes from the fault-free file, TPR and detection delay from each faulted file. Faults that are physically
    invisible in some hours (a valve stuck at 50 % when no cooling is needed, a damper stuck at its normal minimum)
@@ -89,7 +90,7 @@ Published-data quirks found while mapping, and how they are handled:
 | `rules (tuned)` | The same minus rules whose one-hour FPR on the fault-free *training* weeks exceeds 5 % (advisories an engineer silences on a healthy unit); same training data as the ML rows |
 | `pca` | PCA on 7 standardized roles (90 % variance), SPE above the training 99th percentile, per-role contributions |
 | `grey_box` | Residuals against binned medians learned on normal data: OA fraction from the mixed-air balance vs damper command, cooling coil air-side delta-T vs valve command, SAT minus setpoint while the valve modulates |
-| `ocsvm` | One-class SVM (scikit-learn) per operating mode (min OA, economizer only, mechanical at min OA, economizer + mechanical), seeded 4000-row subsample per mode |
+| `ocsvm` | One-class SVM (scikit-learn) per operating mode (min OA, economizer only, mechanical at min OA, economizer + mechanical), seeded 4000-row subsample per mode. A refit replaces every mode model; a mode with no model in the latest fit is unassessed (`ModeGated.assessment()`), and a failed fit leaves the detector unfitted |
 | `copod` | COPOD (pyod) per operating mode, roles constant within a mode dropped |
 | `zscore`, `mad` | The existing `open_fdd.analytics.anomaly` rolling detectors on each role, one-day window, no training |
 
@@ -175,6 +176,8 @@ reproduced row for row on Windows (Python 3.14) before merge.
 ```bash
 open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ahu1_ml
 open-fdd-ml detect ./AHU_1 --method pca --train ./AHU_1_known_good --out ./ahu1_ml_pca   # + contributions.png
+# pca/grey_box/ocsvm/copod need exactly one of --train, --train-until or --exploratory-self-fit (output labeled
+# exploratory). flags.csv has a phase column; summary.json counts evaluation rows only and records the training receipt.
 ```
 
 `AHU_1` is the device folder `open-fdd-anomaly` reads (`history_wide.csv` in SI and `column_map.json`). Train only on
