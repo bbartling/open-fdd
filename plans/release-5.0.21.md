@@ -6,6 +6,124 @@ Internal; excluded from the Pages site (`docs/_config.yml` excludes `plans/**`).
 States: `OPEN -> OWNED -> PR READY -> INDEPENDENTLY VERIFIED -> INTEGRATED -> RELEASED -> CLOSED`.
 Issues stay open after integration (READY FOR RELEASE); Grok posts closure receipts after the default-branch merge.
 
+## Final state (2026-11-19, Claude)
+
+`release/5.0.21` is 49 squash commits ahead of `master`. Every PR below was accepted by the other agent at its exact head, merged with `--match-head-commit`, and patch-checked (stacked PRs verified by applying their diff to the pre-merge release).
+
+Still open into the release when this was written: #1729 (COIL-PERF `active_hours` + stale cookbooks on release), #1709 (tuner sliders), and this ledger.
+
+### Merged into release/5.0.21
+
+| PR | Squash | Subject |
+|---|---|---|
+| # | `3b1a1d3b` | chore: bump app to 5.0.21 for next patch cycle |
+| # | `34fbd794` | chore: VERSION 5.0.21 |
+| # | `7642f407` | tutorials: DuckDB browser AFDD walkthrough (fake AHU data, SQL fault rule) |
+| #1674 | `fc140966` | chore: 5.0.21 cycle ledger; run validation CI on release/** without publishing Pages |
+| #1675 | `b42f2f83` | docs: link the beginner DuckDB browser tutorial from the SQL borrowing pages |
+| #1676 | `125afb6a` | SV sweeps: accept the canonical percent_0_100 relative-humidity unit (#1669) |
+| #1677 | `9aacecfd` | ml: ModeGated refit replaces the whole baseline; failed fit is unusable; per-row assessment (#1666) |
+| #1678 | `f4378cac` | ml detect: require an explicit training source; label train/evaluation phases; evaluation-only counts (#1665) |
+| #1679 | `ce325135` | ml metrics: window eligibility from elapsed time at the cadence; window_coverage; benchmark excluded coverage (#1666) |
+| #1683 | `90fdf54b` | rules: explicit equipment context for run_all/run_rule, summarize() explains skips (#1661) |
+| #1692 | `a1fc4a2f` | sparql client frames: carry the hook's resolved run proof (#1635, client half) |
+| #1693 | `d5fe686b` | ml: assessed vs unassessed rows for PCA and gray-box (#1666) |
+| #1690 | `23c4a093` | open-fdd-nf export-folder: one equipment's SI history as a device folder (#1653) |
+| #1697 | `9c8075fd` | ontology audit: --extensions completeness check for Open-FDD extension terms (#1569) |
+| #1699 | `85d2bd21` | SCHED-247: unknown proof is not OFF; durations and completeness (#1670) |
+| #1703 | `dbdb7e8e` | nf_app_sync: refuse --dry-run outside install before any login (#1634) |
+| #1705 | `be62de7c` | doctor: errored runs show as failed; scheduled hooks need a success within two intervals (#1638) |
+| #1664 | `6bf8baf2` | docs: remove two stale prompt notes |
+| #1706 | `a5e219e6` | FDD hook: synthesized occ_mode follows the saved occupancy calendar on every engine (#1636) |
+| #1711 | `9f78d949` | sparql-data hook: answer the resolved run proof per equipment (#1635, hook half) |
+| #1713 | `9df54ae6` | ci: docs-pages builds of different PRs no longer cancel each other |
+| #1680 | `691956f1` | plans: Grok 5.0.21 checkpoint |
+| #1715 | `03bb72bf` | Timelines: a gated rule with no proof has no timeline rows, like its summary (#1631) |
+| #1717 | `edbff81a` | runner: the fallback run proof gets the rule's startup delay (#1631) |
+| #1687 | `351d68cd` | ml detect: roles used, per-row flag explanations, explicit zero-alarm plot (#1660) |
+| #1694 | `2e21de6d` | open-fdd-ml detect help: --method summary, --train-until zone wording (#1662) |
+| #1704 | `b44cd02f` | nf_app_sync: push preflights the Timescale schema (#1633) |
+| #1682 | `415a5e44` | ml: per-method role requirements, open-fdd-ml methods, single-zone gray-box (#1659) |
+| #1718 | `1a0ff3a1` | Run proof: refuse only analog commands with no unit, inside the resolver (#1631) |
+| #1712 | `178f90ca` | Parity: weather as-of join and pandas mechanical-cooling proof close ECON-3 / ECON-7 / MECH-OAT-1 gaps (#1642) |
+| #1691 | `73a719b3` | ml: review a saved SQL fault episode against ML evidence (#1667, first slice) |
+| #1714 | `acb3ddc0` | GL36 rules keep their own fan gate when "Require motor status" is off (#1631) |
+| #1710 | `1317fe40` | TRIM-3/4, CW-FAN-1, CW-OPT-1: an unbound legacy plant proof is unknown, not OFF (#1631) |
+| #1700 | `c75fcf98` | SV sweeps: SV-STALE is missing data; gaps scored once; stale tuner migration (#1673) |
+| #1681 | `e5912628` | anomaly/ml: one activity policy for screen and ml detect (#1656) |
+| #1716 | `1a45039d` | FC4: count operating-state entries over proven samples only (#1631) |
+| #1686 | `fed1f2f3` | ml: open-fdd-ml make-folder and the device-folder format (#1652) |
+| #1728 | `362ba780` | ci: cancel superseded runs, skip feature-branch push doubles, defer ZAP off release PRs |
+| #1695 | `0c235473` | ml: labeled held-out evaluation of the episode review policy (#1667 acceptance 5) |
+| #1698 | `f3341bd9` | ml detect: publish assessed vs unassessed rows in flags.csv and summary.json (#1666) |
+| #1724 | `530575be` | COIL-PERF: generic coil performance rule, heating and cooling (#1641, first slice) |
+| #1684 | `3396602b` | anomaly screen: defaults run on what is installed; iforest opt-in (#1654, #1658) |
+| #1702 | `3734b72f` | SV sweeps: bounded as-of run proof; unknown proof cannot fault (#1631) |
+| #1719 | `51f1a9c4` | Gated rules report active_hours; fault_pct = fault / active_hours (#1631) |
+| #1708 | `75149814` | FDD tuners: one user-facing timer per rule; fixed internal safeguards (#1671) |
+| #1696 | `dc973d8a` | ml: synthetic end-to-end review demo runnable from the wheel (#1667 acceptance 6) |
+| #1685 | `a5f8af2b` | anomaly screen: summary.json, --json, --no-plots, --tz (#1655) |
+| #1688 | `0bee54d0` | anomaly MAD: resolution floor + near_constant skip (#1657) |
+| #1689 | `da8c64af` | PyPI docs/help: absolute README links, wheel examples, no-NF note (#1662) |
+
+### Issues closed in this cycle
+
+- #1631 Run-proof gate: SQL/pack coverage semantics and runner denominator follow-ups
+- #1634 nf_app_sync: --dry-run is silently ignored by push (it writes and restarts the app)
+- #1635 SPARQL client frames: carry the resolved run proof so client-side rules gate like the hook
+- #1636 FDD hook: synthesized occ_mode ignores the saved weekly occupancy calendar
+- #1638 Health reporting: surface errored hook runs (no end time, queue failed=0) as failures
+- #1652 PyPI tools: document the device-folder format and add a command to build one from a CSV or the LBNL files
+- #1654 open-fdd-anomaly screen: default methods fail on an [ml]-only install and --help does not name the extra
+- #1655 open-fdd-anomaly screen: machine-readable summary, --no-plots and local time zone for scheduled runs
+- #1656 open-fdd-anomaly screen ignores whether the unit is running; ml detect requires it
+- #1657 Anomaly MAD flags quantization noise on near-constant signals
+- #1659 ML detectors: per-equipment role sets and clear role requirements (furnace / RTU / heat pump)
+- #1660 open-fdd-ml detect: report the roles actually used, and add per-role contributions to flags.csv
+- #1662 PyPI docs and help text: broken relative links, repo-only examples, internal names, missing details
+- #1666 ML scoring and benchmark: preserve unassessed rows and enforce elapsed-time coverage
+- #1669 fdd.unit_declares_quantity omits the percent_0_100 alias on relative humidity
+- #1670 SCHED-247 cannot distinguish missing proof from proven OFF
+- #1671 One user-facing delay timer per rule in tuning_catalog.json and SQL templates
+- #1673 SV sweep: SV-STALE duplicates SV-FLATLINE; make stale a data-missing/gap rule and dedupe gap scoring
+
+### Moved to 5.0.22
+
+- #1567 Install paths: support and test NF-native app install methods (git URL, console upload, single-hook deploy), stop depending on nf_app_sync.py + SSH/VPN, document non-SSH and IT-department setup
+- #1614 Deploy tooling: safe prune for orphan app points (removed app ids) and long-stale FDD result points
+- #1615 doctor: host health (memory, disk, restarts) via the NF API, no SSH (Lite hosts)
+- #1616 README: Grok Bot and agent skills section, one canonical skills tree, badge/link drift checks
+- #1624 CI: verify Full hook and run-result authorization on disposable Normal Framework
+- #1639 Expanded parity stress testing beyond the three-way SI tiers
+- #1640 Port DataFusion back as a fourth SI parity engine (pandas == DataFusion == SQL)
+- #1643 NF plugin UI: Overview is laggy again — default to plant + zone temps, move heavy plots onto their own routes
+- #1644 Refactor nf-app/hooks/fdd.js (~1,444 lines) into small, progressive, easy-to-follow modules
+- #1645 Lite edition: replace SQLite-WASM / PGlite with a warm in-memory DuckDB engine + Parquet history (Full stays on Timescale)
+- #1646 Rule tuners and RCx analytics missing vs latest reference
+- #1649 Restore SQL-driven analytics (incl. z-score anomaly detection) with pandas == SQL parity across Postgres/Timescale, DuckDB, SQLite
+- #1668 Mock NF and test fakes diverge from real NF 3.10.x: two installer bugs hidden + contract gaps
+- #1707 Statistic/metric rules (AVG-ZONE-TEMP, ZONE-COMFORT-PCT, FAN-RUNTIME-HOURS) are written to fdd.rule_result as INCONCLUSIVE every run
+- #1721 5.0.22: labeled-fault evaluation (LBNL data), ML fault probability calibration, SQL-vs-ML agent tool
+- #1723 fault_pct denominator: align SQL active_hours with the pandas operational gate per rule family
+- #1725 FC8: eps_sat and supply_tol alias render differently in JS and Python when both are saved
+- #1726 Tuner step grid: 66 shipped defaults are off the snap grid (the default cannot be re-entered after a change)
+- #1727 Docs: CMMS work-order triage page, and a short write-your-own-rule guide (pandas + SQL)
+
+### Open, not labelled 5.0.22 (owner to confirm)
+
+- #1569 Data modeling: formal ontology extension policy (own namespace, subclass existing Brick/223P/Haystack concepts, queryable + validated extensions)
+- #1633 Deploy: nf_app_sync push should preflight the Timescale schema version before writing hooks
+- #1641 Generic coil performance rule (heating and cooling) for any coil-bearing equipment
+- #1642 Tighten SQL-vs-pandas parity pins: a downstream SQL port beats them on 4x3/8x7
+- #1653 open-fdd-nf: export one equipment's history as a device folder (units and roles from the model)
+- #1658 Anomaly Isolation Forest always flags about 1% of rows; make it opt-in and say so
+- #1661 open_fdd.rules.run_all: accept equipment_type and explain an all-skipped run
+- #1663 Tracking: open-fdd 4.5.12 PyPI agent-tool fixes from the 4.5.11 field test
+- #1665 ML detect: require an explicit healthy training source and distinguish training from evaluation
+- #1667 Agent review: join SQL fault episodes with ML evidence and validate alert reduction
+- #1672 Per-rule tuning sliders in the Open-FDD UI
+- #1720 5.0.21 (proposed): portable SQL rule scorecard + offline privacy-preserving review bundle (open-fdd-scorecard)
+
 ## Writer slot
 
 | Field | Value |
