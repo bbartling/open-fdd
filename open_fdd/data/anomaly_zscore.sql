@@ -9,6 +9,9 @@
 --   * mean and sample standard deviation (n - 1) over that window;
 --   * flagged when |x - mean| / stddev > {threshold}, written as (x - mean)^2 > threshold^2 * variance;
 --   * a window with fewer than {window} samples, or with no spread (min = max), never flags.
+--   * because the current sample is part of its own window, |z| can never exceed (n - 1) / sqrt(n) for a window of n
+--     samples (reached by n - 1 equal values and one outlier): with threshold 3 a window of 10 or fewer samples never
+--     flags, and the default 24 caps |z| at 4.69. tests/test_sql_anomaly_zscore.py pins these boundaries.
 -- Values are centred on the point's mean first: the z-score does not change, the sums lose less precision.
 -- is_event marks false -> true edges per point (open_fdd.analytics.anomaly.detectors.dedupe_events).
 --
