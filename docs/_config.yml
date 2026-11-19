@@ -65,7 +65,7 @@ exclude:
   - ml/*.md
 
 mermaid:
-  version: "10.9.1"
+  version: "10.9.8"
 
 plugins:
   - jekyll-seo-tag

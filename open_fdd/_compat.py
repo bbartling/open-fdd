@@ -1,23 +1,7 @@
-"""Compatibility helpers for Python 3.10."""
+"""Compatibility re-exports (Python 3.11+ ships enum.StrEnum; kept so existing imports keep working)."""
 
 from __future__ import annotations
 
-import sys
-
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        """Minimal StrEnum backport (str() returns the value)."""
-
-        def __str__(self) -> str:
-            return str(self.value)
-
-        @staticmethod
-        def _generate_next_value_(name, start, count, last_values):
-            return name.lower()
-
+from enum import StrEnum
 
 __all__ = ["StrEnum"]

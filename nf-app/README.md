@@ -78,11 +78,11 @@ checks it). Static files are cached 5 minutes; `nf_app_sync.py` stamps js/css UR
 | Library | Version | File | sha256 |
 |---|---|---|---|
 | ECharts (ESM build, `dist/echarts.esm.min.mjs` from npm) | 6.1.0 | `static/vendor/echarts.esm.min.js` | `28515f26aa57f87eb1e4ed4eb446927eaf329b5f5e02b4bfd4b0264fea40d1da` |
-| sql.js | 1.15.1 | `hooks/vendor/sql.js/sql-wasm.{js,wasm}` | from `npm install` (`package-lock.json`) |
-| @electric-sql/pglite | 0.5.11 | npm only (`package.json`) | `package-lock.json` |
+| sql.js | 1.15.2 | `hooks/vendor/sql.js/sql-wasm.{js,wasm}` | from `npm install` (`package-lock.json`) |
+| @electric-sql/pglite | 0.5.15 | npm only (`package.json`) | `package-lock.json` |
 
-Supply-chain rule: never take a release younger than two weeks (sql.js 1.15.2 and pglite 0.5.12+ were too new on 2026-11-06).
-Caddy front door: `caddy:2.11.7-alpine`, pinned in `deploy/nf-caddy/docker-compose.yml`.
+Supply-chain rule: never take a release younger than two weeks (sql.js 1.16+ and pglite 0.5.16+ were too new on 2026-11-19).
+Caddy front door: `caddy:2.11.9-alpine`, pinned in `deploy/nf-caddy/docker-compose.yml`.
 
 ## TimescaleDB full edition (optional)
 
