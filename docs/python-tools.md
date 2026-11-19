@@ -77,6 +77,20 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.
 
+**Activity.** `screen` and `open-fdd-ml detect` share one policy (`open_fdd.analytics.anomaly.activity`). Each row
+is `on`, `off`, `unoccupied` or `unknown`. The proof source is the run-proof contract (`sql/fdd/run_proof.json`,
+`open_fdd.run_proof.derive_run_proof`), chosen per folder: a resolved `run-proof` column first, then an own status
+role (`fan-status` first), then an own command (`fan-cmd` first), all running when `> 0.05`. A frame marked
+`run_proof_resolved` counts only its `run-proof` column. A missing value on the chosen source makes that row
+`unknown`; it does not fall back to another source. With the default
+`--activity proof`, equipment points are screened only on `on` rows, and site/weather points (outdoor air
+temperature and humidity) on every row. A point with nothing to assess is listed as `no_run_proof` (no proof role),
+`no_known_proof` (a proof role with no known value on any row) or `no_active_rows` (proof never on) rather than as a
+clean result. STL and Isolation Forest run on the `on` rows joined end to end, so STL's seasonal phase is not aligned
+across off periods; read STL results on intermittently running equipment with that in mind. `--activity ungated` screens every row on purpose.
+`activity.json`, the README and the scoreboard's `gate` / `assessed_rows` columns record the choice and the counts;
+`open-fdd-ml detect` writes the same receipt under `activity` in `summary.json`.
+
 ## ML FDD (`open-fdd-ml`)
 
 ```bash
@@ -87,7 +101,24 @@ open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ah
 # learning methods need --train, --train-until or --exploratory-self-fit; zscore/mad need no training
 ```
 
+`summary.json` lists `roles_used`, `roles_missing` and `roles_configured`, where `roles` is the scored set. `flags.csv` names
+what drove each flagged row: `flagged_roles` for zscore and mad, `top_role` / `top_share` for PCA, and `top_residual` and
+`ratio_<residual>` for the gray-box method.
+
 Method, data, mapping and results: [docs/ml/lbnl-ahu-benchmark.md](ml/lbnl-ahu-benchmark.md).
+
+`open-fdd-ml methods` lists the roles each method needs, and `open-fdd-ml methods ./AHU_1 [--json]` says which
+methods can run on that folder and why the others cannot. PCA, one-class SVM and COPOD need two non-constant
+feature roles (`discharge-air-temp`, `mixed-air-temp`, `return-air-temp`, `outside-air-temp`,
+`outside-air-damper`, `cooling-valve`, `fan-cmd`, `duct-static-pressure`, `zone-air-temp`, `heating-valve`).
+The gray-box method needs one residual family. The AHU families are the mixed-air balance, the cooling-coil
+delta-T, and SAT error while the valve modulates. With no mixed-air temperature it uses the single-zone family
+instead (furnace, RTU, heat pump): supply minus zone (or return) temperature against the heating valve
+(`heat_rise`), or against the cooling valve or compressor status (`cool_drop`). A 0-100 % command is read as a
+fraction. A role that is mapped but has no data on active rows does not count, so an empty `zone-air-temp` falls back
+to `return-air-temp`. For the trained methods `methods FOLDER` runs a dry `fit` on the folder, so `can_run` means
+`fit` succeeds on it (one-class SVM and COPOD need 50 active rows in one operating mode), and the reason is the
+detector's own error.
 
 ## Ontology audit and model doctor (`open-fdd-ontology-audit`)
 

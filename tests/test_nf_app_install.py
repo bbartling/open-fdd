@@ -1023,6 +1023,77 @@ def test_html_answer_from_the_console_url_names_the_front_door_not_the_nf_versio
     assert "unknown route" not in out
 
 
+# ---------------------------------------------------------------- #1633: push preflights the Timescale schema
+
+def _writes(nf):
+    return [(mt, p) for mt, p in nf.log if mt != "GET" and p != "/api/v1/apps/new-app/hooks/schema"]
+
+
+def test_push_refuses_before_any_write_when_the_schema_is_behind(no_psql_no_dsn, tmp_path, capsys):
+    m, nf = make_manifest(tmp_path), probe_box({"ok": False, "installed": 4, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "push: STOPPED" in out and "version 4" in out and "install.sql" in out and "--allow-schema-upgrade-pending" in out
+    assert _writes(nf) == []
+    assert PASSWORD not in out and "127.0.0.1" not in out
+
+
+def test_push_override_is_loud_and_a_passing_schema_continues(no_psql_no_dsn, tmp_path, capsys):
+    m, nf = make_manifest(tmp_path), probe_box({"ok": False, "installed": 4, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}, allow_pending=True) == 0
+    assert "WARNING" in capsys.readouterr().out
+    m, nf = make_manifest(tmp_path), probe_box({"ok": True, "installed": 5, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == 0
+    assert "Timescale schema preflight: Timescale schema version 5" in capsys.readouterr().out
+
+
+def _needs_schema(m, version):
+    rel = m["files"]["/hooks/lib/timescale.js"]
+    path = m["_dir"] / rel
+    path.write_text(f"const SCHEMA_VERSION = {version};\n", encoding="utf-8")
+    assert sync.local_required_schema(m) == version
+
+
+def test_push_checks_this_release_s_schema_not_the_installed_probe_s(no_psql_no_dsn, tmp_path, capsys):
+    """Grok's repro on #1704: an older probe on the box (checks 5, reports ok) must not approve code needing schema 6."""
+    m = boot_manifest(tmp_path)
+    _needs_schema(m, 6)
+    nf = probe_box({"ok": True, "installed": 5, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "push: STOPPED" in out and "version 5" in out and "requires 6" in out and "only checks for 5" in out
+    assert _writes(nf) == []
+    # the database is already at 6 though the old probe only checks 5: nothing to stop
+    nf = probe_box({"ok": True, "installed": 6, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == 0
+
+
+def test_push_without_timescale_or_a_new_app_has_no_schema_check(no_psql_no_dsn, tmp_path):
+    m = make_manifest(tmp_path)
+    assert sync.push_schema_gate(fake(), m, {}) == 0                                      # app not installed yet
+    nf = probe_box({"ok": False, "installed": 4, "required": 5})
+    nf.store["new-app"]["options"] = [o for o in nf.store["new-app"]["options"] if o["name"] not in ("engine", "timescale")]
+    assert sync.push_schema_gate(nf, m, {}) == 0                                          # Lite / no Timescale
+
+
+def test_cli_push_runs_the_gate_first(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(sync, "load_env", lambda _p: {"CONSOLE_USERNAME": "u", "CONSOLE_PASSWORD": "p", "NF_CONSOLE_URL": "https://c.invalid"})
+    monkeypatch.setattr(sync, "Console", lambda *a, **k: object())
+    monkeypatch.setattr(sync, "make_ssl_context", lambda *a, **k: None)
+    monkeypatch.setattr(sync, "manifest", lambda _p: {"application": {"id": "new-app"}})
+    monkeypatch.setattr(sync, "push_schema_gate", lambda c, m, env, allow: calls.append(("gate", allow)) or sync.EXIT_FAILED)
+    monkeypatch.setattr(sync, "cmd_push", lambda *a, **k: calls.append("push") or 0)
+    env = tmp_path / "nf.env"
+    env.write_text("x=1\n", encoding="utf-8")
+    assert sync.main(["--env", str(env), "push", "app.json"]) == sync.EXIT_FAILED
+    assert calls == [("gate", False)], "a failed gate stops before cmd_push"
+    calls.clear()
+    monkeypatch.setattr(sync, "push_schema_gate", lambda c, m, env, allow: calls.append(("gate", allow)) or 0)
+    assert sync.main(["--env", str(env), "push", "app.json", "--allow-schema-upgrade-pending"]) == 0
+    assert calls == [("gate", True), "push"]
+
+
 # ---------------------------------------------------------------- #1638: errored and stale scheduled hook runs
 
 HOURLY = {"id": "fdd", "schedule": {"rrule": "FREQ=HOURLY;INTERVAL=1"}}
