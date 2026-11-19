@@ -87,10 +87,10 @@ def validate_role_limits(
                 raise ValueError(f"{rule_id}: assessed role {name!r} has no limits entry")
             if rule_id == "SV-SPIKE" and entry["spike_delta"] is None:
                 raise ValueError(f"{rule_id}: role {name!r} needs spike_delta")
-            if rule_id in ("SV-FLATLINE", "SV-STALE"):
+            if rule_id == "SV-FLATLINE":   # SV-STALE (#1673) is missing-data only: no value tolerance
                 if entry["quantity"] not in ("absolute_temperature", "relative_humidity"):
                     raise ValueError(f"{rule_id}: role {name!r} quantity {entry['quantity']!r} has no declared tolerance")
-                field = "flat_tol" if rule_id == "SV-FLATLINE" else "stale_tol"
+                field = "flat_tol"
                 if entry["quantity"] == "relative_humidity" and entry[field] is None:
                     raise ValueError(f"{rule_id}: humidity role {name!r} needs {field}")
     return {"defaults": out_defaults, "fallback": fallback, "roles": roles}

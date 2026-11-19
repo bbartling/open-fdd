@@ -1832,7 +1832,7 @@
   },
   {
    "id": "SV-STALE",
-   "description": "Stale data (no fresh samples)",
+   "description": "Stale data (no fresh samples for longer than the stale threshold)",
    "sql_file": "sv_stale.sql",
    "priority": "P0",
    "equipment_kinds": [
@@ -1859,19 +1859,15 @@
     "ra_h",
     "zone_rh",
     "ma_h",
-    "sa_h",
-    "run_proof"
+    "sa_h"
    ],
    "unmapped_roles": [],
-   "confirm_seconds": 300,
+   "confirm_seconds": 0,
    "parameters": {
-    "require_run_proof": 1.0,
-    "confirm_seconds": 300.0,
-    "stale_hours": 2.0,
-    "max_silence_hours": 0.5,
-    "stale_tol": 0.027778
+    "stale_after_hours": 0.5
    },
-   "run_proof": "gated"
+   "run_proof": "exempt",
+   "run_proof_note": "missing-data monitoring: a gap is a fault whether or not the motor runs (#1673)"
   },
   {
    "id": "SV-RATE",

@@ -170,6 +170,11 @@ try {
     const { plan, args } = planFor(equip);
     await ts.syncPoints(db, { siteId: SITE, equipId: equip, rows: ts.pointRows({ pack, ...args }) });
     const loaded = await ts.loadHistory(db, { pack, ...args, from: FROM, to: TO, stepSec: STEP });
+    // #1673: loadHistory declares every fetched sweep series over the requested window [FROM, TO) (production). The
+    // Python parity matrix compares every engine with the pandas oracle on the undeclared contract (the observed
+    // window), so drop the declaration here. The declared window is covered by timescale.test.mjs (Timescale == pglite
+    // with the same sweep_series) and nf-app/tests/sv-stale-gap.test.mjs.
+    if (pack.contract.sweep_series) await db.query("DELETE FROM pg_temp.sweep_series");
 
     // cell-for-cell: the loaded history == the SI dataset
     const got = new Map((await db.query("SELECT * FROM pg_temp.history ORDER BY timestamp_utc")).rows.map((r) => [r.timestamp_utc.getTime(), r]));

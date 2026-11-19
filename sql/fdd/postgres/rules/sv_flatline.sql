@@ -133,14 +133,10 @@ confirmed_rows AS (
   FROM streaks
 ),
 final AS (
+  -- #1673: time beyond MAX_SILENCE_SECONDS of a gap is unknown here (not covered, not a fault); SV-STALE scores gaps.
   SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,
     normal_confirmed AS confirmed, normal_seconds AS held_seconds
   FROM confirmed_rows WHERE normal_seconds > 0
-  UNION ALL
-  SELECT equipment_id, series_id, sensor_role,
-    epoch_seconds + {{MAX_SILENCE_SECONDS}} AS segment_epoch,
-    1 AS confirmed, silence_seconds AS held_seconds
-  FROM confirmed_rows WHERE silence_seconds > 0
 ),
 scored AS (
   SELECT equipment_id, series_id, sensor_role,

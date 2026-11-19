@@ -26,7 +26,7 @@ def test_every_role_has_a_typed_history_column_and_scale():
 def test_contract_declares_metadata_relations_and_every_rule_relation():
     contract = load_contract()
     assert set(contract) == {
-        "history", "weather", "utility_interval", "utility_monthly", "sensor_history",
+        "history", "weather", "utility_interval", "utility_monthly", "sensor_history", "sweep_series",
     }
     # every declared relation is read by some rule, and no rule reads a relation the contract does not declare
     # (authorized_series / equipment were dropped in contract version 2: 0 of 77 rules read them)
@@ -37,7 +37,9 @@ def test_contract_declares_metadata_relations_and_every_rule_relation():
         assert re.search(rf"\b(from|join)\s+{table}\b", all_sql, re.I), f"no rule reads {table}"
 
     sv_sql = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "sql/fdd/postgres/rules").glob("sv_*.sql"))
-    assert sv_sql.count("sensor_series AS (") == 5
+    # SV-STALE (#1673) enumerates expected series from sweep_series instead of a sensor_series CTE
+    assert sv_sql.count("sensor_series AS (") == 4
+    assert sv_sql.count("FROM sweep_series") == 1
     assert re.search(r"\bseries_id\b", sv_sql, re.I)
     assert re.search(r"\bsensor_role\b", sv_sql, re.I)
 
