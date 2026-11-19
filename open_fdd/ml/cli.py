@@ -246,6 +246,23 @@ def _explanations(det, frame, flags):
     return out
 
 
+def _assessment_report(assessment, active, scored) -> dict:
+    """Assessed vs unassessed scored rows (#1666): a row the model could not judge is never counted as healthy."""
+    if assessment is None:
+        return {"assessed_rows": None, "assessed_coverage": None,
+                "assessment_note": "this method does not report per-row assessment; flagged_rows covers active rows"}
+    pool = active.to_numpy() & scored.to_numpy()
+    states = assessment[pool]
+    n_active = int(pool.sum())
+    assessed = int((states == "assessed").sum())
+    reasons = {str(k): int(v) for k, v in states[states != "assessed"].value_counts().sort_index().items()}
+    report = {"assessed_rows": assessed, "unassessed_rows": n_active - assessed, "unassessed_reasons": reasons,
+              "assessed_coverage": round(assessed / n_active, 4) if n_active else None}
+    if not n_active:
+        report["assessed_coverage_reason"] = "no active scored rows"
+    return report
+
+
 def _cmd_detect(args) -> int:
     import pandas as pd
 
@@ -317,6 +334,9 @@ def _cmd_detect(args) -> int:
     scores = det.scores(frame) if args.method in {"pca", "grey_box"} else None
     if scores is not None:
         table["score"] = scores
+    assessment = det.assessment(frame).reindex(frame.index) if hasattr(det, "assessment") else None
+    if assessment is not None:
+        table["assessment"] = assessment
     explain = _explanations(det, frame, flags)
     for col in explain.columns:
         table[col] = explain[col]
@@ -339,6 +359,7 @@ def _cmd_detect(args) -> int:
         **_role_report(det, frame),
         "units": "SI (device-folder contract)",
     }
+    summary.update(_assessment_report(assessment, active, scored))
     if overlap:
         summary["training_overlap"] = overlap
     from open_fdd.analytics.anomaly.activity import activity

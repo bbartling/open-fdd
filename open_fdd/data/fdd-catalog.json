@@ -1066,6 +1066,12 @@
     "isFedBy": "brick:isFedBy",
     "feeds": "brick:feeds"
    }
+  },
+  "alignment": {
+   "mode": "asof_backward",
+   "max_age": "MAX_GAP_HOURS",
+   "unknown": "no proof sample at or before the sample within max_age, or a NULL proof: cannot create a fault, never energized",
+   "note": "#1631: a sample's proof is the latest proof sample of the same equipment at or before it, no older than MAX_GAP_HOURS (runtime_defaults.json). An exact-timestamp join is the zero-age special case (fail-closed)."
   }
  },
  "rules": [
@@ -3490,6 +3496,44 @@
    },
    "run_proof": "exempt",
    "run_proof_note": "utility meter data, no running equipment"
+  },
+  {
+   "id": "COIL-PERF",
+   "description": "Coil valve open but the air temperature changes less than min_dt",
+   "sql_file": "coil_perf.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "htg_valve_pct",
+    "reheat_valve_pct",
+    "clg_valve_pct",
+    "heating_coil_entering_temp",
+    "heating_coil_leaving_temp",
+    "cooling_coil_entering_temp",
+    "cooling_coil_leaving_temp",
+    "mat",
+    "sat",
+    "vav_inlet_t",
+    "vav_discharge_t",
+    "zone_t",
+    "zone_flow",
+    "fan_status",
+    "fan_cmd",
+    "run_proof"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "confirm_seconds": 900.0,
+    "valve_open": 0.8,
+    "valve_shut": 0.05,
+    "min_dt": 3.0,
+    "require_run_proof": 1.0
+   },
+   "run_proof": "gated"
   }
  ]
 }

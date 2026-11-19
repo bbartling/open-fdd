@@ -287,6 +287,9 @@ async function createPglite(pack) {
         }
       }
       await db.exec("CREATE INDEX history_eq_ts ON history(equipment_id, timestamp_utc)");
+      // Planner statistics for the window / as-of joins (#1631): without them PGlite guesses row counts and the sweep
+      // rules' joins degrade to nested loops (seconds -> tens of seconds on a week of 5-min data).
+      for (const table of Object.keys(cols)) await db.exec(`ANALYZE ${table}`);
       loaded = true;
     },
     async query(ruleId) {
