@@ -9,7 +9,8 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
 1. **Benchmark first.** `open-fdd-ml download` (LBNL single-duct AHU subset, CC BY 4.0, into
    `$OPENFDD_ML_CACHE` or `~/.cache/open-fdd/lbnl`; never commit it), then `open-fdd-ml benchmark --out b.md --json b.json`.
    A new detector merges only with a benchmark row and its fault-free FPR. If it loses to `rules (tuned)`, say so.
-2. **Detect on a device folder** (`history_wide.csv` in SI + `column_map.json`, same as `open-fdd-anomaly`):
+2. **Detect on a device folder** (`history_wide.csv` in SI + `column_map.json`, same as `open-fdd-anomaly`; build one
+   with `open-fdd-ml make-folder CSV --map ROLE=COLUMN ... --out DIR`, `--from-lbnl FILE` or `--example`):
    `open-fdd-ml detect FOLDER --method pca|grey_box|ocsvm|copod|zscore|mad --train-until YYYY-MM-DD --out DIR`.
    Learning methods need exactly one training source: `--train KNOWN_GOOD_FOLDER`, `--train-until` (fit before,
    score after) or `--exploratory-self-fit` (never call its flags faults against a healthy baseline). Without one

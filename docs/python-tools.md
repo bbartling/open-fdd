@@ -64,6 +64,25 @@ example `no rule was assessed: no equipment type: pass equipment_type= ...`.
 The package also provides ECM workbooks, reports, anomaly screening, and RDF readers. Use the CLI help for command
 options. Source and installation extras are in the repository's pyproject.toml.
 
+## Device folder
+
+`open-fdd-anomaly screen|report` and `open-fdd-ml detect` read a device folder. It needs no NF and no database.
+
+- `history_wide.csv`: a `timestamp_utc` column (ISO 8601, UTC) and one column per point, in SI. That means degC,
+  Pa, fractions 0-1 for commands and positions (0-100 % also works for commands), and 0/1 for status.
+- `column_map.json`: `{"equipType": "AHU", "points": {"discharge-air-temp": "SAT", "fan-status": "SF_S"}}`. A role
+  is a Haystack-style name or its short alias; `open-fdd-ml make-folder --list-roles` prints them.
+
+```bash
+open-fdd-ml make-folder trend.csv --out AHU_1 --time-col Time --tz America/Chicago \
+    --map discharge-air-temp=SAT --map outside-air-temp=OAT --map fan-status=SF_S   # naive stamps read in --tz
+open-fdd-ml make-folder --from-lbnl ~/.cache/open-fdd/lbnl/AHU_annual.csv --from 2018-06-01 --to 2018-06-30 --out AHU_1
+open-fdd-ml make-folder --example --out demo_AHU                                     # two synthetic days
+```
+
+`make-folder` does not convert units. An unknown role is a warning, not an error. `open-fdd-ml make-folder --help`
+repeats the format.
+
 ## Anomaly screening and SQL z-score
 
 ```bash
