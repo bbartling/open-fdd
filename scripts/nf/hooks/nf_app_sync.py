@@ -826,7 +826,7 @@ def find_run(c, app_id: str, hook_id: str, pid):
     """The run with this pid (last 20 runs, with results and logs), or None. API errors raise SystemExit/OSError."""
     runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{hook_id}/runs"
                          "?page_size=20&include_results=true&include_logs=true").get("runs", [])
-    return next((x for x in runs if x.get("pid") == pid), None)
+    return next((x for x in runs if x.get("pid") is not None and str(x["pid"]) == str(pid)), None)
 
 
 def wait_for_run(c, app_id: str, hook_id: str, pid, wait: float, clock=time.monotonic, sleep=time.sleep):
@@ -934,7 +934,7 @@ def select_runnable(hooks: list[dict], only_hooks: list[str] | None, args: dict 
 
 
 def cmd_run(c, m: dict, only_hooks: list[str] | None = None, wait: float | None = None,
-            resume: int | None = None, clock=time.monotonic, sleep=time.sleep,
+            resume: str | None = None, clock=time.monotonic, sleep=time.sleep,
             args: dict | None = None) -> int:
     """Start each selected hook once and wait for it. Exit 0 = all succeeded, 1 = a run failed (or a hook returned
     ok:false), 3 = a wait ran out with the run still going (check it, or `--resume PID`); 1 wins over 3.
@@ -2174,7 +2174,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--wait", type=float, metavar="SECONDS",
                     help="run: how long to wait for each run (default: the hook's invokeTimeout + 60 s). "
                          "On timeout the run is reported as still running (exit 3) and is never re-started")
-    ap.add_argument("--resume", type=int, metavar="PID",
+    ap.add_argument("--resume", type=str, metavar="PID",
                     help="run: wait on this existing run of the one --hook instead of starting a new one")
     ap.add_argument("--hook", action="append", dest="hooks", metavar="ID",
                     help="push/run: only these hook ids (repeatable); run starts them even if on-request")

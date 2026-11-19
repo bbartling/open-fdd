@@ -137,6 +137,21 @@ def test_resume_needs_exactly_one_hook():
         run(FakeConsole(clock, {}), clock, resume=1)
 
 
+@pytest.mark.parametrize("response_pid,resume_pid", [("777", "777"), ("777", 777), (777, "777")])
+def test_resume_accepts_nf_string_pid_without_starting_a_run(response_pid, resume_pid):
+    # NF int64 fields are JSON strings; tolerate old integer callers too (#1668 A2).
+    clock = FakeClock()
+    c = FakeConsole(clock, {"fdd": 4})
+    c.started_at[response_pid] = ("fdd", clock())
+    assert run(c, clock, only_hooks=["fdd"], resume=resume_pid, wait=10) == 0
+    assert c.starts == []
+
+
+def test_resume_cli_keeps_int64_pid_as_string():
+    args = sync.build_parser().parse_args(["run", "manifest.json", "--hook", "fdd", "--resume", "9223372036854775807"])
+    assert args.resume == "9223372036854775807"
+
+
 def _app(engine="auto", timescale=None):
     opts = [{"name": "engine", "value": {"string": engine}}]
     if timescale is not None:
