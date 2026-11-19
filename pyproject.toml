@@ -56,6 +56,7 @@ open-fdd-version = "open_fdd.version:main"
 open-fdd-anomaly = "open_fdd.analytics.anomaly.cli:main"
 open-fdd-nf = "open_fdd.nf.cli:main"
 open-fdd-ml = "open_fdd.ml.cli:main"
+open-fdd-scorecard = "open_fdd.scorecard.cli:main"
 open-fdd-ontology-audit = "open_fdd.ontology_audit.cli:main"
 
 [project.optional-dependencies]
@@ -158,6 +159,7 @@ include = ["open_fdd*"]
 [tool.setuptools.package-data]
 "open_fdd" = ["data/*.json", "data/*.sql"]
 "open_fdd.ontology_audit" = ["data/*.json", "data/*.csv", "data/*.ttl"]
+"open_fdd.scorecard" = ["*.sql"]
 "open_fdd.ecm_engineering" = [
     "data/*.xlsx",
     "data/*.json",
