@@ -39,8 +39,8 @@ def summary(verdict) -> dict:
 
 
 def test_baseline_file_is_the_documented_verdict():
-    assert [d["verdict"] for d in _BASE] == [{"compared": 71, "matched": 49, "known_divergent": 22, "unexpected": 0},
-                                             {"compared": 71, "matched": 52, "known_divergent": 19, "unexpected": 0}]
+    assert [d["verdict"] for d in _BASE] == [{"compared": 72, "matched": 50, "known_divergent": 22, "unexpected": 0},
+                                             {"compared": 72, "matched": 53, "known_divergent": 19, "unexpected": 0}]
 
 
 def test_baseline_verdict_on_pglite(ds):

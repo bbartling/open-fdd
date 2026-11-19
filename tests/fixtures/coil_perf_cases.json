@@ -1,0 +1,15 @@
+{
+  "_doc": "#1641 COIL-PERF cases, shared by nf-app/tests/coil-perf.test.mjs (PGlite, SQLite) and tests/test_coil_perf.py (pandas). Each case: 4 h at 5 min (49 samples) of constant values (SQL role names, SI); `expect` = fault hours with the 15 min confirmation (the held time of the first two samples of a streak is not fault time: 46 x 5 min = 3.833 h), or an assessment.",
+  "cases": [
+    {"id": "heating_no_rise_ahu", "row": {"run_proof": 1, "fan_status": 1, "htg_valve_pct": 0.9, "clg_valve_pct": 0.0, "mat": 15.0, "sat": 16.0}, "expect": 3.833333},
+    {"id": "heating_good_rise", "row": {"run_proof": 1, "fan_status": 1, "htg_valve_pct": 0.9, "clg_valve_pct": 0.0, "mat": 15.0, "sat": 25.0}, "expect": 0.0},
+    {"id": "cooling_no_drop_ahu", "row": {"run_proof": 1, "fan_status": 1, "clg_valve_pct": 0.9, "htg_valve_pct": 0.0, "mat": 24.0, "sat": 23.0}, "expect": 3.833333},
+    {"id": "cooling_but_heating_open", "row": {"run_proof": 1, "fan_status": 1, "clg_valve_pct": 0.9, "htg_valve_pct": 0.5, "mat": 24.0, "sat": 23.0}, "expect": 0.0},
+    {"id": "coil_sensors_win_over_mat_sat", "row": {"run_proof": 1, "fan_status": 1, "htg_valve_pct": 0.9, "heating_coil_entering_temp": 15.0, "heating_coil_leaving_temp": 30.0, "mat": 15.0, "sat": 16.0}, "expect": 0.0},
+    {"id": "reheat_valve_vav_pair", "row": {"run_proof": 1, "fan_status": 1, "reheat_valve_pct": 0.9, "vav_inlet_t": 13.0, "vav_discharge_t": 14.0, "zone_flow": 50.0}, "expect": 3.833333},
+    {"id": "airflow_below_min", "row": {"run_proof": 1, "fan_status": 1, "reheat_valve_pct": 0.9, "vav_inlet_t": 13.0, "vav_discharge_t": 14.0, "zone_flow": 5.0}, "expect": 0.0},
+    {"id": "proof_off", "row": {"run_proof": 0, "fan_status": 1, "htg_valve_pct": 0.9, "clg_valve_pct": 0.0, "mat": 15.0, "sat": 16.0}, "expect": 0.0},
+    {"id": "no_temperature_pair", "row": {"run_proof": 1, "fan_status": 1, "htg_valve_pct": 0.9, "sat": 16.0}, "expect": "no_temperature_pair"},
+    {"id": "no_coil_valve", "row": {"run_proof": 1, "fan_status": 1, "mat": 15.0, "sat": 16.0}, "expect": "no_coil_valve"}
+  ]
+}
