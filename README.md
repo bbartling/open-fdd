@@ -101,14 +101,14 @@ CI checks the two against each other; the [parity report](https://bbartling.gith
 
 The [Open-FDD Grok Bot](https://x.ai/bot/COWOKNgQRUjlFqo6m0DY7) provides an agent template for working with the
 project. Open the link to access the shared bot; availability and import controls depend on your account.
-You can also use the repository skills directly with Claude, Codex or Cursor: start with [AGENTS.md](AGENTS.md).
+You can also use the repository skills directly with Claude, Codex or Cursor: start with [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).
 
-The canonical recipes live in [openfdd_agent_spec/skills/](openfdd_agent_spec/skills/):
+The canonical recipes live in [openfdd_agent_spec/skills/](https://github.com/bbartling/open-fdd/tree/master/openfdd_agent_spec/skills/):
 
-- Build: [charts](openfdd_agent_spec/skills/add-rcx-chart.md), [rules and tuning](openfdd_agent_spec/skills/add-or-tune-fdd-rule.md), [TypeScript checks](openfdd_agent_spec/skills/typescript.md).
-- Operate: [site modeling](openfdd_agent_spec/skills/model-a-site-in-nf.md), [deployment](openfdd_agent_spec/skills/deploy-to-nf-box.md), [install/upgrade/troubleshooting](openfdd_agent_spec/skills/install-upgrade-troubleshoot.md), [NF gotchas](openfdd_agent_spec/skills/nf-gotchas.md).
-- Validate: [security](openfdd_agent_spec/skills/security-checks.md), [BACnet](openfdd_agent_spec/skills/bacnet-validate.md), [ontology](openfdd_agent_spec/skills/audit-ontology-coverage.md).
-- Python tools: [NF agent](openfdd_agent_spec/skills/pypi-nf-agent.md), [ML FDD](openfdd_agent_spec/skills/ml-fdd.md).
+- Build: [charts](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/add-rcx-chart.md), [rules and tuning](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/add-or-tune-fdd-rule.md), [TypeScript checks](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/typescript.md).
+- Operate: [site modeling](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/model-a-site-in-nf.md), [deployment](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/deploy-to-nf-box.md), [install/upgrade/troubleshooting](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/install-upgrade-troubleshoot.md), [NF gotchas](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/nf-gotchas.md).
+- Validate: [security](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/security-checks.md), [BACnet](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/bacnet-validate.md), [ontology](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/audit-ontology-coverage.md).
+- Python tools: [NF agent](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/pypi-nf-agent.md), [ML FDD](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/ml-fdd.md).
 
 The `.agents/skills/` and `.claude/skills/` files are generated discovery pointers, not separate instructions.
 After editing a canonical recipe, run `python scripts/check_skills_sync.py --write`; CI checks for drift,
