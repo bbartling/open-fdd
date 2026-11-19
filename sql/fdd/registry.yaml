@@ -32,36 +32,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
-        default: 1.0
-        min: 0.0
-        max: 1.0
-        step: 1.0
-        unit: bool
-        kind: boolean
-        frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       zone_t_lo:
         label: Zone low
         default: 21.111111111
@@ -118,36 +88,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
-        default: 1.0
-        min: 0.0
-        max: 1.0
-        step: 1.0
-        unit: bool
-        kind: boolean
-        frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       setback_hi:
         label: Setback high
         default: 20.0
@@ -317,26 +257,6 @@ rules:
         kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      web_cadence_seconds:
-        label: Web weather cadence
-        default: 1200
-        min: 300
-        max: 7200
-        step: 300
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: WEB_CADENCE_SECONDS
-      web_asof_margin_seconds:
-        label: Web as-of margin
-        default: 300
-        min: 0
-        max: 1800
-        step: 60
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: WEB_ASOF_MARGIN_SECONDS
 
   - rule_id: FC13-SAT-HIGH
     equipment_kinds: [ahu]
@@ -354,26 +274,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -394,16 +294,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       eps_sat:
         label: SAT sensor eps
         default: 0.638888889
@@ -480,26 +370,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -556,26 +426,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -596,16 +446,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       eps_dsp:
         label: Duct-static error epsDSP (Pa)
         default: 29.8608
@@ -652,26 +492,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -682,16 +502,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -768,26 +578,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -798,16 +588,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       eps_rat:
         label: RAT sensor eps
         default: 0.638888889
@@ -885,26 +665,6 @@ rules:
     blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -915,16 +675,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -981,26 +731,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1021,16 +751,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       supply_tol:
         label: Supply tol (alias eps_sat)
         default: 0.638888889
@@ -1127,26 +847,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1167,16 +867,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       eps_sat:
         label: SAT sensor eps
         default: 0.638888889
@@ -1263,26 +953,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1303,16 +973,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       eps_oat:
         label: OAT sensor eps
         default: 0.638888889
@@ -1389,26 +1049,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1429,16 +1069,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       eps_sat:
         label: SAT sensor eps
         default: 0.638888889
@@ -1525,26 +1155,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1565,16 +1175,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       supply_tol:
         label: Supply tol (alias eps_sat)
         default: 0.638888889
@@ -1681,26 +1281,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1747,26 +1327,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1826,26 +1386,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1896,16 +1436,6 @@ rules:
         kind: dimensionless
         frontend_control: slider
         sql_placeholder: RANGE_SCALE_PRESSURE
-      max_silence_hours:
-        label: Max sensor silence
-        default: 0.5
-        min: 0.25
-        max: 12.0
-        step: 0.25
-        unit: h
-        kind: dimensionless
-        frontend_control: slider
-        sql_placeholder: MAX_SILENCE_HOURS
 
   - rule_id: SV-FLATLINE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
@@ -1923,26 +1453,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -1953,16 +1463,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      confirm_seconds:
-        label: Confirm time
-        default: 300.0
-        min: 0.0
-        max: 3600.0
-        step: 300.0
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: CONFIRM_SECONDS
       flatline_tol:
         label: Flatline tolerance
         default: 0.055556
@@ -1983,16 +1483,6 @@ rules:
         kind: dimensionless
         frontend_control: slider
         sql_placeholder: FLATLINE_HOURS
-      max_silence_hours:
-        label: Max sensor silence
-        default: 0.5
-        min: 0.25
-        max: 12.0
-        step: 0.25
-        unit: h
-        kind: dimensionless
-        frontend_control: slider
-        sql_placeholder: MAX_SILENCE_HOURS
 
   - rule_id: SV-SPIKE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
@@ -2010,26 +1500,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -2090,66 +1560,28 @@ rules:
         kind: dimensionless
         frontend_control: slider
         sql_placeholder: SPIKE_SCALE
-      max_silence_hours:
-        label: Max sensor silence
-        default: 0.5
-        min: 0.25
-        max: 12.0
-        step: 0.25
-        unit: h
-        kind: dimensionless
-        frontend_control: slider
-        sql_placeholder: MAX_SILENCE_HOURS
 
   - rule_id: SV-STALE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
-    run_proof: gated
+    run_proof: exempt
+    run_proof_note: "missing-data monitoring: a gap is a fault whether or not the motor runs (#1673)"
     sql_file: sv_stale.sql
     pandas_function: null
-    description: Stale data (no fresh samples)
-    # Pandas gate is `always` (sensor sweep); do not require fan_cmd.
+    description: Stale data (no fresh samples for longer than the stale threshold)
+    # #1673: SV-STALE is missing data only (gaps and expected series with no sample); a stuck value that is still polled is
+    # SV-FLATLINE. Not gated by run proof. Gap scoring was removed from SV-FLATLINE, SV-RANGE and SV-SPIKE.
     # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
     required_roles: []
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, run_proof]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
-    confirm_seconds: 300
+    confirm_seconds: 0
     parameters:
-      require_run_proof:
-        label: Require run proof
-        default: 1.0
-        min: 0.0
-        max: 1.0
-        step: 1.0
-        unit: bool
-        kind: boolean
-        frontend_control: slider
-        sql_placeholder: REQUIRE_RUN_PROOF
-      confirm_seconds:
-        label: Confirm time
-        default: 300.0
-        min: 0.0
-        max: 3600.0
-        step: 300.0
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: CONFIRM_SECONDS
-      stale_hours:
-        label: Stale window
-        default: 2.0
-        min: 0.25
-        max: 12.0
-        step: 0.25
-        unit: h
-        kind: dimensionless
-        frontend_control: slider
-        sql_placeholder: STALE_HOURS
-      max_silence_hours:
-        label: Max sensor silence
+      stale_after_hours:
+        label: Stale after
         default: 0.5
         min: 0.25
         max: 12.0
@@ -2157,17 +1589,7 @@ rules:
         unit: h
         kind: dimensionless
         frontend_control: slider
-        sql_placeholder: MAX_SILENCE_HOURS
-      stale_tol:
-        label: Stale tolerance
-        default: 0.027778
-        min: 0.0
-        max: 0.555556
-        step: 0.005556
-        unit: degC
-        kind: temperature_difference
-        frontend_control: slider
-        sql_placeholder: STALE_TOL
+        sql_placeholder: STALE_AFTER_HOURS
 
   - rule_id: SV-RATE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
@@ -2205,16 +1627,6 @@ rules:
         kind: dimensionless
         frontend_control: slider
         sql_placeholder: SENSOR_SPAN
-      max_gap_hours:
-        label: Max sample gap
-        default: 1.0
-        min: 0.1
-        max: 12.0
-        step: 0.1
-        unit: h
-        kind: dimensionless
-        frontend_control: slider
-        sql_placeholder: MAX_GAP_HOURS
       confirm_seconds:
         label: Confirm time
         default: 600.0
@@ -2225,16 +1637,6 @@ rules:
         kind: duration_seconds
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
-      persistence_min:
-        label: Fault persistence
-        default: 10.0
-        min: 5.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: PERSISTENCE_MIN
       steady_fault_per_hour:
         label: Steady-state slew limit
         default: 3.333333
@@ -2261,26 +1663,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -2291,16 +1673,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      confirm_seconds:
-        label: Confirm time
-        default: 0.0
-        min: 0.0
-        max: 3600.0
-        step: 300.0
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: CONFIRM_SECONDS
       window_hours:
         label: Hunting lookback window
         default: 1.0
@@ -2361,16 +1733,6 @@ rules:
         kind: count
         frontend_control: slider
         sql_placeholder: MINIMUM_REVERSALS
-      minimum_coverage_pct:
-        label: Min window sample coverage
-        default: 80.0
-        min: 50.0
-        max: 100.0
-        step: 5.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_COVERAGE_PCT
 
   - rule_id: FC4
     equipment_kinds: [ahu]
@@ -2387,26 +1749,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 3600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -2427,16 +1769,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       confirm_seconds:
         label: Confirm time
         default: 3600.0
@@ -2473,26 +1805,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -2503,16 +1815,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -2599,26 +1901,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -2639,16 +1921,6 @@ rules:
         kind: temperature_difference
         frontend_control: slider
         sql_placeholder: OAT_RAT_DELTA_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       fan_on_min:
         label: Fan-on command min
         default: 0.01
@@ -2715,26 +1987,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: CLG_ON_MIN
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -2755,16 +2007,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       htg_on_min:
         label: Heating on min
         default: 0.01
@@ -2871,26 +2113,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: HTG_ON_MIN
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -2911,16 +2133,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: FAN_ON_MIN
-      mode_delay_min:
-        label: Mode delay after fan-on
-        default: 10.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: MODE_DELAY_MIN
       eps_hclt:
         label: HW coil leaving eps
         default: 0.638888889
@@ -3027,26 +2239,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3094,36 +2286,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
-        default: 1.0
-        min: 0.0
-        max: 1.0
-        step: 1.0
-        unit: bool
-        kind: boolean
-        frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 300.0
@@ -3170,26 +2332,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3236,26 +2378,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3342,26 +2464,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3418,26 +2520,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3486,7 +2568,7 @@ rules:
     pandas_function: null
     description: Economizer OK but not economizing
     required_roles: [oa_damper_pct, clg_valve_pct]
-    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd, run_proof]
+    optional_roles: [web_oa_t, web_oa_dp, fan_status, fan_cmd, run_proof, compressor_status, chiller_status, chiller_amps, chiller_power]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3494,26 +2576,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3593,7 +2655,7 @@ rules:
     pandas_function: null
     description: Mechanical cooling below 15.6 °C web OAT
     required_roles: [web_oa_t]
-    optional_roles: [clg_valve_pct, chiller_status]
+    optional_roles: [compressor_status, chiller_status, chiller_amps, chiller_power]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -3663,26 +2725,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3739,26 +2781,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3805,26 +2827,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3881,26 +2883,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3967,26 +2949,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -3997,16 +2959,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      confirm_seconds:
-        label: Confirm time
-        default: 900.0
-        min: 0.0
-        max: 3600.0
-        step: 300.0
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: CONFIRM_SECONDS
       full_open_pct:
         label: Full open frac
         default: 0.975
@@ -4053,26 +3005,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4129,26 +3061,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4205,26 +3117,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4347,26 +3239,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4377,16 +3249,6 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
-      confirm_seconds:
-        label: Confirm time
-        default: 900.0
-        min: 0.0
-        max: 3600.0
-        step: 300.0
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: CONFIRM_SECONDS
       high_min_flow_sp:
         label: High min-flow SP
         default: 117.98675
@@ -4453,26 +3315,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4550,36 +3392,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
-      require_operational_gate:
-        label: Require operational gate
-        default: 1.0
-        min: 0.0
-        max: 1.0
-        step: 1.0
-        unit: bool
-        kind: boolean
-        frontend_control: slider
-        sql_placeholder: REQUIRE_OPERATIONAL_GATE
       confirm_seconds:
         label: Confirm time
         default: 1800.0
@@ -4616,26 +3428,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4682,26 +3474,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4758,26 +3530,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4824,26 +3576,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4900,26 +3632,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -4976,26 +3688,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -5052,26 +3744,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -5138,26 +3810,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -5250,26 +3902,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -5326,26 +3958,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -5402,26 +4014,6 @@ rules:
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
-      minimum_active_coverage_pct:
-        label: Min active coverage
-        default: 5.0
-        min: 0.0
-        max: 100.0
-        step: 1.0
-        unit: pct
-        kind: percent
-        frontend_control: slider
-        sql_placeholder: MINIMUM_ACTIVE_COVERAGE_PCT
-      startup_delay_min:
-        label: Startup delay
-        default: 0.0
-        min: 0.0
-        max: 60.0
-        step: 1.0
-        unit: min
-        kind: duration_minutes
-        frontend_control: slider
-        sql_placeholder: STARTUP_DELAY_MIN
       require_run_proof:
         label: Require run proof
         default: 1.0
@@ -5523,7 +4115,7 @@ rules:
     description: Always-on fan or pump runtime
     required_roles: []
     optional_roles: [fan_status, pump_status, chiller_status, fan_cmd]
-    output_columns: [equipment_id, fault_hours]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, window_hours, proven_on_hours, proven_off_hours, unknown_hours, assessment]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
@@ -5877,3 +4469,71 @@ rules:
         kind: interval_energy
         frontend_control: slider
         sql_placeholder: UTIL_INTERVAL_MAE
+
+  - rule_id: COIL-PERF
+    # #1641: one generic coil-performance rule (heating and cooling modes), applied by bound roles. First slice: air
+    # handlers (FCU-HTG-COIL / FCU-CLG-COIL / VAV-REHEAT stay until parity shows the generic rule matches them).
+    equipment_kinds: [ahu]
+    run_proof: gated
+    sql_file: coil_perf.sql
+    pandas_function: coil_perf
+    description: "Coil valve open but the air temperature changes less than min_dt"
+    required_roles: []
+    optional_roles: [htg_valve_pct, reheat_valve_pct, clg_valve_pct, heating_coil_entering_temp, heating_coil_leaving_temp, cooling_coil_entering_temp, cooling_coil_leaving_temp, mat, sat, vav_inlet_t, vav_discharge_t, zone_t, zone_flow, fan_status, fan_cmd, run_proof]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    dashboard_wired: false
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      valve_open:
+        label: Valve open threshold
+        default: 0.8
+        min: 0.5
+        max: 1.0
+        step: 0.05
+        unit: frac
+        kind: fraction
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN
+      valve_shut:
+        label: Opposite valve shut
+        default: 0.05
+        min: 0.0
+        max: 0.2
+        step: 0.01
+        unit: frac
+        kind: fraction
+        frontend_control: slider
+        sql_placeholder: VALVE_SHUT
+      min_dt:
+        label: Minimum coil temperature change
+        default: 3.0
+        min: 0.555556
+        max: 11.111111
+        step: 0.277778
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: MIN_DT
+      require_run_proof:
+        label: Require run proof
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        kind: boolean
+        frontend_control: slider
+        sql_placeholder: REQUIRE_RUN_PROOF

@@ -19,6 +19,8 @@ rps AS (
   FROM history
   GROUP BY equipment_id, timestamp_utc
 ),
+-- #1631: require_run_proof = 0 switches off only the resolved run-proof gate; the rule keeps its own fan condition,
+-- fan-restart holdoff and active-coverage floor (as pandas: the operational gate is not the run-proof gate).
 h AS (
   SELECT
     equipment_id,
@@ -31,7 +33,6 @@ h AS (
       ELSE fan_cmd
     END AS fan,
     CASE
-      WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
       ELSE 1
@@ -40,17 +41,21 @@ h AS (
 ),
 modes AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
-    DATE_TRUNC('hour', timestamp_utc) AS clock_hour,
+    h.equipment_id,
+    h.timestamp_utc,
+    DATE_TRUNC('hour', h.timestamp_utc) AS clock_hour,
     CASE
       WHEN fan IS NULL OR fan < {{FAN_ON_MIN}} THEN 0
       WHEN clg IS NOT NULL AND clg > 0.1 THEN 3
       WHEN oa_d IS NOT NULL AND oa_d > 0.5 THEN 2
       ELSE 1
-    END AS op_mode
+    END AS op_mode,
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN rps.run_proof > 0.05 THEN 1 ELSE 0 END AS proven
   FROM h
+  LEFT JOIN rps USING (equipment_id, timestamp_utc)
 ),
+-- #1631: entries are counted over PROVEN samples only (the sequence skips unproven time, so a transition across
+-- unproven time is not an entry and an unproven flap cannot reach the hourly count); pandas fc4 does the same.
 entries AS (
   SELECT
     equipment_id,
@@ -64,18 +69,28 @@ entries AS (
       ELSE 0
     END AS is_entry
   FROM modes
+  WHERE proven = 1
+),
+hourly_counts AS (
+  SELECT
+    equipment_id,
+    clock_hour,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 1 THEN 1 ELSE 0 END) AS entries_min_oa,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 2 THEN 1 ELSE 0 END) AS entries_econ,
+    SUM(CASE WHEN is_entry = 1 AND op_mode = 3 THEN 1 ELSE 0 END) AS entries_mech
+  FROM entries
+  GROUP BY equipment_id, clock_hour
 ),
 hourly AS (
   SELECT
-    equipment_id,
-    timestamp_utc,
-    SUM(CASE WHEN is_entry = 1 AND op_mode = 1 THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, clock_hour) AS entries_min_oa,
-    SUM(CASE WHEN is_entry = 1 AND op_mode = 2 THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, clock_hour) AS entries_econ,
-    SUM(CASE WHEN is_entry = 1 AND op_mode = 3 THEN 1 ELSE 0 END)
-      OVER (PARTITION BY equipment_id, clock_hour) AS entries_mech
-  FROM entries
+    m.equipment_id,
+    m.timestamp_utc,
+    COALESCE(hc.entries_min_oa, 0) AS entries_min_oa,
+    COALESCE(hc.entries_econ, 0) AS entries_econ,
+    COALESCE(hc.entries_mech, 0) AS entries_mech
+  FROM modes m
+  LEFT JOIN hourly_counts hc
+    ON hc.equipment_id = m.equipment_id AND hc.clock_hour = m.clock_hour
 ),
 base AS (
   SELECT
@@ -87,7 +102,9 @@ base AS (
       WHEN entries_econ > {{DELTA_OS_MAX}} THEN 1
       WHEN entries_mech > {{DELTA_OS_MAX}} THEN 1
       ELSE 0
-    END AS INT) AS raw_fault
+    END AS INT) AS raw_fault,
+    -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM hourly
   LEFT JOIN rps USING (equipment_id, timestamp_utc)
 ),
@@ -149,6 +166,7 @@ final AS (
   SELECT
     equipment_id,
     held_seconds,
+    proof_active,
     CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
@@ -161,15 +179,14 @@ final AS (
 SELECT
   f.equipment_id,
   CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN NULL ELSE CASE
-    WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
     ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
   END END AS fault_hours,
   CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN 0.0 ELSE SUM(f.held_seconds) / 3600.0 END AS covered_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN 0.0 ELSE SUM(CASE WHEN f.proof_active = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0 END AS active_hours,
   CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN NULL ELSE CASE
-    WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    ELSE COALESCE(100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(CASE WHEN f.proof_active = 1 THEN f.held_seconds ELSE 0.0 END), 0.0), 0.0)
   END END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id

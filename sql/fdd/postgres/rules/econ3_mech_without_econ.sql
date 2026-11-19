@@ -11,21 +11,36 @@ WITH rp AS (
   FROM history
   GROUP BY equipment_id
 ),
-wx AS (
-  SELECT
-    timestamp_utc,
-    MAX(web_oa_t) AS wx_web_oa_t,
-    MAX(web_oa_dp) AS wx_web_oa_dp
-  FROM weather
-  GROUP BY timestamp_utc
+-- #1642: the weather sidecar is joined as-of, per variable: the latest web sample at or before the history row, used for at
+-- most WEB_ASOF_BOUND_SECONDS (web cadence + margin; the OAT-METEO join and pandas weather_on_grid). An exact timestamp
+-- join left 2 of 3 rows without weather on a 5-min grid with 15-min weather, and those rows broke confirmation.
+wx_web_oa_t AS (
+  SELECT timestamp_utc AS ref_ts, ref_val,
+    LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) AS next_ref_ts
+  FROM (
+    SELECT timestamp_utc, MAX(web_oa_t) AS ref_val
+    FROM weather
+    WHERE web_oa_t IS NOT NULL
+    GROUP BY timestamp_utc
+  ) wx_web_oa_t_points
+),
+wx_web_oa_dp AS (
+  SELECT timestamp_utc AS ref_ts, ref_val,
+    LEAD(timestamp_utc) OVER (ORDER BY timestamp_utc) AS next_ref_ts
+  FROM (
+    SELECT timestamp_utc, MAX(web_oa_dp) AS ref_val
+    FROM weather
+    WHERE web_oa_dp IS NOT NULL
+    GROUP BY timestamp_utc
+  ) wx_web_oa_dp_points
 ),
 h AS (
   SELECT
     run_proof,
     h.equipment_id,
     h.timestamp_utc,
-    COALESCE(h.web_oa_t, wx.wx_web_oa_t) AS web_oa_t,
-    COALESCE(h.web_oa_dp, wx.wx_web_oa_dp) AS web_oa_dp,
+    COALESCE(h.web_oa_t, wx_web_oa_t.ref_val) AS web_oa_t,
+    COALESCE(h.web_oa_dp, wx_web_oa_dp.ref_val) AS web_oa_dp,
     h.oa_damper_pct AS oa_d,
     h.clg_valve_pct AS clg,
     h.fan_cmd,
@@ -36,8 +51,14 @@ h AS (
       ELSE 1
     END AS fan_on
   FROM history h
-  LEFT JOIN wx
-    ON h.timestamp_utc = wx.timestamp_utc
+  LEFT JOIN wx_web_oa_t
+    ON h.timestamp_utc >= wx_web_oa_t.ref_ts
+   AND (wx_web_oa_t.next_ref_ts IS NULL OR h.timestamp_utc < wx_web_oa_t.next_ref_ts)
+   AND EXTRACT(EPOCH FROM (h.timestamp_utc - wx_web_oa_t.ref_ts)) <= {{WEB_ASOF_BOUND_SECONDS}}
+  LEFT JOIN wx_web_oa_dp
+    ON h.timestamp_utc >= wx_web_oa_dp.ref_ts
+   AND (wx_web_oa_dp.next_ref_ts IS NULL OR h.timestamp_utc < wx_web_oa_dp.next_ref_ts)
+   AND EXTRACT(EPOCH FROM (h.timestamp_utc - wx_web_oa_dp.ref_ts)) <= {{WEB_ASOF_BOUND_SECONDS}}
 ),
 base AS (
   SELECT
@@ -50,7 +71,9 @@ base AS (
       WHEN web_oa_t >= {{ECON3_DB_MIN}} AND web_oa_t < {{ECON3_DB_MAX}} AND web_oa_dp < {{ECON3_DP_MAX}}
        AND clg > {{CLG_OPEN_MIN}} AND oa_d < {{ECON3_DAMPER_HI}} THEN 1
       ELSE 0
-    END AS INT) AS raw_fault
+    END AS INT) AS raw_fault,
+    -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM h
 ),
 elapsed_hold AS (
@@ -111,6 +134,7 @@ final AS (
   SELECT
     equipment_id,
     held_seconds,
+    proof_active,
     CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
@@ -118,6 +142,7 @@ SELECT
   equipment_id,
   CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS fault_hours,
   CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(held_seconds) / 3600.0 END AS covered_hours,
-  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE 100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) END AS fault_pct
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(CASE WHEN proof_active = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS active_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE COALESCE(100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(CASE WHEN proof_active = 1 THEN held_seconds ELSE 0.0 END), 0.0), 0.0) END AS fault_pct
 FROM final
 GROUP BY equipment_id;

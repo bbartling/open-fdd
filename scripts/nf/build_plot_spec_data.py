@@ -47,6 +47,9 @@ def rule_tuning_payload() -> dict:
                 item["description"] = d["description"]
             controls[k] = item
         rules[r["rule_id"]] = {"controls": controls}
+        if r.get("legacy_parameters"):   # #1673: renamed / retired saved keys (same shape as the pack template's legacy)
+            lp = r["legacy_parameters"]
+            rules[r["rule_id"]]["legacy"] = {"aliases": lp.get("aliases", {}), "retired": lp.get("retired", []), "note": lp.get("note", "")}
     return {"version": 1, "rules": rules}
 
 

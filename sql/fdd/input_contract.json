@@ -706,6 +706,29 @@
           "type": "double"
         }
       }
+    },
+    "sweep_series": {
+      "_doc": "#1673: every bound sweep series the caller fetched successfully, with its requested half-open window [window_start, window_end). SV-STALE assesses a listed series even with no sample. Optional: an empty table falls back to the series present in sensor_history.",
+      "columns": {
+        "equipment_id": {
+          "type": "text"
+        },
+        "series_id": {
+          "type": "text"
+        },
+        "sensor_role": {
+          "type": "text"
+        },
+        "unit": {
+          "type": "text"
+        },
+        "window_start": {
+          "type": "timestamp"
+        },
+        "window_end": {
+          "type": "timestamp"
+        }
+      }
     }
   }
 }
