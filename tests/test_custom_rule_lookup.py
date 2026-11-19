@@ -19,3 +19,23 @@ def test_run_rule_finds_a_custom_rule_appended_after_import():
         assert res.status == "FAULT" and res.fault_hours > 0
     finally:
         CUSTOM_RULES.remove(rule)
+
+
+def test_the_docs_example_runs_and_a_missing_fan_status_is_skipped():
+    """docs/rules/write-a-rule.md: the published block prints FAULT 1.83; without the required fan status the rule is
+    SKIPPED (never an ERROR, never assumed on)."""
+    import re
+    from pathlib import Path
+
+    page = (Path(__file__).resolve().parents[1] / "docs/rules/write-a-rule.md").read_text(encoding="utf-8")
+    ns: dict = {}
+    before = len(CUSTOM_RULES)
+    try:
+        exec(re.findall(r"```python\n(.*?)```", page, re.S)[0], ns)
+        r = ns["r"]
+        assert (r.status, r.fault_hours) == ("FAULT", 1.83)
+        missing = run_rule("CUSTOM-SAT-HIGH", ns["df"].drop(columns="fan-status"), params={"confirm_min": 10},
+                           equipment_type="AHU")
+        assert str(missing.status).startswith("SKIPPED") and "fan-status" in (missing.notes or "")
+    finally:
+        del CUSTOM_RULES[before:]

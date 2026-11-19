@@ -21,12 +21,12 @@ from open_fdd.rules.custom_rules import CUSTOM_RULES
 
 def sat_high(d, p, poll):
     sat = pd.to_numeric(d["discharge-air-temp"], errors="coerce")
-    on = pd.to_numeric(d.get("fan-status", 1), errors="coerce").fillna(0) > 0.05
+    on = pd.to_numeric(d["fan-status"], errors="coerce").fillna(0) > 0.05
     return sat.notna() & (sat > float(p.get("sat_hi", 23.9))) & on
 
 CUSTOM_RULES.append(make_custom_rule(
     rule_id="CUSTOM-SAT-HIGH", title="SAT high while fan on", compute=sat_high,
-    required_roles=["discharge-air-temp"], optional_roles=["fan-status"], equipment_kinds=["ahu"],
+    required_roles=["discharge-air-temp", "fan-status"], equipment_kinds=["ahu"],
     equation="Fan on AND SAT > sat_hi (°C).",
     extra_params=[CookbookParam("sat_hi", "SAT high", "°C", 12.8, 48.9, 0.5, 23.9)]))
 
@@ -36,7 +36,7 @@ r = run_rule("CUSTOM-SAT-HIGH", df, params={"confirm_min": 10}, equipment_type="
 print(r.status, r.fault_hours)   # FAULT 1.83
 ```
 
-To keep a rule, put it in `open_fdd/rules/custom_rules.py`. More examples: `open_fdd/rules/custom_boilerplate.py`.
+A missing required role gives `SKIPPED`, never a guess. To keep a rule, put it in `open_fdd/rules/custom_rules.py`. More examples: `open_fdd/rules/custom_boilerplate.py`.
 
 ## Shipped rule (SQL + pandas twin)
 
