@@ -6,6 +6,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { createRequire } from "node:module";
+const SA = createRequire(import.meta.url)("../hooks/lib/sql-analytics.js");
 import { twoSite as fx, TRUTH, fetchSeriesStub, fakeSdkHttp, pickWindow, resample, seriesOf } from "./fixtures/two_site.mjs";
 
 const dir = new URL("../static/", import.meta.url);
@@ -16,7 +18,9 @@ const near = (a, b, msg, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${msg}
 
 /** A browser-like vm context with the app's classic scripts; NF history + schedules come from the fixture. */
 function load({ units = "si" } = {}) {
-  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, Intl, localStorage: { getItem: () => units } });
+  // #1649: the views run the SQL analytics; in a page they reach them through the analytics hook, here in-process
+  const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa, Intl, localStorage: { getItem: () => units },
+    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs) } });
   ctx.pickWindow = pickWindow;
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
   ctx.ofddChart = (el) => ({ el });

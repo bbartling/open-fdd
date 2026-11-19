@@ -229,7 +229,67 @@ async function openCore(engine, points, samples, { siteId = "local" } = {}) {
   };
 }
 
+// ---------------------------------------------------------------- grid adapters (the RCx data entry points)
+
+/**
+ * Weekly motor run hours for the RCx weekly view and the analytics hook, from an aligned grid g = { t: [ms], cols }.
+ * specs: [{ key, motor: colName, oat: colName|null, weekOf: (ms) -> weekStartMs|null, occ: (ms) -> bool|null }].
+ * Returns Map(key -> Map(weekStartMs -> { hours, inHours, afterHours, oat, n, partial })), the shape the views read.
+ * The weeks are the site's own (weekOf, e.g. local Mondays): every distinct weekOf(t) of the grid is a boundary. The
+ * occupancy is evaluated at each sample time (the SQL books an interval by the state at its start). A week with no
+ * running time has no entry (the SQL, like pandas, emits weeks with ON time only).
+ */
+async function runtimeFromGrid(engine, g, specs) {
+  const points = [], samples = [], oats = [], weeks = [], occupied = [];
+  const t = g.t;
+  specs.forEach((s, i) => {
+    const eq = `e${i}`;
+    const motor = g.cols[s.motor] || [];
+    points.push({ point_key: `${eq}/m`, equipment_id: eq, role: "fan_status" });
+    for (let j = 0; j < t.length; j++) if (motor[j] != null && Number.isFinite(Number(motor[j]))) samples.push([`${eq}/m`, t[j], Number(motor[j])]);
+    if (s.oat && g.cols[s.oat]) {
+      points.push({ point_key: `${eq}/o`, equipment_id: eq, role: "outside_air_temp" });
+      const o = g.cols[s.oat];
+      for (let j = 0; j < t.length; j++) if (o[j] != null && Number.isFinite(Number(o[j]))) samples.push([`${eq}/o`, t[j], Number(o[j])]);
+      oats.push([eq, `${eq}/o`]);
+    }
+    if (s.weekOf) {
+      const starts = new Set();
+      for (const x of t) { const k = s.weekOf(x); if (k != null && Number.isFinite(k)) starts.add(k); }
+      for (const k of [...starts].sort((a, b) => a - b)) weeks.push([eq, k]);
+    }
+    if (s.occ) {
+      let open = null;
+      for (let j = 0; j < t.length; j++) {
+        const on = !!s.occ(t[j]);
+        if (on && open == null) open = t[j];
+        if (!on && open != null) { occupied.push([eq, open, t[j]]); open = null; }
+      }
+      if (open != null) occupied.push([eq, open, t[t.length - 1] + 1]);
+    }
+  });
+  const anyOcc = specs.some((s) => s.occ);
+  const db = await openCore(engine, points, samples);
+  try {
+    const rows = await db.query(renderRuntime(engine === "pglite" ? "postgres" : engine,
+      { oats, weeks, occupied: anyOcc ? occupied : null }));
+    const out = new Map(specs.map((s) => [s.key, new Map()]));
+    for (const r of rows) {
+      const spec = specs[Number(String(r.equipment_id).slice(1))];
+      const hours = Number(r.run_hours), inH = r.in_hours == null ? null : Number(r.in_hours);
+      out.get(spec.key).set(Number(r.week_start_ms), {
+        hours, inHours: spec.occ ? inH : null, afterHours: spec.occ ? hours - inH : null,
+        oat: r.avg_oat_c == null ? null : Number(r.avg_oat_c), n: Number(r.n_samples), partial: !!Number(r.partial_week),
+      });
+    }
+    return out;
+  } finally {
+    await db.close();
+  }
+}
+
 module.exports = {
+  runtimeFromGrid,
   TS_MS, MECH_OAT_BIN_EDGES_C, MECH_OAT_BIN_LABELS, ELAPSED_MAX_GAP_SECONDS, ECON_DIAG_DT_MIN_C, BAS_WEB_BAND_C,
   pyRepr, inline, render, renderRuntime, renderMechBins, renderEconomizer, renderBasWeb, openCore,
 };

@@ -7,6 +7,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { createRequire } from "node:module";
+const SA = createRequire(import.meta.url)("../hooks/lib/sql-analytics.js");
 
 const dir = new URL("../static/", import.meta.url);
 const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
@@ -16,7 +18,9 @@ const T0 = Date.UTC(2026, 9, 26);            // a Monday 00:00 UTC (ISO week 202
 
 function load() {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa,
-    localStorage: { getItem: () => ctx.units } });          // ofddUnits.displaySystem()
+    localStorage: { getItem: () => ctx.units },             // ofddUnits.displaySystem()
+    // #1649: the views run the SQL analytics; in a page they reach them through the analytics hook, here in-process
+    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs) } });
   ctx.units = "imperial";
   ctx.pickWindow = () => 3600;                // one value per hour
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };

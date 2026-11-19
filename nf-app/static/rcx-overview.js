@@ -349,11 +349,14 @@
     const cols = {};
     eqs.forEach((eq, i) => { cols[`m${i}`] = ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });   // one OAT policy: weather first, else the equip oa_t
     const [g, sites] = await Promise.all([ctx.alignedFine(cols, { hours: ctx.hours }), siteSchedules(ctx, eqs)]);
-    const perEq = eqs.map((eq, i) => {
+    // #1649: the run hours are the SQL analytic (sql/analytics/motor_weekly_runtime.sql), not JS math
+    if (!ctx.sqlAnalytics) throw new Error("SQL analytics engine unavailable (ctx.sqlAnalytics)");
+    const specs = eqs.map((eq, i) => {
       const site = sites.get(siteOf(eq));
-      return { eq, site, role, weeks: M.weeklyRuntime(g.t, g.cols[`m${i}`], { duty: cols[`m${i}`].kind === "Bool", gapMaxSec: GAP_MAX_SEC,
-        oat: g.cols[`o${i}`], weekOf: site && site.weekOf, occ: site && site.occ }) };
+      return { key: i, motor: `m${i}`, oat: `o${i}`, weekOf: site && site.weekOf, occ: site && site.occ };
     });
+    const byEq = await ctx.sqlAnalytics.runtime(g, specs);
+    const perEq = eqs.map((eq, i) => ({ eq, site: sites.get(siteOf(eq)), role, weeks: byEq.get(i) || new Map() }));
     return { perEq, sites };
   }
 
