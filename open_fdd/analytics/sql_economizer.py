@@ -190,7 +190,8 @@ def economizer_metrics_sql(frames: dict, role_map: dict, *, engine: str = "sqlit
 
 # ---------------------------------------------------------------- per-sample points (#1649: the economizer charts)
 
-POINT_COLUMNS = ("equipment_id", "t", "oat", "rat", "mat", "d_or", "d_mr", "identifiable", "damper_pct", "mat_resid")
+POINT_COLUMNS = ("equipment_id", "t", "oat", "rat", "mat", "d_or", "d_mr", "identifiable", "damper_pct", "mat_resid",
+                 "oa_frac_pct")
 
 
 def economizer_points_sql_template() -> str:
@@ -249,7 +250,7 @@ def run_economizer_points_sql(conn: Any, engine: str, roles: Iterable[tuple[str,
         rec = dict(zip(POINT_COLUMNS, row))
         rec["t"] = int(rec["t"]) if not hasattr(rec["t"], "timestamp") else int(rec["t"].timestamp() * 1000)
         rec["identifiable"] = bool(rec["identifiable"])
-        for k in ("oat", "rat", "mat", "d_or", "d_mr", "damper_pct", "mat_resid"):
+        for k in ("oat", "rat", "mat", "d_or", "d_mr", "damper_pct", "mat_resid", "oa_frac_pct"):
             rec[k] = None if rec[k] is None else float(rec[k])
         out.append(rec)
     return out

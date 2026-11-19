@@ -112,6 +112,7 @@ function loadSandbox(http, nowMs, tzSources) {
     ofddSqlAnalytics: {
       runtime: (g, specs) => require('./lib/sql-analytics.js').runtimeFromGrid('sqlite', g, specs),
       mech: (g, specs) => require('./lib/sql-analytics.js').mechFromGrid('sqlite', g, specs),
+      econ: (g) => require('./lib/sql-analytics.js').econFromGrid('sqlite', g),
     },
     api: async (p) => (await http.get(p)).data,
   });
@@ -278,8 +279,7 @@ async function analyze_economizer(sb, args) {
     if (!bound.length) continue;
     const ctx = ctxFor(g, view, bound, hours, model);
     for (const eq of bound) {
-      const { rows: samples } = await D.econGrid(ctx, eq, true);      // fine grid
-      const s = M.economizerSummary(samples);
+      const { summary: s } = await D.econGrid(ctx, eq, true);      // fine grid; the SQL metrics (#1649)
       rows.push({ ...identity(g, eq.rec), n: s.n, n_identifiable: s.nIdent, median_residual_k: round(s.medianResid), mae_k: round(s.maeResid),
         has_damper: !!ctx.first(eq, 'oa_damper_pct'), min_delta_k: round(M.ECON_DT_MIN_C, 4) });
     }

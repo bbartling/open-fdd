@@ -194,6 +194,10 @@ def test_points_match_the_pandas_diagnostics_points():
         assert (g["damper_pct"] is None) == pd.isna(w.damper_fb_pct)
         if g["damper_pct"] is not None:
             assert abs(g["damper_pct"] - w.damper_fb_pct) < 1e-9
+        frac = getattr(w, "oa_frac_temp_pct")
+        assert (g["oa_frac_pct"] is None) == pd.isna(frac)
+        if g["oa_frac_pct"] is not None:
+            assert abs(g["oa_frac_pct"] - frac) < 1e-9
         resid = getattr(w, "mat_resid_f")
         if g["mat_resid"] is None:
             assert pd.isna(resid) or not g["identifiable"]

@@ -658,7 +658,10 @@
     const col = (r) => ctx.first(eq, r);
     const g = await (fine ? ctx.alignedFine : ctx.aligned)({ oa_t: col("oa_t"), rat: col("rat"), mat: col("mat"), fan: col("fan_status"),
       sat: col("sat"), damper: col("oa_damper_pct") }, { hours: ctx.hours });
-    return { eq, rows: M.economizerRows({ t: g.t, ...g.cols }) };
+    // #1649: rows and summary are the SQL analytics (economizer_points.sql / economizer_metrics.sql)
+    if (!ctx.sqlAnalytics) throw new Error("SQL analytics engine unavailable (ctx.sqlAnalytics)");
+    const { rows, summary } = await ctx.sqlAnalytics.econ(g);
+    return { eq, rows, summary };
   }
 
   rcxView({

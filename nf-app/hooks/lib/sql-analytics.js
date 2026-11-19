@@ -331,8 +331,48 @@ async function mechFromGrid(engine, g, specs) {
   }
 }
 
+/**
+ * Economizer rows (the chart points) and the per-equip metrics from one equip's aligned grid
+ * g = { t, cols: { oa_t, rat, mat, fan, sat, damper } }. Every value is computed by economizer_points.sql /
+ * economizer_metrics.sql; sat only passes through for display. Rows keep the view's shape.
+ */
+async function econFromGrid(engine, g) {
+  const t = g.t, roleOf = { fan: "fan", oa_t: "oat", rat: "rat", mat: "mat", damper: "damper" };
+  const points = [], samples = [], roles = [];
+  for (const [col, role] of Object.entries(roleOf)) {
+    const v = g.cols[col];
+    if (!v) continue;
+    points.push({ point_key: col, equipment_id: "E", role });
+    roles.push(["E", role, col]);
+    for (let j = 0; j < t.length; j++) if (v[j] != null && Number.isFinite(Number(v[j]))) samples.push([col, t[j], Number(v[j])]);
+  }
+  if (!roles.some((r) => r[1] === "fan") || !roles.some((r) => r[1] === "oat") || !roles.some((r) => r[1] === "rat")) {
+    return { rows: [], summary: { n: 0, nIdent: 0, medianResid: null, maeResid: null } };
+  }
+  const eng = engine === "pglite" ? "postgres" : engine;
+  const db = await openCore(engine, points, samples);
+  try {
+    const sat = new Map((g.cols.sat || []).map((v, j) => [t[j], v]));
+    const pts = await db.query(renderEconomizerPoints(eng, roles));
+    const rows = pts.filter((r) => r.mat != null).map((r) => {
+      const ts = Number(r.t), resid = r.mat_resid == null ? null : Number(r.mat_resid);
+      return { t: ts, oa: Number(r.oat), rat: Number(r.rat), mat: Number(r.mat), sat: sat.get(ts) ?? null,
+        damperPct: r.damper_pct == null ? null : Number(r.damper_pct), dOR: Number(r.d_or), dMR: Number(r.d_mr),
+        ident: !!Number(r.identifiable), oaFrac: r.oa_frac_pct == null ? null : Number(r.oa_frac_pct),
+        matPred: resid == null ? null : Number(r.mat) - resid, matResid: resid };
+    });
+    const m = (await db.query(renderEconomizer(eng, roles)))[0];
+    const summary = m ? { n: Number(m.n_fan_on), nIdent: Number(m.n_identifiable),
+      medianResid: m.median_resid == null ? null : Number(m.median_resid), maeResid: m.mae_resid == null ? null : Number(m.mae_resid) }
+      : { n: 0, nIdent: 0, medianResid: null, maeResid: null };
+    return { rows, summary };
+  } finally {
+    await db.close();
+  }
+}
+
 module.exports = {
-  runtimeFromGrid, mechFromGrid,
+  runtimeFromGrid, mechFromGrid, econFromGrid,
   TS_MS, MECH_OAT_BIN_EDGES_C, MECH_OAT_BIN_LABELS, ELAPSED_MAX_GAP_SECONDS, ECON_DIAG_DT_MIN_C, BAS_WEB_BAND_C,
   pyRepr, inline, render, renderRuntime, renderMechBins, renderEconomizer, renderEconomizerPoints, renderBasWeb, openCore,
 };

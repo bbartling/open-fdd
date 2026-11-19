@@ -7,7 +7,8 @@
 -- open_fdd.analytics.core.build_economizer_delta_points (plus the MAT residual of economizer_free_cooling_diagnostics):
 --   d_or = OAT - RAT, d_mr = MAT - RAT (NULL without MAT), identifiable = |OAT - RAT| >= {dt_min},
 --   damper_pct = damper fraction x 100 (NULL without a damper),
---   mat_resid = MAT - (RAT + damper x (OAT - RAT)) on identifiable rows with MAT and a damper.
+--   mat_resid = MAT - (RAT + damper x (OAT - RAT)) on identifiable rows with MAT and a damper,
+--   oa_frac_pct = 100 x (MAT - RAT) / (OAT - RAT) clamped to -20..120 on identifiable rows with MAT (oa_frac_temp_pct).
 -- The archived 4.x query (sql/analytics/postgres/queries/economizer_deltas.sql at tag v4.0.11-central) returned the same
 -- per-sample deltas with fan_status only; this port uses the pandas fan rule (fan status OR command).
 WITH roles AS (
@@ -48,7 +49,11 @@ SELECT equipment_id, t,
        CASE WHEN ABS(oat - rat) >= {dt_min} THEN 1 ELSE 0 END AS identifiable,
        damper * 100.0 AS damper_pct,
        CASE WHEN ABS(oat - rat) >= {dt_min} AND mat IS NOT NULL AND damper IS NOT NULL
-            THEN mat - (rat + damper * (oat - rat)) END AS mat_resid
+            THEN mat - (rat + damper * (oat - rat)) END AS mat_resid,
+       CASE WHEN ABS(oat - rat) >= {dt_min} AND mat IS NOT NULL
+            THEN CASE WHEN 100.0 * (mat - rat) / (oat - rat) < -20.0 THEN -20.0
+                      WHEN 100.0 * (mat - rat) / (oat - rat) > 120.0 THEN 120.0
+                      ELSE 100.0 * (mat - rat) / (oat - rat) END END AS oa_frac_pct
 FROM grid
 WHERE fan_on = 1 AND oat IS NOT NULL AND rat IS NOT NULL
 ORDER BY equipment_id, t
