@@ -85,7 +85,8 @@ proof ladder (chiller / compressor status, command, stages, amps or kW; heat pum
 bound roles in `open_fdd.analytics.sql_mech_cooling`, and the rows match `core.mech_cooling_oat_bins`
 (`tests/test_sql_mech_cooling.py`). Economizer metrics per air handler (fan-on hours, identifiable samples, median and mean
 absolute MAT residual against the damper mixing model) are `sql/analytics/economizer_metrics.sql` and match
-`core.economizer_free_cooling_diagnostics` (`tests/test_sql_economizer.py`).
+`core.economizer_free_cooling_diagnostics` (`tests/test_sql_economizer.py`). BAS vs web outdoor-air statistics (bias, MAE, max |delta|, share within 2 delta degC, web joined
+as-of) are `sql/analytics/bas_vs_web_oat.sql`, with `weather_resolver.bas_vs_web_oat_stats` as the pandas reference.
 
 ## ML FDD (`open-fdd-ml`)
 
