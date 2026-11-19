@@ -89,82 +89,95 @@ def _pressure_on_mask(d: pd.DataFrame, p: dict) -> pd.Series | None:
     return None
 
 
-def _sched247_role_mask(d: pd.DataFrame, roles: tuple[str, ...], *, command: bool) -> tuple[pd.Series | None, str | None]:
-    for role in roles:
-        if role not in d.columns or not d[role].notna().any():
+# #1670: one ranked proof list, the same in SQL (sched247_always_on.sql) and here. Statuses first, then
+# commands; run when > 0.05 (the run-proof threshold, sql/fdd/run_proof.json).
+SCHED247_STATUS_ROLES = ("fan-status", "pump-status", "chw-pump-status", "chiller-status", "compressor-status",
+                         "chiller-current")
+SCHED247_COMMAND_ROLES = ("tower-fan-cmd", "fan-cmd", "chw-pump-cmd")
+SCHED247_ON_THRESHOLD = 0.05
+# #1670: an always-on verdict needs known proof for 90% of the observed window, and never less than one day.
+SCHED247_MIN_COMPLETENESS = 0.9
+SCHED247_MIN_WINDOW_SECONDS = 86400.0
+
+
+def _sched247_ranked_proof(d: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Per sample: (on, known). The first non-null status wins over any command; neither is unknown (not OFF)."""
+    on = pd.Series(np.nan, index=d.index, dtype=float)
+    source = pd.Series("", index=d.index, dtype=object)
+    for role in SCHED247_STATUS_ROLES:
+        if role not in d.columns:
             continue
-        if command:
-            mask = norm_cmd(d[role]).fillna(0) > SCHED247_CMD_ON_FRAC
-        else:
-            mask = as_bool(d[role])
-        return mask.reindex(d.index).fillna(False).astype(bool), role
-    return None, None
+        vals = pd.to_numeric(d[role], errors="coerce")
+        fill = on.isna() & vals.notna()
+        on = on.where(~fill, (vals > SCHED247_ON_THRESHOLD).astype(float))
+        source = source.where(~fill, role)
+    for role in SCHED247_COMMAND_ROLES:
+        if role not in d.columns:
+            continue
+        vals = norm_cmd(d[role])
+        fill = on.isna() & vals.notna()
+        on = on.where(~fill, (vals > SCHED247_ON_THRESHOLD).astype(float))
+        source = source.where(~fill, f"{role} (cmd)")
+    return on, source
 
 
 def _sched247(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Always-on runtime using ranked proof (status/current > command).
+    """Always-on runtime from ranked proof (#1670).
 
-    Pressure is inferred evidence only — it does not OR into the FAULT mask
-    (4.3 migration). Structured proof fields are stored on ``d.attrs``.
+    Per sample the first non-null status wins over the command (run when > 0.05, the run-proof threshold); a
+    sample with neither is UNKNOWN, never a proven OFF. Durations are elapsed holds (gap > 1 h and the last
+    sample hold nothing). The verdict needs proven time >= 0.9 * max(observed window, 24 h); otherwise the rule
+    is not assessed (``d.attrs['sched247_proof']['assessment']``). A qualifying equipment
+    (proven_on / proven >= always_on_pct, time-weighted) faults on its proven-ON samples.
+    Pressure is inferred evidence only — it does not OR into the FAULT mask (4.3 migration).
     """
-    from open_fdd.rules.base import hours_true
+    from open_fdd.rules.base import _eligible_hold_seconds, hours_true
 
     thr = _f(p, "always_on_pct", 0.95)
-    status, status_role = _sched247_role_mask(
-        d,
-        (
-            "fan-status",
-            "pump-status",
-            "chw-pump-status",
-            "hw-pump-status",
-            "chiller-status",
-            "compressor-status",
-            "fan-current",
-            "pump-current",
-            "chiller-current",
-        ),
-        command=False,
-    )
-    command, command_role = _sched247_role_mask(
-        d,
-        ("tower-fan-cmd", "cw-fan-cmd", "fan-cmd", "chw-pump-cmd", "hw-pump-cmd"),
-        command=True,
-    )
-    inferred = _pressure_on_mask(d, p)
-    if inferred is not None:
-        inferred = inferred.reindex(d.index).fillna(False).astype(bool)
-
-    if status is not None:
-        proven = status
-        proof_source = status_role or "status"
-        proof_confidence = 0.7 if (status_role or "").endswith("-current") else 1.0
-    elif command is not None:
-        proven = command
-        proof_source = f"{command_role} (cmd)"
-        proof_confidence = 0.5
+    on, source = _sched247_ranked_proof(d)
+    known = on.notna()
+    proven = (on == 1.0) & known
+    held = _eligible_hold_seconds(d.index)
+    if held is None:  # positional frame: poll-spaced samples
+        held = pd.Series(float(poll), index=d.index)
+        if len(held):
+            held.iloc[-1] = 0.0
+        window_s = float(poll) * max(len(d) - 1, 0)
     else:
-        proven = _false(d.index)
-        proof_source = "none"
-        proof_confidence = 0.0
+        window_s = float((d.index.max() - d.index.min()).total_seconds()) if len(d) else 0.0
+    on_s = float(held[proven].sum())
+    off_s = float(held[known & ~proven].sum())
+    if on_s + off_s <= 0.0:
+        assessment = "no_proof"
+    elif on_s + off_s < SCHED247_MIN_COMPLETENESS * max(window_s, SCHED247_MIN_WINDOW_SECONDS):
+        assessment = "insufficient_proof"
+    else:
+        assessment = "assessed"
 
-    conflict = _false(d.index)
-    if status is not None and command is not None:
-        conflict = status.astype(bool) != command.astype(bool)
-
-    proven_h = hours_true(proven, poll)
-    inferred_h = hours_true(inferred, poll) if inferred is not None else 0.0
-    conflict_h = hours_true(conflict, poll)
+    inferred = _pressure_on_mask(d, p)
+    inferred_h = hours_true(inferred.reindex(d.index).fillna(False).astype(bool), poll) if inferred is not None else 0.0
+    status_known = source.ne("") & ~source.str.endswith("(cmd)")
+    cmd_on = None
+    for role in SCHED247_COMMAND_ROLES:
+        if role in d.columns and d[role].notna().any():
+            cmd_on = norm_cmd(d[role]) > SCHED247_ON_THRESHOLD
+            break
+    conflict = status_known & proven.ne(cmd_on) if cmd_on is not None else _false(d.index)
+    used = sorted({s for s in source.unique() if s})
     d.attrs["sched247_proof"] = {
-        "proof_source": proof_source,
-        "proof_confidence": proof_confidence,
-        "proven_runtime_hours": round(float(proven_h), 3),
+        "proof_source": ", ".join(used) if used else "none",
+        "proof_confidence": 1.0 if status_known.any() else (0.5 if known.any() else 0.0),
+        "proven_runtime_hours": round(on_s / 3600.0, 3),
         "inferred_runtime_hours": round(float(inferred_h), 3),
-        "conflicting_signal_hours": round(float(conflict_h), 3),
+        "conflicting_signal_hours": round(hours_true(conflict, poll), 3),
+        "window_hours": window_s / 3600.0,
+        "proven_on_hours": on_s / 3600.0,
+        "proven_off_hours": off_s / 3600.0,
+        "unknown_hours": max(window_s - on_s - off_s, 0.0) / 3600.0,
+        "assessment": assessment,
     }
-
-    frac = float(proven.mean()) if len(proven) else 0.0
-    if proof_source != "none" and frac >= thr:
-        return proven.reindex(d.index).fillna(False)
+    if assessment == "assessed" and on_s / (on_s + off_s) >= thr:
+        return proven
     return _false(d.index)
 
 
@@ -461,6 +474,15 @@ def _sweep_segments(d: pd.DataFrame, masks: dict[str, pd.Series], poll: float, p
 
 def _publish_elapsed_sweep(d: pd.DataFrame, masks: dict[str, pd.Series], *, poll: float, p: dict, rule_tag: str) -> pd.Series:
     segments = _sweep_segments(d, masks, poll, p)
+    # #1673: the part of a gap beyond max_silence_hours is unknown for value sweeps (not covered, not a fault);
+    # missing data is SV-STALE's alone.
+    for rows in segments.values():
+        for row in rows:
+            row["silence_seconds"] = 0.0
+    return _publish_segments(d, segments, poll=poll, rule_tag=rule_tag)
+
+
+def _publish_segments(d: pd.DataFrame, segments: dict[str, list[dict]], *, poll: float, rule_tag: str) -> pd.Series:
     event_masks = {role: _false(d.index) for role in segments}
     for role, rows in segments.items():
         for row in rows:
@@ -822,33 +844,41 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 
 def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    """Measure stable periods and long silent tails independently per sensor."""
-    hours = _f(p, "stale_hours", 2.0)
-    tolerance = _f(p, "stale_tol", 0.027778)
-    max_silence = _f(p, "max_silence_hours", 0.5)
+    """Missing data (#1673): a sensor is stale while it has no valid sample for longer than ``stale_after_hours``.
+
+    No value test (a stuck value that is still polled is SV-FLATLINE) and no run-proof gate. Every assessable sensor
+    column of the frame is an expected series, so a column with no valid sample is assessed over the whole window.
+    The window is the frame's first timestamp to its observed end; the window start, every valid sample and the end
+    split it into intervals, and an interval longer than the threshold contributes (interval - threshold) of fault
+    time. A saved legacy ``max_silence_hours`` is the same threshold. Twin of ``sql/fdd/postgres/rules/sv_stale.sql``.
+    """
+    threshold = max(0.0, _f(p, "stale_after_hours", _f(p, "max_silence_hours", 0.5))) * 3600.0
     units_map = _units_map(d)
     limits = _sweep_limits(d)
-    present = [
-        r
-        for r in FLATLINE_SENSOR_ROLES
-        if r in d.columns and sweep_assessable_role(r, None, units_map, rule_id="SV-STALE", limits=limits)
-    ]
-    per_role: dict[str, pd.Series] = {}
-    energized = _sweep_energized(d, p)
-    for role in present:
-        s = pd.to_numeric(d[role], errors="coerce")
-        if not s.notna().any():
+    segments: dict[str, list[dict]] = {}
+    if not len(d.index):
+        return _false(d.index)
+    if isinstance(d.index, pd.DatetimeIndex):
+        start = float(_index_epoch_seconds(pd.DatetimeIndex([d.index.min()]))[0])
+        end = float(_observed_end_seconds(d))
+    else:
+        start, end = 0.0, max(0, len(d.index) - 1) * max(float(poll), 1.0)
+    anchor = d.index.min() if isinstance(d.index, pd.DatetimeIndex) else d.index[0]
+    for role in FLATLINE_SENSOR_ROLES:
+        if role not in d.columns or not sweep_assessable_role(role, None, units_map, rule_id="SV-STALE", limits=limits):
             continue
-        role_tol = stale_tolerance_for_role(role, tolerance, limits)
-        per_role[role] = _window_flatline_mask(
-            s,
-            hours=hours,
-            tolerance=role_tol,
-            max_silence_hours=max_silence,
-            poll=poll,
-            gate=energized.reindex(s.index).fillna(False),
-        )
-    return _publish_elapsed_sweep(d, per_role, poll=poll, p=p, rule_tag="SV-STALE")
+        valid, epochs = _valid_series_times(pd.to_numeric(d[role], errors="coerce"), poll)
+        points = [(start, anchor)] + [(float(e), ts) for ts, e in zip(valid.index, epochs) if start <= float(e) <= end]
+        points.append((end, None))
+        rows = []
+        for (t0, label), (t1, _) in zip(points, points[1:]):
+            dt = t1 - t0
+            if dt <= 0:
+                continue
+            rows.append({"timestamp": label, "raw_fault": False, "normal_seconds": min(dt, threshold),
+                         "silence_seconds": max(0.0, dt - threshold), "break_before": False})
+        segments[role] = rows
+    return _publish_segments(d, segments, poll=poll, rule_tag="SV-STALE")
 
 
 def _pid_hunt_1(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
@@ -999,7 +1029,17 @@ def fc4(d, p, poll):
         ts = pd.DatetimeIndex(to_utc_datetime(d["timestamp"], errors="coerce"))
     else:
         return _false(d.index)
-    entries = (modes.eq(1) & modes.shift().ne(1))
+    proven = pd.Series(True, index=d.index)
+    if float(p.get("require_run_proof", 1.0)) >= 0.5:
+        # #1631: entries are counted over proven samples only (twin of fc4_os_hunting.sql): the sequence skips unproven
+        # time, so a transition across it is not an entry. No proof bound at all is SKIPPED by the runner before this.
+        from open_fdd.run_proof import derive_run_proof, proof_on
+
+        proof, _src = derive_run_proof(d)
+        if proof is not None:
+            proven = proof_on(proof).reindex(d.index).fillna(False).astype(bool)
+    sub = modes[proven.values]
+    entries = (sub.eq(1) & sub.shift().ne(1)).reindex(modes.index, fill_value=False)
     entries.index = ts
     hourly = entries.resample("1h").sum()
     flagged_hours = hourly[(hourly > delta_os_max).any(axis=1)].index
@@ -1893,15 +1933,12 @@ RULES: list[CookbookRule] = [
         ], sensor_sweep=True, confirm_seconds=300,
     ),
     CookbookRule(
-        "SV-STALE", "Stale data (no fresh samples)", "sensor",
+        "SV-STALE", "Stale data (no fresh samples for longer than the stale threshold)", "sensor",
         ["ahu", "vav", "chiller", "boiler", "weather", "zone_other", "heatpump"], [],
-        "All modeled sensors unchanged over the stale window — data feed likely dropped.",
+        "A sensor sent no valid sample for longer than the stale threshold (gap or missing series); not gated by run proof.",
         _sweep_stale, params=[
-            CookbookParam("stale_hours", "Stale window", "h", 0.25, 12.0, 0.25, 2.0),
-            CookbookParam("stale_tol", "Stale tolerance", "Δ°C", 0.0, 0.555556, 0.005556, 0.027778),
-            CookbookParam("max_silence_hours", "Max sensor silence", "h", 0.25, 12.0, 0.25, 0.5),
-            CONFIRM_PARAM(),
-        ], sensor_sweep=True, confirm_seconds=300,
+            CookbookParam("stale_after_hours", "Stale after", "h", 0.25, 12.0, 0.25, 0.5),
+        ], sensor_sweep=True, confirm_seconds=0,
     ),
     CookbookRule(
         "SV-RATE",
@@ -2565,7 +2602,7 @@ RULE_SUMMARY_OVERRIDES: dict[str, str] = {
     "SV-RANGE": "Flags any modeled sensor reading outside its physical hard range.",
     "SV-FLATLINE": "Flags a sensor that stays stuck within a tiny band for too long.",
     "SV-SPIKE": "Flags an implausible sample-to-sample jump for the sensor type.",
-    "SV-STALE": "Flags when all modeled sensors stop updating — likely a dead data feed.",
+    "SV-STALE": "Flags a sensor that sent no valid sample for longer than the stale threshold — missing data.",
     "SV-RATE": "Flags implausible sustained sensor rates of change using location- and state-aware thresholds.",
     "PID-HUNT-1": "Flags control outputs that oscillate enough to suggest loop hunting.",
     "SCHED-247": "Flags fans or pumps that stay on for nearly the entire analysis window (24/7 runtime).",

@@ -25,7 +25,8 @@ h AS (
       WHEN chiller_status IS NOT NULL THEN CASE WHEN chiller_status > 0.05 THEN 1 ELSE 0 END
       WHEN chw_flow IS NOT NULL THEN CASE WHEN chw_flow > 0.0630902 THEN 1 ELSE 0 END
       WHEN chw_pump_cmd IS NOT NULL THEN CASE WHEN chw_pump_cmd > 0.05 THEN 1 ELSE 0 END
-      ELSE 0
+      -- #1631: no legacy plant point bound = unknown, not OFF; the resolved run_proof gate above decides
+      ELSE NULL
     END AS proof_on
   FROM history
 ),
@@ -35,7 +36,7 @@ base AS (
     timestamp_utc,
     CAST(CASE
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
-      WHEN COALESCE(proof_on, 0) = 0 THEN 0
+      WHEN proof_on = 0 THEN 0
       WHEN chw_supply_t IS NULL THEN 0
       WHEN chw_supply_t < {{CHW_LO}}
        AND chw_reset_request_sum <= {{REQUEST_LO}} THEN 1

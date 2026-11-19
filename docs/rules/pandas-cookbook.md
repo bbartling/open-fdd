@@ -363,7 +363,7 @@ Flags mechanical cooling during web free-cool weather when the OA damper is not 
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-3): weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns
+**Parity** [match](parity.html#econ-3); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
 
 ### ECON-4 {#econ-4}
@@ -510,7 +510,7 @@ Flags cooling demand during economizer-OK web weather (dew point < 15.6 °C, dry
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-7): weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns
+**Parity** [known divergence](parity.html#econ-7): a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642
 
 
 ### FC1 {#fc1}
@@ -1172,7 +1172,7 @@ Flags proven DX or chiller cooling while web dry-bulb is below 15.6 °C.
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
 
-**Parity** [known divergence](parity.html#mech-oat-1): pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve
+**Parity** [match](parity.html#mech-oat-1); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
 
 ### OA-1 {#oa-1}
@@ -1335,6 +1335,11 @@ Flags fans or pumps that stay on for nearly the entire analysis window (24/7 run
 | `fault_hours` | h | confirmed fault time |
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 | `fault_pct` | % | fault_hours as a share of covered_hours |
+| `window_hours` | h | observed window: first to last input sample |
+| `proven_on_hours` | h | time with run proof ON |
+| `proven_off_hours` | h | time with run proof OFF |
+| `unknown_hours` | h | window time with no known run proof (missing proof or gaps) |
+| `assessment` | - | assessed, insufficient_proof or no_proof |
 
 **Parity** [match](parity.html#sched-247)
 
@@ -2682,11 +2687,13 @@ Flags an implausible sample-to-sample jump for the sensor type.
 
 ### SV-STALE {#sv-stale}
 
-Flags when all modeled sensors stop updating — likely a dead data feed.
+Flags a sensor that sent no valid sample for longer than the stale threshold — missing data.
 
-**Stale data (no fresh samples)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function `_sweep_stale` · [SQL entry](sql-cookbook.html#sv-stale)
+**Stale data (no fresh samples for longer than the stale threshold)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 0 min · function `_sweep_stale` · [SQL entry](sql-cookbook.html#sv-stale)
 
-**Equation**: All modeled sensors unchanged over the stale window — data feed likely dropped.
+**Equation**: A sensor sent no valid sample for longer than the stale threshold (gap or missing series); not gated by run proof.
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -2697,10 +2704,8 @@ Flags when all modeled sensors stop updating — likely a dead data feed.
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `stale_hours` | Stale window | 2 | 0.25 | 12 | h |
-| `stale_tol` | Stale tolerance | 0.027778 | 0 | 0.555556 | Δ°C |
+| `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
+| `stale_after_hours` | Stale after | 0.5 | 0.25 | 12 | h |
 
 **Outputs** (the same as the SQL twin)
 
@@ -2713,8 +2718,6 @@ Flags when all modeled sensors stop updating — likely a dead data feed.
 | `covered_hours` | h | time the rule could assess (known inputs, gate open) |
 
 **Parity** [match](parity.html#sv-stale)
-
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
 
 ## Weather {#group-weather}

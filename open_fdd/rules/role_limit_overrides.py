@@ -28,7 +28,8 @@ LIMITS_RULE_ID = "SV-LIMITS"
 SITE_SCOPE = "site"
 EQUIP_SCOPE_PREFIX = "equip:"
 OVERRIDE_VERSION = 1
-SWEEP_RULES = ("SV-RANGE", "SV-SPIKE", "SV-FLATLINE", "SV-STALE", "SV-RATE")
+# #1673: SV-STALE is a missing-data rule with no per-role value limit, so it is not a role-limit consumer.
+SWEEP_RULES = ("SV-RANGE", "SV-SPIKE", "SV-FLATLINE", "SV-RATE")
 
 # Editable fields and the kind of quantity each one is (decides the unit conversion).
 FIELD_KIND: dict[str, str] = {
@@ -39,7 +40,7 @@ FIELD_KIND: dict[str, str] = {
 # Which sweep rule consumes each field (the editor shows it next to the value).
 FIELD_RULES: dict[str, tuple[str, ...]] = {
     "lo": ("SV-RANGE",), "hi": ("SV-RANGE",), "spike_delta": ("SV-SPIKE",), "flat_tol": ("SV-FLATLINE",),
-    "stale_tol": ("SV-STALE",), "rate_per_h": ("SV-RATE",),
+    "stale_tol": (), "rate_per_h": ("SV-RATE",),   # stale_tol is retired (#1673): kept readable, used by no rule
 }
 
 _FACTORS = json.loads((Path(__file__).resolve().parents[1] / "data" / "unit_factors.json").read_text(encoding="utf-8"))["factors"]
