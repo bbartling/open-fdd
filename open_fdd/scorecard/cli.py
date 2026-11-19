@@ -45,6 +45,9 @@ def main(argv: list[str] | None = None) -> int:
     ex.add_argument("--shift-days", type=int, default=0, help="Shift all times (use a multiple of 7)")
     ex.add_argument("--no-alias", action="store_true", help="Keep equipment ids as they are")
     ex.add_argument("--source-note", default="", help="Free text for the manifest (no site names)")
+    ex.add_argument("--site-column", default="site_id",
+                    help="Column that, when present, keys equipment by (site, equipment) so equal ids at two sites "
+                         "get separate aliases; the site id never leaves (default: site_id)")
     un = sub.add_parser("unalias", help="Owner side: map a filled verdict sheet back to real ids and times")
     un.add_argument("--verdicts", required=True, type=Path)
     un.add_argument("--private-dir", required=True, type=Path)
@@ -77,7 +80,8 @@ def main(argv: list[str] | None = None) -> int:
         stats = export.build(results=args.results, out=args.out, private_dir=args.private_dir,
                              history=args.history, point_map=args.point_map, labels=args.labels,
                              cfg=load_config(args.config), window_hours=args.window_hours,
-                             shift_days=args.shift_days, alias=not args.no_alias, source_note=args.source_note)
+                             shift_days=args.shift_days, alias=not args.no_alias, source_note=args.source_note,
+                             site_column=args.site_column)
         print(json.dumps(stats, indent=2))
         return 0
     if args.cmd == "unalias":

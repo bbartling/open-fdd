@@ -48,18 +48,74 @@ def _shift(ts: str, delta: timedelta) -> str:
     return (datetime.fromisoformat(ts) + delta).strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
 
 
+SITE_SEP = "\x1f"  # joins site id + equipment id into one private key; never written to the bundle
+
+
+def _norm_role(role: str) -> str | None:
+    """Open-FDD role name, accepting the snake_case spelling some role maps use (``zone_air_temp``)."""
+    role = role.strip()
+    if ROLE_RE.match(role):
+        return role
+    kebab = role.lower().replace("_", "-")
+    return kebab if ROLE_RE.match(kebab) else None
+
+
+def _rows(path: Path, what: str):
+    """CSV rows with the file name and line number in any parse error, so a bad export row is easy to find."""
+    for line, r in enumerate(read_csv(path), start=2):
+        if None in r or any(v is None for v in r.values()):
+            raise ValueError(f"{what} ({Path(path).name}) line {line}: wrong number of columns")
+        yield line, r
+
+
 def build(*, results: Path, out: Path, private_dir: Path, history: Path | None = None,
           point_map: Path | None = None, labels: Path | None = None, cfg: Config | None = None,
           window_hours: float = 6.0, shift_days: int = 0, alias: bool = True,
-          source_note: str = "") -> dict[str, Any]:
+          source_note: str = "", site_column: str = "site_id") -> dict[str, Any]:
     """Write a bundle to ``out`` and the private re-identification files to ``private_dir``.
 
     ``history``: long CSV ``ts, equipment_id, point, value`` (values already SI).
     ``point_map``: CSV ``point, role`` (optionally ``equipment_id``); the point names stay local.
     ``labels``: optional owner labels in the labels.csv format (aliased and shifted like everything else).
+    ``site_column``: when results / history / point_map carry this column, equipment is keyed by (site, equipment),
+    so the same equipment id at two sites (``AHU_1`` everywhere) gets two aliases; the site id itself never leaves.
     """
     cfg = cfg or Config()
     out, private_dir = Path(out), Path(private_dir)
+    if history is not None and point_map is None:
+        raise ValueError("history needs point_map (point -> role); point names never leave the machine")
+
+    def header(path: Path | None) -> list[str]:
+        if path is None:
+            return []
+        with open(path, newline="", encoding="utf-8-sig") as fh:
+            return next(csv.reader(fh), [])
+
+    # Key by (site, equipment) only when the results carry the site column and the history (if any) does too;
+    # otherwise rows could not be matched to their history and the plain equipment id is used, as before.
+    use_site = bool(site_column) and site_column in header(results) and (
+        history is None or site_column in header(history))
+
+    def key(r: dict[str, str], eq_col: str = "equipment_id") -> str:
+        site = (r.get(site_column) or "").strip() if use_site else ""
+        eq = str(r[eq_col]).strip()
+        return f"{site}{SITE_SEP}{eq}" if site else eq
+
+    # Validate the point map BEFORE writing anything, so a bad input never leaves a half-written bundle.
+    pmap: dict[tuple[str, str], str] = {}
+    renamed_roles: set[str] = set()
+    if point_map is not None:
+        for line, r in _rows(point_map, "point_map"):
+            raw_role = (r.get("role") or "").strip()
+            if not raw_role:
+                continue
+            role = _norm_role(raw_role)
+            if role is None:
+                raise ValueError(f"point_map line {line}: {raw_role!r} is not an Open-FDD role name")
+            if role != raw_role:
+                renamed_roles.add(raw_role)
+            eq = key(r) if (r.get("equipment_id") or "").strip() else ""
+            pmap[(eq, r["point"].strip())] = role
     if out.resolve() == private_dir.resolve() or private_dir.resolve().is_relative_to(out.resolve()):
         raise ValueError("private_dir must be outside the bundle folder")
     out.mkdir(parents=True, exist_ok=True)
@@ -69,18 +125,21 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
 
     def a(eq: str) -> str:
         if not alias:
-            return eq
+            return eq.split(SITE_SEP)[-1]
         if eq not in aliases:
             aliases[eq] = f"EQ-{len(aliases) + 1:04d}"
         return aliases[eq]
 
     rc = cfg.results
     res_rows, faults = [], {}
-    for r in read_csv(results):
-        raw = str(r[rc["status"]])
+    for line, r in _rows(results, "results"):
+        raw = str(r[rc["status"]]).strip()
         status = cfg.status_map.get(raw, cfg.status_map.get(raw.upper(), raw.upper()))
-        eq = str(r[rc["equipment_id"]])
-        s, e = _ts(r[rc["window_start"]]), _ts(r[rc["window_end"]])
+        eq = key(r, rc["equipment_id"])
+        try:
+            s, e = _ts(r[rc["window_start"]]), _ts(r[rc["window_end"]])
+        except ValueError as exc:
+            raise ValueError(f"results line {line}: {exc}") from None
         res_rows.append({"equipment_id": a(eq), "rule_id": r[rc["rule_id"]], "window_start": _shift(s, delta),
                          "window_end": _shift(e, delta), "status": status})
         if status == "FAULT":
@@ -93,8 +152,8 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
     lab_rows = []
     if labels:
         lc = cfg.labels
-        for r in read_csv(labels):
-            lab_rows.append({"equipment_id": a(str(r[lc["equipment_id"]])),
+        for _, r in _rows(labels, "labels"):
+            lab_rows.append({"equipment_id": a(key(r, lc["equipment_id"])),
                              "start_ts": _shift(_ts(r[lc["start_ts"]]), delta),
                              "end_ts": _shift(_ts(r[lc["end_ts"]]), delta), "label": r.get(lc["label"], ""),
                              "rule_id": r.get(lc["rule_id"], "") or "", "fault_type": r.get(lc["fault_type"], "") or "",
@@ -107,16 +166,6 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
     role_map: dict[str, dict[str, Any]] = {}
     n_hist = dropped_points = 0
     if history is not None:
-        if point_map is None:
-            raise ValueError("history needs point_map (point -> role); point names never leave the machine")
-        pmap: dict[tuple[str, str], str] = {}
-        for r in read_csv(point_map):
-            role = (r.get("role") or "").strip()
-            if not role:
-                continue
-            if not ROLE_RE.match(role):
-                raise ValueError(f"point_map: {role!r} is not an Open-FDD role name")
-            pmap[((r.get("equipment_id") or "").strip(), r["point"].strip())] = role
         pad = timedelta(hours=window_hours)
         spans: dict[str, list[tuple[str, str]]] = {}
         for eq, v in faults.items():  # padded FAULT windows, merged so each timestamp hits at most one span
@@ -133,8 +182,9 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
             w = csv.writer(dst)
             w.writerow(HISTORY_FIELDS)
             for r in csv.DictReader(src):
-                eq, point = str(r["equipment_id"]), str(r["point"]).strip()
-                role = pmap.get((eq, point)) or pmap.get(("", point))
+                eq, point = key(r), str(r["point"]).strip()
+                role = (pmap.get((eq, point)) or pmap.get((eq.split(SITE_SEP)[-1], point))
+                        or pmap.get(("", point)))
                 if role is None:
                     dropped_points += 1
                     continue
@@ -173,7 +223,8 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
 
     manifest = {
         "format": FORMAT, "version": VERSION,
-        "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        # Shifted like the data: an unshifted export time next to shifted data would reveal the shift.
+        "created_utc": (datetime.now(timezone.utc) + delta).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source": source_note, "units": "SI", "timezone": "UTC",
         "privacy": {"equipment_aliased": alias, "time_shifted": bool(shift_days), "point_names": "removed",
                     "history_window_hours": window_hours},
@@ -181,11 +232,16 @@ def build(*, results: Path, out: Path, private_dir: Path, history: Path | None =
         "verdict_sheet": "verdicts.csv",
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    private = {"alias_to_equipment": {v: k for k, v in aliases.items()}, "shift_days": int(shift_days)}
+    private = {"alias_to_equipment": {v: k.split(SITE_SEP)[-1] for k, v in aliases.items()},
+               "shift_days": int(shift_days)}
+    sites = {v: k.split(SITE_SEP)[0] for k, v in aliases.items() if SITE_SEP in k}
+    if sites:
+        private["alias_to_site"] = sites
     (private_dir / "reidentify.json").write_text(json.dumps(private, indent=2), encoding="utf-8")
     return {"results": len(res_rows), "faults": sum(len(v) for v in faults.values()), "fault_episodes": len(episodes),
             "history_rows": n_hist,
-            "dropped_unmapped_point_rows": dropped_points, "equipment": len(aliases) if alias else None}
+            "dropped_unmapped_point_rows": dropped_points, "equipment": len(aliases) if alias else None,
+            "renamed_roles": sorted(renamed_roles)}
 
 
 def verify(bundle: Path) -> list[str]:
@@ -206,15 +262,19 @@ def unalias(verdicts: Path, private_dir: Path, out: Path) -> int:
     """Map a filled verdict sheet back to real equipment ids and times, on the owner's machine."""
     private = json.loads((Path(private_dir) / "reidentify.json").read_text(encoding="utf-8"))
     back = private["alias_to_equipment"]
+    sites = private.get("alias_to_site") or {}
     delta = -timedelta(days=int(private.get("shift_days", 0)))
     n = 0
+    fields = (["site_id"] if sites else []) + list(TEMPLATE_FIELDS)
     with open(out, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(TEMPLATE_FIELDS))
+        w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
         for r in read_csv(verdicts):
             if not (r.get("label") or "").strip():
                 continue
             row = {k: r.get(k, "") for k in TEMPLATE_FIELDS}
+            if sites:
+                row["site_id"] = sites.get(r["equipment_id"], "")
             row["equipment_id"] = back.get(r["equipment_id"], r["equipment_id"])
             row["start_ts"] = _shift(_ts(r["start_ts"]), delta)
             row["end_ts"] = _shift(_ts(r["end_ts"]), delta)

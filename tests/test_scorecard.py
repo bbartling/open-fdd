@@ -273,3 +273,67 @@ def test_prevalence_reweights_precision_and_feeds_prior():
     assert site["prior_precision"] == pytest.approx(fc1["precision_at_prevalence"])
     with pytest.raises(ValueError):
         score(RESULTS, LABELS, prevalence=1.5)
+
+
+def _write_csv(path, rows):
+    import csv
+    with open(path, "w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    return path
+
+
+def test_export_keys_equipment_by_site_and_normalizes_snake_roles(tmp_path):
+    """Same equipment id at two sites -> two aliases; snake_case roles accepted; site ids never leave."""
+    import csv
+    results = _write_csv(tmp_path / "r.csv", [
+        dict(_res("AHU_1", "FC1", "2026-01-01T02:00:00Z", "FAULT"), site_id="SITE-A"),
+        dict(_res("AHU_1", "FC1", "2026-01-01T02:00:00Z", "PASS"), site_id="SITE-B"),
+    ])
+    hist = _write_csv(tmp_path / "h.csv", [
+        {"ts": f"2026-01-01T0{h}:00:00Z", "site_id": s, "equipment_id": "AHU_1", "point": "ZN-T", "value": v}
+        for h in range(1, 5) for s, v in (("SITE-A", 21.0), ("SITE-B", 30.0))])
+    pmap = _write_csv(tmp_path / "p.csv", [
+        {"site_id": s, "point": "ZN-T", "role": "zone_air_temp", "equipment_id": "AHU_1"} for s in ("SITE-A", "SITE-B")])
+    bdir, priv = tmp_path / "b", tmp_path / "k"
+    from open_fdd.scorecard import bundle, export
+    stats = export.build(results=results, history=hist, point_map=pmap, out=bdir, private_dir=priv)
+    assert stats["equipment"] == 2 and stats["renamed_roles"] == ["zone_air_temp"]
+    hist_rows = list(csv.DictReader((bdir / "history_long.csv").read_text().splitlines()))
+    # only SITE-A faulted: its history (21.0) is exported, SITE-B's (30.0) is not
+    assert {r["value"] for r in hist_rows} == {"21.0"} and {r["role"] for r in hist_rows} == {"zone-air-temp"}
+    blob = "".join(p.read_text() for p in bdir.iterdir())
+    assert "SITE-A" not in blob and "SITE-B" not in blob and "AHU_1" not in blob and "\x1f" not in blob
+    assert bundle.check(bdir)["ok"]
+    rows = list(csv.DictReader((bdir / "verdicts.csv").read_text().splitlines()))
+    rows[0]["label"] = "fault"
+    _write_csv(bdir / "verdicts.csv", rows)
+    assert main(["unalias", "--verdicts", str(bdir / "verdicts.csv"), "--private-dir", str(priv),
+                 "--out", str(tmp_path / "real.csv")]) == 0
+    real = list(csv.DictReader((tmp_path / "real.csv").read_text().splitlines()))
+    assert real[0]["site_id"] == "SITE-A" and real[0]["equipment_id"] == "AHU_1"
+
+
+def test_export_validates_inputs_before_writing(tmp_path):
+    results = _write_csv(tmp_path / "r.csv", [_res("AHU-1", "FC1", "2026-01-01T02:00:00Z", "FAULT")])
+    hist = _write_csv(tmp_path / "h.csv", [{"ts": "2026-01-01T02:00:00Z", "equipment_id": "AHU-1",
+                                            "point": "P", "value": 1}])
+    pmap = _write_csv(tmp_path / "p.csv", [{"point": "P", "role": "Bldg7.SAT"}])
+    from open_fdd.scorecard import export
+    with pytest.raises(ValueError, match="point_map line 2"):
+        export.build(results=results, history=hist, point_map=pmap, out=tmp_path / "b", private_dir=tmp_path / "k")
+    assert not (tmp_path / "b" / "rule_results.csv").exists()
+    (tmp_path / "bad.csv").write_text(results.read_text() + "a stray log line\n")
+    with pytest.raises(ValueError, match="results .* line 3"):
+        export.build(results=tmp_path / "bad.csv", out=tmp_path / "b2", private_dir=tmp_path / "k2")
+
+
+def test_export_shifts_manifest_time(tmp_path):
+    import json as _json
+    from datetime import datetime, timezone
+    results = _write_csv(tmp_path / "r.csv", [_res("AHU-1", "FC1", "2026-01-01T02:00:00Z", "FAULT")])
+    from open_fdd.scorecard import export
+    export.build(results=results, out=tmp_path / "b", private_dir=tmp_path / "k", shift_days=364)
+    created = _json.loads((tmp_path / "b" / "manifest.json").read_text())["created_utc"]
+    assert (datetime.fromisoformat(created.replace("Z", "+00:00")) - datetime.now(timezone.utc)).days >= 363

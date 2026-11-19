@@ -45,6 +45,11 @@ zip -r bundle.zip bundle/          # send only this
 ```
 
 - `history_long_points.csv`: `ts, equipment_id, point, value` in SI. `points.csv`: `point, role [, equipment_id]`.
+- Several sites in one database: keep a `site_id` column in the results, history and point map (rename with
+  `--site-column`). Equipment is then keyed by site + equipment, so `AHU_1` at two sites gets two aliases; the site
+  id is dropped from the bundle and comes back only through `unalias` (as a `site_id` column).
+- Role names: the point map may use the snake_case spelling (`zone_air_temp`); it is written as `zone-air-temp`.
+  Inputs are checked before anything is written, and a malformed row is reported with its file and line number.
 - Reviewer side: `open-fdd-scorecard check bundle/`, look at `history_long.csv` around each FAULT, fill in
   `bundle/verdicts.csv` (`label`, `fault_type`, `reviewer`, `notes`), send `verdicts.csv` back, and
   `open-fdd-scorecard run --bundle bundle/ --md card.md`.
@@ -61,7 +66,8 @@ Bundle files: `manifest.json` (format, version, privacy flags, SHA-256 of every 
 - Point names never leave: history is mapped to Open-FDD role names; unmapped points are dropped; `check` rejects
   anything that does not look like a role name.
 - Equipment ids become `EQ-0001`-style aliases; site ids and every extra column are dropped.
-- Optional uniform time shift (use whole weeks so hour of day and day of week, which rules depend on, are kept).
+- Optional uniform time shift (use whole weeks so hour of day and day of week, which rules depend on, are kept);
+  the manifest's `created_utc` is shifted too, so the export date does not reveal the shift.
 - Data minimization: only history within `--window-hours` of a FAULT window is exported.
 - Re-identification data (alias map, shift) is written only to `--private-dir`, which must be outside the bundle.
 - Integrity: `check` and `run --bundle` verify the SHA-256 of every exported file and refuse a changed bundle.
