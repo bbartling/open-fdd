@@ -81,7 +81,7 @@ def equip_frame(ds: Dataset, equip: str, ingest: str = "sorted"):
 
 
 def weather_frame(ds: Dataset):
-    """Weather as the SQL join sees it: the last sample carried forward up to cadence + margin (25 min) on the grid."""
+    """The weather sidecar's raw readings (UTC). The runner joins them to each equipment row as-of, as the SQL join does."""
     import pandas as pd
 
     rows = ds.weather
@@ -90,7 +90,8 @@ def weather_frame(ds: Dataset):
     idx = pd.DatetimeIndex(pd.to_datetime([r["ts"] for r in rows], unit="ms", utc=True))
     out = pd.DataFrame({"web-outside-air-temp": [r.get("web_oa_t") for r in rows],
                         "web-outside-air-dewpoint": [r.get("web_oa_dp") for r in rows]}, index=idx)
-    return weather_on_grid(out, ds.step_seconds)
+    # #1642: the raw readings; the runner joins them as-of (WEB_ASOF_BOUND_SECONDS), as the SQL rules do
+    return out[~out.index.duplicated(keep="last")].sort_index()
 
 
 def weather_on_grid(out, step_seconds: int):
