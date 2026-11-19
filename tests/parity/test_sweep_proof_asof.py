@@ -24,7 +24,7 @@ def _run(proof, offset_s=60, rules=("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-R
     con.execute(DUCKDB_HELPERS_SQL)
     kinds = {"double": "DOUBLE", "text": "VARCHAR", "timestamp": "TIMESTAMPTZ"}
     for table, cols in PACK["contract"].items():
-        # Python 3.10/3.11: no reuse of the outer quote inside a nested f-string.
+        # Python 3.11: no reuse of the outer quote inside a nested f-string.
         column_defs = ", ".join('"%s" %s' % (c["name"], kinds[c["type"]]) for c in cols)
         con.execute(f"CREATE TABLE {table} ({column_defs})")
     for m in range(0, 1440, 5):
