@@ -323,6 +323,28 @@ def select_list(body):
 def build_timeline_pg(pg_sql):
     """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
 
+    #1631: a run-proof gated rule (an ``rp`` CTE with ``no_run_proof``) leaves equipment with no proof bound out of its
+    timeline, the same answer as its summary row (SKIPPED: fault_hours NULL, covered_hours 0), instead of a timeline of
+    held, never-confirmed rows that reads as assessed.
+    """
+    tl = _build_timeline_pg(pg_sql)
+    if not re.search(r"\bno_run_proof\b", pg_sql) or not re.search(r"\brp AS \(", strip_comments(pg_sql)):
+        return tl
+    last = tl.rstrip().rfind("\nSELECT ")
+    head, sel = tl[:last + 1], tl[last + 1:]
+    col = "f.equipment_id" if re.search(r"\bFROM final f\b", sel) else "equipment_id"
+    cond = f"{col} NOT IN (SELECT rpx.equipment_id FROM rp rpx WHERE rpx.no_run_proof = 1)"
+    k = sel.rfind("ORDER BY")
+    if k < 0:
+        raise NoTimeline("timeline select has no ORDER BY")
+    before, after = sel[:k].rstrip(), sel[k:]
+    joiner = " AND " if re.search(r"\bWHERE\b", before[before.rfind("FROM"):]) else " WHERE "
+    return head + before + joiner + cond + " " + after
+
+
+def _build_timeline_pg(pg_sql):
+    """Postgres timeline SQL for one rendered rule, or raises NoTimeline(reason).
+
     Per-sensor SV rules expose series_id and sensor_role, and preserve silence-tail intervals exactly.
     """
     s = strip_comments(pg_sql)
@@ -364,11 +386,13 @@ def build_timeline_pg(pg_sql):
         if after == ["cov"]:
             gate = re.search(r"WHEN\s+(\S+)\s*<\s*0\.5\s+THEN\s+SUM", tail)
             thr = re.search(r"MAX\(c\.cov_pct\)\s*<\s*(\S+)\s+THEN\s+0\.0", tail)
-            if not (gate and thr and "FROM final f" in tail and "LEFT JOIN cov c" in tail):
+            # #1631: the GL36 templates no longer bypass the coverage floor when the run-proof gate is off (no `gate`)
+            if not (thr and "FROM final f" in tail and "LEFT JOIN cov c" in tail):
                 raise NoTimeline("coverage-gated rule with an unrecognised final SELECT")
             tween = s[c + 1:main].rstrip()
+            bypass = f"WHEN {gate.group(1)} < 0.5 THEN f.confirmed " if gate else ""
             sel = (f"SELECT f.equipment_id, {_TS.format(t='f.timestamp_utc')},\n"
-                   f"  CASE WHEN {gate.group(1)} < 0.5 THEN f.confirmed WHEN c.cov_pct < {thr.group(1)} THEN 0 ELSE f.confirmed END AS confirmed,\n"
+                   f"  CASE {bypass}WHEN c.cov_pct < {thr.group(1)} THEN 0 ELSE f.confirmed END AS confirmed,\n"
                    f"  f.held_seconds\n"
                    f"FROM final f LEFT JOIN cov c ON f.equipment_id = c.equipment_id ORDER BY f.equipment_id, f.timestamp_utc")
             return head + tween + "\n" + sel + "\n"
@@ -410,7 +434,7 @@ def sqlite_prepare_check(sql, contract):
 
 
 def role_limit_templates(pg_rules):
-    """Templates of the five sweep rules for persisted role-limit overrides (#1589; Full edition, Timescale engine):
+    """Templates of the sweep rules with per-role limits (SV-RANGE, SV-SPIKE, SV-FLATLINE, SV-RATE) for persisted role-limit overrides (#1589; Full edition, Timescale engine):
     the rule and timeline SQL with the per-role limit fragment left as a sentinel, the numbers the fragment references,
     the canonical -> SQL role names, and the shipped limits + allowlists the hook merges overrides onto. Filled with the
     shipped limits each template must give the pack SQL byte for byte (checked here; the JS twin in role-limits.test.mjs)."""
@@ -452,8 +476,9 @@ def rule_tuning_templates(catalog, pg_rules):
             names = sweep_roles[rid]
             allowed = ", ".join("'" + inverse[name].replace("'", "''") + "'" for name in names)
             sql = sql.replace("{{ASSESSABLE_ROLES}}", allowed)
-            fkey = render_rule.FRAGMENT_KEYS[rid]
-            sql = sql.replace("{{" + fkey + "}}", render_rule.sentinel(fkey))
+            fkey = render_rule.FRAGMENT_KEYS.get(rid)   # SV-STALE (#1673) has no per-role limit fragment
+            if fkey:
+                sql = sql.replace("{{" + fkey + "}}", render_rule.sentinel(fkey))
         tl = build_timeline_pg(sql) if pg_rules[rid]["timeline_sql"] else None
         controls = {}
         for k, d in r["parameters"].items():
@@ -480,8 +505,9 @@ def rule_tuning_templates(catalog, pg_rules):
                 vals[d["sql_placeholder"]] = d["default"]
         vals["MODE_DELAY_MIN"] = max(vals.get("MODE_DELAY_MIN", 0), vals.get("STARTUP_DELAY_MIN", 0))
         vals["POLL_SECONDS"] = POLL_SECONDS
-        confirm_min = r["parameters"]["confirm_min"]["default"]
-        vals["CONFIRM_SECONDS"] = confirm_min * 60
+        # a rule with no confirm control (SV-STALE, #1673) keeps the runtime default (render_rule.py, rule-tuning.js)
+        vals["CONFIRM_SECONDS"] = (r["parameters"]["confirm_min"]["default"] * 60 if "confirm_min" in r["parameters"]
+                                   else vals.get("CONFIRM_SECONDS", 600))
         vals["CONFIRM_ROWS"] = max(1, -(-int(vals["CONFIRM_SECONDS"]) // POLL_SECONDS))
         import math
         vals["CONFIRM_ROWS"] = max(1, math.ceil(vals["CONFIRM_SECONDS"] / POLL_SECONDS))
@@ -513,6 +539,11 @@ def rule_tuning_templates(catalog, pg_rules):
         if _fill_tmpl(tl) != pg_rules[rid]["timeline_sql"]:
             raise SystemExit(f"rule_tuning_templates timeline_sql mismatch for {rid}")
         rules[rid] = {"sql": sql, "timeline_sql": tl, "controls": controls}
+        if r.get("legacy_parameters"):
+            # #1673: saved keys this rule renamed or retired (rule-tuning.js normalizeRuleOverride migrates them)
+            rules[rid]["legacy"] = {"aliases": r["legacy_parameters"].get("aliases", {}),
+                                    "retired": r["legacy_parameters"].get("retired", []),
+                                    "note": r["legacy_parameters"].get("note", "")}
     return {"version": 1, "runtime_defaults": runtime_defaults, "rules": rules}
 
 def build():

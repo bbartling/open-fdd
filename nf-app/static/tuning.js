@@ -158,7 +158,7 @@
       }
       params[key] = si;
     }
-    return rt.normalizeRuleOverride({ version: 1, params }, controls, ruleId);
+    return rt.normalizeRuleOverride({ version: 1, params }, controls, ruleId, { legacy: (ruleTplFor(ruleId) || {}).legacy });
   }
 
   /** Clear only `allowedFields` (for `allowedRoles`, or all roles if null) from an SV-LIMITS doc, preserving siblings. */
@@ -201,12 +201,18 @@
     return unit || "";
   }
 
+  /** The pack's tuning template of one rule (controls, legacy keys), or null. */
+  function ruleTplFor(ruleId) {
+    const spec = root.ofddPlotSpecData && root.ofddPlotSpecData.rule_tuning && root.ofddPlotSpecData.rule_tuning.rules;
+    return (spec && spec[ruleId]) || null;
+  }
+
   function shippedControlEffective(ruleId) {
     const rt = RT();
     const spec = root.ofddPlotSpecData && root.ofddPlotSpecData.rule_tuning && root.ofddPlotSpecData.rule_tuning.rules;
     const ruleTpl = spec && spec[ruleId];
     if (!ruleTpl || !ruleTpl.controls) return null;
-    const merged = rt.mergeRuleParams(ruleTpl.controls, null, null, ruleId);
+    const merged = rt.mergeRuleParams(ruleTpl.controls, null, null, ruleId, ruleTpl.legacy);
     return { controls: ruleTpl.controls, effective: { params: merged.effective, sources: merged.sources }, active: {}, history: [] };
   }
 
@@ -361,6 +367,13 @@
     const controls = (paramResp && paramResp.controls) || {};
     const effParams = (paramResp && paramResp.effective && paramResp.effective.params) || {};
     const paramSources = (paramResp && paramResp.effective && paramResp.effective.sources) || {};
+    // #1673: saved keys a release renamed or retired, as the hook migrated them when reading (shown, never hidden)
+    const migration = (paramResp && paramResp.effective && paramResp.effective.migration) || [];
+    const migrationHtml = migration.length
+      ? `<div class="tun-banner" role="note">Saved settings from an older release: ${migration.map((m) => escFn(
+        `${m.layer} ${m.key} ${m.action === "renamed" ? `is now ${m.to}` : m.action === "superseded" ? `ignored (${m.by} is set)`
+          : m.action === "invalid" ? `ignored (${m.reason})` : "is retired and ignored"}`)).join("; ")}. Save a revision to store the new form.</div>`
+      : "";
 
     let controlsHtml = "";
     if (wantParams && Object.keys(controls).length) {
@@ -439,6 +452,7 @@
       + `</div>`
       + (readOnly ? `<div class="tun-banner">${escFn(st.readOnlyReason)} Showing shipped defaults read-only.</div>` : "")
       + (st.status ? `<div class="tun-banner${st.statusIsErr ? " err" : ""}" id="tunStatus" role="status">${escFn(st.status)}</div>` : `<div class="hint" id="tunStatus" role="status"></div>`)
+      + migrationHtml
       + controlsHtml
       + sweepHtml
       + `<div class="exbar">`

@@ -134,6 +134,8 @@ def test_duckdb_and_sqlite_helper_equivalence():
         ("sat", None, 12.5),
         ("oa_h", "%RH", 50.0),
         ("oa_h", "%", 50.0),
+        ("oa_h", "percent_0_100", 50.0),  # #1669 canonical RH token
+        ("zone_rh", "fraction", 0.5),  # a 0-1 fraction is not %RH
         ("duct_static", "Pa", 250.0),
         ("duct_static", "inH2O", 1.0),
         ("zone_flow", "L/s", 400.0),
@@ -184,6 +186,9 @@ def test_duckdb_and_sqlite_helper_equivalence():
 
     assert duck_td == sq_td
     assert duck_sweep == sq_sweep
+    by_case = dict(zip([(r, u) for r, u, _ in cases], duck_sweep))
+    assert by_case[("oa_h", "percent_0_100")] == (False, True, 50.0)
+    assert by_case[("zone_rh", "fraction")] == (False, False, None)
 
     if postgres_configured():
         import os
@@ -240,7 +245,7 @@ def _register_sqlite_udfs(db: sqlite3.Connection) -> None:
         if qty == "absolute_temperature":
             return 1 if nu in ("c", "degc", "celsius") else 0
         if qty == "relative_humidity":
-            return 1 if (nu in ("pct", "percent", "rh", "percentrelativehumidity") or "%" in str(unit)) else 0
+            return 1 if (nu in ("pct", "percent", "percent0100", "rh", "percentrelativehumidity") or "%" in str(unit)) else 0
         if qty == "air_pressure":
             return 1 if nu in ("pa", "pascal") else 0
         if qty == "volume_flow":
@@ -307,6 +312,7 @@ def test_python_sqlite3_udf_registration_smoke(pglite_basic_4x3):
             "sensor_history": (pack["contract"]["sensor_history"], ds.sensor_history),
             "utility_interval": (pack["contract"]["utility_interval"], ds.utility_interval),
             "utility_monthly": (pack["contract"]["utility_monthly"], ds.utility_monthly),
+            "sweep_series": (pack["contract"]["sweep_series"], []),   # optional (#1673): empty = observed series
         }
         for table, (spec, rows) in input_map.items():
             ddl = ", ".join(f'"{c["name"]}" {sq_type[c["type"]]}' for c in spec)

@@ -1,6 +1,6 @@
 # Open-FDD SQL rules for PostgreSQL
 
-This standalone adaptation contains all 77 registry SQL files from the local Open-FDD checkout, plus their tuning metadata. It targets PostgreSQL 14+ syntax, subject to execution qualification on your actual PostgreSQL version. Original equations and per-rule normalization were retained except for the documented dialect changes. Most rules use forward timestamp deltas; a gap longer than `MAX_GAP_HOURS` (default 1) is unknown, not fault or covered time, and breaks confirmation. The four silence-based sensor sweeps (`SV-STALE`, `SV-FLATLINE`, `SV-RANGE`, `SV-SPIKE`) attribute silence beyond `max_silence_hours` (default 0.5 h) to the affected sensor. All five sensor sweeps, including `SV-RATE`, return per-series results. The last sample adds no trailing interval except for the four silence sweeps when another history row establishes the equipment observation end. This is an implementation starting point, not a deployed FDD service or completed UI.
+This standalone adaptation contains all 77 registry SQL files from the local Open-FDD checkout, plus their tuning metadata. It targets PostgreSQL 14+ syntax, subject to execution qualification on your actual PostgreSQL version. Original equations and per-rule normalization were retained except for the documented dialect changes. Most rules use forward timestamp deltas; a gap longer than `MAX_GAP_HOURS` (default 1) is unknown, not fault or covered time, and breaks confirmation. Missing data is `SV-STALE`'s alone (#1673): a gap longer than `stale_after_hours` (default 0.5 h), including a bound series with no sample in the window, is stale time; `SV-FLATLINE`, `SV-RANGE` and `SV-SPIKE` treat the part of a gap beyond `max_silence_hours` as unknown (not covered, not a fault). All five sensor sweeps, including `SV-RATE`, return per-series results. This is an implementation starting point, not a deployed FDD service or completed UI.
 
 ## Start here
 
@@ -57,7 +57,7 @@ All five sensor sweeps return one row per assessable bound sensor series: `(equi
 
 Every per-role number the five sweeps use lives in `open_fdd/data/sensor_sweep_limits.json` (SI only: degC, delta-degC,
 %RH, Pa, L/s, kW). `sql/fdd/render_rule.py` renders it into the `sv_*` rules (`{{SV_RANGE_BANDS}}`, `{{SV_SPIKE_BANDS}}`,
-`{{SV_FLATLINE_TOL}}`, `{{SV_STALE_TOL}}`, `{{SV_RATE_THRESHOLD}}`) and the pandas sweeps read the same file through
+`{{SV_FLATLINE_TOL}}`, `{{SV_RATE_THRESHOLD}}`) and the pandas sweeps read the same file through
 `open_fdd.rules.sensor_sweep_catalog.load_role_limits()`. Which sweep assesses a role is still decided by
 `sensor_sweep_roles.json`. An invalid limit (non-finite, `lo >= hi`, non-positive delta, unknown quantity, missing source,
 an assessed role without a limits entry) is rejected when the file is loaded.
@@ -65,18 +65,19 @@ an assessed role without a limits entry) is rejected when the file is loaded.
 - `lo` / `hi`: SV-RANGE band. SQL renders centre +/- half-width times the existing `range_scale_*` tuner (temperature, humidity,
   pressure); flow and power have no scale tuner.
 - `spike_delta`: SV-SPIKE sample-to-sample delta (a real consecutive-sample difference within `max_silence_hours`, not a rate).
-- `flat_tol` / `stale_tol`: span tolerance. Empty on a temperature role means "follow the rule tuner" (`flatline_tol` 0.055556,
-  `stale_tol` 0.027778 delta-degC); a value equal to that default also follows the tuner. Humidity roles carry their own %RH value.
+- `flat_tol`: SV-FLATLINE span tolerance. Empty on a temperature role means "follow the rule tuner" (`flatline_tol` 0.055556
+  delta-degC); a value equal to that default also follows the tuner. Humidity roles carry their own %RH value. `stale_tol` is retired
+  (#1673: SV-STALE has no value test); it stays readable in the file and in saved overrides, and no rule uses it.
 - `rate_per_h`: SV-RATE threshold per hour (portable SQL rule only; see KNOWN_DIFFERENCES.md). Empty or equal to the default
   3.333333 follows the `steady_fault_per_hour` tuner.
-- Window lengths (`flat_s` 3600, `stale_s` 7200) and the 5 minute confirmation are global defaults, recorded in the file's
+- Window lengths (`flat_s` 3600; `stale_s` 1800 = the SV-STALE `stale_after_hours` default, used by the UI's estimated lane) and the 5 minute confirmation are global defaults, recorded in the file's
   `defaults` block: the SQL window frames are one constant per rule, so they cannot vary per role.
 
 Inventory (R range, S spike, F flatline, T stale, A rate). The 5.0.12 rows are the previous effective defaults moved
 unchanged (imperial-derived bands, so the SI numbers look odd: for example outside air -60 to 130 degF). The 5.0.13 plant
 rows are conservative gross-fault bands for owner review; they are not tuned to any site.
 
-| Role | Unit | Sweeps | Range | Spike delta | Flat tol | Stale tol | Rate per h | Provenance |
+| Role | Unit | Sweeps | Range | Spike delta | Flat tol | Stale tol (retired, #1673) | Rate per h | Provenance |
 |---|---|---|---|---|---|---|---|---|
 | `outside-air-temp` | degC | R S F T A | -51.111111 to 54.444445 | 20 |  |  | 3.333333 | 5.0.12 default |
 | `mixed-air-temp` | degC | R S F T A | -28.888889 to 43.333333 | 13.888889 |  |  | 3.333333 | 5.0.12 default |
@@ -104,7 +105,7 @@ and power are not flatline/stale targets because they rest at a constant when th
 `L/s`, `Pa` and `kW` are assessed; anything else is skipped, never converted. `chw-diff-pressure` uses the `air_pressure`
 quantity of the SQL helpers (declared `Pa`).
 
-`max_silence_hours` is available on the four silence sweeps (minimum and step 0.25 h). Gaps at or below the threshold use sample-and-hold. When a sensor has a next observation after a longer gap, the interval after the threshold is fault time for that series. If the point stops reporting while equipment rows continue, its final gap is measured through the equipment's last timestamp. A series with no valid observation is unknown. `SV-STALE` and `SV-FLATLINE` use elapsed-time trailing windows; their minimum window is 0.25 h. Numeric `RANGE` frames and the cutoff-crossing held sample keep the window tied to elapsed time on PostgreSQL, SQLite and TimescaleDB instead of a row count. `SV-RATE` retains its portable screening equation but evaluates consecutive samples, confirmation, coverage, and output independently for each sensor UUID.
+`SV-STALE` (#1673) is missing data only, with no value test and no run-proof gate. Its one control is `stale_after_hours` (minimum and step 0.25 h, default 0.5 h). The caller lists every bound series it fetched successfully in `sweep_series` with the requested window `[window_start, window_end)`; the window start, every valid sample and the window end split the window, and the part of an interval beyond the threshold is stale time. A listed series with no sample at all is stale for the whole window beyond the threshold; a series whose history request failed is not listed and is not assessed. Without `sweep_series` rows the series present in `sensor_history` are used over the equipment's observed window. Saved `max_silence_hours` on SV-STALE becomes `stale_after_hours` (an explicit `stale_after_hours` in the same scope wins); saved `stale_hours`, `stale_tol`, `confirm_min` and `require_run_proof` on SV-STALE are retired: ignored and reported when read, rejected on a new write. On `SV-FLATLINE`, `SV-RANGE` and `SV-SPIKE`, `max_silence_hours` bounds sample-and-hold; the rest of a longer gap is unknown and breaks confirmation. `SV-FLATLINE` uses elapsed-time trailing windows; its minimum window is 0.25 h. Numeric `RANGE` frames and the cutoff-crossing held sample keep the window tied to elapsed time on PostgreSQL, SQLite and TimescaleDB instead of a row count. `SV-RATE` retains its portable screening equation but evaluates consecutive samples, confirmation, coverage, and output independently for each sensor UUID.
 
 ## Units: SI only
 

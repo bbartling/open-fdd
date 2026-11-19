@@ -3,6 +3,7 @@
     open-fdd-nf info
     open-fdd-nf model [--site S] [--json]
     open-fdd-nf pull --equip AHU-1 --days 7 --out ahu1.csv
+    open-fdd-nf export-folder --equip AHU-1 --days 14 --out AHU_1   (device folder for open-fdd-anomaly / open-fdd-ml)
     open-fdd-nf rules --days 7 [--rules ECON-1,FC1] [--json]
     open-fdd-nf report --days 7 --out report_dir [--findings]
     open-fdd-nf analyze weekly-runtime --site S --days 28 [--json]       (read-only tools run on the box)
@@ -64,7 +65,8 @@ def _range(p: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="open-fdd-nf", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = ap.add_subparsers(dest="cmd", required=True, metavar="{info,model,pull,rules,report,analyze,sparql}")
+    sub = ap.add_subparsers(dest="cmd", required=True,
+                            metavar="{info,model,pull,export-folder,rules,report,analyze,sparql}")
     c = _common()
     sub.add_parser("info", parents=[c], help="platform info and the sites in the model")
     m = sub.add_parser("model", parents=[c], help="equipment with the points bound to each FDD role")
@@ -72,6 +74,17 @@ def build_parser() -> argparse.ArgumentParser:
     pl = sub.add_parser("pull", parents=[c], help="history of the bound roles as SI CSV (or parquet)")
     _range(pl)
     pl.add_argument("--out", required=True, help=".csv (or .parquet when pyarrow is installed)")
+    ef = sub.add_parser(
+        "export-folder", parents=[c],
+        help="one equipment's SI history as a device folder (history_wide.csv + column_map.json)",
+        description="Write the device folder that open-fdd-anomaly screen / report and open-fdd-ml detect read, for "
+                    "ONE equipment (--equip, plus --site when the id repeats across sites). Roles and units come "
+                    "from the NF model; values are SI. Stops when a bound point's unit cannot be converted (unless "
+                    "--allow-skips) and lists unit-less, unrecognised-unit and unmapped points in column_map.json.")
+    _range(ef)
+    ef.add_argument("--out", required=True, help="output directory (created; existing files are overwritten)")
+    ef.add_argument("--allow-skips", action="store_true",
+                    help="export the convertible roles even when some bound points have an unusable unit")
     r = sub.add_parser("rules", parents=[c], help="run the pandas reference rules and print a summary")
     _range(r)
     r.add_argument("--rules", help="comma list of rule ids (default: every applicable rule)")
@@ -198,6 +211,25 @@ def cmd_pull(a: argparse.Namespace) -> int:
     else:
         wide.to_csv(out, encoding="utf-8-sig")
     print(f"wrote {out} ({len(wide)} rows x {wide.shape[1]} columns, SI units)")
+    return 0
+
+
+def cmd_export_folder(a: argparse.Namespace) -> int:
+    from open_fdd.nf.device_folder import export_folder
+
+    if not a.equip:
+        raise NFError("export-folder needs --equip (one equipment id or name; see `open-fdd-nf model`)")
+    start, end = time_range(a)
+    rec = export_folder(client_from_args(a), a.equip, start, end, a.out, site=a.site, window_sec=a.window,
+                        allow_skips=a.allow_skips)
+    print(f"wrote {a.out}: {rec['rows']} rows x {len(rec['points'])} roles ({rec['site_id']}/{rec['equipment_id']}, "
+          f"{rec['equipType'] or 'no type stamp'}, SI)")
+    for label, items in (("skipped", rec["skipped"]), ("unit not verified", rec["unit_unverified"])):
+        for k, why in items.items():
+            print(f"  {label}: {k} {why}", file=sys.stderr)
+    if rec["unmapped_points"]:
+        print(f"  unmapped points on this equipment: {len(rec['unmapped_points'])} (listed in column_map.json)",
+              file=sys.stderr)
     return 0
 
 
@@ -328,7 +360,8 @@ def cmd_sparql(a: argparse.Namespace) -> int:
     return 0
 
 
-COMMANDS = {"info": cmd_info, "model": cmd_model, "pull": cmd_pull, "rules": cmd_rules, "report": cmd_report,
+COMMANDS = {"info": cmd_info, "model": cmd_model, "pull": cmd_pull, "export-folder": cmd_export_folder,
+            "rules": cmd_rules, "report": cmd_report,
             "analyze": cmd_analyze, "sparql": cmd_sparql}
 
 

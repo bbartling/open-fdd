@@ -1,9 +1,14 @@
 """Detection metrics in the style of the LBNL / NREL FDD evaluation framework (Frank, Lin, Granderson et al. 2019).
 
-An *evaluation sample* is a fixed window (default one hour) in which the unit was operating. A detector's
-5-minute flags become one decision per sample: the sample is *flagged* when at least ``persistence`` of its
-active points are flagged (default 0.25, i.e. 15 minutes in an hour). Ground truth comes from the dataset
-inventory: every sample of a faulted file is a fault sample, every sample of the fault-free file is normal.
+An *evaluation sample* is a fixed window (default one hour) in which the unit was operating for at least
+``min_active`` (default 0.5) of the window's ELAPSED time. Coverage is measured against the window length at the
+data cadence (declared, or the median sample spacing), never against the rows that happen to be present, so one
+5-minute sample cannot make a whole hour an evaluation sample. A detector's flags become one decision per sample:
+the sample is *flagged* when at least ``persistence`` (default 0.25) of its ACTIVE samples are flagged. That is a
+share of active time, not a continuous duration: in a fully active hour it is 15 minutes, in an hour active for
+only half its duration it is 7.5 minutes. Ground truth comes from the dataset inventory: every sample of a faulted
+file is a fault sample, every sample of the fault-free file is normal. :func:`window_coverage` reports the
+observed, active, expected and flagged counts and the eligibility of every window, including the excluded ones.
 
 - TPR = flagged fault samples / fault samples
 - FPR = flagged normal samples / normal samples
@@ -23,6 +28,51 @@ DEFAULT_PERSISTENCE = 0.25
 DEFAULT_MIN_ACTIVE = 0.5
 
 
+DEFAULT_CADENCE = "5min"  # used only when the cadence can't be inferred (fewer than two distinct timestamps)
+
+
+def infer_cadence(index: pd.DatetimeIndex, default: str = DEFAULT_CADENCE) -> pd.Timedelta:
+    """Median spacing of the distinct sorted timestamps, else ``default``."""
+    uniq = pd.DatetimeIndex(index).unique().sort_values()
+    if len(uniq) < 2:
+        return pd.Timedelta(default)
+    step = pd.Series(uniq[1:] - uniq[:-1]).median()
+    return step if step > pd.Timedelta(0) else pd.Timedelta(default)
+
+
+def window_coverage(
+    flags: pd.Series,
+    active: pd.Series,
+    *,
+    window: str = DEFAULT_WINDOW,
+    persistence: float = DEFAULT_PERSISTENCE,
+    min_active: float = DEFAULT_MIN_ACTIVE,
+    cadence: str | pd.Timedelta | None = None,
+) -> pd.DataFrame:
+    """Per window: ``observed``, ``active``, ``flagged`` sample counts, ``expected`` samples (window / cadence),
+    ``active_coverage`` (active / expected, capped at 1), ``eligible`` and ``decision`` (null when not eligible).
+
+    Duplicate timestamps count once (the last value wins). Only windows containing at least one sample appear;
+    a window with no samples at all is not observed and has no row."""
+    flags = flags[~flags.index.duplicated(keep="last")]
+    active = active[~active.index.duplicated(keep="last")]
+    active = active.reindex(flags.index).fillna(False).astype(bool)
+    flagged = flags.fillna(False).astype(bool) & active
+    step = pd.Timedelta(cadence) if cadence is not None else infer_cadence(flags.index)
+    expected = max(pd.Timedelta(window) / step, 1.0)
+    grouped = pd.DataFrame({"observed": 1.0, "active": active.astype(float), "flagged": flagged.astype(float)},
+                           index=flags.index)
+    sums = grouped.resample(window).sum()
+    sums = sums[sums["observed"] > 0]
+    out = sums.astype(int)
+    out["expected"] = float(expected)
+    out["active_coverage"] = (sums["active"] / expected).clip(upper=1.0)
+    out["eligible"] = out["active_coverage"] >= float(min_active)
+    share = sums["flagged"] / sums["active"].where(sums["active"] > 0)
+    out["decision"] = share.fillna(0.0).ge(float(persistence)).where(out["eligible"])
+    return out
+
+
 def window_decisions(
     flags: pd.Series,
     active: pd.Series,
@@ -30,20 +80,15 @@ def window_decisions(
     window: str = DEFAULT_WINDOW,
     persistence: float = DEFAULT_PERSISTENCE,
     min_active: float = DEFAULT_MIN_ACTIVE,
+    cadence: str | pd.Timedelta | None = None,
 ) -> pd.Series:
-    """One boolean per evaluation window that is active for at least ``min_active`` of its points.
+    """One boolean per evaluation window active for at least ``min_active`` of its elapsed time.
 
-    ``flags`` and ``active`` are boolean series on the same index. Windows below ``min_active`` are dropped.
-    """
-    active = active.reindex(flags.index).fillna(False).astype(bool)
-    flagged = flags.fillna(False).astype(bool) & active
-    grouped = pd.DataFrame({"active": active.astype(float), "flagged": flagged.astype(float)})
-    sums = grouped.resample(window).sum()
-    counts = grouped["active"].resample(window).count()
-    keep = (counts > 0) & (sums["active"] >= float(min_active) * counts)
-    sums = sums[keep]
-    share = sums["flagged"] / sums["active"].where(sums["active"] > 0)
-    return share.fillna(0.0).ge(float(persistence))
+    ``flags`` and ``active`` are boolean series on the same index. Ineligible windows are dropped here; use
+    :func:`window_coverage` to see them and why."""
+    cov = window_coverage(flags, active, window=window, persistence=persistence, min_active=min_active,
+                          cadence=cadence)
+    return cov.loc[cov["eligible"], "decision"].astype(bool)
 
 
 @dataclass

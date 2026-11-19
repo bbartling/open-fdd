@@ -681,7 +681,8 @@
         "%RH",
         "percent",
         "pct",
-        "percent-relative-humidity"
+        "percent-relative-humidity",
+        "percent_0_100"
       ],
       "quantity": "percent",
       "to_si": {
