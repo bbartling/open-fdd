@@ -68,6 +68,11 @@ class Policy:
     sensor_abs_tol_h: float = 0.0005
     sensor_rel_tol: float = 1e-6
     require_all_twins: bool = True
+    #: #1631: SQL ``active_hours`` (the run-proof denominator of ``fault_pct``) vs pandas active time (the rule's own
+    #: operational gate x ``poll_seconds``). Informational: a difference is reported, never a failure (see
+    #: sql/fdd/KNOWN_DIFFERENCES.md, "fault_pct denominators").
+    poll_seconds: float = 300.0
+    active_tol_h: float = 1.0
 
     @classmethod
     def default(cls, profile: str = "basic", stress: bool = True, dataset: str | None = None, **overrides) -> "Policy":
@@ -97,6 +102,8 @@ class Verdict:
     #: "rule/equipment" pairs where one side skipped for no run proof and the other assessed. Always a failure, even
     #: for a known-divergent rule: the known-difference list covers fault-hour deltas, never proof disagreements.
     proof_mismatches: list = field(default_factory=list)
+    #: #1631 (informational): "rule/equipment: SQL active_hours X h vs pandas active Y h" beyond ``active_tol_h``
+    active_hours_mismatches: list = field(default_factory=list)
 
     @property
     def unexpected(self) -> int:
@@ -111,7 +118,8 @@ class Verdict:
     def to_dict(self) -> dict:
         return {"compared": self.compared, "matched": self.matched, "known_divergent": self.known_divergent,
                 "unexpected": self.unexpected, "unexpected_rules": list(self.unexpected_rules),
-                "pin_violations": list(self.pin_violations), "proof_mismatches": list(self.proof_mismatches), "ok": self.ok}
+                "pin_violations": list(self.pin_violations), "proof_mismatches": list(self.proof_mismatches),
+                "active_hours_mismatches": list(self.active_hours_mismatches), "ok": self.ok}
 
 
 def verdict_from_counts(compared: int, twins: int, diverged: Iterable[str], known: Iterable[str]) -> dict:
@@ -209,6 +217,7 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
     per_rule: dict[str, dict] = {}
     agreed: dict[str, list[str]] = {}
     proof_mismatches: list[str] = []
+    active_mismatches: list[str] = []
     for rule, ref_by_equip in ref_rows.items():
         sql = sql_rows_by_equipment(sql_rows.get(rule))
         per: dict[str, dict] = {}
@@ -245,6 +254,12 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
             if row is None or row.get("fault_hours") is None:
                 continue
             item = {"sql": float(row["fault_hours"]), "pandas": ref.get("pandas"), "status": ref.get("status")}
+            if row.get("active_hours") is not None and ref.get("active_samples") is not None:
+                sa = float(row["active_hours"])
+                pa = float(ref["active_samples"]) * policy.poll_seconds / 3600.0
+                item["sql_active_hours"], item["pandas_active_hours"] = sa, pa
+                if abs(sa - pa) > policy.active_tol_h:
+                    active_mismatches.append(f"{rule}/{equip}: SQL active_hours {sa:.2f} h vs pandas active {pa:.2f} h")
             if "sensor_fault_hours" in row:
                 item["sql_sensor_fault_hours"] = row["sensor_fault_hours"]
                 item["pandas_sensor_fault_hours"] = ref.get("pandas_sensor_fault_hours") or {}
@@ -264,4 +279,4 @@ def compare(sql_rows: Mapping[str, list[dict]], ref_rows: Mapping[str, Mapping[s
         now_matching_but_listed=sorted(r for r in policy.known if r in per_rule and r not in diverged),
         no_twin=sorted(r for r in sql_rows if r not in ref_rows), per_rule=per_rule, ok=v["ok"] and not violations and not proof_mismatches,
         deltas={r: rule_delta(per) for r, per in per_rule.items() if r in policy.known}, pin_violations=violations,
-        no_run_proof=agreed, proof_mismatches=proof_mismatches)
+        no_run_proof=agreed, proof_mismatches=proof_mismatches, active_hours_mismatches=sorted(active_mismatches))

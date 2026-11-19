@@ -151,8 +151,8 @@ Duct static pressure high
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#ahu-ducthi)
 
@@ -191,8 +191,9 @@ SAT deviation from setpoint
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#ahu-satdev): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -233,8 +234,9 @@ Heating and cooling simultaneous
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#ahu-simul)
 
@@ -264,8 +266,8 @@ Fan cmd/status mismatch
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#cmd-1)
 
@@ -357,8 +359,9 @@ OA damper leakage
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#dmp-1)
 
@@ -400,8 +403,9 @@ Economizer stuck closed when OAT favorable
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#econ-1)
 
@@ -441,8 +445,9 @@ Economizing when outdoor air unfavorable
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#econ-2)
 
@@ -487,8 +492,9 @@ Mech cooling without integrated economizer
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#econ-3); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
@@ -529,8 +535,9 @@ Low estimated OA fraction
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#econ-4): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
 
@@ -574,8 +581,9 @@ Preheat over-conditioning
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#econ-5)
 
@@ -617,8 +625,9 @@ Economizing in freezing weather
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#econ-6)
 
@@ -667,8 +676,9 @@ Economizer OK but not economizing
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#econ-7): a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642
 
@@ -708,8 +718,9 @@ Duct static below SP at full fan
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc1)
 
@@ -756,8 +767,9 @@ MAT-OAT delta while cooling and economizing
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc10)
 
@@ -807,8 +819,9 @@ OAT low vs SAT SP while cooling and economizing
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc11)
 
@@ -860,8 +873,9 @@ SAT above MAT while cooling
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc12)
 
@@ -910,8 +924,9 @@ SAT above setpoint at full cooling
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#fc13-sat-high): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -965,8 +980,9 @@ CHW coil ΔT when inactive (GL36 L)
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#fc14): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -1021,8 +1037,9 @@ HW coil ΔT when inactive (GL36 M)
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc15)
 
@@ -1067,8 +1084,9 @@ Mixed air below envelope
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc2)
 
@@ -1113,8 +1131,9 @@ Mixed air above envelope
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc3); differs only on edge data: Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows).
 
@@ -1157,8 +1176,9 @@ PID hunting (operating-state oscillation)
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc4)
 
@@ -1204,8 +1224,9 @@ SAT cold when heating commanded (GL36 D)
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#fc5): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
 
@@ -1250,8 +1271,9 @@ Estimated OA fraction mismatch
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#fc6): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -1296,8 +1318,9 @@ SAT low while heating at full
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#fc7): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -1346,8 +1369,9 @@ SAT vs MAT while economizing
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc8); differs only on edge data: Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas.
 
@@ -1397,8 +1421,9 @@ OAT high vs SAT SP while economizing
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fc9); differs only on edge data: Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start).
 
@@ -1434,8 +1459,8 @@ Mechanical cooling below 15.6 °C web OAT
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#mech-oat-1); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
 
@@ -1476,8 +1501,9 @@ Low OA fraction
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#oa-1): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
 
@@ -1521,8 +1547,9 @@ SAT reset not tracking outdoor air
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#reset-1)
 
@@ -1557,8 +1584,8 @@ Excess / wasted unoccupied fan runtime when the zone is already in the comfort b
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#sched-1)
 
@@ -1591,8 +1618,8 @@ Always-on fan or pump runtime
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 | `window_hours` | h | observed window: first to last input sample |
 | `proven_on_hours` | h | time with run proof ON |
 | `proven_off_hours` | h | time with run proof OFF |
@@ -1638,8 +1665,9 @@ Duct static trim advisory
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#trim-1): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -1681,8 +1709,9 @@ Cooling valve leakage
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vlv-1)
 
@@ -1727,8 +1756,8 @@ Zone comfort band during occupied hours when occupancy is set; unoccupied setbac
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vav-1); differs only on edge data: Two input-handling differences: (1) NULL zone_t cells: SQL drops NULL rows (WHERE zone_t IS NOT NULL) and holds the previous sample's state across the null run, pandas scores a NULL as not faulted; (2) planted out-of-range zone_t (80 degC): the pandas quality layer marks it OUT_OF_RANGE and excludes it, SQL scores the value as given.
 
@@ -1764,8 +1793,8 @@ Night setback miss — unoccupied zone above heating setback
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vav-2)
 
@@ -1807,8 +1836,9 @@ Excessive reheat during warm weather
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vav-3)
 
@@ -1849,8 +1879,9 @@ Damper stuck at full open
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vav-4)
 
@@ -1890,8 +1921,9 @@ Airflow sensor bias
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vav-5)
 
@@ -1930,8 +1962,9 @@ Reheat when cooling available
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#vav-6): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
 
@@ -1974,8 +2007,9 @@ Min airflow / fixed high flow
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vav-7); differs only on edge data: Duplicate (equipment, timestamp) rows: SQL scores the rows as delivered, the reference de-duplicates first (the input contract is one row per timestamp). Verified: de-duplicating the rows before SQL makes SQL equal pandas.
 
@@ -2012,8 +2046,9 @@ VAV leave vs parent AHU SAT (fedBy)
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#vav-ahu-leave): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
 
@@ -2058,8 +2093,9 @@ Reheat valve stuck / no temp rise
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#vav-reheat); differs only on stress-only data: pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL
 
@@ -2104,8 +2140,8 @@ Fan-on cooling coil under-delivery
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fcu-clg-coil)
 
@@ -2144,8 +2180,8 @@ High valid CO2 with low outdoor-air damper command
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fcu-co2-damper)
 
@@ -2184,8 +2220,8 @@ Damper feedback more than 15 points below command
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fcu-damper-pos)
 
@@ -2218,8 +2254,8 @@ Heating/cooling pass-through setpoint deadband below 1 C
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fcu-deadband)
 
@@ -2260,8 +2296,8 @@ Fan-on heating coil under-delivery
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#fcu-htg-coil): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -2297,8 +2333,8 @@ Four or more heat/cool valve mode changes in window
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#fcu-mode-cycle): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
 
@@ -2331,8 +2367,8 @@ Own zone setpoint present but zone temperature null for at least 90% of window
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fcu-sensor-null)
 
@@ -2370,8 +2406,8 @@ Cooling valve passing with both commands shut
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fcu-valve-pass-clg); differs only on edge data: Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults.
 
@@ -2411,8 +2447,8 @@ Heating valve passing with both commands shut
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#fcu-valve-pass-htg)
 
@@ -2463,8 +2499,9 @@ Low chilled-water ΔT
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#chw-1): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
 
@@ -2508,8 +2545,9 @@ DP below SP at max pump speed
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#chw-2)
 
@@ -2550,8 +2588,9 @@ Plant supply temp outside deadband
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#chw-3)
 
@@ -2593,8 +2632,9 @@ Flow high at max pump
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#chw-4)
 
@@ -2634,8 +2674,8 @@ Chiller running with no building load
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 | `status` | - | assessment status text |
 
 **Parity** [known divergence](parity.html#chw-noload-1): pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve
@@ -2679,8 +2719,9 @@ High CW approach at full tower fan
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#cw-apr-1)
 
@@ -2726,8 +2767,9 @@ Excess tower fan energy vs wet-bulb limit
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#cw-fan-1)
 
@@ -2771,8 +2813,9 @@ Condenser water not optimized vs wet-bulb
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#cw-opt-1)
 
@@ -2816,8 +2859,9 @@ CHW plant reset advisory
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#trim-4); differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run
 
@@ -2864,8 +2908,9 @@ HWST trim advisory
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#trim-3); differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run
 
@@ -2911,8 +2956,9 @@ Discharge cold when heating
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#hp-1): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
@@ -2950,8 +2996,8 @@ BAS 15m vs utility interval (MAE threshold)
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [SQL only](parity.html#util-interval)
 
@@ -2984,8 +3030,8 @@ BAS monthly kWh vs utility monthly bills (% deviation)
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [SQL only](parity.html#util-monthly)
 
@@ -3038,8 +3084,9 @@ Suspected control-output hunting
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#pid-hunt-1)
 
@@ -3098,7 +3145,7 @@ Sensor flatline (stuck)
 | `series_id` | - | assessed sensor series |
 | `sensor_role` | - | Haystack role of the sensor |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
 
 **Parity** [match](parity.html#sv-flatline)
 
@@ -3164,7 +3211,7 @@ Sensor out of hard range
 | `series_id` | - | assessed sensor series |
 | `sensor_role` | - | Haystack role of the sensor |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
 
 **Parity** [match](parity.html#sv-range)
 
@@ -3207,7 +3254,7 @@ Context-aware sensor rate of change
 | `series_id` | - | assessed sensor series |
 | `sensor_role` | - | Haystack role of the sensor |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
 
 **Parity** [known divergence](parity.html#sv-rate): documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances
 
@@ -3267,7 +3314,7 @@ Sensor rate-of-change spike
 | `series_id` | - | assessed sensor series |
 | `sensor_role` | - | Haystack role of the sensor |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
 
 **Parity** [match](parity.html#sv-spike)
 
@@ -3311,7 +3358,7 @@ Stale data (no fresh samples for longer than the stale threshold)
 | `series_id` | - | assessed sensor series |
 | `sensor_role` | - | Haystack role of the sensor |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
 
 **Parity** [match](parity.html#sv-stale)
 
@@ -3349,8 +3396,8 @@ Equipment OAT vs weather-staged wx OAT
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [known divergence](parity.html#oat-meteo): weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns
 
@@ -3382,8 +3429,8 @@ OA temperature spike
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [match](parity.html#wx-1); differs only on edge data: Gap handling: SQL flags |oa_t - previous sample| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only.
 
@@ -3489,8 +3536,8 @@ Comfort fault sample count → hours
 | `equipment_id` | - | equipment the row describes |
 | `fault_samples` | count | samples in fault |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
 **Parity** [SQL only](parity.html#fault-elapsed-hours)
 
