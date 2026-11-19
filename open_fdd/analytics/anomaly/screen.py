@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import importlib.util
 import json
 from dataclasses import dataclass, field
 from datetime import date
@@ -35,6 +36,32 @@ from open_fdd.analytics.anomaly.detectors_ml import IFOREST_CONTAMINATION, STL_T
 from open_fdd.analytics.anomaly.io import load_device_folder
 
 VALID_METHODS = ("zscore", "mad", "stl", "iforest")
+#: Run when ``methods`` is not given, each only if its optional dependency imports (#1654). Isolation Forest is
+#: opt-in: it marks a fixed fraction of every point by construction (#1658).
+DEFAULT_METHODS = ("zscore", "mad", "stl")
+#: ``method: (import name, pip extra)`` for the Python-only methods.
+METHOD_EXTRAS: dict[str, tuple[str, str]] = {
+    "stl": ("statsmodels", "open-fdd[anomaly]"),
+    "iforest": ("sklearn", "open-fdd[anomaly]"),
+}
+
+
+def method_available(method: str) -> bool:
+    """True when the method's optional dependency imports (z-score and MAD need only pandas)."""
+    need = METHOD_EXTRAS.get(method)
+    return need is None or importlib.util.find_spec(need[0]) is not None
+
+
+def default_methods() -> tuple[list[str], dict[str, str]]:
+    """``(runnable default methods, {skipped method: why})`` for this install."""
+    run, skipped = [], {}
+    for name in DEFAULT_METHODS:
+        if method_available(name):
+            run.append(name)
+        else:
+            module, extra = METHOD_EXTRAS[name]
+            skipped[name] = f"{module} is not installed: pip install \"{extra}\""
+    return run, skipped
 #: ``pandas`` (default) or ``sql``: where the z-score runs. ``sql`` runs ``sql/analytics/anomaly_zscore.sql`` on an
 #: in-process SQLite core (``open_fdd.analytics.sql_anomaly``); the other methods always run in Python.
 VALID_ENGINES = ("pandas", "sql")
@@ -47,6 +74,7 @@ SCOREBOARD_COLUMNS = [
     "skipped_reason",
     "gate",
     "assessed_rows",
+    "method_note",
 ]
 
 
@@ -61,6 +89,7 @@ class ScreenResult:
     window: int = 24
     methods: list[str] = field(default_factory=list)
     activity: dict[str, object] = field(default_factory=dict)
+    methods_skipped: dict[str, str] = field(default_factory=dict)
 
 
 def _package_version(name: str) -> str:
@@ -71,7 +100,7 @@ def _package_version(name: str) -> str:
 
 
 def _parse_methods(methods: list[str] | tuple[str, ...] | None) -> list[str]:
-    chosen = list(VALID_METHODS if methods is None else methods)
+    chosen = list(default_methods()[0] if methods is None else methods)
     if not chosen:
         raise ValueError("at least one method is required")
     unknown = [name for name in chosen if name not in VALID_METHODS]
@@ -82,7 +111,14 @@ def _parse_methods(methods: list[str] | tuple[str, ...] | None) -> list[str]:
     return chosen
 
 
-def _flags_for_method(method: str, series: pd.Series, *, window: int, period: int) -> pd.Series:
+def _flags_for_method(
+    method: str,
+    series: pd.Series,
+    *,
+    window: int,
+    period: int,
+    contamination: float = IFOREST_CONTAMINATION,
+) -> pd.Series:
     if method == "zscore":
         return rolling_zscore_flags(series, window=window, threshold=ZSCORE_THRESHOLD)
     if method == "mad":
@@ -94,7 +130,7 @@ def _flags_for_method(method: str, series: pd.Series, *, window: int, period: in
     if method == "iforest":
         from open_fdd.analytics.anomaly.detectors_ml import isolation_forest_flags
 
-        return isolation_forest_flags(series, contamination=IFOREST_CONTAMINATION, random_state=42)
+        return isolation_forest_flags(series, contamination=contamination, random_state=42)
     raise ValueError(f"unknown method: {method}")
 
 
@@ -151,6 +187,8 @@ def _write_readme(
     max_days: int,
     engine: str = "pandas",
     activity_receipt: dict[str, object] | None = None,
+    methods_skipped: dict[str, str] | None = None,
+    contamination: float = IFOREST_CONTAMINATION,
 ) -> None:
     method_rows = {
         "zscore": f"| zscore | SQL-portable (pandas/numpy) | abs Z-score > {ZSCORE_THRESHOLD:g} |",
@@ -161,7 +199,8 @@ def _write_readme(
         ),
         "iforest": (
             f"| iforest | Python-only (scikit-learn) | "
-            f"contamination {IFOREST_CONTAMINATION:g}; features value, rolling mean/std, lag-1 |"
+            f"contamination {contamination:g}: flags about {contamination:.1%} of every point's samples by "
+            f"construction, whether or not anything happened (opt-in); features value, rolling mean/std, lag-1 |"
         ),
     }
     lines = [
@@ -185,6 +224,8 @@ def _write_readme(
     ]
     for name in methods:
         lines.append(method_rows[name])
+    for name, why in (methods_skipped or {}).items():
+        lines.append(f"| {name} | skipped | {why} |")
     if activity_receipt:
         a = activity_receipt
         policy = a.get("policy")
@@ -278,6 +319,7 @@ def screen_folder(
     command: str | None = None,
     engine: str = "pandas",
     activity_policy: str = DEFAULT_POLICY,
+    iforest_contamination: float = IFOREST_CONTAMINATION,
 ) -> ScreenResult:
     """Screen AHU IO points and write the scoreboard, README, and plots.
 
@@ -292,6 +334,10 @@ def screen_folder(
     written to ``activity.json`` and the README.
     """
     chosen = _parse_methods(methods)
+    skipped_methods = default_methods()[1] if methods is None else {}
+    rate = float(iforest_contamination)
+    if not 0.0 < rate <= 0.5:
+        raise ValueError("iforest contamination must be in (0, 0.5]")
     if engine not in VALID_ENGINES:
         raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(VALID_ENGINES)}")
     if activity_policy not in ACTIVITY_POLICIES:
@@ -353,6 +399,7 @@ def screen_folder(
                     "skipped_reason": "non_numeric",
                     "gate": _gate(role)[0],
                     "assessed_rows": 0,
+                    "method_note": "",
                 }
             )
             continue
@@ -367,6 +414,7 @@ def screen_folder(
                     "skipped_reason": "binary_like",
                     "gate": _gate(role)[0],
                     "assessed_rows": 0,
+                    "method_note": "",
                 }
             )
             continue
@@ -383,6 +431,7 @@ def screen_folder(
                     "skipped_reason": act.skip_reason(),
                     "gate": gate,
                     "assessed_rows": 0,
+                    "method_note": "",
                 }
             )
             continue
@@ -392,7 +441,7 @@ def screen_folder(
             if method == "zscore" and sql_zscore is not None:
                 flags = sql_zscore[column].astype(bool)
             else:
-                flags = _flags_for_method(method, gated, window=window, period=period)
+                flags = _flags_for_method(method, gated, window=window, period=period, contamination=rate)
                 if gated is not series:
                     # positional: a device folder may carry duplicate timestamps, which reindex cannot align
                     full = np.zeros(len(series), dtype=bool)
@@ -410,6 +459,7 @@ def screen_folder(
                     "skipped_reason": "",
                     "gate": gate,
                     "assessed_rows": assessed_rows,
+                    "method_note": f"fixed_fraction_{rate:g}" if method == "iforest" else "",
                 }
             )
         flags_by_point[column] = point_flags
@@ -430,6 +480,8 @@ def screen_folder(
         max_days=int(max_days),
         engine=engine,
         activity_receipt=receipt,
+        methods_skipped=skipped_methods,
+        contamination=rate,
     )
 
     top_points = _rank_points(scoreboard, int(top_n))
@@ -453,4 +505,5 @@ def screen_folder(
         window=window,
         methods=chosen,
         activity=receipt,
+        methods_skipped=skipped_methods,
     )
