@@ -21,6 +21,7 @@ from open_fdd.analytics.core import motor_run_hours_weekly  # noqa: E402
 from open_fdd.analytics.sql_anomaly import create_core, load_core  # noqa: E402
 from open_fdd.analytics.sql_runtime import (  # noqa: E402
     _core_from_frames,
+    _ms,
     motor_run_hours_weekly_sql,
     render_runtime_sql,
     run_runtime_sql,
@@ -184,12 +185,65 @@ def test_no_motor_roles_gives_no_rows():
     assert out.empty and list(out.columns)[:2] == ["week_start", "week_label"]
 
 
+def _local_weeks_and_schedule(tz="America/Chicago"):
+    """Local Monday boundaries (the week of 2026-03-08 is 167 h: DST starts) and weekday 07:00-18:00 local occupancy."""
+    days = pd.date_range("2026-02-23", "2026-03-24", freq="D", tz=tz)
+    starts = [d for d in days if d.dayofweek == 0]
+    occ = [(d + pd.Timedelta(hours=7), d + pd.Timedelta(hours=18)) for d in days if d.dayofweek < 5]
+    return starts, occ
+
+
+@pytest.mark.parametrize("engine", ["sqlite", "duckdb"])
+def test_local_weeks_and_occupancy_match_pandas(engine):
+    if engine == "duckdb":
+        pytest.importorskip("duckdb")
+    frames, role_map = _frames()
+    starts, occ = _local_weeks_and_schedule()
+    kw = {"week_starts": starts, "occupied_intervals": occ}
+    cols = COMPARE + ["in_hours", "after_hours"]
+    want = _pandas_reference_kw(frames, role_map, **kw)[cols]
+    got = motor_run_hours_weekly_sql(frames, role_map, engine=engine, **kw)[cols]
+    order = ["equipment_id", "signal", "week_start"]
+    want = want.sort_values(order).reset_index(drop=True)
+    got = got.sort_values(order).reset_index(drop=True)
+    pd.testing.assert_frame_equal(got, want, check_dtype=False)
+    # local Monday 00:00 Chicago is 06:00 UTC in February and 05:00 UTC after the DST change
+    assert {w.hour for w in got["week_start"]} == {5, 6}
+    assert set(got["week_label"]) <= {d.strftime("%Y-%m-%d") for d in starts}
+    # the frames start Monday 00:00 UTC, which is Sunday evening in Chicago: that slice is the local week of Feb 23 and
+    # is all after-hours; every full local week has both
+    first = got["week_label"] == "2026-02-23"
+    assert (got.loc[first, "in_hours"] == 0).all() and (got.loc[~first, "in_hours"] > 0).all()
+    assert (got["after_hours"] > 0).all()
+    assert ((got["in_hours"] + got["after_hours"]) - got["hours"]).abs().max() <= 0.011
+
+
+def test_custom_weeks_drop_samples_before_the_first_boundary():
+    points = [_pt("f", "AHU-1", "fan_status")]
+    samples = _series("f", T0, 25, H // 2, 1)
+    rows = _run(points, samples, weeks=[("AHU-1", T0 + 6 * H)])
+    assert [r["week_start_ms"] for r in rows] == [T0 + 6 * H]
+    assert rows[0]["run_hours"] == pytest.approx(6.0)  # 6 h .. 12 h; the last sample owns 0
+    assert rows[0]["in_hours"] is None
+    occ = _run(points, samples, occupied=[("AHU-1", T0, T0 + 3 * H)])
+    assert occ[0]["in_hours"] == pytest.approx(3.0) and occ[0]["run_hours"] == pytest.approx(12.0)
+
+
+def _pandas_reference_kw(frames, role_map, **kw):
+    want = motor_run_hours_weekly(frames, role_map, include_all_mapped=True, **kw)
+    return want[want["signal"].isin(["fan-status", "fan-cmd", "pump-status", "pump-cmd", "chw-pump-status",
+                                      "chw-pump-cmd", "hw-pump-cmd"])]
+
+
 @pytest.mark.skipif(not _postgres_configured(), reason="needs POSTGRES_TEST_URL and OPENFDD_PG_TEST_DISPOSABLE=1")
 def test_postgres_matches_sqlite():
     psycopg = pytest.importorskip("psycopg")
     frames, role_map = _frames()
     points, samples, oats = _core_from_frames(frames, role_map)
-    lite = _run(points, samples, oats=oats)
+    starts, occ = _local_weeks_and_schedule()
+    kw = {"oats": oats, "weeks": [(e, _ms(w)) for e in frames for w in starts],
+          "occupied": [(e, _ms(x), _ms(y)) for e in frames for x, y in occ]}
+    lite = _run(points, samples, **kw)
     base = os.environ["POSTGRES_TEST_URL"]
     dbname = f"openfdd_runtime_{secrets.token_hex(6)}"
     with psycopg.connect(base, autocommit=True) as admin:
@@ -200,11 +254,11 @@ def test_postgres_matches_sqlite():
             conn.execute("SET TIME ZONE 'UTC'")
             create_core(conn, "postgres")
             load_core(conn, "postgres", points, samples)
-            rows = run_runtime_sql(conn, "postgres", oats=oats)
+            rows = run_runtime_sql(conn, "postgres", **kw)
     finally:
         with psycopg.connect(base, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
-    assert len(rows) == len(lite) == 9
+    assert len(rows) == len(lite) > 0
     for a, b in zip(rows, lite):
         assert {k: a[k] for k in a if k not in ("run_hours", "avg_oat_c")} == {k: b[k] for k in b if k not in ("run_hours", "avg_oat_c")}
         assert a["run_hours"] == pytest.approx(b["run_hours"], abs=1e-9)

@@ -18,6 +18,11 @@
 --     counts 0 hours (it is not clipped); the last sample owns 0;
 --   * the interval is booked to the UTC week (Monday 00:00) of its starting sample; weeks with no ON time are omitted;
 --   * partial_week is true when the samples in that week span less than 6 days;
+--   * {weeks} (equipment_id, week_ms) optionally replaces the UTC Monday weeks of an equipment with the caller's
+--     boundaries (e.g. the site's local Mondays as UTC ms): a sample goes to the last boundary at or before it, and
+--     samples before the first boundary are not counted. An equipment with no rows keeps UTC Mondays;
+--   * {occ} (equipment_id, start_ms, end_ms) gives occupied intervals (end exclusive). With {use_occ} = 1, in_hours is
+--     the ON time whose interval starts while occupied (pandas in_hours; after_hours = run_hours - in_hours);
 --   * avg_oat_c is the mean outdoor temperature over the week's counted ON intervals. {oats} is an inline table
 --     (equipment_id, point_key) of each equipment's outdoor-air point (web before BAS, chosen by the caller); the
 --     reading used is the latest one at or before the interval start and at most {max_gap_ms} old, carried forward
@@ -70,13 +75,24 @@ series AS (
   FROM chosen c
   JOIN windowed w ON w.point_key = c.point_key
 ),
+weeks AS (
+{weeks}
+),
+occ AS (
+{occ}
+),
 counted AS (
-  SELECT equipment_id, role, family, t,
-         t - ((t - 345600000) % 604800000) AS week_ms,
-         CASE WHEN (CASE WHEN value > 1.5 THEN value / 100.0 ELSE value END) > 0.05
-                   AND dt_ms > 0 AND dt_ms <= {max_gap_ms}
-              THEN dt_ms ELSE 0 END AS on_ms
-  FROM series
+  SELECT x.equipment_id, x.role, x.family, x.t,
+         CASE WHEN EXISTS (SELECT 1 FROM weeks w WHERE w.equipment_id = x.equipment_id)
+              THEN (SELECT MAX(w.week_ms) FROM weeks w WHERE w.equipment_id = x.equipment_id AND w.week_ms <= x.t)
+              ELSE x.t - ((x.t - 345600000) % 604800000) END AS week_ms,
+         CASE WHEN EXISTS (SELECT 1 FROM occ o
+                            WHERE o.equipment_id = x.equipment_id AND o.start_ms <= x.t AND x.t < o.end_ms)
+              THEN 1 ELSE 0 END AS occ_flag,
+         CASE WHEN (CASE WHEN x.value > 1.5 THEN x.value / 100.0 ELSE x.value END) > 0.05
+                   AND x.dt_ms > 0 AND x.dt_ms <= {max_gap_ms}
+              THEN x.dt_ms ELSE 0 END AS on_ms
+  FROM series x
 ),
 oatsrc AS (
 {oats}
@@ -90,20 +106,21 @@ oat_win AS (
 stream AS (
   -- motor samples and OAT readings in one time-ordered stream per equipment; a reading sorts before a sample at the
   -- same time, so "at or before" holds
-  SELECT equipment_id, role, family, t, week_ms, on_ms, 2 AS src, CAST(NULL AS DOUBLE PRECISION) AS oat
+  SELECT equipment_id, role, family, t, week_ms, occ_flag, on_ms, 2 AS src, CAST(NULL AS DOUBLE PRECISION) AS oat
   FROM counted
+  WHERE week_ms IS NOT NULL
   UNION ALL
-  SELECT equipment_id, NULL, NULL, t, NULL, NULL, 1, value
+  SELECT equipment_id, NULL, NULL, t, NULL, NULL, NULL, 1, value
   FROM oat_win
   WHERE 1 = 1{window_filter}
 ),
 grouped AS (
-  SELECT equipment_id, role, family, t, week_ms, on_ms, src, oat,
+  SELECT equipment_id, role, family, t, week_ms, occ_flag, on_ms, src, oat,
          COUNT(oat) OVER (PARTITION BY equipment_id ORDER BY t, src ROWS UNBOUNDED PRECEDING) AS grp
   FROM stream
 ),
 carried AS (
-  SELECT equipment_id, role, family, t, week_ms, on_ms, src,
+  SELECT equipment_id, role, family, t, week_ms, occ_flag, on_ms, src,
          MAX(oat) OVER (PARTITION BY equipment_id, grp) AS oat,
          MAX(CASE WHEN src = 1 THEN t END) OVER (PARTITION BY equipment_id, grp) AS oat_t
   FROM grouped
@@ -115,7 +132,8 @@ SELECT equipment_id,
        SUM(on_ms) / 3600000.0 AS run_hours,
        COUNT(*) AS n_samples,
        CASE WHEN MAX(t) - MIN(t) < 518400000 THEN 1 ELSE 0 END AS partial_week,
-       AVG(CASE WHEN on_ms > 0 AND oat IS NOT NULL AND t - oat_t <= {max_gap_ms} THEN oat END) AS avg_oat_c
+       AVG(CASE WHEN on_ms > 0 AND oat IS NOT NULL AND t - oat_t <= {max_gap_ms} THEN oat END) AS avg_oat_c,
+       CASE WHEN {use_occ} = 1 THEN SUM(CASE WHEN occ_flag = 1 THEN on_ms ELSE 0 END) / 3600000.0 END AS in_hours
 FROM carried
 WHERE src = 2
 GROUP BY equipment_id, role, family, week_ms

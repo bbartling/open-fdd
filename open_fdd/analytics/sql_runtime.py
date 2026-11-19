@@ -41,7 +41,7 @@ CHILLER_TYPES = {"CHW_PLANT", "CHILLER"}
 CHILLER_RUN_ORDER = ("chw-pump-status", "pump-status", "chw-pump-cmd", "pump-cmd")
 
 COLUMNS = ("equipment_id", "signal", "motor_family", "week_start_ms", "run_hours", "n_samples", "partial_week",
-           "avg_oat_c")
+           "avg_oat_c", "in_hours")
 
 #: Outdoor-air roles, in the order pandas resolves them (web weather before BAS).
 OAT_ROLES = ("web-outside-air-temp", "bas-outside-air-temp", "outside-air-temp")
@@ -87,12 +87,16 @@ def render_runtime_sql(
     end_ms: int | None = None,
     max_gap_seconds: float = ELAPSED_MAX_GAP_SECONDS,
     oats: Iterable[tuple[str, str]] = (),
+    weeks: Iterable[tuple[str, int]] = (),
+    occupied: Iterable[tuple[str, int, int]] | None = None,
 ) -> str:
     """Render the query with checked literals (no string from the caller reaches SQL unquoted).
 
     ``start_ms`` / ``end_ms`` bound the samples read (UTC epoch ms, end exclusive); an interval is only measured
     between samples inside the window. ``oats`` is (equipment_id, point_key) of each equipment's outdoor-air point;
-    without one, ``avg_oat_c`` is NULL.
+    without one, ``avg_oat_c`` is NULL. ``weeks`` is (equipment_id, week start UTC ms) to replace that equipment's UTC
+    Monday weeks; ``occupied`` is (equipment_id, start_ms, end_ms) occupied intervals, and passing it (even empty)
+    turns on ``in_hours``.
     """
     if engine not in TS_MS:
         raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(ENGINES)}")
@@ -119,6 +123,10 @@ def render_runtime_sql(
         ts_ms=TS_MS[engine],
         max_gap_ms=int(round(gap * 1000.0)),
         oats=_inline([("equipment_id", "TEXT"), ("point_key", "TEXT")], list(oats)),
+        weeks=_inline([("equipment_id", "TEXT"), ("week_ms", "INTEGER")], list(weeks)),
+        occ=_inline([("equipment_id", "TEXT"), ("start_ms", "INTEGER"), ("end_ms", "INTEGER")],
+                    list(occupied) if occupied is not None else []),
+        use_occ=0 if occupied is None else 1,
     )
 
 
@@ -139,6 +147,7 @@ def run_runtime_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
         rec["n_samples"] = int(rec["n_samples"])
         rec["partial_week"] = bool(rec["partial_week"])
         rec["avg_oat_c"] = None if rec["avg_oat_c"] is None else float(rec["avg_oat_c"])
+        rec["in_hours"] = None if rec["in_hours"] is None else float(rec["in_hours"])
         out.append(rec)
     return out
 
@@ -191,11 +200,29 @@ def _core_from_frames(frames: dict, role_map: dict) -> tuple[list[dict], list[tu
     return points, samples, oats
 
 
-def motor_run_hours_weekly_sql(frames: dict, role_map: dict, *, engine: str = "sqlite"):
+def _ms(value) -> int:
+    import pandas as pd
+
+    ts = pd.Timestamp(value)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return int(ts.tz_convert("UTC").value // 1_000_000)
+
+
+def motor_run_hours_weekly_sql(
+    frames: dict,
+    role_map: dict,
+    *,
+    engine: str = "sqlite",
+    week_starts=None,
+    occupied_intervals=None,
+):
     """Weekly motor run hours computed by the SQL query, with the columns of ``motor_run_hours_weekly``.
 
     ``plant_group`` and ``label`` come from the same equipment metadata helpers the pandas function uses.
     ``avg_oat_c`` uses the frame's own outdoor-air column (web, else BAS); a separate ``weather`` frame is not read.
+    ``week_starts`` and ``occupied_intervals`` take the same values as the pandas function (a list, or a per-equipment
+    dict); the week label is the boundary's date in its own time zone.
     """
     import pandas as pd
 
@@ -213,7 +240,18 @@ def motor_run_hours_weekly_sql(frames: dict, role_map: dict, *, engine: str = "s
         create_core(conn, engine)
         if points:
             load_core(conn, engine, points, samples)
-        rows = run_runtime_sql(conn, engine, oats=oats) if points else []
+        weeks, labels, occupied = [], {}, None
+        for eq_id in frames:
+            starts = week_starts.get(eq_id) if isinstance(week_starts, dict) else week_starts
+            for start in starts or []:
+                weeks.append((str(eq_id), _ms(start)))
+                labels[(str(eq_id), _ms(start))] = pd.Timestamp(start)
+        if occupied_intervals is not None:
+            occupied = []
+            for eq_id in frames:
+                spans = occupied_intervals.get(eq_id) if isinstance(occupied_intervals, dict) else occupied_intervals
+                occupied.extend((str(eq_id), _ms(a), _ms(b)) for a, b in (spans or []))
+        rows = run_runtime_sql(conn, engine, oats=oats, weeks=weeks, occupied=occupied) if points else []
     finally:
         conn.close()
     # A chilled-water plant or chiller reports its first pump signal as the chiller's run (as plant discovery does).
@@ -237,10 +275,10 @@ def motor_run_hours_weekly_sql(frames: dict, role_map: dict, *, engine: str = "s
         et = resolve_equipment_type(eq_id, df=raw, role_map=role_map)
         plant = _equipment_plant_group(eq_id, et, df=raw, role_map=role_map) or _fallback_plant_group(role, kind)
         week = pd.Timestamp(r["week_start_ms"], unit="ms")
-        out.append(
-            {
+        label_ts = labels.get((eq_id, r["week_start_ms"]), week)
+        row = {
                 "week_start": week,
-                "week_label": week.strftime("%Y-%m-%d"),
+                "week_label": label_ts.strftime("%Y-%m-%d"),
                 "equipment_id": eq_id,
                 "signal": role,
                 "motor_kind": kind,
@@ -249,8 +287,13 @@ def motor_run_hours_weekly_sql(frames: dict, role_map: dict, *, engine: str = "s
                 "hours": round(r["run_hours"], 2),
                 "avg_oat_c": r["avg_oat_c"],
                 "partial_week": r["partial_week"],
-            }
-        )
+        }
+        if occupied_intervals is not None:
+            row["in_hours"] = round(r["in_hours"], 2)
+            row["after_hours"] = round(r["run_hours"] - r["in_hours"], 2)
+        out.append(row)
     cols = ["week_start", "week_label", "equipment_id", "signal", "motor_kind", "plant_group", "label", "hours",
             "avg_oat_c", "partial_week"]
+    if occupied_intervals is not None:
+        cols += ["in_hours", "after_hours"]
     return pd.DataFrame(out, columns=cols)
