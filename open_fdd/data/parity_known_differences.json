@@ -5,14 +5,14 @@
   {
    "rule": "AHU-SATDEV",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "reason": "Small residual after #1642 (SQL now reads the fan status before the command, as pandas _fan; the parity reference no longer applies open_fdd.quality nulling, which SQL never does, #1253); not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 5.6667,
+     "hours": 0.8333,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 4.5,
+     "hours": 0.5,
      "tol": 0.01
     }
    }
@@ -20,7 +20,7 @@
   {
    "rule": "CHW-1",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "pandas holds off the rule for its startup delay after the proof turns on (operational_gate.RULE_GATES: 600 s, CHW-1 900 s); the SQL rule has no startup holdoff yet (startup_delay_min tuner, #1646).",
    "expected": {
     "basic/0/8/7": {
      "hours": 0.5,
@@ -50,14 +50,14 @@
   {
    "rule": "ECON-4",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "Small residual after #1642 (SQL now reads the fan status before the command, as pandas _fan; the parity reference no longer applies open_fdd.quality nulling, which SQL never does, #1253); not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 2.8333,
+     "hours": 0.4167,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 1.0833,
+     "hours": 0.1667,
      "tol": 0.01
     }
    }
@@ -108,21 +108,6 @@
    }
   },
   {
-   "rule": "FC5",
-   "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 3.9167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 1.8333,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "FC6",
    "scope": "all",
    "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
@@ -138,61 +123,16 @@
    }
   },
   {
-   "rule": "FC7",
-   "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 4.5833,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 3.9167,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "FCU-HTG-COIL",
-   "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 5.4167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 4.6667,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "FCU-MODE-CYCLE",
-   "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 1.75,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 1.0,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "HP-1",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "reason": "Small residual after #1642 (SQL now reads the fan status before the command, as pandas _fan; the parity reference no longer applies open_fdd.quality nulling, which SQL never does, #1253); not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 3.0,
+     "hours": 0.1667,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 2.9167,
+     "hours": 0.0833,
      "tol": 0.01
     }
    }
@@ -200,7 +140,7 @@
   {
    "rule": "OA-1",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "pandas holds off the rule for its startup delay after the proof turns on (operational_gate.RULE_GATES: 600 s, CHW-1 900 s); the SQL rule has no startup holdoff yet (startup_delay_min tuner, #1646).",
    "expected": {
     "basic/0/8/7": {
      "hours": 0.25,
@@ -273,24 +213,9 @@
    }
   },
   {
-   "rule": "VAV-6",
-   "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 3.6667,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 1.25,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "VAV-AHU-LEAVE",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "pandas holds off the rule for its startup delay after the proof turns on (operational_gate.RULE_GATES: 600 s, CHW-1 900 s); the SQL rule has no startup holdoff yet (startup_delay_min tuner, #1646).",
    "expected": {
     "basic/0/8/7": {
      "hours": 1.3333,
@@ -366,6 +291,11 @@
    "rule": "WX-1",
    "scope": "edge",
    "reason": "Gap handling: SQL flags |oa_t - previous sample| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only."
+  },
+  {
+   "rule": "FC5",
+   "scope": "edge",
+   "reason": "Edge profile only (#1642): after a data gap pandas re-applies the rule's 600 s startup delay (operational_gate.RULE_GATES) and SQL has no startup holdoff, so SQL confirms one sample-gap earlier (edge 4x3 AHU-2: SQL 9.6781 h = pandas with startup_delay_min 0; default pandas 9.5214 h). Basic (on-grid) datasets match exactly. Same family as CHW-1 / OA-1 / VAV-AHU-LEAVE (#1646)."
   },
   {
    "rule": "ECON-3",

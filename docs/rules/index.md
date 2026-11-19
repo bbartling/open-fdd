@@ -64,17 +64,17 @@ each input, parameter and output.
 | [**FC2**](sql-cookbook.html#fc2) | Mixed air below envelope | ahu | 10 min | [pandas](pandas-cookbook.html#fc2) | match |
 | [**FC3**](sql-cookbook.html#fc3) | Mixed air above envelope | ahu | 10 min | [pandas](pandas-cookbook.html#fc3) | match |
 | [**FC4**](sql-cookbook.html#fc4) | PID hunting (operating-state oscillation) | ahu | 60 min | [pandas](pandas-cookbook.html#fc4) | match |
-| [**FC5**](sql-cookbook.html#fc5) | SAT cold when heating commanded (GL36 D) | ahu | 10 min | [pandas](pandas-cookbook.html#fc5) | known divergence |
+| [**FC5**](sql-cookbook.html#fc5) | SAT cold when heating commanded (GL36 D) | ahu | 10 min | [pandas](pandas-cookbook.html#fc5) | match |
 | [**FC6**](sql-cookbook.html#fc6) | Estimated OA fraction mismatch | ahu | 10 min | [pandas](pandas-cookbook.html#fc6) | known divergence |
-| [**FC7**](sql-cookbook.html#fc7) | SAT low while heating at full | ahu | 10 min | [pandas](pandas-cookbook.html#fc7) | known divergence |
+| [**FC7**](sql-cookbook.html#fc7) | SAT low while heating at full | ahu | 10 min | [pandas](pandas-cookbook.html#fc7) | match |
 | [**FC8**](sql-cookbook.html#fc8) | SAT vs MAT while economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc8) | match |
 | [**FC9**](sql-cookbook.html#fc9) | OAT high vs SAT SP while economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc9) | match |
 | [**FCU-CLG-COIL**](sql-cookbook.html#fcu-clg-coil) | Fan-on cooling coil under-delivery | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-clg-coil) | match |
 | [**FCU-CO2-DAMPER**](sql-cookbook.html#fcu-co2-damper) | High valid CO2 with low outdoor-air damper command | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-co2-damper) | match |
 | [**FCU-DAMPER-POS**](sql-cookbook.html#fcu-damper-pos) | Damper feedback more than 15 points below command | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-damper-pos) | match |
 | [**FCU-DEADBAND**](sql-cookbook.html#fcu-deadband) | Heating/cooling pass-through setpoint deadband below 1 C | zone_other, general, ahu | immediate | [pandas](pandas-cookbook.html#fcu-deadband) | match |
-| [**FCU-HTG-COIL**](sql-cookbook.html#fcu-htg-coil) | Fan-on heating coil under-delivery | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-htg-coil) | known divergence |
-| [**FCU-MODE-CYCLE**](sql-cookbook.html#fcu-mode-cycle) | Four or more heat/cool valve mode changes in window | zone_other, general, ahu | immediate | [pandas](pandas-cookbook.html#fcu-mode-cycle) | known divergence |
+| [**FCU-HTG-COIL**](sql-cookbook.html#fcu-htg-coil) | Fan-on heating coil under-delivery | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-htg-coil) | match |
+| [**FCU-MODE-CYCLE**](sql-cookbook.html#fcu-mode-cycle) | Four or more heat/cool valve mode changes in window | zone_other, general, ahu | immediate | [pandas](pandas-cookbook.html#fcu-mode-cycle) | match |
 | [**FCU-SENSOR-NULL**](sql-cookbook.html#fcu-sensor-null) | Own zone setpoint present but zone temperature null for at least 90% of window | zone_other, general, ahu | immediate | [pandas](pandas-cookbook.html#fcu-sensor-null) | match |
 | [**FCU-VALVE-PASS-CLG**](sql-cookbook.html#fcu-valve-pass-clg) | Cooling valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-clg) | match |
 | [**FCU-VALVE-PASS-HTG**](sql-cookbook.html#fcu-valve-pass-htg) | Heating valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-htg) | match |
@@ -101,7 +101,7 @@ each input, parameter and output.
 | [**VAV-3**](sql-cookbook.html#vav-3) | Excessive reheat during warm weather | vav | 5 min | [pandas](pandas-cookbook.html#vav-3) | match |
 | [**VAV-4**](sql-cookbook.html#vav-4) | Damper stuck at full open | vav | 15 min | [pandas](pandas-cookbook.html#vav-4) | match |
 | [**VAV-5**](sql-cookbook.html#vav-5) | Airflow sensor bias | vav | 15 min | [pandas](pandas-cookbook.html#vav-5) | match |
-| [**VAV-6**](sql-cookbook.html#vav-6) | Reheat when cooling available | vav | 15 min | [pandas](pandas-cookbook.html#vav-6) | known divergence |
+| [**VAV-6**](sql-cookbook.html#vav-6) | Reheat when cooling available | vav | 15 min | [pandas](pandas-cookbook.html#vav-6) | match |
 | [**VAV-7**](sql-cookbook.html#vav-7) | Min airflow / fixed high flow | vav | 15 min | [pandas](pandas-cookbook.html#vav-7) | match |
 | [**VAV-AHU-LEAVE**](sql-cookbook.html#vav-ahu-leave) | VAV leave vs parent AHU SAT (fedBy) | vav | 15 min | [pandas](pandas-cookbook.html#vav-ahu-leave) | known divergence |
 | [**VAV-REHEAT**](sql-cookbook.html#vav-reheat) | Reheat valve stuck / no temp rise | vav | 15 min | [pandas](pandas-cookbook.html#vav-reheat) | match |

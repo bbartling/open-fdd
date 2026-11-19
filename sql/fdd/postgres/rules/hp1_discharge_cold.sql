@@ -15,7 +15,12 @@ h AS (
     equipment_id,
     timestamp_utc,
     sat, zone_t,
-    fan_cmd AS fan,
+    -- #1642: the fan is the status when bound, else the command, as pandas _fan (never the command alone)
+    CASE
+      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
+      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
+      ELSE 1
+    END AS fan_on,
     compressor_status,
     fan_status,
     CASE
@@ -34,8 +39,8 @@ base AS (
     CAST(CASE
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(proof_on, 0) = 0 THEN 0
-      WHEN sat IS NULL OR zone_t IS NULL OR fan IS NULL THEN 0
-      WHEN fan >= 0.05 AND zone_t < {{ZONE_COLD}} AND sat < {{MIN_SAT}} THEN 1
+      WHEN sat IS NULL OR zone_t IS NULL THEN 0
+      WHEN fan_on = 1 AND zone_t < {{ZONE_COLD}} AND sat < {{MIN_SAT}} THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)

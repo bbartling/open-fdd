@@ -429,7 +429,10 @@ def run_cookbook_rule(
     equipment_type: str = "",
     require_operational_gates: bool = True,
     skip_weather_merge: bool = False,
+    apply_quality: bool = True,
 ) -> RuleResult:
+    """``apply_quality=False`` skips the role-bound / sentinel nulling of ``open_fdd.quality``. The SQL pack never applies
+    it (#1253), so the SQL parity reference runs without it; the product pandas engine keeps it on."""
     params_by_rule = params_by_rule or {}
     stamped = equipment_type or str(df.attrs.get("equipment_type") or df.attrs.get("equipType") or "")
     eq_type = normalize_equipment_type(stamped) or "UNKNOWN"
@@ -530,7 +533,7 @@ def run_cookbook_rule(
         if r in quality.roles
     ]
     worst_req = min(req_cov) if req_cov else 1.0
-    if req_cov and worst_req <= 0.0:
+    if apply_quality and req_cov and worst_req <= 0.0:
         return skipped(
             rule.id,
             equipment_id,
@@ -542,7 +545,8 @@ def run_cookbook_rule(
             params_fingerprint=fp,
         )
     pre_quality = d
-    d = apply_normalized(d, quality, attach_raw_and_flags=False)
+    if apply_quality:
+        d = apply_normalized(d, quality, attach_raw_and_flags=False)
     if rule.sensor_sweep:
         # #1673: the SQL sweeps judge the stored SI values (masked only by unit). A value quality calls out of range is
         # exactly what SV-RANGE / SV-SPIKE assess; nulling it first hid it, and turned it into a gap (now SV-STALE's).
