@@ -50,7 +50,7 @@ SHARED: dict[str, list[str]] = {
     "shared/types/shapes.d.ts": [f"{app}/types/shapes.d.ts" for app in BOTH],
 }
 # #1649: the portable SQL analytics run in the NF analytics hook (hooks/lib/sql-analytics.js); pandas is the reference
-for _name in ("motor_weekly_runtime", "mech_cooling_oat_bins", "economizer_metrics", "bas_vs_web_oat"):
+for _name in ("motor_weekly_runtime", "mech_cooling_oat_bins", "economizer_metrics", "economizer_points", "bas_vs_web_oat"):
     SHARED[f"sql/analytics/{_name}.sql"] = [f"nf-app/rules/analytics/{_name}.sql"]
 for _name in ("nf.js", "model.js", "theme-init.js", "tree.css", "version.js",
               "app-core.js", "charts.js", "theme.js", "chart-page.js", "tree.js", "base.css"):

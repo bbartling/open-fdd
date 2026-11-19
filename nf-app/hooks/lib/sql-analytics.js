@@ -146,6 +146,21 @@ function renderEconomizer(engine, roles, { siteId = "local", dtMinC = ECON_DIAG_
   });
 }
 
+/** sql_economizer.render_economizer_points_sql (same roles and checks as the metrics query, no gap limit). */
+function renderEconomizerPoints(engine, roles, { siteId = "local", dtMinC = ECON_DIAG_DT_MIN_C, startMs = null, endMs = null } = {}) {
+  checkEngine(engine);
+  for (const [, role] of roles) if (!["fan", "oat", "rat", "mat", "damper"].includes(role)) throw new Error(`unknown economizer role ${role}`);
+  const dt = Number(dtMinC);
+  if (!Number.isFinite(dt) || dt < 0) throw new Error("dt_min_c must be a non-negative number");
+  return render("economizer_points", {
+    roles: inline([["equipment_id", "TEXT"], ["role", "TEXT"], ["point_key", "TEXT"]], roles),
+    ts_ms: TS_MS[engine],
+    site_id: quote(siteId),
+    window_filter: windowFilter(startMs, endMs),
+    dt_min: pyRepr(dt),
+  });
+}
+
 /** sql_bas_web.render_bas_web_sql (pairs = [[equipment_id, bas_key, web_key, max_age_ms]]). */
 function renderBasWeb(engine, pairs, { siteId = "local", bandC = BAS_WEB_BAND_C, startMs = null, endMs = null } = {}) {
   checkEngine(engine);
@@ -319,5 +334,5 @@ async function mechFromGrid(engine, g, specs) {
 module.exports = {
   runtimeFromGrid, mechFromGrid,
   TS_MS, MECH_OAT_BIN_EDGES_C, MECH_OAT_BIN_LABELS, ELAPSED_MAX_GAP_SECONDS, ECON_DIAG_DT_MIN_C, BAS_WEB_BAND_C,
-  pyRepr, inline, render, renderRuntime, renderMechBins, renderEconomizer, renderBasWeb, openCore,
+  pyRepr, inline, render, renderRuntime, renderMechBins, renderEconomizer, renderEconomizerPoints, renderBasWeb, openCore,
 };
