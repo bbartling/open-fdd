@@ -50,7 +50,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
-    dl = sub.add_parser("download", help="Fetch the LBNL single-duct AHU subset into the cache (CC BY 4.0)")
+    dl = sub.add_parser("download", help="Fetch the 8-file LBNL single-duct AHU subset (about 1.1 GB of CSV on disk) into the cache",
+                        description="Fetch the LBNL single-duct AHU (SDAHU) benchmark files from fdddata.lbl.gov "
+                                    "(DOI 10.25984/1881324, CC BY 4.0). Only the needed zip members are read with HTTP "
+                                    "range requests (about 30 MB compressed each, about 240 MB in all); the 8 "
+                                    "default CSVs take about 1.1 GB on disk. Nothing is uploaded.")
     dl.add_argument("--cache", type=Path, default=None, help="Cache dir (default $OPENFDD_ML_CACHE or ~/.cache/open-fdd/lbnl)")
     dl.add_argument("--files", default=None, help="Comma-separated file names (default: the benchmark subset)")
     dl.add_argument("--force", action="store_true", help="Download again even when cached")
@@ -60,7 +64,8 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--download", action="store_true", help="Download missing files first")
     bench.add_argument("--methods", default="rules,pca,grey_box,ocsvm,copod,zscore,mad",
                        help="Comma-separated: rules,pca,grey_box,ocsvm,copod,zscore,mad")
-    bench.add_argument("--seed", type=int, default=0)
+    bench.add_argument("--seed", type=int, default=0,
+                       help="Random seed for the ocsvm / copod training subsample; default 0")
     bench.add_argument("--out", type=Path, default=None, help="Write the Markdown table here (default: stdout)")
     bench.add_argument("--json", type=Path, default=None, help="Write every score and detail as JSON")
     meth = sub.add_parser("methods", help="List each detector's required roles; with FOLDER, which can run there and why not")
@@ -107,7 +112,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Fit on the same rows being scored (exploration only; the output is labeled exploratory "
                              "and a recurring fault can become the baseline)")
     det.add_argument("--out", type=Path, required=True, help="Output directory")
-    det.add_argument("--seed", type=int, default=0)
+    det.add_argument("--seed", type=int, default=0,
+                     help="Random seed for the ocsvm / copod training subsample; default 0")
     return parser
 
 

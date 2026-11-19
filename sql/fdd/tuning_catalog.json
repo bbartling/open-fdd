@@ -8752,6 +8752,7 @@
         "equipment_id",
         "fault_hours",
         "covered_hours",
+        "active_hours",
         "fault_pct",
         "assessment"
       ],

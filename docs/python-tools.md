@@ -88,6 +88,7 @@ repeats the format.
 ```bash
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_out                          # z-score, MAD, STL (if installed)
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_if --methods zscore,iforest  # Isolation Forest is opt-in
+open-fdd-anomaly screen ./AHU_1 --out ./nightly --no-plots --json --tz America/Chicago   # scheduled run: JSON on stdout
 open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sql
 ```
 
@@ -97,11 +98,22 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.
 
+**Output.** Every run writes `summary.json` to `--out`. It holds the methods run and skipped, the activity receipt, and for
+each point and method the minutes, events, skip reason, `minutes_by_day` and the flagged `windows` (`start`/`end`
+ISO 8601 in the chosen zone, capped at 200 per row with `windows_total`). `--json` prints it to stdout, or
+`--json PATH` writes a copy. `--no-plots` skips every PNG. `--tz` (an IANA zone, default UTC) sets the calendar days,
+the day-zoom files and axes, and the JSON windows. A DST day is 23 or 25 hours.
+
 **Methods.** z-score and MAD need only pandas. STL needs statsmodels and Isolation Forest needs scikit-learn; both come
 with `open-fdd[anomaly]`. The default `zscore,mad,stl` runs whatever is installed, and the README lists a skipped
 default. Naming a method whose dependency is missing exits 2 and names the extra. Isolation Forest flags
 `--iforest-contamination` (default 0.01) of every point's samples by construction, so it is opt-in. Its scoreboard rows
 carry `method_note` `fixed_fraction_<rate>`; read them as a ranking, not a count of events.
+MAD's denominator is floored at one resolution step of the series (the 5th percentile of gaps between distinct
+values) and at `1e-3 * |median|`, so sensor quantization is not an outlier. A point whose full min-to-max range is
+within 5 resolution steps or `2e-3 * |median|` is skipped as `near_constant`, like `binary_like`. The full range is
+used on purpose: the skip applies before every method, so one short excursion on a flat signal keeps the point in the
+screen. The resolution step is measured on the whole series (offline screening), while the MAD window is trailing.
 
 **Activity.** `screen` and `open-fdd-ml detect` share one policy (`open_fdd.analytics.anomaly.activity`). Each row
 is `on`, `off`, `unoccupied` or `unknown`. The proof source is the run-proof contract (`sql/fdd/run_proof.json`,
