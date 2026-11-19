@@ -6,32 +6,26 @@ nav_order: 3.5
 
 # Using the SQL analytics in your own database
 
-The Open-FDD analytics behind the RCx charts are plain SQL files in [`sql/analytics/`](https://github.com/bbartling/open-fdd/tree/master/sql/analytics). They run on PostgreSQL / TimescaleDB, DuckDB and SQLite 3.28+, with no extensions. Each one has a pandas twin, and tests check that both give the same answer on all three engines. The license is MIT: copy them into your own historian or warehouse.
+The RCx analytics in [`sql/analytics/`](https://github.com/bbartling/open-fdd/tree/master/sql/analytics) run on PostgreSQL / TimescaleDB, DuckDB and SQLite 3.28+. Tests check each one against its pandas twin on all three. MIT licensed.
 
-| File | Answers | Pandas twin |
-|---|---|---|
-| `motor_weekly_runtime.sql` | Run hours per motor per week, average OAT while running, in-schedule and after-hours split | `open_fdd.analytics.core.motor_run_hours_weekly` |
-| `mech_cooling_oat_bins.sql` | Mechanical-cooling hours per outdoor-air bin (six fixed bins, °C) | `open_fdd.analytics.core.mech_cooling_oat_bins` |
-| `economizer_metrics.sql` | Fan-on samples, identifiable samples, median and MAE of the mixed-air residual | `open_fdd.analytics.core.economizer_free_cooling_diagnostics` |
-| `bas_vs_web_oat.sql` | BAS outdoor-air sensor vs a weather service: bias, MAE, max \|delta\|, share within ±2 °C | `open_fdd.analytics.weather_resolver.bas_vs_web_oat_stats` |
-| `anomaly_zscore.sql` | Rolling z-score anomaly flags per point | `open_fdd.analytics.anomaly.detectors.rolling_zscore_flags` |
+| File | Answers |
+|---|---|
+| `motor_weekly_runtime.sql` | Run hours per motor per week, OAT while running, in-schedule / after-hours |
+| `mech_cooling_oat_bins.sql` | Cooling hours per outdoor-air bin |
+| `economizer_metrics.sql` | Identifiable samples, median and MAE of the mixed-air residual |
+| `bas_vs_web_oat.sql` | BAS outdoor-air sensor vs weather service: bias, MAE, share within ±2 °C |
+| `anomaly_zscore.sql` | Rolling z-score flags per point |
 
-## What your database needs
-
-Two tables in a schema named `fdd`. These are the only columns the analytics read:
+## Input
 
 | Table | Columns |
 |---|---|
 | `fdd.point` | `site_id`, `point_key`, `equipment_id`, `role` |
-| `fdd.input_sample` | `site_id`, `point_key`, `ts`, `value` (a view is fine) |
+| `fdd.input_sample` | `site_id`, `point_key`, `ts` (UTC), `value` (SI) |
 
-- `ts` is `timestamptz` (PostgreSQL), `timestamp` in UTC (DuckDB) or integer UTC epoch milliseconds (SQLite).
-- Values are SI: °C, Δ°C, percent 0-100 or fraction 0-1 for commands and dampers, 0/1 for statuses.
-- `role` comes from your point tagging, never from point names. Weekly runtime and the z-score read it (the motor roles are listed in the header of `motor_weekly_runtime.sql`). The economizer, cooling-bin and BAS-vs-web queries take the point keys you pass instead, as a small inline table.
+An Open-FDD TimescaleDB already has both. Elsewhere, `create_core` and `load_core` in `open_fdd.analytics.sql_anomaly` make them.
 
-On an Open-FDD TimescaleDB these already exist (`sql/fdd/schema/core.sql`). Anywhere else, `open_fdd.analytics.sql_anomaly.create_core` creates a minimal copy, and `load_core` fills it.
-
-## Quick start (no server)
+## Quick start
 
 ```python
 import math, sqlite3
@@ -71,29 +65,17 @@ print([(b["bin_label"], b["on_ms"] / 3.6e6) for b in run_mech_bins_sql(conn, "sq
 print(round(run_bas_web_sql(conn, "sqlite", [("AHU-1", "ahu1/oat", "web/oat", 5_400_000)])[0]["bias"], 3))  # 0.8
 ```
 
-SQLite and DuckDB print the same numbers. Needs `pip install open-fdd` (plus `duckdb` for DuckDB).
+## Plain SQL
 
-## Plain SQL, no Python at run time
-
-Each file has `{placeholders}`: the site, the window, a small inline table of your points, and the engine's timestamp-to-milliseconds expression. Render a file once for your engine and keep the result. Every value is checked and quoted, so no caller string reaches the SQL unquoted:
+Render a file once for your engine, then run it from `psql` or any scheduler. Re-render when the points change.
 
 ```python
 from open_fdd.analytics.sql_runtime import render_runtime_sql
 open("weekly_runtime.sql", "w").write(render_runtime_sql("postgres", site_id="my-site", oats=[("AHU-1", "ahu1/oat")]))
 ```
 
-Then run `weekly_runtime.sql` from `psql`, a dashboard tool or a scheduled job. Re-render it when the point list changes. The renderers are `render_runtime_sql`, `render_mech_bins_sql`, `render_economizer_sql`, `render_bas_web_sql` and `render_zscore_sql`, in the matching `open_fdd.analytics.sql_*` modules.
+Each `.sql` file's header lists its roles, placeholders and exact semantics.
 
-## Definitions worth knowing
+## If the numbers differ
 
-| Rule | Meaning |
-|---|---|
-| On | Value above 5 % after scaling to 0-1 (a value above 1.5 is read as percent). The whole interval counts. |
-| Interval | Each sample owns the time to its point's next sample. An interval over 1 h is unknown and counts 0 h. |
-| Weeks | UTC Mondays by default. Pass your own week starts (site time zone) and occupied intervals for the schedule split. Weeks with no run time have no row. |
-| Weather | Outdoor air is joined as-of: the latest reading at or before the sample, within an age limit. |
-| Economizer | Identifiable when \|OAT - RAT\| ≥ 50/9 Δ°C (10 Δ°F). The residual is MAT - (RAT + damper × (OAT - RAT)). |
-
-## Checking your port
-
-Load the same samples into your database and into pandas, then compare. `tests/test_sql_*.py` in the repository do exactly this for each analytic, and `tests/fixtures/sql_analytics_cases.json` holds small generated cases with their pandas answers. If your numbers drift, first check the units (SI), the time zone (UTC timestamps), and duplicate timestamps. This is the same list as for the [SQL rules](borrowing-sql.html#if-the-numbers-do-not-match-pandas).
+Check SI units, UTC timestamps and duplicate timestamps first, as for the [SQL rules](borrowing-sql.html#if-the-numbers-do-not-match-pandas). `tests/test_sql_*.py` show the pandas comparison for each file.

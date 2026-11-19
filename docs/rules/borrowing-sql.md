@@ -9,7 +9,7 @@ nav_order: 3
 The 77 rule SQL files are ordinary PostgreSQL 14+. They use no `time_bucket`, hypertables or continuous aggregates. Timescale is
 only the runtime that builds the wide `history` input, so any database that can build that table can run them.
 
-The RCx analytics (weekly runtime, cooling bins, economizer, BAS vs web OAT) are portable SQL too: see [Using the SQL analytics in your own database](borrowing-analytics.html).
+The RCx analytics are portable SQL too: [Using the SQL analytics in your own database](borrowing-analytics.html).
 
 ## Quick start (DuckDB, no server)
 
