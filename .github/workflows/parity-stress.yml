@@ -32,14 +32,14 @@ jobs:
         size: ["4x3", "8x7"]
         profile: [basic, edge]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
@@ -55,7 +55,7 @@ jobs:
         run: |
           set -o pipefail
           python tests/parity/stress.py --engines pglite,sqlite,duckdb,duckdb-parquet --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --sparql --out "$RUNNER_TEMP/stress.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: parity-stress-${{ matrix.size }}-${{ matrix.profile }}
@@ -80,14 +80,14 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
           cache: pip
