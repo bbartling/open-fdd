@@ -41,11 +41,11 @@ permissions:
   pages: write
   id-token: write
 
-# Deploys (pushes to master) are serialized in one group. A pull request's build gets its own group per branch: with one
-# shared group GitHub keeps a single pending run, so every PR build cancelled the one queued before it.
+# Per workflow + event + ref/head_ref, so one PR cannot cancel another. cancel-in-progress is on except for
+# master and tag pushes, which must not drop an in-flight production deploy.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.head_ref) || format('pages-{0}', github.ref) }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
