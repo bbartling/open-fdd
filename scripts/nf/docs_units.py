@@ -215,7 +215,7 @@ def param_rows(params: dict) -> tuple[list[str], bool, bool]:
 OUTPUT_COLUMNS = {
     "equipment_id": ("-", "equipment the row describes"),
     "fault_hours": ("h", "confirmed fault time"),
-    "fault_pct": ("%", "fault_hours as a share of covered_hours"),
+    "fault_pct": ("%", "fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours"),
     "fault_samples": ("count", "samples in fault"),
     "fan_runtime_hours": ("h", "fan running time"),
     "total_hours": ("h", "assessed time"),
@@ -225,7 +225,8 @@ OUTPUT_COLUMNS = {
     "comfort_pct": ("%", "share of assessed time inside the comfort band"),
     "series_id": ("-", "assessed sensor series"),
     "sensor_role": ("-", "Haystack role of the sensor"),
-    "covered_hours": ("h", "time the rule could assess (known inputs, gate open)"),
+    "covered_hours": ("h", "time with data the rule could read (data coverage)"),
+    "active_hours": ("h", "covered time while the run proof was on (the fault_pct denominator of gated rules, #1631)"),
     "status": ("-", "assessment status text"),
     "window_hours": ("h", "observed window: first to last input sample"),
     "proven_on_hours": ("h", "time with run proof ON"),

@@ -57,6 +57,7 @@ The operational gate applies to flatline/range/spike evidence; SV-STALE is not g
 - SV-RATE is excluded from the `W4e_si_sensor_util` parity family. It stays unsupported on SI (see the SV-RATE section above) and is not claimed by W4e.
 - Sensor-sweep tolerances (`flatline_tol`, `spike_limit`) and `oat_err` are temperature differences (K / delta degC), never absolute temperatures. Humidity roles use declared percent-RH literals (flatline 0.1), not the temperature tolerance. `stale_tol` is retired (#1673).
 - SV-RANGE, SV-FLATLINE and SV-SPIKE SQL use the row-wise operational proof fallback order (fan status, fan command, VAV zone airflow, pump status, CHW pump command, chiller status); each row uses the first non-NULL proof, and rows with NULL values fall through to the next available proof. The airflow threshold is 23.597350 L/s (SI). The pandas oracle now uses the same row-wise fallback. Missing data (SV-STALE) is assessed independent of the gate.
+- Sweep proof alignment (#1631): a long-form sensor sample takes the proof of the latest `history` row of its equipment at or before it, held for at most `MAX_GAP_HOURS` (default 1 h). No such row, an older one, or a NULL proof is unknown: with the gate on it cannot create a fault (it used to count as energized through `COALESCE(..., 1)` on an exact timestamp join, so sensor samples 60 s off the proof grid turned a proven-OFF day into 23.9 fault hours). Equipment with sensor history but no `history` row is `no_run_proof` with the gate on. Sensor-data coverage (`covered_hours`) is unchanged. The pandas reference shares one index for proof and sensor values, the aligned case of the same rule; the SPARQL client's exact join is the same rule with a zero hold (fail-closed).
 - Each `sensor_history` row carries the source unit and its SI value. The SQL checks the row's unit against the role quantity; a non-SI or unsupported unit is masked and breaks that series' continuity.
 - SCHED-1 comfort tuners are `comfort_low`/`comfort_high` (degC), matching the SI runner parameters.
 
@@ -72,6 +73,25 @@ The preparation host's installed `open-fdd` distribution is 4.4.1 (62 diagnostic
 - Utility fault-hours retain a fixed 720-hour proxy. This is not measured fault duration, including in the interval-MAE rule.
 - The focused SV fixtures cover per-role isolation, long and trailing silence (SV-STALE only), de-energized silence, expected series with no sample (`nf-app/tests/sv-stale-gap.test.mjs`), irregular 7-minute sampling and spike role attribution on both SQL engines. They are synthetic screening proofs, not field-data accuracy or every boundary value. The separate Timescale suite provides additional dialect/runtime qualification.
 - Sensor-sweep tolerance metadata may span different physical quantities. Temperature display conversions are a convenience, not permission to apply Celsius offsets to humidity or pressure tolerances. Resolve per-role quantities explicitly for a warehouse UI.
+
+## fault_pct denominators (#1631)
+
+Run-proof gated SQL rules divide `fault_hours` by `active_hours`: held time while the resolved run proof is on (or the
+gate is off). pandas `finalize_result` divides by the rule's own operational-gate time (`resolve_operational_mask`),
+which for most AHU rules is the same fan proof but differs where the rule has its own gate:
+
+- hydronic and plant rules (CHW-1..4, CW-APR-1, CW-FAN-1, CW-OPT-1, TRIM-3/4): pump / flow / chiller proof plus the
+  rule's startup delay;
+- HP-1 and DMP-1, whose pandas gate is not the run proof;
+- the rolling-window rules FC4, PID-HUNT-1 and VAV-4, whose pandas active mask is roughly half the run-proof time on the
+  synthetic data;
+- every gated rule, by a few samples: the startup / fan-restart holdoff in the pandas active mask.
+
+`fault_hours` is unaffected (the parity compare and its pins use it). The parity verdict carries both denominators per
+rule and equipment (`sql_active_hours`, `pandas_active_hours`) and lists every pair that differs by more than
+`Policy.active_tol_h` (1 h) in `active_hours_mismatches`; `tests/parity/stress.py` prints them as "fault_pct denominator
+differs". This is informational, not a failure. On basic 4x3: 31 pairs, e.g. CHW-2 / AHU-1 SQL 42.0 h vs pandas 21.2 h
+and DMP-1 / AHU-2 SQL 34.5 h vs pandas 49.3 h. Aligning these gates in SQL (so `fault_pct` equals pandas) is a follow-up.
 
 ## Run proof from an analog command with no unit (#1631)
 

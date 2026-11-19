@@ -38,7 +38,9 @@ base AS (
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
       WHEN mat IS NOT NULL AND oa_t IS NOT NULL AND rat IS NOT NULL
        AND (mat - {{EPS_MAT}}) > (CASE WHEN rat > oa_t THEN rat + {{EPS_RAT}} ELSE oa_t + {{EPS_OAT}} END)
-      THEN 1 ELSE 0 END AS INT) AS raw_fault
+      THEN 1 ELSE 0 END AS INT) AS raw_fault,
+    -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
+    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
   FROM (
   SELECT h.*,
     CASE
@@ -110,6 +112,7 @@ final AS (
   SELECT
     equipment_id,
     held_seconds,
+    proof_active,
     CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked
 )
@@ -126,9 +129,10 @@ SELECT
     ELSE SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0
   END END AS fault_hours,
   CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN 0.0 ELSE SUM(f.held_seconds) / 3600.0 END AS covered_hours,
+  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN 0.0 ELSE SUM(CASE WHEN f.proof_active = 1 THEN f.held_seconds ELSE 0.0 END) / 3600.0 END AS active_hours,
   CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = f.equipment_id) = 1 THEN NULL ELSE CASE
     WHEN MAX(c.cov_pct) < {{MINIMUM_ACTIVE_COVERAGE_PCT}} THEN 0.0
-    ELSE 100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(f.held_seconds), 0.0)
+    ELSE COALESCE(100.0 * SUM(CASE WHEN f.confirmed = 1 THEN f.held_seconds ELSE 0.0 END) / NULLIF(SUM(CASE WHEN f.proof_active = 1 THEN f.held_seconds ELSE 0.0 END), 0.0), 0.0)
   END END AS fault_pct
 FROM final f
 LEFT JOIN cov c ON f.equipment_id = c.equipment_id
