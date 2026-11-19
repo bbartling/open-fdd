@@ -1,3 +1,9 @@
+---
+title: Rule scorecard and offline review bundle
+parent: Rules
+nav_order: 9
+---
+
 # Rule scorecard and offline review bundle
 
 `open-fdd-scorecard` measures how often each FDD rule is right, on any SQL database, with nothing but
