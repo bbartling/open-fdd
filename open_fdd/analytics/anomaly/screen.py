@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import importlib.metadata
+import json
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
+from open_fdd.analytics.anomaly.activity import (
+    ACTIVITY_POLICIES,
+    DEFAULT_POLICY,
+    SKIP_NO_ACTIVE,
+    SKIP_NO_KNOWN_PROOF,
+    SKIP_NO_PROOF,
+    activity,
+    is_site_role,
+)
 from open_fdd.analytics.anomaly.detectors import (
     MAD_THRESHOLD,
     ZSCORE_THRESHOLD,
@@ -34,6 +45,8 @@ SCOREBOARD_COLUMNS = [
     "anomaly_minutes",
     "event_count",
     "skipped_reason",
+    "gate",
+    "assessed_rows",
 ]
 
 
@@ -47,6 +60,7 @@ class ScreenResult:
     days_by_point: dict[str, list[date]] = field(default_factory=dict)
     window: int = 24
     methods: list[str] = field(default_factory=list)
+    activity: dict[str, object] = field(default_factory=dict)
 
 
 def _package_version(name: str) -> str:
@@ -136,6 +150,7 @@ def _write_readme(
     top_n: int,
     max_days: int,
     engine: str = "pandas",
+    activity_receipt: dict[str, object] | None = None,
 ) -> None:
     method_rows = {
         "zscore": f"| zscore | SQL-portable (pandas/numpy) | abs Z-score > {ZSCORE_THRESHOLD:g} |",
@@ -170,6 +185,33 @@ def _write_readme(
     ]
     for name in methods:
         lines.append(method_rows[name])
+    if activity_receipt:
+        a = activity_receipt
+        policy = a.get("policy")
+        lines.extend(
+            [
+                "",
+                "## Activity",
+                "",
+                f"Policy: **{policy}**"
+                + (
+                    " (every row screened on purpose; proof counts below are for disclosure)."
+                    if policy == "ungated"
+                    else " (equipment points are screened only on rows with operating proof `on`;"
+                    " site and weather points are always screened)."
+                ),
+                f"Proof source: **{a.get('proof_source')}** ({a.get('proof_kind')}"
+                + (f", > {a.get('threshold')}" if a.get("threshold") is not None else "")
+                + f"); occupancy source: **{a.get('occupancy_source')}**.",
+                f"Rows: {a.get('rows')} total; on {a.get('on_rows')}, off {a.get('off_rows')}, "
+                f"unoccupied {a.get('unoccupied_rows')}, unknown {a.get('unknown_rows')}.",
+                f"Assessed equipment rows: **{a.get('assessed_rows')}** ({float(a.get('assessed_fraction') or 0):.1%}).",
+                "Equipment points with no assessable rows are listed with `skipped_reason` "
+                f"`{SKIP_NO_PROOF}` (no proof role), `{SKIP_NO_KNOWN_PROOF}` (a proof role with no known value on any row) "
+                f"or `{SKIP_NO_ACTIVE}` (proof never on); they were not assessed.",
+                "The scoreboard's `gate` column says how each point was gated and `assessed_rows` how many rows it had.",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -235,16 +277,27 @@ def screen_folder(
     methods: list[str] | tuple[str, ...] | None = None,
     command: str | None = None,
     engine: str = "pandas",
+    activity_policy: str = DEFAULT_POLICY,
 ) -> ScreenResult:
     """Screen AHU IO points and write the scoreboard, README, and plots.
 
     Support plots cover every non-skipped point. Day zooms cover the top
     ``top_n`` points and at most ``max_days`` UTC days each. ``engine="sql"``
     computes the z-score with the portable SQL query instead of pandas.
+
+    ``activity_policy="proof"`` (default) screens equipment points only on rows the shared activity
+    policy (:mod:`open_fdd.analytics.anomaly.activity`, also used by ``open-fdd-ml detect``) marks ``on``;
+    the detectors then run over those rows in order. Site and weather points are always screened.
+    ``"ungated"`` screens every row on purpose. The policy, proof source and on/off/unknown counts are
+    written to ``activity.json`` and the README.
     """
     chosen = _parse_methods(methods)
     if engine not in VALID_ENGINES:
         raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(VALID_ENGINES)}")
+    if activity_policy not in ACTIVITY_POLICIES:
+        raise ValueError(
+            f"unknown activity policy {activity_policy!r}; choose from {', '.join(ACTIVITY_POLICIES)}"
+        )
     destination = Path(out_dir)
     destination.mkdir(parents=True, exist_ok=True)
 
@@ -253,12 +306,34 @@ def screen_folder(
     period = max(window, 2)
     median_dt = median_sample_delta(device.frame.index)
 
+    # Proof roles may sit outside the AHU IO set, so read them from every mapped point.
+    every = load_device_folder(folder, ahu_only=False)
+    role_frame = pd.DataFrame(
+        {role: every.frame[column] for role, column in reversed(every.points)},
+        index=every.frame.index,
+    )
+    act = activity(role_frame, policy=activity_policy)
+    on_rows = act.state.eq("on")
+    if on_rows.index.equals(device.frame.index):
+        running = pd.Series(on_rows.to_numpy(dtype=bool), index=device.frame.index)
+    else:
+        running = on_rows[~on_rows.index.duplicated()].reindex(device.frame.index).fillna(False).astype(bool)
+
+    def _gate(role: str) -> tuple[str, pd.Series]:
+        if activity_policy == "ungated":
+            return "ungated", pd.Series(True, index=device.frame.index)
+        if is_site_role(role):
+            return "site", pd.Series(True, index=device.frame.index)
+        return "proof", running
+
     sql_zscore: pd.DataFrame | None = None
     if engine == "sql" and "zscore" in chosen:
         from open_fdd.analytics.sql_anomaly import zscore_flags_sql
 
         columns = list(dict.fromkeys(column for _role, column in device.points))
         numeric = device.frame[columns].apply(pd.to_numeric, errors="coerce")
+        for role, column in device.points:
+            numeric[column] = numeric[column].where(_gate(role)[1].to_numpy())
         sql_zscore = zscore_flags_sql(numeric, window=window, threshold=ZSCORE_THRESHOLD, engine="sqlite")
 
     rows: list[dict[str, object]] = []
@@ -276,6 +351,8 @@ def screen_folder(
                     "anomaly_minutes": 0.0,
                     "event_count": 0,
                     "skipped_reason": "non_numeric",
+                    "gate": _gate(role)[0],
+                    "assessed_rows": 0,
                 }
             )
             continue
@@ -288,15 +365,40 @@ def screen_folder(
                     "anomaly_minutes": 0.0,
                     "event_count": 0,
                     "skipped_reason": "binary_like",
+                    "gate": _gate(role)[0],
+                    "assessed_rows": 0,
                 }
             )
             continue
+        gate, assessed = _gate(role)
+        assessed_rows = int((assessed & series.notna()).sum())
+        if not bool(assessed.any()):
+            rows.append(
+                {
+                    "point": column,
+                    "role": role,
+                    "method": "",
+                    "anomaly_minutes": 0.0,
+                    "event_count": 0,
+                    "skipped_reason": act.skip_reason(),
+                    "gate": gate,
+                    "assessed_rows": 0,
+                }
+            )
+            continue
+        gated = series if bool(assessed.all()) else series[assessed.to_numpy()]
         point_flags: dict[str, pd.Series] = {}
         for method in chosen:
             if method == "zscore" and sql_zscore is not None:
                 flags = sql_zscore[column].astype(bool)
             else:
-                flags = _flags_for_method(method, series, window=window, period=period)
+                flags = _flags_for_method(method, gated, window=window, period=period)
+                if gated is not series:
+                    # positional: a device folder may carry duplicate timestamps, which reindex cannot align
+                    full = np.zeros(len(series), dtype=bool)
+                    full[np.flatnonzero(assessed.to_numpy())] = flags.to_numpy(dtype=bool)
+                    flags = pd.Series(full, index=series.index)
+            flags = (flags.astype(bool) & assessed.to_numpy()).astype(bool)
             point_flags[method] = flags
             rows.append(
                 {
@@ -306,6 +408,8 @@ def screen_folder(
                     "anomaly_minutes": anomaly_minutes(flags, median_dt),
                     "event_count": int(dedupe_events(flags).sum()),
                     "skipped_reason": "",
+                    "gate": gate,
+                    "assessed_rows": assessed_rows,
                 }
             )
         flags_by_point[column] = point_flags
@@ -314,6 +418,8 @@ def screen_folder(
     scoreboard = pd.DataFrame(rows, columns=SCOREBOARD_COLUMNS)
     scoreboard_path = destination / "scoreboard.csv"
     scoreboard.to_csv(scoreboard_path, index=False)
+    receipt = act.receipt()
+    (destination / "activity.json").write_text(json.dumps(receipt, indent=1), encoding="utf-8")
     _write_readme(
         destination / "README.md",
         command=command,
@@ -323,6 +429,7 @@ def screen_folder(
         top_n=int(top_n),
         max_days=int(max_days),
         engine=engine,
+        activity_receipt=receipt,
     )
 
     top_points = _rank_points(scoreboard, int(top_n))
@@ -345,4 +452,5 @@ def screen_folder(
         days_by_point=days_by_point,
         window=window,
         methods=chosen,
+        activity=receipt,
     )

@@ -74,7 +74,7 @@ test("dataset covers every contract column (typed NULL for the rest) on both eng
   assert.equal(input.history.length, 2 * 864 - 40);
   assert.ok(Object.keys(pgPack.contract.history).length > 60);
   assert.deepEqual(Object.keys(pgPack.contract).sort(),
-    ["history", "sensor_history", "utility_interval", "utility_monthly", "weather"]);
+    ["history", "sensor_history", "sweep_series", "utility_interval", "utility_monthly", "weather"]);
 });
 
 test("every rule runs without error on both engines", () => {

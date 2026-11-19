@@ -64,6 +64,25 @@ example `no rule was assessed: no equipment type: pass equipment_type= ...`.
 The package also provides ECM workbooks, reports, anomaly screening, and RDF readers. Use the CLI help for command
 options. Source and installation extras are in the repository's pyproject.toml.
 
+## Device folder
+
+`open-fdd-anomaly screen|report` and `open-fdd-ml detect` read a device folder. It needs no NF and no database.
+
+- `history_wide.csv`: a `timestamp_utc` column (ISO 8601, UTC) and one column per point, in SI. That means degC,
+  Pa, fractions 0-1 for commands and positions (0-100 % also works for commands), and 0/1 for status.
+- `column_map.json`: `{"equipType": "AHU", "points": {"discharge-air-temp": "SAT", "fan-status": "SF_S"}}`. A role
+  is a Haystack-style name or its short alias; `open-fdd-ml make-folder --list-roles` prints them.
+
+```bash
+open-fdd-ml make-folder trend.csv --out AHU_1 --time-col Time --tz America/Chicago \
+    --map discharge-air-temp=SAT --map outside-air-temp=OAT --map fan-status=SF_S   # naive stamps read in --tz
+open-fdd-ml make-folder --from-lbnl ~/.cache/open-fdd/lbnl/AHU_annual.csv --from 2018-06-01 --to 2018-06-30 --out AHU_1
+open-fdd-ml make-folder --example --out demo_AHU                                     # two synthetic days
+```
+
+`make-folder` does not convert units. An unknown role is a warning, not an error. `open-fdd-ml make-folder --help`
+repeats the format.
+
 ## Anomaly screening and SQL z-score
 
 ```bash
@@ -76,6 +95,20 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 `open_fdd.analytics.anomaly.detectors.rolling_zscore_flags` on each point's non-missing samples
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.
+
+**Activity.** `screen` and `open-fdd-ml detect` share one policy (`open_fdd.analytics.anomaly.activity`). Each row
+is `on`, `off`, `unoccupied` or `unknown`. The proof source is the run-proof contract (`sql/fdd/run_proof.json`,
+`open_fdd.run_proof.derive_run_proof`), chosen per folder: a resolved `run-proof` column first, then an own status
+role (`fan-status` first), then an own command (`fan-cmd` first), all running when `> 0.05`. A frame marked
+`run_proof_resolved` counts only its `run-proof` column. A missing value on the chosen source makes that row
+`unknown`; it does not fall back to another source. With the default
+`--activity proof`, equipment points are screened only on `on` rows, and site/weather points (outdoor air
+temperature and humidity) on every row. A point with nothing to assess is listed as `no_run_proof` (no proof role),
+`no_known_proof` (a proof role with no known value on any row) or `no_active_rows` (proof never on) rather than as a
+clean result. STL and Isolation Forest run on the `on` rows joined end to end, so STL's seasonal phase is not aligned
+across off periods; read STL results on intermittently running equipment with that in mind. `--activity ungated` screens every row on purpose.
+`activity.json`, the README and the scoreboard's `gate` / `assessed_rows` columns record the choice and the counts;
+`open-fdd-ml detect` writes the same receipt under `activity` in `summary.json`.
 
 ## ML FDD (`open-fdd-ml`)
 

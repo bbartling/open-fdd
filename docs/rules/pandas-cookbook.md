@@ -2734,11 +2734,13 @@ Flags an implausible sample-to-sample jump for the sensor type.
 
 ### SV-STALE {#sv-stale}
 
-Flags when all modeled sensors stop updating — likely a dead data feed.
+Flags a sensor that sent no valid sample for longer than the stale threshold — missing data.
 
-**Stale data (no fresh samples)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function `_sweep_stale` · [SQL entry](sql-cookbook.html#sv-stale)
+**Stale data (no fresh samples for longer than the stale threshold)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 0 min · function `_sweep_stale` · [SQL entry](sql-cookbook.html#sv-stale)
 
-**Equation**: All modeled sensors unchanged over the stale window — data feed likely dropped.
+**Equation**: A sensor sent no valid sample for longer than the stale threshold (gap or missing series); not gated by run proof.
+
+**Run proof** not gated.
 
 **Inputs**
 
@@ -2749,10 +2751,8 @@ Flags when all modeled sensors stop updating — likely a dead data feed.
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `stale_hours` | Stale window | 2 | 0.25 | 12 | h |
-| `stale_tol` | Stale tolerance | 0.027778 | 0 | 0.555556 | Δ°C |
+| `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
+| `stale_after_hours` | Stale after | 0.5 | 0.25 | 12 | h |
 
 **Outputs** (the same as the SQL twin)
 
@@ -2765,8 +2765,6 @@ Flags when all modeled sensors stop updating — likely a dead data feed.
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 
 **Parity** [match](parity.html#sv-stale)
-
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
 
 ## Weather {#group-weather}

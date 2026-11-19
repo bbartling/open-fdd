@@ -434,7 +434,7 @@ def sqlite_prepare_check(sql, contract):
 
 
 def role_limit_templates(pg_rules):
-    """Templates of the five sweep rules for persisted role-limit overrides (#1589; Full edition, Timescale engine):
+    """Templates of the sweep rules with per-role limits (SV-RANGE, SV-SPIKE, SV-FLATLINE, SV-RATE) for persisted role-limit overrides (#1589; Full edition, Timescale engine):
     the rule and timeline SQL with the per-role limit fragment left as a sentinel, the numbers the fragment references,
     the canonical -> SQL role names, and the shipped limits + allowlists the hook merges overrides onto. Filled with the
     shipped limits each template must give the pack SQL byte for byte (checked here; the JS twin in role-limits.test.mjs)."""
@@ -476,8 +476,9 @@ def rule_tuning_templates(catalog, pg_rules):
             names = sweep_roles[rid]
             allowed = ", ".join("'" + inverse[name].replace("'", "''") + "'" for name in names)
             sql = sql.replace("{{ASSESSABLE_ROLES}}", allowed)
-            fkey = render_rule.FRAGMENT_KEYS[rid]
-            sql = sql.replace("{{" + fkey + "}}", render_rule.sentinel(fkey))
+            fkey = render_rule.FRAGMENT_KEYS.get(rid)   # SV-STALE (#1673) has no per-role limit fragment
+            if fkey:
+                sql = sql.replace("{{" + fkey + "}}", render_rule.sentinel(fkey))
         tl = build_timeline_pg(sql) if pg_rules[rid]["timeline_sql"] else None
         controls = {}
         for k, d in r["parameters"].items():
@@ -504,8 +505,9 @@ def rule_tuning_templates(catalog, pg_rules):
                 vals[d["sql_placeholder"]] = d["default"]
         vals["MODE_DELAY_MIN"] = max(vals.get("MODE_DELAY_MIN", 0), vals.get("STARTUP_DELAY_MIN", 0))
         vals["POLL_SECONDS"] = POLL_SECONDS
-        confirm_min = r["parameters"]["confirm_min"]["default"]
-        vals["CONFIRM_SECONDS"] = confirm_min * 60
+        # a rule with no confirm control (SV-STALE, #1673) keeps the runtime default (render_rule.py, rule-tuning.js)
+        vals["CONFIRM_SECONDS"] = (r["parameters"]["confirm_min"]["default"] * 60 if "confirm_min" in r["parameters"]
+                                   else vals.get("CONFIRM_SECONDS", 600))
         vals["CONFIRM_ROWS"] = max(1, -(-int(vals["CONFIRM_SECONDS"]) // POLL_SECONDS))
         import math
         vals["CONFIRM_ROWS"] = max(1, math.ceil(vals["CONFIRM_SECONDS"] / POLL_SECONDS))
@@ -537,6 +539,11 @@ def rule_tuning_templates(catalog, pg_rules):
         if _fill_tmpl(tl) != pg_rules[rid]["timeline_sql"]:
             raise SystemExit(f"rule_tuning_templates timeline_sql mismatch for {rid}")
         rules[rid] = {"sql": sql, "timeline_sql": tl, "controls": controls}
+        if r.get("legacy_parameters"):
+            # #1673: saved keys this rule renamed or retired (rule-tuning.js normalizeRuleOverride migrates them)
+            rules[rid]["legacy"] = {"aliases": r["legacy_parameters"].get("aliases", {}),
+                                    "retired": r["legacy_parameters"].get("retired", []),
+                                    "note": r["legacy_parameters"].get("note", "")}
     return {"version": 1, "runtime_defaults": runtime_defaults, "rules": rules}
 
 def build():
