@@ -302,8 +302,9 @@ Coil valve open but the air temperature changes less than min_dt
 |---|---|---|
 | `equipment_id` | - | equipment the row describes |
 | `fault_hours` | h | confirmed fault time |
-| `covered_hours` | h | time the rule could assess (known inputs, gate open) |
-| `fault_pct` | % | fault_hours as a share of covered_hours |
+| `covered_hours` | h | time with data the rule could read (data coverage) |
+| `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
+| `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 | `assessment` | - | assessed, insufficient_proof or no_proof |
 
 **Parity** [match](parity.html#coil-perf)
