@@ -6021,7 +6021,11 @@
         "web_oa_dp",
         "fan_status",
         "fan_cmd",
-        "run_proof"
+        "run_proof",
+        "compressor_status",
+        "chiller_status",
+        "chiller_amps",
+        "chiller_power"
       ],
       "output_columns": [
         "equipment_id",
@@ -6197,8 +6201,10 @@
         "heatpump"
       ],
       "optional_roles": [
-        "clg_valve_pct",
-        "chiller_status"
+        "compressor_status",
+        "chiller_status",
+        "chiller_amps",
+        "chiller_power"
       ],
       "output_columns": [
         "equipment_id",
