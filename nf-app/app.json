@@ -79,6 +79,7 @@
     "/static/occupancy.js": "static/occupancy.js",
     "/static/occupancy-editor.js": "static/occupancy-editor.js",
     "/static/sparql.js": "static/sparql.js",
+    "/static/sql-analytics-client.js": "static/sql-analytics-client.js",
     "/static/style.css": "static/style.css",
     "/static/theme-init.js": "static/theme-init.js",
     "/static/theme.js": "static/theme.js",

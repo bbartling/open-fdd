@@ -392,6 +392,22 @@ async function explain_missing_rcx_view(sb, args) {
   };
 }
 
+/**
+ * sql_grid {kind: runtime | mech | econ | bas, grid, specs?}: the dashboard's SQL analytics on a grid the browser sends
+ * (static/sql-analytics-client.js wire format). The answer is never capped: a truncated chart would be wrong.
+ */
+async function sqlGrid(args) {
+  const wire = require('../static/sql-analytics-client.js');
+  const SA = require('./lib/sql-analytics.js');
+  const kind = String(args.kind || '');
+  const parse = (k) => { try { return JSON.parse(String(args[k])); } catch (_) { throw new ToolError(`sql_grid: args.${k} is not JSON`); } };
+  const g = wire.decodeGrid(parse('grid'));
+  const run = { runtime: () => SA.runtimeFromGrid('sqlite', g, parse('specs')), mech: () => SA.mechFromGrid('sqlite', g, parse('specs')),
+    econ: () => SA.econFromGrid('sqlite', g), bas: () => SA.basFromGrid('sqlite', g) }[kind];
+  if (!run) throw new ToolError('sql_grid: args.kind must be runtime, mech, econ or bas');
+  return { kind, result: wire.encodeResult(kind, await run()) };
+}
+
 const TOOLS = { analyze_ahu_weekly_runtime, analyze_mechanical_cooling, analyze_economizer, get_fdd_fault_timeline, resolve_equipment_roles, explain_missing_rcx_view };
 
 // ---- hook ------------------------------------------------------------------------------------------------------------
@@ -451,7 +467,15 @@ async function handle({ sdk, args = {}, config = {}, now = () => Date.now(), con
   const tool = String((args && args.tool) || '');
   let result;
   try {
-    if (!Object.prototype.hasOwnProperty.call(TOOLS, tool)) throw new ToolError(`args.tool must be one of ${Object.keys(TOOLS).join(', ')}`);
+    if (!Object.prototype.hasOwnProperty.call(TOOLS, tool) && tool !== 'sql_grid') throw new ToolError(`args.tool must be one of ${[...Object.keys(TOOLS), 'sql_grid'].join(', ')}`);
+    if (tool === 'sql_grid') {
+      // #1649: the dashboard's analytics, run as SQL on the grid the browser sends (no NF reads, no model)
+      result = { ok: true, tool, ...(await sqlGrid(args)) };
+      result.ms = now() - t0;
+      const text = JSON.stringify(result);
+      log(text);
+      return JSON.parse(text);
+    }
     const http = readOnlyHttp(sdk.http);
     const nowMs = now();
     const cfg = settings.normalizeConfig(config);

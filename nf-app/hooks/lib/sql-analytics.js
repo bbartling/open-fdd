@@ -266,6 +266,7 @@ async function openCore(engine, points, samples, { siteId = "local" } = {}) {
 async function runtimeFromGrid(engine, g, specs) {
   const points = [], samples = [], oats = [], weeks = [], occupied = [];
   const t = g.t;
+  specs = require("../../static/sql-analytics-client.js").plainRuntimeSpecs(t, specs);
   specs.forEach((s, i) => {
     const eq = `e${i}`;
     const motor = g.cols[s.motor] || [];
@@ -277,22 +278,10 @@ async function runtimeFromGrid(engine, g, specs) {
       for (let j = 0; j < t.length; j++) if (o[j] != null && Number.isFinite(Number(o[j]))) samples.push([`${eq}/o`, t[j], Number(o[j])]);
       oats.push([eq, `${eq}/o`]);
     }
-    if (s.weekOf) {
-      const starts = new Set();
-      for (const x of t) { const k = s.weekOf(x); if (k != null && Number.isFinite(k)) starts.add(k); }
-      for (const k of [...starts].sort((a, b) => a - b)) weeks.push([eq, k]);
-    }
-    if (s.occ) {
-      let open = null;
-      for (let j = 0; j < t.length; j++) {
-        const on = !!s.occ(t[j]);
-        if (on && open == null) open = t[j];
-        if (!on && open != null) { occupied.push([eq, open, t[j]]); open = null; }
-      }
-      if (open != null) occupied.push([eq, open, t[t.length - 1] + 1]);
-    }
+    if (s.weeks) for (const k of s.weeks) weeks.push([eq, k]);
+    if (s.occupied) for (const [a, b] of s.occupied) occupied.push([eq, a, b]);
   });
-  const anyOcc = specs.some((s) => s.occ);
+  const anyOcc = specs.some((s) => s.occupied);
   const db = await openCore(engine, points, samples);
   try {
     const rows = await db.query(renderRuntime(engine === "pglite" ? "postgres" : engine,
@@ -302,7 +291,7 @@ async function runtimeFromGrid(engine, g, specs) {
       const spec = specs[Number(String(r.equipment_id).slice(1))];
       const hours = Number(r.run_hours), inH = r.in_hours == null ? null : Number(r.in_hours);
       out.get(spec.key).set(Number(r.week_start_ms), {
-        hours, inHours: spec.occ ? inH : null, afterHours: spec.occ ? hours - inH : null,
+        hours, inHours: spec.occupied ? inH : null, afterHours: spec.occupied ? hours - inH : null,
         oat: r.avg_oat_c == null ? null : Number(r.avg_oat_c), n: Number(r.n_samples), partial: !!Number(r.partial_week),
       });
     }
