@@ -41,6 +41,13 @@ then its own command roles, running when above the contract threshold (`> 0.05`)
 rows are filtered the same way before any method is fitted. With no proof the review is `insufficient_evidence`; ML
 never scores rows the SQL rule did not judge.
 
+## Synthetic end-to-end demo
+
+`python -m open_fdd.ml.review_demo ./review-demo` runs the whole workflow from an installed wheel with no NF,
+database or network: it writes a seeded synthetic SI device folder (`AHU-DEMO`, damper stuck from day 8), two saved
+SQL episodes (a real fault and an alert on a healthy day), their reviews, a labeled corpus and its evaluation, and
+prints a summary. Two episodes cannot support a claim, so `eval.json` reports `claim_supported: false`.
+
 ## Scoring reviews on a labeled held-out corpus
 
 `python -m open_fdd.ml.review_eval labeled.json --out eval.json` scores saved reviews against independent labels
