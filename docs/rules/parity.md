@@ -53,7 +53,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="dmp-1"></a>[DMP-1](sql-cookbook.html#dmp-1) | match |  |
 | <a id="econ-1"></a>[ECON-1](sql-cookbook.html#econ-1) | match |  |
 | <a id="econ-2"></a>[ECON-2](sql-cookbook.html#econ-2) | match |  |
-| <a id="econ-3"></a>[ECON-3](sql-cookbook.html#econ-3) | match | match; differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly. |
+| <a id="econ-3"></a>[ECON-3](sql-cookbook.html#econ-3) | match | match; differs only on edge data: Jittered timestamps (#1642): the weather join itself now matches. pandas joins the raw weather readings as-of (runner.WEB_ASOF_BOUND_SECONDS = 1500 s), as SQL does, which took the edge 4x3 delta from 15.24 h to 0.34 h (MECH-OAT-1 went to 0 and is no longer listed). The remaining 0.34 h on edge AHU-1 is not yet attributed; basic (on-grid) datasets match exactly. |
 | <a id="econ-4"></a>[ECON-4](sql-cookbook.html#econ-4) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
 | <a id="econ-5"></a>[ECON-5](sql-cookbook.html#econ-5) | match |  |
 | <a id="econ-6"></a>[ECON-6](sql-cookbook.html#econ-6) | match |  |
@@ -85,7 +85,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fcu-valve-pass-clg"></a>[FCU-VALVE-PASS-CLG](sql-cookbook.html#fcu-valve-pass-clg) | match | match; differs only on edge data: Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults. |
 | <a id="fcu-valve-pass-htg"></a>[FCU-VALVE-PASS-HTG](sql-cookbook.html#fcu-valve-pass-htg) | match |  |
 | <a id="hp-1"></a>[HP-1](sql-cookbook.html#hp-1) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | match | match; differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly. |
+| <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | match |  |
 | <a id="oa-1"></a>[OA-1](sql-cookbook.html#oa-1) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
 | <a id="oat-meteo"></a>[OAT-METEO](sql-cookbook.html#oat-meteo) | known divergence | weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns |
 | <a id="pid-hunt-1"></a>[PID-HUNT-1](sql-cookbook.html#pid-hunt-1) | match |  |
@@ -142,7 +142,6 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [FCU-MODE-CYCLE](#fcu-mode-cycle) | all | 1 h &plusmn; 0.01 | 1.75 h &plusmn; 0.01 |
 | [FCU-VALVE-PASS-CLG](#fcu-valve-pass-clg) | edge | - | - |
 | [HP-1](#hp-1) | all | 2.9167 h &plusmn; 0.01 | 3 h &plusmn; 0.01 |
-| [MECH-OAT-1](#mech-oat-1) | edge | - | - |
 | [OA-1](#oa-1) | all | 0.1667 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
 | [OAT-METEO](#oat-meteo) | all | 77 h &plusmn; 0.01 | 359.333 h &plusmn; 0.01 |
 | [SV-RATE](#sv-rate) | all | 44 h &plusmn; 0.01 | 199.25 h &plusmn; 0.01 |

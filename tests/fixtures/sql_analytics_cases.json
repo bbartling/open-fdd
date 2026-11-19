@@ -1,0 +1,3039 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "columns": [
+          "week_start",
+          "week_label",
+          "equipment_id",
+          "signal",
+          "motor_kind",
+          "plant_group",
+          "label",
+          "hours",
+          "avg_oat_c",
+          "partial_week",
+          "in_hours",
+          "after_hours"
+        ],
+        "rows": [
+          {
+            "after_hours": 156.0,
+            "avg_oat_c": 12.0,
+            "equipment_id": "equipment-1",
+            "hours": 165.0,
+            "in_hours": 9.0,
+            "label": "equipment-1 \u00b7 fan-status",
+            "motor_kind": "fan",
+            "partial_week": false,
+            "plant_group": "air",
+            "signal": "fan-status",
+            "week_label": "2026-03-02",
+            "week_start": 1772431200000
+          },
+          {
+            "after_hours": 78.0,
+            "avg_oat_c": null,
+            "equipment_id": "equipment-2",
+            "hours": 82.0,
+            "in_hours": 4.0,
+            "label": "equipment-2 \u00b7 hw-pump-cmd",
+            "motor_kind": "pump",
+            "partial_week": false,
+            "plant_group": "boiler",
+            "signal": "hw-pump-cmd",
+            "week_label": "2026-03-02",
+            "week_start": 1772431200000
+          }
+        ]
+      },
+      "frames": {
+        "equipment-1": {
+          "equipment_type": "AHU",
+          "rows": [
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772431200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772434800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772438400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772442000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772445600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772449200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772452800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772456400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772460000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772463600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772467200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772470800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772474400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772478000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772481600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772485200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772488800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772492400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772496000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772499600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772503200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772506800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772510400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772514000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772517600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772521200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772524800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772528400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772532000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772535600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772539200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772542800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772546400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772550000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772553600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772557200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772560800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772564400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772568000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772571600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772575200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772578800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772582400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772586000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772589600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772593200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772596800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772600400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772604000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772607600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772614800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772618400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772622000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772625600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772629200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772632800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772636400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772640000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772643600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772647200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772650800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772654400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772658000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772661600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772665200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772668800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772672400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772676000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772679600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772683200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772686800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772690400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772694000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772697600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772701200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772704800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772708400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772712000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772715600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772719200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772722800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772726400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772730000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772733600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772737200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772740800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772744400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772748000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772751600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772755200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772758800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772762400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772766000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772769600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772773200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772776800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772780400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772784000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772787600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772791200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772794800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772798400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772802000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772805600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772809200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772812800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772816400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772820000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772823600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772827200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772830800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772834400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772838000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772841600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772845200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772848800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772852400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772856000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772859600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772863200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772866800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772870400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772874000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772877600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772881200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772884800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772888400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772892000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772895600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772899200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772902800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772906400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772910000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772913600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772917200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772920800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772924400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772928000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772931600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772935200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772938800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772942400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772946000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772949600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772953200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772956800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772960400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772964000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772967600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772971200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772974800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772978400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772982000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772985600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772989200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772992800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1772996400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773000000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773003600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773007200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773010800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773014400000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773018000000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773021600000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773025200000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773028800000
+            },
+            {
+              "fan-cmd": 0.0,
+              "fan-status": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1773032400000
+            }
+          ]
+        },
+        "equipment-2": {
+          "equipment_type": "BOILER",
+          "rows": [
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772431200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772434800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772438400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772442000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772445600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772449200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772452800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772456400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772460000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772463600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772467200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772470800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772474400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772478000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772481600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772485200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772488800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772492400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772496000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772499600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772503200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772506800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772510400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772514000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772517600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772521200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772524800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772528400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772532000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772535600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772539200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772542800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772546400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772550000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772553600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772557200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772560800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772564400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772568000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772571600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772575200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772578800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772582400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772586000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772589600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772593200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772596800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772600400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772604000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772607600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772614800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772618400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772622000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772625600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772629200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772632800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772636400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772640000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772643600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772647200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772650800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772654400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772658000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772661600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772665200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772668800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772672400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772676000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772679600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772683200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772686800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772690400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772694000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772697600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772701200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772704800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772708400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772712000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772715600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772719200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772722800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772726400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772730000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772733600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772737200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772740800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772744400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772748000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772751600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772755200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772758800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772762400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772766000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772769600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772773200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772776800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772780400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772784000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772787600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772791200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772794800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772798400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772802000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772805600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772809200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772812800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772816400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772820000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772823600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772827200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772830800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772834400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772838000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772841600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772845200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772848800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772852400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772856000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772859600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772863200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772866800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772870400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772874000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772877600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772881200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772884800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772888400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772892000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772895600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772899200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772902800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772906400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772910000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772913600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772917200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772920800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772924400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772928000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772931600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772935200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772938800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772942400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772946000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772949600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772953200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772956800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772960400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772964000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772967600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772971200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772974800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772978400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772982000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772985600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772989200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1772992800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1772996400000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1773000000000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1773003600000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1773007200000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1773010800000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1773014400000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1773018000000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1773021600000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1773025200000
+            },
+            {
+              "hw-pump-cmd": 100.0,
+              "ts_ms": 1773028800000
+            },
+            {
+              "hw-pump-cmd": 0.0,
+              "ts_ms": 1773032400000
+            }
+          ]
+        }
+      },
+      "id": "runtime-dst-week-gap-percent-command",
+      "options": {
+        "occupied_intervals": [
+          [
+            1772460000000,
+            1772492400000
+          ]
+        ],
+        "timezone": "America/Chicago",
+        "week_starts": [
+          1772431200000,
+          1773032400000
+        ]
+      },
+      "role_map": {
+        "equipment-1": {
+          "fan-cmd": "fan-cmd",
+          "fan-status": "fan-status",
+          "outside-air-temp": "outside-air-temp"
+        },
+        "equipment-2": {
+          "hw-pump-cmd": "hw-pump-cmd"
+        }
+      },
+      "tool": "motor_run_hours_weekly"
+    },
+    {
+      "expected": {
+        "columns": [
+          "equipment_id",
+          "source",
+          "source_kind",
+          "series_kind",
+          "series_id",
+          "bin_start",
+          "bin_label",
+          "hours",
+          "runtime_hours",
+          "valid_elapsed_hours",
+          "coverage_pct",
+          "equipment_type",
+          "cooling_technology",
+          "proof_role",
+          "proof_quality",
+          "device_count"
+        ],
+        "rows": [
+          {
+            "bin_label": "<10",
+            "bin_start": 0,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-1",
+            "equipment_type": "AHU",
+            "hours": 0.08,
+            "proof_quality": "direct",
+            "proof_role": "compressor-cmd",
+            "runtime_hours": 0.08,
+            "series_id": "equipment-1",
+            "series_kind": "individual_device",
+            "source": "equipment-1 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "10-16",
+            "bin_start": 1,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-1",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-cmd",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-1",
+            "series_kind": "individual_device",
+            "source": "equipment-1 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "16-21",
+            "bin_start": 2,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-1",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-cmd",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-1",
+            "series_kind": "individual_device",
+            "source": "equipment-1 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "21-27",
+            "bin_start": 3,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-1",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-cmd",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-1",
+            "series_kind": "individual_device",
+            "source": "equipment-1 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "27-32",
+            "bin_start": 4,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-1",
+            "equipment_type": "AHU",
+            "hours": 0.25,
+            "proof_quality": "direct",
+            "proof_role": "compressor-cmd",
+            "runtime_hours": 0.25,
+            "series_id": "equipment-1",
+            "series_kind": "individual_device",
+            "source": "equipment-1 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": ">=32",
+            "bin_start": 5,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-1",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-cmd",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-1",
+            "series_kind": "individual_device",
+            "source": "equipment-1 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "21-27",
+            "bin_start": 3,
+            "cooling_technology": "heat_pump",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-2",
+            "equipment_type": "HP",
+            "hours": 0.08,
+            "proof_quality": "direct",
+            "proof_role": "compressor-status",
+            "runtime_hours": 0.08,
+            "series_id": "equipment-2",
+            "series_kind": "individual_device",
+            "source": "equipment-2 (heatpump)",
+            "source_kind": "heatpump",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "27-32",
+            "bin_start": 4,
+            "cooling_technology": "heat_pump",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-2",
+            "equipment_type": "HP",
+            "hours": 0.25,
+            "proof_quality": "direct",
+            "proof_role": "compressor-status",
+            "runtime_hours": 0.25,
+            "series_id": "equipment-2",
+            "series_kind": "individual_device",
+            "source": "equipment-2 (heatpump)",
+            "source_kind": "heatpump",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": ">=32",
+            "bin_start": 5,
+            "cooling_technology": "heat_pump",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-2",
+            "equipment_type": "HP",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-status",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-2",
+            "series_kind": "individual_device",
+            "source": "equipment-2 (heatpump)",
+            "source_kind": "heatpump",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "<10",
+            "bin_start": 0,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-3",
+            "equipment_type": "AHU",
+            "hours": 0.08,
+            "proof_quality": "direct",
+            "proof_role": "compressor-stage",
+            "runtime_hours": 0.08,
+            "series_id": "equipment-3",
+            "series_kind": "individual_device",
+            "source": "equipment-3 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "10-16",
+            "bin_start": 1,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-3",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-stage",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-3",
+            "series_kind": "individual_device",
+            "source": "equipment-3 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "16-21",
+            "bin_start": 2,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-3",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-stage",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-3",
+            "series_kind": "individual_device",
+            "source": "equipment-3 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "21-27",
+            "bin_start": 3,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-3",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-stage",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-3",
+            "series_kind": "individual_device",
+            "source": "equipment-3 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": "27-32",
+            "bin_start": 4,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-3",
+            "equipment_type": "AHU",
+            "hours": 0.25,
+            "proof_quality": "direct",
+            "proof_role": "compressor-stage",
+            "runtime_hours": 0.25,
+            "series_id": "equipment-3",
+            "series_kind": "individual_device",
+            "source": "equipment-3 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          },
+          {
+            "bin_label": ">=32",
+            "bin_start": 5,
+            "cooling_technology": "dx",
+            "coverage_pct": 100.0,
+            "device_count": 1,
+            "equipment_id": "equipment-3",
+            "equipment_type": "AHU",
+            "hours": 0.17,
+            "proof_quality": "direct",
+            "proof_role": "compressor-stage",
+            "runtime_hours": 0.17,
+            "series_id": "equipment-3",
+            "series_kind": "individual_device",
+            "source": "equipment-3 (ahu_dx)",
+            "source_kind": "ahu_dx",
+            "valid_elapsed_hours": 1.0
+          }
+        ]
+      },
+      "frames": {
+        "equipment-1": {
+          "equipment_type": "AHU",
+          "rows": [
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 8.0,
+              "ts_ms": 1783296000000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 10.0,
+              "ts_ms": 1783296300000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1783296600000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 16.0,
+              "ts_ms": 1783296900000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 18.0,
+              "ts_ms": 1783297200000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 22.0,
+              "ts_ms": 1783297500000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 26.0,
+              "ts_ms": 1783297800000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 28.0,
+              "ts_ms": 1783298100000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 30.0,
+              "ts_ms": 1783298400000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 32.0,
+              "ts_ms": 1783298700000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 34.0,
+              "ts_ms": 1783299000000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 36.0,
+              "ts_ms": 1783299300000
+            },
+            {
+              "compressor-cmd": 100.0,
+              "compressor-status": 0.0,
+              "outside-air-temp": 38.0,
+              "ts_ms": 1783299600000
+            }
+          ]
+        },
+        "equipment-2": {
+          "equipment_type": "HP",
+          "rows": [
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 0.0,
+              "outside-air-temp": 8.0,
+              "ts_ms": 1783296000000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 0.0,
+              "outside-air-temp": 10.0,
+              "ts_ms": 1783296300000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 0.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1783296600000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 0.0,
+              "outside-air-temp": 16.0,
+              "ts_ms": 1783296900000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 0.0,
+              "outside-air-temp": 18.0,
+              "ts_ms": 1783297200000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 0.0,
+              "outside-air-temp": 22.0,
+              "ts_ms": 1783297500000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 1.0,
+              "outside-air-temp": 26.0,
+              "ts_ms": 1783297800000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 1.0,
+              "outside-air-temp": 28.0,
+              "ts_ms": 1783298100000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 1.0,
+              "outside-air-temp": 30.0,
+              "ts_ms": 1783298400000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 1.0,
+              "outside-air-temp": 32.0,
+              "ts_ms": 1783298700000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 1.0,
+              "outside-air-temp": 34.0,
+              "ts_ms": 1783299000000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 1.0,
+              "outside-air-temp": 36.0,
+              "ts_ms": 1783299300000
+            },
+            {
+              "compressor-status": 1.0,
+              "heat-pump-cooling-status": 1.0,
+              "outside-air-temp": 38.0,
+              "ts_ms": 1783299600000
+            }
+          ]
+        },
+        "equipment-3": {
+          "equipment_type": "RTU",
+          "rows": [
+            {
+              "compressor-stage-1": 0.0,
+              "compressor-stage-2": 1.0,
+              "outside-air-temp": 8.0,
+              "ts_ms": 1783296000000
+            },
+            {
+              "compressor-stage-1": 1.0,
+              "compressor-stage-2": 0.0,
+              "outside-air-temp": 10.0,
+              "ts_ms": 1783296300000
+            },
+            {
+              "compressor-stage-1": 0.0,
+              "compressor-stage-2": 1.0,
+              "outside-air-temp": 12.0,
+              "ts_ms": 1783296600000
+            },
+            {
+              "compressor-stage-1": 1.0,
+              "compressor-stage-2": 0.0,
+              "outside-air-temp": 16.0,
+              "ts_ms": 1783296900000
+            },
+            {
+              "compressor-stage-1": 0.0,
+              "compressor-stage-2": 1.0,
+              "outside-air-temp": 18.0,
+              "ts_ms": 1783297200000
+            },
+            {
+              "compressor-stage-1": 1.0,
+              "compressor-stage-2": 0.0,
+              "outside-air-temp": 22.0,
+              "ts_ms": 1783297500000
+            },
+            {
+              "compressor-stage-1": 0.0,
+              "compressor-stage-2": 1.0,
+              "outside-air-temp": 26.0,
+              "ts_ms": 1783297800000
+            },
+            {
+              "compressor-stage-1": 1.0,
+              "compressor-stage-2": 0.0,
+              "outside-air-temp": 28.0,
+              "ts_ms": 1783298100000
+            },
+            {
+              "compressor-stage-1": 0.0,
+              "compressor-stage-2": 1.0,
+              "outside-air-temp": 30.0,
+              "ts_ms": 1783298400000
+            },
+            {
+              "compressor-stage-1": 1.0,
+              "compressor-stage-2": 0.0,
+              "outside-air-temp": 32.0,
+              "ts_ms": 1783298700000
+            },
+            {
+              "compressor-stage-1": 0.0,
+              "compressor-stage-2": 1.0,
+              "outside-air-temp": 34.0,
+              "ts_ms": 1783299000000
+            },
+            {
+              "compressor-stage-1": 1.0,
+              "compressor-stage-2": 0.0,
+              "outside-air-temp": 36.0,
+              "ts_ms": 1783299300000
+            },
+            {
+              "compressor-stage-1": 0.0,
+              "compressor-stage-2": 1.0,
+              "outside-air-temp": 38.0,
+              "ts_ms": 1783299600000
+            }
+          ]
+        }
+      },
+      "id": "cooling-individual-percent-and-heat-pump-mode",
+      "role_map": {
+        "equipment-1": {
+          "compressor-cmd": "compressor-cmd",
+          "compressor-status": "compressor-status",
+          "outside-air-temp": "outside-air-temp"
+        },
+        "equipment-2": {
+          "compressor-status": "compressor-status",
+          "heat-pump-cooling-status": "heat-pump-cooling-status",
+          "outside-air-temp": "outside-air-temp"
+        },
+        "equipment-3": {
+          "compressor-stage-1": "compressor-stage-1",
+          "compressor-stage-2": "compressor-stage-2",
+          "outside-air-temp": "outside-air-temp"
+        }
+      },
+      "tool": "mech_cooling_oat_bins"
+    },
+    {
+      "expected": {
+        "metrics": {
+          "columns": [
+            "equipment_id",
+            "equipment_type",
+            "fan_on_hours",
+            "n_fan_on_samples",
+            "n_identifiable",
+            "has_damper",
+            "median_mat_resid_f",
+            "mat_resid_mae_f",
+            "oa_frac_vs_damper_slope",
+            "oa_frac_vs_damper_intercept",
+            "oa_frac_vs_damper_r2",
+            "dt_min_f"
+          ],
+          "rows": [
+            {
+              "dt_min_f": 5.555555555555555,
+              "equipment_id": "equipment-1",
+              "equipment_type": "AHU",
+              "fan_on_hours": 0.83,
+              "has_damper": true,
+              "mat_resid_mae_f": 0.0,
+              "median_mat_resid_f": 0.0,
+              "n_fan_on_samples": 10,
+              "n_identifiable": 10,
+              "oa_frac_vs_damper_intercept": null,
+              "oa_frac_vs_damper_r2": null,
+              "oa_frac_vs_damper_slope": null
+            }
+          ]
+        },
+        "skipped": []
+      },
+      "frames": {
+        "equipment-1": {
+          "equipment_type": "AHU",
+          "rows": [
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": null,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296000000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296300000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296600000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296900000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": null,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783297200000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783297500000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783297800000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783298100000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": null,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783298400000
+            },
+            {
+              "fan-status": 1.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783298700000
+            },
+            {
+              "fan-status": 0.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783299000000
+            },
+            {
+              "fan-status": 0.0,
+              "mixed-air-temp": 19.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783299300000
+            },
+            {
+              "fan-status": 0.0,
+              "mixed-air-temp": null,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783299600000
+            }
+          ]
+        }
+      },
+      "id": "economizer-percent-damper-mat-holes",
+      "role_map": {
+        "equipment-1": {
+          "fan-status": "fan-status",
+          "mixed-air-temp": "mixed-air-temp",
+          "outside-air-damper": "outside-air-damper",
+          "outside-air-temp": "outside-air-temp",
+          "return-air-temp": "return-air-temp"
+        }
+      },
+      "tool": "economizer_free_cooling_diagnostics"
+    },
+    {
+      "expected": {
+        "metrics": {
+          "columns": [
+            "equipment_id",
+            "equipment_type",
+            "fan_on_hours",
+            "n_fan_on_samples",
+            "n_identifiable",
+            "has_damper",
+            "median_mat_resid_f",
+            "mat_resid_mae_f",
+            "oa_frac_vs_damper_slope",
+            "oa_frac_vs_damper_intercept",
+            "oa_frac_vs_damper_r2",
+            "dt_min_f"
+          ],
+          "rows": []
+        },
+        "skipped": [
+          {
+            "equipment_id": "equipment-1",
+            "reason": "missing_MAT"
+          }
+        ]
+      },
+      "frames": {
+        "equipment-1": {
+          "equipment_type": "AHU",
+          "rows": [
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296000000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296300000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296600000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783296900000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783297200000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783297500000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783297800000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783298100000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783298400000
+            },
+            {
+              "fan-status": 1.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783298700000
+            },
+            {
+              "fan-status": 0.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783299000000
+            },
+            {
+              "fan-status": 0.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783299300000
+            },
+            {
+              "fan-status": 0.0,
+              "outside-air-damper": 25.0,
+              "outside-air-temp": 10.0,
+              "return-air-temp": 22.0,
+              "ts_ms": 1783299600000
+            }
+          ]
+        }
+      },
+      "id": "economizer-missing-mat",
+      "role_map": {
+        "equipment-1": {
+          "fan-status": "fan-status",
+          "outside-air-damper": "outside-air-damper",
+          "outside-air-temp": "outside-air-temp",
+          "return-air-temp": "return-air-temp"
+        }
+      },
+      "tool": "economizer_free_cooling_diagnostics"
+    },
+    {
+      "expected": {
+        "equipment-1": {
+          "band_c": 2.0,
+          "bias": 1.5,
+          "mae": 1.5,
+          "max_abs": 1.5,
+          "max_age_seconds": 1200.0,
+          "n": 15,
+          "within_band": 1.0
+        }
+      },
+      "frames": {
+        "equipment-1": {
+          "equipment_type": "AHU",
+          "rows": [
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783296000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783296600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783297200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783297800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783298400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783299000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783299600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783300200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783300800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783301400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783302000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783302600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783303200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783303800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783304400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783305000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783305600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783306200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783306800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783307400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783308000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783308600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783309200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783309800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783310400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783311000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783311600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783312200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783312800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783313400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783314000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783314600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783315200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783315800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783316400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783317000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783317600000
+            }
+          ]
+        }
+      },
+      "id": "web-weather-outage",
+      "options": {
+        "max_age_seconds": 1200
+      },
+      "role_map": {
+        "equipment-1": {
+          "outside-air-temp": "outside-air-temp"
+        }
+      },
+      "tool": "bas_vs_web_oat_stats",
+      "web_weather": [
+        {
+          "ts_ms": 1783296000000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783296600000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783297200000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783297800000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783298400000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783299000000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783314000000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783314600000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783315200000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783315800000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783316400000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783317000000,
+          "value_c": 20.0
+        },
+        {
+          "ts_ms": 1783317600000,
+          "value_c": 20.0
+        }
+      ]
+    },
+    {
+      "expected": {
+        "equipment-1": {
+          "band_c": 2.0,
+          "bias": null,
+          "mae": null,
+          "max_abs": null,
+          "max_age_seconds": 1200.0,
+          "n": 0,
+          "within_band": null
+        }
+      },
+      "frames": {
+        "equipment-1": {
+          "equipment_type": "AHU",
+          "rows": [
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783296000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783296600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783297200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783297800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783298400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783299000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783299600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783300200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783300800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783301400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783302000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783302600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783303200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783303800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783304400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783305000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783305600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783306200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783306800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783307400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783308000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783308600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783309200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783309800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783310400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783311000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783311600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783312200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783312800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783313400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783314000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783314600000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783315200000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783315800000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783316400000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783317000000
+            },
+            {
+              "outside-air-temp": 21.5,
+              "ts_ms": 1783317600000
+            }
+          ]
+        }
+      },
+      "id": "web-weather-empty",
+      "options": {
+        "max_age_seconds": 1200
+      },
+      "role_map": {
+        "equipment-1": {
+          "outside-air-temp": "outside-air-temp"
+        }
+      },
+      "tool": "bas_vs_web_oat_stats",
+      "web_weather": []
+    }
+  ],
+  "note": "Legacy pandas output names ending _f contain SI temperatures/deltas; no Fahrenheit conversion.",
+  "schema_version": 1,
+  "source": "repository pandas analytics; deterministic synthetic data only",
+  "timestamp_unit": "UTC epoch milliseconds",
+  "units": {
+    "commands": "percent 0-100",
+    "duration": "hours",
+    "motor_status": "boolean 0-1",
+    "temperature": "degC",
+    "temperature_difference": "degC"
+  }
+}
