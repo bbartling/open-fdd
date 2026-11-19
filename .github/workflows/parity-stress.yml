@@ -41,7 +41,7 @@ jobs:
           node-version: "22"
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
       - name: Install oracle (pandas), rdflib, DuckDB and nf-app dependencies
         run: |
@@ -73,7 +73,7 @@ jobs:
         profile: [basic, edge]
     services:
       pg:
-        image: postgres:17
+        image: postgres:17.12
         env:
           POSTGRES_PASSWORD: example
         ports: ["5432:5432"]
@@ -89,7 +89,7 @@ jobs:
           node-version: "22"
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
       - name: Install oracle (pandas), DuckDB, Postgres driver and nf-app dependencies
         run: |

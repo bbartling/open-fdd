@@ -74,24 +74,14 @@ The preparation host's installed `open-fdd` distribution is 4.4.1 (62 diagnostic
 - The focused SV fixtures cover per-role isolation, long and trailing silence (SV-STALE only), de-energized silence, expected series with no sample (`nf-app/tests/sv-stale-gap.test.mjs`), irregular 7-minute sampling and spike role attribution on both SQL engines. They are synthetic screening proofs, not field-data accuracy or every boundary value. The separate Timescale suite provides additional dialect/runtime qualification.
 - Sensor-sweep tolerance metadata may span different physical quantities. Temperature display conversions are a convenience, not permission to apply Celsius offsets to humidity or pressure tolerances. Resolve per-role quantities explicitly for a warehouse UI.
 
-## fault_pct denominators (#1631)
+## fault_pct denominators (#1631, #1723)
 
-Run-proof gated SQL rules divide `fault_hours` by `active_hours`: held time while the resolved run proof is on (or the
-gate is off). pandas `finalize_result` divides by the rule's own operational-gate time (`resolve_operational_mask`),
-which for most AHU rules is the same fan proof but differs where the rule has its own gate:
-
-- hydronic and plant rules (CHW-1..4, CW-APR-1, CW-FAN-1, CW-OPT-1, TRIM-3/4): pump / flow / chiller proof plus the
-  rule's startup delay;
-- HP-1 and DMP-1, whose pandas gate is not the run proof;
-- the rolling-window rules FC4, PID-HUNT-1 and VAV-4, whose pandas active mask is roughly half the run-proof time on the
-  synthetic data;
-- every gated rule, by a few samples: the startup / fan-restart holdoff in the pandas active mask.
-
-`fault_hours` is unaffected (the parity compare and its pins use it). The parity verdict carries both denominators per
-rule and equipment (`sql_active_hours`, `pandas_active_hours`) and lists every pair that differs by more than
-`Policy.active_tol_h` (1 h) in `active_hours_mismatches`; `tests/parity/stress.py` prints them as "fault_pct denominator
-differs". This is informational, not a failure. On basic 4x3: 31 pairs, e.g. CHW-2 / AHU-1 SQL 42.0 h vs pandas 21.2 h
-and DMP-1 / AHU-2 SQL 34.5 h vs pandas 49.3 h. Aligning these gates in SQL (so `fault_pct` equals pandas) is a follow-up.
+Resolved in 5.0.21. Run-proof gated rules divide `fault_hours` by proven-on time in both engines: SQL `active_hours` (held
+time while the resolved run proof is on, or every held sample when the gate is off) and pandas `finalize_result(pct_mask=...)`
+(the run-proof mask, or every sample when the gate is off), reported as `metrics["active_hours"]`. Each rule's own gate
+still decides which samples can fault, so `fault_hours` is unchanged. The parity verdict compares the two denominators
+and fails on a difference beyond `Policy.active_tol_h` (1 h); a rule pandas did not assess (SKIPPED) is not compared.
+Basic 4x3 and 8x7 and edge 4x3: 0 pairs.
 
 ## Run proof from an analog command with no unit (#1631)
 

@@ -55,7 +55,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install nf-app npm dependencies (when a lockfile exists)
         run: |
@@ -145,7 +145,7 @@ jobs:
           if grep -Eq "^# skipped [1-9]|^ℹ skipped [1-9]" "$RUNNER_TEMP/ts.log"; then echo "Timescale tests skipped: failing the lane"; exit 1; fi
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: pandas == SQL parity through the core tables (fail on skip)
         env:
           OPENFDD_TS_TEST_DISPOSABLE: "1"
