@@ -271,7 +271,7 @@ def main() -> int:
     if not args.no_pandas:
         for line in v.pin_violations:
             print(f"pinned delta out of band: {line}")
-        for line in v.active_hours_mismatches:   # informational (#1631): fault_pct denominators, not a failure
+        for line in v.active_hours_mismatches:   # #1723: a failure (pandas and SQL share the proven-on denominator)
             print(f"fault_pct denominator differs: {line}")
         print(v.summary(ok))
     if args.out:
