@@ -527,6 +527,32 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
   }
 });
 
+test("upgrade v5 -> v6 (#1707): the status CHECK gains METRIC, re-install is a no-op, statistic rules store METRIC", { skip }, async () => {
+  // put the table back to the v5 constraint, as an existing 5.0.20 install has it
+  await db.query("ALTER TABLE fdd.rule_result DROP CONSTRAINT IF EXISTS rule_result_status_check");
+  await db.query(`ALTER TABLE fdd.rule_result ADD CONSTRAINT rule_result_status_check
+    CHECK (status IN ('PASS','FAULT','INCONCLUSIVE','SKIPPED','ERROR','STALE'))`);
+  await db.query("UPDATE openfdd.config SET value = to_jsonb(5) WHERE key = 'schema_version'");
+  const def = async () => (await db.query(`SELECT string_agg(pg_get_constraintdef(oid), ' ') AS d FROM pg_constraint
+    WHERE conrelid = 'fdd.rule_result'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%INCONCLUSIVE%'`)).rows[0].d;
+  assert.ok(!(await def()).includes("METRIC"));
+  assert.equal((await ts.install(db)).schemaVersion, 6);
+  assert.ok((await def()).includes("METRIC"), "the CHECK now allows METRIC");
+  assert.equal((await ts.install(db)).schemaVersion, 6, "second install is a no-op");
+  const n = (await db.query(`SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid = 'fdd.rule_result'::regclass
+    AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%INCONCLUSIVE%'`)).rows[0].n;
+  assert.equal(n, 1, "exactly one status CHECK");
+  const row = ts.toResultRow({ runTs: "2026-10-15T00:00:00Z", equip: EQUIP, site: "site-1", ruleId: "AVG-ZONE-TEMP",
+    row: { equipment_id: EQUIP, avg_zone_temp: 22.4, min_zone_temp: 20.1, max_zone_temp: 24.0 }, windowStart: FROM, windowEnd: TO,
+    metric: true });
+  assert.equal(await ts.writeResults(db, [row]), 1);
+  const back = (await db.query("SELECT status, reason, metrics FROM fdd.rule_result WHERE rule_id = 'AVG-ZONE-TEMP' AND created_at = $1",
+    ["2026-10-15T00:00:00Z"])).rows[0];
+  assert.equal(back.status, "METRIC");
+  assert.equal(back.reason, null);
+  assert.equal(back.metrics.avg_zone_temp, 22.4);
+});
+
 test("writeResults upserts rule results into fdd.rule_result", { skip }, async () => {
   assert.ok(ruleRun, "needs the rules test");
   const runTs = "2026-10-14T00:00:00Z";
