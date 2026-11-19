@@ -69,6 +69,7 @@ Still open into the release when this was written: #1729 (COIL-PERF `active_hour
 ### Issues closed in this cycle
 
 - #1631 Run-proof gate: SQL/pack coverage semantics and runner denominator follow-ups
+- #1633 Deploy: nf_app_sync push should preflight the Timescale schema version before writing hooks
 - #1634 nf_app_sync: --dry-run is silently ignored by push (it writes and restarts the app)
 - #1635 SPARQL client frames: carry the resolved run proof so client-side rules gate like the hook
 - #1636 FDD hook: synthesized occ_mode ignores the saved weekly occupancy calendar
@@ -96,6 +97,8 @@ Still open into the release when this was written: #1729 (COIL-PERF `active_hour
 - #1624 CI: verify Full hook and run-result authorization on disposable Normal Framework
 - #1639 Expanded parity stress testing beyond the three-way SI tiers
 - #1640 Port DataFusion back as a fourth SI parity engine (pandas == DataFusion == SQL)
+- #1641 Generic coil performance rule (heating and cooling) for any coil-bearing equipment
+- #1642 Tighten SQL-vs-pandas parity pins: a downstream SQL port beats them on 4x3/8x7
 - #1643 NF plugin UI: Overview is laggy again — default to plant + zone temps, move heavy plots onto their own routes
 - #1644 Refactor nf-app/hooks/fdd.js (~1,444 lines) into small, progressive, easy-to-follow modules
 - #1645 Lite edition: replace SQLite-WASM / PGlite with a warm in-memory DuckDB engine + Parquet history (Full stays on Timescale)
@@ -112,9 +115,6 @@ Still open into the release when this was written: #1729 (COIL-PERF `active_hour
 ### Open, not labelled 5.0.22 (owner to confirm)
 
 - #1569 Data modeling: formal ontology extension policy (own namespace, subclass existing Brick/223P/Haystack concepts, queryable + validated extensions)
-- #1633 Deploy: nf_app_sync push should preflight the Timescale schema version before writing hooks
-- #1641 Generic coil performance rule (heating and cooling) for any coil-bearing equipment
-- #1642 Tighten SQL-vs-pandas parity pins: a downstream SQL port beats them on 4x3/8x7
 - #1653 open-fdd-nf: export one equipment's history as a device folder (units and roles from the model)
 - #1658 Anomaly Isolation Forest always flags about 1% of rows; make it opt-in and say so
 - #1661 open_fdd.rules.run_all: accept equipment_type and explain an all-skipped run
