@@ -6,8 +6,8 @@ Every detector follows the same small interface::
     det.fit(normal_frame)               # rows believed fault-free (ignored by zscore / mad)
     flags = det.flags(frame)            # boolean Series on frame.index (False where not active)
 
-Detectors only look at *active* rows (supply fan proven on and, when the role exists, occupied); see
-:func:`active_mask`. Thresholds are set from the training rows only (default: the 99th percentile of the
+Detectors only look at *active* rows (operating proof on and, when the role has data, occupied; rows without
+proof are not assessed); see :func:`active_mask`. Thresholds are set from the training rows only (default: the 99th percentile of the
 normal score, i.e. about 1 % of normal 5-minute samples flagged before any persistence filter).
 
 - ``pca``: PCA + squared prediction error (SPE / Q statistic) with per-role contributions (Wang & Xiao 2004).
@@ -122,18 +122,16 @@ def canonical_roles(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def active_mask(frame: pd.DataFrame) -> pd.Series:
-    """Rows where the unit runs: ``fan-status`` > 0.5 (else ``fan-cmd`` > 0.05), and ``occupied`` > 0.5 if present."""
-    if "fan-status" in frame.columns:
-        on = pd.to_numeric(frame["fan-status"], errors="coerce") > 0.5
-    elif "fan-cmd" in frame.columns:
-        on = pd.to_numeric(frame["fan-cmd"], errors="coerce") > 0.05
-    else:
-        on = pd.Series(True, index=frame.index)
-    if "occupied" in frame.columns:
-        occ = pd.to_numeric(frame["occupied"], errors="coerce")
-        if occ.notna().any():
-            on &= occ > 0.5
-    return on.fillna(False).astype(bool)
+    """Rows the shared activity policy assesses (:mod:`open_fdd.analytics.anomaly.activity`, ``proof``).
+
+    Proof is the run-proof contract (``open_fdd.run_proof.derive_run_proof``): a resolved ``run-proof`` column,
+    else an own status role (``fan-status`` first), else an own command (``fan-cmd`` first), each ``> 0.05``;
+    ``occupied`` must be ``> 0.5`` when it has data.
+    Rows without proof are not assessed: a frame with no proof role has no active rows.
+    """
+    from open_fdd.analytics.anomaly.activity import activity_mask
+
+    return activity_mask(canonical_roles(frame), policy="proof")
 
 
 def _features(frame: pd.DataFrame, roles: list[str]) -> pd.DataFrame:

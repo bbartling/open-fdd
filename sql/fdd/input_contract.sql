@@ -8,3 +8,4 @@ CREATE TEMP TABLE weather ("timestamp_utc" timestamp with time zone, "oa_t" DOUB
 CREATE TEMP TABLE utility_interval ("timestamp_utc" timestamp with time zone, "kwh" DOUBLE PRECISION);
 CREATE TEMP TABLE utility_monthly ("billing_period" VARCHAR, "kwh" DOUBLE PRECISION);
 CREATE TEMP TABLE sensor_history ("equipment_id" VARCHAR, "series_id" VARCHAR, "sensor_role" VARCHAR, "unit" VARCHAR, "timestamp_utc" timestamp with time zone, "value" DOUBLE PRECISION);
+CREATE TEMP TABLE sweep_series ("equipment_id" VARCHAR, "series_id" VARCHAR, "sensor_role" VARCHAR, "unit" VARCHAR, "window_start" timestamp with time zone, "window_end" timestamp with time zone);

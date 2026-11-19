@@ -363,7 +363,7 @@
   "SV-RANGE": 5.0,
   "SV-RATE": 10.0,
   "SV-SPIKE": 5.0,
-  "SV-STALE": 5.0,
+  "SV-STALE": 0.0,
   "TRIM-1": 30.0,
   "TRIM-3": 30.0,
   "TRIM-4": 30.0,

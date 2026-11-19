@@ -35,10 +35,10 @@ def test_global_defaults_equal_the_sql_tuning_catalog():
     catalog = {r["rule_id"]: r["parameters"] for r in json.loads((ROOT / "sql/fdd/tuning_catalog.json").read_text(encoding="utf-8"))["rules"]}
     defaults = cat.ROLE_LIMITS["defaults"]
     assert defaults["flat_tol_temperature"] == catalog["SV-FLATLINE"]["flatline_tol"]["default"]
-    assert defaults["stale_tol_temperature"] == catalog["SV-STALE"]["stale_tol"]["default"]
     assert defaults["rate_per_h"] == catalog["SV-RATE"]["steady_fault_per_hour"]["default"]
     assert defaults["flat_s"] == catalog["SV-FLATLINE"]["flatline_hours"]["default"] * 3600
-    assert defaults["stale_s"] == catalog["SV-STALE"]["stale_hours"]["default"] * 3600
+    # #1673: stale_s (the UI's estimated stale lane) is the SV-STALE missing-data threshold; stale_tol_temperature is retired
+    assert defaults["stale_s"] == catalog["SV-STALE"]["stale_after_hours"]["default"] * 3600
 
 
 def test_every_allowlisted_role_has_a_limits_entry_with_a_quantity():
@@ -58,7 +58,8 @@ def test_default_render_keeps_the_legacy_sql_literals():
     assert "{{" not in rng
     assert "ABS(value - previous_value) > 20.0 * 1" in render_rule.render("SV-SPIKE")
     assert "CASE WHEN sensor_role IN ('oa_h','ra_h','zone_rh','ma_h','sa_h') THEN 0.1 ELSE 0.055556 END" in render_rule.render("SV-FLATLINE")
-    assert "CASE WHEN sensor_role IN ('oa_h','ra_h','zone_rh','ma_h','sa_h') THEN 0.05 ELSE 0.027778 END" in render_rule.render("SV-STALE")
+    stale = render_rule.render("SV-STALE")   # #1673: missing data only, no per-role value tolerance
+    assert "dt_seconds > 1800" in stale and "STALE_TOL" not in stale and "0.027778" not in stale
     assert "(3.333333 * 100 / 100.0)" in render_rule.render("SV-RATE")
 
 
@@ -169,7 +170,8 @@ def test_per_role_tolerance_and_spike_overrides_render_and_apply():
     limits = cat.load_role_limits(doc)
     flat = render_rule.render("SV-FLATLINE", role_limits=limits)
     assert "WHEN sensor_role IN ('zone_t') THEN 0.2" in flat and "THEN 0.1" in flat and "ELSE 0.055556 END" in flat
-    assert "WHEN sensor_role IN ('zone_t') THEN 0.3" in render_rule.render("SV-STALE", role_limits=limits)
+    # #1673: stale_tol is retired (kept readable in the limits file); SV-STALE is missing data only and ignores it
+    assert render_rule.render("SV-STALE", role_limits=limits) == render_rule.render("SV-STALE")
     assert "(sensor_role = 'zone_t' AND previous_value IS NOT NULL" in render_rule.render("SV-SPIKE", role_limits=limits)
     assert "ABS(value - previous_value) > 2.5 * 1" in render_rule.render("SV-SPIKE", role_limits=limits)
     assert "WHEN sensor_role = 'oa_t' THEN (1.5 * 100 / 100.0)" in render_rule.render("SV-RATE", role_limits=limits)

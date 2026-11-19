@@ -2103,53 +2103,25 @@ rules:
 
   - rule_id: SV-STALE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]
-    run_proof: gated
+    run_proof: exempt
+    run_proof_note: "missing-data monitoring: a gap is a fault whether or not the motor runs (#1673)"
     sql_file: sv_stale.sql
     pandas_function: null
-    description: Stale data (no fresh samples)
-    # Pandas gate is `always` (sensor sweep); do not require fan_cmd.
+    description: Stale data (no fresh samples for longer than the stale threshold)
+    # #1673: SV-STALE is missing data only (gaps and expected series with no sample); a stuck value that is still polled is
+    # SV-FLATLINE. Not gated by run proof. Gap scoring was removed from SV-FLATLINE, SV-RANGE and SV-SPIKE.
     # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
     required_roles: []
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, run_proof]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
     dashboard_wired: false
     delete_python_candidate: false
-    confirm_seconds: 300
+    confirm_seconds: 0
     parameters:
-      require_run_proof:
-        label: Require run proof
-        default: 1.0
-        min: 0.0
-        max: 1.0
-        step: 1.0
-        unit: bool
-        kind: boolean
-        frontend_control: slider
-        sql_placeholder: REQUIRE_RUN_PROOF
-      confirm_seconds:
-        label: Confirm time
-        default: 300.0
-        min: 0.0
-        max: 3600.0
-        step: 300.0
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: CONFIRM_SECONDS
-      stale_hours:
-        label: Stale window
-        default: 2.0
-        min: 0.25
-        max: 12.0
-        step: 0.25
-        unit: h
-        kind: dimensionless
-        frontend_control: slider
-        sql_placeholder: STALE_HOURS
-      max_silence_hours:
-        label: Max sensor silence
+      stale_after_hours:
+        label: Stale after
         default: 0.5
         min: 0.25
         max: 12.0
@@ -2157,17 +2129,7 @@ rules:
         unit: h
         kind: dimensionless
         frontend_control: slider
-        sql_placeholder: MAX_SILENCE_HOURS
-      stale_tol:
-        label: Stale tolerance
-        default: 0.027778
-        min: 0.0
-        max: 0.555556
-        step: 0.005556
-        unit: degC
-        kind: temperature_difference
-        frontend_control: slider
-        sql_placeholder: STALE_TOL
+        sql_placeholder: STALE_AFTER_HOURS
 
   - rule_id: SV-RATE
     equipment_kinds: [ahu, vav, chiller, boiler, weather, zone_other, heatpump]

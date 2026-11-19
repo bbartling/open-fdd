@@ -77,6 +77,20 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.
 
+**Activity.** `screen` and `open-fdd-ml detect` share one policy (`open_fdd.analytics.anomaly.activity`). Each row
+is `on`, `off`, `unoccupied` or `unknown`. The proof source is the run-proof contract (`sql/fdd/run_proof.json`,
+`open_fdd.run_proof.derive_run_proof`), chosen per folder: a resolved `run-proof` column first, then an own status
+role (`fan-status` first), then an own command (`fan-cmd` first), all running when `> 0.05`. A frame marked
+`run_proof_resolved` counts only its `run-proof` column. A missing value on the chosen source makes that row
+`unknown`; it does not fall back to another source. With the default
+`--activity proof`, equipment points are screened only on `on` rows, and site/weather points (outdoor air
+temperature and humidity) on every row. A point with nothing to assess is listed as `no_run_proof` (no proof role),
+`no_known_proof` (a proof role with no known value on any row) or `no_active_rows` (proof never on) rather than as a
+clean result. STL and Isolation Forest run on the `on` rows joined end to end, so STL's seasonal phase is not aligned
+across off periods; read STL results on intermittently running equipment with that in mind. `--activity ungated` screens every row on purpose.
+`activity.json`, the README and the scoreboard's `gate` / `assessed_rows` columns record the choice and the counts;
+`open-fdd-ml detect` writes the same receipt under `activity` in `summary.json`.
+
 ## ML FDD (`open-fdd-ml`)
 
 ```bash

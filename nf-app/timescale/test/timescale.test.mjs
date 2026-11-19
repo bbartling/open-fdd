@@ -470,9 +470,15 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
   const sensorHistory = (await q("SELECT * FROM pg_temp.sensor_history")).map(({ timestamp_utc, ...r }) => ({ ...r, ts: timestamp_utc.getTime() }));
   assert.equal(new Set(sensorHistory.map((row) => row.series_id)).size, 6);
   assert.equal(new Set(sensorHistory.filter((row) => row.sensor_role === "sat").map((row) => row.series_id)).size, 2);
+  // #1673: load() declares every fetched series with the requested window [FROM, TO). Give pglite the same
+  // declaration, or SV-STALE there falls back to the observed window (which ends one step before TO).
+  const sweepSeries = (await q("SELECT * FROM pg_temp.sweep_series")).map(({ window_start, window_end, ...r }) => ({
+    ...r, window_start: window_start.getTime(), window_end: window_end.getTime(),
+  }));
+  assert.equal(sweepSeries.length, 6, "load() declares the six fetched sweep series");
   const input = {
     historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })),
-    history: hist, weather, sensorHistory,
+    history: hist, weather, sensorHistory, sweepSeries,
   };
   const eng = await createEngine({ kind: "pglite", pack });
   let matched = 0, bothError = 0, withFault = 0, timelines = 0;

@@ -307,6 +307,10 @@ def _cmd_detect(args) -> int:
     }
     if overlap:
         summary["training_overlap"] = overlap
+    from open_fdd.analytics.anomaly.activity import activity
+
+    # scoped like the other counts: the scored (evaluation) rows, not the training rows of the folder
+    summary["activity"] = activity(frame[scored.to_numpy()], policy="proof").receipt()
     if args.method == "pca" and isinstance(det, PCASPE):
         contrib = det.contributions(frame)
         contrib.to_csv(out / "contributions.csv", index_label="timestamp_utc")
