@@ -109,7 +109,10 @@ function loadSandbox(http, nowMs, tzSources) {
     console, URLSearchParams, TextDecoder, atob, btoa, Intl, Date: PinnedDate,
     localStorage: { getItem: () => 'si' },                  // calculations are SI whatever the display system
     // #1649: the analytics are SQL (sql/analytics/*.sql) run in-process on SQLite, never JS math
-    ofddSqlAnalytics: { runtime: (g, specs) => require('./lib/sql-analytics.js').runtimeFromGrid('sqlite', g, specs) },
+    ofddSqlAnalytics: {
+      runtime: (g, specs) => require('./lib/sql-analytics.js').runtimeFromGrid('sqlite', g, specs),
+      mech: (g, specs) => require('./lib/sql-analytics.js').mechFromGrid('sqlite', g, specs),
+    },
     api: async (p) => (await http.get(p)).data,
   });
   for (const f of SCRIPTS) vm.runInContext(fs.readFileSync(path.join(STATIC, f), 'utf8'), ctx, { filename: f });

@@ -288,8 +288,36 @@ async function runtimeFromGrid(engine, g, specs) {
   }
 }
 
+/**
+ * Mechanical-cooling hours per SI OAT bin from an aligned grid, one proof column per equip (a one-tier ladder).
+ * specs: [{ key, proof: colName, oat: colName }] -> Map(key -> [hours per bin, MECH_OAT_BIN_LABELS order]).
+ */
+async function mechFromGrid(engine, g, specs) {
+  const points = [], samples = [], plan = { candidates: [], gates: [], oats: [] };
+  const t = g.t;
+  specs.forEach((s, i) => {
+    const eq = `e${i}`, proof = g.cols[s.proof] || [], oat = g.cols[s.oat] || [];
+    points.push({ point_key: `${eq}/p`, equipment_id: eq, role: "proof" }, { point_key: `${eq}/o`, equipment_id: eq, role: "oat" });
+    for (let j = 0; j < t.length; j++) {
+      if (proof[j] != null && Number.isFinite(Number(proof[j]))) samples.push([`${eq}/p`, t[j], Number(proof[j])]);
+      if (oat[j] != null && Number.isFinite(Number(oat[j]))) samples.push([`${eq}/o`, t[j], Number(oat[j])]);
+    }
+    plan.candidates.push([eq, 1, 0, `${eq}/p`, "on", null]);
+    plan.oats.push([eq, `${eq}/o`]);
+  });
+  const db = await openCore(engine, points, samples);
+  try {
+    const rows = await db.query(renderMechBins(engine === "pglite" ? "postgres" : engine, plan));
+    const out = new Map(specs.map((s) => [s.key, MECH_OAT_BIN_LABELS.map(() => 0)]));
+    for (const r of rows) out.get(specs[Number(String(r.equipment_id).slice(1))].key)[Number(r.bin)] = Number(r.on_ms) / 3600000;
+    return out;
+  } finally {
+    await db.close();
+  }
+}
+
 module.exports = {
-  runtimeFromGrid,
+  runtimeFromGrid, mechFromGrid,
   TS_MS, MECH_OAT_BIN_EDGES_C, MECH_OAT_BIN_LABELS, ELAPSED_MAX_GAP_SECONDS, ECON_DIAG_DT_MIN_C, BAS_WEB_BAND_C,
   pyRepr, inline, render, renderRuntime, renderMechBins, renderEconomizer, renderBasWeb, openCore,
 };

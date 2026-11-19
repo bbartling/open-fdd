@@ -582,13 +582,12 @@
     ctx.equips.forEach((eq, i) => { cols[`a${i}`] = pick ? pick(eq) : ctx.first(eq, role); cols[`o${i}`] = wx || ctx.first(eq, "oa_t"); });
     if (!Object.keys(cols).some((k) => k[0] === "o" && cols[k])) return { error: "needs an outdoor-air temperature (weather point or oa_t)", per: [], wx };
     const g = await ctx.alignedFine(cols, { hours: ctx.hours });   // fine grid: a short low-OAT event must not vanish
-    const per = ctx.equips.map((eq, i) => {
-      const op = cols[`o${i}`];
-      // a slow weather series (20 min) is carried as-of onto the 5 min device rows, bounded by its own cadence
-      const oat = op ? M.asOfFill(g.t, g.cols[`o${i}`], Math.max(M.webMaxAgeMs(g.t, g.cols[`o${i}`]), g.windowSec * 1e3)) : null;
-      return oat && cols[`a${i}`] ? { eq, col: cols[`a${i}`], bins: M.mechBins(g.t, g.cols[`a${i}`], oat,
-        { toDisp, duty: cols[`a${i}`].kind === "Bool", gapMaxSec: GAP_MAX_SEC }) } : null;
-    }).filter(Boolean);
+    // #1649: the hours per bin are the SQL analytic (sql/analytics/mech_cooling_oat_bins.sql, OAT joined as-of)
+    if (!ctx.sqlAnalytics) throw new Error("SQL analytics engine unavailable (ctx.sqlAnalytics)");
+    const idx = ctx.equips.map((eq, i) => i).filter((i) => cols[`a${i}`] && cols[`o${i}`]);
+    const hoursBy = await ctx.sqlAnalytics.mech(g, idx.map((i) => ({ key: i, proof: `a${i}`, oat: `o${i}` })));
+    const labels = M.oatBinLabels(toDisp);
+    const per = idx.map((i) => ({ eq: ctx.equips[i], col: cols[`a${i}`], bins: { labels, hours: hoursBy.get(i) } }));
     return { per, wx };
   }
 

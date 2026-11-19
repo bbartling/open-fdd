@@ -20,7 +20,7 @@ function load() {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa,
     localStorage: { getItem: () => ctx.units },             // ofddUnits.displaySystem()
     // #1649: the views run the SQL analytics; in a page they reach them through the analytics hook, here in-process
-    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs) } });
+    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs) } });
   ctx.units = "imperial";
   ctx.pickWindow = () => 3600;                // one value per hour
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
