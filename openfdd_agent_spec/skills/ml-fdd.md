@@ -30,6 +30,7 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
 5. **Anomaly CLI** (`open-fdd[anomaly]`): `open-fdd-anomaly screen FOLDER --out DIR` (z-score, MAD, STL, Isolation
    Forest; `--engine pandas|sql`), `open-fdd-anomaly report FOLDER --out DIR --month YYYY-MM [--compile]` (Typst / PDF).
    Anomalies are single-signal outliers, not faults: the benchmark shows z-score / MAD flag healthy hours as often.
+   For agents and scheduled runs use `--no-plots --json --tz <IANA zone>`, and read `summary.json` rather than the PNGs.
    `screen` and `detect` share one activity policy (default `--activity proof`): equipment points are assessed only
    while operating proof is on. Read `activity.json` / `summary.json` `activity` before calling a zero-flag result
    clean: `no_run_proof`, `no_active_rows` or a small `assessed_rows` means unassessed, not healthy.
