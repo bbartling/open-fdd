@@ -8,9 +8,7 @@ Issues stay open after integration (READY FOR RELEASE); Grok posts closure recei
 
 ## Final state (2026-11-19, Claude)
 
-`release/5.0.21` is 49 squash commits ahead of `master`. Every PR below was accepted by the other agent at its exact head, merged with `--match-head-commit`, and patch-checked (stacked PRs verified by applying their diff to the pre-merge release).
-
-Still open into the release when this was written: #1729 (COIL-PERF `active_hours` + stale cookbooks on release), #1709 (tuner sliders), and this ledger.
+`release/5.0.21` is 51 squash commits ahead of `master`. Every PR below was accepted by the other agent at its exact head, merged with `--match-head-commit`, and patch-checked (stacked PRs verified by applying their diff to the pre-merge release). No topic PR into the release is open; this ledger merges last, then `release/5.0.21` → `master`.
 
 ### Merged into release/5.0.21
 
@@ -65,6 +63,8 @@ Still open into the release when this was written: #1729 (COIL-PERF `active_hour
 | #1685 | `a5f8af2b` | anomaly screen: summary.json, --json, --no-plots, --tz (#1655) |
 | #1688 | `0bee54d0` | anomaly MAD: resolution floor + near_constant skip (#1657) |
 | #1689 | `da8c64af` | PyPI docs/help: absolute README links, wheel examples, no-NF note (#1662) |
+| #1729 | `347fded2` | COIL-PERF reports active_hours; fault_pct = fault / active_hours (#1631, #1641) |
+| #1709 | `215333f1` | FDD Tuners: grouped sliders, motor-status checkbox, step snapping, ordered pairs (#1672) |
 
 ### Issues closed in this cycle
 
@@ -86,6 +86,7 @@ Still open into the release when this was written: #1729 (COIL-PERF `active_hour
 - #1669 fdd.unit_declares_quantity omits the percent_0_100 alias on relative humidity
 - #1670 SCHED-247 cannot distinguish missing proof from proven OFF
 - #1671 One user-facing delay timer per rule in tuning_catalog.json and SQL templates
+- #1672 Per-rule tuning sliders in the Open-FDD UI
 - #1673 SV sweep: SV-STALE duplicates SV-FLATLINE; make stale a data-missing/gap rule and dedupe gap scoring
 
 ### Moved to 5.0.22
@@ -111,6 +112,7 @@ Still open into the release when this was written: #1729 (COIL-PERF `active_hour
 - #1725 FC8: eps_sat and supply_tol alias render differently in JS and Python when both are saved
 - #1726 Tuner step grid: 66 shipped defaults are off the snap grid (the default cannot be re-entered after a change)
 - #1727 Docs: CMMS work-order triage page, and a short write-your-own-rule guide (pandas + SQL)
+- #1730 Parity test: SPARQL-client vs oracle frames fail on pandas 3 (datetime index resolution us vs ms)
 
 ### Open, not labelled 5.0.22 (owner to confirm)
 
@@ -121,7 +123,6 @@ Still open into the release when this was written: #1729 (COIL-PERF `active_hour
 - #1663 Tracking: open-fdd 4.5.12 PyPI agent-tool fixes from the 4.5.11 field test
 - #1665 ML detect: require an explicit healthy training source and distinguish training from evaluation
 - #1667 Agent review: join SQL fault episodes with ML evidence and validate alert reduction
-- #1672 Per-rule tuning sliders in the Open-FDD UI
 - #1720 5.0.21 (proposed): portable SQL rule scorecard + offline privacy-preserving review bundle (open-fdd-scorecard)
 
 ## Writer slot
