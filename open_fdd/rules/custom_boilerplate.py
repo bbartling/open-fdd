@@ -4,10 +4,10 @@ Location (copy / extend from here)
 ----------------------------------
 | Path | Purpose |
 | --- | --- |
-| ``app/rules/custom_boilerplate.py`` | **This file** — templates, helpers, worked examples |
-| ``app/rules/custom_rules.py`` | **Agent workspace** — put finished ``CookbookRule`` objects in ``CUSTOM_RULES`` |
-| ``app/rules/custom_registry.py`` | Merges custom rules into the active catalog |
-| ``docs/fdd-rules.md`` | Generated rule catalog (SQL pack) |
+| ``open_fdd/rules/custom_boilerplate.py`` | **This file** — templates, helpers, worked examples |
+| ``open_fdd/rules/custom_rules.py`` | **Agent workspace** — put finished ``CookbookRule`` objects in ``CUSTOM_RULES`` |
+| ``open_fdd/rules/custom_registry.py`` | Merges custom rules into the active catalog |
+| ``docs/rules/write-a-rule.md`` | How to write and run one |
 
 Hard rules
 ----------
@@ -16,16 +16,14 @@ Hard rules
 3. ``compute(df, params, poll_seconds) -> pd.Series`` of **bool** (raw fault mask), index-aligned.
 4. Prefer cookbook roles (``sat``, ``fan_status``, …) after role_map — do not hardcode raw CSV names.
 5. Always include ``CONFIRM_PARAM()`` so UI gets a 0–60 min fault-delay slider (default 5).
-6. After adding rules: ``python scripts/generate_rule_configs.py`` is **not** required for custom-only
-   (configs are canonical). Run ``pytest`` instead. Smoke with agent API or product UI.
+6. Custom rules need no catalog regeneration; run them with ``open_fdd.rules.run_rule("CUSTOM-...", df)``.
 
 How an agent adds a rule
 ------------------------
 1. Copy an example below into ``custom_rules.py``.
 2. Append the ``CookbookRule`` to ``CUSTOM_RULES``.
-3. Optionally add a gate in ``app/rules/operational_gate.py`` ``RULE_GATES``.
-4. ``python -m pytest -q tests/test_custom_rules.py``
-5. Headless: ``python scripts/agent_afdd.py --package … --out … --run-all``
+3. Optionally add a gate in ``open_fdd/rules/operational_gate.py`` ``RULE_GATES``.
+4. ``python -m pytest -q tests/test_custom_rule_lookup.py``
 """
 
 from __future__ import annotations
