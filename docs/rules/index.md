@@ -89,7 +89,7 @@ each input, parameter and output.
 | [**SV-RANGE**](sql-cookbook.html#sv-range) | Sensor out of hard range | ahu, vav, chiller, boiler, weather, zone_other, heatpump, meter | 5 min | [pandas](pandas-cookbook.html#sv-range) | match |
 | [**SV-RATE**](sql-cookbook.html#sv-rate) | Context-aware sensor rate of change | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 10 min | [pandas](pandas-cookbook.html#sv-rate) | known divergence |
 | [**SV-SPIKE**](sql-cookbook.html#sv-spike) | Sensor rate-of-change spike | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 5 min | [pandas](pandas-cookbook.html#sv-spike) | match |
-| [**SV-STALE**](sql-cookbook.html#sv-stale) | Stale data (no fresh samples) | ahu, vav, chiller, boiler, weather, zone_other, heatpump | 5 min | [pandas](pandas-cookbook.html#sv-stale) | match |
+| [**SV-STALE**](sql-cookbook.html#sv-stale) | Stale data (no fresh samples for longer than the stale threshold) | ahu, vav, chiller, boiler, weather, zone_other, heatpump | immediate | [pandas](pandas-cookbook.html#sv-stale) | match |
 | [**TRIM-1**](sql-cookbook.html#trim-1) | Duct static trim advisory | ahu | 30 min | [pandas](pandas-cookbook.html#trim-1) | known divergence |
 | [**TRIM-3**](sql-cookbook.html#trim-3) | HWST trim advisory | boiler | 30 min | [pandas](pandas-cookbook.html#trim-3) | match |
 | [**TRIM-4**](sql-cookbook.html#trim-4) | CHW plant reset advisory | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#trim-4) | match |

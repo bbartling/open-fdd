@@ -135,7 +135,7 @@ async function handleRuleParams({ ts, client, a, pack, log }) {
   let revision;
   let candidate = active[a.scope] && active[a.scope].parameters;
   if (a.action === 'preview' || a.action === 'save') {
-    candidate = ruleTuning.normalizeRuleOverride(a.overrides, ruleTpl.controls, a.rule_id);
+    candidate = ruleTuning.normalizeRuleOverride(a.overrides, ruleTpl.controls, a.rule_id, { legacy: ruleTpl.legacy });
     if (a.note) candidate.note = a.note;
   } else if (a.action === 'reset') {
     candidate = { version: 1, params: {}, reset: true, ...(a.note ? { note: a.note } : {}) };
@@ -144,10 +144,12 @@ async function handleRuleParams({ ts, client, a, pack, log }) {
     const old = await ts.ruleConfigRevision(client, a.site, a.rule_id, a.scope, a.revision);
     if (!old) throw new Error(`no revision ${a.revision} for ${a.rule_id} ${a.scope}`);
     const { reset: _r, rollback_of: _b, ...rest } = old;
-    candidate = { ...ruleTuning.normalizeRuleOverride({ ...rest, version: rest.version }, ruleTpl.controls, a.rule_id), rollback_of: a.revision };
+    // an old revision may hold keys a later release renamed or retired (#1673): migrate them, do not fail the rollback
+    const { migration: _m, ...restored } = ruleTuning.normalizeRuleOverride({ ...rest, version: rest.version }, ruleTpl.controls, a.rule_id, { legacy: ruleTpl.legacy, stored: true });
+    candidate = { ...restored, rollback_of: a.revision };
   }
   const [siteLayer, equipLayer] = layers(candidate);
-  const merged = ruleTuning.mergeRuleParams(ruleTpl.controls, siteLayer, equipLayer, a.rule_id);
+  const merged = ruleTuning.mergeRuleParams(ruleTpl.controls, siteLayer, equipLayer, a.rule_id, ruleTpl.legacy);
   const values = ruleTuning.resolvePlaceholders(ruleTplRoot.runtime_defaults, ruleTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
 
   // Verify full SQL rendering (including active SV-LIMITS if this is a sweep rule) before saving
@@ -187,7 +189,7 @@ async function handleRuleParams({ ts, client, a, pack, log }) {
   return {
     ok: true, action: a.action, site: a.site, scope: a.scope, rule_id: a.rule_id,
     written: revision != null, ...(revision != null ? { revision } : {}),
-    active: after, effective: { params: merged.effective, sources: merged.sources },
+    active: after, effective: { params: merged.effective, sources: merged.sources, migration: merged.migration },
     controls: ruleTpl.controls, history,
     ...(roleLimitsSummary ? { role_limits: roleLimitsSummary } : {}),
   };

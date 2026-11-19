@@ -109,65 +109,100 @@
     return value;
   }
 
-  /** Validate and normalize one rule-level override document: { version: 1, params: { ... } }. */
-  function normalizeRuleOverride(doc, controls, ruleId = '') {
+  /**
+   * Validate and normalize one rule-level override document: { version: 1, params: { ... } }.
+   * `legacy` (the pack template's rule.legacy, #1673) = { aliases: { oldKey: newKey }, retired: [key], note }.
+   * A renamed key maps to its new name unless the document also has the new name (the new name wins).
+   * A retired key is rejected on a new write; when `stored` (a document already saved before the rename) it is
+   * dropped and reported in `clean.migration`, and so is an out-of-range renamed value. Nothing is clamped.
+   */
+  function normalizeRuleOverride(doc, controls, ruleId = '', { legacy = null, stored = false } = {}) {
     if (!doc || typeof doc !== 'object' || Array.isArray(doc) || doc.version !== 1) {
       throw new Error(`${ruleId || 'rule'} override: version must be 1`);
     }
     if (!doc.params || typeof doc.params !== 'object' || Array.isArray(doc.params)) {
       throw new Error(`${ruleId || 'rule'} override: params must be an object`);
     }
+    const aliases = (legacy && legacy.aliases) || {};
+    const retired = new Set((legacy && legacy.retired) || []);
+    const migration = [];
     const out = {};
     for (const [rawKey, raw] of Object.entries(doc.params)) {
+      if (retired.has(rawKey) && !(controls && has(controls, rawKey))) {
+        if (!stored) throw new Error(`${ruleId ? ruleId + '.' : ''}${rawKey} was retired${legacy.note ? ': ' + legacy.note : ''}`);
+        migration.push({ key: rawKey, action: 'retired', value: raw });
+        continue;
+      }
+      let key = rawKey;
+      if (has(aliases, rawKey) && controls && has(controls, aliases[rawKey]) && !has(controls, rawKey)) key = aliases[rawKey];
       // #1608: require_operational_gate is the old name of require_run_proof (an alias, like in render_rule.py)
-      const key = rawKey === 'require_operational_gate' && controls && has(controls, 'require_run_proof') && !has(controls, rawKey) ? 'require_run_proof' : rawKey;
+      else if (rawKey === 'require_operational_gate' && controls && has(controls, 'require_run_proof') && !has(controls, rawKey)) key = 'require_run_proof';
       // the canonical key wins over its legacy alias whatever the property order (like render_rule.py)
-      if (key !== rawKey && has(doc.params, key)) continue;
+      if (key !== rawKey && has(doc.params, key)) {
+        if (has(aliases, rawKey)) migration.push({ key: rawKey, action: 'superseded', by: key, value: raw });
+        continue;
+      }
       if (!controls || !has(controls, key)) {
         throw new Error(`${ruleId ? ruleId + '.' : ''}${key} is not a tunable SQL parameter`);
       }
       const ctrl = controls[key];
       let val = raw;
-      if (ctrl.kind === 'boolean') {
-        if (raw === true || raw === 1) val = 1;
-        else if (raw === false || raw === 0) val = 0;
-        else throw new Error(`${key} must be boolean (0/1 or true/false)`);
-      } else {
-        if (typeof raw === 'boolean' || !isNum(raw)) {
-          throw new Error(`${key} must be a finite number`);
+      try {
+        if (ctrl.kind === 'boolean') {
+          if (raw === true || raw === 1) val = 1;
+          else if (raw === false || raw === 0) val = 0;
+          else throw new Error(`${key} must be boolean (0/1 or true/false)`);
+        } else {
+          if (typeof raw === 'boolean' || !isNum(raw)) {
+            throw new Error(`${key} must be a finite number`);
+          }
+          if (raw < ctrl.min || raw > ctrl.max) {
+            throw new Error(`${key} (${raw}) outside [${ctrl.min}, ${ctrl.max}]`);
+          }
         }
-        if (raw < ctrl.min || raw > ctrl.max) {
-          throw new Error(`${key} (${raw}) outside [${ctrl.min}, ${ctrl.max}]`);
+      } catch (e) {
+        if (stored && key !== rawKey && has(aliases, rawKey)) {
+          migration.push({ key: rawKey, action: 'invalid', to: key, value: raw, reason: e.message });
+          continue;
         }
+        throw e;
       }
+      if (key !== rawKey && has(aliases, rawKey)) migration.push({ key: rawKey, action: 'renamed', to: key, value: val });
       out[key] = val;
     }
     const clean = { version: 1, params: out };
     for (const meta of ['note', 'reset', 'rollback_of']) {
       if (has(doc, meta) && doc[meta] !== undefined) clean[meta] = doc[meta];
     }
+    if (migration.length) clean.migration = migration;
     return clean;
   }
 
-  /** Merge shipped defaults < site override < equipment override for one rule. */
-  function mergeRuleParams(controls, siteDoc, equipDoc, ruleId = '') {
+  /**
+   * Merge shipped defaults < site override < equipment override for one rule. Each saved layer is migrated on its own
+   * (#1673) before precedence applies, so an equipment's renamed legacy key still beats a site's new key.
+   * `migration` lists every conversion: [{ layer, key, action, ... }].
+   */
+  function mergeRuleParams(controls, siteDoc, equipDoc, ruleId = '', legacy = null) {
     const effective = {};
     const sources = {};
     const overrideKeys = new Set();
+    const migration = [];
     for (const [k, d] of Object.entries(controls || {})) {
       effective[k] = d.default;
       sources[k] = 'shipped';
     }
     for (const [layer, doc] of [['site', siteDoc], ['equip', equipDoc]]) {
       if (!doc) continue;
-      const clean = normalizeRuleOverride(doc, controls, ruleId);
+      const clean = normalizeRuleOverride(doc, controls, ruleId, { legacy, stored: true });
+      for (const m of clean.migration || []) migration.push({ layer, ...m });
       for (const [k, v] of Object.entries(clean.params)) {
         effective[k] = v;
         sources[k] = layer;
         overrideKeys.add(k);
       }
     }
-    return { effective, sources, overrideKeys };
+    return { effective, sources, overrideKeys, migration };
   }
 
   /** Python-compatible float/int SQL literal formatting (render_rule.py::_format_value). */
