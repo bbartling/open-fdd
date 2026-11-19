@@ -205,6 +205,64 @@
     return { effective, sources, overrideKeys, migration };
   }
 
+  // ---- #1672: slider contract (grouping, step snapping, ordered pairs) ------------------------------------------------
+
+  const TIME_UNITS = new Set(['min', 'h', 's', 'sec']);
+  /** Display groups in panel order. The motor-status / occupancy booleans come after the numeric tuners. */
+  const CONTROL_GROUPS = [
+    { id: 'duration', label: 'Duration' },
+    { id: 'thresholds', label: 'Thresholds and setpoints' },
+    { id: 'tolerances', label: 'Tolerances' },
+    { id: 'other', label: 'Other limits' },
+    { id: 'gates', label: 'Gates' },
+  ];
+  const OTHER_KINDS = new Set(['count', 'dimensionless', 'interval_energy']);
+
+  /** The display group of one catalog control (see CONTROL_GROUPS). */
+  function controlGroup(key, ctrl) {
+    if (ctrl.kind === 'boolean') return 'gates';
+    if (TIME_UNITS.has(ctrl.unit)) return 'duration';
+    if (/^eps_|_tol$|scale/.test(key)) return 'tolerances';
+    if (OTHER_KINDS.has(ctrl.kind)) return 'other';
+    return 'thresholds';
+  }
+
+  /** [{ id, label, keys }] for the controls of one rule, in CONTROL_GROUPS order, catalog order within a group; empty groups dropped. */
+  function groupControls(controls) {
+    const byGroup = new Map(CONTROL_GROUPS.map((g) => [g.id, []]));
+    for (const [key, ctrl] of Object.entries(controls || {})) byGroup.get(controlGroup(key, ctrl)).push(key);
+    return CONTROL_GROUPS.map((g) => ({ ...g, keys: byGroup.get(g.id) })).filter((g) => g.keys.length);
+  }
+
+  /** The SI value on the control's step grid (anchored at min), clamped to [min, max], 6 decimals. */
+  function snapToStep(ctrl, si) {
+    if (!isNum(si)) throw new Error(`non-finite value ${si}`);
+    let v = si;
+    if (isNum(ctrl.step) && ctrl.step > 0) v = ctrl.min + Math.round((si - ctrl.min) / ctrl.step) * ctrl.step;
+    v = Math.min(ctrl.max, Math.max(ctrl.min, v));
+    return Number(v.toFixed(6));
+  }
+
+  /** Catalog key pairs whose effective values must stay strictly ordered (low < high). */
+  const ORDERED_PAIRS = [
+    ['zone_t_lo', 'zone_t_hi'],
+    ['comfort_low', 'comfort_high'],
+    ['econ3_db_min', 'econ3_db_max'],
+    ['econ7_db_min', 'econ7_db_max'],
+  ];
+
+  /** Throws when an effective low >= its high (both keys must be controls of the rule). */
+  function checkOrderedPairs(controls, effective, ruleId = '') {
+    for (const [lo, hi] of ORDERED_PAIRS) {
+      if (!controls || !has(controls, lo) || !has(controls, hi)) continue;
+      const a = has(effective, lo) ? effective[lo] : controls[lo].default;
+      const b = has(effective, hi) ? effective[hi] : controls[hi].default;
+      if (!(a < b)) {
+        throw new Error(`${ruleId ? ruleId + ': ' : ''}${controls[lo].label || lo} (${a}) must be below ${controls[hi].label || hi} (${b})`);
+      }
+    }
+  }
+
   /** Python-compatible float/int SQL literal formatting (render_rule.py::_format_value). */
   function pyRepr(x) {
     if (!Number.isFinite(x)) throw new Error('non-finite');
@@ -320,6 +378,7 @@
     SITE_SCOPE, EQUIP_SCOPE_PREFIX, equipScope,
     displayUnits, preferredDisplayUnit, toSi, fromSi, prettyCatalogUnit,
     normalizeRuleOverride, mergeRuleParams, formatRuleValue, ruleDefaults, resolvePlaceholders, renderRuleSql, canonicalJson,
+    CONTROL_GROUPS, ORDERED_PAIRS, controlGroup, groupControls, snapToStep, checkOrderedPairs,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ofddRuleTuning = api;
