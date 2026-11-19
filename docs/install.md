@@ -189,3 +189,9 @@ Use the named failure to choose the next check.
 - **auth** means NF rejected the console credentials. Verify the local console login before changing credentials.
 - **fdd freshness** compares output age with raw history. If raw history is current, read the latest `fdd` hook run
   with `include_results=true` for per-equipment skip or stale reasons.
+- **host memory / host disk / host services** come from one read-only `GET /api/v1/platform/info` (no SSH, no
+  writes). They WARN on low free memory (under 10 % or 256 MiB), low free disk (under 10 % or 1 GiB), restarted or
+  stopped services, and SKIP when NF does not expose the value. NF 3.10.9 returns only a static hardware inventory
+  there (disk sizes, CPUs, NICs) and an empty service list, so all three SKIP on it today; the checks pick the values
+  up by name if a later NF adds them. These lines never fail `doctor`, and serials, MAC addresses and the license are
+  never printed.
