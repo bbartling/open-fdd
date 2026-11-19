@@ -156,7 +156,9 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
         for key in ('eps_mat','eps_oat','eps_rat','eps_sat'):
             if key not in overrides:
                 values[key.upper()] = chosen['mix_tol']
-    if 'supply_tol' in overrides:
+    # supply_tol is the legacy SAT master: it sets EPS_SAT only when eps_sat itself was not saved (#1725), as the JS twin
+    # (shared/rule-tuning.js) and the pandas runner do. A saved eps_sat always wins.
+    if 'supply_tol' in overrides and 'eps_sat' not in overrides:
         values['EPS_SAT'] = chosen['supply_tol']
     values['MODE_DELAY_MIN'] = max(values.get('MODE_DELAY_MIN',0), values.get('STARTUP_DELAY_MIN',0))
     values['POLL_SECONDS'] = poll_seconds
