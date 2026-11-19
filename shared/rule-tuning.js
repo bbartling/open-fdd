@@ -240,7 +240,12 @@
     let v = si;
     if (isNum(ctrl.step) && ctrl.step > 0) v = ctrl.min + Math.round((si - ctrl.min) / ctrl.step) * ctrl.step;
     v = Math.min(ctrl.max, Math.max(ctrl.min, v));
-    return Number(v.toFixed(6));
+    v = Number(v.toFixed(6));
+    // #1726: many shipped defaults (e.g. 1.15 degF tolerances) sit between grid points. The exact default stays
+    // reachable: a value at least as close to the default as to the nearest grid point snaps to the default itself.
+    const d = ctrl.default;
+    if (isNum(d) && d >= ctrl.min && d <= ctrl.max && Math.abs(si - d) <= Math.abs(si - v)) return d;
+    return v;
   }
 
   /** Catalog key pairs whose effective values must stay strictly ordered (low < high). */

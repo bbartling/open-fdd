@@ -70,6 +70,29 @@ test("every rule groups its controls: at most one duration, gates last, motor st
   assert.deepEqual(rt.groupControls(tpls.FC2.controls).map((g) => g.id), ["duration", "thresholds", "tolerances", "gates"]);
 });
 
+test("every shipped default survives snapToStep, including the 1.15 degF tolerances off the grid (#1726)", () => {
+  let offGrid = 0, checked = 0;
+  for (const [ruleId, tpl] of Object.entries(tpls)) {
+    for (const [key, ctrl] of Object.entries(tpl.controls)) {
+      if (typeof ctrl.default !== "number" || !(ctrl.step > 0)) continue;
+      checked++;
+      const grid = Number((ctrl.min + Math.round((ctrl.default - ctrl.min) / ctrl.step) * ctrl.step).toFixed(6));
+      if (Math.abs(grid - ctrl.default) > 1e-9) offGrid++;
+      assert.equal(rt.snapToStep(ctrl, ctrl.default), ctrl.default, `${ruleId}.${key}`);
+    }
+  }
+  assert.ok(checked > 200 && offGrid >= 60, `checked ${checked}, off-grid ${offGrid}`);
+});
+
+test("near the default snaps to the default; a step away snaps to the grid (#1726)", () => {
+  const c = { min: 0, max: 5.555555556, step: 0.138888889, default: 0.638888889 };   // 1.15 degF, step 0.25 degF
+  assert.equal(rt.snapToStep(c, 0.65), 0.638888889);
+  assert.equal(rt.snapToStep(c, 0.638888889 + 0.01), 0.638888889);
+  assert.equal(rt.snapToStep(c, 0.7), 0.694444);              // closer to the grid point 1.25 degF
+  assert.equal(rt.snapToStep(c, 0.4), 0.416667);
+  assert.equal(rt.snapToStep({ ...c, default: 99 }, 0.65), 0.694444);   // an out-of-range default is ignored
+});
+
 test("snapToStep anchors the grid at min and clamps", () => {
   const c = { min: 22.222222, max: 29.444444, step: 0.277778 };
   assert.equal(rt.snapToStep(c, 24.055556), 24.166668);
