@@ -310,6 +310,12 @@ async function createPglite(pack) {
 
 /** sha256 (hex) of a rule's SQL text: the rule_hash provenance of fdd.rule_result rows. */
 const ruleHashes = new WeakMap();
+/** #1707: a statistic rule outputs no fault_hours (AVG-ZONE-TEMP, ZONE-COMFORT-PCT, FAN-RUNTIME-HOURS); it is written as METRIC. */
+function isMetricRule(pack, ruleId) {
+  const r = pack && pack.rules && pack.rules[ruleId];
+  return !!(r && Array.isArray(r.output_columns) && !r.output_columns.includes("fault_hours"));
+}
+
 function ruleHash(pack, ruleId) {
   let byRule = ruleHashes.get(pack);
   if (!byRule) ruleHashes.set(pack, (byRule = new Map()));
@@ -386,7 +392,8 @@ async function createTimescale(pack, opts = {}) {
     },
     /** Newest sample (epoch ms | null) of these points in the source table, any age (read-only). */
     newestSample: (uuids) => ts.newestSample(client, uuids),
-    resultRow: (a) => ts.toResultRow({ engine: "timescale", pollSeconds: pack.poll_seconds, ruleHash: ruleHash(pack, a.ruleId), ...a }),
+    resultRow: (a) => ts.toResultRow({ engine: "timescale", pollSeconds: pack.poll_seconds, ruleHash: ruleHash(pack, a.ruleId),
+      metric: isMetricRule(pack, a.ruleId), ...a }),
     /** Active role-limit override revisions (fdd.rule_config SV-LIMITS) of every site (#1589). */
     roleLimitOverrides: () => ts.activeRoleLimitOverrides(client),
     ruleConfigOverrides: () => ts.activeRuleConfigs(client),

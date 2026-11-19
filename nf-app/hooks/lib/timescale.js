@@ -67,7 +67,7 @@ async function connect(config = {}) {
 }
 
 /** schema_version of install.sql this release needs (4 = shared core schema: fdd.point / fdd.rule_result / fdd.rule_config). */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;   // 6 (5.0.21): status METRIC for statistic rules (#1707)
 
 /** Installed openfdd schema_version, 0 when the schema / config table / key is absent (pre-scoped release = 0). */
 async function schemaVersion(client) {
@@ -364,7 +364,7 @@ const RESULT_KEY = ["site_id", "equipment_id", "rule_id", "subject_key", "window
  * are required (window_end > window_start); rule_hash / config_hash '' when the caller has none.
  */
 function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale", windowStart, windowEnd, pollSeconds = 300,
-  ruleHash = "", configHash = "", configRevision = null, parameters = {} }) {
+  ruleHash = "", configHash = "", configRevision = null, parameters = {}, metric = false }) {
   if (windowStart == null || windowEnd == null) throw new Error("toResultRow: windowStart and windowEnd are required");
   const known = new Set(["equipment_id", "series_id", "sensor_role", "fault_pct", "fault_hours", "covered_hours"]);
   const metrics = {};
@@ -382,8 +382,9 @@ function toResultRow({ runTs, equip, site = "", ruleId, row, engine = "timescale
     site_id: site || "", equipment_id: equip, rule_id: ruleId, subject_key: row.series_id || "",
     window_start: iso(windowStart), window_end: iso(windowEnd), rule_hash: ruleHash, config_hash: configHash, config_revision: configRevision,
     effective_parameters: parameters, poll_seconds: pollSeconds,
-    status: faultHours == null ? "INCONCLUSIVE" : faultHours > 0 ? "FAULT" : "PASS",
-    reason: faultHours != null ? null : sensorNotAssessed ? "sensor not assessed (no covered time)" : "rule reports no fault_hours",
+    // #1707: a statistic rule (no fault_hours output) is METRIC, never INCONCLUSIVE; its numbers live in metrics
+    status: metric ? "METRIC" : faultHours == null ? "INCONCLUSIVE" : faultHours > 0 ? "FAULT" : "PASS",
+    reason: metric || faultHours != null ? null : sensorNotAssessed ? "sensor not assessed (no covered time)" : "rule reports no fault_hours",
     fault_hours: faultHours, covered_hours: num(row.covered_hours), fault_pct: num(row.fault_pct), role: row.sensor_role || null,
     engine, metrics, diagnostics: Object.keys(outputs).length ? { outputs } : {}, created_at: iso(runTs),
   };
