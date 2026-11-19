@@ -10,6 +10,8 @@ The parity harness is a versioned part of the `open-fdd` package (`open_fdd.pari
 database can use it to prove that the SQL result equals the pandas reference on the same data. It is stdlib plus
 pandas: `pip install open-fdd[oracle]` is all a third-party adapter needs. All values are SI.
 
+Datetime indexes normalize to nanoseconds; timestamp precision and values remain checked.
+
 ```python
 from open_fdd.parity import generate, reference, compare, Policy, run_adapter
 
