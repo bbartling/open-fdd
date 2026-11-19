@@ -468,7 +468,7 @@ Mech cooling without integrated economizer
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#econ-3); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
+**Parity** [match](parity.html#econ-3); differs only on edge data: Jittered timestamps (#1642): the weather join itself now matches. pandas joins the raw weather readings as-of (runner.WEB_ASOF_BOUND_SECONDS = 1500 s), as SQL does, which took the edge 4x3 delta from 15.24 h to 0.34 h (MECH-OAT-1 went to 0 and is no longer listed). The remaining 0.34 h on edge AHU-1 is not yet attributed; basic (on-grid) datasets match exactly.
 
 
 ### ECON-4 {#econ-4}
@@ -1369,7 +1369,7 @@ Mechanical cooling below 15.6 °C web OAT
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#mech-oat-1); differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly.
+**Parity** [match](parity.html#mech-oat-1)
 
 
 ### OA-1 {#oa-1}
