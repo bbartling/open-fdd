@@ -124,6 +124,12 @@ open-fdd-ml detect ./AHU_1 --method grey_box --train-until 2026-06-01 --out ./ah
 what drove each flagged row: `flagged_roles` for zscore and mad, `top_role` / `top_share` for PCA, and `top_residual` and
 `ratio_<residual>` for the gray-box method.
 
+For PCA and the gray-box method, `flags.csv` also has an `assessment` column for each row: `assessed`, `inactive`,
+`missing_inputs` or `no_residual`. `summary.json` reports `assessed_rows`, `unassessed_rows`, `unassessed_reasons` and
+`assessed_coverage` (assessed / active scored rows; `null` with a reason when nothing was active). A quiet run with
+low coverage means the model could not judge those rows, not that they were healthy. Methods that don't report
+per-row assessment (zscore, mad) give `assessed_rows: null` and an `assessment_note`.
+
 Method, data, mapping and results: [docs/ml/lbnl-ahu-benchmark.md](ml/lbnl-ahu-benchmark.md).
 
 `open-fdd-ml methods` lists the roles each method needs, and `open-fdd-ml methods ./AHU_1 [--json]` says which
