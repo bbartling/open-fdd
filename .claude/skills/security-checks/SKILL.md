@@ -1,6 +1,6 @@
 ---
 name: security-checks
-description: ZAP, npm audit, gitleaks, CSP. Pointer to the Open-FDD agent spec.
+description: Run the Open-FDD security checks (ZAP against the mock NF, npm audit, gitleaks, CSP).
 ---
 # security-checks
 

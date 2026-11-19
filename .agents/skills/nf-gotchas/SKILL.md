@@ -1,6 +1,6 @@
 ---
 name: nf-gotchas
-description: Known NF 3.10 traps and workarounds. Pointer to the Open-FDD agent spec.
+description: Known NF 3.10 traps (existing-uuid overwrite, delete, portal 401, TLS, logged secrets) and how to avoid them.
 ---
 # nf-gotchas
 

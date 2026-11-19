@@ -1,6 +1,6 @@
 ---
 name: ml-fdd
-description: Run or extend the ML FDD tools (open-fdd-ml, LBNL benchmark) and the SQL z-score of the PyPI package open-fdd. Pointer to the Open-FDD agent spec.
+description: Run or extend the ML FDD tools of the PyPI package (open-fdd-ml, open_fdd.ml) and the SQL z-score; score any detector on the public LBNL AHU data against the rule pack.
 ---
 # ml-fdd
 
