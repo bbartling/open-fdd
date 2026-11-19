@@ -121,7 +121,7 @@ jobs:
     timeout-minutes: 45
     services:
       tsdb:
-        image: timescale/timescaledb:2.31.0-pg17
+        image: timescale/timescaledb:2.32.1-pg17
         env:
           POSTGRES_PASSWORD: example
         ports: ["5432:5432"]
