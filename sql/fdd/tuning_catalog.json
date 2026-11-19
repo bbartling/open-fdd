@@ -4970,7 +4970,11 @@
         "web_oa_dp",
         "fan_status",
         "fan_cmd",
-        "run_proof"
+        "run_proof",
+        "compressor_status",
+        "chiller_status",
+        "chiller_amps",
+        "chiller_power"
       ],
       "output_columns": [
         "equipment_id",
@@ -5124,8 +5128,10 @@
         "heatpump"
       ],
       "optional_roles": [
-        "clg_valve_pct",
-        "chiller_status"
+        "compressor_status",
+        "chiller_status",
+        "chiller_amps",
+        "chiller_power"
       ],
       "output_columns": [
         "equipment_id",
@@ -8715,6 +8721,134 @@
         ],
         "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
       }
+    },
+    {
+      "confirm_seconds": 900,
+      "dashboard_wired": false,
+      "delete_python_candidate": false,
+      "description": "Coil valve open but the air temperature changes less than min_dt",
+      "equipment_kinds": [
+        "ahu"
+      ],
+      "optional_roles": [
+        "htg_valve_pct",
+        "reheat_valve_pct",
+        "clg_valve_pct",
+        "heating_coil_entering_temp",
+        "heating_coil_leaving_temp",
+        "cooling_coil_entering_temp",
+        "cooling_coil_leaving_temp",
+        "mat",
+        "sat",
+        "vav_inlet_t",
+        "vav_discharge_t",
+        "zone_t",
+        "zone_flow",
+        "fan_status",
+        "fan_cmd",
+        "run_proof"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "fault_pct",
+        "assessment"
+      ],
+      "pandas_function": "coil_perf",
+      "parameters": {
+        "confirm_min": {
+          "control": "slider",
+          "default": 15.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "key": "confirm_min",
+          "kind": "duration_minutes",
+          "label": "Fault confirm delay",
+          "max": 60.0,
+          "min": 0.0,
+          "sql_placeholder": "CONFIRM_SECONDS",
+          "step": 5.0,
+          "unit": "min"
+        },
+        "valve_open": {
+          "control": "slider",
+          "default": 0.8,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "valve_open",
+          "kind": "fraction",
+          "label": "Valve open threshold",
+          "max": 1.0,
+          "min": 0.5,
+          "sql_placeholder": "VALVE_OPEN",
+          "step": 0.05,
+          "unit": "frac"
+        },
+        "valve_shut": {
+          "control": "slider",
+          "default": 0.05,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "valve_shut",
+          "kind": "fraction",
+          "label": "Opposite valve shut",
+          "max": 0.2,
+          "min": 0.0,
+          "sql_placeholder": "VALVE_SHUT",
+          "step": 0.01,
+          "unit": "frac"
+        },
+        "min_dt": {
+          "control": "slider",
+          "default": 3.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "min_dt",
+          "kind": "temperature_difference",
+          "label": "Minimum coil temperature change",
+          "max": 11.111111,
+          "min": 0.555556,
+          "sql_placeholder": "MIN_DT",
+          "step": 0.277778,
+          "unit": "degC"
+        },
+        "require_run_proof": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "require_run_proof",
+          "kind": "boolean",
+          "label": "Require motor status",
+          "max": 1.0,
+          "min": 0.0,
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
+          "step": 1.0,
+          "unit": "bool"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "CONFIRM_SECONDS",
+        "FAN_ON_MIN",
+        "FLOW_ON_MIN",
+        "MAX_GAP_HOURS",
+        "MIN_DT",
+        "REQUIRE_RUN_PROOF",
+        "VALVE_OPEN",
+        "VALVE_SHUT"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P1",
+      "required_roles": [],
+      "rule_id": "COIL-PERF",
+      "sql_file": "coil_perf.sql",
+      "run_proof": "gated"
     }
   ]
 }

@@ -25,6 +25,13 @@ Before touching a live box read `nf-gotchas.md` (this folder). Related runbooks 
 `nf-upgrade-compose.md`, `bacnet-validate.md` (see the `bacnet-validate` skill). Read-only checks of a deployed box:
 `scripts/nf/tools/` (`nf_portal_sensors.py`, `nf_sensor_history.py`).
 
+## Timescale schema gate
+
+`push` and `install` read the installed Timescale schema first (read-only) and stop before any write when the database
+is older than the release needs, or the check cannot run (#1633). Apply `nf-app/timescale/install.sql` as the database
+owner, then push. `--allow-schema-upgrade-pending` overrides it; scheduled `fdd` runs then fail until the schema is
+applied. `--dry-run` is for `install` only; other actions refuse it (#1634).
+
 ## Live patching (last resort)
 
 Do not hand-edit the box as the normal fix path. If a hotfix is required to unblock verification, follow the **Live patching a box** section in repo-root `AGENTS.md`: read-only capture first, patch one path, commit on a patch branch (HTML without `?v=` stamps), restart before verify, do not rewrite push-manifest hashes early. Coding agents do not deploy releases to NF sites; Grok Bot handles deploys after merge.

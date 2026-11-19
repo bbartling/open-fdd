@@ -529,8 +529,13 @@ def run_cookbook_rule(
 
             rp_series, rp_src = derive_run_proof(d)
             if rp_series is not None:
-                active = proof_on(rp_series)
+                # #1631: the fallback proof gets the rule's startup delay too, like the hydronic proof it replaces
+                from open_fdd.rules.operational_gate import apply_startup_delay
+
+                delay = float(params.get("startup_delay_min", (spec.startup_delay_seconds if spec else 0.0) / 60.0)) * 60.0
+                active = apply_startup_delay(proof_on(rp_series), poll_seconds, delay)
                 gate_meta = {**gate_meta, "missing_proof": False, "gate_applied": True, "gate_source": rp_src,
+                             "startup_delay_seconds": delay,
                              "active_sample_count": int(active.sum()),
                              "active_coverage_pct": round(100.0 * float(active.mean()), 1) if len(active) else 0.0}
         if gate_meta.get("missing_proof"):
@@ -668,6 +673,14 @@ def run_cookbook_rule(
             active_mask=active if use_active else None,
             params_fingerprint=fp,
         )
+        if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
+            # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero
+            why = d.attrs["coil_perf_assessment"]
+            result.status = f"NOT_ASSESSED_{why.upper()}"
+            result.fault_hours = None
+            result.fault_pct = None
+            result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
+            result.metrics["assessment"] = why
         if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
             # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
             result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"
