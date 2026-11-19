@@ -150,7 +150,7 @@ async function handleRuleParams({ ts, client, a, pack, log }) {
   }
   const [siteLayer, equipLayer] = layers(candidate);
   const merged = ruleTuning.mergeRuleParams(ruleTpl.controls, siteLayer, equipLayer, a.rule_id, ruleTpl.legacy);
-  const values = ruleTuning.resolvePlaceholders(ruleTplRoot.runtime_defaults, ruleTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
+  const values = ruleTuning.resolvePlaceholders(ruleTuning.ruleDefaults(ruleTplRoot, ruleTpl), ruleTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
 
   // Verify full SQL rendering (including active SV-LIMITS if this is a sweep rule) before saving
   let roleLimitsOpt = null;

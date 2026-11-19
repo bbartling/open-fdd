@@ -6,19 +6,22 @@ from sql.fdd.render_rule import render
 
 
 def test_sv_window_and_silence_minimum_render_as_elapsed_seconds():
-    flatline = render("SV-FLATLINE", poll_seconds=420, overrides={"flatline_hours": 0.25, "max_silence_hours": 0.25})
+    flatline = render("SV-FLATLINE", poll_seconds=420, overrides={"flatline_hours": 0.25})
     assert "RANGE BETWEEN 900 PRECEDING AND CURRENT ROW" in flatline
     assert "ROWS BETWEEN" not in flatline
     stale = render("SV-STALE", poll_seconds=420, overrides={"stale_after_hours": 0.25})
     assert "dt_seconds > 900" in stale and "ROWS BETWEEN" not in stale
 
 
-def test_all_four_sv_rules_allow_quarter_hour_silence():
+def test_sweep_silence_cutoff_is_a_fixed_internal_constant():
+    """#1671: the gap cutoff of SV-RANGE / SV-FLATLINE / SV-SPIKE is fixed at its shipped 0.5 h (internal_constants);
+    a saved max_silence_hours there is retired. On SV-STALE it is still the alias of stale_after_hours (#1673)."""
     for rule_id in ("SV-RANGE", "SV-FLATLINE", "SV-SPIKE"):
-        sql = render(rule_id, poll_seconds=420, overrides={"max_silence_hours": 0.25})
-        assert "epoch_seconds - previous_epoch <= 900" in sql or rule_id != "SV-SPIKE"
-        assert "dt_seconds > 900" in sql
-    # #1673: a saved max_silence_hours on SV-STALE is its stale threshold (alias of stale_after_hours)
+        sql = render(rule_id, poll_seconds=420)
+        assert "epoch_seconds - previous_epoch <= 1800" in sql or rule_id != "SV-SPIKE"
+        assert "dt_seconds > 1800" in sql
+        with pytest.raises(ValueError, match="retired"):
+            render(rule_id, overrides={"max_silence_hours": 0.25})
     assert "dt_seconds > 900" in render("SV-STALE", poll_seconds=420, overrides={"max_silence_hours": 0.25})
 
 

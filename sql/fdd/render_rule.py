@@ -119,6 +119,8 @@ def _render(rule_id, poll_seconds=300, overrides=None, parameter_controls=None, 
     if not math.isfinite(poll_seconds) or poll_seconds < 1:
         raise ValueError('poll_seconds must be finite and >= 1')
     values = json.loads((ROOT / 'runtime_defaults.json').read_text())
+    # #1671: fixed per-rule safeguards that are no longer user tuners (the shipped defaults; see tuning_catalog.json)
+    values.update(rule.get('internal_constants') or {})
     controls = parameter_controls if parameter_controls is not None else rule['parameters']
     chosen = {k: d['default'] for k,d in controls.items()}
     overrides = dict(overrides or {})

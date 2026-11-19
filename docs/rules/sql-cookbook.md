@@ -138,12 +138,7 @@ Duct static pressure high
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `duct_high_margin` | High margin | 62.21 | 12.442 | 248.84 | Pa |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `pressure_on_min` | Pressure-on evidence | 49.768 | 12.442 | 248.84 | Pa |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -178,12 +173,8 @@ SAT deviation from setpoint
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sat_dev_err` | SAT deviation | 2.77778 | 0.555556 | 8.33333 | Δ°C |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -221,12 +212,8 @@ Heating and cooling simultaneous
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `valve_open_pct` | Valve open threshold | 0.1 | 0.05 | 0.5 | fraction (0-1) |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -347,11 +334,7 @@ OA damper leakage
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `leak_delta` | Leak ΔT | 1.11111 | 0.277778 | 3.33333 | Δ°C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -391,11 +374,7 @@ Economizer stuck closed when OAT favorable
 | `confirm_min` | Fault confirm delay | 10 | 0 | 120 | min |
 | `econ1_damper_max` | Stuck-closed damper frac | 0.05 | 0 | 0.2 | fraction (0-1) |
 | `econ1_oat_min` | Favorable OAT | 12.7778 | 7.22222 | 21.1111 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -433,11 +412,7 @@ Economizing when outdoor air unfavorable
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `econ2_damper` | Damper open frac | 0.42 | 0.2 | 0.9 | fraction (0-1) |
 | `econ2_oat_hi` | OAT high cutoff | 17.2222 | 12.7778 | 26.6667 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -480,11 +455,7 @@ Mech cooling without integrated economizer
 | `econ3_db_max` | Free-cool OA dry-bulb max | 22.2222 | 18.3333 | 26.6667 | °C |
 | `econ3_db_min` | Free-cool OA dry-bulb min | 15.5556 | 10 | 20 | °C |
 | `econ3_dp_max` | Free-cool OA dew point max | 15.5556 | 7.22222 | 20 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -521,13 +492,9 @@ Low estimated OA fraction
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `oa_min_pct` | Min OA fraction | 21 | 5 | 40 | % |
 | `oat_rat_delta_min` | Min \|RAT−OAT\| for OA-fraction estimate (Δ°C) | 1.22222 | 0.277778 | 5.55556 | Δ°C |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -568,12 +535,8 @@ Preheat over-conditioning
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `htg_open_min` | Heating valve open minimum | 0.01 | 0 | 0.5 | fraction (0-1) |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `preheat_over` | Preheat over ΔT | 1.22222 | 0.277778 | 4.44444 | Δ°C |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -613,11 +576,7 @@ Economizing in freezing weather
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `econ6_damper_max` | Winter min-OA damper | 0.25 | 0.05 | 0.5 | fraction (0-1) |
 | `econ6_oat_max` | Winter OAT ceiling | -3.88889 | -9.44444 | 4.44444 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -664,11 +623,7 @@ Economizer OK but not economizing
 | `econ7_db_max` | Econ-OK dry-bulb max | 22.2222 | 18.3333 | 26.6667 | °C |
 | `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | 1.66667 | -6.66667 | 10 | °C |
 | `econ7_dp_max` | Econ-OK dew point max | 15.5556 | 7.22222 | 20 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -707,10 +662,7 @@ Duct static below SP at full fan
 | `eps_dsp` | Duct-static error epsDSP (Pa) | 29.8608 | 0 | 124.42 | Pa |
 | `eps_vfd_spd` | VFD speed error epsVFDSPD (GL36 default 5%) | 0.13 | 0 | 0.5 | fraction (0-1) |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
 
@@ -753,11 +705,8 @@ MAT-OAT delta while cooling and economizing
 | `eps_mat` | MAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_oat` † | OAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -805,11 +754,8 @@ OAT low vs SAT SP while cooling and economizing
 | `eps_oat` † | OAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` † | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -858,11 +804,8 @@ SAT above MAT while cooling
 | `eps_mat` † | MAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` † | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 | `supply_tol` † | Supply tol (alias eps_sat) | 0.638889 | 0 | 5.55556 | Δ°C |
 
 † informational: this control has no effect in the SQL template.
@@ -910,11 +853,8 @@ SAT above setpoint at full cooling
 | `econ_min_pos` † | Econ damper min pos | 0.05 | 0 | 0.5 | fraction (0-1) |
 | `eps_sat` | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `oa_damper_econ_low` | OA damper economizer low | 0.05 | 0 | 0.5 | fraction (0-1) |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -966,11 +906,8 @@ CHW coil ΔT when inactive (GL36 L)
 | `eps_cclt` † | CHW coil leaving eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `htg_on_min` † | Heating on min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -1023,11 +960,8 @@ HW coil ΔT when inactive (GL36 M)
 | `eps_hclt` † | HW coil leaving eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `htg_on_min` | Heating on min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -1072,11 +1006,8 @@ Mixed air below envelope
 | `eps_oat` | OAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_rat` | RAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
 
@@ -1119,11 +1050,8 @@ Mixed air above envelope
 | `eps_oat` | OAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_rat` | RAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan ON fraction threshold | 0.01 | 0 | 0.5 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
 
@@ -1163,12 +1091,7 @@ PID hunting (operating-state oscillation)
 | `confirm_min` | Fault confirm delay | 60 | 0 | 60 | min |
 | `delta_os_max` | Max operating-state entries per hour | 5 | 1 | 30 | count |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
-| `mode_delay_min` † | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1210,11 +1133,8 @@ SAT cold when heating commanded (GL36 D)
 | `eps_sat` † | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `htg_on_min` | Heating-command ON threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -1259,11 +1179,8 @@ Estimated OA fraction mismatch
 | `eps_airflow` | Airflow fraction eps | 0.15 | 0.05 | 1 | fraction (0-1) |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `min_flow_design` | Design minimum outdoor airflow | 2359.74 | 0 | 94389.4 | L/s |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `oat_rat_delta_min` | Min \|OAT-RAT\| | 2.77778 | 0 | 16.6667 | Δ°C |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 **Outputs**
 
@@ -1305,12 +1222,7 @@ SAT low while heating at full
 | `eps_sat` | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `htg_full_min` | Full-heating threshold (GL36 99%) | 0.9 | 0.5 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
-| `mode_delay_min` † | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1356,11 +1268,8 @@ SAT vs MAT while economizing
 | `eps_mat` | MAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 | `supply_tol` | Supply tol (alias eps_sat) | 0.638889 | 0 | 5.55556 | Δ°C |
 
 **Outputs**
@@ -1407,11 +1316,8 @@ OAT high vs SAT SP while economizing
 | `eps_oat` † | OAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` † | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all eps values) | 0.638889 | 0 | 5.55556 | Δ°C |
-| `mode_delay_min` | Mode delay after fan-on | 10 | 0 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -1488,12 +1394,8 @@ Low OA fraction
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `min_oa_frac` | Min OA fraction | 0.15 | 0.05 | 0.4 | fraction (0-1) |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `oat_rat_guard` | OAT/RAT guard | 1.22222 | 0.277778 | 3.33333 | Δ°C |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1531,15 +1433,11 @@ SAT reset not tracking outdoor air
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `reset_err` | Reset error | 1.66667 | 0.277778 | 5.55556 | Δ°C |
 | `reset_oat_ref` | Reset OAT ref | 18.3333 | 10 | 26.6667 | °C |
 | `reset_sat_at_ref` | SAT SP at the reset OAT reference | 11.1111 | 7.22222 | 18.3333 | °C |
 | `reset_slope` | Reset slope | 0.25 | 0.05 | 1 | fraction (0-1) |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1652,12 +1550,8 @@ Duct static trim advisory
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
 | `duct_hi` | Duct static high | 335.934 | 124.42 | 746.52 | Pa |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1696,12 +1590,8 @@ Cooling valve leakage
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `mat_leak_delta` | SAT vs MAT leak ΔT | 1.11111 | 0.277778 | 6.66667 | Δ°C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sat_err` | SAT vs SP leak ΔT | 1.11111 | 0.277778 | 4.44444 | Δ°C |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1741,14 +1631,9 @@ Zone comfort band during occupied hours when occupancy is set; unoccupied setbac
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_occupied` | Require occupied | 1 | 0 | 1 | 0/1 |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `zone_t_hi` | Zone high | 23.8889 | 22.2222 | 29.4444 | °C |
 | `zone_t_lo` | Zone low | 21.1111 | 12.7778 | 22.2222 | °C |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1780,12 +1665,7 @@ Night setback miss — unoccupied zone above heating setback
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
 | `setback_hi` | Setback high | 20 | 12.7778 | 22.2222 | °C |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1822,13 +1702,9 @@ Excessive reheat during warm weather
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `reheat_oat` | Warm OAT | 25.5556 | 18.3333 | 32.2222 | °C |
 | `reheat_pct` | Reheat frac | 0.52 | 0.1 | 1 | fraction (0-1) |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1863,15 +1739,10 @@ Damper stuck at full open
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `full_open_pct` | Full open frac | 0.975 | 0.8 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `sustain_hours` | Sustain window | 1.5 | 0.5 | 6 | h |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1909,11 +1780,7 @@ Airflow sensor bias
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `damper_closed_max` | Damper closed maximum | 0.1 | 0 | 0.5 | fraction (0-1) |
 | `flow_bias` | Airflow bias threshold | 23.5973 | 4.71947 | 94.3894 | L/s |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1949,12 +1816,8 @@ Reheat when cooling available
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `free_cool_oat` | Free-cool OAT | 18.3333 | 7.22222 | 23.8889 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `reheat_pct` | Reheat frac | 0.25 | 0.05 | 1 | fraction (0-1) |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -1989,17 +1852,12 @@ Min airflow / fixed high flow
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `fixed_flow_hours` | Fixed-flow rolling window | 1 | 0.25 | 6 | h |
 | `fixed_flow_max_std` | Fixed-flow max std | 7.0792 | 0.471947 | 37.7558 | L/s |
 | `fixed_flow_min_mean` | Fixed-flow min mean | 94.3894 | 23.5973 | 943.894 | L/s |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `high_min_flow_sp` | High min-flow SP | 117.987 | 23.5973 | 943.894 | L/s |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2080,12 +1938,8 @@ Reheat valve stuck / no temp rise
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `min_rise` | Min temp rise | 1.66667 | 0.277778 | 8.33333 | Δ°C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `reheat_cmd` | Reheat open frac | 0.3 | 0.1 | 1 | fraction (0-1) |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2243,10 +2097,7 @@ Heating/cooling pass-through setpoint deadband below 1 C
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `deadband` | Minimum deadband | 1 | 0 | 5 | Δ°C |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2321,11 +2172,8 @@ Four or more heat/cool valve mode changes in window
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `mode_changes` | Mode changes | 4 | 1 | 20 | count |
 | `mode_valve_min` | Active valve threshold | 0.1 | 0 | 0.5 | fraction (0-1) |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2356,10 +2204,7 @@ Own zone setpoint present but zone temperature null for at least 90% of window
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `null_fraction` | Null fraction | 0.9 | 0.5 | 1 | fraction (0-1) |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2487,11 +2332,7 @@ Low chilled-water ΔT
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `min_dt` | Minimum delta-T | 2.22222 | 0.555556 | 6.66667 | Δ°C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2532,12 +2373,8 @@ DP below SP at max pump speed
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `dp_margin` | DP margin | 15168.5 | 3447.38 | 41368.5 | Pa |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2575,12 +2412,8 @@ Plant supply temp outside deadband
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sp_band` | SP band | 1.22222 | 0.277778 | 3.33333 | Δ°C |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2619,12 +2452,8 @@ Flow high at max pump
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `flow_hi` | Flow high | 69.3992 | 12.618 | 189.271 | L/s |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2662,11 +2491,6 @@ Chiller running with no building load
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
 | `load_sat_hi` | Load satisfaction high (no-load fault) | 0.5 | 0 | 1 | fraction (0-1) |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `require_operational_gate` † | Require operational gate | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2706,12 +2530,8 @@ High CW approach at full tower fan
 |---|---|---:|---:|---:|---|
 | `approach_max` | Max approach at full fan | 4.44444 | 2.77778 | 8.33333 | Δ°C |
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2754,12 +2574,8 @@ Excess tower fan energy vs wet-bulb limit
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `cw_approach` | Design approach | 3.88889 | 1.66667 | 8.33333 | Δ°C |
 | `excess_beyond_approach` | Excess beyond approach | 2.77778 | 1.11111 | 11.1111 | Δ°C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2801,11 +2617,7 @@ Condenser water not optimized vs wet-bulb
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `cw_approach` | Design approach | 3.88889 | 1.66667 | 8.33333 | Δ°C |
 | `cw_slack` | Slack below target | 1.11111 | 0.277778 | 3.33333 | Δ°C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2846,12 +2658,8 @@ CHW plant reset advisory
 |---|---|---:|---:|---:|---|
 | `chw_lo` | CHWS low | 7.22222 | 1.66667 | 12.7778 | °C |
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2895,12 +2703,8 @@ HWST trim advisory
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
 | `hwst_hi` | HWST high | 71.1111 | 48.8889 | 93.3333 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2943,12 +2747,8 @@ Discharge cold when heating
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `min_sat` | Min discharge SAT | 29.4444 | 21.1111 | 43.3333 | °C |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `zone_cold` | Zone cold threshold | 20.5556 | 15.5556 | 22.2222 | °C |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -2985,10 +2785,7 @@ BAS 15m vs utility interval (MAE threshold)
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `util_interval_mae` | Interval MAE threshold | 5 | 0.5 | 100 | kWh |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -3019,10 +2816,7 @@ BAS monthly kWh vs utility monthly bills (% deviation)
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `util_pct_err` | Monthly kWh deviation | 10 | 2 | 50 | % |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -3065,18 +2859,12 @@ Suspected control-output hunting
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `change_deadband_pct` | Ignore changes below | 1 | 0 | 10 | % |
-| `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
-| `minimum_coverage_pct` | Min window sample coverage | 80 | 50 | 100 | % |
 | `minimum_equivalent_cycles` | Min equivalent cycles | 2.5 | 0.5 | 10 | count |
 | `minimum_reversals` | Min direction reversals | 4 | 1 | 20 | count |
 | `minimum_span_pct` | Minimum observed span | 20 | 5 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 | `total_variation_fault_pct` | Total variation fault threshold | 500 | 50 | 2000 | % |
 | `window_hours` | Hunting lookback window | 1 | 0.25 | 4 | h |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -3127,15 +2915,9 @@ Sensor flatline (stuck)
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `flatline_hours` | Flatline window | 1 | 0.25 | 12 | h |
 | `flatline_tol` | Flatline tolerance | 0.055556 | 0.011111 | 0.555556 | Δ°C |
-| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -3193,15 +2975,10 @@ Sensor out of hard range
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `minimum_active_coverage_pct` † | Min active coverage | 5 | 0 | 100 | % |
 | `range_scale_humidity` | Humidity range scale | 1 | 0.5 | 2 | x (ratio) |
 | `range_scale_pressure` | Pressure / duct-static range scale | 1 | 0.5 | 2 | x (ratio) |
 | `range_scale_temperature` | Temp range scale | 1 | 0.5 | 2 | x (ratio) |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -3238,13 +3015,9 @@ Context-aware sensor rate of change
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `max_gap_hours` | Max sample gap | 1 | 0.1 | 12 | h |
-| `persistence_min` † | Fault persistence | 10 | 5 | 60 | min |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `sensor_span` | Sensor span | 100 | 1 | 500 | signal units |
 | `steady_fault_per_hour` | Steady-state slew limit | 3.33333 | 0.555556 | 33.3333 | Δ°C/h |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -3295,14 +3068,11 @@ Sensor rate-of-change spike
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `minimum_active_coverage_pct` | Min active coverage | 5 | 0 | 100 | % |
 | `require_run_proof` | Require run proof | 1 | 0 | 1 | 0/1 |
 | `spike_scale` † | Spike limit scale (global) | 1 | 0.25 | 3 | x (ratio) |
 | `spike_scale_humidity` | Spike scale humidity | 1 | 0.25 | 4 | x (ratio) |
 | `spike_scale_pressure` | Spike scale pressure | 1 | 0.25 | 4 | x (ratio) |
 | `spike_scale_temperature` | Spike scale temperature | 1 | 0.25 | 4 | x (ratio) |
-| `startup_delay_min` † | Startup delay | 0 | 0 | 60 | min |
 
 † informational: this control has no effect in the SQL template.
 
@@ -3387,8 +3157,6 @@ Equipment OAT vs weather-staged wx OAT
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `oat_err` | OAT vs meteo tolerance | 2.77778 | 1.11111 | 11.1111 | Δ°C |
-| `web_asof_margin_seconds` | Web as-of margin | 300 | 0 | 1800 | s |
-| `web_cadence_seconds` | Web weather cadence | 1200 | 300 | 7200 | s |
 
 **Outputs**
 
@@ -3458,7 +3226,6 @@ Average zone temperature per equipment
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `zone_t_hi` † | Zone comfort high (reference) | 24.4444 | 22.2222 | 29.4444 | °C |
 | `zone_t_lo` † | Zone comfort low (reference) | 20 | 15.5556 | 22.2222 | °C |
 
@@ -3490,11 +3257,7 @@ Fan running hours where fan_cmd > 5% (normalized 0-1)
 
 **Parameters**
 
-| Parameter | Label | Default | Min | Max | SI unit |
-|---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
-
-† informational: this control has no effect in the SQL template.
+_None._
 
 **Outputs**
 
@@ -3523,11 +3286,8 @@ Comfort fault sample count → hours
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `zone_t_hi` | Zone comfort high | 24.4444 | 22.2222 | 29.4444 | °C |
 | `zone_t_lo` | Zone comfort low | 20 | 15.5556 | 22.2222 | °C |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 
@@ -3558,11 +3318,8 @@ Percent of samples in comfort band
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` † | Fault confirm delay | 0 | 0 | 120 | min |
 | `zone_t_hi` | Zone comfort high | 24.4444 | 22.2222 | 29.4444 | °C |
 | `zone_t_lo` | Zone comfort low | 20 | 15.5556 | 22.2222 | °C |
-
-† informational: this control has no effect in the SQL template.
 
 **Outputs**
 

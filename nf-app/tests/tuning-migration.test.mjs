@@ -72,7 +72,7 @@ test("a new write rejects retired keys, NaN, booleans and out-of-range values at
 
 test("the migrated value renders into the SQL the next run executes", () => {
   const r = merge({ stale_hours: 6 }, { max_silence_hours: 2 });
-  const values = rt.resolvePlaceholders(pack.rule_tuning_templates.runtime_defaults, controls, r.effective, r.overrideKeys, pack.poll_seconds);
+  const values = rt.resolvePlaceholders(rt.ruleDefaults(pack.rule_tuning_templates, tpl), controls, r.effective, r.overrideKeys, pack.poll_seconds);
   const sql = rt.renderRuleSql(tpl.sql, values, "SV-STALE");
   assert.ok(sql.includes("dt_seconds > 7200"), "2 h threshold");
   assert.ok(!sql.includes("{{"));

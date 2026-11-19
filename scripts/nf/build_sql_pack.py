@@ -499,7 +499,7 @@ def rule_tuning_templates(catalog, pg_rules):
                 item["description"] = d["description"]
             controls[k] = item
         # Roundtrip check against pg_rules[rid] with defaults + shipped limits
-        vals = dict(runtime_defaults)
+        vals = {**runtime_defaults, **(r.get("internal_constants") or {})}   # #1671: fixed per-rule safeguards
         for k, d in r["parameters"].items():
             if k != "confirm_min":
                 vals[d["sql_placeholder"]] = d["default"]
@@ -539,6 +539,9 @@ def rule_tuning_templates(catalog, pg_rules):
         if _fill_tmpl(tl) != pg_rules[rid]["timeline_sql"]:
             raise SystemExit(f"rule_tuning_templates timeline_sql mismatch for {rid}")
         rules[rid] = {"sql": sql, "timeline_sql": tl, "controls": controls}
+        if r.get("internal_constants"):
+            # #1671: fixed safeguards layered over runtime_defaults (rule-tuning.js ruleDefaults)
+            rules[rid]["internal"] = dict(r["internal_constants"])
         if r.get("legacy_parameters"):
             # #1673: saved keys this rule renamed or retired (rule-tuning.js normalizeRuleOverride migrates them)
             rules[rid]["legacy"] = {"aliases": r["legacy_parameters"].get("aliases", {}),

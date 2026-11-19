@@ -232,6 +232,15 @@
     return pyRepr(value);
   }
 
+  /**
+   * The base values of one rule before its controls apply: the pack's runtime_defaults with the rule's fixed
+   * internal safeguards on top (#1671 internal_constants: retired delays, coverage floors and join plumbing at
+   * their shipped values). Pass the result as resolvePlaceholders' runtimeDefaults, like render_rule.py does.
+   */
+  function ruleDefaults(templateRoot, ruleTpl) {
+    return { ...((templateRoot && templateRoot.runtime_defaults) || {}), ...((ruleTpl && ruleTpl.internal) || {}) };
+  }
+
   /** Exact JS twin of render_rule.py lines 121-163. */
   function resolvePlaceholders(runtimeDefaults, controls, effective, overrideKeys = new Set(), pollSeconds = 300) {
     if (!isNum(pollSeconds) || pollSeconds < 1) throw new Error('pollSeconds must be finite and >= 1');
@@ -254,7 +263,8 @@
     }
     values.MODE_DELAY_MIN = Math.max(values.MODE_DELAY_MIN || 0, values.STARTUP_DELAY_MIN || 0);
     values.POLL_SECONDS = pollSeconds;
-    const confirmMin = has(effective, 'confirm_min') ? effective.confirm_min : ((values.CONFIRM_SECONDS || 600) / 60);
+    // a fixed internal confirm of 0 s (PID-HUNT-1, #1671) is a value, not "unset": same as render_rule.py's .get(..., 600)
+    const confirmMin = has(effective, 'confirm_min') ? effective.confirm_min : ((has(values, 'CONFIRM_SECONDS') ? values.CONFIRM_SECONDS : 600) / 60);
     values.CONFIRM_SECONDS = confirmMin * 60;
     values.CONFIRM_ROWS = Math.max(1, Math.ceil(values.CONFIRM_SECONDS / pollSeconds));
     for (const [k, v] of Object.entries({ ...values })) {
@@ -310,7 +320,7 @@
   const api = {
     SITE_SCOPE, EQUIP_SCOPE_PREFIX, equipScope,
     displayUnits, preferredDisplayUnit, toSi, fromSi, prettyCatalogUnit,
-    normalizeRuleOverride, mergeRuleParams, formatRuleValue, resolvePlaceholders, renderRuleSql, canonicalJson,
+    normalizeRuleOverride, mergeRuleParams, formatRuleValue, ruleDefaults, resolvePlaceholders, renderRuleSql, canonicalJson,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ofddRuleTuning = api;

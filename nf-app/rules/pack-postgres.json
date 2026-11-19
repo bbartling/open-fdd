@@ -1840,7 +1840,17 @@
    "FAN-RUNTIME-HOURS": {
     "sql": "-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.\n-- Inputs must be scoped to one tenant/site and cadence; see README.md.\n-- fan_runtime_hours.sql\n-- Fan runtime integrates the forward delta while fan_cmd > 0.05.\n-- A gap longer than MAX_GAP_HOURS is unknown and is omitted from both totals.\n-- The last sample does not invent a trailing interval.\n\nWITH ordered AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    fan_cmd AS fan_cmd,\n    EXTRACT(EPOCH FROM (\n      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n      - timestamp_utc\n    )) AS dt_seconds\n  FROM history\n),\nheld AS (\n  SELECT\n    equipment_id,\n    fan_cmd,\n    CASE\n      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)\n      THEN 0.0\n      ELSE dt_seconds\n    END AS held_seconds\n  FROM ordered\n)\nSELECT\n  equipment_id,\n  SUM(CASE WHEN fan_cmd > 0.05 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fan_runtime_hours,\n  SUM(CASE WHEN fan_cmd IS NOT NULL THEN held_seconds ELSE 0.0 END) / 3600.0 AS total_hours\nFROM held\nGROUP BY equipment_id;\n",
     "timeline_sql": null,
-    "controls": {}
+    "controls": {},
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+    }
    },
    "VAV-1": {
     "sql": "-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.\n-- Inputs must be scoped to one tenant/site and cadence; see README.md.\n-- vav1_comfort_fault.sql — zone comfort band with confirm window (Open-FDD parity)\n-- When occ_mode is present, require_occupied (default 1) scores the band only\n-- while occupied. The rule runner synthesizes occ_mode from the saved Overview\n-- calendar (session occupancy_schedule) when no modeled occ_mode exists.\n-- With neither signal, the product path reports NOT_ASSESSED_NO_OCCUPANCY (0 fault\n-- seconds). Unoccupied setback stays on VAV-2.\n-- OFDD-065: do not reference fan_cmd here. Zone-only parquet schemas\n-- often lack fan_cmd; the rule is then → SKIPPED_MISSING_ROLES.\nWITH h AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    zone_t,\n    occ_mode,\n    CAST(CASE WHEN zone_t < {{ZONE_T_LO}} OR zone_t > {{ZONE_T_HI}} THEN 1 ELSE 0 END AS INT) AS band_fault\n  FROM history\n  WHERE zone_t IS NOT NULL\n),\nbase AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    CAST(CASE\n      WHEN {{REQUIRE_OCCUPIED}} >= 0.5\n       AND occ_mode IS NOT NULL\n       AND (\n         LOWER(trim(CAST(occ_mode AS VARCHAR))) IN\n           ('unoccupied','unocc','off','false','night','standby','setback','no')\n         OR (\n           fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) IS NOT NULL\n           AND fdd.try_double(trim(CAST(occ_mode AS VARCHAR))) <= 0.05\n         )\n       )\n      THEN 0\n      ELSE band_fault\n    END AS INT) AS raw_fault\n  FROM h\n),\nelapsed_hold AS (\n  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:\n  -- it is not fault time, not covered time, and it breaks confirmation.\n  -- The last sample has no forward interval.\n  SELECT\n    stepped.*,\n    CASE\n      WHEN stepped.dt_seconds IS NULL\n        OR stepped.dt_seconds <= 0.0\n        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)\n      THEN 0.0\n      ELSE stepped.dt_seconds\n    END AS held_seconds,\n    CASE\n      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1\n      ELSE 0\n    END AS gap_after\n  FROM (\n    SELECT\n      src.*,\n      EXTRACT(EPOCH FROM (\n        LEAD(src.timestamp_utc) OVER (\n          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc\n        ) - src.timestamp_utc\n      )) AS dt_seconds\n    FROM base src\n  ) stepped\n),\nlagged AS (\n  SELECT\n    *,\n    CASE\n      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0\n      THEN 0 ELSE 1\n    END AS is_new_streak\n  FROM elapsed_hold\n),\ngrp AS (\n  SELECT\n    *,\n    SUM(is_new_streak)\n      OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id\n  FROM lagged\n),\nranked AS (\n  SELECT\n    *,\n    SUM(held_seconds) OVER (\n      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc\n      ROWS UNBOUNDED PRECEDING\n    ) AS streak_elapsed\n  FROM grp\n),\nfinal AS (\n  SELECT\n    equipment_id,\n    held_seconds,\n    timestamp_utc,\n    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed\n  FROM ranked\n)\nSELECT\n  equipment_id,\n  SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,\n  SUM(held_seconds) / 3600.0 AS covered_hours,\n  100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(held_seconds), 0.0) AS fault_pct\nFROM final\nGROUP BY equipment_id;\n",
@@ -1890,6 +1900,15 @@
       "default": 21.111111111,
       "sql_placeholder": "ZONE_T_LO"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "require_operational_gate",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VAV-2": {
@@ -1918,12 +1937,31 @@
       "default": 20.0,
       "sql_placeholder": "SETBACK_HI"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "require_operational_gate",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "AVG-ZONE-TEMP": {
     "sql": "-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.\n-- Inputs must be scoped to one tenant/site and cadence; see README.md.\n-- avg_zone_temp.sql\nSELECT\n  equipment_id,\n  AVG(zone_t) AS avg_zone_temp,\n  MIN(zone_t) AS min_zone_temp,\n  MAX(zone_t) AS max_zone_temp\nFROM history\nWHERE zone_t IS NOT NULL\nGROUP BY equipment_id;\n",
     "timeline_sql": null,
-    "controls": {}
+    "controls": {},
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+    }
    },
    "ZONE-COMFORT-PCT": {
     "sql": "-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.\n-- Inputs must be scoped to one tenant/site and cadence; see README.md.\n-- zone_comfort_pct.sql\n-- Comfort is the share of eligible elapsed time inside the band, not a row count.\n-- Band placeholders ZONE_T_LO / ZONE_T_HI and history zone_t are SI °C (metric pack).\nWITH ordered AS (\n  SELECT\n    equipment_id,\n    zone_t,\n    EXTRACT(EPOCH FROM (\n      LEAD(timestamp_utc) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n      - timestamp_utc\n    )) AS dt_seconds\n  FROM history\n  WHERE zone_t IS NOT NULL\n),\nheld AS (\n  SELECT\n    equipment_id,\n    zone_t,\n    CASE\n      WHEN dt_seconds IS NULL OR dt_seconds <= 0.0 OR dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)\n      THEN 0.0\n      ELSE dt_seconds\n    END AS held_seconds\n  FROM ordered\n)\nSELECT\n  equipment_id,\n  100.0 * SUM(CASE\n    WHEN zone_t >= {{ZONE_T_LO}} AND zone_t <= {{ZONE_T_HI}} THEN held_seconds\n    ELSE 0.0\n  END) / NULLIF(SUM(held_seconds), 0.0) AS comfort_pct\nFROM held\nGROUP BY equipment_id;\n",
@@ -1951,6 +1989,16 @@
       "default": 20.0,
       "sql_placeholder": "ZONE_T_LO"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FAULT-ELAPSED-HOURS": {
@@ -1979,6 +2027,16 @@
       "default": 20.0,
       "sql_placeholder": "ZONE_T_LO"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "OAT-METEO": {
@@ -2006,29 +2064,19 @@
       "unit": "degC",
       "default": 2.777778,
       "sql_placeholder": "OAT_ERR"
-     },
-     "web_asof_margin_seconds": {
-      "key": "web_asof_margin_seconds",
-      "kind": "duration_seconds",
-      "label": "Web as-of margin",
-      "min": 0.0,
-      "max": 1800.0,
-      "step": 60.0,
-      "unit": "sec",
-      "default": 300.0,
-      "sql_placeholder": "WEB_ASOF_MARGIN_SECONDS"
-     },
-     "web_cadence_seconds": {
-      "key": "web_cadence_seconds",
-      "kind": "duration_seconds",
-      "label": "Web weather cadence",
-      "min": 300.0,
-      "max": 7200.0,
-      "step": 300.0,
-      "unit": "sec",
-      "default": 1200.0,
-      "sql_placeholder": "WEB_CADENCE_SECONDS"
      }
+    },
+    "internal": {
+     "WEB_ASOF_MARGIN_SECONDS": 300.0,
+     "WEB_CADENCE_SECONDS": 1200.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "web_asof_margin_seconds",
+      "web_cadence_seconds"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC13-SAT-HIGH": {
@@ -2090,28 +2138,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "oa_damper_econ_low": {
       "key": "oa_damper_econ_low",
       "kind": "fraction",
@@ -2133,18 +2159,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "ECON-2": {
@@ -2195,6 +2224,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC1": {
@@ -2245,28 +2282,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -2277,18 +2292,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC2": {
@@ -2350,17 +2368,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -2372,17 +2379,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -2393,18 +2389,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC3": {
@@ -2466,17 +2465,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -2488,17 +2476,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -2509,18 +2486,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC7": {
@@ -2571,17 +2551,6 @@
       "default": 0.9,
       "sql_placeholder": "HTG_FULL_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -2593,6 +2562,18 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC8": {
@@ -2676,17 +2657,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -2697,17 +2667,6 @@
       "unit": "degC",
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
-     },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
      },
      "require_run_proof": {
       "key": "require_run_proof",
@@ -2720,17 +2679,6 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
-     },
      "supply_tol": {
       "key": "supply_tol",
       "kind": "temperature_difference",
@@ -2742,6 +2690,20 @@
       "default": 0.638888889,
       "sql_placeholder": "SUPPLY_TOL"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC9": {
@@ -2803,17 +2765,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -2825,17 +2776,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -2846,18 +2786,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC10": {
@@ -2919,17 +2862,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -2941,17 +2873,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -2962,18 +2883,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC11": {
@@ -3035,17 +2959,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -3057,17 +2970,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -3078,18 +2980,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC12": {
@@ -3162,17 +3067,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -3184,17 +3078,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -3205,18 +3088,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "ECON-1": {
@@ -3267,6 +3153,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "ECON-4": {
@@ -3317,6 +3211,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "SV-RANGE": {
@@ -3377,35 +3279,25 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "max_silence_hours": {
-      "key": "max_silence_hours",
-      "kind": "dimensionless",
-      "label": "Max sensor silence",
-      "min": 0.25,
-      "max": 12.0,
-      "step": 0.25,
-      "unit": "h",
-      "default": 0.5,
-      "sql_placeholder": "MAX_SILENCE_HOURS"
      }
+    },
+    "internal": {
+     "MAX_SILENCE_HOURS": 0.5
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min",
+      "max_silence_hours"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "SV-FLATLINE": {
     "sql": "WITH rp AS (\n  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).\n  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.\n  SELECT equipment_id,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof\n  FROM history\n  GROUP BY equipment_id\n),\nbase_proof AS (\n  SELECT h.*,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN h.run_proof > 0.05 THEN 1 ELSE 0 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n  GROUP BY equipment_id, series_id, sensor_role\n),\n-- #1631: bounded as-of proof per (equipment, sample time) with window functions (no correlated subquery, so it scales on\n-- PostgreSQL / TimescaleDB): proof rows and the distinct sample times of one equipment are interleaved in time order\n-- (a proof row sorts before a sample at the same instant); a running count of proof rows tags every sample with the\n-- latest proof row at or before it; that row's proof is used when it is less than MAX_GAP_HOURS older than the sample.\nsample_times AS (\n  SELECT DISTINCT equipment_id, timestamp_utc, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds\n  FROM sensor_history\n  WHERE value IS NOT NULL\n    AND sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nproof_stream AS (\n  SELECT equipment_id, timestamp_utc, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds, 0 AS stream_kind, energized\n  FROM base_proof\n  UNION ALL\n  SELECT equipment_id, timestamp_utc, epoch_seconds, 1 AS stream_kind, NULL AS energized\n  FROM sample_times\n),\nproof_tagged AS (\n  SELECT proof_stream.*,\n    SUM(CASE WHEN stream_kind = 0 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id ORDER BY epoch_seconds, stream_kind ROWS UNBOUNDED PRECEDING) AS proof_group\n  FROM proof_stream\n),\nproof_carried AS (\n  SELECT proof_tagged.*,\n    MAX(CASE WHEN stream_kind = 0 THEN epoch_seconds END) OVER (PARTITION BY equipment_id, proof_group) AS proof_epoch,\n    MAX(CASE WHEN stream_kind = 0 THEN energized END) OVER (PARTITION BY equipment_id, proof_group) AS proof_energized\n  FROM proof_tagged\n),\nproof_asof AS (\n  SELECT equipment_id, timestamp_utc,\n    CASE WHEN proof_epoch IS NOT NULL AND proof_epoch > epoch_seconds - {{MAX_GAP_HOURS}} * 3600.0\n      THEN proof_energized ELSE NULL END AS energized\n  FROM proof_carried\n  WHERE stream_kind = 1\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    -- #1631: the proof of a sample is the latest proof row at or before it, held for at most MAX_GAP_HOURS (proof_asof).\n    -- No such row (or a NULL proof) is UNKNOWN: it cannot create a fault. With the gate off every sample is eligible.\n    COALESCE(pa.energized, CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 ELSE 0 END) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  LEFT JOIN proof_asof pa\n    ON pa.equipment_id = s.equipment_id AND pa.timestamp_utc = s.timestamp_utc\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > {{MAX_SILENCE_SECONDS}} THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_epoch,\n    MIN(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_min,\n    MAX(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_max,\n    FIRST_VALUE(previous_value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_prev_value,\n    FIRST_VALUE(previous_epoch) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_prev_epoch\n  FROM valid\n),\nsegments0 AS (\n  SELECT windowed.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id, data_segment) AS segment_start_epoch\n  FROM windowed\n),\nelapsed_window AS (\n  SELECT segments0.*,\n    CASE WHEN window_first_epoch > epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch <= epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value < window_min\n         THEN window_first_prev_value ELSE window_min END AS elapsed_window_min,\n    CASE WHEN window_first_epoch > epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch <= epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value > window_max\n         THEN window_first_prev_value ELSE window_max END AS elapsed_window_max\n  FROM segments0\n),\nsignals AS (\n  SELECT elapsed_window.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - {{FLATLINE_SECONDS}}) AND (elapsed_window_max - elapsed_window_min <= __OFDD_SV_FLATLINE_TOL__) AND energized = 1)) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM elapsed_window\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < {{MAX_SILENCE_SECONDS}} THEN dt_seconds\n         ELSE {{MAX_SILENCE_SECONDS}} END AS normal_seconds,\n    CASE WHEN dt_seconds > {{MAX_SILENCE_SECONDS}}\n         THEN dt_seconds - {{MAX_SILENCE_SECONDS}} ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  -- #1673: time beyond MAX_SILENCE_SECONDS of a gap is unknown here (not covered, not a fault); SV-STALE scores gaps.\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n),\nscored AS (\n  SELECT equipment_id, series_id, sensor_role,\n    SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 AS fault_hours,\n    SUM(held_seconds) / 3600.0 AS covered_hours\n  FROM final\n  GROUP BY equipment_id, series_id, sensor_role\n)\nSELECT ss.equipment_id, ss.series_id, ss.sensor_role,\n  CASE WHEN COALESCE((SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id), CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 THEN 1 ELSE 0 END) = 1 THEN NULL ELSE CASE WHEN COALESCE(scored.covered_hours, 0.0) > 0 THEN COALESCE(scored.fault_hours, 0.0) ELSE NULL END END AS fault_hours,\n  CASE WHEN COALESCE((SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = ss.equipment_id), CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 THEN 1 ELSE 0 END) = 1 THEN 0.0 ELSE COALESCE(scored.covered_hours, 0.0) END AS covered_hours\nFROM sensor_series ss\nLEFT JOIN scored USING (equipment_id, series_id, sensor_role)\nORDER BY ss.equipment_id, ss.series_id;\n",
     "timeline_sql": "WITH rp AS (\n  SELECT equipment_id,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof\n  FROM history\n  GROUP BY equipment_id\n),\nbase_proof AS (\n  SELECT h.*,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN h.run_proof > 0.05 THEN 1 ELSE 0 END AS energized\n  FROM history h\n),\nbase_history AS (\n  SELECT base_proof.*,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) OVER (PARTITION BY equipment_id) AS observed_end_epoch,\n    100.0 * AVG(energized) OVER (PARTITION BY equipment_id) AS coverage_pct\n  FROM base_proof\n),\nequipment_summary AS (\n  SELECT equipment_id,\n    MAX(EXTRACT(EPOCH FROM timestamp_utc)) AS observed_end_epoch,\n    100.0 * AVG(energized) AS coverage_pct\n  FROM base_proof\n  GROUP BY equipment_id\n),\nsensor_series AS (\n  SELECT equipment_id, series_id, sensor_role\n  FROM sensor_history\n  WHERE sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n  GROUP BY equipment_id, series_id, sensor_role\n),\nsample_times AS (\n  SELECT DISTINCT equipment_id, timestamp_utc, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds\n  FROM sensor_history\n  WHERE value IS NOT NULL\n    AND sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nproof_stream AS (\n  SELECT equipment_id, timestamp_utc, EXTRACT(EPOCH FROM timestamp_utc) AS epoch_seconds, 0 AS stream_kind, energized\n  FROM base_proof\n  UNION ALL\n  SELECT equipment_id, timestamp_utc, epoch_seconds, 1 AS stream_kind, NULL AS energized\n  FROM sample_times\n),\nproof_tagged AS (\n  SELECT proof_stream.*,\n    SUM(CASE WHEN stream_kind = 0 THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id ORDER BY epoch_seconds, stream_kind ROWS UNBOUNDED PRECEDING) AS proof_group\n  FROM proof_stream\n),\nproof_carried AS (\n  SELECT proof_tagged.*,\n    MAX(CASE WHEN stream_kind = 0 THEN epoch_seconds END) OVER (PARTITION BY equipment_id, proof_group) AS proof_epoch,\n    MAX(CASE WHEN stream_kind = 0 THEN energized END) OVER (PARTITION BY equipment_id, proof_group) AS proof_energized\n  FROM proof_tagged\n),\nproof_asof AS (\n  SELECT equipment_id, timestamp_utc,\n    CASE WHEN proof_epoch IS NOT NULL AND proof_epoch > epoch_seconds - {{MAX_GAP_HOURS}} * 3600.0\n      THEN proof_energized ELSE NULL END AS energized\n  FROM proof_carried\n  WHERE stream_kind = 1\n),\nsensor_rows AS (\n  SELECT s.equipment_id, s.series_id, s.sensor_role, s.timestamp_utc,\n    CASE WHEN hs.observed_end_epoch IS NULL OR MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) > hs.observed_end_epoch\n      THEN MAX(EXTRACT(EPOCH FROM s.timestamp_utc)) OVER (PARTITION BY s.equipment_id) ELSE hs.observed_end_epoch END AS observed_end_epoch,\n    COALESCE(pa.energized, CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 ELSE 0 END) AS energized,\n    COALESCE(hs.coverage_pct, 100.0) AS coverage_pct,\n    EXTRACT(EPOCH FROM s.timestamp_utc) AS epoch_seconds,\n    fdd.mask_sweep_val(s.sensor_role, s.unit, s.value) AS value\n  FROM sensor_history s\n  LEFT JOIN equipment_summary hs\n    ON hs.equipment_id = s.equipment_id\n  LEFT JOIN proof_asof pa\n    ON pa.equipment_id = s.equipment_id AND pa.timestamp_utc = s.timestamp_utc\n  WHERE s.value IS NOT NULL\n    AND s.sensor_role IN ('oa_t', 'mat', 'zone_t', 'rat', 'sat', 'chw_supply_t', 'chw_return_t', 'hw_supply_t', 'hw_return_t', 'oa_h', 'ra_h', 'zone_rh', 'ma_h', 'sa_h')\n),\nprior AS (\n  SELECT sensor_rows.*,\n    LAG(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_value,\n    COALESCE(LEAD(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), observed_end_epoch) AS next_epoch,\n    LAG(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds) AS previous_epoch\n  FROM sensor_rows\n),\nprior_groups AS (\n  SELECT prior.*,\n    SUM(CASE WHEN value IS NULL OR previous_value IS NULL OR previous_epoch IS NULL OR epoch_seconds - previous_epoch > {{MAX_SILENCE_SECONDS}} THEN 1 ELSE 0 END)\n      OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING) AS data_segment\n  FROM prior\n),\nvalid AS (\n  SELECT * FROM prior_groups WHERE value IS NOT NULL\n),\nwindowed AS (\n  SELECT valid.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_epoch,\n    MIN(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_min,\n    MAX(value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_max,\n    FIRST_VALUE(previous_value) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_prev_value,\n    FIRST_VALUE(previous_epoch) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds RANGE BETWEEN {{FLATLINE_SECONDS}} PRECEDING AND CURRENT ROW) AS window_first_prev_epoch\n  FROM valid\n),\nsegments0 AS (\n  SELECT windowed.*,\n    MIN(epoch_seconds) OVER (PARTITION BY equipment_id, series_id, data_segment) AS segment_start_epoch\n  FROM windowed\n),\nelapsed_window AS (\n  SELECT segments0.*,\n    CASE WHEN window_first_epoch > epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch <= epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value < window_min\n         THEN window_first_prev_value ELSE window_min END AS elapsed_window_min,\n    CASE WHEN window_first_epoch > epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch <= epoch_seconds - {{FLATLINE_SECONDS}}\n           AND window_first_prev_epoch >= segment_start_epoch\n           AND window_first_prev_value > window_max\n         THEN window_first_prev_value ELSE window_max END AS elapsed_window_max\n  FROM segments0\n),\nsignals AS (\n  SELECT elapsed_window.*,\n    CASE WHEN next_epoch IS NULL OR next_epoch <= epoch_seconds THEN 0.0\n         ELSE next_epoch - epoch_seconds END AS dt_seconds,\n    CAST(CASE WHEN (((segment_start_epoch <= epoch_seconds - {{FLATLINE_SECONDS}}) AND (elapsed_window_max - elapsed_window_min <= __OFDD_SV_FLATLINE_TOL__) AND energized = 1)) THEN 1 ELSE 0 END AS INT) AS raw_fault\n  FROM elapsed_window\n),\nsegments AS (\n  SELECT signals.*,\n    CASE WHEN dt_seconds <= 0 THEN 0.0\n         WHEN dt_seconds < {{MAX_SILENCE_SECONDS}} THEN dt_seconds\n         ELSE {{MAX_SILENCE_SECONDS}} END AS normal_seconds,\n    CASE WHEN dt_seconds > {{MAX_SILENCE_SECONDS}}\n         THEN dt_seconds - {{MAX_SILENCE_SECONDS}} ELSE 0.0 END AS silence_seconds\n  FROM signals\n),\nlagged AS (\n  SELECT segments.*,\n    COALESCE(LAG(raw_fault) OVER (PARTITION BY equipment_id, series_id ORDER BY epoch_seconds), 0) AS previous_raw_fault\n  FROM segments\n),\nstreak_groups AS (\n  SELECT segments.*,\n    SUM(CASE WHEN (raw_fault = 1 AND previous_raw_fault = 0) OR raw_fault = 0\n             THEN 1 ELSE 0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS streak_group\n  FROM lagged segments\n),\nstreaks AS (\n  SELECT streak_groups.*,\n    SUM(CASE WHEN raw_fault = 1 THEN normal_seconds ELSE 0.0 END) OVER (\n      PARTITION BY equipment_id, series_id, data_segment, streak_group\n      ORDER BY epoch_seconds ROWS UNBOUNDED PRECEDING\n    ) AS fault_streak_seconds\n  FROM streak_groups\n),\nconfirmed_rows AS (\n  SELECT streaks.*,\n    CASE WHEN raw_fault = 1 AND fault_streak_seconds >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS normal_confirmed\n  FROM streaks\n),\nfinal AS (\n  SELECT equipment_id, series_id, sensor_role, epoch_seconds AS segment_epoch,\n    normal_confirmed AS confirmed, normal_seconds AS held_seconds\n  FROM confirmed_rows WHERE normal_seconds > 0\n)\nSELECT equipment_id, series_id, sensor_role, CAST(segment_epoch AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE held_seconds > 0 AND equipment_id NOT IN (SELECT rpx.equipment_id FROM rp rpx WHERE rpx.no_run_proof = 1) ORDER BY equipment_id, series_id, sensor_role, segment_epoch\n",
     "controls": {
-     "confirm_min": {
-      "key": "confirm_min",
-      "kind": "duration_minutes",
-      "label": "Fault confirm delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 5.0,
-      "unit": "min",
-      "default": 5.0,
-      "sql_placeholder": "CONFIRM_SECONDS"
-     },
      "flatline_hours": {
       "key": "flatline_hours",
       "kind": "dimensionless",
@@ -3438,18 +3330,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "max_silence_hours": {
-      "key": "max_silence_hours",
-      "kind": "dimensionless",
-      "label": "Max sensor silence",
-      "min": 0.25,
-      "max": 12.0,
-      "step": 0.25,
-      "unit": "h",
-      "default": 0.5,
-      "sql_placeholder": "MAX_SILENCE_HOURS"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 300.0,
+     "MAX_SILENCE_HOURS": 0.5
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min",
+      "minimum_active_coverage_pct",
+      "startup_delay_min",
+      "max_silence_hours"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "SV-SPIKE": {
@@ -3466,17 +3361,6 @@
       "unit": "min",
       "default": 5.0,
       "sql_placeholder": "CONFIRM_SECONDS"
-     },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
      },
      "require_run_proof": {
       "key": "require_run_proof",
@@ -3521,18 +3405,20 @@
       "unit": "x",
       "default": 1.0,
       "sql_placeholder": "SPIKE_SCALE_TEMPERATURE"
-     },
-     "max_silence_hours": {
-      "key": "max_silence_hours",
-      "kind": "dimensionless",
-      "label": "Max sensor silence",
-      "min": 0.25,
-      "max": 12.0,
-      "step": 0.25,
-      "unit": "h",
-      "default": 0.5,
-      "sql_placeholder": "MAX_SILENCE_HOURS"
      }
+    },
+    "internal": {
+     "MAX_SILENCE_HOURS": 0.5,
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min",
+      "max_silence_hours"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "SV-STALE": {
@@ -3580,17 +3466,6 @@
       "default": 10.0,
       "sql_placeholder": "CONFIRM_SECONDS"
      },
-     "max_gap_hours": {
-      "key": "max_gap_hours",
-      "kind": "dimensionless",
-      "label": "Max sample gap",
-      "min": 0.1,
-      "max": 12.0,
-      "step": 0.1,
-      "unit": "h",
-      "default": 1.0,
-      "sql_placeholder": "MAX_GAP_HOURS"
-     },
      "sensor_span": {
       "key": "sensor_span",
       "kind": "dimensionless",
@@ -3624,6 +3499,17 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "internal": {
+     "MAX_GAP_HOURS": 1.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "max_gap_hours",
+      "persistence_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "PID-HUNT-1": {
@@ -3640,28 +3526,6 @@
       "unit": "pct",
       "default": 1.0,
       "sql_placeholder": "CHANGE_DEADBAND_PCT"
-     },
-     "confirm_min": {
-      "key": "confirm_min",
-      "kind": "duration_minutes",
-      "label": "Fault confirm delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 5.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "CONFIRM_SECONDS"
-     },
-     "minimum_coverage_pct": {
-      "key": "minimum_coverage_pct",
-      "kind": "percent",
-      "label": "Min window sample coverage",
-      "min": 50.0,
-      "max": 100.0,
-      "step": 5.0,
-      "unit": "pct",
-      "default": 80.0,
-      "sql_placeholder": "MINIMUM_COVERAGE_PCT"
      },
      "minimum_equivalent_cycles": {
       "key": "minimum_equivalent_cycles",
@@ -3729,6 +3593,20 @@
       "default": 1.0,
       "sql_placeholder": "WINDOW_HOURS"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0,
+     "MINIMUM_COVERAGE_PCT": 80.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min",
+      "minimum_active_coverage_pct",
+      "minimum_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC4": {
@@ -3768,17 +3646,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -3790,6 +3657,18 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC5": {
@@ -3851,17 +3730,6 @@
       "default": 0.01,
       "sql_placeholder": "HTG_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -3873,17 +3741,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -3894,18 +3751,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC6": {
@@ -3956,28 +3816,6 @@
       "default": 2359.735,
       "sql_placeholder": "MIN_FLOW_DESIGN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "oat_rat_delta_min": {
       "key": "oat_rat_delta_min",
       "kind": "temperature_difference",
@@ -3999,18 +3837,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC14": {
@@ -4061,17 +3902,6 @@
       "default": 0.01,
       "sql_placeholder": "FAN_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -4083,17 +3913,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -4104,18 +3923,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FC15": {
@@ -4177,17 +3999,6 @@
       "default": 0.01,
       "sql_placeholder": "HTG_ON_MIN"
      },
-     "minimum_active_coverage_pct": {
-      "key": "minimum_active_coverage_pct",
-      "kind": "percent",
-      "label": "Min active coverage",
-      "min": 0.0,
-      "max": 100.0,
-      "step": 1.0,
-      "unit": "pct",
-      "default": 5.0,
-      "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT"
-     },
      "mix_tol": {
       "key": "mix_tol",
       "kind": "temperature_difference",
@@ -4199,17 +4010,6 @@
       "default": 0.638888889,
       "sql_placeholder": "MIX_TOL"
      },
-     "mode_delay_min": {
-      "key": "mode_delay_min",
-      "kind": "duration_minutes",
-      "label": "Mode delay after fan-on",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 10.0,
-      "sql_placeholder": "MODE_DELAY_MIN"
-     },
      "require_run_proof": {
       "key": "require_run_proof",
       "kind": "boolean",
@@ -4220,18 +4020,21 @@
       "unit": "bool",
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
-     },
-     "startup_delay_min": {
-      "key": "startup_delay_min",
-      "kind": "duration_minutes",
-      "label": "Startup delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 1.0,
-      "unit": "min",
-      "default": 0.0,
-      "sql_placeholder": "STARTUP_DELAY_MIN"
      }
+    },
+    "internal": {
+     "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+     "MODE_DELAY_MIN": 10.0,
+     "STARTUP_DELAY_MIN": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "mode_delay_min",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "AHU-SATDEV": {
@@ -4271,6 +4074,14 @@
       "default": 2.777778,
       "sql_placeholder": "SAT_DEV_ERR"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "AHU-DUCTHI": {
@@ -4310,6 +4121,15 @@
       "default": 49.768,
       "sql_placeholder": "PRESSURE_ON_MIN"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "require_operational_gate",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "AHU-SIMUL": {
@@ -4349,6 +4169,14 @@
       "default": 0.1,
       "sql_placeholder": "VALVE_OPEN_PCT"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "ECON-3": {
@@ -4432,6 +4260,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "ECON-5": {
@@ -4482,6 +4318,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "ECON-6": {
@@ -4532,6 +4376,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "ECON-7": {
@@ -4615,6 +4467,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "MECH-OAT-1": {
@@ -4710,6 +4570,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "DMP-1": {
@@ -4749,6 +4617,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VLV-1": {
@@ -4799,6 +4675,14 @@
       "default": 1.111111,
       "sql_placeholder": "SAT_ERR"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VAV-3": {
@@ -4860,23 +4744,20 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VAV-4": {
     "sql": "-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.\n-- Inputs must be scoped to one tenant/site and cadence; see README.md.\n-- vav4_damper_full_open.sql — sequential sustain then confirm (pandas vav4).\n-- Stage 1: air-on and damper > FULL_OPEN for SUSTAIN_HOURS of eligible elapsed time.\n-- Stage 2: confirm that sustained mask for CONFIRM_SECONDS (not the max of the two).\n-- Gaps longer than MAX_GAP_HOURS are unknown and break both streaks.\nWITH rp AS (\n  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).\n  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.\n  SELECT equipment_id,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof\n  FROM history\n  GROUP BY equipment_id\n),\nh AS (\n  SELECT\n    run_proof,\n    equipment_id,\n    timestamp_utc,\n    zone_flow,\n    damper_pct AS dmp,\n    fan_cmd,\n    fan_status,\n    CASE\n      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN zone_flow IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} THEN 1\n      ELSE 1\n    END AS fan_on\n  FROM history\n),\ncond AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    CAST(CASE\n      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0\n      WHEN COALESCE(fan_on, 0) = 0 THEN 0\n      WHEN dmp IS NULL THEN 0\n      WHEN COALESCE(zone_flow, 0) > {{FLOW_ON_MIN}} AND dmp > {{FULL_OPEN_PCT}} THEN 1\n      ELSE 0\n    END AS INT) AS cond_fault,\n    -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)\n    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active\n  FROM h\n),\nelapsed_hold AS (\n  SELECT\n    stepped.*,\n    CASE\n      WHEN stepped.dt_seconds IS NULL\n        OR stepped.dt_seconds <= 0.0\n        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)\n      THEN 0.0\n      ELSE stepped.dt_seconds\n    END AS held_seconds,\n    CASE\n      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1\n      ELSE 0\n    END AS gap_after\n  FROM (\n    SELECT\n      src.*,\n      EXTRACT(EPOCH FROM (\n        LEAD(src.timestamp_utc) OVER (\n          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc\n        ) - src.timestamp_utc\n      )) AS dt_seconds\n    FROM cond src\n  ) stepped\n),\nlagged1 AS (\n  SELECT\n    *,\n    CASE\n      WHEN cond_fault = LAG(cond_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0\n      THEN 0 ELSE 1\n    END AS is_new1\n  FROM elapsed_hold\n),\ngrp1 AS (\n  SELECT\n    *,\n    SUM(is_new1) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak1\n  FROM lagged1\n),\nsustained AS (\n  SELECT\n    *,\n    CAST(CASE\n      WHEN cond_fault = 1\n       AND SUM(held_seconds) OVER (\n         PARTITION BY equipment_id, streak1 ORDER BY timestamp_utc\n         ROWS UNBOUNDED PRECEDING\n       ) >= ({{SUSTAIN_HOURS}} * 3600.0)\n      THEN 1 ELSE 0\n    END AS INT) AS sustained_fault\n  FROM grp1\n),\nlagged2 AS (\n  SELECT\n    *,\n    CASE\n      WHEN sustained_fault = LAG(sustained_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0\n      THEN 0 ELSE 1\n    END AS is_new2\n  FROM sustained\n),\ngrp2 AS (\n  SELECT\n    *,\n    SUM(is_new2) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak2\n  FROM lagged2\n),\nfinal AS (\n  SELECT\n    equipment_id,\n    held_seconds,\n    proof_active,\n    CAST(CASE\n      WHEN sustained_fault = 1\n       AND SUM(held_seconds) OVER (\n         PARTITION BY equipment_id, streak2 ORDER BY timestamp_utc\n         ROWS UNBOUNDED PRECEDING\n       ) >= {{CONFIRM_SECONDS}}\n      THEN 1 ELSE 0\n    END AS INT) AS confirmed\n  FROM grp2\n)\nSELECT\n  equipment_id,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS fault_hours,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(held_seconds) / 3600.0 END AS covered_hours,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(CASE WHEN proof_active = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS active_hours,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE COALESCE(100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(CASE WHEN proof_active = 1 THEN held_seconds ELSE 0.0 END), 0.0), 0.0) END AS fault_pct\nFROM final\nGROUP BY equipment_id;\n",
     "timeline_sql": "WITH rp AS (\n  SELECT equipment_id,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof\n  FROM history\n  GROUP BY equipment_id\n),\nh AS (\n  SELECT\n    run_proof,\n    equipment_id,\n    timestamp_utc,\n    zone_flow,\n    damper_pct AS dmp,\n    fan_cmd,\n    fan_status,\n    CASE\n      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN zone_flow IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} THEN 1\n      ELSE 1\n    END AS fan_on\n  FROM history\n),\ncond AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    CAST(CASE\n      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0\n      WHEN COALESCE(fan_on, 0) = 0 THEN 0\n      WHEN dmp IS NULL THEN 0\n      WHEN COALESCE(zone_flow, 0) > {{FLOW_ON_MIN}} AND dmp > {{FULL_OPEN_PCT}} THEN 1\n      ELSE 0\n    END AS INT) AS cond_fault,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active\n  FROM h\n),\nelapsed_hold AS (\n  SELECT\n    stepped.*,\n    CASE\n      WHEN stepped.dt_seconds IS NULL\n        OR stepped.dt_seconds <= 0.0\n        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)\n      THEN 0.0\n      ELSE stepped.dt_seconds\n    END AS held_seconds,\n    CASE\n      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1\n      ELSE 0\n    END AS gap_after\n  FROM (\n    SELECT\n      src.*,\n      EXTRACT(EPOCH FROM (\n        LEAD(src.timestamp_utc) OVER (\n          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc\n        ) - src.timestamp_utc\n      )) AS dt_seconds\n    FROM cond src\n  ) stepped\n),\nlagged1 AS (\n  SELECT\n    *,\n    CASE\n      WHEN cond_fault = LAG(cond_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0\n      THEN 0 ELSE 1\n    END AS is_new1\n  FROM elapsed_hold\n),\ngrp1 AS (\n  SELECT\n    *,\n    SUM(is_new1) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak1\n  FROM lagged1\n),\nsustained AS (\n  SELECT\n    *,\n    CAST(CASE\n      WHEN cond_fault = 1\n       AND SUM(held_seconds) OVER (\n         PARTITION BY equipment_id, streak1 ORDER BY timestamp_utc\n         ROWS UNBOUNDED PRECEDING\n       ) >= ({{SUSTAIN_HOURS}} * 3600.0)\n      THEN 1 ELSE 0\n    END AS INT) AS sustained_fault\n  FROM grp1\n),\nlagged2 AS (\n  SELECT\n    *,\n    CASE\n      WHEN sustained_fault = LAG(sustained_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0\n      THEN 0 ELSE 1\n    END AS is_new2\n  FROM sustained\n),\ngrp2 AS (\n  SELECT\n    *,\n    SUM(is_new2) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak2\n  FROM lagged2\n),\nfinal AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    held_seconds,\n    proof_active,\n    CAST(CASE\n      WHEN sustained_fault = 1\n       AND SUM(held_seconds) OVER (\n         PARTITION BY equipment_id, streak2 ORDER BY timestamp_utc\n         ROWS UNBOUNDED PRECEDING\n       ) >= {{CONFIRM_SECONDS}}\n      THEN 1 ELSE 0\n    END AS INT) AS confirmed\n  FROM grp2\n)\nSELECT equipment_id, CAST(EXTRACT(EPOCH FROM timestamp_utc) AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE equipment_id NOT IN (SELECT rpx.equipment_id FROM rp rpx WHERE rpx.no_run_proof = 1) ORDER BY equipment_id, timestamp_utc\n",
     "controls": {
-     "confirm_min": {
-      "key": "confirm_min",
-      "kind": "duration_minutes",
-      "label": "Fault confirm delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 5.0,
-      "unit": "min",
-      "default": 15.0,
-      "sql_placeholder": "CONFIRM_SECONDS"
-     },
      "flow_on_min": {
       "key": "flow_on_min",
       "kind": "volumetric_flow",
@@ -4921,6 +4802,18 @@
       "default": 1.5,
       "sql_placeholder": "SUSTAIN_HOURS"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 900.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min",
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VAV-5": {
@@ -4971,6 +4864,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VAV-6": {
@@ -5021,6 +4922,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VAV-REHEAT": {
@@ -5082,6 +4991,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "VAV-AHU-LEAVE": {
@@ -5138,17 +5055,6 @@
     "sql": "-- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.\n-- Inputs must be scoped to one tenant/site and cadence; see README.md.\n-- vav7_min_airflow.sql — three pandas branches: under-min, fixed-high flow, high min SP.\n-- Rolling windows use poll-derived {{FIXED_FLOW_ROWS}} (1h sample count), matching pandas.\nWITH rp AS (\n  -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).\n  -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.\n  SELECT equipment_id,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof\n  FROM history\n  GROUP BY equipment_id\n),\nh AS (\n  SELECT\n    run_proof,\n    equipment_id,\n    timestamp_utc,\n    zone_flow,\n    min_flow_sp,\n    fan_cmd,\n    fan_status,\n    CASE\n      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN zone_flow IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} THEN 1\n      ELSE 1\n    END AS fan_on\n  FROM history\n),\nrolled AS (\n  SELECT\n    *,\n    STDDEV_SAMP(zone_flow) OVER (\n      PARTITION BY equipment_id ORDER BY timestamp_utc\n      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW\n    ) AS roll_std,\n    AVG(zone_flow) OVER (\n      PARTITION BY equipment_id ORDER BY timestamp_utc\n      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW\n    ) AS roll_mean,\n    COUNT(zone_flow) OVER (\n      PARTITION BY equipment_id ORDER BY timestamp_utc\n      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW\n    ) AS roll_n\n  FROM h\n),\nbase AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    CAST(CASE\n      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0\n      WHEN COALESCE(fan_on, 0) = 0 THEN 0\n      WHEN zone_flow IS NULL THEN 0\n      WHEN min_flow_sp IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} AND zone_flow < min_flow_sp THEN 1\n      WHEN roll_n >= {{FIXED_FLOW_MIN_PERIODS}}\n           AND zone_flow IS NOT NULL\n           AND roll_std < {{FIXED_FLOW_MAX_STD}}\n           AND roll_mean > {{FIXED_FLOW_MIN_MEAN}} THEN 1\n      WHEN min_flow_sp IS NOT NULL\n           AND roll_n >= {{FIXED_FLOW_MIN_PERIODS}}\n           AND min_flow_sp > {{HIGH_MIN_FLOW_SP}}\n           AND roll_std < {{FIXED_FLOW_MAX_STD}} THEN 1\n      ELSE 0\n    END AS INT) AS raw_fault,\n    -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)\n    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active\n  FROM rolled\n),\nelapsed_hold AS (\n  -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:\n  -- it is not fault time, not covered time, and it breaks confirmation.\n  -- The last sample has no forward interval.\n  SELECT\n    stepped.*,\n    CASE\n      WHEN stepped.dt_seconds IS NULL\n        OR stepped.dt_seconds <= 0.0\n        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)\n      THEN 0.0\n      ELSE stepped.dt_seconds\n    END AS held_seconds,\n    CASE\n      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1\n      ELSE 0\n    END AS gap_after\n  FROM (\n    SELECT\n      src.*,\n      EXTRACT(EPOCH FROM (\n        LEAD(src.timestamp_utc) OVER (\n          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc\n        ) - src.timestamp_utc\n      )) AS dt_seconds\n    FROM base src\n  ) stepped\n),\nlagged AS (\n  SELECT\n    *,\n    CASE\n      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0\n      THEN 0 ELSE 1\n    END AS is_new_streak\n  FROM elapsed_hold\n),\ngrp AS (\n  SELECT\n    *,\n    SUM(is_new_streak)\n      OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id\n  FROM lagged\n),\nranked AS (\n  SELECT\n    *,\n    SUM(held_seconds) OVER (\n      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc\n      ROWS UNBOUNDED PRECEDING\n    ) AS streak_elapsed\n  FROM grp\n),\nfinal AS (\n  SELECT\n    equipment_id,\n    held_seconds,\n    proof_active,\n    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed\n  FROM ranked\n)\nSELECT\n  equipment_id,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS fault_hours,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(held_seconds) / 3600.0 END AS covered_hours,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN 0.0 ELSE SUM(CASE WHEN proof_active = 1 THEN held_seconds ELSE 0.0 END) / 3600.0 END AS active_hours,\n  CASE WHEN (SELECT rpx.no_run_proof FROM rp rpx WHERE rpx.equipment_id = final.equipment_id) = 1 THEN NULL ELSE COALESCE(100.0 * SUM(CASE WHEN confirmed = 1 THEN held_seconds ELSE 0.0 END) / NULLIF(SUM(CASE WHEN proof_active = 1 THEN held_seconds ELSE 0.0 END), 0.0), 0.0) END AS fault_pct\nFROM final\nGROUP BY equipment_id;\n",
     "timeline_sql": "WITH rp AS (\n  SELECT equipment_id,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COUNT(run_proof) = 0 THEN 1 ELSE 0 END AS no_run_proof\n  FROM history\n  GROUP BY equipment_id\n),\nh AS (\n  SELECT\n    run_proof,\n    equipment_id,\n    timestamp_utc,\n    zone_flow,\n    min_flow_sp,\n    fan_cmd,\n    fan_status,\n    CASE\n      WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END\n      WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END\n      WHEN zone_flow IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} THEN 1\n      ELSE 1\n    END AS fan_on\n  FROM history\n),\nrolled AS (\n  SELECT\n    *,\n    STDDEV_SAMP(zone_flow) OVER (\n      PARTITION BY equipment_id ORDER BY timestamp_utc\n      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW\n    ) AS roll_std,\n    AVG(zone_flow) OVER (\n      PARTITION BY equipment_id ORDER BY timestamp_utc\n      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW\n    ) AS roll_mean,\n    COUNT(zone_flow) OVER (\n      PARTITION BY equipment_id ORDER BY timestamp_utc\n      ROWS BETWEEN {{FIXED_FLOW_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW\n    ) AS roll_n\n  FROM h\n),\nbase AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    CAST(CASE\n      WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0\n      WHEN COALESCE(fan_on, 0) = 0 THEN 0\n      WHEN zone_flow IS NULL THEN 0\n      WHEN min_flow_sp IS NOT NULL AND zone_flow > {{FLOW_ON_MIN}} AND zone_flow < min_flow_sp THEN 1\n      WHEN roll_n >= {{FIXED_FLOW_MIN_PERIODS}}\n           AND zone_flow IS NOT NULL\n           AND roll_std < {{FIXED_FLOW_MAX_STD}}\n           AND roll_mean > {{FIXED_FLOW_MIN_MEAN}} THEN 1\n      WHEN min_flow_sp IS NOT NULL\n           AND roll_n >= {{FIXED_FLOW_MIN_PERIODS}}\n           AND min_flow_sp > {{HIGH_MIN_FLOW_SP}}\n           AND roll_std < {{FIXED_FLOW_MAX_STD}} THEN 1\n      ELSE 0\n    END AS INT) AS raw_fault,\n    CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active\n  FROM rolled\n),\nelapsed_hold AS (\n  SELECT\n    stepped.*,\n    CASE\n      WHEN stepped.dt_seconds IS NULL\n        OR stepped.dt_seconds <= 0.0\n        OR stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0)\n      THEN 0.0\n      ELSE stepped.dt_seconds\n    END AS held_seconds,\n    CASE\n      WHEN stepped.dt_seconds > ({{MAX_GAP_HOURS}} * 3600.0) THEN 1\n      ELSE 0\n    END AS gap_after\n  FROM (\n    SELECT\n      src.*,\n      EXTRACT(EPOCH FROM (\n        LEAD(src.timestamp_utc) OVER (\n          PARTITION BY src.equipment_id ORDER BY src.timestamp_utc\n        ) - src.timestamp_utc\n      )) AS dt_seconds\n    FROM base src\n  ) stepped\n),\nlagged AS (\n  SELECT\n    *,\n    CASE\n      WHEN raw_fault = LAG(raw_fault) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc)\n       AND COALESCE(LAG(gap_after) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc), 0) = 0\n      THEN 0 ELSE 1\n    END AS is_new_streak\n  FROM elapsed_hold\n),\ngrp AS (\n  SELECT\n    *,\n    SUM(is_new_streak)\n      OVER (PARTITION BY equipment_id ORDER BY timestamp_utc ROWS UNBOUNDED PRECEDING) AS streak_id\n  FROM lagged\n),\nranked AS (\n  SELECT\n    *,\n    SUM(held_seconds) OVER (\n      PARTITION BY equipment_id, streak_id ORDER BY timestamp_utc\n      ROWS UNBOUNDED PRECEDING\n    ) AS streak_elapsed\n  FROM grp\n),\nfinal AS (\n  SELECT\n    equipment_id,\n    timestamp_utc,\n    held_seconds,\n    proof_active,\n    CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed\n  FROM ranked\n)\nSELECT equipment_id, CAST(EXTRACT(EPOCH FROM timestamp_utc) AS DOUBLE PRECISION) AS ts_epoch, confirmed, held_seconds FROM final WHERE equipment_id NOT IN (SELECT rpx.equipment_id FROM rp rpx WHERE rpx.no_run_proof = 1) ORDER BY equipment_id, timestamp_utc\n",
     "controls": {
-     "confirm_min": {
-      "key": "confirm_min",
-      "kind": "duration_minutes",
-      "label": "Fault confirm delay",
-      "min": 0.0,
-      "max": 60.0,
-      "step": 5.0,
-      "unit": "min",
-      "default": 15.0,
-      "sql_placeholder": "CONFIRM_SECONDS"
-     },
      "fixed_flow_hours": {
       "key": "fixed_flow_hours",
       "kind": "dimensionless",
@@ -5215,6 +5121,18 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 900.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min",
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "RESET-1": {
@@ -5287,6 +5205,14 @@
       "default": 0.25,
       "sql_placeholder": "RESET_SLOPE"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CHW-NOLOAD-1": {
@@ -5315,6 +5241,15 @@
       "default": 0.5,
       "sql_placeholder": "LOAD_SAT_HI"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "require_operational_gate",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CHW-1": {
@@ -5354,6 +5289,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CHW-2": {
@@ -5404,6 +5347,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CHW-3": {
@@ -5443,6 +5394,14 @@
       "default": 1.222222,
       "sql_placeholder": "SP_BAND"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CHW-4": {
@@ -5493,6 +5452,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CW-OPT-1": {
@@ -5543,6 +5510,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CW-APR-1": {
@@ -5593,6 +5568,14 @@
       "default": 0.95,
       "sql_placeholder": "TOWER_FAN_HI"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "CW-FAN-1": {
@@ -5654,6 +5637,14 @@
       "default": 0.95,
       "sql_placeholder": "TOWER_FAN_HI"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "HP-1": {
@@ -5704,6 +5695,14 @@
       "default": 20.555556,
       "sql_placeholder": "ZONE_COLD"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "WX-1": {
@@ -5782,6 +5781,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "TRIM-3": {
@@ -5832,6 +5839,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "TRIM-4": {
@@ -5882,6 +5897,14 @@
       "default": 1.0,
       "sql_placeholder": "REQUIRE_RUN_PROOF"
      }
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "minimum_active_coverage_pct",
+      "startup_delay_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "SCHED-1": {
@@ -5966,6 +5989,16 @@
       "default": 0.9,
       "sql_placeholder": "NULL_FRACTION"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FCU-HTG-COIL": {
@@ -6184,6 +6217,16 @@
       "default": 1,
       "sql_placeholder": "DEADBAND"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "FCU-MODE-CYCLE": {
@@ -6212,6 +6255,16 @@
       "default": 0.1,
       "sql_placeholder": "MODE_VALVE_MIN"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "UTIL-MONTHLY": {
@@ -6229,6 +6282,16 @@
       "default": 10.0,
       "sql_placeholder": "UTIL_PCT_ERR"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "UTIL-INTERVAL": {
@@ -6246,6 +6309,16 @@
       "default": 5.0,
       "sql_placeholder": "UTIL_INTERVAL_MAE"
      }
+    },
+    "internal": {
+     "CONFIRM_SECONDS": 0.0
+    },
+    "legacy": {
+     "aliases": {},
+     "retired": [
+      "confirm_min"
+     ],
+     "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
     }
    },
    "COIL-PERF": {

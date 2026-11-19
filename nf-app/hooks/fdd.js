@@ -867,7 +867,7 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
         try {
           const merged = ruleTuning.mergeRuleParams(rTpl.controls, siteR && siteR.parameters, equipR && equipR.parameters, ruleId, rTpl.legacy);
           for (const m of merged.migration) log(`${equipId}: ${ruleId} saved tuner ${m.layer}.${m.key} ${m.action}${m.to || m.by ? ' -> ' + (m.to || m.by) : ''}${m.reason ? ' (' + m.reason + ')' : ''}`);
-          const values = ruleTuning.resolvePlaceholders(ruleTpls.runtime_defaults, rTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
+          const values = ruleTuning.resolvePlaceholders(ruleTuning.ruleDefaults(ruleTpls, rTpl), rTpl.controls, merged.effective, merged.overrideKeys, pack.poll_seconds);
           const roleLimitsOpt = roleLimits.SWEEP_RULES.includes(ruleId) && tpl.rules && tpl.rules[ruleId]
             ? {
               roleTemplate: tpl.rules[ruleId],
