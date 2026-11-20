@@ -2132,20 +2132,27 @@ def host_health(c) -> list[tuple[str, str, str]]:
 
     uptime = _find_number(src, _HOST_KEYS["uptime"])
     services = [s for s in (info.get("services") or []) if isinstance(s, dict)]
-    restarted, down = [], []
+    restarted, down, unknown = [], [], []
+    healthy_states = {"running", "run", "up", "ok", "healthy", "green", "serving", "active"}
+    unhealthy_states = {"unhealthy", "inactive", "not running", "stopped", "failed", "degraded", "error", "down",
+                        "dead", "exited", "unavailable"}
     for sv in services:
         name = str(sv.get("name") or sv.get("id") or sv.get("service") or "?")[:40]
         n = _find_number(sv, _HOST_KEYS["restarts"])
         if n:
             restarted.append(f"{name} x{int(n)}")
-        state = str(sv.get("status") or sv.get("state") or sv.get("health") or "").lower()
-        if state and not re.search(r"run|up|ok|healthy|green|serving|active", state):
+        state = re.sub(r"[_\s-]+", " ", str(sv.get("status") or sv.get("state") or sv.get("health") or "").strip().lower())
+        if state in unhealthy_states:
             down.append(f"{name} ({state[:20]})")
+        elif state not in healthy_states:
+            unknown.append(f"{name} ({state[:20] or 'not reported'})")
     up = f"uptime {human_age(uptime)}" if uptime is not None else ""
     if restarted or down:
         parts = ([f"restarted: {', '.join(restarted)}"] if restarted else []) + \
                 ([f"not running: {', '.join(down)}"] if down else [])
         out.append(("WARN", "host services", "; ".join(parts + ([up] if up else []))))
+    elif unknown:
+        out.append(("SKIP", "host services", f"health unknown: {', '.join(unknown)}" + (f"; {up}" if up else "")))
     elif services:
         out.append(("PASS", "host services", f"{len(services)} services, no restarts or stopped services reported"
                     + (f"; {up}" if up else "")))

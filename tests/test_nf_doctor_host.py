@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import pytest
 
 from test_nf_app_install import doctor_nf, sync
 
@@ -92,6 +93,23 @@ def test_service_restarts_and_stopped_services_warn():
 def test_healthy_services_pass():
     lvl, text = lines({"services": [{"name": "hpl", "status": "SERVING"}, {"name": "hooks", "health": "ok"}]})["host services"]
     assert lvl == "PASS" and "2 services" in text
+
+
+@pytest.mark.parametrize("state", ["unhealthy", "inactive", "not running", "not_running", "degraded", "FAILED"])
+def test_negative_status_cannot_match_a_healthy_substring(state):
+    lvl, text = lines({"services": [{"name": "worker", "status": state}]})["host services"]
+    assert lvl == "WARN" and "not running" in text
+
+
+@pytest.mark.parametrize("state", ["", "starting", "health unknown"])
+def test_unknown_status_is_not_reported_healthy(state):
+    lvl, text = lines({"services": [{"name": "worker", "status": state}]})["host services"]
+    assert lvl == "SKIP" and "health unknown" in text
+
+
+def test_unknown_service_alongside_healthy_service_still_is_unknown():
+    lvl, _ = lines({"services": [{"name": "a", "status": "running"}, {"name": "b"}]})["host services"]
+    assert lvl == "SKIP"
 
 
 def test_unreadable_platform_info_skips_cleanly():
