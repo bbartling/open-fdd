@@ -1,7 +1,9 @@
 """SQL per-point statistics (issue #1757): ``sql/analytics/sensor_stats.sql``, ``diurnal_hourly.sql`` and
 ``setpoints_latest.sql`` on SQLite, DuckDB or PostgreSQL, over the v5 SI core (``fdd.point`` + ``fdd.input_sample``).
 They return the same numbers as the pandas twins in :mod:`open_fdd.analytics.point_stats`. The packaged copies in
-``open_fdd/data/`` are byte-identical to the repo files (a test checks it). Standard library only for SQLite.
+``open_fdd/data/`` are byte-identical to the repo files (a test checks it). The SQLite driver is the standard library,
+but importing this module imports pandas (through the twins' role lists); DuckDB needs ``duckdb``, PostgreSQL
+``psycopg``.
 """
 
 from __future__ import annotations

@@ -170,7 +170,9 @@ def _long2():
         t = T0 + i * 300_000 + int(rng.integers(-30_000, 30_000))
         rows += [("z/zt", "VAV-1", "zone_t", t, 22 + (6 if i % 2 else -6) + float(rng.normal(0, 0.2))),
                  ("a/sat", "AHU-1", "sat", t, 13 + float(rng.normal(0, 0.3))),
-                 ("a/clg", "AHU-1", "clg_valve_pct", t, 40 + float(rng.normal(0, 2))),          # percent, calm
+                 ("a/clg", "AHU-1", "clg_valve_pct", t, 0.40 + float(rng.normal(0, 0.02))),     # 0-1, calm
+                 ("a/cmd", "AHU-1", "htg_valve_pct", t, 0.016 if i % 2 else 0.014),             # 1.4 % / 1.6 %
+                 ("a/pct", "AHU-1", "fan_cmd", t, 1.6 if i % 2 else 1.4),                     # out of contract (percent)
                  ("a/dmp", "AHU-1", "oa_damper_pct", t, 0.2 if i % 2 else 0.6),                # 0-1, hunting
                  ("a/dsp", "AHU-1", "duct_static", t, 250 + float(rng.normal(0, 15))),
                  ("a/mat", "AHU-1", "mat", t, 18.0)]                                          # constant
@@ -229,7 +231,20 @@ def test_slice2_semantics_pinned():
         pid = {r["point_key"]: r for r in sps.run_pid_hunting_sql(conn, "sqlite")}
         assert pid["z/zt"]["is_hunting"] == 1 and pid["a/sat"]["is_hunting"] == 0
         assert pid["a/dmp"]["is_hunting"] == 1                                        # 0-1 command: 0.2 / 0.6 swing
-        assert pid["a/clg"]["is_hunting"] == 0 and abs(pid["a/clg"]["avg_val"] - 0.40) < 0.01   # percent scaled to 0-1
+        assert pid["a/clg"]["is_hunting"] == 0 and abs(pid["a/clg"]["avg_val"] - 0.40) < 0.01
+        # Codex #1760 review: a command near 1.5 % must not be split across two scales and read as hunting.
+        # Independent expectation: 48 / 48 alternating 0.014 / 0.016 -> mean 0.015, sample variance
+        # 96 * 0.001^2 / 95 = 1.0105e-6, far below the 0.08^2 limit.
+        cmd = pid["a/cmd"]
+        assert cmd["is_hunting"] == 0 and cmd["n"] == 96
+        assert cmd["avg_val"] == pytest.approx(0.015, abs=1e-12)
+        assert cmd["var_val"] == pytest.approx(96 * 0.001 ** 2 / 95, rel=1e-9)
+        # Every value is read on one scale, never guessed per value: 1.4 / 1.6 averages exactly 1.5. The old per-value
+        # "> 1.5 is percent" rule turned only the 1.6 samples into 0.016 (mean ~0.708) and flagged a steady signal.
+        # A percent source must be normalized to 0-1 at ingest (the input contract); this one is read as fractions.
+        pct = pid["a/pct"]
+        assert pct["avg_val"] == pytest.approx(1.5, abs=1e-12)
+        assert pct["var_val"] == pytest.approx(96 * 0.1 ** 2 / 95, rel=1e-9)
         assert pid["a/dsp"]["is_hunting"] == 0 and "a/rat" not in pid                 # rat is not a PID role
         assert list(pid)[0] == "a/dsp"                                                # largest spread first
         ts = sps.run_role_timeseries_sql(conn, "sqlite", ["zone_t"], limit=5)

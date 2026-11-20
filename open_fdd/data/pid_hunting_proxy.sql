@@ -3,17 +3,14 @@
 -- open_fdd.analytics.sql_point_stats.render_pid_hunting_sql. A coarse screen, not the PID-HUNT-1 rule.
 --
 -- Same rows as open_fdd.analytics.point_stats.pid_hunting_proxy. Roles: clg_valve_pct, htg_valve_pct, oa_damper_pct,
--- fan_cmd (commands, scaled to 0-1: a value above 1.5 is a percent and is divided by 100), duct_static (Pa), sat and
--- zone_t (degC). Per point with at least 12 samples: n, avg_val, var_val (sample variance of the scaled values) and
+-- fan_cmd (commands as the input contract stores them: 0-1 fractions; no per-value scale guessing, which split a
+-- series near 1.5 % across two scales), duct_static (Pa), sat and zone_t (degC). Normalize a percent source to 0-1 at
+-- ingest. Per point with at least 12 samples: n, avg_val, var_val (sample variance) and
 -- is_hunting = n >= 24 AND stddev above the legacy limit: 4.444 delta degC (8 delta degF) for sat / zone_t, 1990.72 Pa
 -- (8 inH2O) for duct_static, 0.08 (8 %) for the commands. Compared as variance > limit^2. Ordered by spread, largest
 -- first.
 WITH src AS (
-  SELECT s.point_key, p.equipment_id, p.role, {ts_ms} AS t,
-         CASE WHEN p.role IN ('clg_valve_pct', 'htg_valve_pct', 'oa_damper_pct', 'fan_cmd')
-                   AND CAST(s.value AS DOUBLE PRECISION) > 1.5
-              THEN CAST(s.value AS DOUBLE PRECISION) / 100.0
-              ELSE CAST(s.value AS DOUBLE PRECISION) END AS value
+  SELECT s.point_key, p.equipment_id, p.role, {ts_ms} AS t, CAST(s.value AS DOUBLE PRECISION) AS value
   FROM fdd.input_sample s
   JOIN fdd.point p ON p.site_id = s.site_id AND p.point_key = s.point_key
   WHERE s.site_id = {site_id}{point_filter}

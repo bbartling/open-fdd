@@ -5,7 +5,7 @@
 --
 -- Same rows as open_fdd.analytics.point_stats.meter_daily: per point and UTC day (day_ms = midnight, epoch ms) of
 -- non-NULL samples in the window: n, min_val, max_val, avg_val, delta_val = max - min (for a cumulative register,
--- the day's consumption). Newest day first, then point_key.
+-- the span observed between that day's first and last samples, not its full consumption). Newest day first.
 WITH src AS (
   SELECT s.point_key, p.equipment_id, p.role, {ts_ms} AS t, CAST(s.value AS DOUBLE PRECISION) AS value
   FROM fdd.input_sample s

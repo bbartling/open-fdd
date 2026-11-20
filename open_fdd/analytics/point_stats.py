@@ -98,12 +98,11 @@ PID_VAR_LIMIT_COMMAND = 0.0064
 
 
 def pid_hunting_proxy(long: pd.DataFrame, *, start_ms: int | None = None, end_ms: int | None = None) -> pd.DataFrame:
-    """Per point with >= 12 samples of the PID roles: n, avg_val, var_val (commands scaled to 0-1) and is_hunting
-    (n >= 24 and variance above the role's limit). Largest spread first."""
+    """Per point with >= 12 samples of the PID roles: n, avg_val, var_val and is_hunting (n >= 24 and variance above
+    the role's limit). Commands are 0-1 fractions as the input contract stores them (no scale guessing). Largest spread
+    first."""
     d = _clean(long, start_ms, end_ms)
-    d = d[d["role"].isin(PID_ROLES)].copy()
-    cmd = d["role"].isin(PID_COMMAND_ROLES) & (d["value"] > 1.5)
-    d.loc[cmd, "value"] = d.loc[cmd, "value"] / 100.0
+    d = d[d["role"].isin(PID_ROLES)]
     g = d.groupby(["point_key", "equipment_id", "role"], dropna=False, sort=True)["value"]
     out = g.agg(n="size", avg_val="mean", var_val=lambda s: s.var(ddof=1)).reset_index()
     out = out[out["n"] >= 12]
