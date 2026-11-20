@@ -9,7 +9,8 @@ nav_order: 8
 Open-FDD's shipped tolerances are starting values. This page compares them with the published SI values in ASHRAE
 Guideline 36-2018 (Tables 5.16.14.5 multi-zone VAV and 5.18.13.5 single-zone VAV, with
 [Addendum u, 2021](https://www.ashrae.org/file%20library/technical%20resources/standards%20and%20guidelines/standards%20addenda/g36_2018_u_20210330.pdf)).
-It is an audit, not a G36 compliance claim. 5.0.21 changes no default; behavior changes are tracked in #1763.
+It is an audit, not a G36 compliance claim. This audit changes labels and documentation only; numeric defaults
+and saved overrides are unchanged. Behavior changes are tracked in #1763.
 
 ## AHU fault-equation tolerances (multi-sensor equations)
 
@@ -48,5 +49,3 @@ flatline is a suspected-stuck indication only.
 - FC1 `eps_vfd_spd` was labelled "GL36 default 5 %" with a 0.13 default. The label is corrected; the value is unchanged.
 - FC7 `htg_full_min` and the pandas `clg_full_min` were labelled "GL36 99 %". Labels corrected. `clg_full_min`
   defaults to 0.01, below its own 0.5 minimum; fixing that changes behavior and is deferred to #1763.
-
-Saved site, equipment and sensor tuning is never changed by a release.
