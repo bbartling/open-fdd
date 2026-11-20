@@ -116,7 +116,8 @@ def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0, p
     params = {"confirm_min": _confirm_min().get(rule_id, 0.0), **(params or {})}
     res = run_cookbook_rule(rule, df.copy(), equipment_id=df.attrs["equipment_id"], equipment_kind=kind,
                             poll_seconds=poll_seconds, params_by_rule={rule.id: params},
-                            weather=None if weather is None else weather.copy(), require_operational_gates=True)
+                            weather=None if weather is None else weather.copy(), require_operational_gates=True,
+                            apply_quality=False)  # #1253: the SQL pack never applies open_fdd.quality nulling
     if res.status == "PASS":
         return 0.0, "PASS", res
     if res.confirmed_fault is not None and res.status == "FAULT":

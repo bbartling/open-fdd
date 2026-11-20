@@ -15,7 +15,6 @@ h AS (
     equipment_id,
     timestamp_utc,
     mat, rat, oa_t,
-    fan_cmd AS fan,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
@@ -34,7 +33,7 @@ base AS (
       WHEN mat IS NULL OR rat IS NULL OR oa_t IS NULL THEN 0
       WHEN ABS(rat - oa_t) <= {{OAT_RAT_GUARD}} THEN 0
       WHEN (mat - rat) / NULLIF(oa_t - rat, 0) < {{MIN_OA_FRAC}}
-       AND fan IS NOT NULL AND fan >= 0.05 THEN 1
+       AND fan_on = 1 THEN 1   -- #1642: fan = status when bound, else command, as pandas _fan
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)

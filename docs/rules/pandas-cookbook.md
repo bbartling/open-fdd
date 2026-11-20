@@ -156,7 +156,7 @@ Duct static > static SP + margin.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#ahu-satdev): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
+**Parity** [known divergence](parity.html#ahu-satdev): Small residual left after #1642; not yet attributed.
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
@@ -453,7 +453,7 @@ Fan on, |RAT−OAT| > 1.2 Δ°C, estimated OA fraction < 21%.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#econ-4): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
+**Parity** [known divergence](parity.html#econ-4): Small residual left after #1642; not yet attributed.
 
 
 ### ECON-5 {#econ-5}
@@ -1034,7 +1034,7 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fc5): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
+**Parity** [match](parity.html#fc5); differs only on edge data: Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match.
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
@@ -1118,7 +1118,7 @@ SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fc7): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
+**Parity** [match](parity.html#fc7)
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
@@ -1282,7 +1282,7 @@ Estimated OA fraction < 15% with adequate OAT/RAT split.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#oa-1): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
+**Parity** [known divergence](parity.html#oa-1): pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
@@ -1692,7 +1692,7 @@ Flags reheat while outdoor air is cool enough for free cooling.
 |---|---|---|---|---|---:|---|
 | `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 | `reheat_valve_pct` | `reheat-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_available` | `clg-available` | Status | 0/1 | bool | 0 or 1 | optional |
+| `clg_available` | `cooling-available` | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1712,7 +1712,7 @@ Flags reheat while outdoor air is cool enough for free cooling.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#vav-6): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
+**Parity** [match](parity.html#vav-6)
 
 
 ### VAV-7 {#vav-7}
@@ -1783,7 +1783,7 @@ Flags VAV discharge far from the parent AHU SAT when topology feeds are known.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#vav-ahu-leave): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
+**Parity** [known divergence](parity.html#vav-ahu-leave): pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).
 
 
 ### VAV-REHEAT {#vav-reheat}
@@ -2010,7 +2010,7 @@ Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zo
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fcu-htg-coil): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
+**Parity** [match](parity.html#fcu-htg-coil)
 
 
 ### FCU-MODE-CYCLE {#fcu-mode-cycle}
@@ -2045,7 +2045,7 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fcu-mode-cycle): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
+**Parity** [match](parity.html#fcu-mode-cycle)
 
 
 ### FCU-SENSOR-NULL {#fcu-sensor-null}
@@ -2193,7 +2193,7 @@ Pump on AND (CHWR − CHWS) < 2.2 Δ°C.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#chw-1): SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges
+**Parity** [known divergence](parity.html#chw-1): pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).
 
 
 ### CHW-2 {#chw-2}
@@ -2567,7 +2567,7 @@ Fan on, zone < 20.6 °C, discharge SAT < 29.4 °C.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#hp-1): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
+**Parity** [known divergence](parity.html#hp-1): Small residual left after #1642; not yet attributed.
 
 
 ## Meters and utilities {#group-meter}
