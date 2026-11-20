@@ -261,3 +261,88 @@ def test_postgres_slice2_matches_pandas():
     finally:
         with psycopg.connect(base, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
+
+
+# ---- slice 3: daily meter aggregates, day-over-day change points ---------------------------------------------------
+def _long3():
+    """Six days hourly: a cumulative kWh register, a kW load stepping up on day 4, gas, an OAT with a cold snap on
+    day 4, a sparse day (< 6 samples) on the gas meter, and a non-meter role."""
+    rng = np.random.default_rng(17573)
+    rows, kwh = [], 1000.0
+    for i in range(6 * 24):
+        t = T0 + i * H + int(rng.integers(-60_000, 60_000))
+        day = i // 24
+        kw = (40 if day < 3 else 70) + float(rng.normal(0, 3))
+        kwh += kw
+        rows += [("m/kwh", "SITE", "electric_kwh", t, kwh), ("m/kw", "SITE", "electric_kw", t, kw),
+                 ("w/oat", "SITE", "oa_t", t, (12 if day < 3 else -4) + float(rng.normal(0, 1.0))),
+                 ("a/sat", "AHU-1", "sat", t, 13 + float(rng.normal(0, 0.2))),
+                 ("a/dsp", "AHU-1", "duct_static", t, 250.0)]
+        if day != 2 or i % 24 < 4:
+            rows.append(("m/gas", "SITE", "gas_therm", t, 3 + day * 0.1 + float(rng.normal(0, 0.05))))
+    return pd.DataFrame(rows, columns=list(ps.LONG_COLUMNS))
+
+
+def _check_slice3(conn, engine, long, window=None):
+    kw = dict(start_ms=window[0], end_ms=window[1]) if window else {}
+    _same(sps.run_meter_daily_sql(conn, engine, **kw), ps.meter_daily(long, **kw),
+          ["point_key", "role", "day_ms", "n", "min_val", "max_val", "avg_val", "delta_val"], f"{engine} meter")
+    _same(sps.run_meter_daily_sql(conn, engine, roles=ps.FUEL_ROLES, limit=7, **kw),
+          ps.meter_daily(long, roles=ps.FUEL_ROLES, limit=7, **kw), ["point_key", "day_ms", "n", "delta_val"],
+          f"{engine} fuel")
+    _same(sps.run_mv_change_point_sql(conn, engine, **kw), ps.mv_change_points(long, **kw),
+          ["point_key", "role", "day_ms", "avg_val", "prev_avg", "delta_avg", "n", "required_delta"], f"{engine} mv")
+
+
+@pytest.mark.parametrize("engine", ["sqlite", "duckdb"])
+def test_slice3_matches_pandas(engine):
+    long = _long3()
+    conn = _connect(engine)
+    try:
+        _load(conn, engine, long)
+        _check_slice3(conn, engine, long)
+        _check_slice3(conn, engine, long, window=(T0 + 24 * H, T0 + 120 * H))
+    finally:
+        conn.close()
+
+
+def test_slice3_semantics_pinned():
+    long = _long3()
+    conn = sqlite3.connect(":memory:")
+    try:
+        _load(conn, "sqlite", long)
+        meter = sps.run_meter_daily_sql(conn, "sqlite")
+        assert {r["role"] for r in meter} == {"electric_kwh", "electric_kw", "gas_therm"}   # sat / duct_static out
+        assert meter[0]["day_ms"] == T0 + 5 * 24 * H                                         # newest day first
+        day0 = next(r for r in meter if r["point_key"] == "m/kwh" and r["day_ms"] == T0)
+        assert abs(day0["delta_val"] - 40 * (day0["n"] - 1)) < 60                              # register: (n - 1) x ~40 kWh
+        mv = sps.run_mv_change_point_sql(conn, "sqlite")
+        hits = {(r["point_key"], r["day_ms"]) for r in mv}
+        assert ("m/kw", T0 + 3 * 24 * H) in hits and ("w/oat", T0 + 3 * 24 * H) in hits       # the day-4 steps
+        assert not any(k == "a/sat" for k, _ in hits)                                         # steady: no change
+        assert not any(k == "m/gas" and d == T0 + 2 * 24 * H for k, d in hits)               # sparse day not counted
+    finally:
+        conn.close()
+    with pytest.raises(ValueError):
+        sps.render_meter_daily_sql("sqlite", limit=0)
+
+
+@pytest.mark.skipif(not (os.environ.get("POSTGRES_TEST_URL") and os.environ.get("OPENFDD_PG_TEST_DISPOSABLE") == "1"),
+                    reason="needs POSTGRES_TEST_URL and OPENFDD_PG_TEST_DISPOSABLE=1")
+def test_postgres_slice3_matches_pandas():
+    psycopg = pytest.importorskip("psycopg")
+    long = _long3()
+    base = os.environ["POSTGRES_TEST_URL"]
+    dbname = f"openfdd_pstats3_{secrets.token_hex(6)}"
+    with psycopg.connect(base, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{dbname}"')
+    try:
+        url = urlunparse(urlparse(base)._replace(path=f"/{dbname}"))
+        with psycopg.connect(url, autocommit=True) as conn:
+            conn.execute("SET TIME ZONE 'UTC'")
+            _load(conn, "postgres", long)
+            _check_slice3(conn, "postgres", long)
+            _check_slice3(conn, "postgres", long, window=(T0 + 24 * H, T0 + 120 * H))
+    finally:
+        with psycopg.connect(base, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')

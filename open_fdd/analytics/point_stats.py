@@ -110,3 +110,48 @@ def pid_hunting_proxy(long: pd.DataFrame, *, start_ms: int | None = None, end_ms
     limit = out["role"].map(PID_VAR_LIMIT).fillna(PID_VAR_LIMIT_COMMAND)
     out["is_hunting"] = ((out["n"] >= 24) & (out["var_val"] > limit)).astype(int)
     return out.sort_values(["var_val", "point_key"], ascending=[False, True], kind="stable").reset_index(drop=True)
+
+
+# ---- slice 3: daily meter aggregates, day-over-day change points ---------------------------------------------------
+METER_ROLES = ("electric_kwh", "kwh", "electric_kw", "power_kw", "chiller_power", "gas_therm", "gas_ccf", "fuel_gal",
+               "steam_mlb", "water_gal")
+FUEL_ROLES = ("gas_therm", "gas_ccf", "fuel_gal", "steam_mlb", "electric_kwh", "power_kw")
+MV_ROLES = ("electric_kwh", "kwh", "electric_kw", "gas_therm", "power_kw", "steam_mlb", "oa_t", "web_oa_t", "sat",
+            "zone_t")
+MV_TEMP_ROLES = ("oa_t", "web_oa_t", "sat", "zone_t")
+_DAY = 86_400_000
+
+
+def meter_daily(long: pd.DataFrame, *, roles=METER_ROLES, limit: int = 2000, start_ms: int | None = None,
+                end_ms: int | None = None) -> pd.DataFrame:
+    """Per point and UTC day: n, min_val, max_val, avg_val, delta_val (max - min). Newest day first, then point."""
+    d = _clean(long, start_ms, end_ms)
+    d = d[d["role"].isin(list(roles))]
+    d = d.assign(day_ms=d["ts_ms"] - (d["ts_ms"] % _DAY))
+    g = d.groupby(["point_key", "equipment_id", "role", "day_ms"], dropna=False, sort=True)["value"]
+    out = g.agg(n="size", min_val="min", max_val="max", avg_val="mean").reset_index()
+    out["delta_val"] = out["max_val"] - out["min_val"]
+    out = out.sort_values(["day_ms", "point_key"], ascending=[False, True], kind="stable").head(int(limit))
+    return out.reset_index(drop=True)
+
+
+def mv_change_points(long: pd.DataFrame, *, roles=MV_ROLES, limit: int = 2000, start_ms: int | None = None,
+                     end_ms: int | None = None) -> pd.DataFrame:
+    """Day-over-day CHANGE rows (archived 4.x thresholds); see sql/analytics/mv_change_point_daily.sql."""
+    d = _clean(long, start_ms, end_ms)
+    d = d[d["role"].isin(list(roles))]
+    d = d.assign(day_ms=d["ts_ms"] - (d["ts_ms"] % _DAY))
+    g = d.groupby(["point_key", "equipment_id", "role", "day_ms"], dropna=False, sort=True)["value"]
+    daily = g.agg(avg_val="mean", n="size").reset_index()
+    daily = daily[daily["n"] >= 6].sort_values(["point_key", "day_ms"], kind="stable")
+    daily["prev_avg"] = daily.groupby("point_key")["avg_val"].shift(1)
+    daily = daily[daily["prev_avg"].notna()].copy()
+    temp = daily["role"].isin(MV_TEMP_ROLES)
+    t_req = ((daily["prev_avg"] - (-17.77777777777778)).abs() * 0.25).clip(lower=0.5555555555555556)
+    o_req = (daily["prev_avg"].abs() * 0.25).clip(lower=1.0)
+    daily["required_delta"] = t_req.where(temp, o_req)
+    daily["delta_avg"] = daily["avg_val"] - daily["prev_avg"]
+    daily["abs_delta"] = daily["delta_avg"].abs()
+    out = daily[daily["abs_delta"] >= daily["required_delta"]]
+    out = out.sort_values(["day_ms", "abs_delta", "point_key"], ascending=[False, False, True], kind="stable")
+    return out.drop(columns="abs_delta").head(int(limit)).reset_index(drop=True)

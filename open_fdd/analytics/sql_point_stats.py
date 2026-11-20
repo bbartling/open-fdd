@@ -11,7 +11,7 @@ import math
 from importlib import resources
 from typing import Any, Iterable
 
-from open_fdd.analytics.point_stats import ANOMALY_ROLES, DIURNAL_ROLES, setpoint_roles
+from open_fdd.analytics.point_stats import ANOMALY_ROLES, DIURNAL_ROLES, METER_ROLES, MV_ROLES, setpoint_roles
 from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote
 from open_fdd.analytics.sql_runtime import TS_MS
 
@@ -180,5 +180,53 @@ def run_pid_hunting_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
         rec["n"], rec["is_hunting"] = int(rec["n"]), int(rec["is_hunting"])
         rec["avg_val"], rec["var_val"] = float(rec["avg_val"]), float(rec["var_val"])
         rec["stddev_val"] = math.sqrt(max(rec["var_val"], 0.0))
+        out.append(rec)
+    return out
+
+
+# ---- slice 3: daily meter aggregates, day-over-day change points ---------------------------------------------------
+METER_COLUMNS = ("point_key", "equipment_id", "role", "day_ms", "n", "min_val", "max_val", "avg_val", "delta_val")
+MV_COLUMNS = ("point_key", "equipment_id", "role", "day_ms", "avg_val", "prev_avg", "delta_avg", "n", "required_delta")
+
+
+def _check_limit(limit: int) -> int:
+    if not 1 <= int(limit) <= 100_000:
+        raise ValueError("limit must be 1..100000")
+    return int(limit)
+
+
+def render_meter_daily_sql(engine: str, *, roles: Iterable[str] = METER_ROLES, limit: int = 2000,
+                           site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
+                           start_ms: int | None = None, end_ms: int | None = None) -> str:
+    """``roles=FUEL_ROLES`` gives the archived fuel view."""
+    return _render("meter_daily", engine, site_id=site_id, point_keys=point_keys, roles=list(roles),
+                   start_ms=start_ms, end_ms=end_ms, limit=_check_limit(limit))
+
+
+def render_mv_change_point_sql(engine: str, *, roles: Iterable[str] = MV_ROLES, limit: int = 2000,
+                               site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
+                               start_ms: int | None = None, end_ms: int | None = None) -> str:
+    return _render("mv_change_point_daily", engine, site_id=site_id, point_keys=point_keys, roles=list(roles),
+                   start_ms=start_ms, end_ms=end_ms, limit=_check_limit(limit))
+
+
+def run_meter_daily_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
+    out = []
+    for row in _fetch(conn, engine, render_meter_daily_sql(engine, **kwargs)):
+        rec = dict(zip(METER_COLUMNS, row))
+        rec["day_ms"], rec["n"] = int(rec["day_ms"]), int(rec["n"])
+        for k in ("min_val", "max_val", "avg_val", "delta_val"):
+            rec[k] = float(rec[k])
+        out.append(rec)
+    return out
+
+
+def run_mv_change_point_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
+    out = []
+    for row in _fetch(conn, engine, render_mv_change_point_sql(engine, **kwargs)):
+        rec = dict(zip(MV_COLUMNS, row))
+        rec["day_ms"], rec["n"] = int(rec["day_ms"]), int(rec["n"])
+        for k in ("avg_val", "prev_avg", "delta_avg", "required_delta"):
+            rec[k] = float(rec[k])
         out.append(rec)
     return out
