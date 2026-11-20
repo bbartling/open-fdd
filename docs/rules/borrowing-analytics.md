@@ -15,6 +15,15 @@ The RCx analytics in [`sql/analytics/`](https://github.com/bbartling/open-fdd/tr
 | `economizer_metrics.sql` | Identifiable samples, median and MAE of the mixed-air residual |
 | `bas_vs_web_oat.sql` | BAS outdoor-air sensor vs weather service: bias, MAE, share within ±2 °C |
 | `anomaly_zscore.sql` | Rolling z-score flags per point |
+| `sensor_stats.sql` | Count, min, max, mean, sample stddev, first / last time per point |
+| `diurnal_hourly.sql` | Mean by UTC hour of day per point |
+| `setpoints_latest.sql` | Latest value of each setpoint point |
+| `role_timeseries.sql` | Newest samples of chosen roles, capped |
+| `anomaly_series_coverage.sql` | Points the z-score cannot score: empty, short or constant |
+| `pid_hunting_proxy.sql` | Per-point spread screen for hunting control loops |
+| `meter_daily.sql` | Daily meter count, min, max, mean and observed span (max - min) per point (metering or fuel roles) |
+| `mv_change_point_daily.sql` | Days whose mean changed sharply from the previous day |
+| `zone_comfort.sql` | Share of occupied zone-temperature samples inside the comfort band, worst first |
 
 ## Input
 
