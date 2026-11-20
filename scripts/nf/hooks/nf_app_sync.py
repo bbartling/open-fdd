@@ -20,6 +20,8 @@ read-only and cannot deploy).
     python3 $S --env $ENV install $M --remove-old --yes    # ... and delete the predecessor apps
     python3 $S --env $ENV uninstall $M [--yes]             # dry run unless --yes
     python3 $S --env $ENV doctor $M                        # read-only pass/fail checks
+    python3 $S --env $ENV prune-points $M [--stale-days 30]  # LIST this app's orphan / long-stale points (dry run)
+    python3 $S --env $ENV prune-points $M --yes            # ... and delete exactly the listed uuids
 
     # the pieces:
     python3 $S --env $ENV status $M
@@ -1054,9 +1056,10 @@ def list_orphans(c, installed: set[str], removing: set[str]) -> list[dict]:
     return orphans
 
 
-ORPHAN_HOWTO = ("orphan points are never deleted by this tool. Delete them with the NF MCP delete_points tool "
-                "(dry run first), checking attrs.application_id of each uuid. Never delete points of other apps or "
-                "BACnet/field layers")
+ORPHAN_HOWTO = ("remove-old / uninstall never delete points. `prune-points` lists (dry run) and, with --yes, deletes "
+                "the orphans whose application_id is this manifest's own id or a `replaces` id; for any other app use "
+                "the NF MCP delete_points tool (dry run first), checking attrs.application_id of each uuid. Never "
+                "delete points of other apps or BACnet/field layers")
 
 
 def remove_apps(c, ids: list[str], yes: bool, installed: dict[str, dict]) -> int:
@@ -1091,6 +1094,139 @@ def cmd_uninstall(c, m: dict, yes: bool) -> int:
     if app_id not in apps:
         print(f"app {app_id}: not installed")
     return remove_apps(c, [app_id], yes, apps)
+
+
+# ---------------------------------------------------------------- prune-points (#1614)
+
+PRUNE_RESULT_TYPES = ("fdd-result", "fdd-fault-timeline")   # automation-layer attrs.type the fdd hook writes
+DEFAULT_PRUNE_STALE_DAYS = 30
+DEFAULT_PRUNE_MAX = 500
+PRUNE_BATCH = 50
+
+
+def own_app_ids(m: dict) -> set[str]:
+    """The ids this manifest owns: its own application id and the predecessors it `replaces`. prune-points never looks
+    at a point whose attrs.application_id is anything else (other apps, BACnet / field layers, hand-made points)."""
+    return {m["application"]["id"], *replaced_ids(m)}
+
+
+def prune_candidates(m: dict, automation: list[dict], model: list[dict], installed: set[str], now: datetime.datetime,
+                     stale_days: float) -> tuple[list[dict], list[dict]]:
+    """(orphans, stale): the two groups prune-points may delete, every entry {uuid, name, application_id, why}.
+
+    orphans = automation-layer points whose application_id is one of this manifest's ids (own id or `replaces`) and
+              that app is NOT installed (a removed / renamed predecessor). Points of an installed app never qualify.
+    stale   = automation-layer points of the installed own app with type fdd-result / fdd-fault-timeline whose
+              model record says fddStatus "stale" (the current release no longer runs that rule for that equip) and
+              whose newest value (latestValue.ts, else fddTimelineThrough) is older than `stale_days`, or that never
+              had a value. fddLastRun is not used: the hook rewrites it on every stale flag.
+    Pure function, no I/O."""
+    owned = own_app_ids(m)
+    own = m["application"]["id"]
+    by_uuid = {p.get("uuid"): p for p in model if p.get("uuid")}
+    cutoff = now - datetime.timedelta(days=stale_days)
+    orphans: list[dict] = []
+    stale: list[dict] = []
+    seen: set[str] = set()
+    for p in automation:
+        a = p.get("attrs") or {}
+        app = a.get("application_id")
+        uid = p.get("uuid")
+        if not uid or not app or app not in owned or uid in seen:
+            continue
+        if app not in installed:
+            seen.add(uid)
+            orphans.append({"uuid": uid, "name": p.get("name"), "application_id": app,
+                            "why": f"app {app} is not installed"})
+            continue
+        if app != own or a.get("type") not in PRUNE_RESULT_TYPES:
+            continue
+        rec = by_uuid.get(uid)
+        ma = (rec or {}).get("attrs") or {}
+        if ma.get("fddStatus") != "stale":
+            continue
+        last = parse_ts(((rec or {}).get("latestValue") or {}).get("ts")) or parse_ts(ma.get("fddTimelineThrough"))
+        if last and last > cutoff:
+            continue
+        seen.add(uid)
+        age = f"newest value {human_age((now - last).total_seconds())} ago" if last else "never had a value"
+        reason = re.sub(r"\s*\(.*$", "", str(ma.get("fddReason") or "no reason recorded"))[:60]
+        stale.append({"uuid": uid, "name": p.get("name"), "application_id": app,
+                      "why": f"{a.get('type')} flagged stale ({reason}), {age}"})
+    return orphans, stale
+
+
+def delete_points(c, uuids: list[str], batch: int = PRUNE_BATCH) -> int:
+    """DeletePoints by uuid (DELETE /api/v1/point/points?uuids=...), in batches. Returns NF's delete_count total."""
+    total = 0
+    for i in range(0, len(uuids), batch):
+        part = uuids[i:i + batch]
+        qs = "&".join("uuids=" + urllib.parse.quote(u, safe="") for u in part)
+        r = c.call("DELETE", f"/api/v1/point/points?{qs}") or {}
+        n = r.get("deleteCount", r.get("delete_count"))
+        total += int(n) if str(n or "").lstrip("-").isdigit() else 0
+    return total
+
+
+PRUNE_MCP_HOWTO = ("same cleanup without this tool: NF MCP delete_points with exactly the uuids above, dry_run=true "
+                   "first, then dry_run=false. Never add uuids of other apps or of BACnet / field layers")
+
+
+def cmd_prune_points(c, m: dict, yes: bool, stale_days: float = DEFAULT_PRUNE_STALE_DAYS,
+                     max_delete: int = DEFAULT_PRUNE_MAX, now: datetime.datetime | None = None,
+                     self_uninstalled: bool = False) -> int:
+    """List (dry run, default) or delete (--yes) this app's orphan and long-stale result points. Reads the apps, the
+    automation layer and the model layer; writes nothing unless `yes`, and then only DeletePoints for the listed
+    uuids. 0 = nothing to do or done, 1 = a read / delete failed or the candidate list is over --max-delete."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    if stale_days < 1:
+        raise SystemExit("--stale-days must be at least 1")
+    try:
+        apps = c.apps()
+        if not isinstance(apps, list) or not apps or any(
+                not isinstance(app, dict) or not isinstance(app.get("id"), str) or not app["id"].strip()
+                for app in apps):
+            print("prune-points: empty or invalid apps list; nothing was changed")
+            return EXIT_FAILED
+        installed = {a["id"] for a in apps}
+        if m["application"]["id"] not in installed and not self_uninstalled:
+            print("prune-points: own app is missing from the apps list; nothing was changed. "
+                  "Only after confirming it was uninstalled, use --self-uninstalled")
+            return EXIT_FAILED
+        automation = automation_points(c)
+        model = query_pages(c, {"layer": "model"})
+    except SystemExit as e:
+        print(f"prune-points: could not read the apps / points, nothing was changed ({e})")
+        return EXIT_FAILED
+    orphans, stale = prune_candidates(m, automation, model, installed, now, stale_days)
+    print(f"prune-points: scope = automation-layer points with application_id in {sorted(own_app_ids(m))}")
+    print(f"orphan points (app not installed): {len(orphans)}")
+    for p in orphans:
+        _safe_print(f"  {p['uuid']}  {p['name']}  application_id={p['application_id']}  ({p['why']})")
+    print(f"stale FDD result / timeline points (older than {stale_days:g} days): {len(stale)}")
+    for p in stale:
+        _safe_print(f"  {p['uuid']}  {p['name']}  ({p['why']})")
+    uuids = [p["uuid"] for p in orphans + stale]
+    if not uuids:
+        print("prune-points: nothing to delete")
+        return 0
+    if len(uuids) > max_delete:
+        print(f"prune-points: {len(uuids)} candidates is more than --max-delete {max_delete}; nothing was changed. "
+              "Review the list, then raise --max-delete if it is right")
+        return EXIT_FAILED
+    if not yes:
+        print(f"dry run: nothing was changed; add --yes to delete these {len(uuids)} points "
+              "(NF deletes the point and its NF history in every layer; Timescale tables are not touched)")
+        print(PRUNE_MCP_HOWTO)
+        return 0
+    try:
+        n = delete_points(c, uuids)
+    except SystemExit as e:
+        print(f"prune-points: delete FAILED ({e}). {PRUNE_MCP_HOWTO}")
+        return EXIT_FAILED
+    print(f"prune-points: deleted {n} of {len(uuids)} points" + ("" if n == len(uuids) else
+          " (NF reported a different count: re-run the dry run to see what is left)"))
+    return 0 if n == len(uuids) else EXIT_FAILED
 
 
 def verify_install(c, m: dict, skip_run: bool = False, wait: float | None = None,
@@ -2148,7 +2284,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pin-server-cert", action="store_true",
                     help="fetch the certificate the server presents, print its SHA-256 and trust only it for this run "
                          "(its SAN must match the host); verification stays on")
-    ap.add_argument("action", choices=["status", "push", "run", "pull", "diff", "install", "uninstall", "remove-old", "doctor"])
+    ap.add_argument("action", choices=["status", "push", "run", "pull", "diff", "install", "uninstall", "remove-old", "doctor",
+                                       "prune-points"])
     ap.add_argument("manifest", type=Path)
     ap.add_argument("--skip-hooks", action="store_true",
                     help="push/install: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
@@ -2170,7 +2307,17 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--remove-old", action="store_true",
                     help="install: delete the predecessor apps listed under `replaces` in the manifest "
                          "(dry run: only lists them, plus orphan points, unless --yes)")
-    ap.add_argument("--yes", action="store_true", help="remove-old / uninstall: actually delete (default is a dry run)")
+    ap.add_argument("--yes", action="store_true",
+                    help="remove-old / uninstall / prune-points: actually delete (default is a dry run)")
+    ap.add_argument("--stale-days", type=float, default=DEFAULT_PRUNE_STALE_DAYS, metavar="DAYS",
+                    help=f"prune-points: a stale FDD result qualifies once its newest value is older than DAYS "
+                         f"(default {DEFAULT_PRUNE_STALE_DAYS})")
+    ap.add_argument("--max-delete", type=int, default=DEFAULT_PRUNE_MAX, metavar="N",
+                    help=f"prune-points: refuse (change nothing) when there are more than N candidates "
+                         f"(default {DEFAULT_PRUNE_MAX})")
+    ap.add_argument("--self-uninstalled", action="store_true",
+                    help="prune-points: explicitly confirm this app was removed; permits its missing id in a "
+                         "nonempty apps list (never bypasses an empty/invalid list or the dry-run default)")
     ap.add_argument("--wait", type=float, metavar="SECONDS",
                     help="run: how long to wait for each run (default: the hook's invokeTimeout + 60 s). "
                          "On timeout the run is reported as still running (exit 3) and is never re-started")
@@ -2235,6 +2382,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_remove_old(c, m, a.yes)
     if a.action == "doctor":
         return cmd_doctor(c, m, environ=env)
+    if a.action == "prune-points":
+        return cmd_prune_points(c, m, a.yes, a.stale_days, a.max_delete, self_uninstalled=a.self_uninstalled)
     return cmd_pull(c, m, write=(a.action == "pull"))
 
 
