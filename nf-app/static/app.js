@@ -403,7 +403,8 @@ async function renderFddResults(equips, sweepRoles = {}) {
 // blanks the page.
 const viewTabRuns = { rcx: 0, fdd: 0 };
 // Overview (#1643): the fleet dashboard draws a card only when it comes near the viewport, a few at a time, so opening
-// Overview no longer requests history for every panel on the site at once. A newer render drops the old observer.
+// Overview no longer requests history for every panel on the site at once. Holds the running queue's stop().
+/** @type {Record<string, (() => void) | null>} */
 const viewTabObservers = { rcx: null, fdd: null };
 const LAZY_CARD_MARGIN = "600px 0px", LAZY_CARD_CONCURRENCY = 2;
 const VIEW_TABS = {
@@ -524,31 +525,15 @@ async function renderViewTab(tab) {
       $("overviewRcx").hidden = ![...body.querySelectorAll(".rcx-card")].some((x) => !/** @type {HTMLElement} */ (x).hidden);
     }
   };
-  if (viewTabObservers[tab]) { viewTabObservers[tab].disconnect(); viewTabObservers[tab] = null; }
-  if (fleet && cards.length && typeof IntersectionObserver === "function") {
-    // Lazy: each card fetches its history when it nears the viewport; LAZY_CARD_CONCURRENCY cards draw at once.
+  if (viewTabObservers[tab]) { viewTabObservers[tab](); viewTabObservers[tab] = null; }
+  if (fleet && cards.length && typeof IntersectionObserver === "function" && typeof lazyDrawCards === "function") {
+    // Lazy (lazy-cards.js): a card fetches its history when it nears the viewport, LAZY_CARD_CONCURRENCY at once.
+    // Leaving Overview stops the queue; coming back re-renders the dashboard as a new run.
     $(T.status).textContent = "";                               // each card shows its own loading placeholder
-    const queue = [];
-    let active = 0, left = cards.length;
-    const pump = () => {
-      while (active < LAZY_CARD_CONCURRENCY && queue.length && run === viewTabRuns[tab]) {
-        const i = queue.shift();
-        active++;
-        drawCard(i).finally(() => { active--; if (--left === 0) finish(); pump(); });
-      }
-    };
-    const io = new IntersectionObserver((entries) => {
-      for (const en of entries) {
-        if (!en.isIntersecting) continue;
-        io.unobserve(en.target);
-        queue.push(Number(/** @type {HTMLElement} */ (en.target).dataset.card));
-      }
-      pump();
-    }, { rootMargin: LAZY_CARD_MARGIN });
-    viewTabObservers[tab] = io;
-    cards.forEach((_, i) => {
-      const el = $(`${tab}-${i}`);
-      if (el) { el.dataset.card = String(i); io.observe(el); }
+    viewTabObservers[tab] = lazyDrawCards({
+      els: cards.map((_, i) => $(`${tab}-${i}`)), draw: drawCard, onDone: finish,
+      isLive: () => run === viewTabRuns[tab] && activeTab === "overview",
+      concurrency: LAZY_CARD_CONCURRENCY, rootMargin: LAZY_CARD_MARGIN,
     });
     return;
   }

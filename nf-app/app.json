@@ -52,6 +52,7 @@
     "/rules/pack-sqlite.json": "rules/pack-sqlite.json",
     "/static/app-core.js": "static/app-core.js",
     "/static/app.js": "static/app.js",
+    "/static/lazy-cards.js": "static/lazy-cards.js",
     "/static/base.css": "static/base.css",
     "/static/chart-page.js": "static/chart-page.js",
     "/static/chart.html": "static/chart.html",
