@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=84.2.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,7 +11,7 @@ license = { text = "MIT" }
 authors = [
     { name = "Ben Bartling", email = "ben.bartling@gmail.com" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -19,7 +19,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -39,9 +38,8 @@ keywords = [
     "ai-agent",
     "reporting",
 ]
-# Floors are the latest stable releases tested on 2026-11-16 (no upper bounds, as before; pydantic keeps <3).
-# Libraries whose latest release dropped an older Python keep a floor for that Python behind a marker:
-# pandas 3.x / scikit-learn 1.9 / matplotlib 3.11 / duckdb 2.x need 3.11+, numpy 2.5 / scipy 1.18 need 3.12+.
+# Floors are the latest stable releases tested on 2026-11-19 (no upper bounds, as before; pydantic keeps <3).
+# Python 3.11+ only. numpy 2.5 / scipy 1.18 need 3.12+, so 3.11 keeps their last 3.11 release behind a marker.
 dependencies = [
     "openpyxl>=3.1.5",
 ]
@@ -58,31 +56,28 @@ open-fdd-version = "open_fdd.version:main"
 open-fdd-anomaly = "open_fdd.analytics.anomaly.cli:main"
 open-fdd-nf = "open_fdd.nf.cli:main"
 open-fdd-ml = "open_fdd.ml.cli:main"
+open-fdd-scorecard = "open_fdd.scorecard.cli:main"
 open-fdd-ontology-audit = "open_fdd.ontology_audit.cli:main"
 
 [project.optional-dependencies]
 ecm-web = [
-    "fastapi>=0.163.1; python_version >= '3.11'",
-    "fastapi>=0.162.5; python_version < '3.11'",
+    "fastapi>=0.165.0",
     "uvicorn>=0.54.0",
-    "pydantic>=2.14.3,<3",
+    "pydantic>=2.14.4,<3",
 ]
 oracle = [
-    "pandas>=3.1.1; python_version >= '3.11'",
-    "pandas>=2.3.3; python_version < '3.11'",
+    "pandas>=3.1.1",
     "numpy>=2.5.5; python_version >= '3.12'",
-    "numpy>=2.4.6; python_version == '3.11'",
-    "numpy>=2.2.6; python_version < '3.11'",
+    "numpy>=2.4.6; python_version < '3.12'",
     "pyyaml>=6.0.3",
 ]
 reporting = [
     "open-fdd[oracle]",
     "python-docx>=1.2.0",
     "openpyxl>=3.1.5",
-    "matplotlib>=3.11.2; python_version >= '3.11'",
-    "matplotlib>=3.10.9; python_version < '3.11'",
+    "matplotlib>=3.11.2",
     "plotly>=7.1.0",
-    "kaleido>=1.5.1",
+    "kaleido>=1.5.2",
     "requests>=2.34.2",
 ]
 analytics = [
@@ -99,8 +94,7 @@ rdf = [
 ]
 # Offline SQL parity replay (borrowing sql/fdd on DuckDB); also the in-process DuckDB engine of the SQL analytics.
 duckdb = [
-    "duckdb>=2.0.0; python_version >= '3.11'",
-    "duckdb>=1.5.6; python_version < '3.11'",
+    "duckdb>=2.0.0",
 ]
 # Standalone PostgreSQL parity driver.
 postgres = [
@@ -108,26 +102,20 @@ postgres = [
 ]
 anomaly = [
     "open-fdd[oracle]",
-    "matplotlib>=3.11.2; python_version >= '3.11'",
-    "matplotlib>=3.10.9; python_version < '3.11'",
+    "matplotlib>=3.11.2",
     "statsmodels>=0.15.0",
-    "scikit-learn>=1.9.1; python_version >= '3.11'",
-    "scikit-learn>=1.7.2; python_version < '3.11'",
+    "scikit-learn>=1.9.1",
     "scipy>=1.18.1; python_version >= '3.12'",
-    "scipy>=1.17.1; python_version == '3.11'",
-    "scipy>=1.15.3; python_version < '3.11'",
+    "scipy>=1.17.1; python_version < '3.12'",
     "requests>=2.34.2",
 ]
 # ML FDD benchmark (LBNL data) and detectors: open-fdd-ml. Core install unchanged.
 ml = [
     "open-fdd[oracle]",
-    "matplotlib>=3.11.2; python_version >= '3.11'",
-    "matplotlib>=3.10.9; python_version < '3.11'",
-    "scikit-learn>=1.9.1; python_version >= '3.11'",
-    "scikit-learn>=1.7.2; python_version < '3.11'",
+    "matplotlib>=3.11.2",
+    "scikit-learn>=1.9.1",
     "scipy>=1.18.1; python_version >= '3.12'",
-    "scipy>=1.17.1; python_version == '3.11'",
-    "scipy>=1.15.3; python_version < '3.11'",
+    "scipy>=1.17.1; python_version < '3.12'",
 ]
 # COPOD for open-fdd-ml (pyod pulls numba + llvmlite, kept out of the ml extra).
 ml-copod = [
@@ -149,8 +137,7 @@ test = [
     "open-fdd[anomaly]",
     "open-fdd[ml]",
     "open-fdd[ontology-shacl]",
-    "duckdb>=2.0.0; python_version >= '3.11'",
-    "duckdb>=1.5.6; python_version < '3.11'",
+    "duckdb>=2.0.0",
 ]
 dev = [
     "pytest>=9.2.0",
@@ -172,6 +159,7 @@ include = ["open_fdd*"]
 [tool.setuptools.package-data]
 "open_fdd" = ["data/*.json", "data/*.sql"]
 "open_fdd.ontology_audit" = ["data/*.json", "data/*.csv", "data/*.ttl"]
+"open_fdd.scorecard" = ["*.sql"]
 "open_fdd.ecm_engineering" = [
     "data/*.xlsx",
     "data/*.json",

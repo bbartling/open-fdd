@@ -17,6 +17,7 @@
  *   history:   [{ equipment_id, ts /* epoch ms *\/, <col>: number | string | null }],
  *   weather:   [{ ts, oa_t, web_oa_t, web_oa_dp }],
  *   sensorHistory?: [{ equipment_id, series_id, sensor_role, unit, ts, value }],   // long-form sweep input (SI values)
+ *   sweepSeries?: [{ equipment_id, series_id, sensor_role, unit, window_start, window_end }], // epoch ms; bound series fetched OK (#1673)
  *   utilityInterval?: [{ ts, kwh }], utilityMonthly?: [{ billing_period, kwh }]   // optional
  * }
  * Contract columns (pack.contract) that are not listed exist as typed NULL columns.
@@ -59,7 +60,7 @@ const unitDeclaresQuantity = (unit, quantity) => {
   const n = normUnit(unit);
   if (quantity === "absolute_temperature") return ["c", "degc", "celsius"].includes(n) ? 1 : 0;
   if (quantity === "relative_humidity") {
-    return ["pct", "percent", "rh", "percentrelativehumidity"].includes(n) || String(unit).includes("%") ? 1 : 0;
+    return ["pct", "percent", "percent0100", "rh", "percentrelativehumidity"].includes(n) || String(unit).includes("%") ? 1 : 0;
   }
   if (quantity === "air_pressure") {
     return ["pa", "pascal"].includes(n) ? 1 : 0;
@@ -114,6 +115,7 @@ const TABLE_INPUT_KEY = {
   history: "history", weather: "weather", utility_interval: "utilityInterval",
   utility_monthly: "utilityMonthly",
   sensor_history: "sensorHistory",
+  sweep_series: "sweepSeries",   // #1673: expected sweep series + requested window (SV-STALE)
 };
 // Which input key feeds a contract column (timestamp_utc is fed from `ts`, epoch ms).
 const inputKey = (col) => (col === "timestamp_utc" ? "ts" : col);
@@ -285,6 +287,9 @@ async function createPglite(pack) {
         }
       }
       await db.exec("CREATE INDEX history_eq_ts ON history(equipment_id, timestamp_utc)");
+      // Planner statistics for the window / as-of joins (#1631): without them PGlite guesses row counts and the sweep
+      // rules' joins degrade to nested loops (seconds -> tens of seconds on a week of 5-min data).
+      for (const table of Object.keys(cols)) await db.exec(`ANALYZE ${table}`);
       loaded = true;
     },
     async query(ruleId) {
@@ -305,6 +310,12 @@ async function createPglite(pack) {
 
 /** sha256 (hex) of a rule's SQL text: the rule_hash provenance of fdd.rule_result rows. */
 const ruleHashes = new WeakMap();
+/** #1707: a statistic rule outputs no fault_hours (AVG-ZONE-TEMP, ZONE-COMFORT-PCT, FAN-RUNTIME-HOURS); it is written as METRIC. */
+function isMetricRule(pack, ruleId) {
+  const r = pack && pack.rules && pack.rules[ruleId];
+  return !!(r && Array.isArray(r.output_columns) && !r.output_columns.includes("fault_hours"));
+}
+
 function ruleHash(pack, ruleId) {
   let byRule = ruleHashes.get(pack);
   if (!byRule) ruleHashes.set(pack, (byRule = new Map()));
@@ -347,6 +358,21 @@ async function createTimescale(pack, opts = {}) {
       const { rows, sensorRows } = await ts.loadHistory(client, { pack, ...args });
       return rows || sensorRows;
     },
+    /**
+     * #1636: write a synthesized occ_mode (1 occupied / 0 not, from at(ms)) onto this equipment's session history rows,
+     * after load(). Only called when no occ_mode point is bound. Returns the number of rows updated.
+     */
+    async occupancy(equipId, at) {
+      const res = await client.query("SELECT DISTINCT timestamp_utc FROM pg_temp.history WHERE equipment_id = $1", [equipId]);
+      if (!res.rows.length) return 0;
+      const ts = res.rows.map((r) => new Date(r.timestamp_utc));
+      const upd = await client.query(
+        `UPDATE pg_temp.history h SET occ_mode = v.occ
+         FROM unnest($2::timestamptz[], $3::float8[]) AS v(ts, occ)
+         WHERE h.equipment_id = $1 AND h.timestamp_utc = v.ts`,
+        [equipId, ts.map((d) => d.toISOString()), ts.map((d) => (at(d.getTime()) ? 1 : 0))]);
+      return upd.rowCount;
+    },
     /** Mirror the bound points of one equipment into fdd.point (load() does this itself). */
     syncPoints: (args) => ts.syncPoints(client, { siteId: args.siteId || "", equipId: args.equipId, rows: ts.pointRows({ pack, ...args }) }),
     /** sql: optional { sql, timeline_sql } of this rule re-rendered with role-limit overrides (#1589); default the pack's. */
@@ -366,7 +392,8 @@ async function createTimescale(pack, opts = {}) {
     },
     /** Newest sample (epoch ms | null) of these points in the source table, any age (read-only). */
     newestSample: (uuids) => ts.newestSample(client, uuids),
-    resultRow: (a) => ts.toResultRow({ engine: "timescale", pollSeconds: pack.poll_seconds, ruleHash: ruleHash(pack, a.ruleId), ...a }),
+    resultRow: (a) => ts.toResultRow({ engine: "timescale", pollSeconds: pack.poll_seconds, ruleHash: ruleHash(pack, a.ruleId),
+      metric: isMetricRule(pack, a.ruleId), ...a }),
     /** Active role-limit override revisions (fdd.rule_config SV-LIMITS) of every site (#1589). */
     roleLimitOverrides: () => ts.activeRoleLimitOverrides(client),
     ruleConfigOverrides: () => ts.activeRuleConfigs(client),
@@ -386,4 +413,4 @@ async function createEngine({ kind, pack, ...opts }) {
   throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite" or "timescale")`);
 }
 
-module.exports = { createEngine, HELPERS };
+module.exports = { createEngine, HELPERS, loadSqlJs };

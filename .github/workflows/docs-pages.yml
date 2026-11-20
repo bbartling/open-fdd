@@ -5,9 +5,17 @@ name: Docs (GitHub Pages)
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, "release/**"]
     paths:
       - "docs/**"
+      - "README.md"
+      - "openfdd_agent_spec/skills/**"
+      - ".agents/skills/**"
+      - ".claude/skills/**"
+      - "scripts/check_skills_sync.py"
+      - "tests/test_skills_sync.py"
+      - "VERSION"
+      - "nf-app/package.json"
       - "nf-app/static/fdd-catalog.json"
       - "scripts/nf/gen_rule_docs.py"
       - "scripts/nf/gen_cookbook.py"
@@ -20,9 +28,17 @@ on:
       - "tests/parity/test_parity.py"
       - ".github/workflows/docs-pages.yml"
   pull_request:
-    branches: [master, main]
+    branches: [master, main, "release/**"]
     paths:
       - "docs/**"
+      - "README.md"
+      - "openfdd_agent_spec/skills/**"
+      - ".agents/skills/**"
+      - ".claude/skills/**"
+      - "scripts/check_skills_sync.py"
+      - "tests/test_skills_sync.py"
+      - "VERSION"
+      - "nf-app/package.json"
       - "nf-app/static/fdd-catalog.json"
       - "scripts/nf/gen_rule_docs.py"
       - "scripts/nf/gen_cookbook.py"
@@ -41,23 +57,29 @@ permissions:
   pages: write
   id-token: write
 
+# Per workflow + event + ref/head_ref, so one PR cannot cancel another. cancel-in-progress is on except for
+# master and tag pushes, which must not drop an in-flight production deploy.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.2"
+          ruby-version: "3.4"
           bundler-cache: true
           working-directory: docs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
 
       - name: Lock Ruby dependencies
         run: bundle lock
@@ -68,8 +90,10 @@ jobs:
 
       - name: Check the generated Rule Cookbook is current (SQL, pandas, parity)
         run: |
-          python3 -m pip install --quiet pandas numpy pyyaml
+          python3 -m pip install --quiet pandas numpy pyyaml pytest
           python3 scripts/nf/gen_cookbook.py --check
+          python3 scripts/check_skills_sync.py
+          python3 -m pytest -q tests/test_skills_sync.py
 
       - name: Jekyll build
         run: bundle exec jekyll build --trace --strict_front_matter
@@ -87,17 +111,18 @@ jobs:
       - name: Check source Markdown links
         run: python3 scripts/check_links.py
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: docs/_site
 
   deploy:
     needs: build
-    if: github.event_name != 'pull_request'
+    # Release-branch pushes build and link-check the site but never publish it.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
         id: deployment

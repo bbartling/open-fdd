@@ -3,18 +3,31 @@
 from __future__ import annotations
 
 import importlib.metadata
+import importlib.util
+import json
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
+from open_fdd.analytics.anomaly.activity import (
+    ACTIVITY_POLICIES,
+    DEFAULT_POLICY,
+    SKIP_NO_ACTIVE,
+    SKIP_NO_KNOWN_PROOF,
+    SKIP_NO_PROOF,
+    activity,
+    is_site_role,
+)
 from open_fdd.analytics.anomaly.detectors import (
     MAD_THRESHOLD,
     ZSCORE_THRESHOLD,
     anomaly_minutes,
     dedupe_events,
     is_binary_like,
+    is_near_constant,
     median_sample_delta,
     rolling_mad_flags,
     rolling_zscore_flags,
@@ -24,6 +37,32 @@ from open_fdd.analytics.anomaly.detectors_ml import IFOREST_CONTAMINATION, STL_T
 from open_fdd.analytics.anomaly.io import load_device_folder
 
 VALID_METHODS = ("zscore", "mad", "stl", "iforest")
+#: Run when ``methods`` is not given, each only if its optional dependency imports (#1654). Isolation Forest is
+#: opt-in: it marks a fixed fraction of every point by construction (#1658).
+DEFAULT_METHODS = ("zscore", "mad", "stl")
+#: ``method: (import name, pip extra)`` for the Python-only methods.
+METHOD_EXTRAS: dict[str, tuple[str, str]] = {
+    "stl": ("statsmodels", "open-fdd[anomaly]"),
+    "iforest": ("sklearn", "open-fdd[anomaly]"),
+}
+
+
+def method_available(method: str) -> bool:
+    """True when the method's optional dependency imports (z-score and MAD need only pandas)."""
+    need = METHOD_EXTRAS.get(method)
+    return need is None or importlib.util.find_spec(need[0]) is not None
+
+
+def default_methods() -> tuple[list[str], dict[str, str]]:
+    """``(runnable default methods, {skipped method: why})`` for this install."""
+    run, skipped = [], {}
+    for name in DEFAULT_METHODS:
+        if method_available(name):
+            run.append(name)
+        else:
+            module, extra = METHOD_EXTRAS[name]
+            skipped[name] = f"{module} is not installed: pip install \"{extra}\""
+    return run, skipped
 #: ``pandas`` (default) or ``sql``: where the z-score runs. ``sql`` runs ``sql/analytics/anomaly_zscore.sql`` on an
 #: in-process SQLite core (``open_fdd.analytics.sql_anomaly``); the other methods always run in Python.
 VALID_ENGINES = ("pandas", "sql")
@@ -34,6 +73,9 @@ SCOREBOARD_COLUMNS = [
     "anomaly_minutes",
     "event_count",
     "skipped_reason",
+    "gate",
+    "assessed_rows",
+    "method_note",
 ]
 
 
@@ -47,6 +89,9 @@ class ScreenResult:
     days_by_point: dict[str, list[date]] = field(default_factory=dict)
     window: int = 24
     methods: list[str] = field(default_factory=list)
+    activity: dict[str, object] = field(default_factory=dict)
+    methods_skipped: dict[str, str] = field(default_factory=dict)
+    summary: dict[str, object] = field(default_factory=dict)
 
 
 def _package_version(name: str) -> str:
@@ -57,7 +102,7 @@ def _package_version(name: str) -> str:
 
 
 def _parse_methods(methods: list[str] | tuple[str, ...] | None) -> list[str]:
-    chosen = list(VALID_METHODS if methods is None else methods)
+    chosen = list(default_methods()[0] if methods is None else methods)
     if not chosen:
         raise ValueError("at least one method is required")
     unknown = [name for name in chosen if name not in VALID_METHODS]
@@ -68,7 +113,14 @@ def _parse_methods(methods: list[str] | tuple[str, ...] | None) -> list[str]:
     return chosen
 
 
-def _flags_for_method(method: str, series: pd.Series, *, window: int, period: int) -> pd.Series:
+def _flags_for_method(
+    method: str,
+    series: pd.Series,
+    *,
+    window: int,
+    period: int,
+    contamination: float = IFOREST_CONTAMINATION,
+) -> pd.Series:
     if method == "zscore":
         return rolling_zscore_flags(series, window=window, threshold=ZSCORE_THRESHOLD)
     if method == "mad":
@@ -80,24 +132,72 @@ def _flags_for_method(method: str, series: pd.Series, *, window: int, period: in
     if method == "iforest":
         from open_fdd.analytics.anomaly.detectors_ml import isolation_forest_flags
 
-        return isolation_forest_flags(series, contamination=IFOREST_CONTAMINATION, random_state=42)
+        return isolation_forest_flags(series, contamination=contamination, random_state=42)
     raise ValueError(f"unknown method: {method}")
 
 
-def _utc_dates(index: pd.DatetimeIndex) -> pd.Series:
+def _utc_dates(index: pd.DatetimeIndex, tz: str = "UTC") -> pd.Series:
+    """Calendar date of each stamp in ``tz`` (default UTC; naive stamps are read as UTC)."""
     if getattr(index, "tz", None) is not None:
-        stamped = index.tz_convert("UTC")
+        stamped = index.tz_convert(tz)
+    elif tz != "UTC":
+        stamped = index.tz_localize("UTC").tz_convert(tz)
     else:
         stamped = index
     return pd.Series([ts.date() for ts in stamped], index=index)
+
+
+def check_tz(tz: str) -> str:
+    """Validate an IANA zone name (``UTC``, ``America/Chicago`` ...); raise ``ValueError`` if unknown."""
+    try:
+        pd.Timestamp("2026-01-01", tz=str(tz))
+    except Exception as exc:  # noqa: BLE001 - pandas raises several types for an unknown zone
+        raise ValueError(f"unknown time zone {tz!r}: use an IANA name such as America/Chicago") from exc
+    return str(tz)
+
+
+MAX_WINDOWS = 200
+
+
+def flagged_windows(flags: pd.Series, median_dt: pd.Timedelta, tz: str = "UTC") -> list[dict[str, object]]:
+    """Contiguous flagged runs as ``{start, end, minutes}``; ``end`` is the last flagged stamp plus one interval."""
+    bit = flags.fillna(False).astype(bool)
+    if not bool(bit.any()):
+        return []
+    index = bit.index
+    if getattr(index, "tz", None) is None:
+        index = index.tz_localize("UTC")
+    index = index.tz_convert(tz)
+    values = bit.to_numpy()
+    starts = values & ~pd.Series(values).shift(1, fill_value=False).to_numpy()
+    out: list[dict[str, object]] = []
+    step = median_dt.total_seconds() / 60.0
+    run_start = None
+    count = 0
+    for i, flag in enumerate(values):
+        if starts[i]:
+            run_start, count = i, 0
+        if flag:
+            count += 1
+            last = i
+            if i + 1 == len(values) or not values[i + 1]:
+                out.append(
+                    {
+                        "start": index[run_start].isoformat(),
+                        "end": (index[last] + median_dt).isoformat(),
+                        "minutes": round(count * step, 3),
+                    }
+                )
+    return out
 
 
 def worst_days(
     flags_by_method: dict[str, pd.Series],
     median_dt: pd.Timedelta,
     max_days: int,
+    tz: str = "UTC",
 ) -> list[date]:
-    """Calendar days (UTC) with the most anomaly minutes, union across methods."""
+    """Calendar days (in ``tz``, default UTC) with the most anomaly minutes, union across methods."""
     if max_days <= 0 or not flags_by_method:
         return []
     union: pd.Series | None = None
@@ -107,7 +207,7 @@ def worst_days(
     if union is None or not bool(union.any()):
         return []
     minutes = median_dt.total_seconds() / 60.0
-    daily = union.groupby(_utc_dates(union.index)).sum() * minutes
+    daily = union.groupby(_utc_dates(union.index, tz)).sum() * minutes
     daily = daily[daily > 0].sort_values(ascending=False)
     picked: list[date] = []
     for day in daily.head(int(max_days)).index:
@@ -136,6 +236,11 @@ def _write_readme(
     top_n: int,
     max_days: int,
     engine: str = "pandas",
+    activity_receipt: dict[str, object] | None = None,
+    methods_skipped: dict[str, str] | None = None,
+    contamination: float = IFOREST_CONTAMINATION,
+    tz: str = "UTC",
+    plots: bool = True,
 ) -> None:
     method_rows = {
         "zscore": f"| zscore | SQL-portable (pandas/numpy) | abs Z-score > {ZSCORE_THRESHOLD:g} |",
@@ -146,7 +251,8 @@ def _write_readme(
         ),
         "iforest": (
             f"| iforest | Python-only (scikit-learn) | "
-            f"contamination {IFOREST_CONTAMINATION:g}; features value, rolling mean/std, lag-1 |"
+            f"contamination {contamination:g}: flags about {contamination:.1%} of every point's samples by "
+            f"construction, whether or not anything happened (opt-in); features value, rolling mean/std, lag-1 |"
         ),
     }
     lines = [
@@ -154,8 +260,12 @@ def _write_readme(
         "",
         f"Command: `{command or 'open-fdd-anomaly screen <folder> --out <outdir>'}`",
         "",
-        "Calendar days are **UTC** dates from `timestamp_utc`.",
-        "This run does not convert to a building-local zone such as America/Chicago.",
+        (
+            "Calendar days are **UTC** dates from `timestamp_utc` (pass `--tz` for a local zone)."
+            if tz == "UTC"
+            else f"Calendar days, day zooms and `summary.json` windows are in **{tz}** (from `timestamp_utc`)."
+        ),
+        "`summary.json` holds every point, method and flagged window for scripts and scheduled runs.",
         "",
         "Z-score and MAD are **SQL-portable** rolling statistics (no sklearn/statsmodels).",
         "STL and Isolation Forest are **Python-only** and require `open-fdd[anomaly]`.",
@@ -170,13 +280,48 @@ def _write_readme(
     ]
     for name in methods:
         lines.append(method_rows[name])
+    for name, why in (methods_skipped or {}).items():
+        lines.append(f"| {name} | skipped | {why} |")
+    if activity_receipt:
+        a = activity_receipt
+        policy = a.get("policy")
+        lines.extend(
+            [
+                "",
+                "## Activity",
+                "",
+                f"Policy: **{policy}**"
+                + (
+                    " (every row screened on purpose; proof counts below are for disclosure)."
+                    if policy == "ungated"
+                    else " (equipment points are screened only on rows with operating proof `on`;"
+                    " site and weather points are always screened)."
+                ),
+                f"Proof source: **{a.get('proof_source')}** ({a.get('proof_kind')}"
+                + (f", > {a.get('threshold')}" if a.get("threshold") is not None else "")
+                + f"); occupancy source: **{a.get('occupancy_source')}**.",
+                f"Rows: {a.get('rows')} total; on {a.get('on_rows')}, off {a.get('off_rows')}, "
+                f"unoccupied {a.get('unoccupied_rows')}, unknown {a.get('unknown_rows')}.",
+                f"Assessed equipment rows: **{a.get('assessed_rows')}** ({float(a.get('assessed_fraction') or 0):.1%}).",
+                "Equipment points with no assessable rows are listed with `skipped_reason` "
+                f"`{SKIP_NO_PROOF}` (no proof role), `{SKIP_NO_KNOWN_PROOF}` (a proof role with no known value on any row) "
+                f"or `{SKIP_NO_ACTIVE}` (proof never on); they were not assessed.",
+                "The scoreboard's `gate` column says how each point was gated and `assessed_rows` how many rows it had.",
+            ]
+        )
     lines.extend(
         [
             "",
             f"Trailing window: **{window}** samples (about one day at the median spacing).",
             f"Median sample interval: **{median_dt}**.",
-            f"Day zooms: top **{top_n}** points, up to **{max_days}** UTC days each.",
-            "Support plots (line, histogram, box) cover every screened point that was not skipped.",
+            (
+                f"Day zooms: top **{top_n}** points, up to **{max_days}** {tz} days each."
+                if plots
+                else "Plots: **off** (`--no-plots`)."
+            ),
+            "Support plots (line, histogram, box) cover every screened point that was not skipped."
+            if plots
+            else "",
             "",
             "## Versions",
             "",
@@ -191,6 +336,54 @@ def _write_readme(
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _summary(
+    *,
+    folder,
+    scoreboard: pd.DataFrame,
+    flags_by_point: dict[str, dict[str, pd.Series]],
+    median_dt: pd.Timedelta,
+    tz: str,
+    methods: list[str],
+    methods_skipped: dict[str, str],
+    activity_receipt: dict[str, object],
+    top_points: list[str],
+    days_by_point: dict[str, list[date]],
+    plots: bool,
+    engine: str,
+) -> dict[str, object]:
+    """Machine-readable result of one run (``summary.json``, ``--json``)."""
+    rows = []
+    for rec in scoreboard.to_dict(orient="records"):
+        point, method = str(rec["point"]), str(rec.get("method") or "")
+        flags = flags_by_point.get(point, {}).get(method) if method else None
+        windows = flagged_windows(flags, median_dt, tz) if flags is not None else []
+        entry = {k: (None if isinstance(v, float) and pd.isna(v) else v) for k, v in rec.items()}
+        entry["windows"] = windows[:MAX_WINDOWS]
+        entry["windows_total"] = len(windows)
+        if flags is not None and bool(flags.any()):
+            minutes = median_dt.total_seconds() / 60.0
+            daily = flags.fillna(False).astype(bool).groupby(_utc_dates(flags.index, tz)).sum() * minutes
+            entry["minutes_by_day"] = {str(day): float(v) for day, v in daily.items() if v > 0}
+        else:
+            entry["minutes_by_day"] = {}
+        rows.append(entry)
+    return {
+        "version": 1,
+        "folder": str(folder),
+        "tz": tz,
+        "engine": engine,
+        "methods": list(methods),
+        "methods_skipped": dict(methods_skipped),
+        "median_sample_minutes": median_dt.total_seconds() / 60.0,
+        "activity": dict(activity_receipt),
+        "plots": plots,
+        "flagged_points": sorted({r["point"] for r in rows if (r.get("anomaly_minutes") or 0) > 0}),
+        "top_points": list(top_points),
+        "days_by_point": {p: [d.isoformat() for d in days] for p, days in days_by_point.items()},
+        "points": rows,
+    }
+
+
 def _write_plots(
     destination: Path,
     *,
@@ -199,6 +392,7 @@ def _write_plots(
     flags_by_point: dict[str, dict[str, pd.Series]],
     top_points: list[str],
     days_by_point: dict[str, list[date]],
+    tz: str = "UTC",
 ) -> None:
     from open_fdd.analytics.anomaly.plots import (
         point_slug,
@@ -223,6 +417,7 @@ def _write_plots(
                 flags,
                 day,
                 destination / "days" / slug / f"{day.isoformat()}.png",
+                tz=tz,
             )
 
 
@@ -235,16 +430,35 @@ def screen_folder(
     methods: list[str] | tuple[str, ...] | None = None,
     command: str | None = None,
     engine: str = "pandas",
+    activity_policy: str = DEFAULT_POLICY,
+    iforest_contamination: float = IFOREST_CONTAMINATION,
+    plots: bool = True,
+    tz: str = "UTC",
 ) -> ScreenResult:
     """Screen AHU IO points and write the scoreboard, README, and plots.
 
     Support plots cover every non-skipped point. Day zooms cover the top
     ``top_n`` points and at most ``max_days`` UTC days each. ``engine="sql"``
     computes the z-score with the portable SQL query instead of pandas.
+
+    ``activity_policy="proof"`` (default) screens equipment points only on rows the shared activity
+    policy (:mod:`open_fdd.analytics.anomaly.activity`, also used by ``open-fdd-ml detect``) marks ``on``;
+    the detectors then run over those rows in order. Site and weather points are always screened.
+    ``"ungated"`` screens every row on purpose. The policy, proof source and on/off/unknown counts are
+    written to ``activity.json`` and the README.
     """
     chosen = _parse_methods(methods)
+    tz = check_tz(tz)
+    skipped_methods = default_methods()[1] if methods is None else {}
+    rate = float(iforest_contamination)
+    if not 0.0 < rate <= 0.5:
+        raise ValueError("iforest contamination must be in (0, 0.5]")
     if engine not in VALID_ENGINES:
         raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(VALID_ENGINES)}")
+    if activity_policy not in ACTIVITY_POLICIES:
+        raise ValueError(
+            f"unknown activity policy {activity_policy!r}; choose from {', '.join(ACTIVITY_POLICIES)}"
+        )
     destination = Path(out_dir)
     destination.mkdir(parents=True, exist_ok=True)
 
@@ -253,12 +467,34 @@ def screen_folder(
     period = max(window, 2)
     median_dt = median_sample_delta(device.frame.index)
 
+    # Proof roles may sit outside the AHU IO set, so read them from every mapped point.
+    every = load_device_folder(folder, ahu_only=False)
+    role_frame = pd.DataFrame(
+        {role: every.frame[column] for role, column in reversed(every.points)},
+        index=every.frame.index,
+    )
+    act = activity(role_frame, policy=activity_policy)
+    on_rows = act.state.eq("on")
+    if on_rows.index.equals(device.frame.index):
+        running = pd.Series(on_rows.to_numpy(dtype=bool), index=device.frame.index)
+    else:
+        running = on_rows[~on_rows.index.duplicated()].reindex(device.frame.index).fillna(False).astype(bool)
+
+    def _gate(role: str) -> tuple[str, pd.Series]:
+        if activity_policy == "ungated":
+            return "ungated", pd.Series(True, index=device.frame.index)
+        if is_site_role(role):
+            return "site", pd.Series(True, index=device.frame.index)
+        return "proof", running
+
     sql_zscore: pd.DataFrame | None = None
     if engine == "sql" and "zscore" in chosen:
         from open_fdd.analytics.sql_anomaly import zscore_flags_sql
 
         columns = list(dict.fromkeys(column for _role, column in device.points))
         numeric = device.frame[columns].apply(pd.to_numeric, errors="coerce")
+        for role, column in device.points:
+            numeric[column] = numeric[column].where(_gate(role)[1].to_numpy())
         sql_zscore = zscore_flags_sql(numeric, window=window, threshold=ZSCORE_THRESHOLD, engine="sqlite")
 
     rows: list[dict[str, object]] = []
@@ -276,6 +512,9 @@ def screen_folder(
                     "anomaly_minutes": 0.0,
                     "event_count": 0,
                     "skipped_reason": "non_numeric",
+                    "gate": _gate(role)[0],
+                    "assessed_rows": 0,
+                    "method_note": "",
                 }
             )
             continue
@@ -288,15 +527,57 @@ def screen_folder(
                     "anomaly_minutes": 0.0,
                     "event_count": 0,
                     "skipped_reason": "binary_like",
+                    "gate": _gate(role)[0],
+                    "assessed_rows": 0,
+                    "method_note": "",
                 }
             )
             continue
+        if is_near_constant(series):
+            rows.append(
+                {
+                    "point": column,
+                    "role": role,
+                    "method": "",
+                    "anomaly_minutes": 0.0,
+                    "event_count": 0,
+                    "skipped_reason": "near_constant",
+                    "gate": _gate(role)[0],
+                    "assessed_rows": 0,
+                    "method_note": "",
+                }
+            )
+            continue
+        gate, assessed = _gate(role)
+        assessed_rows = int((assessed & series.notna()).sum())
+        if not bool(assessed.any()):
+            rows.append(
+                {
+                    "point": column,
+                    "role": role,
+                    "method": "",
+                    "anomaly_minutes": 0.0,
+                    "event_count": 0,
+                    "skipped_reason": act.skip_reason(),
+                    "gate": gate,
+                    "assessed_rows": 0,
+                    "method_note": "",
+                }
+            )
+            continue
+        gated = series if bool(assessed.all()) else series[assessed.to_numpy()]
         point_flags: dict[str, pd.Series] = {}
         for method in chosen:
             if method == "zscore" and sql_zscore is not None:
                 flags = sql_zscore[column].astype(bool)
             else:
-                flags = _flags_for_method(method, series, window=window, period=period)
+                flags = _flags_for_method(method, gated, window=window, period=period, contamination=rate)
+                if gated is not series:
+                    # positional: a device folder may carry duplicate timestamps, which reindex cannot align
+                    full = np.zeros(len(series), dtype=bool)
+                    full[np.flatnonzero(assessed.to_numpy())] = flags.to_numpy(dtype=bool)
+                    flags = pd.Series(full, index=series.index)
+            flags = (flags.astype(bool) & assessed.to_numpy()).astype(bool)
             point_flags[method] = flags
             rows.append(
                 {
@@ -306,6 +587,9 @@ def screen_folder(
                     "anomaly_minutes": anomaly_minutes(flags, median_dt),
                     "event_count": int(dedupe_events(flags).sum()),
                     "skipped_reason": "",
+                    "gate": gate,
+                    "assessed_rows": assessed_rows,
+                    "method_note": f"fixed_fraction_{rate:g}" if method == "iforest" else "",
                 }
             )
         flags_by_point[column] = point_flags
@@ -314,6 +598,8 @@ def screen_folder(
     scoreboard = pd.DataFrame(rows, columns=SCOREBOARD_COLUMNS)
     scoreboard_path = destination / "scoreboard.csv"
     scoreboard.to_csv(scoreboard_path, index=False)
+    receipt = act.receipt()
+    (destination / "activity.json").write_text(json.dumps(receipt, indent=1), encoding="utf-8")
     _write_readme(
         destination / "README.md",
         command=command,
@@ -323,21 +609,43 @@ def screen_folder(
         top_n=int(top_n),
         max_days=int(max_days),
         engine=engine,
+        activity_receipt=receipt,
+        methods_skipped=skipped_methods,
+        contamination=rate,
+        tz=tz,
+        plots=bool(plots),
     )
 
     top_points = _rank_points(scoreboard, int(top_n))
     days_by_point = {
-        point: worst_days(flags_by_point.get(point, {}), median_dt, int(max_days))
+        point: worst_days(flags_by_point.get(point, {}), median_dt, int(max_days), tz)
         for point in top_points
     }
-    _write_plots(
-        destination,
+    if plots:
+        _write_plots(
+            destination,
+            scoreboard=scoreboard,
+            screened=screened,
+            flags_by_point=flags_by_point,
+            top_points=top_points,
+            days_by_point=days_by_point,
+            tz=tz,
+        )
+    summary = _summary(
+        folder=folder,
         scoreboard=scoreboard,
-        screened=screened,
         flags_by_point=flags_by_point,
+        median_dt=median_dt,
+        tz=tz,
+        methods=chosen,
+        methods_skipped=skipped_methods,
+        activity_receipt=receipt,
         top_points=top_points,
         days_by_point=days_by_point,
+        plots=bool(plots),
+        engine=engine,
     )
+    (destination / "summary.json").write_text(json.dumps(summary, indent=1, default=str), encoding="utf-8")
     return ScreenResult(
         scoreboard=scoreboard,
         out_dir=destination,
@@ -345,4 +653,7 @@ def screen_folder(
         days_by_point=days_by_point,
         window=window,
         methods=chosen,
+        activity=receipt,
+        methods_skipped=skipped_methods,
+        summary=summary,
     )

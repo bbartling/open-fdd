@@ -3,6 +3,7 @@ name: NF app CI
 
 on:
   push:
+    branches: [master, "release/**"]
     paths:
       - "nf-app/**"
       - "lite/**"
@@ -34,23 +35,27 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   nf-app:
     name: NF app + RDF export
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install nf-app npm dependencies (when a lockfile exists)
         run: |
@@ -68,8 +73,9 @@ jobs:
 
       - name: NF app unit tests, manifest, catalog + SQL pack checks
         run: |
+          # the #1649 SQL analytics tests call the Python renderers / runner (open_fdd.analytics imports pandas)
+          python3 -m pip install --quiet pytest pandas numpy pyyaml
           node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs
-          python3 -m pip install --quiet pytest
           python3 -m pytest -q tests/test_nf_app_install.py tests/test_nf_app_sync.py tests/test_nf_paging_and_guard.py tests/test_input_contract.py tests/test_core_schema.py
           node --test nf-app/timescale/test/bounds.test.mjs
           python3 - <<'EOF'
@@ -116,17 +122,17 @@ jobs:
     timeout-minutes: 45
     services:
       tsdb:
-        image: timescale/timescaledb:2.31.0-pg17
+        image: timescale/timescaledb:2.32.1-pg17
         env:
           POSTGRES_PASSWORD: example
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - run: cd nf-app && npm ci
@@ -138,9 +144,9 @@ jobs:
           set -o pipefail
           node --test nf-app/timescale/test/*.test.mjs 2>&1 | tee "$RUNNER_TEMP/ts.log"
           if grep -Eq "^# skipped [1-9]|^ℹ skipped [1-9]" "$RUNNER_TEMP/ts.log"; then echo "Timescale tests skipped: failing the lane"; exit 1; fi
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: pandas == SQL parity through the core tables (fail on skip)
         env:
           OPENFDD_TS_TEST_DISPOSABLE: "1"

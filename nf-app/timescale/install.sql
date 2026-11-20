@@ -387,6 +387,25 @@ $$;
 -- no longer references it, so nothing depends on it.
 DROP TABLE IF EXISTS openfdd.retention_log;
 
+-- v6 (#1707): statistic rules (AVG-ZONE-TEMP, ZONE-COMFORT-PCT, FAN-RUNTIME-HOURS) are written with status METRIC instead
+-- of INCONCLUSIVE. core.sql creates new tables with the wider CHECK; an existing table gets it here. Idempotent: the
+-- constraint is replaced only while it does not allow METRIC. fdd.rule_result has no compression, so the swap is allowed.
+DO $$
+DECLARE c record; dropped int := 0;
+BEGIN
+  FOR c IN SELECT conname FROM pg_constraint
+            WHERE conrelid = 'fdd.rule_result'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) LIKE '%INCONCLUSIVE%' AND pg_get_constraintdef(oid) NOT LIKE '%METRIC%'
+  LOOP
+    EXECUTE format('ALTER TABLE fdd.rule_result DROP CONSTRAINT %I', c.conname);
+    dropped := dropped + 1;
+  END LOOP;
+  IF dropped > 0 THEN
+    ALTER TABLE fdd.rule_result ADD CONSTRAINT rule_result_status_check
+      CHECK (status IN ('PASS','FAULT','INCONCLUSIVE','SKIPPED','ERROR','STALE','METRIC'));
+  END IF;
+END $$;
+
 -- Last statement: mark the schema after the migration succeeds.
-INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(5))
+INSERT INTO openfdd.config (key, value) VALUES ('schema_version', to_jsonb(6))
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;

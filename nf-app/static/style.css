@@ -11,6 +11,10 @@
 @media (max-width: 640px) { .rcx-grid { grid-template-columns: 1fr; } }
 .rcx-card h3 { margin: 0 0 6px; font-size: 14px; }
 .rcx-card .chart { height: 320px; }
+/* #1643: a card waiting for its history (drawn when it nears the viewport) shows a quiet placeholder, not a blank box. */
+.rcx-card .chart:not(.done) { border-radius: 6px; background: linear-gradient(90deg, var(--panel2) 25%, var(--row-hover) 50%, var(--panel2) 75%) 0 0 / 200% 100%; animation: rcx-wait 1.6s ease-in-out infinite; }
+@keyframes rcx-wait { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .rcx-card .chart:not(.done) { animation: none; background: var(--panel2); } }
 .rcx-card .note { margin-top: 6px; }
 .rcx-split { width: 100%; }
 tr.clickable { cursor: pointer; }
@@ -70,6 +74,11 @@ tr.clickable:hover td { background: var(--panel2); }
 .tun-card label { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .tun-card input[type="number"], .tun-card select { font: inherit; padding: 4px 6px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; width: 100%; box-sizing: border-box; }
 .tun-card-check { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+/* #1672: slider + number box on one row; the number box keeps the exact typed value */
+.tun-slider-row { display: flex; align-items: center; gap: 8px; }
+.tun-slider-row input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: var(--accent, #3b82f6); }
+.tun-card .tun-slider-row input[type="number"] { flex: 0 0 88px; width: 88px; }
+.tun-card.tun-gate .tun-card-check { font-weight: 600; }
 .tun-banner { padding: 8px 10px; border-radius: 8px; font-size: 12px; margin: 8px 0; background: color-mix(in srgb, var(--warn, #f59e0b) 14%, var(--panel2)); border: 1px solid var(--warn, #f59e0b); color: var(--text); }
 .tun-banner.err { background: color-mix(in srgb, var(--hot) 14%, var(--panel2)); border-color: var(--hot); }
 .tuners-subhead { margin: 12px 0 6px; font-size: 13px; color: var(--muted); }

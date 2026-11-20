@@ -273,6 +273,8 @@ function rcxContext(view, equips, hours, model, catalog, range = null, siteTz = 
   };
   return {
     view, equips, hours, model, catalog, first, series, aligned, alignedFine, range, siteTz,
+    // #1649: the SQL analytics engine (in-process in the analytics hook, the hook itself from a browser page)
+    sqlAnalytics: extra.sqlAnalytics || globalThis.ofddSqlAnalytics || null,
     ahuOn: !!extra.ahuOn, feedingAhu, ahuMask, kpi: (tile) => { if (extra.kpis) extra.kpis.push(tile); },
     chart: (el) => rcxSiteChart(el, siteTz, range, !!extra.dropTitle),
     siUnit: rcxSiUnit,

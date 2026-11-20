@@ -7,6 +7,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { createRequire } from "node:module";
+const SA = createRequire(import.meta.url)("../hooks/lib/sql-analytics.js");
 
 const dir = new URL("../static/", import.meta.url);
 const catalog = JSON.parse(readFileSync(new URL("fdd-catalog.json", dir), "utf8"));
@@ -16,7 +18,9 @@ const T0 = Date.UTC(2026, 9, 26);            // a Monday 00:00 UTC (ISO week 202
 
 function load() {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa,
-    localStorage: { getItem: () => ctx.units } });          // ofddUnits.displaySystem()
+    localStorage: { getItem: () => ctx.units },             // ofddUnits.displaySystem()
+    // #1649: the views run the SQL analytics; in a page they reach them through the analytics hook, here in-process
+    ofddSqlAnalytics: { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs), econ: (g) => SA.econFromGrid("sqlite", g), bas: (g) => SA.basFromGrid("sqlite", g) } });
   ctx.units = "imperial";
   ctx.pickWindow = () => 3600;                // one value per hour
   ctx.FAULT_LANE = { lineStyle: { color: "red" }, areaStyle: { color: "red" } };
@@ -101,94 +105,83 @@ test("ISO weeks: Monday start (UTC), week labels, year boundary", () => {
   assert.equal(m.isoWeekLabel(Date.UTC(2025, 11, 29)), "2026-W01");
 });
 
-test("weeklyRuntime: duty vs threshold, 0.05 on-limit, gap cap, week split, OAT while on", () => {
-  const { rcxOverviewMath: m } = setup().ctx;
+// #1649: run hours, cooling bins and the economizer are SQL (sql/analytics/*.sql, pandas parity in tests/test_sql_*.py);
+// these pin the definitions the charts rely on, through the same SQL the views run.
+const SQL = { runtime: (g, specs) => SA.runtimeFromGrid("sqlite", g, specs), mech: (g, specs) => SA.mechFromGrid("sqlite", g, specs) };
+const MON = Date.UTC(2026, 9, 26), WEEK = 7 * 86400e3;
+const runtime1 = async (t, v, o = {}) => (await SA.runtimeFromGrid("sqlite", { t, cols: { m: v, o: o.oat || null } },
+  [{ key: 0, motor: "m", oat: o.oat ? "o" : null, weekOf: (ms) => MON + Math.floor((ms - MON) / WEEK) * WEEK }])).get(0);
+
+test("weekly runtime (SQL): 0.05 on-limit, percent inputs, gap cap, week split, OAT while on", async () => {
   // Sunday 22:00 .. Monday 04:00 (UTC): 6 hourly samples ending in week 2026-W45's Monday.
   const sun = Date.UTC(2026, 10, 1, 22);
   const t = Array.from({ length: 7 }, (_, i) => sun + i * HOUR);
-  const on = new Array(7).fill(1);
-  const w = m.weeklyRuntime(t, on, { duty: true });
-  assert.deepEqual(arr(w.keys()), [Date.UTC(2026, 9, 26), Date.UTC(2026, 10, 2)]);
-  assert.equal(w.get(Date.UTC(2026, 9, 26)).hours, 2);          // 22:00, 23:00 intervals
-  assert.equal(w.get(Date.UTC(2026, 10, 2)).hours, 4);          // 00:00..03:00 intervals (last sample has no interval)
-  assert.equal(w.get(Date.UTC(2026, 10, 2)).partial, true);     // under 6 days observed
-  // duty mode weights by the resampled on-fraction; <= 0.05 is off
-  assert.equal(m.weeklyRuntime(t, [0.5, 0.5, 0.05, 0.04, 1, 1, 1], { duty: true }).get(Date.UTC(2026, 9, 26)).hours, 1);
-  // analog command: any > 5% counts the whole interval; percent inputs are normalized (50 -> 0.5)
-  assert.equal(m.weeklyRuntime(t, [0.3, 50, 0.04, 0, 0, 0, 0], { duty: false }).get(Date.UTC(2026, 9, 26)).hours, 2);
-  // a gap longer than the cap is not counted
+  const w = await runtime1(t, new Array(7).fill(1));
+  assert.deepEqual([...w.keys()], [MON, MON + WEEK]);
+  assert.equal(w.get(MON).hours, 2);                            // 22:00, 23:00 intervals
+  assert.equal(w.get(MON + WEEK).hours, 4);                     // 00:00..03:00 intervals (last sample has no interval)
+  assert.equal(w.get(MON + WEEK).partial, true);                // under 6 days observed
+  // any > 5 % counts the whole interval; percent inputs are normalized (50 -> 0.5); <= 0.05 is off
+  assert.equal((await runtime1(t, [0.3, 50, 0.04, 0, 0, 0, 0])).get(MON).hours, 2);
+  assert.equal((await runtime1(t, [0.05, 0.05, 1, 0, 0, 0, 0])).has(MON), false, "no running time: no week row (pandas)");
+  // a gap longer than the 3600 s cap is not counted
   const gap = [T0, T0 + HOUR, T0 + 6 * HOUR, T0 + 7 * HOUR];
-  assert.equal(m.weeklyRuntime(gap, [1, 1, 1, 1], { duty: true }).get(Date.UTC(2026, 9, 26)).hours, 2);
-  assert.equal(m.weeklyRuntime(gap, [1, 1, 1, 1], { duty: true, gapMaxSec: 6 * 3600 }).get(Date.UTC(2026, 9, 26)).hours, 7);
+  assert.equal((await runtime1(gap, [1, 1, 1, 1])).get(MON).hours, 2);
   // average OAT is taken while running only
-  const o = m.weeklyRuntime(t, [1, 0, 1, 0, 0, 0, 0], { duty: true, oat: [40, 99, 60, 99, 99, 99, 99] });
-  assert.equal(o.get(Date.UTC(2026, 9, 26)).oat, 40);
-  assert.equal(o.get(Date.UTC(2026, 10, 2)).oat, 60);
+  const o = await runtime1(t, [1, 0, 1, 0, 0, 0, 0], { oat: [40, 99, 60, 99, 99, 99, 99] });
+  assert.equal(o.get(MON).oat, 40);
+  assert.equal(o.get(MON + WEEK).oat, 60);
 });
 
-test("mechBins: bins are fixed in degC (50..90 degF); labels follow the display system", () => {
+test("cooling bins (SQL): bins are fixed in degC (50..90 degF); labels follow the display system", async () => {
   const { rcxOverviewMath: m } = setup().ctx;
   assert.deepEqual(arr(m.oatBinLabels()), ["<10", "10-16", "16-21", "21-27", "27-32", ">=32"]);
   assert.deepEqual(arr(m.oatBinLabels((c) => c * 1.8 + 32)), ["<50", "50-60", "60-70", "70-80", "80-90", ">=90"]);
+  assert.equal(SA.MECH_OAT_BIN_LABELS.length, 6);
   const t = Array.from({ length: 6 }, (_, i) => T0 + i * HOUR);
+  const bins = async (a, oat) => (await SQL.mech({ t, cols: { a, o: oat } }, [{ key: 0, proof: "a", oat: "o" }])).get(0);
   // the same physical temperatures (given in degC) land in the same bins whichever labels are shown
-  const oat = [45, 55, 55, 75, 95, 95].map(F2C);
-  const r = m.mechBins(t, [1, 1, 0, 1, 1, 1], oat, { duty: true });
-  assert.deepEqual(arr(r.hours), [1, 1, 0, 1, 0, 1]);           // last sample has no interval
-  assert.deepEqual(arr(r.labels), ["<10", "10-16", "16-21", "21-27", "27-32", ">=32"]);
-  assert.deepEqual(arr(m.mechBins(t, [1, 1, 0, 1, 1, 1], oat, { duty: true, toDisp: (c) => c * 1.8 + 32 }).hours), arr(r.hours));
-  const c = m.mechBins(t, [1, 1, 1, 1, 1, 1], [5, 5, 12, 33, 33, 33]);
-  assert.deepEqual(arr(c.hours), [2, 1, 0, 0, 0, 2]);
+  assert.deepEqual(await bins([1, 1, 0, 1, 1, 1], [45, 55, 55, 75, 95, 95].map(F2C)), [1, 1, 0, 1, 0, 1]);   // last sample has no interval
+  assert.deepEqual(await bins([1, 1, 1, 1, 1, 1], [5, 5, 12, 33, 33, 33]), [2, 1, 0, 0, 0, 2]);
 });
 
-test("economizerRows: SI default identifiable delta is 5.5556 delta degC (= 10 delta degF)", () => {
+test("economizer (SQL): fan gate, identifiable delta (5.5556 delta degC = 10 delta degF), OA fraction, mixing residual", async () => {
   const { rcxOverviewMath: m } = setup().ctx;
   near(m.ECON_DT_MIN_C, 50 / 9, 1e-12);
-  const g = { t: [1, 2, 3], rat: [21, 21, 21], mat: [18, 18, 18], fan: [1, 1, 1], oa_t: [21 - 5.5, 21 - 5.6, 21 + 5.6] };
-  assert.deepEqual(arr(m.economizerRows(g), (r) => r.ident), [false, true, true]);   // |OAT-RAT| >= 5.5556
-});
-
-test("economizerRows: fan gate, identifiable delta, OA fraction, damper mixing residual", () => {
-  const { rcxOverviewMath: m } = setup().ctx;
-  const g = {
-    t: [1, 2, 3, 4, 5],
-    oa_t: [50, 50, 50, 50, 50], rat: [70, 70, 70, 70, 70], mat: [60, 65, 60, 70, 60],
-    fan: [1, 1, 0, 1, 1], sat: [55, 55, 55, 55, 55], damper: [50, 50, 50, 50, null],
-  };
-  const rows = m.economizerRows(g, { dtMin: 10 });
-  assert.deepEqual(arr(rows, (r) => r.t), [1, 2, 4, 5]);        // fan off (t=3) dropped
-  assert.equal(rows[0].dOR, -20);
-  assert.equal(rows[0].dMR, -10);
-  assert.equal(rows[0].oaFrac, 50);
-  assert.equal(rows[0].matPred, 60);                            // 70 + 0.5 * -20
-  assert.equal(rows[0].matResid, 0);
+  near(SA.ECON_DIAG_DT_MIN_C, m.ECON_DT_MIN_C, 1e-12);          // the caption constant is the SQL's
+  const edge = await SA.econFromGrid("sqlite", { t: [1, 2, 3], cols: { rat: [21, 21, 21], mat: [18, 18, 18], fan: [1, 1, 1], oa_t: [21 - 5.5, 21 - 5.6, 21 + 5.6] } });
+  assert.deepEqual(edge.rows.map((r) => r.ident), [false, true, true]);
+  const g = { t: [1, 2, 3, 4, 5], cols: {
+    oa_t: [10, 10, 10, 10, 10], rat: [30, 30, 30, 30, 30], mat: [20, 25, 20, 30, 20],
+    fan: [1, 1, 0, 1, 1], sat: [13, 13, 13, 13, 13], damper: [50, 50, 50, 50, null] } };
+  const { rows, summary } = await SA.econFromGrid("sqlite", g);
+  assert.deepEqual(rows.map((r) => r.t), [1, 2, 4, 5]);          // fan off (t=3) dropped
+  assert.deepEqual([rows[0].dOR, rows[0].dMR, rows[0].oaFrac, rows[0].matPred, rows[0].matResid], [-20, -10, 50, 20, 0]);
   assert.equal(rows[1].matResid, 5);
-  assert.equal(rows[2].oaFrac + 0, 0);
-  assert.equal(rows[3].matResid, null);                         // no damper reading
-  assert.equal(rows[3].damperPct, null);
+  assert.equal(rows[2].oaFrac + 0, 0);                         // SQL may give -0
+  assert.deepEqual([rows[3].matResid, rows[3].damperPct], [null, null]);   // no damper reading
+  assert.deepEqual([summary.n, summary.nIdent, summary.medianResid, summary.maeResid], [4, 4, 5, 5]);
   // not identifiable below the minimum delta: no OA fraction
-  const lo = m.economizerRows({ ...g, oa_t: [66, 66, 66, 66, 66] }, { dtMin: 10 });
-  assert.ok(lo.every((r) => !r.ident && r.oaFrac === null));
-  const s = m.economizerSummary(rows);
-  assert.deepEqual([s.n, s.nIdent, s.medianResid, s.maeResid], [4, 4, 5, 5]);
+  const lo = await SA.econFromGrid("sqlite", { ...g, cols: { ...g.cols, oa_t: [27, 27, 27, 27, 27] } });
+  assert.ok(lo.rows.length && lo.rows.every((r) => !r.ident && r.oaFrac === null));
 });
 
-test("basVsWeb: web joined as-of within its cadence, delta, band stats, histogram", () => {
+test("BAS vs web (SQL): web joined as-of within its cadence, delta, band stats; histogram", async () => {
   const { rcxOverviewMath: m } = setup().ctx;
   const t = Array.from({ length: 8 }, (_, i) => T0 + i * HOUR);
   const bas = [50, 51, 52, 53, 54, 55, 56, 57];
   const web = [50, null, null, 50, null, null, 50, null];       // 3 h cadence
-  assert.equal(m.webMaxAgeMs(t, web), 4.5 * HOUR);
-  const r = m.basVsWeb(t, bas, web);
-  assert.deepEqual(arr(r.rows, (x) => x.d), [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(SA.webMaxAgeMs(t, bas, web), 4.5 * HOUR);       // max(1.5 x 3 h web, 2 x 1 h BAS), as pandas
+  const r = await SA.basFromGrid("sqlite", { t, cols: { bas, web } });
+  assert.deepEqual(r.rows.map((x) => x.d), [0, 1, 2, 3, 4, 5, 6, 7]);
   assert.equal(r.band, 2);                                      // delta degC (= 3.6 delta degF)
   assert.equal(r.stats.n, 8);
   assert.equal(r.stats.bias, 3.5);
   assert.equal(r.stats.maxAbs, 7);
   assert.equal(r.stats.withinBand, 3 / 8);                      // |d| <= 2 degC: 0, 1, 2
-  // stale web (older than the bound) is not joined
-  const stale = m.asOfFill(t, [10, null, null, null, null, null, null, null], 2 * HOUR);
-  assert.deepEqual(arr(stale), [10, 10, 10, null, null, null, null, null]);
+  // stale web (older than the bound) is not joined: one reading, BAS hourly -> limit 2 h, three samples pair
+  const stale = await SA.basFromGrid("sqlite", { t, cols: { bas, web: [10, null, null, null, null, null, null, null] } });
+  assert.deepEqual(stale.rows.map((x) => x.t), t.slice(0, 3));
   // histogram: contiguous bins, ends clamped
   const h = m.deltaHist([0.2, 0.4, 1.6, -0.7, 100], 1);
   assert.deepEqual(arr(h.labels).slice(0, 3), ["-1", "0", "1"]);
@@ -393,7 +386,7 @@ function truthHours(t, v, dayOf, gapSec = 3600) {
   return out;
 }
 
-test("daily runtime hours equal the raw-data truth on a 5-minute grid, with a data gap (UTC days)", () => {
+test("daily runtime hours equal the raw-data truth on a 5-minute grid, with a data gap (UTC days)", async () => {
   const { rcxOverviewMath: m } = setup().ctx;
   const STEP = 300e3, t = [], v = [];
   for (let x = T0; x < T0 + 3 * 24 * HOUR; x += STEP) {
@@ -405,7 +398,7 @@ test("daily runtime hours equal the raw-data truth on a 5-minute grid, with a da
   }
   const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
   const truth = truthHours(t, v, dayOf);
-  const got = m.dailyRuntime(t, v, { duty: false });
+  const [got] = await m.dailyRuntimes(SQL, { t, cols: { v } }, ["v"]);
   assert.deepEqual(arr(got, (d) => d.day), ["2026-10-26", "2026-10-27", "2026-10-28"]);
   near(got[0].hours, 9.5, 1e-9);
   near(got[2].hours, 9.5, 1e-9);
@@ -413,24 +406,26 @@ test("daily runtime hours equal the raw-data truth on a 5-minute grid, with a da
   for (const d of got) near(d.hours, truth.get(d.day), 1e-9);   // and agrees with the independent integration
 });
 
-test("daily runtime: calendar days follow the site time zone, a Bool average counts as its on-fraction", () => {
+test("daily runtime: calendar days follow the site time zone; on = above 5 %, the whole interval", async () => {
   const { rcxOverviewMath: m } = setup().ctx;
   const start = Date.UTC(2026, 6, 1), t = [], v = [];
   for (let x = start; x < start + 48 * HOUR; x += 300e3) {
     const h = (x - start) / HOUR;
     t.push(x); v.push(h >= 27 && h < 33 ? 1 : 0);                // 03:00-09:00 UTC on Jul 2 = 22:00 (Jul 1) .. 04:00 (Jul 2) in CDT
   }
-  const chicago = m.dailyRuntime(t, v, { tz: "America/Chicago" }), utc = m.dailyRuntime(t, v, { tz: "UTC" });
+  const [chicago] = await m.dailyRuntimes(SQL, { t, cols: { v } }, ["v"], { tz: "America/Chicago" });
+  const [utc] = await m.dailyRuntimes(SQL, { t, cols: { v } }, ["v"], { tz: "UTC" });
   const hoursByDay = (rows) => Object.fromEntries(arr(rows, (d) => [d.day, +d.hours.toFixed(6)]));
   assert.deepEqual(hoursByDay(chicago), { "2026-06-30": 0, "2026-07-01": 2, "2026-07-02": 4 });
   assert.deepEqual(hoursByDay(utc), { "2026-07-01": 0, "2026-07-02": 6 });
   const tz = "America/Chicago", dayOf = m.dayKeyer(tz);
   const truth = truthHours(t, v, (ms) => new Date(dayOf(ms)).toISOString().slice(0, 10));
   for (const d of chicago) near(d.hours, truth.get(d.day) || 0, 1e-9);
-  // duty: a resampled Bool of 0.5 over an hour = half an hour
-  const half = m.dailyRuntime([T0, T0 + HOUR, T0 + 2 * HOUR], [0.5, 0.5, 0.5], { duty: true });
-  assert.equal(half[0].hours, 1);                                // two 1 h intervals x 0.5
-  assert.equal(m.dailyRuntime([T0, T0 + HOUR], [0.04, 0.04], {})[0].hours, 0, "5 % or less is off");
+  // a resampled Bool of 0.5 is on (> 5 %): the whole interval counts, as in the weekly hours and the SQL pack
+  const [half] = await m.dailyRuntimes(SQL, { t: [T0, T0 + HOUR, T0 + 2 * HOUR], cols: { v: [0.5, 0.5, 0.5] } }, ["v"]);
+  assert.equal(half[0].hours, 2);
+  const [off] = await m.dailyRuntimes(SQL, { t: [T0, T0 + HOUR], cols: { v: [0.04, 0.04] } }, ["v"]);
+  assert.deepEqual(arr(off, (d) => d.hours), [0], "5 % or less is off; the day still gets a row");
 });
 
 test("ahu-runtime-daily view: hours per day per AHU from fan status, labelled; command only where there is no status", async () => {

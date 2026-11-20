@@ -9,6 +9,8 @@ nav_order: 3
 The 77 rule SQL files are ordinary PostgreSQL 14+. They use no `time_bucket`, hypertables or continuous aggregates. Timescale is
 only the runtime that builds the wide `history` input, so any database that can build that table can run them.
 
+The RCx analytics are portable SQL too: [Using the SQL analytics in your own database](borrowing-analytics.html).
+
 ## Quick start (DuckDB, no server)
 
 Checked on `generate(seed=0, equips=2, days=3, profile="basic")`: FC1, FC2 and CMD-1 match the pandas reference within 1e-6 h.
@@ -74,6 +76,8 @@ for eq, fh, _cov, _pct in con.execute(pack["rules"]["FC1"]["sql"]).fetchall():
 | `edge` | `8 x 7` | 16,069 | 241,035 | 504 | `ed82a649d58e` |
 
 ## Runnable DuckDB and SPARQL tutorial
+
+The [beginner DuckDB browser tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_browser_afdd) loads fake AHU readings, explains tables and views, and runs a small SQL temperature rule. Change one threshold and see the assessment update on the same data.
 
 The [standalone DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) includes executable pandas-versus-SQL assertions for FC1, FC2 and CMD-1, plus SPARQL point discovery joined to a DuckDB long-form historian. Both scripts run locally without an NF server. Follow its README for PowerShell or Linux setup.
 

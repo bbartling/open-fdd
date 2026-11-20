@@ -156,6 +156,30 @@ the framework's release instructions and verify its console before installing Op
 upgrade, and rollback steps, see the [NF Compose guide](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-upgrade-compose.md).
 App uninstall is not a substitute for an NF backup.
 
+Points the app leaves behind are cleaned up with `prune-points`, which is a dry run unless `--yes` is given:
+
+```bash
+python3 scripts/nf/hooks/nf_app_sync.py --env <protected-env-file> prune-points nf-app/app.json                 # list only
+python3 scripts/nf/hooks/nf_app_sync.py --env <protected-env-file> prune-points nf-app/app.json --stale-days 30 --yes
+```
+
+It lists two groups and deletes nothing else:
+
+- **Orphans:** automation-layer points whose `attrs.application_id` is this manifest's id or one of its `replaces`
+  ids, and that app is no longer installed.
+- **Stale results:** `fdd-result` / `fdd-fault-timeline` points of the installed app whose model record is flagged
+  `fddStatus: stale` (the release no longer runs that rule for that equipment) and whose newest value is older than
+  `--stale-days` (default 30).
+
+Points of any other app, BACnet or field layers and hand-made points are never candidates.
+An empty/invalid apps list always stops pruning. A missing current app also stops it: only after independently
+confirming it was removed, pass `--self-uninstalled` with a nonempty list. This never implies `--yes`.
+
+More than `--max-delete`
+candidates (default 500) stops with nothing changed. `--yes` deletes exactly the listed uuids through the NF point
+API, which removes the point and its NF history in every layer; Timescale tables are not touched. Without the tool,
+the same uuids can be deleted with the NF MCP `delete_points` tool (dry run first).
+
 ## Hooks
 
 Full schedules `fdd` hourly and `weather` every 20 minutes. `sparql` is on request. Lite schedules `weather`
@@ -189,3 +213,11 @@ Use the named failure to choose the next check.
 - **auth** means NF rejected the console credentials. Verify the local console login before changing credentials.
 - **fdd freshness** compares output age with raw history. If raw history is current, read the latest `fdd` hook run
   with `include_results=true` for per-equipment skip or stale reasons.
+- **host memory / host disk / host services** come from one read-only `GET /api/v1/platform/info` (no SSH, no
+  writes). Service health uses exact status names: unhealthy/inactive/not-running warn; unknown or absent health
+  reports SKIP, never PASS. These informational lines do not change doctor's exit status. They WARN on low free
+  memory (under 10 % or 256 MiB), low free disk (under 10 % or 1 GiB), restarted or
+  stopped services, and SKIP when NF does not expose the value. NF 3.10.9 returns only a static hardware inventory
+  there (disk sizes, CPUs, NICs) and an empty service list, so all three SKIP on it today; the checks pick the values
+  up by name if a later NF adds them. These lines never fail `doctor`, and serials, MAC addresses and the license are
+  never printed.

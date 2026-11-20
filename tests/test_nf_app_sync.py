@@ -314,7 +314,7 @@ def test_timescale_schema_version_matches_runtime_constant():
     match = re.search(r"const SCHEMA_VERSION = (\d+);", source.read_text(encoding="utf-8"))
     install = (source.parents[2] / "timescale" / "install.sql").read_text(encoding="utf-8")
     stamped = re.search(r"VALUES \('schema_version', to_jsonb\((\d+)\)\)", install)
-    assert match and stamped and int(match.group(1)) == int(stamped.group(1)) == 5
+    assert match and stamped and int(match.group(1)) == int(stamped.group(1)) == 6   # v6: METRIC status (#1707)
 
 
 @pytest.mark.parametrize(("verify_rc", "restored"), [(sync.EXIT_FAILED, True), (sync.EXIT_STILL_RUNNING, False)])
@@ -547,3 +547,21 @@ def test_doctor_reports_weather_disabled_not_a_failure(monkeypatch, tmp_path, ca
     else:
         assert "weather disabled" not in output
         assert sync.weather_enabled({"options": options})
+
+
+@pytest.mark.parametrize("action", ["push", "run", "pull", "diff", "status", "uninstall", "remove-old", "doctor"])
+def test_dry_run_is_refused_outside_install_before_any_login(action, tmp_path, monkeypatch):
+    """#1634: `push --dry-run` used to write and restart for real. Every action but install refuses the flag, and does
+    so before reading credentials or opening a connection."""
+    monkeypatch.setattr(sync, "Console", lambda *a, **k: pytest.fail("no login may happen"))
+    monkeypatch.setattr(sync, "load_env", lambda *a, **k: pytest.fail("credentials must not be read"))
+    env = tmp_path / "nf.env"
+    env.write_text("CONSOLE_USERNAME=u\nCONSOLE_PASSWORD=p\nNF_CONSOLE_URL=https://console.invalid\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="--dry-run applies to install only"):
+        sync.main(["--env", str(env), action, "app.json", "--dry-run"])
+
+
+def test_dry_run_is_accepted_for_install_and_absent_flags_are_fine():
+    parse = sync.build_parser().parse_args
+    assert sync.argument_problem(parse(["install", "app.json", "--dry-run"])) is None
+    assert sync.argument_problem(parse(["push", "app.json"])) is None

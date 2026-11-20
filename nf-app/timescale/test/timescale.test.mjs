@@ -470,9 +470,15 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
   const sensorHistory = (await q("SELECT * FROM pg_temp.sensor_history")).map(({ timestamp_utc, ...r }) => ({ ...r, ts: timestamp_utc.getTime() }));
   assert.equal(new Set(sensorHistory.map((row) => row.series_id)).size, 6);
   assert.equal(new Set(sensorHistory.filter((row) => row.sensor_role === "sat").map((row) => row.series_id)).size, 2);
+  // #1673: load() declares every fetched series with the requested window [FROM, TO). Give pglite the same
+  // declaration, or SV-STALE there falls back to the observed window (which ends one step before TO).
+  const sweepSeries = (await q("SELECT * FROM pg_temp.sweep_series")).map(({ window_start, window_end, ...r }) => ({
+    ...r, window_start: window_start.getTime(), window_end: window_end.getTime(),
+  }));
+  assert.equal(sweepSeries.length, 6, "load() declares the six fetched sweep series");
   const input = {
     historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })),
-    history: hist, weather, sensorHistory,
+    history: hist, weather, sensorHistory, sweepSeries,
   };
   const eng = await createEngine({ kind: "pglite", pack });
   let matched = 0, bothError = 0, withFault = 0, timelines = 0;
@@ -519,6 +525,32 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
     assert.equal(sat.length, 2, `${id} preserves both supply-air sensors`);
     assert.ok(sat.every((row) => row.covered_hours > 0), `${id} reports real coverage`);
   }
+});
+
+test("upgrade v5 -> v6 (#1707): the status CHECK gains METRIC, re-install is a no-op, statistic rules store METRIC", { skip }, async () => {
+  // put the table back to the v5 constraint, as an existing 5.0.20 install has it
+  await db.query("ALTER TABLE fdd.rule_result DROP CONSTRAINT IF EXISTS rule_result_status_check");
+  await db.query(`ALTER TABLE fdd.rule_result ADD CONSTRAINT rule_result_status_check
+    CHECK (status IN ('PASS','FAULT','INCONCLUSIVE','SKIPPED','ERROR','STALE'))`);
+  await db.query("UPDATE openfdd.config SET value = to_jsonb(5) WHERE key = 'schema_version'");
+  const def = async () => (await db.query(`SELECT string_agg(pg_get_constraintdef(oid), ' ') AS d FROM pg_constraint
+    WHERE conrelid = 'fdd.rule_result'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%INCONCLUSIVE%'`)).rows[0].d;
+  assert.ok(!(await def()).includes("METRIC"));
+  assert.equal((await ts.install(db)).schemaVersion, 6);
+  assert.ok((await def()).includes("METRIC"), "the CHECK now allows METRIC");
+  assert.equal((await ts.install(db)).schemaVersion, 6, "second install is a no-op");
+  const n = (await db.query(`SELECT count(*)::int AS n FROM pg_constraint WHERE conrelid = 'fdd.rule_result'::regclass
+    AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%INCONCLUSIVE%'`)).rows[0].n;
+  assert.equal(n, 1, "exactly one status CHECK");
+  const row = ts.toResultRow({ runTs: "2026-10-15T00:00:00Z", equip: EQUIP, site: "site-1", ruleId: "AVG-ZONE-TEMP",
+    row: { equipment_id: EQUIP, avg_zone_temp: 22.4, min_zone_temp: 20.1, max_zone_temp: 24.0 }, windowStart: FROM, windowEnd: TO,
+    metric: true });
+  assert.equal(await ts.writeResults(db, [row]), 1);
+  const back = (await db.query("SELECT status, reason, metrics FROM fdd.rule_result WHERE rule_id = 'AVG-ZONE-TEMP' AND created_at = $1",
+    ["2026-10-15T00:00:00Z"])).rows[0];
+  assert.equal(back.status, "METRIC");
+  assert.equal(back.reason, null);
+  assert.equal(back.metrics.avg_zone_temp, 22.4);
 });
 
 test("writeResults upserts rule results into fdd.rule_result", { skip }, async () => {

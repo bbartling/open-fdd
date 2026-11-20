@@ -55,6 +55,42 @@ def infer_equipment_kind(
     }.get(t, "unknown")
 
 
+#: #1642: web weather joins the equipment frame as-of, as the SQL rules do: the latest non-null reading at or before the
+#: sample, at most WEB_CADENCE_SECONDS + WEB_ASOF_MARGIN_SECONDS (sql/fdd/runtime_defaults.json: 1200 + 300) old.
+WEB_ASOF_BOUND_SECONDS = 1500.0
+
+
+def _weather_asof(wx: pd.DataFrame, index: pd.Index, bound_seconds: float = WEB_ASOF_BOUND_SECONDS) -> pd.DataFrame:
+    """Each weather column joined as-of to ``index`` (rows keep their order; duplicates and NaT are allowed)."""
+    import numpy as np
+
+    out = pd.DataFrame(index=index)
+    if not isinstance(index, pd.DatetimeIndex) or not isinstance(wx.index, pd.DatetimeIndex) or len(index) == 0:
+        return wx.reindex(index)
+
+    def utc_ns(idx):
+        idx = pd.DatetimeIndex(idx)
+        if idx.tz is None:
+            idx = idx.tz_localize("UTC")
+        return idx.tz_convert("UTC").as_unit("ns").asi8
+
+    t = utc_ns(index)
+    bound = np.int64(round(float(bound_seconds) * 1e9))
+    for col in wx.columns:
+        s = wx[col].dropna()
+        if s.empty:
+            out[col] = pd.Series(np.nan, index=index, dtype=float) if wx[col].dtype.kind in "fiu" else None
+            continue
+        s = s[~s.index.duplicated(keep="last")].sort_index()
+        ts = utc_ns(s.index)
+        pos = np.searchsorted(ts, t, side="right") - 1
+        ok = (pos >= 0) & (t - ts[np.clip(pos, 0, None)] <= bound)
+        vals = s.to_numpy()[np.clip(pos, 0, None)]
+        col_out = pd.Series(vals, index=index, dtype=s.dtype if s.dtype.kind in "fiub" else object)
+        out[col] = col_out.where(ok)
+    return out
+
+
 def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFrame:
     """Align/enrich web weather onto an equipment frame, then resolve effective OAT.
 
@@ -69,7 +105,7 @@ def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFram
         wx_full = enrich_weather_frame(weather)
         if "web-outside-air-temp" in wx_full.columns:
             out.attrs["web_oat_native_frame"] = wx_full[["web-outside-air-temp"]].copy()
-        wx = wx_full.reindex(out.index)
+        wx = _weather_asof(wx_full, out.index)   # #1642: as-of, as SQL (an exact match is always within the bound)
         for col in wx.columns:
             if col not in out.columns:
                 out[col] = wx[col]
@@ -165,24 +201,11 @@ def _missing_roles(rule: cb.CookbookRule, df: pd.DataFrame) -> list[str]:
             return ["building-zone-load-satisfied|building-ahu-load-satisfied"]
         return []
     if rule.id == "SCHED-247":
-        proofs = (
-            "fan-status",
-            "pump-status",
-            "chw-pump-status",
-            "hw-pump-status",
-            "chiller-status",
-            "compressor-status",
-            "tower-fan-cmd",
-            "cw-fan-cmd",
-            "fan-cmd",
-            "chw-pump-cmd",
-            "hw-pump-cmd",
-            "duct-static-pressure",
-            "chw-diff-pressure",
-        )
+        # #1670: the same ranked proof roles as the SQL rule; pressure is never proof for always-on.
+        proofs = cb.SCHED247_STATUS_ROLES + cb.SCHED247_COMMAND_ROLES
         if any(r in df.columns and df[r].notna().any() for r in proofs):
             return []
-        return ["fan_or_pump_status_or_cmd_or_pressure"]
+        return ["fan_or_pump_status_or_cmd"]
     if rule.sensor_sweep:
         present = [r for r in cb.SWEEP_SENSOR_ROLES if r in df.columns and df[r].notna().any()]
         return [] if present else ["any sensor role from sweep list"]
@@ -305,15 +328,7 @@ def _plot_series_for_rule(rule: cb.CookbookRule, d: pd.DataFrame) -> dict[str, p
             if c in d.columns and d[c].notna().any():
                 out[c] = d[c]
     if rule.id == "SCHED-247":
-        for c in (
-            "fan-status",
-            "pump-status",
-            "chw-pump-status",
-            "hw-pump-status",
-            "fan-cmd",
-            "chw-pump-cmd",
-            "hw-pump-cmd",
-        ):
+        for c in cb.SCHED247_STATUS_ROLES + cb.SCHED247_COMMAND_ROLES:
             if c in d.columns and d[c].notna().any():
                 out[c] = d[c]
     _attach_motor_status_lane(out, d)
@@ -414,7 +429,10 @@ def run_cookbook_rule(
     equipment_type: str = "",
     require_operational_gates: bool = True,
     skip_weather_merge: bool = False,
+    apply_quality: bool = True,
 ) -> RuleResult:
+    """``apply_quality=False`` skips the role-bound / sentinel nulling of ``open_fdd.quality``. The SQL pack never applies
+    it (#1253), so the SQL parity reference runs without it; the product pandas engine keeps it on."""
     params_by_rule = params_by_rule or {}
     stamped = equipment_type or str(df.attrs.get("equipment_type") or df.attrs.get("equipType") or "")
     eq_type = normalize_equipment_type(stamped) or "UNKNOWN"
@@ -515,7 +533,7 @@ def run_cookbook_rule(
         if r in quality.roles
     ]
     worst_req = min(req_cov) if req_cov else 1.0
-    if req_cov and worst_req <= 0.0:
+    if apply_quality and req_cov and worst_req <= 0.0:
         return skipped(
             rule.id,
             equipment_id,
@@ -526,7 +544,16 @@ def run_cookbook_rule(
             equipment_type=eq_type,
             params_fingerprint=fp,
         )
-    d = apply_normalized(d, quality, attach_raw_and_flags=False)
+    pre_quality = d
+    if apply_quality:
+        d = apply_normalized(d, quality, attach_raw_and_flags=False)
+    if rule.sensor_sweep:
+        # #1673: the SQL sweeps judge the stored SI values (masked only by unit). A value quality calls out of range is
+        # exactly what SV-RANGE / SV-SPIKE assess; nulling it first hid it, and turned it into a gap (now SV-STALE's).
+        swept = [c for c in cb.SWEEP_SENSOR_ROLES if c in pre_quality.columns and c in d.columns]
+        if swept:
+            d = d.copy()
+            d[swept] = pre_quality[swept]
 
     try:
         active, gate_meta = resolve_operational_mask(
@@ -542,8 +569,13 @@ def run_cookbook_rule(
 
             rp_series, rp_src = derive_run_proof(d)
             if rp_series is not None:
-                active = proof_on(rp_series)
+                # #1631: the fallback proof gets the rule's startup delay too, like the hydronic proof it replaces
+                from open_fdd.rules.operational_gate import apply_startup_delay
+
+                delay = float(params.get("startup_delay_min", (spec.startup_delay_seconds if spec else 0.0) / 60.0)) * 60.0
+                active = apply_startup_delay(proof_on(rp_series), poll_seconds, delay)
                 gate_meta = {**gate_meta, "missing_proof": False, "gate_applied": True, "gate_source": rp_src,
+                             "startup_delay_seconds": delay,
                              "active_sample_count": int(active.sum()),
                              "active_coverage_pct": round(100.0 * float(active.mean()), 1) if len(active) else 0.0}
         if gate_meta.get("missing_proof"):
@@ -680,7 +712,26 @@ def run_cookbook_rule(
             plot_series=_plot_series_for_rule(rule, d),
             active_mask=active if use_active else None,
             params_fingerprint=fp,
+            # #1723 (#1631 design call 1): the fault_pct denominator of a run-proof gated rule is its proven-on time,
+            # every sample when the gate is off, exactly the SQL active_hours (proof_active).
+            pct_mask=(proof_ok if proof_ok is not None
+                      else pd.Series(True, index=d.index) if rule.id in run_proof_gated_ids() else None),
         )
+        if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
+            # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero
+            why = d.attrs["coil_perf_assessment"]
+            result.status = f"NOT_ASSESSED_{why.upper()}"
+            result.fault_hours = None
+            result.fault_pct = None
+            result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
+            result.metrics["assessment"] = why
+        if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
+            # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
+            result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"
+            result.fault_hours = None
+            result.fault_pct = None
+            result.notes = (f"NOT ASSESSED — {metrics['assessment']}: {metrics.get('proven_on_hours', 0) + metrics.get('proven_off_hours', 0):.1f} h "
+                            f"of known run proof in a {metrics.get('window_hours', 0):.1f} h window (needs 90% of max(window, 24 h))")
         if sweep_result is not None:
             result.raw_fault = sweep_result["raw_mask"]
             result.confirmed_fault = sweep_result["confirmed_mask"]

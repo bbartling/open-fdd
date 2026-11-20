@@ -5,14 +5,14 @@
   {
    "rule": "AHU-SATDEV",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "reason": "Small residual left after #1642; not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 5.6667,
+     "hours": 0.8333,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 4.5,
+     "hours": 0.5,
      "tol": 0.01
     }
    }
@@ -20,7 +20,7 @@
   {
    "rule": "CHW-1",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
    "expected": {
     "basic/0/8/7": {
      "hours": 0.5,
@@ -48,31 +48,16 @@
    }
   },
   {
-   "rule": "ECON-3",
-   "scope": "all",
-   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 24.5833,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 11.5,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "ECON-4",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "Small residual left after #1642; not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 2.8333,
+     "hours": 0.4167,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 1.0833,
+     "hours": 0.1667,
      "tol": 0.01
     }
    }
@@ -80,14 +65,14 @@
   {
    "rule": "ECON-7",
    "scope": "all",
-   "reason": "weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns",
+   "reason": "a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642",
    "expected": {
     "basic/0/8/7": {
-     "hours": 27.6667,
+     "hours": 0.25,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 14.8333,
+     "hours": 0.25,
      "tol": 0.01
     }
    }
@@ -123,21 +108,6 @@
    }
   },
   {
-   "rule": "FC5",
-   "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 3.9167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 1.8333,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "FC6",
    "scope": "all",
    "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
@@ -153,76 +123,16 @@
    }
   },
   {
-   "rule": "FC7",
-   "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 4.5833,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 3.9167,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "FCU-HTG-COIL",
-   "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 5.4167,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 4.6667,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "FCU-MODE-CYCLE",
-   "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 1.75,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 1.0,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "HP-1",
    "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
+   "reason": "Small residual left after #1642; not yet attributed.",
    "expected": {
     "basic/0/8/7": {
-     "hours": 3.0,
+     "hours": 0.1667,
      "tol": 0.01
     },
     "basic/0/4/3": {
-     "hours": 2.9167,
-     "tol": 0.01
-    }
-   }
-  },
-  {
-   "rule": "MECH-OAT-1",
-   "scope": "all",
-   "reason": "pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 208.6667,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 56.1667,
+     "hours": 0.0833,
      "tol": 0.01
     }
    }
@@ -230,7 +140,7 @@
   {
    "rule": "OA-1",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
    "expected": {
     "basic/0/8/7": {
      "hours": 0.25,
@@ -303,24 +213,9 @@
    }
   },
   {
-   "rule": "VAV-6",
-   "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 3.6667,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 1.25,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "VAV-AHU-LEAVE",
    "scope": "all",
-   "reason": "SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges",
+   "reason": "pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).",
    "expected": {
     "basic/0/8/7": {
      "hours": 1.3333,
@@ -396,6 +291,16 @@
    "rule": "WX-1",
    "scope": "edge",
    "reason": "Gap handling: SQL flags |oa_t - previous sample| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only."
+  },
+  {
+   "rule": "FC5",
+   "scope": "edge",
+   "reason": "Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match."
+  },
+  {
+   "rule": "ECON-3",
+   "scope": "edge",
+   "reason": "Jittered timestamps (#1642): the weather join itself now matches. pandas joins the raw weather readings as-of (runner.WEB_ASOF_BOUND_SECONDS = 1500 s), as SQL does, which took the edge 4x3 delta from 15.24 h to 0.34 h (MECH-OAT-1 went to 0 and is no longer listed). The remaining 0.34 h on edge AHU-1 is not yet attributed; basic (on-grid) datasets match exactly."
   }
  ]
 }

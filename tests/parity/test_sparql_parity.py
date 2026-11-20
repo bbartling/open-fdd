@@ -30,6 +30,25 @@ import sparql_leg as leg  # noqa: E402
 CASES = [(0, 2, 2, "basic"), (0, 2, 1, "edge")]
 
 
+def _nanosecond_index(frame):
+    """Compare timestamp values independently of pandas 3's inferred resolution (#1730)."""
+    return frame.set_axis(frame.index.as_unit('ns'), axis='index')
+
+
+@pytest.mark.parametrize('unit', ['ms', 'us', 'ns'])
+def test_index_resolution_normalization_preserves_exact_values(unit):
+    index = pd.date_range('2026-01-01T00:00:00.123', periods=2, freq='5min', tz='UTC')
+    expected = pd.DataFrame({'value': [1., 2.]}, index=index.as_unit('ns'))
+    actual = expected.set_axis(index.as_unit(unit), axis='index')
+    pd.testing.assert_frame_equal(_nanosecond_index(actual), expected)
+    shifted = expected.set_axis(expected.index + pd.Timedelta(1, unit='ns'), axis='index')
+    with pytest.raises(AssertionError):
+        pd.testing.assert_frame_equal(_nanosecond_index(shifted), expected)
+    changed = expected.assign(value=[1., 3.])
+    with pytest.raises(AssertionError):
+        pd.testing.assert_frame_equal(_nanosecond_index(changed), expected)
+
+
 @pytest.fixture(scope="module", params=CASES, ids=lambda c: f"{c[3]}-{c[1]}x{c[2]}")
 def case(request):
     seed, equips, days, profile = request.param
@@ -56,9 +75,11 @@ def test_client_frames_are_the_oracle_frames(case):
         o = equip_frame(ds, e)
         assert list(df.index) == list(o.index), e
         assert sorted(df.columns) == sorted(o.columns), (e, sorted(set(df.columns) ^ set(o.columns)))
-        pd.testing.assert_frame_equal(df[o.columns], o, check_freq=False, check_names=False, check_index_type=False)
+        pd.testing.assert_frame_equal(_nanosecond_index(df[o.columns]), _nanosecond_index(o),
+                                      check_freq=False, check_names=False)
     w = weather_frame(ds)
-    pd.testing.assert_frame_equal(wx[w.columns], w, check_freq=False, check_names=False)
+    pd.testing.assert_frame_equal(_nanosecond_index(wx[w.columns]), _nanosecond_index(w),
+                                  check_freq=False, check_names=False)
 
 
 def test_sparql_client_equals_pandas_oracle(case):

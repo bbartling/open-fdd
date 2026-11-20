@@ -1,6 +1,6 @@
 ---
 name: add-rcx-chart
-description: Add an RCx chart with the fault lane and parity entry. Pointer to the Open-FDD agent spec.
+description: Add an RCx chart (view) to the Open-FDD NF app with the bottom fault lane and parity entry.
 ---
 # add-rcx-chart
 

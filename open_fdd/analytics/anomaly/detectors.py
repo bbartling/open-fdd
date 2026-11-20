@@ -12,6 +12,14 @@ import pandas as pd
 
 ZSCORE_THRESHOLD = 3.0
 MAD_THRESHOLD = 3.5
+#: MAD floor (#1657): a positive MAD is raised to ``max(MAD, MAD_RESOLUTION_STEPS * resolution,
+#: MAD_RELATIVE_FLOOR * |median|)`` so resolution steps of a near-constant signal are not outliers.
+MAD_RESOLUTION_STEPS = 1.0
+MAD_RELATIVE_FLOOR = 1e-3
+#: A series whose 1st-99th percentile range is within this many resolution steps, or within
+#: ``NEAR_CONSTANT_RELATIVE * |median|``, is skipped as ``near_constant``.
+NEAR_CONSTANT_STEPS = 5.0
+NEAR_CONSTANT_RELATIVE = 2e-3
 
 
 def samples_per_day(index: pd.DatetimeIndex) -> int:
@@ -68,6 +76,34 @@ def rolling_zscore_flags(
     return flags.astype(bool)
 
 
+def resolution(y: pd.Series) -> float:
+    """Typical quantization step: the 5th percentile of the gaps between distinct finite values (0 if unknown)."""
+    values = np.unique(_numeric(y).dropna().to_numpy(dtype=float))
+    if values.size < 2:
+        return 0.0
+    gaps = np.diff(values)
+    scale = float(np.max(np.abs(values))) or 1.0
+    gaps = gaps[gaps > 1e-9 * scale]
+    if gaps.size == 0:
+        return 0.0
+    return float(np.quantile(gaps, 0.05))
+
+
+def is_near_constant(y: pd.Series) -> bool:
+    """True when the series only moves by a few resolution steps or a tiny fraction of its level (#1657).
+
+    The spread is the full min-to-max range, not a percentile band: the screen skips a near-constant point before
+    every method, so a short excursion on an otherwise flat signal (a damper that drops to 0 for a few samples, a
+    closed valve that spikes open) must keep the point in the screen.
+    """
+    values = _numeric(y).dropna()
+    if values.empty:
+        return False
+    spread = float(values.max()) - float(values.min())
+    limit = max(NEAR_CONSTANT_STEPS * resolution(values), NEAR_CONSTANT_RELATIVE * abs(float(values.median())))
+    return spread <= limit
+
+
 def rolling_mad_flags(
     y: pd.Series,
     *,
@@ -77,10 +113,13 @@ def rolling_mad_flags(
     """Flag samples whose trailing-window modified deviation exceeds ``threshold``.
 
     Score is ``|x - median| / MAD`` with ``MAD = median(|x - median|)`` inside
-    the same window. ``MAD == 0`` never flags.
+    the same window. ``MAD == 0`` never flags. A positive MAD is floored at one
+    resolution step of the series and at ``1e-3 * |median|`` (#1657), so a signal
+    that only moves by its sensor resolution is not flagged.
     """
     values = _numeric(y)
     span = _min_periods(window)
+    step = resolution(values)
 
     def _mad(win: np.ndarray) -> float:
         finite = win[np.isfinite(win)]
@@ -91,7 +130,9 @@ def rolling_mad_flags(
 
     center = values.rolling(span, min_periods=span).median()
     mad = values.rolling(span, min_periods=span).apply(_mad, raw=True)
+    floor = np.maximum(MAD_RESOLUTION_STEPS * step, MAD_RELATIVE_FLOOR * center.abs())
     safe_mad = mad.where(mad > 0)
+    safe_mad = np.maximum(safe_mad, floor).where(safe_mad.notna())
     score = (values - center).abs() / safe_mad
     flags = score.gt(float(threshold)).fillna(False)
     return flags.astype(bool)

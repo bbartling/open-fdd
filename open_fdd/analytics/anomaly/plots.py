@@ -42,9 +42,9 @@ def _pyplot():
     return plt
 
 
-def _plot_x(index: pd.Index) -> pd.Index:
+def _plot_x(index: pd.Index, tz: str = "UTC") -> pd.Index:
     if isinstance(index, pd.DatetimeIndex) and index.tz is not None:
-        return index.tz_convert("UTC").tz_localize(None)
+        return index.tz_convert(tz).tz_localize(None)
     return index
 
 
@@ -56,13 +56,14 @@ def _union_flags(flags_by_method: dict[str, pd.Series], index: pd.Index) -> pd.S
     return union
 
 
-def _day_slice(series: pd.Series, day: date) -> pd.Series:
+def _day_slice(series: pd.Series, day: date, tz: str = "UTC") -> pd.Series:
     start = pd.Timestamp(datetime(day.year, day.month, day.day))
-    end = start + pd.Timedelta(days=1)
+    end = pd.Timestamp(datetime(day.year, day.month, day.day)) + pd.Timedelta(days=1)
     index = series.index
     if isinstance(index, pd.DatetimeIndex) and index.tz is not None:
-        start = start.tz_localize("UTC").tz_convert(index.tz)
-        end = end.tz_localize("UTC").tz_convert(index.tz)
+        # localize the calendar day in tz (a DST day is 23 or 25 hours), then compare in the index's zone
+        start = start.tz_localize(tz).tz_convert(index.tz)
+        end = end.tz_localize(tz).tz_convert(index.tz)
     return series[(series.index >= start) & (series.index < end)]
 
 
@@ -207,8 +208,10 @@ def write_day_zoom(
     flags: pd.Series | dict[str, pd.Series],
     day: date,
     path: Path | str,
+    *,
+    tz: str = "UTC",
 ) -> Path:
-    """One UTC day: value on top, one boolean strip per method underneath."""
+    """One calendar day in ``tz`` (default UTC): value on top, one boolean strip per method underneath."""
     plt = _pyplot()
     import matplotlib.dates as mdates
 
@@ -219,10 +222,10 @@ def write_day_zoom(
     if not flags_by_method:
         flags_by_method = {"anomaly": pd.Series(False, index=series.index)}
 
-    value_day = _day_slice(pd.to_numeric(series, errors="coerce"), day)
+    value_day = _day_slice(pd.to_numeric(series, errors="coerce"), day, tz)
     strips: list[tuple[str, pd.Series]] = []
     for name, mask in flags_by_method.items():
-        strips.append((str(name), _day_slice(mask.astype(bool), day)))
+        strips.append((str(name), _day_slice(mask.astype(bool), day, tz)))
 
     n_strips = len(strips)
     fig, axes = plt.subplots(
@@ -234,7 +237,7 @@ def write_day_zoom(
     )
     ax = axes[0]
     if not value_day.empty:
-        ax.plot(_plot_x(value_day.index), value_day.to_numpy(), color="#2563eb", lw=1.4)
+        ax.plot(_plot_x(value_day.index, tz), value_day.to_numpy(), color="#2563eb", lw=1.4)
     ax.set_ylabel("Value")
     ax.grid(axis="y", alpha=0.3)
     ax.set_title(f"{point} — {day.isoformat()}", fontsize=11)
@@ -247,7 +250,7 @@ def write_day_zoom(
         if mask.empty:
             continue
         numeric = mask.fillna(False).astype(float).clip(0, 1)
-        x = _plot_x(numeric.index)
+        x = _plot_x(numeric.index, tz)
         color = METHOD_COLORS.get(name, "#c53030")
         axis.fill_between(x, 0, numeric.to_numpy(), step="mid", color=color, alpha=0.55)
         ax.fill_between(
@@ -267,7 +270,7 @@ def write_day_zoom(
     for axis in axes:
         axis.xaxis.set_major_locator(locator)
         axis.xaxis.set_major_formatter(formatter)
-    bottom.set_xlabel("Time of day (UTC)")
+    bottom.set_xlabel(f"Time of day ({tz})")
     for label in bottom.get_xticklabels():
         label.set_rotation(45)
         label.set_ha("right")

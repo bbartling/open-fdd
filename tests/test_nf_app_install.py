@@ -6,6 +6,7 @@ A fake NF (in-memory console) stands in for the box; a tiny local HTTP server an
 from __future__ import annotations
 
 import base64
+import datetime
 import importlib.util
 import json
 import ssl
@@ -75,6 +76,11 @@ class FakeNF:
         # When True, a missing app file raises ApiError HTTP 500 with nf_missing_file set
         # (NF 3.10.x application/grpc + empty body signature), instead of returning None/404.
         self.missing_as_nf_500 = missing_as_nf_500
+        # GET /api/v1/platform/info as NF 3.10.9 answers it: static hardware inventory only (#1615)
+        self.platform_info = {"siteName": "test", "version": "3.10.9-1", "domain": "", "services": [],
+                              "machineInfo": base64.b64encode(json.dumps(
+                                  {"block": [{"bytes": 31914983424, "serial": "unknown"}], "cpus": [],
+                                   "net": [{"mac": "00:00:00:00:00:01", "name": "eth0"}]}).encode()).decode()}
 
     def app_rec(self, app_id, version=None):
         return {"id": app_id, "status": "STATUS_INSTALLED", "hooks": [], "files": [],
@@ -94,6 +100,10 @@ class FakeNF:
             return {}
         if base == "/api/v1/sites":
             return {"sites": self.sites}
+        if base == "/api/v1/platform/info" and method == "GET":
+            if isinstance(self.platform_info, BaseException):
+                raise self.platform_info
+            return self.platform_info
         if base == "/api/v1/point/query":
             if body.get("layer") == "automation":
                 return {"points": self.points}
@@ -1020,3 +1030,118 @@ def test_html_answer_from_the_console_url_names_the_front_door_not_the_nf_versio
     out = capsys.readouterr().out
     assert "returned HTML" in out and "NF_CONSOLE_URL" in out and "--console" in out and "front door" in out
     assert "unknown route" not in out
+
+
+# ---------------------------------------------------------------- #1633: push preflights the Timescale schema
+
+def _writes(nf):
+    return [(mt, p) for mt, p in nf.log if mt != "GET" and p != "/api/v1/apps/new-app/hooks/schema"]
+
+
+def test_push_refuses_before_any_write_when_the_schema_is_behind(no_psql_no_dsn, tmp_path, capsys):
+    m, nf = make_manifest(tmp_path), probe_box({"ok": False, "installed": 4, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "push: STOPPED" in out and "version 4" in out and "install.sql" in out and "--allow-schema-upgrade-pending" in out
+    assert _writes(nf) == []
+    assert PASSWORD not in out and "127.0.0.1" not in out
+
+
+def test_push_override_is_loud_and_a_passing_schema_continues(no_psql_no_dsn, tmp_path, capsys):
+    m, nf = make_manifest(tmp_path), probe_box({"ok": False, "installed": 4, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}, allow_pending=True) == 0
+    assert "WARNING" in capsys.readouterr().out
+    m, nf = make_manifest(tmp_path), probe_box({"ok": True, "installed": 5, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == 0
+    assert "Timescale schema preflight: Timescale schema version 5" in capsys.readouterr().out
+
+
+def _needs_schema(m, version):
+    rel = m["files"]["/hooks/lib/timescale.js"]
+    path = m["_dir"] / rel
+    path.write_text(f"const SCHEMA_VERSION = {version};\n", encoding="utf-8")
+    assert sync.local_required_schema(m) == version
+
+
+def test_push_checks_this_release_s_schema_not_the_installed_probe_s(no_psql_no_dsn, tmp_path, capsys):
+    """Grok's repro on #1704: an older probe on the box (checks 5, reports ok) must not approve code needing schema 6."""
+    m = boot_manifest(tmp_path)
+    _needs_schema(m, 6)
+    nf = probe_box({"ok": True, "installed": 5, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == sync.EXIT_FAILED
+    out = capsys.readouterr().out
+    assert "push: STOPPED" in out and "version 5" in out and "requires 6" in out and "only checks for 5" in out
+    assert _writes(nf) == []
+    # the database is already at 6 though the old probe only checks 5: nothing to stop
+    nf = probe_box({"ok": True, "installed": 6, "required": 5})
+    assert sync.push_schema_gate(nf, m, {}) == 0
+
+
+def test_push_without_timescale_or_a_new_app_has_no_schema_check(no_psql_no_dsn, tmp_path):
+    m = make_manifest(tmp_path)
+    assert sync.push_schema_gate(fake(), m, {}) == 0                                      # app not installed yet
+    nf = probe_box({"ok": False, "installed": 4, "required": 5})
+    nf.store["new-app"]["options"] = [o for o in nf.store["new-app"]["options"] if o["name"] not in ("engine", "timescale")]
+    assert sync.push_schema_gate(nf, m, {}) == 0                                          # Lite / no Timescale
+
+
+def test_cli_push_runs_the_gate_first(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(sync, "load_env", lambda _p: {"CONSOLE_USERNAME": "u", "CONSOLE_PASSWORD": "p", "NF_CONSOLE_URL": "https://c.invalid"})
+    monkeypatch.setattr(sync, "Console", lambda *a, **k: object())
+    monkeypatch.setattr(sync, "make_ssl_context", lambda *a, **k: None)
+    monkeypatch.setattr(sync, "manifest", lambda _p: {"application": {"id": "new-app"}})
+    monkeypatch.setattr(sync, "push_schema_gate", lambda c, m, env, allow: calls.append(("gate", allow)) or sync.EXIT_FAILED)
+    monkeypatch.setattr(sync, "cmd_push", lambda *a, **k: calls.append("push") or 0)
+    env = tmp_path / "nf.env"
+    env.write_text("x=1\n", encoding="utf-8")
+    assert sync.main(["--env", str(env), "push", "app.json"]) == sync.EXIT_FAILED
+    assert calls == [("gate", False)], "a failed gate stops before cmd_push"
+    calls.clear()
+    monkeypatch.setattr(sync, "push_schema_gate", lambda c, m, env, allow: calls.append(("gate", allow)) or 0)
+    assert sync.main(["--env", str(env), "push", "app.json", "--allow-schema-upgrade-pending"]) == 0
+    assert calls == [("gate", True), "push"]
+
+
+# ---------------------------------------------------------------- #1638: errored and stale scheduled hook runs
+
+HOURLY = {"id": "fdd", "schedule": {"rrule": "FREQ=HOURLY;INTERVAL=1"}}
+T0 = datetime.datetime(2026, 11, 9, 15, 0, tzinfo=datetime.timezone.utc)
+err = {"state": "STATE_FAILED", "startTime": "2026-11-09T14:00:00Z",
+       "results": {"g": {"state": 4, "error": {"message": "openfdd schema upgrade not applied (must be owner of table point)"}}}}
+
+
+def ok_run(ts):
+    return {"state": "STATE_SUCCESS", "startTime": ts, "endTime": ts, "results": {"g": {"events": []}}}
+
+
+def test_scheduled_hook_without_a_success_in_two_intervals_fails():
+    runs = [dict(err, startTime=f"2026-11-09T{h:02d}:00:00Z") for h in (14, 13, 12)] + [ok_run("2026-11-09T11:00:00Z")]
+    text = sync.scheduled_success_gap(HOURLY, runs, T0)
+    assert text and "two intervals (120 min)" in text and "2026-11-09T11:00:00Z" in text
+    assert sync.scheduled_success_gap(HOURLY, [err] * 3, T0).endswith("none in the last 3 runs")
+    # a recent success clears it; on-request and unscheduled hooks are not judged
+    assert sync.scheduled_success_gap(HOURLY, [err, ok_run("2026-11-09T13:30:00Z")], T0) is None
+    assert sync.scheduled_success_gap({"id": "x", "mode": sync.ON_REQUEST}, [err] * 3, T0) is None
+    assert sync.scheduled_success_gap({"id": "x"}, [err] * 3, T0) is None
+    # ok:false in a STATE_SUCCESS run is not a success
+    bad = ok_run("2026-11-09T14:30:00Z")
+    bad["results"]["g"]["result"] = {"ok": False, "error": "no fresh results"}
+    assert sync.scheduled_success_gap(HOURLY, [bad], T0)
+
+
+def test_doctor_reports_an_errored_run_without_end_time_as_failed_and_a_success_clears_it(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(sync, "timescale_schema_check", lambda *_args, **_kwargs: ("PASS", "Timescale schema version 3"))
+    m, nf = doctor_nf(tmp_path, sites=[{"id": "s", "latitude": 43.0, "longitude": -89.0}],
+                      redirect=(302, {"Location": "https://h/api/v1/apps/static/new-app/"}), timescale=True)
+    fdd = next(h for h in nf.store["new-app"]["hooks"] if h["id"] == "fdd")
+    fdd["schedule"] = {"rrule": "FREQ=HOURLY;INTERVAL=1"}
+    nf.runs[("new-app", "fdd")] = [dict(err, pid=3), dict(err, pid=2, startTime="2026-11-09T13:00:00Z"),
+                                   dict(ok_run("2026-11-09T10:00:00Z"), pid=1)]
+    assert sync.cmd_doctor(nf, m, now=T0) == 1
+    out = capsys.readouterr().out
+    assert "[FAIL] hook fdd: last run STATE_FAILED (started 2026-11-09T14:00:00Z)" in out, out
+    assert "schema upgrade not applied" in out and "no successful run within two intervals" in out
+    nf.runs[("new-app", "fdd")].insert(0, dict(ok_run("2026-11-09T14:55:00Z"), pid=4))
+    sync.cmd_doctor(nf, m, now=T0)
+    assert "[PASS] hook fdd: last run STATE_SUCCESS" in capsys.readouterr().out

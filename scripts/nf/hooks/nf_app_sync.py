@@ -20,6 +20,8 @@ read-only and cannot deploy).
     python3 $S --env $ENV install $M --remove-old --yes    # ... and delete the predecessor apps
     python3 $S --env $ENV uninstall $M [--yes]             # dry run unless --yes
     python3 $S --env $ENV doctor $M                        # read-only pass/fail checks
+    python3 $S --env $ENV prune-points $M [--stale-days 30]  # LIST this app's orphan / long-stale points (dry run)
+    python3 $S --env $ENV prune-points $M --yes            # ... and delete exactly the listed uuids
 
     # the pieces:
     python3 $S --env $ENV status $M
@@ -1054,9 +1056,10 @@ def list_orphans(c, installed: set[str], removing: set[str]) -> list[dict]:
     return orphans
 
 
-ORPHAN_HOWTO = ("orphan points are never deleted by this tool. Delete them with the NF MCP delete_points tool "
-                "(dry run first), checking attrs.application_id of each uuid. Never delete points of other apps or "
-                "BACnet/field layers")
+ORPHAN_HOWTO = ("remove-old / uninstall never delete points. `prune-points` lists (dry run) and, with --yes, deletes "
+                "the orphans whose application_id is this manifest's own id or a `replaces` id; for any other app use "
+                "the NF MCP delete_points tool (dry run first), checking attrs.application_id of each uuid. Never "
+                "delete points of other apps or BACnet/field layers")
 
 
 def remove_apps(c, ids: list[str], yes: bool, installed: dict[str, dict]) -> int:
@@ -1091,6 +1094,139 @@ def cmd_uninstall(c, m: dict, yes: bool) -> int:
     if app_id not in apps:
         print(f"app {app_id}: not installed")
     return remove_apps(c, [app_id], yes, apps)
+
+
+# ---------------------------------------------------------------- prune-points (#1614)
+
+PRUNE_RESULT_TYPES = ("fdd-result", "fdd-fault-timeline")   # automation-layer attrs.type the fdd hook writes
+DEFAULT_PRUNE_STALE_DAYS = 30
+DEFAULT_PRUNE_MAX = 500
+PRUNE_BATCH = 50
+
+
+def own_app_ids(m: dict) -> set[str]:
+    """The ids this manifest owns: its own application id and the predecessors it `replaces`. prune-points never looks
+    at a point whose attrs.application_id is anything else (other apps, BACnet / field layers, hand-made points)."""
+    return {m["application"]["id"], *replaced_ids(m)}
+
+
+def prune_candidates(m: dict, automation: list[dict], model: list[dict], installed: set[str], now: datetime.datetime,
+                     stale_days: float) -> tuple[list[dict], list[dict]]:
+    """(orphans, stale): the two groups prune-points may delete, every entry {uuid, name, application_id, why}.
+
+    orphans = automation-layer points whose application_id is one of this manifest's ids (own id or `replaces`) and
+              that app is NOT installed (a removed / renamed predecessor). Points of an installed app never qualify.
+    stale   = automation-layer points of the installed own app with type fdd-result / fdd-fault-timeline whose
+              model record says fddStatus "stale" (the current release no longer runs that rule for that equip) and
+              whose newest value (latestValue.ts, else fddTimelineThrough) is older than `stale_days`, or that never
+              had a value. fddLastRun is not used: the hook rewrites it on every stale flag.
+    Pure function, no I/O."""
+    owned = own_app_ids(m)
+    own = m["application"]["id"]
+    by_uuid = {p.get("uuid"): p for p in model if p.get("uuid")}
+    cutoff = now - datetime.timedelta(days=stale_days)
+    orphans: list[dict] = []
+    stale: list[dict] = []
+    seen: set[str] = set()
+    for p in automation:
+        a = p.get("attrs") or {}
+        app = a.get("application_id")
+        uid = p.get("uuid")
+        if not uid or not app or app not in owned or uid in seen:
+            continue
+        if app not in installed:
+            seen.add(uid)
+            orphans.append({"uuid": uid, "name": p.get("name"), "application_id": app,
+                            "why": f"app {app} is not installed"})
+            continue
+        if app != own or a.get("type") not in PRUNE_RESULT_TYPES:
+            continue
+        rec = by_uuid.get(uid)
+        ma = (rec or {}).get("attrs") or {}
+        if ma.get("fddStatus") != "stale":
+            continue
+        last = parse_ts(((rec or {}).get("latestValue") or {}).get("ts")) or parse_ts(ma.get("fddTimelineThrough"))
+        if last and last > cutoff:
+            continue
+        seen.add(uid)
+        age = f"newest value {human_age((now - last).total_seconds())} ago" if last else "never had a value"
+        reason = re.sub(r"\s*\(.*$", "", str(ma.get("fddReason") or "no reason recorded"))[:60]
+        stale.append({"uuid": uid, "name": p.get("name"), "application_id": app,
+                      "why": f"{a.get('type')} flagged stale ({reason}), {age}"})
+    return orphans, stale
+
+
+def delete_points(c, uuids: list[str], batch: int = PRUNE_BATCH) -> int:
+    """DeletePoints by uuid (DELETE /api/v1/point/points?uuids=...), in batches. Returns NF's delete_count total."""
+    total = 0
+    for i in range(0, len(uuids), batch):
+        part = uuids[i:i + batch]
+        qs = "&".join("uuids=" + urllib.parse.quote(u, safe="") for u in part)
+        r = c.call("DELETE", f"/api/v1/point/points?{qs}") or {}
+        n = r.get("deleteCount", r.get("delete_count"))
+        total += int(n) if str(n or "").lstrip("-").isdigit() else 0
+    return total
+
+
+PRUNE_MCP_HOWTO = ("same cleanup without this tool: NF MCP delete_points with exactly the uuids above, dry_run=true "
+                   "first, then dry_run=false. Never add uuids of other apps or of BACnet / field layers")
+
+
+def cmd_prune_points(c, m: dict, yes: bool, stale_days: float = DEFAULT_PRUNE_STALE_DAYS,
+                     max_delete: int = DEFAULT_PRUNE_MAX, now: datetime.datetime | None = None,
+                     self_uninstalled: bool = False) -> int:
+    """List (dry run, default) or delete (--yes) this app's orphan and long-stale result points. Reads the apps, the
+    automation layer and the model layer; writes nothing unless `yes`, and then only DeletePoints for the listed
+    uuids. 0 = nothing to do or done, 1 = a read / delete failed or the candidate list is over --max-delete."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    if stale_days < 1:
+        raise SystemExit("--stale-days must be at least 1")
+    try:
+        apps = c.apps()
+        if not isinstance(apps, list) or not apps or any(
+                not isinstance(app, dict) or not isinstance(app.get("id"), str) or not app["id"].strip()
+                for app in apps):
+            print("prune-points: empty or invalid apps list; nothing was changed")
+            return EXIT_FAILED
+        installed = {a["id"] for a in apps}
+        if m["application"]["id"] not in installed and not self_uninstalled:
+            print("prune-points: own app is missing from the apps list; nothing was changed. "
+                  "Only after confirming it was uninstalled, use --self-uninstalled")
+            return EXIT_FAILED
+        automation = automation_points(c)
+        model = query_pages(c, {"layer": "model"})
+    except SystemExit as e:
+        print(f"prune-points: could not read the apps / points, nothing was changed ({e})")
+        return EXIT_FAILED
+    orphans, stale = prune_candidates(m, automation, model, installed, now, stale_days)
+    print(f"prune-points: scope = automation-layer points with application_id in {sorted(own_app_ids(m))}")
+    print(f"orphan points (app not installed): {len(orphans)}")
+    for p in orphans:
+        _safe_print(f"  {p['uuid']}  {p['name']}  application_id={p['application_id']}  ({p['why']})")
+    print(f"stale FDD result / timeline points (older than {stale_days:g} days): {len(stale)}")
+    for p in stale:
+        _safe_print(f"  {p['uuid']}  {p['name']}  ({p['why']})")
+    uuids = [p["uuid"] for p in orphans + stale]
+    if not uuids:
+        print("prune-points: nothing to delete")
+        return 0
+    if len(uuids) > max_delete:
+        print(f"prune-points: {len(uuids)} candidates is more than --max-delete {max_delete}; nothing was changed. "
+              "Review the list, then raise --max-delete if it is right")
+        return EXIT_FAILED
+    if not yes:
+        print(f"dry run: nothing was changed; add --yes to delete these {len(uuids)} points "
+              "(NF deletes the point and its NF history in every layer; Timescale tables are not touched)")
+        print(PRUNE_MCP_HOWTO)
+        return 0
+    try:
+        n = delete_points(c, uuids)
+    except SystemExit as e:
+        print(f"prune-points: delete FAILED ({e}). {PRUNE_MCP_HOWTO}")
+        return EXIT_FAILED
+    print(f"prune-points: deleted {n} of {len(uuids)} points" + ("" if n == len(uuids) else
+          " (NF reported a different count: re-run the dry run to see what is left)"))
+    return 0 if n == len(uuids) else EXIT_FAILED
 
 
 def verify_install(c, m: dict, skip_run: bool = False, wait: float | None = None,
@@ -1797,6 +1933,49 @@ def install_schema_gate(c, m: dict, a, prior: dict | None, app_id: str, environ,
     return lvl, text, lvl != "DRIFT"
 
 
+def push_schema_gate(c, m: dict, environ=None, allow_pending: bool = False) -> int:
+    """#1633: `push` reads the installed Timescale schema first (read-only, the same check as install and doctor) and
+    refuses before any write when it cannot confirm that the database is at the schema this release needs. Returns
+    0 to continue, EXIT_FAILED to stop. --allow-schema-upgrade-pending pushes anyway, loudly."""
+    app_id = m["application"]["id"]
+    prior = c.app(app_id)
+    if not prior or not timescale_selected(prior):
+        return 0
+    lvl, text = push_schema_verdict(c, m, prior, app_id, environ)
+    if lvl != "FAIL":
+        if text:
+            print(f"push: Timescale schema preflight: {text}")
+        return 0
+    if allow_pending:
+        print(f"push: WARNING: Timescale schema preflight failed and --allow-schema-upgrade-pending was given: {text}. "
+              "Scheduled fdd runs fail until nf-app/timescale/install.sql is applied as the database owner.")
+        return 0
+    print(f"push: STOPPED: Timescale schema preflight failed: {text}")
+    print("push: nothing was written. Apply nf-app/timescale/install.sql as the database owner (installer role) first, "
+          "or pass --allow-schema-upgrade-pending to push anyway.")
+    return EXIT_FAILED
+
+
+def push_schema_verdict(c, m: dict, prior: dict, app_id: str, environ=None, clock=time.monotonic,
+                        sleep=time.sleep) -> tuple[str, str]:
+    """(level, text) of push's read-only schema check against THIS release's required schema (local
+    hooks/lib/timescale.js SCHEMA_VERSION). The installed probe's own `ok` / `required` describe the release already on
+    the box, so its PASS is taken only when the schema it reports installed is at least what this push needs (an older
+    probe would otherwise approve pushing code that needs a newer schema). Push never bootstraps the probe: an app
+    without it, or a probe run with no usable answer, uses the NF_TIMESCALE_PREFLIGHT_DSN path."""
+    if not has_probe_hook(prior):
+        return timescale_schema_check(prior, environ)
+    got = probe_run(c, app_id, clock, sleep)
+    if got is None:
+        return timescale_schema_check(prior, environ)
+    lvl, text = probe_verdict(got)
+    want, installed = local_required_schema(m), got.get("installed")
+    if lvl != "SKIP" and want is not None and isinstance(installed, int) and installed < want:
+        return "FAIL", (f"Timescale schema version {installed}; this release requires {want} (the installed schema probe "
+                        f"only checks for {got.get('required')}). Run nf-app/timescale/install.sql as installer/owner")
+    return lvl, text
+
+
 def schema_preflight(c, app: dict, app_id: str, environ=None, **kw) -> tuple[str, str]:
     """Schema check order: the NF-side probe when the installed app has it, else the NF_TIMESCALE_PREFLIGHT_DSN path
     (psql), else a refusal that names both remedies. SKIP on Lite or a non-Timescale engine."""
@@ -1945,6 +2124,180 @@ def hand_edit_line(drift: dict) -> tuple[str, str, str]:
 WEATHER_HOOK_IDS = ("weather", "open-meteo-weather")
 
 
+def scheduled_success_gap(hook: dict, runs: list[dict], now: datetime.datetime) -> str | None:
+    """#1638: text when a scheduled hook has had no successful run (STATE_SUCCESS and not ok:false) within two of its
+    intervals, else None. On-request hooks and hooks without a simple schedule are not judged."""
+    if hook.get("mode") == ON_REQUEST:
+        return None
+    interval = rrule_interval_seconds(((hook.get("schedule") or {}).get("rrule")))
+    if not interval or not runs:
+        return None
+    ok = next((r for r in runs if r.get("state") == "STATE_SUCCESS" and not result_failure(r)), None)
+    started = parse_ts(ok.get("startTime")) if ok else None
+    if ok and started is None:
+        return None                      # a success without a readable start time cannot be aged
+    if started and (now - started).total_seconds() <= 2 * interval:
+        return None
+    since = f"the last success started {ok.get('startTime')}" if started else f"none in the last {len(runs)} runs"
+    return f"no successful run within two intervals ({2 * interval // 60} min): {since}"
+
+
+# ---------------------------------------------------------------- doctor: host health (#1615)
+# Read-only, NF console API only (GET /api/v1/platform/info), never SSH. What NF 3.10.9 returns there: siteName,
+# version, domain, services (an empty list on the hosts checked) and machineInfo (base64 JSON of a static hardware
+# inventory: baseboard, block devices with their sizes, cpus, NICs, product). That is no free memory, no free disk,
+# no uptime and no restart counts, so those lines SKIP and say so. Any of these fields that a later NF adds (top level,
+# inside machineInfo or per service) is picked up by name. Serials, MAC addresses and the license are never printed.
+
+HOST_MEM_WARN_FRACTION = 0.10
+HOST_MEM_WARN_BYTES = 256 * 1024 ** 2
+HOST_DISK_WARN_FRACTION = 0.10
+HOST_DISK_WARN_BYTES = 1024 ** 3
+
+_HOST_KEYS = {
+    "mem_avail": ("memavailable", "memavailablebytes", "memoryavailable", "memoryavailablebytes", "availablememory",
+                  "availablememorybytes", "memfree", "memfreebytes", "memoryfree", "memoryfreebytes", "freememory",
+                  "freememorybytes"),
+    "mem_total": ("memtotal", "memtotalbytes", "memorytotal", "memorytotalbytes", "totalmemory", "totalmemorybytes",
+                  "totalphysicalbytes", "totalusablebytes"),
+    "disk_free": ("diskfree", "diskfreebytes", "diskavailable", "diskavailablebytes", "freedisk", "freediskbytes",
+                  "fsavailable", "fsavailablebytes", "fsfree", "fsfreebytes"),
+    "disk_total": ("disktotal", "disktotalbytes", "totaldisk", "totaldiskbytes", "fstotal", "fstotalbytes",
+                   "fssize", "fssizebytes"),
+    "uptime": ("uptime", "uptimeseconds", "uptimesec"),
+    "restarts": ("restarts", "restartcount", "restartscount", "numrestarts"),
+}
+
+
+def _norm_key(k) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(k).lower())
+
+
+def _num(v) -> float | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str) and re.fullmatch(r"\s*-?\d+(\.\d+)?\s*", v):
+        return float(v)
+    return None
+
+
+def _find_number(obj, names: tuple[str, ...], depth: int = 0) -> float | None:
+    """First numeric value whose normalised key is in `names`, searching dicts breadth-first (lists are skipped:
+    per-device / per-service lists are read separately)."""
+    if not isinstance(obj, dict) or depth > 4:
+        return None
+    for k, v in obj.items():
+        if _norm_key(k) in names and _num(v) is not None:
+            return _num(v)
+    for v in obj.values():
+        got = _find_number(v, names, depth + 1)
+        if got is not None:
+            return got
+    return None
+
+
+def decode_machine_info(value) -> dict:
+    """machineInfo as a dict: NF sends base64 JSON; accept plain JSON or a dict too. {} when it cannot be read."""
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    for raw in (value, None):
+        try:
+            text = raw if raw is not None else base64.b64decode(value, validate=False).decode("utf-8", "replace")
+            got = json.loads(text)
+            return got if isinstance(got, dict) else {}
+        except (ValueError, TypeError):
+            continue
+    return {}
+
+
+def _gib(n: float) -> str:
+    return f"{n / 1024 ** 3:.1f} GiB" if n >= 1024 ** 3 else f"{n / 1024 ** 2:.0f} MiB"
+
+
+def _level_for(avail: float, total: float | None, frac: float, floor: float) -> str:
+    low = avail < floor or (total is not None and total > 0 and avail / total < frac)
+    return "WARN" if low else "PASS"
+
+
+def host_health(c) -> list[tuple[str, str, str]]:
+    """doctor lines (level, what, text) for host memory, disk and restarts. Levels: PASS, WARN or SKIP; never FAIL
+    (a host reading never fails doctor). One read-only GET; nothing is written."""
+    try:
+        info = c.call("GET", "/api/v1/platform/info") or {}
+    except SystemExit as e:
+        return [("SKIP", "host", f"NF platform info not readable through the console API ({e}); "
+                                 "memory, disk and restarts not checked")]
+    if not isinstance(info, dict):
+        return [("SKIP", "host", "NF platform info has an unexpected shape; memory, disk and restarts not checked")]
+    mi = decode_machine_info(info.get("machineInfo"))
+    src = {k: v for k, v in info.items() if k not in ("machineInfo", "services", "license")}
+    nf = f"NF {info.get('version') or 'unknown version'}"
+    out: list[tuple[str, str, str]] = []
+
+    avail = _find_number(src, _HOST_KEYS["mem_avail"])
+    avail = avail if avail is not None else _find_number(mi, _HOST_KEYS["mem_avail"])
+    total = _find_number(src, _HOST_KEYS["mem_total"])
+    total = total if total is not None else _find_number(mi, _HOST_KEYS["mem_total"])
+    if avail is not None:
+        pct = f" ({100 * avail / total:.0f} % of {_gib(total)})" if total else ""
+        lvl = _level_for(avail, total, HOST_MEM_WARN_FRACTION, HOST_MEM_WARN_BYTES)
+        out.append((lvl, "host memory", f"{_gib(avail)} available{pct}"
+                    + ("; low memory: hooks may be killed or slow on this host" if lvl == "WARN" else "")))
+    else:
+        known = f"; total RAM {_gib(total)}" if total else ""
+        out.append(("SKIP", "host memory", f"{nf} does not expose free memory through its API{known}"))
+
+    dfree = _find_number(src, _HOST_KEYS["disk_free"])
+    dfree = dfree if dfree is not None else _find_number(mi, _HOST_KEYS["disk_free"])
+    dtotal = _find_number(src, _HOST_KEYS["disk_total"])
+    dtotal = dtotal if dtotal is not None else _find_number(mi, _HOST_KEYS["disk_total"])
+    if dfree is not None:
+        pct = f" ({100 * dfree / dtotal:.0f} % of {_gib(dtotal)})" if dtotal else ""
+        lvl = _level_for(dfree, dtotal, HOST_DISK_WARN_FRACTION, HOST_DISK_WARN_BYTES)
+        out.append((lvl, "host disk", f"{_gib(dfree)} free{pct}"
+                    + ("; low disk: NF history and app files may stop being written" if lvl == "WARN" else "")))
+    else:
+        blocks = [b for b in (mi.get("block") or []) if isinstance(b, dict) and _num(b.get("bytes"))]
+        largest = max((_num(b["bytes"]) for b in blocks), default=None)
+        known = f"; largest disk {_gib(largest)} (size only)" if largest else ""
+        out.append(("SKIP", "host disk", f"{nf} does not expose free disk space through its API{known}"))
+
+    uptime = _find_number(src, _HOST_KEYS["uptime"])
+    services = [s for s in (info.get("services") or []) if isinstance(s, dict)]
+    restarted, down, unknown = [], [], []
+    healthy_states = {"running", "run", "up", "ok", "healthy", "green", "serving", "active"}
+    unhealthy_states = {"unhealthy", "inactive", "not running", "stopped", "failed", "degraded", "error", "down",
+                        "dead", "exited", "unavailable"}
+    for sv in services:
+        name = str(sv.get("name") or sv.get("id") or sv.get("service") or "?")[:40]
+        n = _find_number(sv, _HOST_KEYS["restarts"])
+        if n:
+            restarted.append(f"{name} x{int(n)}")
+        state = re.sub(r"[_\s-]+", " ", str(sv.get("status") or sv.get("state") or sv.get("health") or "").strip().lower())
+        if state in unhealthy_states:
+            down.append(f"{name} ({state[:20]})")
+        elif state not in healthy_states:
+            unknown.append(f"{name} ({state[:20] or 'not reported'})")
+    up = f"uptime {human_age(uptime)}" if uptime is not None else ""
+    if restarted or down:
+        parts = ([f"restarted: {', '.join(restarted)}"] if restarted else []) + \
+                ([f"not running: {', '.join(down)}"] if down else [])
+        out.append(("WARN", "host services", "; ".join(parts + ([up] if up else []))))
+    elif unknown:
+        out.append(("SKIP", "host services", f"health unknown: {', '.join(unknown)}" + (f"; {up}" if up else "")))
+    elif services:
+        out.append(("PASS", "host services", f"{len(services)} services, no restarts or stopped services reported"
+                    + (f"; {up}" if up else "")))
+    else:
+        out.append(("SKIP", "host services", f"{nf} reports no service list or restart counts through its API"
+                    + (f"; {up}" if up else "")))
+    return out
+
+
 def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -> int:
     app_id = m["application"]["id"]
     bad = 0
@@ -1962,6 +2315,8 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line("FAIL", getattr(e, "kind", "") or ("auth" if status in (401, 403) else "console"), str(e))
         return 1
     line("PASS", "auth", "console login accepted (Caddy and NF both let it through)")
+    for lvl, what, text in host_health(c):        # report-only: WARN / SKIP never fail doctor (#1615)
+        line(lvl, what, text)
     a = apps.get(app_id)
     if not a:
         line("FAIL", "app", f"{app_id} is not installed")
@@ -1993,7 +2348,7 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line("PASS", "deps", "none declared")
     for h in a.get("hooks", []):
         try:
-            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=1&include_results=true")
+            runs = c.call("GET", f"/api/v1/apps/{app_id}/hooks/{h['id']}/runs?page_size=20&include_results=true")
         except SystemExit as e:
             line("WARN", f"hook {h['id']}", f"could not read runs ({e})")
             continue
@@ -2005,13 +2360,15 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
             line("PASS" if h.get("mode") == ON_REQUEST else "WARN", f"hook {h['id']}", "never run")
             continue
         text = run_error_text(last)
+        stale = scheduled_success_gap(h, runs.get("runs") or [], now or datetime.datetime.now(datetime.timezone.utc))
         if last.get("state") == "STATE_SUCCESS" and not result_failure(last):
-            line("PASS", f"hook {h['id']}", f"last run {last['state']}")
+            line("FAIL" if stale else "PASS", f"hook {h['id']}", stale or f"last run {last['state']}")
         elif h.get("mode") == ON_REQUEST and last.get("state") == "STATE_SUCCESS":
             line("WARN", f"hook {h['id']}", f"last run returned ok:false ({result_failure(last)}), usually missing args")
         else:
-            line("FAIL", f"hook {h['id']}", f"last run {last.get('state')}: "
-                 f"{(result_failure(last) or text or '')[:160].strip()}")
+            # #1638: an errored run may carry no endTime; it is a failure with its start time, never "still running"
+            line("FAIL", f"hook {h['id']}", f"last run {last.get('state')} (started {last.get('startTime') or 'unknown'}): "
+                 f"{(result_failure(last) or text or '')[:160].strip()}" + (f"; {stale}" if stale else ""))
         if h["id"] == "fdd" and (unit_skips := fdd_unit_skip_text(last)):
             line("WARN", "fdd units", unit_skips)
     if any("weather" in h["entryPoint"] or "open_meteo" in h["entryPoint"] for h in m["hooks"]):
@@ -2085,7 +2442,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pin-server-cert", action="store_true",
                     help="fetch the certificate the server presents, print its SHA-256 and trust only it for this run "
                          "(its SAN must match the host); verification stays on")
-    ap.add_argument("action", choices=["status", "push", "run", "pull", "diff", "install", "uninstall", "remove-old", "doctor"])
+    ap.add_argument("action", choices=["status", "push", "run", "pull", "diff", "install", "uninstall", "remove-old", "doctor",
+                                       "prune-points"])
     ap.add_argument("manifest", type=Path)
     ap.add_argument("--skip-hooks", action="store_true",
                     help="push/install: write files only, leave hook definitions alone (e.g. a bench that already runs them)")
@@ -2097,13 +2455,27 @@ def build_parser() -> argparse.ArgumentParser:
                     help="push/install: first download the hand-edited box copies to DIR (same folder layout) for review")
     ap.add_argument("--dry-run", action="store_true",
                     help="install: run the read-only checks (login, schema probe, hand edits) and say what would happen, "
-                         "e.g. \"would bootstrap the schema probe\"; writes nothing")
+                         "e.g. \"would bootstrap the schema probe\"; writes nothing. Refused for every other action "
+                         "(they have no dry run); use status or diff for a read-only look")
+    ap.add_argument("--allow-schema-upgrade-pending", action="store_true",
+                    help="push: push even when the Timescale schema preflight fails (the database is older than this "
+                         "release needs, or the check cannot run); the scheduled fdd runs fail until install.sql is applied")
     ap.add_argument("--skip-verify-run", action="store_true",
                     help="install: do not run the scheduled hooks once to verify")
     ap.add_argument("--remove-old", action="store_true",
                     help="install: delete the predecessor apps listed under `replaces` in the manifest "
                          "(dry run: only lists them, plus orphan points, unless --yes)")
-    ap.add_argument("--yes", action="store_true", help="remove-old / uninstall: actually delete (default is a dry run)")
+    ap.add_argument("--yes", action="store_true",
+                    help="remove-old / uninstall / prune-points: actually delete (default is a dry run)")
+    ap.add_argument("--stale-days", type=float, default=DEFAULT_PRUNE_STALE_DAYS, metavar="DAYS",
+                    help=f"prune-points: a stale FDD result qualifies once its newest value is older than DAYS "
+                         f"(default {DEFAULT_PRUNE_STALE_DAYS})")
+    ap.add_argument("--max-delete", type=int, default=DEFAULT_PRUNE_MAX, metavar="N",
+                    help=f"prune-points: refuse (change nothing) when there are more than N candidates "
+                         f"(default {DEFAULT_PRUNE_MAX})")
+    ap.add_argument("--self-uninstalled", action="store_true",
+                    help="prune-points: explicitly confirm this app was removed; permits its missing id in a "
+                         "nonempty apps list (never bypasses an empty/invalid list or the dry-run default)")
     ap.add_argument("--wait", type=float, metavar="SECONDS",
                     help="run: how long to wait for each run (default: the hook's invokeTimeout + 60 s). "
                          "On timeout the run is reported as still running (exit 3) and is never re-started")
@@ -2117,8 +2489,19 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def argument_problem(a: argparse.Namespace) -> str | None:
+    """A flag combination that would not do what it says, refused before any login or write (#1634)."""
+    if getattr(a, "dry_run", False) and a.action != "install":
+        return (f"--dry-run applies to install only; `{a.action}` has no dry run and would act for real. "
+                "For a read-only look use `status` or `diff` (pull without writing).")
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     a = build_parser().parse_args(argv)
+    problem = argument_problem(a)
+    if problem:
+        raise SystemExit(problem)
     if a.env.expanduser().is_file():
         env = load_env(a.env)
         if not env.get("NF_TIMESCALE_PREFLIGHT_DSN") and os.environ.get("NF_TIMESCALE_PREFLIGHT_DSN"):
@@ -2143,6 +2526,9 @@ def main(argv: list[str] | None = None) -> int:
     if a.action == "status":
         return cmd_status(c, m)
     if a.action == "push":
+        rc = push_schema_gate(c, m, env, a.allow_schema_upgrade_pending)   # before any write (#1633)
+        if rc:
+            return rc
         return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, force=a.force, save_remote=a.save_remote)
     if a.action == "run":
         return cmd_run(c, m, a.hooks, a.wait, a.resume, args=parse_args(a.hook_args) or None)
@@ -2154,6 +2540,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_remove_old(c, m, a.yes)
     if a.action == "doctor":
         return cmd_doctor(c, m, environ=env)
+    if a.action == "prune-points":
+        return cmd_prune_points(c, m, a.yes, a.stale_days, a.max_delete, self_uninstalled=a.self_uninstalled)
     return cmd_pull(c, m, write=(a.action == "pull"))
 
 

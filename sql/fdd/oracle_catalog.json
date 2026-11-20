@@ -498,7 +498,7 @@
       },
       {
         "key": "eps_vfd_spd",
-        "label": "VFD speed error \u03b5VFDSPD (GL36 default 5%)",
+        "label": "VFD speed error \u03b5VFDSPD (fraction; G36-2018 lists 0.05)",
         "unit": "frac",
         "min": 0.0,
         "max": 0.5,
@@ -1029,7 +1029,7 @@
       },
       {
         "key": "htg_full_min",
-        "label": "Full-heating threshold (GL36 99%)",
+        "label": "Full-heating threshold (fraction)",
         "unit": "frac",
         "min": 0.5,
         "max": 1.0,
@@ -1641,7 +1641,7 @@
       },
       {
         "key": "clg_full_min",
-        "label": "Full-cooling threshold (GL36 99%)",
+        "label": "Full-cooling threshold (fraction)",
         "unit": "frac",
         "min": 0.5,
         "max": 1.0,

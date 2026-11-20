@@ -21,6 +21,10 @@ Issue #1569. Tool list: `docs/pypi-agent-tools.md`. Nothing here assigns rules, 
    (standard / open-fdd / site-specific, defined / undefined / unchecked), identity and history problems, explicit
    `ofddRole` bindings (two sensors on one role stay two points) and competency query results. `--shacl` needs
    `open-fdd[ontology-shacl]`.
+5. Extension terms: `open-fdd-ontology-audit --extensions [ext.ttl] --out r` writes `extensions.json`, listing each
+   Open-FDD class, property and enum member with its parent chain, standard root, label and definition, and any issues
+   (`minted_in_standard_namespace`, `no_standard_parent`, `no_label`, `no_definition`, `undeclared_type`). This is
+   report-only: the namespace and vocabulary edits belong to the #1569 ontology owner.
 
 **Optional, NF box** (`open-fdd[nf]`, read-only credentials as in `pypi-nf-agent`): `--from-nf [--app lite]` reads the
 app's `rdf` hook and saves `nf_model.ttl` in the report folder. That is a consumer of the NF export, not a second producer.

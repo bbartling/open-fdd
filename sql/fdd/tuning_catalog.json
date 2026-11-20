@@ -2,10 +2,6 @@
   "rules": [
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan running hours where fan_cmd > 5% (normalized 0-1)",
       "output_columns": [
@@ -14,22 +10,7 @@
         "total_hours"
       ],
       "pandas_function": null,
-      "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        }
-      },
+      "parameters": {},
       "parity_status": "sql_screening",
       "placeholders": [
         "POLL_SECONDS"
@@ -42,16 +23,20 @@
       "rule_id": "FAN-RUNTIME-HOURS",
       "sql_file": "fan_runtime_hours.sql",
       "run_proof": "exempt",
-      "run_proof_note": "measures the equipment runtime itself"
+      "run_proof_note": "measures the equipment runtime itself",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2",
       "equipment_kinds": [
@@ -84,21 +69,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_occupied": {
           "control": "slider",
           "default": 1.0,
@@ -113,36 +83,6 @@
           "sql_placeholder": "REQUIRE_OCCUPIED",
           "step": 1.0,
           "unit": "bool"
-        },
-        "require_operational_gate": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "require_operational_gate",
-          "kind": "boolean",
-          "label": "Require operational gate",
-          "max": 1.0,
-          "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
-          "step": 1.0,
-          "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "zone_t_hi": {
           "control": "slider",
@@ -191,16 +131,19 @@
       "rule_id": "VAV-1",
       "sql_file": "vav1_comfort_fault.sql",
       "run_proof": "exempt",
-      "run_proof_note": "zone comfort band while occupied; independent of the air handler running"
+      "run_proof_note": "zone comfort band while occupied; independent of the air handler running",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "require_operational_gate",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Night setback miss — unoccupied zone above heating setback",
       "equipment_kinds": [
@@ -229,36 +172,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "require_operational_gate": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "require_operational_gate",
-          "kind": "boolean",
-          "label": "Require operational gate",
-          "max": 1.0,
-          "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
-          "step": 1.0,
-          "unit": "bool"
-        },
         "setback_hi": {
           "control": "slider",
           "default": 20.0,
@@ -273,21 +186,6 @@
           "sql_placeholder": "SETBACK_HI",
           "step": 0.277777778,
           "unit": "degC"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -305,16 +203,23 @@
       "rule_id": "VAV-2",
       "sql_file": "vav2_night_setback.sql",
       "run_proof": "exempt",
-      "run_proof_note": "night setback runs while the air handler is off by design"
+      "run_proof_note": "night setback runs while the air handler is off by design",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "require_operational_gate",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 0,
       "controls_without_sql_effect": [
         "zone_t_lo",
-        "zone_t_hi",
-        "confirm_min"
+        "zone_t_hi"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Average zone temperature per equipment",
       "output_columns": [
@@ -325,20 +230,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "zone_t_hi": {
           "control": "slider",
           "default": 24.444444444,
@@ -380,14 +271,20 @@
       "rule_id": "AVG-ZONE-TEMP",
       "sql_file": "avg_zone_temp.sql",
       "run_proof": "exempt",
-      "run_proof_note": "zone statistic, not an equipment fault"
+      "run_proof_note": "zone statistic, not an equipment fault",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Percent of samples in comfort band",
       "output_columns": [
@@ -396,20 +293,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "zone_t_hi": {
           "control": "slider",
           "default": 24.444444444,
@@ -454,14 +337,20 @@
       "rule_id": "ZONE-COMFORT-PCT",
       "sql_file": "zone_comfort_pct.sql",
       "run_proof": "exempt",
-      "run_proof_note": "zone comfort statistic, not an equipment fault"
+      "run_proof_note": "zone comfort statistic, not an equipment fault",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Comfort fault sample count → hours",
       "output_columns": [
@@ -471,20 +360,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "zone_t_hi": {
           "control": "slider",
           "default": 24.444444,
@@ -530,12 +405,20 @@
       "rule_id": "FAULT-ELAPSED-HOURS",
       "sql_file": "fault_elapsed_hours.sql",
       "run_proof": "exempt",
-      "run_proof_note": "aggregates fault flags of other rules"
+      "run_proof_note": "aggregates fault flags of other rules",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Equipment OAT vs weather-staged wx OAT",
       "equipment_kinds": [
@@ -579,34 +462,6 @@
           "sql_placeholder": "OAT_ERR",
           "step": 0.277778,
           "unit": "degC"
-        },
-        "web_asof_margin_seconds": {
-          "control": "slider",
-          "default": 300.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "web_asof_margin_seconds",
-          "kind": "duration_seconds",
-          "label": "Web as-of margin",
-          "max": 1800.0,
-          "min": 0.0,
-          "sql_placeholder": "WEB_ASOF_MARGIN_SECONDS",
-          "step": 60.0,
-          "unit": "sec"
-        },
-        "web_cadence_seconds": {
-          "control": "slider",
-          "default": 1200.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "web_cadence_seconds",
-          "kind": "duration_seconds",
-          "label": "Web weather cadence",
-          "max": 7200.0,
-          "min": 300.0,
-          "sql_placeholder": "WEB_CADENCE_SECONDS",
-          "step": 300.0,
-          "unit": "sec"
         }
       },
       "parity_status": "sql_screening",
@@ -626,7 +481,19 @@
       "rule_id": "OAT-METEO",
       "sql_file": "oat_meteo_fault.sql",
       "run_proof": "exempt",
-      "run_proof_note": "compares two outside-air sources; no running equipment is judged"
+      "run_proof_note": "compares two outside-air sources; no running equipment is judged",
+      "internal_constants": {
+        "WEB_ASOF_MARGIN_SECONDS": 300.0,
+        "WEB_CADENCE_SECONDS": 1200.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "web_asof_margin_seconds",
+          "web_cadence_seconds"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "aliases": [
@@ -636,7 +503,6 @@
       "controls_without_sql_effect": [
         "econ_min_pos"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT above setpoint at full cooling",
       "equipment_kinds": [
@@ -742,36 +608,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "oa_damper_econ_low": {
           "control": "slider",
           "default": 0.05,
@@ -795,27 +631,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -841,15 +662,24 @@
       ],
       "rule_id": "FC13-SAT-HIGH",
       "sql_file": "sat_high_fault.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Economizing when outdoor air unfavorable",
       "equipment_kinds": [
@@ -910,21 +740,6 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -933,27 +748,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -972,12 +772,18 @@
       ],
       "rule_id": "ECON-2",
       "sql_file": "economizer_fault.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Duct static below SP at full fan",
       "equipment_kinds": [
@@ -1031,7 +837,7 @@
           "frontend_control": "slider",
           "key": "eps_vfd_spd",
           "kind": "fraction",
-          "label": "VFD speed error epsVFDSPD (GL36 default 5%)",
+          "label": "VFD speed error epsVFDSPD (fraction; G36-2018 lists 0.05)",
           "max": 0.5,
           "min": 0.0,
           "sql_placeholder": "EPS_VFD_SPD",
@@ -1053,36 +859,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -1091,27 +867,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -1134,12 +895,24 @@
       ],
       "rule_id": "FC1",
       "sql_file": "fc1_duct_static_low.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Mixed air below envelope",
       "equipment_kinds": [
@@ -1230,21 +1003,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -1260,21 +1018,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -1283,27 +1026,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -1328,12 +1056,24 @@
       ],
       "rule_id": "FC2",
       "sql_file": "fc2_mat_low.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Mixed air above envelope",
       "equipment_kinds": [
@@ -1424,21 +1164,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -1454,21 +1179,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -1477,27 +1187,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -1522,16 +1217,25 @@
       ],
       "rule_id": "FC3",
       "sql_file": "fc3_mat_high.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "blocker": "htg_valve_pct missing on some AHUs — Python and SQL both skip",
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "startup_delay_min",
-        "mode_delay_min"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT low while heating at full",
       "equipment_kinds": [
@@ -1600,42 +1304,12 @@
           "frontend_control": "slider",
           "key": "htg_full_min",
           "kind": "fraction",
-          "label": "Full-heating threshold (GL36 99%)",
+          "label": "Full-heating threshold (fraction)",
           "max": 1.0,
           "min": 0.5,
           "sql_placeholder": "HTG_FULL_MIN",
           "step": 0.01,
           "unit": "frac"
-        },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "require_run_proof": {
           "control": "slider",
@@ -1645,27 +1319,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -1687,12 +1346,22 @@
       ],
       "rule_id": "FC7",
       "sql_file": "fc7_sat_low_heating.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT vs MAT while economizing",
       "equipment_kinds": [
@@ -1813,21 +1482,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -1843,21 +1497,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -1866,27 +1505,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "supply_tol": {
           "control": "slider",
@@ -1928,7 +1552,21 @@
       ],
       "rule_id": "FC8",
       "sql_file": "fc8_sat_mat_econ.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
@@ -1936,7 +1574,6 @@
         "eps_sat",
         "eps_oat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "OAT high vs SAT SP while economizing",
       "equipment_kinds": [
@@ -2057,21 +1694,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -2087,21 +1709,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -2110,27 +1717,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -2156,14 +1748,27 @@
       ],
       "rule_id": "FC9",
       "sql_file": "fc9_oa_sat_sp_econ.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "eps_oat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "MAT-OAT delta while cooling and economizing",
       "equipment_kinds": [
@@ -2269,21 +1874,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -2299,21 +1889,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -2322,27 +1897,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -2367,7 +1927,21 @@
       ],
       "rule_id": "FC10",
       "sql_file": "fc10_mat_oa_clg.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
@@ -2375,7 +1949,6 @@
         "eps_sat",
         "eps_oat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "OAT low vs SAT SP while cooling and economizing",
       "equipment_kinds": [
@@ -2496,21 +2069,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -2526,21 +2084,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -2549,27 +2092,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -2595,7 +2123,21 @@
       ],
       "rule_id": "FC11",
       "sql_file": "fc11_oa_sat_sp_clg.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
@@ -2604,7 +2146,6 @@
         "eps_sat",
         "eps_mat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT above MAT while cooling",
       "equipment_kinds": [
@@ -2740,21 +2281,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -2770,21 +2296,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -2793,27 +2304,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "supply_tol": {
           "control": "slider",
@@ -2855,15 +2351,24 @@
       ],
       "rule_id": "FC12",
       "sql_file": "fc12_sat_mat_clg.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Economizer stuck closed when OAT favorable",
       "equipment_kinds": [
@@ -2924,21 +2429,6 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -2947,27 +2437,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -2987,15 +2462,18 @@
       ],
       "rule_id": "ECON-1",
       "sql_file": "econ1_stuck_closed.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Low estimated OA fraction",
       "equipment_kinds": [
@@ -3025,21 +2503,6 @@
           "sql_placeholder": "CONFIRM_SECONDS",
           "step": 5.0,
           "unit": "min"
-        },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
         },
         "oa_min_pct": {
           "control": "slider",
@@ -3079,27 +2542,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -3120,15 +2568,18 @@
       ],
       "rule_id": "ECON-4",
       "sql_file": "econ4_low_oa_frac.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Sensor out of hard range",
       "equipment_kinds": [
@@ -3186,21 +2637,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "range_scale_humidity": {
           "control": "slider",
           "default": 1.0,
@@ -3254,42 +2690,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
-        "max_silence_hours": {
-          "control": "slider",
-          "default": 0.5,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "max_silence_hours",
-          "kind": "dimensionless",
-          "label": "Max sensor silence",
-          "max": 12.0,
-          "min": 0.25,
-          "sql_placeholder": "MAX_SILENCE_HOURS",
-          "step": 0.25,
-          "unit": "h"
         }
       },
       "parity_status": "sql_screening",
@@ -3308,15 +2714,22 @@
       "required_roles": [],
       "rule_id": "SV-RANGE",
       "sql_file": "sv_range.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MAX_SILENCE_HOURS": 0.5
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min",
+          "max_silence_hours"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Sensor flatline (stuck)",
       "equipment_kinds": [
@@ -3355,20 +2768,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 5.0,
-          "unit": "min"
-        },
         "flatline_hours": {
           "control": "slider",
           "default": 1.0,
@@ -3399,21 +2798,6 @@
           "step": 0.011111,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -3422,42 +2806,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
-        "max_silence_hours": {
-          "control": "slider",
-          "default": 0.5,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "max_silence_hours",
-          "kind": "dimensionless",
-          "label": "Max sensor silence",
-          "max": 12.0,
-          "min": 0.25,
-          "sql_placeholder": "MAX_SILENCE_HOURS",
-          "step": 0.25,
-          "unit": "h"
         }
       },
       "parity_status": "sql_screening",
@@ -3474,15 +2828,27 @@
       "required_roles": [],
       "rule_id": "SV-FLATLINE",
       "sql_file": "sv_flatline.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 300.0,
+        "MAX_SILENCE_HOURS": 0.5
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min",
+          "minimum_active_coverage_pct",
+          "startup_delay_min",
+          "max_silence_hours"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
       "controls_without_sql_effect": [
-        "startup_delay_min",
         "spike_scale"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Sensor rate-of-change spike",
       "equipment_kinds": [
@@ -3536,21 +2902,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -3559,7 +2910,7 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
@@ -3625,36 +2976,6 @@
           "sql_placeholder": "SPIKE_SCALE_TEMPERATURE",
           "step": 0.25,
           "unit": "x"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
-        "max_silence_hours": {
-          "control": "slider",
-          "default": 0.5,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "max_silence_hours",
-          "kind": "dimensionless",
-          "label": "Max sensor silence",
-          "max": 12.0,
-          "min": 0.25,
-          "sql_placeholder": "MAX_SILENCE_HOURS",
-          "step": 0.25,
-          "unit": "h"
         }
       },
       "parity_status": "sql_screening",
@@ -3674,14 +2995,26 @@
       "required_roles": [],
       "rule_id": "SV-SPIKE",
       "sql_file": "sv_spike.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MAX_SILENCE_HOURS": 0.5,
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min",
+          "max_silence_hours"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
-      "confirm_seconds": 300,
+      "confirm_seconds": 0,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
-      "description": "Stale data (no fresh samples)",
+      "description": "Stale data (no fresh samples for longer than the stale threshold)",
       "equipment_kinds": [
         "ahu",
         "vav",
@@ -3702,7 +3035,10 @@
         "hw_supply_t",
         "hw_return_t",
         "oa_h",
-        "run_proof"
+        "ra_h",
+        "zone_rh",
+        "ma_h",
+        "sa_h"
       ],
       "output_columns": [
         "equipment_id",
@@ -3713,106 +3049,53 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 5.0,
-          "unit": "min"
-        },
-        "stale_hours": {
-          "control": "slider",
-          "default": 2.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "stale_hours",
-          "kind": "dimensionless",
-          "label": "Stale window",
-          "max": 12.0,
-          "min": 0.25,
-          "sql_placeholder": "STALE_HOURS",
-          "step": 0.25,
-          "unit": "h"
-        },
-        "stale_tol": {
-          "control": "slider",
-          "default": 0.027778,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "stale_tol",
-          "kind": "temperature_difference",
-          "label": "Stale tolerance",
-          "max": 0.555556,
-          "min": 0.0,
-          "sql_placeholder": "STALE_TOL",
-          "step": 0.005556,
-          "unit": "degC"
-        },
-        "max_silence_hours": {
+        "stale_after_hours": {
           "control": "slider",
           "default": 0.5,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "frontend_control": "slider",
-          "key": "max_silence_hours",
+          "key": "stale_after_hours",
           "kind": "dimensionless",
-          "label": "Max sensor silence",
+          "label": "Stale after",
           "max": 12.0,
           "min": 0.25,
-          "sql_placeholder": "MAX_SILENCE_HOURS",
+          "sql_placeholder": "STALE_AFTER_HOURS",
           "step": 0.25,
           "unit": "h"
-        },
-        "require_run_proof": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "require_run_proof",
-          "kind": "boolean",
-          "label": "Require run proof",
-          "max": 1.0,
-          "min": 0.0,
-          "step": 1.0,
-          "unit": "bool",
-          "sql_placeholder": "REQUIRE_RUN_PROOF"
         }
       },
       "parity_status": "sql_screening",
       "placeholders": [
-        "CONFIRM_ROWS",
-        "MAX_SILENCE_HOURS",
-        "MAX_SILENCE_SECONDS",
-        "REQUIRE_RUN_PROOF",
-        "STALE_SECONDS",
-        "STALE_TOL"
+        "STALE_AFTER_HOURS",
+        "STALE_AFTER_SECONDS"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
       "required_roles": [],
       "rule_id": "SV-STALE",
       "sql_file": "sv_stale.sql",
-      "run_proof": "gated"
+      "run_proof": "exempt",
+      "run_proof_note": "missing-data monitoring: a gap is a fault whether or not the motor runs (#1673)",
+      "legacy_parameters": {
+        "aliases": {
+          "max_silence_hours": "stale_after_hours"
+        },
+        "retired": [
+          "stale_hours",
+          "stale_tol",
+          "confirm_min",
+          "require_run_proof",
+          "require_operational_gate"
+        ],
+        "note": "#1673: SV-STALE is missing data only. A saved max_silence_hours becomes stale_after_hours (an explicit stale_after_hours in the same scope wins). The value-span stale_hours / stale_tol, the confirm delay and the motor-status gate are retired and ignored when read; new saves reject them."
+      }
     },
     {
       "aliases": [
         "SV-SLEW"
       ],
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "persistence_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Context-aware sensor rate of change",
       "equipment_kinds": [
@@ -3855,36 +3138,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "max_gap_hours": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "unsupported",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "max_gap_hours",
-          "kind": "dimensionless",
-          "label": "Max sample gap",
-          "max": 12.0,
-          "min": 0.1,
-          "sql_placeholder": "MAX_GAP_HOURS",
-          "step": 0.1,
-          "unit": "h"
-        },
-        "persistence_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "unsupported",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "persistence_min",
-          "kind": "duration_minutes",
-          "label": "Fault persistence",
-          "max": 60.0,
-          "min": 5.0,
-          "sql_placeholder": "PERSISTENCE_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "sensor_span": {
           "control": "slider",
           "default": 100.0,
@@ -3923,7 +3176,7 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "step": 1.0,
@@ -3945,15 +3198,21 @@
       "required_roles": [],
       "rule_id": "SV-RATE",
       "sql_file": "sv_rate.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MAX_GAP_HOURS": 1.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "max_gap_hours",
+          "persistence_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Suspected control-output hunting",
       "equipment_kinds": [
@@ -3993,50 +3252,6 @@
           "min": 0.0,
           "sql_placeholder": "CHANGE_DEADBAND_PCT",
           "step": 0.5,
-          "unit": "pct"
-        },
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 5.0,
-          "unit": "min"
-        },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "minimum_coverage_pct": {
-          "control": "slider",
-          "default": 80.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_coverage_pct",
-          "kind": "percent",
-          "label": "Min window sample coverage",
-          "max": 100.0,
-          "min": 50.0,
-          "sql_placeholder": "MINIMUM_COVERAGE_PCT",
-          "step": 5.0,
           "unit": "pct"
         },
         "minimum_equivalent_cycles": {
@@ -4092,27 +3307,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "total_variation_fault_pct": {
           "control": "slider",
@@ -4164,15 +3364,24 @@
       "required_roles": [],
       "rule_id": "PID-HUNT-1",
       "sql_file": "pid_hunt_1.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0,
+        "MINIMUM_COVERAGE_PCT": 80.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min",
+          "minimum_active_coverage_pct",
+          "minimum_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 3600,
-      "controls_without_sql_effect": [
-        "startup_delay_min",
-        "mode_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "PID hunting (operating-state oscillation)",
       "equipment_kinds": [
@@ -4232,36 +3441,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -4270,27 +3449,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -4311,14 +3475,25 @@
       ],
       "rule_id": "FC4",
       "sql_file": "fc4_os_hunting.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
       "controls_without_sql_effect": [
         "eps_sat"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "SAT cold when heating commanded (GL36 D)",
       "equipment_kinds": [
@@ -4424,21 +3599,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -4454,21 +3614,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -4477,27 +3622,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -4522,12 +3652,24 @@
       ],
       "rule_id": "FC5",
       "sql_file": "fc5_sat_cold_heating.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Estimated OA fraction mismatch",
       "equipment_kinds": [
@@ -4603,36 +3745,6 @@
           "step": 47.1947,
           "unit": "L_per_s"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "oat_rat_delta_min": {
           "control": "slider",
           "default": 2.777777778,
@@ -4656,27 +3768,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -4702,7 +3799,21 @@
       ],
       "rule_id": "FC6",
       "sql_file": "fc6_oa_frac_mismatch.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
@@ -4713,7 +3824,6 @@
         "econ_min_pos",
         "clg_inactive_max"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "CHW coil ΔT when inactive (GL36 L)",
       "equipment_kinds": [
@@ -4869,21 +3979,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -4899,21 +3994,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -4922,27 +4002,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -4964,7 +4029,21 @@
       ],
       "rule_id": "FC14",
       "sql_file": "fc14_chw_coil_dt_inactive.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
@@ -4975,7 +4054,6 @@
         "econ_full_open",
         "clg_inactive_max"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "HW coil ΔT when inactive (GL36 M)",
       "equipment_kinds": [
@@ -5147,21 +4225,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "mix_tol": {
           "control": "slider",
           "default": 0.638888889,
@@ -5177,21 +4240,6 @@
           "step": 0.138888889,
           "unit": "degC"
         },
-        "mode_delay_min": {
-          "control": "slider",
-          "default": 10.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "mode_delay_min",
-          "kind": "duration_minutes",
-          "label": "Mode delay after fan-on",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "MODE_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -5200,27 +4248,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -5241,15 +4274,24 @@
       "required_roles": [],
       "rule_id": "FC15",
       "sql_file": "fc15_hw_coil_dt_inactive.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
+        "MODE_DELAY_MIN": 10.0,
+        "STARTUP_DELAY_MIN": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "mode_delay_min",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "SAT deviation from setpoint",
       "equipment_kinds": [
@@ -5280,21 +4322,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -5303,7 +4330,7 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
@@ -5324,21 +4351,6 @@
           "sql_placeholder": "SAT_DEV_ERR",
           "step": 0.277778,
           "unit": "degC_delta"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -5356,16 +4368,18 @@
       ],
       "rule_id": "AHU-SATDEV",
       "sql_file": "ahu_satdev.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Duct static pressure high",
       "equipment_kinds": [
@@ -5410,21 +4424,6 @@
           "step": 12.442,
           "unit": "Pa"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "pressure_on_min": {
           "control": "slider",
           "default": 49.768,
@@ -5439,36 +4438,6 @@
           "sql_placeholder": "PRESSURE_ON_MIN",
           "step": 12.442,
           "unit": "Pa"
-        },
-        "require_operational_gate": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "require_operational_gate",
-          "kind": "boolean",
-          "label": "Require operational gate",
-          "max": 1.0,
-          "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
-          "step": 1.0,
-          "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -5488,15 +4457,19 @@
       "rule_id": "AHU-DUCTHI",
       "sql_file": "ahu_ducthi.sql",
       "run_proof": "exempt",
-      "run_proof_note": "evaluates when the fan is proven on OR the duct static itself shows pressure; a proof gate would hide high static with a failed status"
+      "run_proof_note": "evaluates when the fan is proven on OR the duct static itself shows pressure; a proof gate would hide high static with a failed status",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "require_operational_gate",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Heating and cooling simultaneous",
       "equipment_kinds": [
@@ -5527,21 +4500,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -5550,27 +4508,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "valve_open_pct": {
           "control": "slider",
@@ -5603,15 +4546,18 @@
       ],
       "rule_id": "AHU-SIMUL",
       "sql_file": "ahu_simul.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Mech cooling without integrated economizer",
       "equipment_kinds": [
@@ -5719,21 +4665,6 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -5742,27 +4673,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -5784,15 +4700,18 @@
       ],
       "rule_id": "ECON-3",
       "sql_file": "econ3_mech_without_econ.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Preheat over-conditioning",
       "equipment_kinds": [
@@ -5838,21 +4757,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "preheat_over": {
           "control": "slider",
           "default": 1.222222,
@@ -5876,27 +4780,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -5917,15 +4806,18 @@
       ],
       "rule_id": "ECON-5",
       "sql_file": "econ5_preheat_over.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Economizing in freezing weather",
       "equipment_kinds": [
@@ -5987,21 +4879,6 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -6010,27 +4887,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -6048,15 +4910,18 @@
       ],
       "rule_id": "ECON-6",
       "sql_file": "econ6_econ_freezing.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Economizer OK but not economizing",
       "equipment_kinds": [
@@ -6067,7 +4932,11 @@
         "web_oa_dp",
         "fan_status",
         "fan_cmd",
-        "run_proof"
+        "run_proof",
+        "compressor_status",
+        "chiller_status",
+        "chiller_amps",
+        "chiller_power"
       ],
       "output_columns": [
         "equipment_id",
@@ -6164,21 +5033,6 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -6187,27 +5041,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -6229,12 +5068,19 @@
       ],
       "rule_id": "ECON-7",
       "sql_file": "econ7_ok_not_economizing.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Mechanical cooling below 15.6 °C web OAT",
       "equipment_kinds": [
@@ -6243,8 +5089,10 @@
         "heatpump"
       ],
       "optional_roles": [
-        "clg_valve_pct",
-        "chiller_status"
+        "compressor_status",
+        "chiller_status",
+        "chiller_amps",
+        "chiller_power"
       ],
       "output_columns": [
         "equipment_id",
@@ -6301,7 +5149,6 @@
     {
       "confirm_seconds": 600,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan cmd/status mismatch",
       "equipment_kinds": [
@@ -6346,11 +5193,6 @@
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Low OA fraction",
       "equipment_kinds": [
@@ -6396,21 +5238,6 @@
           "step": 0.01,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "oat_rat_guard": {
           "control": "slider",
           "default": 1.222222,
@@ -6434,27 +5261,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -6475,15 +5287,18 @@
       ],
       "rule_id": "OA-1",
       "sql_file": "oa1_low_oa_frac.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "OA damper leakage",
       "equipment_kinds": [
@@ -6529,21 +5344,6 @@
           "step": 0.277778,
           "unit": "degC_delta"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -6552,27 +5352,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -6591,15 +5376,18 @@
       ],
       "rule_id": "DMP-1",
       "sql_file": "dmp1_oa_damper_leak.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Cooling valve leakage",
       "equipment_kinds": [
@@ -6645,21 +5433,6 @@
           "step": 0.277778,
           "unit": "degC_delta"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -6668,7 +5441,7 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
@@ -6689,21 +5462,6 @@
           "sql_placeholder": "SAT_ERR",
           "step": 0.277778,
           "unit": "degC_delta"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -6724,15 +5482,18 @@
       ],
       "rule_id": "VLV-1",
       "sql_file": "vlv1_clg_valve_leak.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Excessive reheat during warm weather",
       "equipment_kinds": [
@@ -6778,21 +5539,6 @@
           "step": 2.359735,
           "unit": "L_per_s"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "reheat_oat": {
           "control": "slider",
           "default": 25.555555556,
@@ -6831,27 +5577,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -6872,15 +5603,18 @@
       ],
       "rule_id": "VAV-3",
       "sql_file": "vav3_excessive_reheat.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Damper stuck at full open",
       "equipment_kinds": [
@@ -6897,20 +5631,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 15.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 5.0,
-          "unit": "min"
-        },
         "flow_on_min": {
           "control": "slider",
           "default": 11.798675,
@@ -6941,21 +5661,6 @@
           "step": 0.005,
           "unit": "frac"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -6964,27 +5669,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "sustain_hours": {
           "control": "slider",
@@ -7019,15 +5709,22 @@
       ],
       "rule_id": "VAV-4",
       "sql_file": "vav4_damper_full_open.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 900.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min",
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Airflow sensor bias",
       "equipment_kinds": [
@@ -7088,21 +5785,6 @@
           "step": 2.359735,
           "unit": "L_per_s"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -7111,27 +5793,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -7150,15 +5817,18 @@
       ],
       "rule_id": "VAV-5",
       "sql_file": "vav5_airflow_bias.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Reheat when cooling available",
       "equipment_kinds": [
@@ -7203,21 +5873,6 @@
           "step": 0.555555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "reheat_pct": {
           "control": "slider",
           "default": 0.25,
@@ -7241,27 +5896,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -7280,15 +5920,18 @@
       ],
       "rule_id": "VAV-6",
       "sql_file": "vav6_reheat_free_cool.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Reheat valve stuck / no temp rise",
       "equipment_kinds": [
@@ -7349,21 +5992,6 @@
           "step": 0.277777778,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "reheat_cmd": {
           "control": "slider",
           "default": 0.3,
@@ -7387,27 +6015,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -7429,12 +6042,19 @@
       ],
       "rule_id": "VAV-REHEAT",
       "sql_file": "vav_reheat.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "VAV leave vs parent AHU SAT (fedBy)",
       "equipment_kinds": [
@@ -7503,7 +6123,7 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "step": 1.0,
@@ -7532,11 +6152,6 @@
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Min airflow / fixed high flow",
       "equipment_kinds": [
@@ -7554,20 +6169,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 15.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 5.0,
-          "unit": "min"
-        },
         "fixed_flow_hours": {
           "control": "slider",
           "default": 1.0,
@@ -7643,21 +6244,6 @@
           "step": 4.71947,
           "unit": "L_per_s"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -7666,27 +6252,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -7708,15 +6279,22 @@
       ],
       "rule_id": "VAV-7",
       "sql_file": "vav7_min_airflow.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 900.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min",
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and the confirm delay (the window duration is the timer) are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT reset not tracking outdoor air",
       "equipment_kinds": [
@@ -7747,21 +6325,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -7770,7 +6333,7 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
@@ -7836,21 +6399,6 @@
           "sql_placeholder": "RESET_SLOPE",
           "step": 0.05,
           "unit": "frac"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -7871,16 +6419,18 @@
       ],
       "rule_id": "RESET-1",
       "sql_file": "reset1_sat_oa_reset.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 1800,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min",
-        "require_operational_gate"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Chiller running with no building load",
       "equipment_kinds": [
@@ -7928,51 +6478,6 @@
           "sql_placeholder": "LOAD_SAT_HI",
           "step": 0.05,
           "unit": "frac"
-        },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
-        "require_operational_gate": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "require_operational_gate",
-          "kind": "boolean",
-          "label": "Require operational gate",
-          "max": 1.0,
-          "min": 0.0,
-          "sql_placeholder": "REQUIRE_OPERATIONAL_GATE",
-          "step": 1.0,
-          "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -7987,15 +6492,19 @@
       "rule_id": "CHW-NOLOAD-1",
       "sql_file": "chw_noload_1.sql",
       "run_proof": "exempt",
-      "run_proof_note": "no-load detection with its own mechanical-cooling proof and a 30 min confirmation that must see off samples"
+      "run_proof_note": "no-load detection with its own mechanical-cooling proof and a 30 min confirmation that must see off samples",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "require_operational_gate",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Low chilled-water ΔT",
       "equipment_kinds": [
@@ -8046,21 +6555,6 @@
           "step": 0.277778,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -8069,27 +6563,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -8107,15 +6586,18 @@
       ],
       "rule_id": "CHW-1",
       "sql_file": "chw1_low_dt.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "DP below SP at max pump speed",
       "equipment_kinds": [
@@ -8156,21 +6638,6 @@
           "step": 689.476,
           "unit": "Pa"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "pump_hi": {
           "control": "slider",
           "default": 0.87,
@@ -8194,27 +6661,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -8237,15 +6689,18 @@
       "run_proof": "gated",
       "optional_roles": [
         "run_proof"
-      ]
+      ],
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Plant supply temp outside deadband",
       "equipment_kinds": [
@@ -8271,21 +6726,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -8294,7 +6734,7 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
@@ -8315,21 +6755,6 @@
           "sql_placeholder": "SP_BAND",
           "step": 0.055556,
           "unit": "degC"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -8351,15 +6776,18 @@
       "run_proof": "gated",
       "optional_roles": [
         "run_proof"
-      ]
+      ],
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Flow high at max pump",
       "equipment_kinds": [
@@ -8400,21 +6828,6 @@
           "step": 3.15451,
           "unit": "L_per_s"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "pump_hi": {
           "control": "slider",
           "default": 0.87,
@@ -8438,27 +6851,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -8480,15 +6878,18 @@
       "run_proof": "gated",
       "optional_roles": [
         "run_proof"
-      ]
+      ],
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Condenser water not optimized vs wet-bulb",
       "equipment_kinds": [
@@ -8552,21 +6953,6 @@
           "step": 0.277778,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -8575,27 +6961,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -8614,15 +6985,18 @@
       ],
       "rule_id": "CW-OPT-1",
       "sql_file": "cw_opt_1.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "High CW approach at full tower fan",
       "equipment_kinds": [
@@ -8671,21 +7045,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -8694,27 +7053,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "tower_fan_hi": {
           "control": "slider",
@@ -8749,15 +7093,18 @@
       ],
       "rule_id": "CW-APR-1",
       "sql_file": "cw_apr_1.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Excess tower fan energy vs wet-bulb limit",
       "equipment_kinds": [
@@ -8821,21 +7168,6 @@
           "step": 0.277778,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -8844,27 +7176,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "tower_fan_hi": {
           "control": "slider",
@@ -8900,15 +7217,18 @@
       ],
       "rule_id": "CW-FAN-1",
       "sql_file": "cw_fan_1.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 600,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Discharge cold when heating",
       "equipment_kinds": [
@@ -8954,21 +7274,6 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "require_run_proof": {
           "control": "slider",
           "default": 1.0,
@@ -8977,27 +7282,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         },
         "zone_cold": {
           "control": "slider",
@@ -9032,12 +7322,19 @@
       ],
       "rule_id": "HP-1",
       "sql_file": "hp1_discharge_cold.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 300,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "OA temperature spike",
       "equipment_kinds": [
@@ -9097,11 +7394,6 @@
     },
     {
       "confirm_seconds": 1800,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Duct static trim advisory",
       "equipment_kinds": [
@@ -9149,21 +7441,6 @@
           "step": 12.442,
           "unit": "Pa"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "request_lo": {
           "control": "slider",
           "default": 1.0,
@@ -9187,27 +7464,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -9225,15 +7487,18 @@
       ],
       "rule_id": "TRIM-1",
       "sql_file": "trim1_duct_static.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 1800,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "HWST trim advisory",
       "equipment_kinds": [
@@ -9281,21 +7546,6 @@
           "step": 0.555556,
           "unit": "degC"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "request_lo": {
           "control": "slider",
           "default": 1.0,
@@ -9319,27 +7569,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -9357,15 +7592,18 @@
       ],
       "rule_id": "TRIM-3",
       "sql_file": "trim3_hwst.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 1800,
-      "controls_without_sql_effect": [
-        "minimum_active_coverage_pct",
-        "startup_delay_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "CHW plant reset advisory",
       "equipment_kinds": [
@@ -9413,21 +7651,6 @@
           "step": 5.0,
           "unit": "min"
         },
-        "minimum_active_coverage_pct": {
-          "control": "slider",
-          "default": 5.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "minimum_active_coverage_pct",
-          "kind": "percent",
-          "label": "Min active coverage",
-          "max": 100.0,
-          "min": 0.0,
-          "sql_placeholder": "MINIMUM_ACTIVE_COVERAGE_PCT",
-          "step": 1.0,
-          "unit": "pct"
-        },
         "request_lo": {
           "control": "slider",
           "default": 1.0,
@@ -9451,27 +7674,12 @@
           "frontend_control": "slider",
           "key": "require_run_proof",
           "kind": "boolean",
-          "label": "Require run proof",
+          "label": "Require motor status",
           "max": 1.0,
           "min": 0.0,
           "sql_placeholder": "REQUIRE_RUN_PROOF",
           "step": 1.0,
           "unit": "bool"
-        },
-        "startup_delay_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "frontend_control": "slider",
-          "key": "startup_delay_min",
-          "kind": "duration_minutes",
-          "label": "Startup delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "STARTUP_DELAY_MIN",
-          "step": 1.0,
-          "unit": "min"
         }
       },
       "parity_status": "sql_screening",
@@ -9489,7 +7697,15 @@
       ],
       "rule_id": "TRIM-4",
       "sql_file": "trim4_chw_reset.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "minimum_active_coverage_pct",
+          "startup_delay_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "aliases": [
@@ -9497,7 +7713,6 @@
       ],
       "confirm_seconds": 1800,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_t, falls back to unoccupied + fan_on (pandas sched1 base).",
       "equipment_kinds": [
@@ -9579,7 +7794,6 @@
     {
       "confirm_seconds": 3600,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Always-on fan or pump runtime",
       "equipment_kinds": [
@@ -9648,10 +7862,6 @@
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Own zone setpoint present but zone temperature null for at least 90% of window",
       "equipment_kinds": [
@@ -9668,20 +7878,6 @@
       ],
       "pandas_function": "fcu_sensor_null",
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "null_fraction": {
           "control": "slider",
           "default": 0.9,
@@ -9711,12 +7907,21 @@
       "rule_id": "FCU-SENSOR-NULL",
       "sql_file": "fcu_sensor_null.sql",
       "run_proof": "exempt",
-      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan-on heating coil under-delivery",
       "equipment_kinds": [
@@ -9805,7 +8010,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan-on cooling coil under-delivery",
       "equipment_kinds": [
@@ -9878,7 +8082,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Heating valve passing with both commands shut",
       "equipment_kinds": [
@@ -9951,7 +8154,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Cooling valve passing with both commands shut",
       "equipment_kinds": [
@@ -10024,7 +8226,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Damper feedback more than 15 points below command",
       "equipment_kinds": [
@@ -10113,7 +8314,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "High valid CO2 with low outdoor-air damper command",
       "equipment_kinds": [
@@ -10201,10 +8401,6 @@
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Heating/cooling pass-through setpoint deadband below 1 C",
       "equipment_kinds": [
@@ -10218,20 +8414,6 @@
       ],
       "pandas_function": "fcu_deadband",
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "deadband": {
           "control": "slider",
           "default": 1,
@@ -10262,14 +8444,20 @@
       "rule_id": "FCU-DEADBAND",
       "sql_file": "fcu_deadband.sql",
       "run_proof": "exempt",
-      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Four or more heat/cool valve mode changes in window",
       "equipment_kinds": [
@@ -10283,20 +8471,6 @@
       ],
       "pandas_function": "fcu_mode_cycle",
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "mode_changes": {
           "control": "slider",
           "default": 4,
@@ -10343,14 +8517,20 @@
       "rule_id": "FCU-MODE-CYCLE",
       "sql_file": "fcu_mode_cycle.sql",
       "run_proof": "exempt",
-      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
+      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "BAS monthly kWh vs utility monthly bills (% deviation)",
       "equipment_kinds": [
@@ -10368,20 +8548,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "util_pct_err": {
           "control": "slider",
           "default": 10.0,
@@ -10409,14 +8575,20 @@
       "rule_id": "UTIL-MONTHLY",
       "sql_file": "util_monthly_fault.sql",
       "run_proof": "exempt",
-      "run_proof_note": "utility meter data, no running equipment"
+      "run_proof_note": "utility meter data, no running equipment",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
     },
     {
       "confirm_seconds": 0,
-      "controls_without_sql_effect": [
-        "confirm_min"
-      ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "BAS 15m vs utility interval (MAE threshold)",
       "equipment_kinds": [
@@ -10434,20 +8606,6 @@
       ],
       "pandas_function": null,
       "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 0.0,
-          "effect": "no_op",
-          "effect_in_sql": false,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
         "util_interval_mae": {
           "control": "slider",
           "default": 5.0,
@@ -10475,7 +8633,145 @@
       "rule_id": "UTIL-INTERVAL",
       "sql_file": "util_interval_fault.sql",
       "run_proof": "exempt",
-      "run_proof_note": "utility meter data, no running equipment"
+      "run_proof_note": "utility meter data, no running equipment",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0
+      },
+      "legacy_parameters": {
+        "aliases": {},
+        "retired": [
+          "confirm_min"
+        ],
+        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing and a confirm delay that had no effect in this SQL are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
+      }
+    },
+    {
+      "confirm_seconds": 900,
+      "delete_python_candidate": false,
+      "description": "Coil valve open but the air temperature changes less than min_dt",
+      "equipment_kinds": [
+        "ahu"
+      ],
+      "optional_roles": [
+        "htg_valve_pct",
+        "reheat_valve_pct",
+        "clg_valve_pct",
+        "heating_coil_entering_temp",
+        "heating_coil_leaving_temp",
+        "cooling_coil_entering_temp",
+        "cooling_coil_leaving_temp",
+        "mat",
+        "sat",
+        "vav_inlet_t",
+        "vav_discharge_t",
+        "zone_t",
+        "zone_flow",
+        "fan_status",
+        "fan_cmd",
+        "run_proof"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "active_hours",
+        "fault_pct",
+        "assessment"
+      ],
+      "pandas_function": "coil_perf",
+      "parameters": {
+        "confirm_min": {
+          "control": "slider",
+          "default": 15.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "key": "confirm_min",
+          "kind": "duration_minutes",
+          "label": "Fault confirm delay",
+          "max": 60.0,
+          "min": 0.0,
+          "sql_placeholder": "CONFIRM_SECONDS",
+          "step": 5.0,
+          "unit": "min"
+        },
+        "valve_open": {
+          "control": "slider",
+          "default": 0.8,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "valve_open",
+          "kind": "fraction",
+          "label": "Valve open threshold",
+          "max": 1.0,
+          "min": 0.5,
+          "sql_placeholder": "VALVE_OPEN",
+          "step": 0.05,
+          "unit": "frac"
+        },
+        "valve_shut": {
+          "control": "slider",
+          "default": 0.05,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "valve_shut",
+          "kind": "fraction",
+          "label": "Opposite valve shut",
+          "max": 0.2,
+          "min": 0.0,
+          "sql_placeholder": "VALVE_SHUT",
+          "step": 0.01,
+          "unit": "frac"
+        },
+        "min_dt": {
+          "control": "slider",
+          "default": 3.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "min_dt",
+          "kind": "temperature_difference",
+          "label": "Minimum coil temperature change",
+          "max": 11.111111,
+          "min": 0.555556,
+          "sql_placeholder": "MIN_DT",
+          "step": 0.277778,
+          "unit": "degC"
+        },
+        "require_run_proof": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "require_run_proof",
+          "kind": "boolean",
+          "label": "Require motor status",
+          "max": 1.0,
+          "min": 0.0,
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
+          "step": 1.0,
+          "unit": "bool"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "CONFIRM_SECONDS",
+        "FAN_ON_MIN",
+        "FLOW_ON_MIN",
+        "MAX_GAP_HOURS",
+        "MIN_DT",
+        "REQUIRE_RUN_PROOF",
+        "VALVE_OPEN",
+        "VALVE_SHUT"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P1",
+      "required_roles": [],
+      "rule_id": "COIL-PERF",
+      "sql_file": "coil_perf.sql",
+      "run_proof": "gated"
     }
   ]
 }

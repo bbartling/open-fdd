@@ -51,7 +51,7 @@ def test_dataset_is_si(data):
     declared = set(data["units"].values())
     assert declared <= {"°C", "%", "Pa", "°F", None}, declared
     pg = data["results"]["pglite"]
-    assert len(pg) == 77
+    assert len(pg) == 78
 
 
 def test_dataset_follows_the_declared_scales(data):
@@ -120,7 +120,7 @@ def test_pandas_equals_sql_in_si(report):
 def test_rules_without_pandas_twin_are_listed(report):
     # SQL-only rules (no open_fdd.rules twin): listed by stress.py in the report, never silently skipped
     assert set(report["no_twin"]) == NO_TWIN
-    assert len(report["twins"]) + len(report["no_twin"]) == 77
+    assert len(report["twins"]) + len(report["no_twin"]) == 78
 
 
 # ---- SI-only contract (no imperial anywhere in the pack or the oracle) -------------------------------------------
@@ -303,6 +303,12 @@ def test_pinned_delta_band_catches_a_widened_known_difference():
     widened = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.5}, {"equipment_id": "E2", "fault_hours": 0.25}]}, ref, pinned)
     assert not widened.ok and widened.unexpected == 0
     assert widened.pin_violations == ["RULE-X: delta 0.7500 h, pinned 0.5000 +/- 0.0100 h"]
+    tightened = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.25}, {"equipment_id": "E2", "fault_hours": 0.0}]}, ref, pinned)
+    assert not tightened.ok and tightened.unexpected == 0
+    assert tightened.pin_violations == ["RULE-X: delta 0.2500 h, pinned 0.5000 +/- 0.0100 h"]
+    matching = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.0}, {"equipment_id": "E2", "fault_hours": 0.0}]}, ref, pinned)
+    assert not matching.ok and matching.unexpected == 0
+    assert matching.pin_violations == ["RULE-X: delta 0.0000 h, pinned 0.5000 +/- 0.0100 h"]
     unpinned = Policy(known={"RULE-X": "test"}, pins={"OTHER": {"hours": 0.0, "tol": 0.01}})
     assert compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.5}]}, ref, unpinned).pin_violations == [
         "RULE-X: no expected delta pinned for this dataset"]

@@ -232,3 +232,43 @@ def load_sdahu_csv(path: Path | str, step_minutes: int = 5):
 
     raw = pd.read_csv(path, usecols=lambda c: c == "Datetime" or c in SDAHU_ROLE_MAP)
     return to_roles(raw, step_minutes=step_minutes)
+
+
+def export_long(paths: Iterable[Path | str], out_dir: Path | str, step_minutes: int = 5,
+                prefix: str = "lbnl-sdahu") -> dict[str, Path]:
+    """Write cached SDAHU CSVs as Open-FDD long-format SI history plus a labels table, for any SQL database.
+
+    ``history_long.csv``: ``ts, equipment_id, role, value`` (UTC, SI). ``labels.csv``: one row per file,
+    ``equipment_id, start_ts, end_ts, label, rule_id, fault_type, source`` (``label`` fault / normal, ``rule_id``
+    empty = applies to every rule), the input of ``open-fdd-scorecard``. Each LBNL file becomes its own
+    ``equipment_id`` (``<prefix>/<file stem>``) because every file covers the same simulated year.
+    """
+    import csv
+
+    import pandas as pd
+
+    by_name = {f.name: f for f in SDAHU_SUBSET}
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    hist_path, lab_path = out / "history_long.csv", out / "labels.csv"
+    step = pd.Timedelta(minutes=step_minutes or 1)
+    with open(hist_path, "w", newline="", encoding="utf-8") as hf, \
+            open(lab_path, "w", newline="", encoding="utf-8") as lf:
+        hw, lw = csv.writer(hf), csv.writer(lf)
+        hw.writerow(["ts", "equipment_id", "role", "value"])
+        lw.writerow(["equipment_id", "start_ts", "end_ts", "label", "rule_id", "fault_type", "source"])
+        for path in paths:
+            path = Path(path)
+            meta = by_name.get(path.name) or next(
+                (f for f in SDAHU_SUBSET if path.stem.startswith(Path(f.name).stem)), None)
+            fault = meta.fault if meta else ("none" if path.stem.startswith(Path(FAULT_FREE).stem) else path.stem)
+            equipment = f"{prefix}/{path.stem}"
+            frame = load_sdahu_csv(path, step_minutes=step_minutes)
+            long = frame.stack().dropna().reset_index()
+            long.columns = ["ts", "role", "value"]
+            long.insert(1, "equipment_id", equipment)
+            long["ts"] = long["ts"].map(lambda t: t.isoformat())
+            long.to_csv(hf, header=False, index=False, lineterminator="\n")
+            lw.writerow([equipment, frame.index.min().isoformat(), (frame.index.max() + step).isoformat(),
+                         "normal" if fault == "none" else "fault", "", fault, "lbnl"])
+    return {"history": hist_path, "labels": lab_path}

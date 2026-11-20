@@ -109,65 +109,163 @@
     return value;
   }
 
-  /** Validate and normalize one rule-level override document: { version: 1, params: { ... } }. */
-  function normalizeRuleOverride(doc, controls, ruleId = '') {
+  /**
+   * Validate and normalize one rule-level override document: { version: 1, params: { ... } }.
+   * `legacy` (the pack template's rule.legacy, #1673) = { aliases: { oldKey: newKey }, retired: [key], note }.
+   * A renamed key maps to its new name unless the document also has the new name (the new name wins).
+   * A retired key is rejected on a new write; when `stored` (a document already saved before the rename) it is
+   * dropped and reported in `clean.migration`, and so is an out-of-range renamed value. Nothing is clamped.
+   */
+  function normalizeRuleOverride(doc, controls, ruleId = '', { legacy = null, stored = false } = {}) {
     if (!doc || typeof doc !== 'object' || Array.isArray(doc) || doc.version !== 1) {
       throw new Error(`${ruleId || 'rule'} override: version must be 1`);
     }
     if (!doc.params || typeof doc.params !== 'object' || Array.isArray(doc.params)) {
       throw new Error(`${ruleId || 'rule'} override: params must be an object`);
     }
+    const aliases = (legacy && legacy.aliases) || {};
+    const retired = new Set((legacy && legacy.retired) || []);
+    const migration = [];
     const out = {};
     for (const [rawKey, raw] of Object.entries(doc.params)) {
+      if (retired.has(rawKey) && !(controls && has(controls, rawKey))) {
+        if (!stored) throw new Error(`${ruleId ? ruleId + '.' : ''}${rawKey} was retired${legacy.note ? ': ' + legacy.note : ''}`);
+        migration.push({ key: rawKey, action: 'retired', value: raw });
+        continue;
+      }
+      let key = rawKey;
+      if (has(aliases, rawKey) && controls && has(controls, aliases[rawKey]) && !has(controls, rawKey)) key = aliases[rawKey];
       // #1608: require_operational_gate is the old name of require_run_proof (an alias, like in render_rule.py)
-      const key = rawKey === 'require_operational_gate' && controls && has(controls, 'require_run_proof') && !has(controls, rawKey) ? 'require_run_proof' : rawKey;
+      else if (rawKey === 'require_operational_gate' && controls && has(controls, 'require_run_proof') && !has(controls, rawKey)) key = 'require_run_proof';
       // the canonical key wins over its legacy alias whatever the property order (like render_rule.py)
-      if (key !== rawKey && has(doc.params, key)) continue;
+      if (key !== rawKey && has(doc.params, key)) {
+        if (has(aliases, rawKey)) migration.push({ key: rawKey, action: 'superseded', by: key, value: raw });
+        continue;
+      }
       if (!controls || !has(controls, key)) {
         throw new Error(`${ruleId ? ruleId + '.' : ''}${key} is not a tunable SQL parameter`);
       }
       const ctrl = controls[key];
       let val = raw;
-      if (ctrl.kind === 'boolean') {
-        if (raw === true || raw === 1) val = 1;
-        else if (raw === false || raw === 0) val = 0;
-        else throw new Error(`${key} must be boolean (0/1 or true/false)`);
-      } else {
-        if (typeof raw === 'boolean' || !isNum(raw)) {
-          throw new Error(`${key} must be a finite number`);
+      try {
+        if (ctrl.kind === 'boolean') {
+          if (raw === true || raw === 1) val = 1;
+          else if (raw === false || raw === 0) val = 0;
+          else throw new Error(`${key} must be boolean (0/1 or true/false)`);
+        } else {
+          if (typeof raw === 'boolean' || !isNum(raw)) {
+            throw new Error(`${key} must be a finite number`);
+          }
+          if (raw < ctrl.min || raw > ctrl.max) {
+            throw new Error(`${key} (${raw}) outside [${ctrl.min}, ${ctrl.max}]`);
+          }
         }
-        if (raw < ctrl.min || raw > ctrl.max) {
-          throw new Error(`${key} (${raw}) outside [${ctrl.min}, ${ctrl.max}]`);
+      } catch (e) {
+        if (stored && key !== rawKey && has(aliases, rawKey)) {
+          migration.push({ key: rawKey, action: 'invalid', to: key, value: raw, reason: e.message });
+          continue;
         }
+        throw e;
       }
+      if (key !== rawKey && has(aliases, rawKey)) migration.push({ key: rawKey, action: 'renamed', to: key, value: val });
       out[key] = val;
     }
     const clean = { version: 1, params: out };
     for (const meta of ['note', 'reset', 'rollback_of']) {
       if (has(doc, meta) && doc[meta] !== undefined) clean[meta] = doc[meta];
     }
+    if (migration.length) clean.migration = migration;
     return clean;
   }
 
-  /** Merge shipped defaults < site override < equipment override for one rule. */
-  function mergeRuleParams(controls, siteDoc, equipDoc, ruleId = '') {
+  /**
+   * Merge shipped defaults < site override < equipment override for one rule. Each saved layer is migrated on its own
+   * (#1673) before precedence applies, so an equipment's renamed legacy key still beats a site's new key.
+   * `migration` lists every conversion: [{ layer, key, action, ... }].
+   */
+  function mergeRuleParams(controls, siteDoc, equipDoc, ruleId = '', legacy = null) {
     const effective = {};
     const sources = {};
     const overrideKeys = new Set();
+    const migration = [];
     for (const [k, d] of Object.entries(controls || {})) {
       effective[k] = d.default;
       sources[k] = 'shipped';
     }
     for (const [layer, doc] of [['site', siteDoc], ['equip', equipDoc]]) {
       if (!doc) continue;
-      const clean = normalizeRuleOverride(doc, controls, ruleId);
+      const clean = normalizeRuleOverride(doc, controls, ruleId, { legacy, stored: true });
+      for (const m of clean.migration || []) migration.push({ layer, ...m });
       for (const [k, v] of Object.entries(clean.params)) {
         effective[k] = v;
         sources[k] = layer;
         overrideKeys.add(k);
       }
     }
-    return { effective, sources, overrideKeys };
+    return { effective, sources, overrideKeys, migration };
+  }
+
+  // ---- #1672: slider contract (grouping, step snapping, ordered pairs) ------------------------------------------------
+
+  const TIME_UNITS = new Set(['min', 'h', 's', 'sec']);
+  /** Display groups in panel order. The motor-status / occupancy booleans come after the numeric tuners. */
+  const CONTROL_GROUPS = [
+    { id: 'duration', label: 'Duration' },
+    { id: 'thresholds', label: 'Thresholds and setpoints' },
+    { id: 'tolerances', label: 'Tolerances' },
+    { id: 'other', label: 'Other limits' },
+    { id: 'gates', label: 'Gates' },
+  ];
+  const OTHER_KINDS = new Set(['count', 'dimensionless', 'interval_energy']);
+
+  /** The display group of one catalog control (see CONTROL_GROUPS). */
+  function controlGroup(key, ctrl) {
+    if (ctrl.kind === 'boolean') return 'gates';
+    if (TIME_UNITS.has(ctrl.unit)) return 'duration';
+    if (/^eps_|_tol$|scale/.test(key)) return 'tolerances';
+    if (OTHER_KINDS.has(ctrl.kind)) return 'other';
+    return 'thresholds';
+  }
+
+  /** [{ id, label, keys }] for the controls of one rule, in CONTROL_GROUPS order, catalog order within a group; empty groups dropped. */
+  function groupControls(controls) {
+    const byGroup = new Map(CONTROL_GROUPS.map((g) => [g.id, []]));
+    for (const [key, ctrl] of Object.entries(controls || {})) byGroup.get(controlGroup(key, ctrl)).push(key);
+    return CONTROL_GROUPS.map((g) => ({ ...g, keys: byGroup.get(g.id) })).filter((g) => g.keys.length);
+  }
+
+  /** The SI value on the control's step grid (anchored at min), clamped to [min, max], 6 decimals. */
+  function snapToStep(ctrl, si) {
+    if (!isNum(si)) throw new Error(`non-finite value ${si}`);
+    let v = si;
+    if (isNum(ctrl.step) && ctrl.step > 0) v = ctrl.min + Math.round((si - ctrl.min) / ctrl.step) * ctrl.step;
+    v = Math.min(ctrl.max, Math.max(ctrl.min, v));
+    v = Number(v.toFixed(6));
+    // #1726: many shipped defaults (e.g. 1.15 degF tolerances) sit between grid points. The exact default stays
+    // reachable: a value at least as close to the default as to the nearest grid point snaps to the default itself.
+    const d = ctrl.default;
+    if (isNum(d) && d >= ctrl.min && d <= ctrl.max && Math.abs(si - d) <= Math.abs(si - v)) return d;
+    return v;
+  }
+
+  /** Catalog key pairs whose effective values must stay strictly ordered (low < high). */
+  const ORDERED_PAIRS = [
+    ['zone_t_lo', 'zone_t_hi'],
+    ['comfort_low', 'comfort_high'],
+    ['econ3_db_min', 'econ3_db_max'],
+    ['econ7_db_min', 'econ7_db_max'],
+  ];
+
+  /** Throws when an effective low >= its high (both keys must be controls of the rule). */
+  function checkOrderedPairs(controls, effective, ruleId = '') {
+    for (const [lo, hi] of ORDERED_PAIRS) {
+      if (!controls || !has(controls, lo) || !has(controls, hi)) continue;
+      const a = has(effective, lo) ? effective[lo] : controls[lo].default;
+      const b = has(effective, hi) ? effective[hi] : controls[hi].default;
+      if (!(a < b)) {
+        throw new Error(`${ruleId ? ruleId + ': ' : ''}${controls[lo].label || lo} (${a}) must be below ${controls[hi].label || hi} (${b})`);
+      }
+    }
   }
 
   /** Python-compatible float/int SQL literal formatting (render_rule.py::_format_value). */
@@ -196,6 +294,15 @@
     return pyRepr(value);
   }
 
+  /**
+   * The base values of one rule before its controls apply: the pack's runtime_defaults with the rule's fixed
+   * internal safeguards on top (#1671 internal_constants: retired delays, coverage floors and join plumbing at
+   * their shipped values). Pass the result as resolvePlaceholders' runtimeDefaults, like render_rule.py does.
+   */
+  function ruleDefaults(templateRoot, ruleTpl) {
+    return { ...((templateRoot && templateRoot.runtime_defaults) || {}), ...((ruleTpl && ruleTpl.internal) || {}) };
+  }
+
   /** Exact JS twin of render_rule.py lines 121-163. */
   function resolvePlaceholders(runtimeDefaults, controls, effective, overrideKeys = new Set(), pollSeconds = 300) {
     if (!isNum(pollSeconds) || pollSeconds < 1) throw new Error('pollSeconds must be finite and >= 1');
@@ -218,7 +325,8 @@
     }
     values.MODE_DELAY_MIN = Math.max(values.MODE_DELAY_MIN || 0, values.STARTUP_DELAY_MIN || 0);
     values.POLL_SECONDS = pollSeconds;
-    const confirmMin = has(effective, 'confirm_min') ? effective.confirm_min : ((values.CONFIRM_SECONDS || 600) / 60);
+    // a fixed internal confirm of 0 s (PID-HUNT-1, #1671) is a value, not "unset": same as render_rule.py's .get(..., 600)
+    const confirmMin = has(effective, 'confirm_min') ? effective.confirm_min : ((has(values, 'CONFIRM_SECONDS') ? values.CONFIRM_SECONDS : 600) / 60);
     values.CONFIRM_SECONDS = confirmMin * 60;
     values.CONFIRM_ROWS = Math.max(1, Math.ceil(values.CONFIRM_SECONDS / pollSeconds));
     for (const [k, v] of Object.entries({ ...values })) {
@@ -274,7 +382,8 @@
   const api = {
     SITE_SCOPE, EQUIP_SCOPE_PREFIX, equipScope,
     displayUnits, preferredDisplayUnit, toSi, fromSi, prettyCatalogUnit,
-    normalizeRuleOverride, mergeRuleParams, formatRuleValue, resolvePlaceholders, renderRuleSql, canonicalJson,
+    normalizeRuleOverride, mergeRuleParams, formatRuleValue, ruleDefaults, resolvePlaceholders, renderRuleSql, canonicalJson,
+    CONTROL_GROUPS, ORDERED_PAIRS, controlGroup, groupControls, snapToStep, checkOrderedPairs,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.ofddRuleTuning = api;

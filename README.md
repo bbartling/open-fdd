@@ -1,12 +1,12 @@
 # Open-FDD
 
 <p align="center">
-  <img src="docs/assets/open-fdd-nf-plugin.webp" alt="open-fdd: fault detection &amp; analytics plugin for the Normal Framework" width="720">
+  <img src="https://raw.githubusercontent.com/bbartling/open-fdd/master/docs/assets/open-fdd-nf-plugin.webp" alt="open-fdd: fault detection &amp; analytics plugin for the Normal Framework" width="720">
 </p>
 
 <p align="center">
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg" alt="NF app CI"></a>
-  <a href="https://x.ai/bot/COWOKNgQRUjlFqo6m0DY7"><img src="https://img.shields.io/badge/Grok%20bot-Open--FDD%20skills-000000?logo=x&logoColor=white" alt="Open-FDD Grok bot skills"></a>
+  <a href="#grok-bot-and-agent-skills"><img src="https://img.shields.io/badge/Grok%20bot-Open--FDD%20skills-000000?logo=x&logoColor=white" alt="Open-FDD Grok bot skills"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/security.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/security.yml/badge.svg" alt="Security (ZAP, audit, gitleaks)"></a>
 </p>
 
@@ -15,7 +15,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-77%20SQL%20%2B%2071%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 77 SQL + 71 pandas, SI units">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-78%20SQL%20%2B%2073%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 78 SQL + 73 pandas, SI units">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -29,7 +29,7 @@
   <a href="https://bbartling.github.io/open-fdd/architecture/adr-014-open-fdd-as-nf-plugin.html">
     <img src="https://img.shields.io/badge/ADR--014-NF%20plugin-6D28D9?style=for-the-badge" alt="ADR-014: Open-FDD as an NF plugin">
   </a>
-  <a href="https://x.ai/bot/COWOKNgQRUjlFqo6m0DY7">
+  <a href="#grok-bot-and-agent-skills">
     <img src="https://img.shields.io/badge/Grok%20Bot-Open--FDD%20skills-000000?style=for-the-badge&logo=x&logoColor=white" alt="Open-FDD skills on Grok bot">
   </a>
 </p>
@@ -76,14 +76,14 @@ python3 -m pytest tests -q
 
 | Path | Contents |
 |---|---|
-| [`nf-app/`](nf-app/README.md) | Full edition: UI, hooks, rule packs, tests, mock NF |
-| [`lite/`](lite/README.md) | Lite edition |
-| [`sql/fdd/`](sql/fdd/README.md) | Fault rules (SQL), registry, role scales, tuning catalog |
-| [`open_fdd/`](open_fdd) | PyPI package: pandas reference rules and NF agent tools |
-| [`scripts/nf/`](scripts/nf) | Build and deploy tooling |
-| [`deploy/nf-caddy/`](deploy/nf-caddy/README.md) | Optional Caddy front door |
-| [`docs/`](docs) | Documentation site |
-| [`openfdd_agent_spec/`](openfdd_agent_spec/README.md) | Guidance for AI coding agents |
+| [`nf-app/`](https://github.com/bbartling/open-fdd/blob/master/nf-app/README.md) | Full edition: UI, hooks, rule packs, tests, mock NF |
+| [`lite/`](https://github.com/bbartling/open-fdd/blob/master/lite/README.md) | Lite edition |
+| [`sql/fdd/`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/README.md) | Fault rules (SQL), registry, role scales, tuning catalog |
+| [`open_fdd/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd) | PyPI package: pandas reference rules and NF agent tools |
+| [`scripts/nf/`](https://github.com/bbartling/open-fdd/tree/master/scripts/nf) | Build and deploy tooling |
+| [`deploy/nf-caddy/`](https://github.com/bbartling/open-fdd/blob/master/deploy/nf-caddy/README.md) | Optional Caddy front door |
+| [`docs/`](https://github.com/bbartling/open-fdd/tree/master/docs) | Documentation site |
+| [`openfdd_agent_spec/`](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/README.md) | Guidance for AI coding agents |
 
 ### FDD rules in SQL and pandas
 
@@ -91,24 +91,45 @@ The rules also run without NF: SQL on PostgreSQL / TimescaleDB, or pandas in Pyt
 
 | | SQL (PostgreSQL / TimescaleDB) | pandas (Python, used for testing) |
 |---|---|---|
-| Rules | [`sql/fdd/postgres/rules/`](sql/fdd/postgres/rules), one file per rule | [`open_fdd/rules/`](open_fdd/rules), or `pip install open-fdd` |
+| Rules | [`sql/fdd/postgres/rules/`](https://github.com/bbartling/open-fdd/tree/master/sql/fdd/postgres/rules), one file per rule | [`open_fdd/rules/`](https://github.com/bbartling/open-fdd/tree/master/open_fdd/rules), or `pip install open-fdd` |
 | Cookbook | [SQL cookbook](https://bbartling.github.io/open-fdd/rules/sql-cookbook.html): each rule's inputs, SI parameters and full SQL | [pandas cookbook](https://bbartling.github.io/open-fdd/rules/pandas-cookbook.html): source plus a runnable example per rule |
-| Thresholds | [`sql/fdd/tuning_catalog.json`](sql/fdd/tuning_catalog.json): defaults for every rule | SI defaults in each rule; any difference from SQL is listed in the parity report |
+| Thresholds | [`sql/fdd/tuning_catalog.json`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/tuning_catalog.json): defaults for every rule | SI defaults in each rule; any difference from SQL is listed in the parity report |
 
 CI checks the two against each other; the [parity report](https://bbartling.github.io/open-fdd/rules/parity.html) explains each known difference.
+
+## Grok Bot and agent skills
+
+The [Open-FDD Grok Bot](https://x.ai/bot/COWOKNgQRUjlFqo6m0DY7) provides an agent template for working with the
+project. Open the link to access the shared bot; availability and import controls depend on your account.
+You can also use the repository skills directly with Claude, Codex or Cursor: start with [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).
+
+The canonical recipes live in [openfdd_agent_spec/skills/](https://github.com/bbartling/open-fdd/tree/master/openfdd_agent_spec/skills/):
+
+- Build: [charts](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/add-rcx-chart.md), [rules and tuning](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/add-or-tune-fdd-rule.md), [TypeScript checks](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/typescript.md).
+- Operate: [site modeling](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/model-a-site-in-nf.md), [deployment](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/deploy-to-nf-box.md), [install/upgrade/troubleshooting](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/install-upgrade-troubleshoot.md), [NF gotchas](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/nf-gotchas.md).
+- Validate: [security](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/security-checks.md), [BACnet](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/bacnet-validate.md), [ontology](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/audit-ontology-coverage.md).
+- Python tools: [NF agent](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/pypi-nf-agent.md), [ML FDD](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/ml-fdd.md).
+
+The `.agents/skills/` and `.claude/skills/` files are generated discovery pointers, not separate instructions.
+After editing a canonical recipe, run `python scripts/check_skills_sync.py --write`; CI checks for drift,
+including README cookbook counts and the NF version pin. The PyPI badge follows the published package version.
 
 ## AI agent tools (Python)
 
 ```bash
 pip install open-fdd                          # ECM / ROI calculators and workbooks
-pip install "open-fdd[nf,anomaly,ml]"         # NF + SPARQL client, anomaly screening, ML detectors
+pip install "open-fdd[anomaly,ml]"            # anomaly screening + ML detectors on CSV device folders (no NF needed)
+pip install "open-fdd[nf]"                    # NF + SPARQL client, only when you read an NF box
 ```
 
 Extras: `oracle` (pandas rules), `nf`, `analytics`, `anomaly`, `ml`, `ml-copod`, `ontology`, `ontology-shacl`, `reporting`, `rdf`, `duckdb`, `postgres`, `ecm-web`.
+
+Python 3.11 or newer (3.11-3.15 tested, 3.14 is the default).
 Commands: `open-fdd-nf`, `open-fdd-anomaly`, `open-fdd-ml`, `open-fdd-report`, `open-fdd-ecm`, `open-fdd-ontology-audit`, `open-fdd-version`.
 Every tool with an example: [PyPI agent tools](https://bbartling.github.io/open-fdd/pypi-agent-tools.html).
-The ML detectors are benchmarked on public LBNL AHU data: [results](docs/ml/lbnl-ahu-benchmark.md).
-The package (4.x) is versioned separately from the NF app (5.x).
+The ML detectors are benchmarked on public LBNL AHU data: [results](https://github.com/bbartling/open-fdd/blob/master/docs/ml/lbnl-ahu-benchmark.md).
+The anomaly and ML tools need no NF box or database: they read a device folder (`history_wide.csv` in SI +
+`column_map.json`). The package (4.x) is versioned separately from the NF app (5.x).
 
 ## Support
 
@@ -130,4 +151,4 @@ Questions and discussion: [Discord](https://discord.gg/qjT3w9y3pu).
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and [CHANGELOG.md](CHANGELOG.md).
+MIT. See [LICENSE](https://github.com/bbartling/open-fdd/blob/master/LICENSE) and [CHANGELOG.md](https://github.com/bbartling/open-fdd/blob/master/CHANGELOG.md).

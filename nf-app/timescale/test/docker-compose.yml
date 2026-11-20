@@ -5,7 +5,7 @@
 name: openfdd-timescale-test
 services:
   db:
-    image: timescale/timescaledb:2.31.0-pg17
+    image: timescale/timescaledb:2.32.1-pg17
     container_name: openfdd-timescale-test
     environment:
       POSTGRES_PASSWORD: example

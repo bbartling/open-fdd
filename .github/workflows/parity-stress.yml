@@ -2,6 +2,8 @@
 # 7 days) synthetic datasets, basic and edge profiles, plus standalone PostgreSQL at the same sizes. Runs nightly on
 # master and by workflow_dispatch before each release (the release checklist links the run). Any disagreeing path, a
 # skipped leg or an error fails the run. The PR tier (2x3) is in parity.yml. Tiers: docs/rules/parity-harness.md.
+# Five reproducible 4x3 generator seeds cover each profile (#1639). Seed 0 retains the canonical delta pins;
+# additional seeds use the existing noncanonical compare policy, not seed-0 expected deltas. Keep 8x7 at seed 0.
 name: parity stress (nightly / pre-release)
 
 on:
@@ -23,25 +25,29 @@ concurrency:
 
 jobs:
   three-way:
-    name: three-way ${{ matrix.size }} ${{ matrix.profile }}
+    name: three-way ${{ matrix.size }} ${{ matrix.profile }} seed ${{ matrix.seed }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
-        size: ["4x3", "8x7"]
+        size: ["4x3"]
         profile: [basic, edge]
+        seed: [0, 1, 2, 3, 4]
+        include:
+          - {size: "8x7", profile: basic, seed: 0}
+          - {size: "8x7", profile: edge, seed: 0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
       - name: Install oracle (pandas), rdflib, DuckDB and nf-app dependencies
         run: |
@@ -52,13 +58,15 @@ jobs:
         env:
           SIZE: ${{ matrix.size }}
           PROFILE: ${{ matrix.profile }}
+          SEED: ${{ matrix.seed }}
         run: |
           set -o pipefail
-          python tests/parity/stress.py --engines pglite,sqlite,duckdb,duckdb-parquet --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --sparql --out "$RUNNER_TEMP/stress.json"
-      - uses: actions/upload-artifact@v4
+          echo "Reproduce: profile=$PROFILE seed=$SEED size=$SIZE"
+          python tests/parity/stress.py --engines pglite,sqlite,duckdb,duckdb-parquet --equips "${SIZE%x*}" --days "${SIZE#*x}" --profile "$PROFILE" --seed "$SEED" --sparql --out "$RUNNER_TEMP/stress.json"
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: parity-stress-${{ matrix.size }}-${{ matrix.profile }}
+          name: parity-stress-${{ matrix.size }}-${{ matrix.profile }}-seed-${{ matrix.seed }}
           path: ${{ runner.temp }}/stress.json
           if-no-files-found: ignore
 
@@ -73,23 +81,23 @@ jobs:
         profile: [basic, edge]
     services:
       pg:
-        image: postgres:17
+        image: postgres:17.12
         env:
           POSTGRES_PASSWORD: example
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.ref || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: pip
       - name: Install oracle (pandas), DuckDB, Postgres driver and nf-app dependencies
         run: |

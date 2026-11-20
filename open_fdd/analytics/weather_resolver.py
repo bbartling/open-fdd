@@ -137,3 +137,64 @@ def weather_source_metrics(df: pd.DataFrame) -> dict[str, Any]:
             metrics["oat_meteo_mean_abs_diff_f"] = round(float(diff.mean()), 3)
             metrics["oat_meteo_max_abs_diff_f"] = round(float(diff.max()), 3)
     return metrics
+
+
+#: BAS vs web outdoor-air band (delta degC), the dashboard's BAS_BAND_C.
+BAS_WEB_BAND_C = 2.0
+
+
+def default_web_max_age_seconds(bas: pd.Series, web: pd.Series) -> float:
+    """As-of age limit for the web reading: max(1.5 x median web interval, 2 x median BAS interval), in seconds.
+
+    The dashboard derives the same limit from the web cadence and its grid step; here the BAS cadence is the grid.
+    """
+    def median_step(s: pd.Series) -> float:
+        idx = pd.DatetimeIndex(s.dropna().index).sort_values()
+        if len(idx) < 2:
+            return 0.0
+        return float(pd.Series(idx[1:] - idx[:-1]).dt.total_seconds().median())
+
+    return max(1.5 * median_step(web), 2.0 * median_step(bas))
+
+
+def bas_vs_web_pairs(bas: pd.Series, web: pd.Series, *, max_age_seconds: float | None = None) -> pd.DataFrame:
+    """Each BAS sample with the latest web reading at or before it, at most ``max_age_seconds`` old (default
+    :func:`default_web_max_age_seconds`): columns t, bas, web, d = bas - web (degC); unpaired samples are dropped.
+    The SQL twin is ``sql/analytics/bas_vs_web_points.sql``.
+    """
+    b = pd.to_numeric(bas, errors="coerce").dropna().sort_index()
+    w = pd.to_numeric(web, errors="coerce").dropna().sort_index()
+    age = default_web_max_age_seconds(b, w) if max_age_seconds is None else float(max_age_seconds)
+    if b.empty or w.empty:
+        return pd.DataFrame({"t": pd.DatetimeIndex([], tz="UTC"), "bas": [], "web": [], "d": []})
+    left = pd.DataFrame({"t": pd.DatetimeIndex(b.index), "bas": b.to_numpy(dtype=float)})
+    right = pd.DataFrame({"t": pd.DatetimeIndex(w.index), "web": w.to_numpy(dtype=float)})
+    joined = pd.merge_asof(left, right, on="t", direction="backward",
+                           tolerance=pd.Timedelta(seconds=age), allow_exact_matches=True)
+    joined["d"] = joined["bas"] - joined["web"]
+    return joined.dropna(subset=["d"]).reset_index(drop=True)
+
+
+def bas_vs_web_oat_stats(
+    bas: pd.Series,
+    web: pd.Series,
+    *,
+    max_age_seconds: float | None = None,
+    band_c: float = BAS_WEB_BAND_C,
+) -> dict[str, Any]:
+    """BAS minus web outdoor-air temperature over :func:`bas_vs_web_pairs` (degC; delta degC).
+
+    Returns n, bias (mean delta), mae, max_abs and within_band (share of |delta| <= ``band_c``); the statistics are
+    None when n is 0. The SQL twin is ``sql/analytics/bas_vs_web_oat.sql``.
+    """
+    b = pd.to_numeric(bas, errors="coerce").dropna().sort_index()
+    w = pd.to_numeric(web, errors="coerce").dropna().sort_index()
+    age = default_web_max_age_seconds(b, w) if max_age_seconds is None else float(max_age_seconds)
+    out: dict[str, Any] = {"n": 0, "bias": None, "mae": None, "max_abs": None, "within_band": None,
+                           "max_age_seconds": age, "band_c": float(band_c)}
+    d = bas_vs_web_pairs(b, w, max_age_seconds=age)["d"]
+    if d.empty:
+        return out
+    out.update(n=int(len(d)), bias=float(d.mean()), mae=float(d.abs().mean()), max_abs=float(d.abs().max()),
+               within_band=float((d.abs() <= float(band_c)).mean()))
+    return out
