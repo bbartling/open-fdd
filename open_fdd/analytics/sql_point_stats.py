@@ -11,7 +11,7 @@ import math
 from importlib import resources
 from typing import Any, Iterable
 
-from open_fdd.analytics.point_stats import DIURNAL_ROLES, setpoint_roles
+from open_fdd.analytics.point_stats import ANOMALY_ROLES, DIURNAL_ROLES, setpoint_roles
 from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote
 from open_fdd.analytics.sql_runtime import TS_MS
 
@@ -27,7 +27,7 @@ def template(name: str) -> str:
 
 
 def _render(name: str, engine: str, *, site_id: str, point_keys: Iterable[str] | None, roles: Iterable[str] | None,
-            start_ms: int | None, end_ms: int | None) -> str:
+            start_ms: int | None, end_ms: int | None, window: int = 0, limit: int = 0) -> str:
     if engine not in TS_MS:
         raise ValueError(f"unknown engine {engine!r}")
     if start_ms is not None and end_ms is not None and int(end_ms) <= int(start_ms):
@@ -44,8 +44,10 @@ def _render(name: str, engine: str, *, site_id: str, point_keys: Iterable[str] |
     if end_ms is not None:
         window_filter += f" AND t < {int(end_ms)}"
     body = "\n".join(ln for ln in template(name).splitlines() if not ln.lstrip().startswith("--"))
+    point_filter_p = point_filter.replace(" AND s.point_key IN", " AND p.point_key IN")
     return body.format(ts_ms=TS_MS[engine], site_id=_quote(site_id), point_filter=point_filter,
-                       role_filter=role_filter, window_filter=window_filter)
+                       point_filter_p=point_filter_p, role_filter=role_filter, window_filter=window_filter,
+                       window=int(window), limit=int(limit))
 
 
 def render_sensor_stats_sql(engine: str, *, site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
@@ -114,5 +116,69 @@ def run_setpoints_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
     for row in _fetch(conn, engine, render_setpoints_sql(engine, **kwargs)):
         rec = dict(zip(SETPOINT_COLUMNS, row))
         rec["t"], rec["value"] = int(rec["t"]), float(rec["value"])
+        out.append(rec)
+    return out
+
+
+# ---- slice 2: role timeseries, anomaly coverage, PID hunting proxy ------------------------------------------------
+TIMESERIES_COLUMNS = ("point_key", "equipment_id", "role", "t", "value")
+COVERAGE_COLUMNS = ("point_key", "equipment_id", "role", "n", "var_val", "is_short", "is_constant")
+PID_COLUMNS = ("point_key", "equipment_id", "role", "n", "avg_val", "var_val", "is_hunting")
+
+
+def render_role_timeseries_sql(engine: str, roles: Iterable[str], *, limit: int = 5000, site_id: str = DEFAULT_SITE,
+                               point_keys: Iterable[str] | None = None, start_ms: int | None = None,
+                               end_ms: int | None = None) -> str:
+    """Newest first, at most ``limit`` rows (1..100000)."""
+    if not 1 <= int(limit) <= 100_000:
+        raise ValueError("limit must be 1..100000")
+    return _render("role_timeseries", engine, site_id=site_id, point_keys=point_keys, roles=list(roles),
+                   start_ms=start_ms, end_ms=end_ms, limit=int(limit))
+
+
+def render_anomaly_coverage_sql(engine: str, *, window: int = 24, roles: Iterable[str] = ANOMALY_ROLES,
+                                site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
+                                start_ms: int | None = None, end_ms: int | None = None) -> str:
+    """``window`` is the z-score window the coverage is judged against (>= 2)."""
+    if int(window) < 2:
+        raise ValueError("window must be at least 2 samples")
+    return _render("anomaly_series_coverage", engine, site_id=site_id, point_keys=point_keys, roles=list(roles),
+                   start_ms=start_ms, end_ms=end_ms, window=int(window))
+
+
+def render_pid_hunting_sql(engine: str, *, site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
+                           start_ms: int | None = None, end_ms: int | None = None) -> str:
+    return _render("pid_hunting_proxy", engine, site_id=site_id, point_keys=point_keys, roles=None,
+                   start_ms=start_ms, end_ms=end_ms)
+
+
+def run_role_timeseries_sql(conn: Any, engine: str, roles: Iterable[str], **kwargs: Any) -> list[dict]:
+    out = []
+    for row in _fetch(conn, engine, render_role_timeseries_sql(engine, roles, **kwargs)):
+        rec = dict(zip(TIMESERIES_COLUMNS, row))
+        rec["t"], rec["value"] = int(rec["t"]), float(rec["value"])
+        out.append(rec)
+    return out
+
+
+def run_anomaly_coverage_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
+    """One dict per bound point of the roles, also with no samples: n, var_val, is_short, is_constant."""
+    out = []
+    for row in _fetch(conn, engine, render_anomaly_coverage_sql(engine, **kwargs)):
+        rec = dict(zip(COVERAGE_COLUMNS, row))
+        rec["n"], rec["is_short"], rec["is_constant"] = int(rec["n"]), int(rec["is_short"]), int(rec["is_constant"])
+        rec["var_val"] = None if rec["var_val"] is None else float(rec["var_val"])
+        out.append(rec)
+    return out
+
+
+def run_pid_hunting_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
+    """One dict per PID-role point with >= 12 samples: n, avg_val, var_val, stddev_val, is_hunting."""
+    out = []
+    for row in _fetch(conn, engine, render_pid_hunting_sql(engine, **kwargs)):
+        rec = dict(zip(PID_COLUMNS, row))
+        rec["n"], rec["is_hunting"] = int(rec["n"]), int(rec["is_hunting"])
+        rec["avg_val"], rec["var_val"] = float(rec["avg_val"]), float(rec["var_val"])
+        rec["stddev_val"] = math.sqrt(max(rec["var_val"], 0.0))
         out.append(rec)
     return out

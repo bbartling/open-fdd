@@ -18,6 +18,9 @@ The RCx analytics in [`sql/analytics/`](https://github.com/bbartling/open-fdd/tr
 | `sensor_stats.sql` | Count, min, max, mean, sample stddev, first / last time per point |
 | `diurnal_hourly.sql` | Mean by UTC hour of day per point |
 | `setpoints_latest.sql` | Latest value of each setpoint point |
+| `role_timeseries.sql` | Newest samples of chosen roles, capped |
+| `anomaly_series_coverage.sql` | Points the z-score cannot score: empty, short or constant |
+| `pid_hunting_proxy.sql` | Per-point spread screen for hunting control loops |
 
 ## Input
 

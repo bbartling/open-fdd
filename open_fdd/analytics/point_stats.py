@@ -61,3 +61,52 @@ def latest_setpoints(long: pd.DataFrame, roles, *, start_ms: int | None = None,
     last = d.groupby("point_key", sort=True).tail(1)
     out = last.rename(columns={"ts_ms": "t"}).loc[:, ["point_key", "equipment_id", "role", "t", "value"]]
     return out.sort_values("point_key", kind="stable").reset_index(drop=True)
+
+
+def role_timeseries(long: pd.DataFrame, roles, *, limit: int = 5000, start_ms: int | None = None,
+                    end_ms: int | None = None) -> pd.DataFrame:
+    """Samples of the given roles, newest first (then point_key, then the larger value), at most ``limit`` rows."""
+    d = _clean(long, start_ms, end_ms)
+    d = d[d["role"].isin(list(roles))]
+    d = d.sort_values(["ts_ms", "point_key", "value"], ascending=[False, True, False], kind="stable").head(int(limit))
+    return d.rename(columns={"ts_ms": "t"}).loc[:, ["point_key", "equipment_id", "role", "t", "value"]].reset_index(drop=True)
+
+
+ANOMALY_ROLES = ("sat", "mat", "rat", "oa_t", "web_oa_t", "zone_t", "duct_static")
+
+
+def anomaly_coverage(points: pd.DataFrame, long: pd.DataFrame, *, window: int = 24, roles=ANOMALY_ROLES,
+                     start_ms: int | None = None, end_ms: int | None = None) -> pd.DataFrame:
+    """Per bound point of ``roles`` (``points``: point_key, equipment_id, role), even with no samples: n, var_val
+    (sample variance; NaN below two), is_short (n < window) and is_constant (n >= 2 and min == max)."""
+    pts = points[points["role"].isin(list(roles))].loc[:, ["point_key", "equipment_id", "role"]]
+    d = _clean(long, start_ms, end_ms)
+    agg = d.groupby("point_key")["value"].agg(n="size", var_val=lambda s: s.var(ddof=1), vmin="min", vmax="max")
+    out = pts.merge(agg, left_on="point_key", right_index=True, how="left")
+    out["n"] = out["n"].fillna(0).astype(int)
+    out["is_short"] = (out["n"] < int(window)).astype(int)
+    out["is_constant"] = ((out["n"] >= 2) & (out["vmin"] == out["vmax"])).astype(int)
+    out = out.drop(columns=["vmin", "vmax"])
+    return out.sort_values("point_key", kind="stable").reset_index(drop=True)
+
+
+PID_COMMAND_ROLES = ("clg_valve_pct", "htg_valve_pct", "oa_damper_pct", "fan_cmd")
+PID_ROLES = (*PID_COMMAND_ROLES, "duct_static", "sat", "zone_t")
+# variance limits = (legacy stddev limit)^2, written exactly as in pid_hunting_proxy.sql
+PID_VAR_LIMIT = {"sat": 19.75308641975309, "zone_t": 19.75308641975309, "duct_static": 3962966.1184}
+PID_VAR_LIMIT_COMMAND = 0.0064
+
+
+def pid_hunting_proxy(long: pd.DataFrame, *, start_ms: int | None = None, end_ms: int | None = None) -> pd.DataFrame:
+    """Per point with >= 12 samples of the PID roles: n, avg_val, var_val (commands scaled to 0-1) and is_hunting
+    (n >= 24 and variance above the role's limit). Largest spread first."""
+    d = _clean(long, start_ms, end_ms)
+    d = d[d["role"].isin(PID_ROLES)].copy()
+    cmd = d["role"].isin(PID_COMMAND_ROLES) & (d["value"] > 1.5)
+    d.loc[cmd, "value"] = d.loc[cmd, "value"] / 100.0
+    g = d.groupby(["point_key", "equipment_id", "role"], dropna=False, sort=True)["value"]
+    out = g.agg(n="size", avg_val="mean", var_val=lambda s: s.var(ddof=1)).reset_index()
+    out = out[out["n"] >= 12]
+    limit = out["role"].map(PID_VAR_LIMIT).fillna(PID_VAR_LIMIT_COMMAND)
+    out["is_hunting"] = ((out["n"] >= 24) & (out["var_val"] > limit)).astype(int)
+    return out.sort_values(["var_val", "point_key"], ascending=[False, True], kind="stable").reset_index(drop=True)

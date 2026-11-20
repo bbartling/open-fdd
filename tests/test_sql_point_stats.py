@@ -158,3 +158,106 @@ def test_postgres_matches_pandas():
     finally:
         with psycopg.connect(base, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
+
+
+# ---- slice 2: role timeseries, anomaly coverage, PID hunting proxy ------------------------------------------------
+def _long2():
+    """PID / anomaly cases: a hunting zone temp, a calm SAT, valve commands in percent and in 0-1, a hunting damper,
+    duct static, a constant MAT, a short RAT, and a bound OAT point with no samples at all."""
+    rng = np.random.default_rng(17572)
+    rows = []
+    for i in range(96):
+        t = T0 + i * 300_000 + int(rng.integers(-30_000, 30_000))
+        rows += [("z/zt", "VAV-1", "zone_t", t, 22 + (6 if i % 2 else -6) + float(rng.normal(0, 0.2))),
+                 ("a/sat", "AHU-1", "sat", t, 13 + float(rng.normal(0, 0.3))),
+                 ("a/clg", "AHU-1", "clg_valve_pct", t, 40 + float(rng.normal(0, 2))),          # percent, calm
+                 ("a/dmp", "AHU-1", "oa_damper_pct", t, 0.2 if i % 2 else 0.6),                # 0-1, hunting
+                 ("a/dsp", "AHU-1", "duct_static", t, 250 + float(rng.normal(0, 15))),
+                 ("a/mat", "AHU-1", "mat", t, 18.0)]                                          # constant
+        if i < 10:
+            rows.append(("a/rat", "AHU-1", "rat", t, 21 + i * 0.1))                           # short
+    return pd.DataFrame(rows, columns=list(ps.LONG_COLUMNS))
+
+
+def _load2(conn, engine, long):
+    _load(conn, engine, long)
+    rows = [("local", "a/oat", "AHU-1", "oa_t")]                                               # bound, no samples
+    if engine == "postgres":
+        with conn.cursor() as cur:
+            cur.executemany("INSERT INTO fdd.point VALUES (%s, %s, %s, %s)", rows)
+    else:
+        conn.executemany("INSERT INTO fdd.point VALUES (?, ?, ?, ?)", rows)
+
+
+def _points2(long):
+    pts = long.drop_duplicates("point_key").loc[:, ["point_key", "equipment_id", "role"]]
+    return pd.concat([pts, pd.DataFrame([("a/oat", "AHU-1", "oa_t")], columns=pts.columns)], ignore_index=True)
+
+
+def _check_slice2(conn, engine, long, window=None):
+    kw = dict(start_ms=window[0], end_ms=window[1]) if window else {}
+    roles = ["zone_t", "sat", "duct_static"]
+    _same(sps.run_role_timeseries_sql(conn, engine, roles, limit=77, **kw),
+          ps.role_timeseries(long, roles, limit=77, **kw), ["point_key", "role", "t", "value"], f"{engine} timeseries")
+    _same(sps.run_anomaly_coverage_sql(conn, engine, **kw), ps.anomaly_coverage(_points2(long), long, **kw),
+          ["point_key", "role", "n", "var_val", "is_short", "is_constant"], f"{engine} coverage")
+    _same(sps.run_pid_hunting_sql(conn, engine, **kw), ps.pid_hunting_proxy(long, **kw),
+          ["point_key", "role", "n", "avg_val", "var_val", "is_hunting"], f"{engine} pid")
+
+
+@pytest.mark.parametrize("engine", ["sqlite", "duckdb"])
+def test_slice2_matches_pandas(engine):
+    long = _long2()
+    conn = _connect(engine)
+    try:
+        _load2(conn, engine, long)
+        _check_slice2(conn, engine, long)
+        _check_slice2(conn, engine, long, window=(T0 + 2 * H, T0 + 6 * H))
+    finally:
+        conn.close()
+
+
+def test_slice2_semantics_pinned():
+    long = _long2()
+    conn = sqlite3.connect(":memory:")
+    try:
+        _load2(conn, "sqlite", long)
+        cov = {r["point_key"]: r for r in sps.run_anomaly_coverage_sql(conn, "sqlite")}
+        assert cov["a/oat"]["n"] == 0 and cov["a/oat"]["is_short"] == 1 and cov["a/oat"]["var_val"] is None
+        assert cov["a/mat"]["is_constant"] == 1 and cov["a/rat"]["is_short"] == 1 and cov["a/sat"]["is_short"] == 0
+        assert "a/clg" not in cov                                                     # not an anomaly role
+        pid = {r["point_key"]: r for r in sps.run_pid_hunting_sql(conn, "sqlite")}
+        assert pid["z/zt"]["is_hunting"] == 1 and pid["a/sat"]["is_hunting"] == 0
+        assert pid["a/dmp"]["is_hunting"] == 1                                        # 0-1 command: 0.2 / 0.6 swing
+        assert pid["a/clg"]["is_hunting"] == 0 and abs(pid["a/clg"]["avg_val"] - 0.40) < 0.01   # percent scaled to 0-1
+        assert pid["a/dsp"]["is_hunting"] == 0 and "a/rat" not in pid                 # rat is not a PID role
+        assert list(pid)[0] == "a/dsp"                                                # largest spread first
+        ts = sps.run_role_timeseries_sql(conn, "sqlite", ["zone_t"], limit=5)
+        assert len(ts) == 5 and ts[0]["t"] >= ts[-1]["t"]                             # newest first, capped
+    finally:
+        conn.close()
+    with pytest.raises(ValueError):
+        sps.render_role_timeseries_sql("sqlite", ["sat"], limit=0)
+    with pytest.raises(ValueError):
+        sps.render_anomaly_coverage_sql("sqlite", window=1)
+
+
+@pytest.mark.skipif(not (os.environ.get("POSTGRES_TEST_URL") and os.environ.get("OPENFDD_PG_TEST_DISPOSABLE") == "1"),
+                    reason="needs POSTGRES_TEST_URL and OPENFDD_PG_TEST_DISPOSABLE=1")
+def test_postgres_slice2_matches_pandas():
+    psycopg = pytest.importorskip("psycopg")
+    long = _long2()
+    base = os.environ["POSTGRES_TEST_URL"]
+    dbname = f"openfdd_pstats2_{secrets.token_hex(6)}"
+    with psycopg.connect(base, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{dbname}"')
+    try:
+        url = urlunparse(urlparse(base)._replace(path=f"/{dbname}"))
+        with psycopg.connect(url, autocommit=True) as conn:
+            conn.execute("SET TIME ZONE 'UTC'")
+            _load2(conn, "postgres", long)
+            _check_slice2(conn, "postgres", long)
+            _check_slice2(conn, "postgres", long, window=(T0 + 2 * H, T0 + 6 * H))
+    finally:
+        with psycopg.connect(base, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
