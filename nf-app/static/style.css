@@ -11,6 +11,10 @@
 @media (max-width: 640px) { .rcx-grid { grid-template-columns: 1fr; } }
 .rcx-card h3 { margin: 0 0 6px; font-size: 14px; }
 .rcx-card .chart { height: 320px; }
+/* #1643: a card waiting for its history (drawn when it nears the viewport) shows a quiet placeholder, not a blank box. */
+.rcx-card .chart:not(.done) { border-radius: 6px; background: linear-gradient(90deg, var(--panel2) 25%, var(--row-hover) 50%, var(--panel2) 75%) 0 0 / 200% 100%; animation: rcx-wait 1.6s ease-in-out infinite; }
+@keyframes rcx-wait { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .rcx-card .chart:not(.done) { animation: none; background: var(--panel2); } }
 .rcx-card .note { margin-top: 6px; }
 .rcx-split { width: 100%; }
 tr.clickable { cursor: pointer; }

@@ -402,6 +402,11 @@ async function renderFddResults(equips, sweepRoles = {}) {
 // The FDD charts follow the FDD tab's one selected equipment. Each card renders on its own so one failing view never
 // blanks the page.
 const viewTabRuns = { rcx: 0, fdd: 0 };
+// Overview (#1643): the fleet dashboard draws a card only when it comes near the viewport, a few at a time, so opening
+// Overview no longer requests history for every panel on the site at once. Holds the running queue's stop().
+/** @type {Record<string, (() => void) | null>} */
+const viewTabObservers = { rcx: null, fdd: null };
+const LAZY_CARD_MARGIN = "600px 0px", LAZY_CARD_CONCURRENCY = 2;
 const VIEW_TABS = {
   rcx: { ui: () => rcxUi, body: "rcxBody", range: "rcxRangeControl", status: "rcxRangeStatus", key: "rcx", mode: "rcxMode", kpis: "rcxKpis" },
   fdd: { ui: () => fddUi, body: "fddBody", range: "fddChartsRangeControl", status: "fddChartsRangeStatus", key: "fddCharts", mode: "fddMode", kpis: null },
@@ -481,9 +486,11 @@ async function renderViewTab(tab) {
     || (fleet ? "" : `<section class="panel"><p class="sub">No FDD chart has its inputs on the equipment in scope yet.</p></section>`);
   const kpis = [], maskCache = new Map();
   if (T.kpis && $(T.kpis)) $(T.kpis).innerHTML = "";
-  for (const [i, c] of cards.entries()) {
+  const drawCard = async (i) => {
+    const c = cards[i];
     if (run !== viewTabRuns[tab]) return;                      // a newer render (range/scope change) took over
     const el = $(`${tab}-${i}`);
+    if (!el) return;
     try {
       const ctx = rcxContext(c.view, c.eqs, hours, model, catalog, range, siteTz, { ahuOn, kpis, maskCache, dropTitle: tab === "rcx" });
       const note = await c.view.render(el, ctx);
@@ -506,15 +513,35 @@ async function renderViewTab(tab) {
       }
     } catch (e) {
       if (run === viewTabRuns[tab]) $(`${tab}-note-${i}`).textContent = `could not draw: ${e.message}`;
+    } finally {
+      if (el.classList) el.classList.add("done");             // ends the card's loading placeholder
     }
-  }
-  if (run === viewTabRuns[tab]) {
+  };
+  const finish = () => {
+    if (run !== viewTabRuns[tab]) return;
     $(T.status).textContent = "";
     const body = $(T.body);
     if (fleet && $("overviewRcx") && body && typeof body.querySelectorAll === "function") {
       $("overviewRcx").hidden = ![...body.querySelectorAll(".rcx-card")].some((x) => !/** @type {HTMLElement} */ (x).hidden);
     }
+  };
+  if (viewTabObservers[tab]) { viewTabObservers[tab](); viewTabObservers[tab] = null; }
+  if (fleet && cards.length && typeof IntersectionObserver === "function" && typeof lazyDrawCards === "function") {
+    // Lazy (lazy-cards.js): a card fetches its history when it nears the viewport, LAZY_CARD_CONCURRENCY at once.
+    // Leaving Overview stops the queue; coming back re-renders the dashboard as a new run.
+    $(T.status).textContent = "";                               // each card shows its own loading placeholder
+    viewTabObservers[tab] = lazyDrawCards({
+      els: cards.map((_, i) => $(`${tab}-${i}`)), draw: drawCard, onDone: finish,
+      isLive: () => run === viewTabRuns[tab] && activeTab === "overview",
+      concurrency: LAZY_CARD_CONCURRENCY, rootMargin: LAZY_CARD_MARGIN,
+    });
+    return;
   }
+  for (let i = 0; i < cards.length; i++) {
+    if (run !== viewTabRuns[tab]) return;
+    await drawCard(i);
+  }
+  finish();
 }
 
 function renderRcx() { return renderViewTab("rcx"); }
