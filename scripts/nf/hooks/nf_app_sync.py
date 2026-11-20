@@ -2142,6 +2142,162 @@ def scheduled_success_gap(hook: dict, runs: list[dict], now: datetime.datetime) 
     return f"no successful run within two intervals ({2 * interval // 60} min): {since}"
 
 
+# ---------------------------------------------------------------- doctor: host health (#1615)
+# Read-only, NF console API only (GET /api/v1/platform/info), never SSH. What NF 3.10.9 returns there: siteName,
+# version, domain, services (an empty list on the hosts checked) and machineInfo (base64 JSON of a static hardware
+# inventory: baseboard, block devices with their sizes, cpus, NICs, product). That is no free memory, no free disk,
+# no uptime and no restart counts, so those lines SKIP and say so. Any of these fields that a later NF adds (top level,
+# inside machineInfo or per service) is picked up by name. Serials, MAC addresses and the license are never printed.
+
+HOST_MEM_WARN_FRACTION = 0.10
+HOST_MEM_WARN_BYTES = 256 * 1024 ** 2
+HOST_DISK_WARN_FRACTION = 0.10
+HOST_DISK_WARN_BYTES = 1024 ** 3
+
+_HOST_KEYS = {
+    "mem_avail": ("memavailable", "memavailablebytes", "memoryavailable", "memoryavailablebytes", "availablememory",
+                  "availablememorybytes", "memfree", "memfreebytes", "memoryfree", "memoryfreebytes", "freememory",
+                  "freememorybytes"),
+    "mem_total": ("memtotal", "memtotalbytes", "memorytotal", "memorytotalbytes", "totalmemory", "totalmemorybytes",
+                  "totalphysicalbytes", "totalusablebytes"),
+    "disk_free": ("diskfree", "diskfreebytes", "diskavailable", "diskavailablebytes", "freedisk", "freediskbytes",
+                  "fsavailable", "fsavailablebytes", "fsfree", "fsfreebytes"),
+    "disk_total": ("disktotal", "disktotalbytes", "totaldisk", "totaldiskbytes", "fstotal", "fstotalbytes",
+                   "fssize", "fssizebytes"),
+    "uptime": ("uptime", "uptimeseconds", "uptimesec"),
+    "restarts": ("restarts", "restartcount", "restartscount", "numrestarts"),
+}
+
+
+def _norm_key(k) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(k).lower())
+
+
+def _num(v) -> float | None:
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str) and re.fullmatch(r"\s*-?\d+(\.\d+)?\s*", v):
+        return float(v)
+    return None
+
+
+def _find_number(obj, names: tuple[str, ...], depth: int = 0) -> float | None:
+    """First numeric value whose normalised key is in `names`, searching dicts breadth-first (lists are skipped:
+    per-device / per-service lists are read separately)."""
+    if not isinstance(obj, dict) or depth > 4:
+        return None
+    for k, v in obj.items():
+        if _norm_key(k) in names and _num(v) is not None:
+            return _num(v)
+    for v in obj.values():
+        got = _find_number(v, names, depth + 1)
+        if got is not None:
+            return got
+    return None
+
+
+def decode_machine_info(value) -> dict:
+    """machineInfo as a dict: NF sends base64 JSON; accept plain JSON or a dict too. {} when it cannot be read."""
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    for raw in (value, None):
+        try:
+            text = raw if raw is not None else base64.b64decode(value, validate=False).decode("utf-8", "replace")
+            got = json.loads(text)
+            return got if isinstance(got, dict) else {}
+        except (ValueError, TypeError):
+            continue
+    return {}
+
+
+def _gib(n: float) -> str:
+    return f"{n / 1024 ** 3:.1f} GiB" if n >= 1024 ** 3 else f"{n / 1024 ** 2:.0f} MiB"
+
+
+def _level_for(avail: float, total: float | None, frac: float, floor: float) -> str:
+    low = avail < floor or (total is not None and total > 0 and avail / total < frac)
+    return "WARN" if low else "PASS"
+
+
+def host_health(c) -> list[tuple[str, str, str]]:
+    """doctor lines (level, what, text) for host memory, disk and restarts. Levels: PASS, WARN or SKIP; never FAIL
+    (a host reading never fails doctor). One read-only GET; nothing is written."""
+    try:
+        info = c.call("GET", "/api/v1/platform/info") or {}
+    except SystemExit as e:
+        return [("SKIP", "host", f"NF platform info not readable through the console API ({e}); "
+                                 "memory, disk and restarts not checked")]
+    if not isinstance(info, dict):
+        return [("SKIP", "host", "NF platform info has an unexpected shape; memory, disk and restarts not checked")]
+    mi = decode_machine_info(info.get("machineInfo"))
+    src = {k: v for k, v in info.items() if k not in ("machineInfo", "services", "license")}
+    nf = f"NF {info.get('version') or 'unknown version'}"
+    out: list[tuple[str, str, str]] = []
+
+    avail = _find_number(src, _HOST_KEYS["mem_avail"])
+    avail = avail if avail is not None else _find_number(mi, _HOST_KEYS["mem_avail"])
+    total = _find_number(src, _HOST_KEYS["mem_total"])
+    total = total if total is not None else _find_number(mi, _HOST_KEYS["mem_total"])
+    if avail is not None:
+        pct = f" ({100 * avail / total:.0f} % of {_gib(total)})" if total else ""
+        lvl = _level_for(avail, total, HOST_MEM_WARN_FRACTION, HOST_MEM_WARN_BYTES)
+        out.append((lvl, "host memory", f"{_gib(avail)} available{pct}"
+                    + ("; low memory: hooks may be killed or slow on this host" if lvl == "WARN" else "")))
+    else:
+        known = f"; total RAM {_gib(total)}" if total else ""
+        out.append(("SKIP", "host memory", f"{nf} does not expose free memory through its API{known}"))
+
+    dfree = _find_number(src, _HOST_KEYS["disk_free"])
+    dfree = dfree if dfree is not None else _find_number(mi, _HOST_KEYS["disk_free"])
+    dtotal = _find_number(src, _HOST_KEYS["disk_total"])
+    dtotal = dtotal if dtotal is not None else _find_number(mi, _HOST_KEYS["disk_total"])
+    if dfree is not None:
+        pct = f" ({100 * dfree / dtotal:.0f} % of {_gib(dtotal)})" if dtotal else ""
+        lvl = _level_for(dfree, dtotal, HOST_DISK_WARN_FRACTION, HOST_DISK_WARN_BYTES)
+        out.append((lvl, "host disk", f"{_gib(dfree)} free{pct}"
+                    + ("; low disk: NF history and app files may stop being written" if lvl == "WARN" else "")))
+    else:
+        blocks = [b for b in (mi.get("block") or []) if isinstance(b, dict) and _num(b.get("bytes"))]
+        largest = max((_num(b["bytes"]) for b in blocks), default=None)
+        known = f"; largest disk {_gib(largest)} (size only)" if largest else ""
+        out.append(("SKIP", "host disk", f"{nf} does not expose free disk space through its API{known}"))
+
+    uptime = _find_number(src, _HOST_KEYS["uptime"])
+    services = [s for s in (info.get("services") or []) if isinstance(s, dict)]
+    restarted, down, unknown = [], [], []
+    healthy_states = {"running", "run", "up", "ok", "healthy", "green", "serving", "active"}
+    unhealthy_states = {"unhealthy", "inactive", "not running", "stopped", "failed", "degraded", "error", "down",
+                        "dead", "exited", "unavailable"}
+    for sv in services:
+        name = str(sv.get("name") or sv.get("id") or sv.get("service") or "?")[:40]
+        n = _find_number(sv, _HOST_KEYS["restarts"])
+        if n:
+            restarted.append(f"{name} x{int(n)}")
+        state = re.sub(r"[_\s-]+", " ", str(sv.get("status") or sv.get("state") or sv.get("health") or "").strip().lower())
+        if state in unhealthy_states:
+            down.append(f"{name} ({state[:20]})")
+        elif state not in healthy_states:
+            unknown.append(f"{name} ({state[:20] or 'not reported'})")
+    up = f"uptime {human_age(uptime)}" if uptime is not None else ""
+    if restarted or down:
+        parts = ([f"restarted: {', '.join(restarted)}"] if restarted else []) + \
+                ([f"not running: {', '.join(down)}"] if down else [])
+        out.append(("WARN", "host services", "; ".join(parts + ([up] if up else []))))
+    elif unknown:
+        out.append(("SKIP", "host services", f"health unknown: {', '.join(unknown)}" + (f"; {up}" if up else "")))
+    elif services:
+        out.append(("PASS", "host services", f"{len(services)} services, no restarts or stopped services reported"
+                    + (f"; {up}" if up else "")))
+    else:
+        out.append(("SKIP", "host services", f"{nf} reports no service list or restart counts through its API"
+                    + (f"; {up}" if up else "")))
+    return out
+
+
 def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -> int:
     app_id = m["application"]["id"]
     bad = 0
@@ -2159,6 +2315,8 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line("FAIL", getattr(e, "kind", "") or ("auth" if status in (401, 403) else "console"), str(e))
         return 1
     line("PASS", "auth", "console login accepted (Caddy and NF both let it through)")
+    for lvl, what, text in host_health(c):        # report-only: WARN / SKIP never fail doctor (#1615)
+        line(lvl, what, text)
     a = apps.get(app_id)
     if not a:
         line("FAIL", "app", f"{app_id} is not installed")
