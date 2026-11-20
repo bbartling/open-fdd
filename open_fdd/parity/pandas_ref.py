@@ -81,7 +81,7 @@ def equip_frame(ds: Dataset, equip: str, ingest: str = "sorted"):
 
 
 def weather_frame(ds: Dataset):
-    """Weather as the SQL join sees it: the last sample carried forward up to cadence + margin (25 min) on the grid."""
+    """The weather sidecar's raw readings (UTC). The runner joins them to each equipment row as-of, as the SQL join does."""
     import pandas as pd
 
     rows = ds.weather
@@ -90,7 +90,8 @@ def weather_frame(ds: Dataset):
     idx = pd.DatetimeIndex(pd.to_datetime([r["ts"] for r in rows], unit="ms", utc=True))
     out = pd.DataFrame({"web-outside-air-temp": [r.get("web_oa_t") for r in rows],
                         "web-outside-air-dewpoint": [r.get("web_oa_dp") for r in rows]}, index=idx)
-    return weather_on_grid(out, ds.step_seconds)
+    # #1642: the raw readings; the runner joins them as-of (WEB_ASOF_BOUND_SECONDS), as the SQL rules do
+    return out[~out.index.duplicated(keep="last")].sort_index()
 
 
 def weather_on_grid(out, step_seconds: int):
@@ -115,7 +116,8 @@ def pandas_rule_result(rule_id: str, df, weather, poll_seconds: float = 300.0, p
     params = {"confirm_min": _confirm_min().get(rule_id, 0.0), **(params or {})}
     res = run_cookbook_rule(rule, df.copy(), equipment_id=df.attrs["equipment_id"], equipment_kind=kind,
                             poll_seconds=poll_seconds, params_by_rule={rule.id: params},
-                            weather=None if weather is None else weather.copy(), require_operational_gates=True)
+                            weather=None if weather is None else weather.copy(), require_operational_gates=True,
+                            apply_quality=False)  # #1253: the SQL pack never applies open_fdd.quality nulling
     if res.status == "PASS":
         return 0.0, "PASS", res
     if res.confirmed_fault is not None and res.status == "FAULT":

@@ -43,6 +43,14 @@ interface RcxViewDef {
   [k: string]: any;
 }
 
+/** #1649: sql/analytics/*.sql on an aligned grid (hooks/lib/sql-analytics.js, static/sql-analytics-client.js). */
+interface OfddSqlAnalytics {
+  runtime(g: { t: number[]; cols: Record<string, (number | null)[]> }, specs: any[]): Promise<Map<string, Map<number, any>>>;
+  mech(g: { t: number[]; cols: Record<string, (number | null)[]> }, specs: any[]): Promise<Map<string, number[]>>;
+  econ(g: { t: number[]; cols: Record<string, (number | null)[]> }): Promise<{ rows: any[]; summary: any }>;
+  bas(g: { t: number[]; cols: Record<string, (number | null)[]> }): Promise<{ rows: { t: number; bas: number; web: number; d: number }[]; band: number; stats: any }>;
+}
+
 /** What a view's render() receives (rcxContext()). Chart options stay `any` (ECharts). */
 interface RcxContext {
   view: RcxViewDef; equips: OfddEquip[]; hours: number; model: OfddModel; catalog: FddCatalog; range: any; siteTz: string;
@@ -63,6 +71,8 @@ interface RcxContext {
   ahuOn: boolean;
   feedingAhu(eq: OfddEquip): { ahu: { rec: NfRecord; id: string; name: string }; assumed: boolean } | null;
   ahuMask(eq: OfddEquip, windowSec?: number): Promise<{ on: Map<number, boolean>; ahu: { rec: NfRecord; id: string; name: string }; assumed: boolean; role: string } | null>;
+  /** #1649: the analytics as SQL (hook in-process, or the browser's client via the analytics hook). */
+  sqlAnalytics: OfddSqlAnalytics | null;
   /** Publish a summary tile for the tab's KPI row. */
   kpi(tile: { id: string; label: string; value: string; sub?: string; tone?: "warn" | "ok"; order?: number }): void;
 }

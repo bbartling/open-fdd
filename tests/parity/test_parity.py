@@ -303,6 +303,12 @@ def test_pinned_delta_band_catches_a_widened_known_difference():
     widened = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.5}, {"equipment_id": "E2", "fault_hours": 0.25}]}, ref, pinned)
     assert not widened.ok and widened.unexpected == 0
     assert widened.pin_violations == ["RULE-X: delta 0.7500 h, pinned 0.5000 +/- 0.0100 h"]
+    tightened = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.25}, {"equipment_id": "E2", "fault_hours": 0.0}]}, ref, pinned)
+    assert not tightened.ok and tightened.unexpected == 0
+    assert tightened.pin_violations == ["RULE-X: delta 0.2500 h, pinned 0.5000 +/- 0.0100 h"]
+    matching = compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.0}, {"equipment_id": "E2", "fault_hours": 0.0}]}, ref, pinned)
+    assert not matching.ok and matching.unexpected == 0
+    assert matching.pin_violations == ["RULE-X: delta 0.0000 h, pinned 0.5000 +/- 0.0100 h"]
     unpinned = Policy(known={"RULE-X": "test"}, pins={"OTHER": {"hours": 0.0, "tol": 0.01}})
     assert compare({"RULE-X": [{"equipment_id": "E1", "fault_hours": 1.5}]}, ref, unpinned).pin_violations == [
         "RULE-X: no expected delta pinned for this dataset"]

@@ -248,12 +248,16 @@ export function rollingFaultPct(rows, atMs, windowHours = 24, opts) {
   return covered ? (100 * conf) / covered : 0;
 }
 
-/** Economizer samples: fan on (> 0.05), oa_t / rat / mat present; identifiable = |oat - rat| >= 50/9 K; resid = mat - (rat + damper * (oat - rat)). */
+/**
+ * Economizer truth with the pandas reference's definitions (economizer_free_cooling_diagnostics, #1649): n = fan-on
+ * samples (> 0.05); identifiable = fan on, oa_t and rat present, |oat - rat| >= 50/9 K (MAT not needed);
+ * resid = mat - (rat + damper * (oat - rat)) on identifiable samples with mat and a damper.
+ */
 export function economizer(rows) {
-  const kept = rows.filter((r) => r.oa_t != null && r.rat != null && r.mat != null && r.fan_status != null && r.fan_status > ON);
-  const ident = kept.filter((r) => Math.abs(r.oa_t - r.rat) >= ECON_DT_MIN_C);
-  const resid = ident.map((r) => r.mat - (r.rat + r.oa_damper_pct * (r.oa_t - r.rat)));
-  return { n: kept.length, nIdent: ident.length, medianResidK: median(resid), maeResidK: resid.length ? resid.reduce((a, b) => a + Math.abs(b), 0) / resid.length : null };
+  const on = rows.filter((r) => r.fan_status != null && r.fan_status > ON);
+  const ident = on.filter((r) => r.oa_t != null && r.rat != null && Math.abs(r.oa_t - r.rat) >= ECON_DT_MIN_C);
+  const resid = ident.filter((r) => r.mat != null && r.oa_damper_pct != null).map((r) => r.mat - (r.rat + r.oa_damper_pct * (r.oa_t - r.rat)));
+  return { n: on.length, nIdent: ident.length, medianResidK: median(resid), maeResidK: resid.length ? resid.reduce((a, b) => a + Math.abs(b), 0) / resid.length : null };
 }
 
 /** Round float dust (1e-9) out of the truth numbers so tests can use strict equality on hours. */

@@ -25,8 +25,9 @@ branches below, so these two are pinned in `STRESS_ONLY_DIVERGENT` (tests/parity
 - **VAV-REHEAT** (SQL 16.0833 h, pandas 15.9167 h on one equipment): pandas runs the rule behind the operational gate
   `fan_running` with `startup_delay_seconds=600`; SQL has no startup holdoff. A standing fault at fan start is confirmed one
   5-minute sample earlier in SQL at each of the two fan starts in the 7-day run (0.1667 h in total). With the holdoff removed
-  pandas equals SQL (regression test `test_vav_reheat_difference_is_exactly_the_startup_holdoff`). Same family as VAV-6 and
-  VAV-AHU-LEAVE ("Default startup/mode behavior is not yet fully equivalent" above).
+  pandas equals SQL (regression test `test_vav_reheat_difference_is_exactly_the_startup_holdoff`). Same family as VAV-AHU-LEAVE,
+  OA-1 and CHW-1 ("Default startup/mode behavior is not yet fully equivalent" above). VAV-6 was a different cause
+  (the pandas frame never mapped `clg_available`) and matches since #1642.
 - **TRIM-3** (SQL 1.5 h, pandas skipped on every equipment): three separate differences. (1) pandas reads the role
   `hw-reset-request-sum`; the SQL contract and the NF role are `hot-water-reset-request-sum` (the same applies to TRIM-4 and
   `chw-reset-request-sum` / `chilled-water-reset-request-sum`), so with contract names pandas has no input and returns

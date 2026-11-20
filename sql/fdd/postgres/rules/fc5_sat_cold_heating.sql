@@ -18,7 +18,6 @@ h AS (
     timestamp_utc,
     sat, mat,
     htg_valve_pct AS htg,
-    fan_cmd AS fan,
         CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > {{FAN_ON_MIN}} THEN 1 ELSE 0 END
@@ -35,8 +34,10 @@ base AS (
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
       WHEN COALESCE(mode_stable, 1) = 0 THEN 0
-      WHEN sat IS NULL OR mat IS NULL OR htg IS NULL OR fan IS NULL THEN 0
-      WHEN fan >= {{FAN_ON_MIN}} AND htg > {{HTG_ON_MIN}}
+      WHEN sat IS NULL OR mat IS NULL OR htg IS NULL THEN 0
+      -- #1642: the fan is the status when bound, else the command (fan_on above), as pandas _fan; never the command
+      -- alone, which reads a running fan with a zero command as off
+      WHEN fan_on = 1 AND htg > {{HTG_ON_MIN}}
        AND (sat + {{EPS_MAT}}) <= (mat - {{EPS_MAT}} + {{DELTA_SUPPLY_FAN}}) THEN 1
       ELSE 0
     END AS INT) AS raw_fault,

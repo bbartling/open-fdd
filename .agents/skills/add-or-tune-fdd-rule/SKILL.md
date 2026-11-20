@@ -1,6 +1,6 @@
 ---
 name: add-or-tune-fdd-rule
-description: Add or tune an FDD rule in sql/fdd. Pointer to the Open-FDD agent spec.
+description: Add or tune an FDD rule in sql/fdd and rebuild the catalog, SQL packs and rule docs.
 ---
 # add-or-tune-fdd-rule
 

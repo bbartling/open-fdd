@@ -15,7 +15,7 @@ that only ever touches Open-FDD's own tables (unless you opt a source table in).
 | `../hooks/history.js` | On-request hook `history`: long-range bucketed history as JSON (bounded, capped ~200 KB) |
 | `test/` | Docker TimescaleDB, synthetic NF-like seed, `node:test` suites (see below) |
 
-Dependency: npm `pg` 8.23.1 (add to `nf-app/package.json` dependencies). Image: `timescale/timescaledb:2.31.0-pg17`.
+Dependency: npm `pg` 8.23.1 (add to `nf-app/package.json` dependencies). Image: `timescale/timescaledb:2.32.1-pg17`.
 
 ## Run the tests
 
