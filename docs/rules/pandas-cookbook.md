@@ -595,7 +595,7 @@ Flags duct static too low while the supply fan is near full speed.
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `duct_static_err` | Legacy duct-static error (sets εDSP) | 29.8608 | 0 | 124.42 | Pa |
 | `eps_dsp` | Duct-static error εDSP | 29.8608 | 0 | 124.42 | Pa |
-| `eps_vfd_spd` | VFD speed error εVFDSPD (GL36 default 5%) | 0.13 | 0 | 0.5 | fraction (0-1) |
+| `eps_vfd_spd` | VFD speed error εVFDSPD (fraction; G36-2018 lists 0.05) | 0.13 | 0 | 0.5 | fraction (0-1) |
 | `fan_hi` | Legacy fan-high threshold (sets εVFDSPD) | 0.87 | 0.5 | 1 | fraction (0-1) |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
@@ -761,7 +761,7 @@ SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_full_min` | Full-cooling threshold (GL36 99%) | 0.01 | 0.5 | 1 | fraction (0-1) |
+| `clg_full_min` | Full-cooling threshold (fraction) | 0.01 | 0.5 | 1 | fraction (0-1) |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `econ_full_open` | Economizer full-open threshold | 0.9 | 0.5 | 1 | fraction (0-1) |
 | `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
@@ -1104,7 +1104,7 @@ SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
-| `htg_full_min` | Full-heating threshold (GL36 99%) | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `htg_full_min` | Full-heating threshold (fraction) | 0.9 | 0.5 | 1 | fraction (0-1) |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `sat_err` | Legacy SAT error (sets εSAT) | 0.555556 | 0 | 5.55556 | Δ°C |
 

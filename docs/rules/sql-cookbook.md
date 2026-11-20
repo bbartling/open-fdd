@@ -661,7 +661,7 @@ Duct static below SP at full fan
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `eps_dsp` | Duct-static error epsDSP (Pa) | 29.8608 | 0 | 124.42 | Pa |
-| `eps_vfd_spd` | VFD speed error epsVFDSPD (GL36 default 5%) | 0.13 | 0 | 0.5 | fraction (0-1) |
+| `eps_vfd_spd` | VFD speed error epsVFDSPD (fraction; G36-2018 lists 0.05) | 0.13 | 0 | 0.5 | fraction (0-1) |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
 | `require_run_proof` | Require motor status | 1 | 0 | 1 | 0/1 |
 
@@ -1222,7 +1222,7 @@ SAT low while heating at full
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `eps_sat` | SAT sensor eps | 0.638889 | 0 | 5.55556 | Δ°C |
 | `fan_on_min` | Fan-on command min | 0.01 | 0 | 1 | fraction (0-1) |
-| `htg_full_min` | Full-heating threshold (GL36 99%) | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `htg_full_min` | Full-heating threshold (fraction) | 0.9 | 0.5 | 1 | fraction (0-1) |
 | `require_run_proof` | Require motor status | 1 | 0 | 1 | 0/1 |
 
 **Outputs**

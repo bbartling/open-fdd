@@ -2264,7 +2264,7 @@
      "eps_vfd_spd": {
       "key": "eps_vfd_spd",
       "kind": "fraction",
-      "label": "VFD speed error epsVFDSPD (GL36 default 5%)",
+      "label": "VFD speed error epsVFDSPD (fraction; G36-2018 lists 0.05)",
       "min": 0.0,
       "max": 0.5,
       "step": 0.01,
@@ -2544,7 +2544,7 @@
      "htg_full_min": {
       "key": "htg_full_min",
       "kind": "fraction",
-      "label": "Full-heating threshold (GL36 99%)",
+      "label": "Full-heating threshold (fraction)",
       "min": 0.5,
       "max": 1.0,
       "step": 0.01,
