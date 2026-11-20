@@ -128,13 +128,12 @@ class HookProcess:
 
 
 def client_frames(ds: Dataset, query: str = QUERY, *, source: str = "nf", **fetch_kw: Any):
-    """``(answer, {equipment_id: frame}, weather_on_grid | None, calls)`` through the hooks and the client.
+    """``(answer, {equipment_id: frame}, weather readings | None, calls)`` through the hooks and the client.
 
     ``source="nf"``: raw NF ``point/data`` samples. ``source="timescale"``: the hook's Timescale-selected path, buckets
     of the dataset's own step (``historyRoute`` over an in-memory ``history_buckets``; see the runner).
     """
     from open_fdd.nf import sparql_data as sd
-    from open_fdd.parity.pandas_ref import weather_on_grid
 
     start, end = ds.history_window_ms()   # every device's actual first row (jitter may precede t0) and the weather
     from datetime import datetime, timezone
@@ -157,7 +156,8 @@ def client_frames(ds: Dataset, query: str = QUERY, *, source: str = "nf", **fetc
     if any(df.attrs.get("run_proof_resolved") is not True for df in fr.values()):
         raise AssertionError("frames() did not stamp the hook's run proof (#1635)")
     wx = sd.weather_frame(answer)
-    return answer, {k[1]: v for k, v in fr.items()}, (None if wx is None else weather_on_grid(wx, ds.step_seconds)), calls
+    # #1642: raw readings, like the oracle's weather_frame; the runner joins them as-of
+    return answer, {k[1]: v for k, v in fr.items()}, (None if wx is None else wx[~wx.index.duplicated(keep="last")].sort_index()), calls
 
 
 def sparql_reference(ds: Dataset, rules: Iterable[str] | None = None, **fetch_kw: Any) -> tuple[dict, dict]:

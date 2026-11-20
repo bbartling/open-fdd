@@ -55,6 +55,42 @@ def infer_equipment_kind(
     }.get(t, "unknown")
 
 
+#: #1642: web weather joins the equipment frame as-of, as the SQL rules do: the latest non-null reading at or before the
+#: sample, at most WEB_CADENCE_SECONDS + WEB_ASOF_MARGIN_SECONDS (sql/fdd/runtime_defaults.json: 1200 + 300) old.
+WEB_ASOF_BOUND_SECONDS = 1500.0
+
+
+def _weather_asof(wx: pd.DataFrame, index: pd.Index, bound_seconds: float = WEB_ASOF_BOUND_SECONDS) -> pd.DataFrame:
+    """Each weather column joined as-of to ``index`` (rows keep their order; duplicates and NaT are allowed)."""
+    import numpy as np
+
+    out = pd.DataFrame(index=index)
+    if not isinstance(index, pd.DatetimeIndex) or not isinstance(wx.index, pd.DatetimeIndex) or len(index) == 0:
+        return wx.reindex(index)
+
+    def utc_ns(idx):
+        idx = pd.DatetimeIndex(idx)
+        if idx.tz is None:
+            idx = idx.tz_localize("UTC")
+        return idx.tz_convert("UTC").as_unit("ns").asi8
+
+    t = utc_ns(index)
+    bound = np.int64(round(float(bound_seconds) * 1e9))
+    for col in wx.columns:
+        s = wx[col].dropna()
+        if s.empty:
+            out[col] = pd.Series(np.nan, index=index, dtype=float) if wx[col].dtype.kind in "fiu" else None
+            continue
+        s = s[~s.index.duplicated(keep="last")].sort_index()
+        ts = utc_ns(s.index)
+        pos = np.searchsorted(ts, t, side="right") - 1
+        ok = (pos >= 0) & (t - ts[np.clip(pos, 0, None)] <= bound)
+        vals = s.to_numpy()[np.clip(pos, 0, None)]
+        col_out = pd.Series(vals, index=index, dtype=s.dtype if s.dtype.kind in "fiub" else object)
+        out[col] = col_out.where(ok)
+    return out
+
+
 def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFrame:
     """Align/enrich web weather onto an equipment frame, then resolve effective OAT.
 
@@ -69,7 +105,7 @@ def merge_weather(df: pd.DataFrame, weather: pd.DataFrame | None) -> pd.DataFram
         wx_full = enrich_weather_frame(weather)
         if "web-outside-air-temp" in wx_full.columns:
             out.attrs["web_oat_native_frame"] = wx_full[["web-outside-air-temp"]].copy()
-        wx = wx_full.reindex(out.index)
+        wx = _weather_asof(wx_full, out.index)   # #1642: as-of, as SQL (an exact match is always within the bound)
         for col in wx.columns:
             if col not in out.columns:
                 out[col] = wx[col]
@@ -393,7 +429,10 @@ def run_cookbook_rule(
     equipment_type: str = "",
     require_operational_gates: bool = True,
     skip_weather_merge: bool = False,
+    apply_quality: bool = True,
 ) -> RuleResult:
+    """``apply_quality=False`` skips the role-bound / sentinel nulling of ``open_fdd.quality``. The SQL pack never applies
+    it (#1253), so the SQL parity reference runs without it; the product pandas engine keeps it on."""
     params_by_rule = params_by_rule or {}
     stamped = equipment_type or str(df.attrs.get("equipment_type") or df.attrs.get("equipType") or "")
     eq_type = normalize_equipment_type(stamped) or "UNKNOWN"
@@ -494,7 +533,7 @@ def run_cookbook_rule(
         if r in quality.roles
     ]
     worst_req = min(req_cov) if req_cov else 1.0
-    if req_cov and worst_req <= 0.0:
+    if apply_quality and req_cov and worst_req <= 0.0:
         return skipped(
             rule.id,
             equipment_id,
@@ -506,7 +545,8 @@ def run_cookbook_rule(
             params_fingerprint=fp,
         )
     pre_quality = d
-    d = apply_normalized(d, quality, attach_raw_and_flags=False)
+    if apply_quality:
+        d = apply_normalized(d, quality, attach_raw_and_flags=False)
     if rule.sensor_sweep:
         # #1673: the SQL sweeps judge the stored SI values (masked only by unit). A value quality calls out of range is
         # exactly what SV-RANGE / SV-SPIKE assess; nulling it first hid it, and turned it into a gap (now SV-STALE's).

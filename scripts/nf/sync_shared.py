@@ -49,6 +49,9 @@ SHARED: dict[str, list[str]] = {
     "shared/hooks/open_meteo_weather.js": ["nf-app/hooks/weather.js", "lite/hooks/open_meteo_weather.js"],
     "shared/types/shapes.d.ts": [f"{app}/types/shapes.d.ts" for app in BOTH],
 }
+# #1649: the portable SQL analytics run in the NF analytics hook (hooks/lib/sql-analytics.js); pandas is the reference
+for _name in ("motor_weekly_runtime", "mech_cooling_oat_bins", "economizer_metrics", "economizer_points", "bas_vs_web_oat", "bas_vs_web_points"):
+    SHARED[f"sql/analytics/{_name}.sql"] = [f"nf-app/rules/analytics/{_name}.sql"]
 for _name in ("nf.js", "model.js", "theme-init.js", "tree.css", "version.js",
               "app-core.js", "charts.js", "theme.js", "chart-page.js", "tree.js", "base.css"):
     SHARED[f"shared/static/{_name}"] = [f"{app}/static/{_name}" for app in BOTH]
@@ -63,6 +66,8 @@ SUBST: dict[str, tuple[str, str]] = {
 
 def banner(source: str, dest: str) -> str:
     text = f"GENERATED COPY of {source} by scripts/nf/sync_shared.py: edit the source, then re-run the script."
+    if dest.endswith(".sql"):
+        return f"-- {text}"
     return f"/* {text} */" if dest.endswith(".css") else f"// {text}"
 
 

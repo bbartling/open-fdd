@@ -16,8 +16,8 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 |---|---:|
 | SQL rules | **78** |
 | With a pandas twin | **72** |
-| Match on the synthetic suite | **53** |
-| Known divergence | **19** |
+| Match on the synthetic suite | **58** |
+| Known divergence | **14** |
 | SQL only (no twin) | **6** |
 
 **Units.** Parity is checked in SI. Imperial input is converted to SI at ingest, so SQL on imperial input equals SQL on SI input by
@@ -37,10 +37,10 @@ the same in all three legs. See the [harness](parity-harness.html).
 | Rule | pandas SI vs SQL SI | Note |
 |---|---|---|
 | <a id="ahu-ducthi"></a>[AHU-DUCTHI](sql-cookbook.html#ahu-ducthi) | match |  |
-| <a id="ahu-satdev"></a>[AHU-SATDEV](sql-cookbook.html#ahu-satdev) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
+| <a id="ahu-satdev"></a>[AHU-SATDEV](sql-cookbook.html#ahu-satdev) | known divergence | Small residual left after #1642; not yet attributed. |
 | <a id="ahu-simul"></a>[AHU-SIMUL](sql-cookbook.html#ahu-simul) | match |  |
 | <a id="avg-zone-temp"></a>[AVG-ZONE-TEMP](sql-cookbook.html#avg-zone-temp) | SQL only | aggregate or utility analytic, no pandas function |
-| <a id="chw-1"></a>[CHW-1](sql-cookbook.html#chw-1) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="chw-1"></a>[CHW-1](sql-cookbook.html#chw-1) | known divergence | pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646). |
 | <a id="chw-2"></a>[CHW-2](sql-cookbook.html#chw-2) | match |  |
 | <a id="chw-3"></a>[CHW-3](sql-cookbook.html#chw-3) | match |  |
 | <a id="chw-4"></a>[CHW-4](sql-cookbook.html#chw-4) | match |  |
@@ -53,8 +53,8 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="dmp-1"></a>[DMP-1](sql-cookbook.html#dmp-1) | match |  |
 | <a id="econ-1"></a>[ECON-1](sql-cookbook.html#econ-1) | match |  |
 | <a id="econ-2"></a>[ECON-2](sql-cookbook.html#econ-2) | match |  |
-| <a id="econ-3"></a>[ECON-3](sql-cookbook.html#econ-3) | match | match; differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly. |
-| <a id="econ-4"></a>[ECON-4](sql-cookbook.html#econ-4) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="econ-3"></a>[ECON-3](sql-cookbook.html#econ-3) | match | match; differs only on edge data: Jittered timestamps (#1642): the weather join itself now matches. pandas joins the raw weather readings as-of (runner.WEB_ASOF_BOUND_SECONDS = 1500 s), as SQL does, which took the edge 4x3 delta from 15.24 h to 0.34 h (MECH-OAT-1 went to 0 and is no longer listed). The remaining 0.34 h on edge AHU-1 is not yet attributed; basic (on-grid) datasets match exactly. |
+| <a id="econ-4"></a>[ECON-4](sql-cookbook.html#econ-4) | known divergence | Small residual left after #1642; not yet attributed. |
 | <a id="econ-5"></a>[ECON-5](sql-cookbook.html#econ-5) | match |  |
 | <a id="econ-6"></a>[ECON-6](sql-cookbook.html#econ-6) | match |  |
 | <a id="econ-7"></a>[ECON-7](sql-cookbook.html#econ-7) | known divergence | a few samples at fault edges on one AHU with its own web columns (fan-gate / startup handling); the weather as-of join and the mechanical-cooling demand match pandas since #1642 |
@@ -70,23 +70,23 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fc2"></a>[FC2](sql-cookbook.html#fc2) | match |  |
 | <a id="fc3"></a>[FC3](sql-cookbook.html#fc3) | match | match; differs only on edge data: Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows). |
 | <a id="fc4"></a>[FC4](sql-cookbook.html#fc4) | match |  |
-| <a id="fc5"></a>[FC5](sql-cookbook.html#fc5) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="fc5"></a>[FC5](sql-cookbook.html#fc5) | match | match; differs only on edge data: Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match. |
 | <a id="fc6"></a>[FC6](sql-cookbook.html#fc6) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="fc7"></a>[FC7](sql-cookbook.html#fc7) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
+| <a id="fc7"></a>[FC7](sql-cookbook.html#fc7) | match |  |
 | <a id="fc8"></a>[FC8](sql-cookbook.html#fc8) | match | match; differs only on edge data: Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas. |
 | <a id="fc9"></a>[FC9](sql-cookbook.html#fc9) | match | match; differs only on edge data: Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start). |
 | <a id="fcu-clg-coil"></a>[FCU-CLG-COIL](sql-cookbook.html#fcu-clg-coil) | match |  |
 | <a id="fcu-co2-damper"></a>[FCU-CO2-DAMPER](sql-cookbook.html#fcu-co2-damper) | match |  |
 | <a id="fcu-damper-pos"></a>[FCU-DAMPER-POS](sql-cookbook.html#fcu-damper-pos) | match |  |
 | <a id="fcu-deadband"></a>[FCU-DEADBAND](sql-cookbook.html#fcu-deadband) | match |  |
-| <a id="fcu-htg-coil"></a>[FCU-HTG-COIL](sql-cookbook.html#fcu-htg-coil) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="fcu-mode-cycle"></a>[FCU-MODE-CYCLE](sql-cookbook.html#fcu-mode-cycle) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="fcu-htg-coil"></a>[FCU-HTG-COIL](sql-cookbook.html#fcu-htg-coil) | match |  |
+| <a id="fcu-mode-cycle"></a>[FCU-MODE-CYCLE](sql-cookbook.html#fcu-mode-cycle) | match |  |
 | <a id="fcu-sensor-null"></a>[FCU-SENSOR-NULL](sql-cookbook.html#fcu-sensor-null) | match |  |
 | <a id="fcu-valve-pass-clg"></a>[FCU-VALVE-PASS-CLG](sql-cookbook.html#fcu-valve-pass-clg) | match | match; differs only on edge data: Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults. |
 | <a id="fcu-valve-pass-htg"></a>[FCU-VALVE-PASS-HTG](sql-cookbook.html#fcu-valve-pass-htg) | match |  |
-| <a id="hp-1"></a>[HP-1](sql-cookbook.html#hp-1) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | match | match; differs only on edge data: Jittered timestamps (#1642): the reference puts the weather sidecar on the poll grid and joins it to the equipment frame by exact timestamp, so a unit without its own web columns whose samples are off the grid (edge AHU-1: 99 %) sees no weather and passes. SQL joins the sidecar as-of (latest web sample at or before the row, at most WEB_ASOF_BOUND_SECONDS old), as on a real site with jittered polls. Basic (on-grid) datasets match exactly. |
-| <a id="oa-1"></a>[OA-1](sql-cookbook.html#oa-1) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="hp-1"></a>[HP-1](sql-cookbook.html#hp-1) | known divergence | Small residual left after #1642; not yet attributed. |
+| <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | match |  |
+| <a id="oa-1"></a>[OA-1](sql-cookbook.html#oa-1) | known divergence | pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646). |
 | <a id="oat-meteo"></a>[OAT-METEO](sql-cookbook.html#oat-meteo) | known divergence | weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns |
 | <a id="pid-hunt-1"></a>[PID-HUNT-1](sql-cookbook.html#pid-hunt-1) | match |  |
 | <a id="reset-1"></a>[RESET-1](sql-cookbook.html#reset-1) | match |  |
@@ -107,9 +107,9 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="vav-3"></a>[VAV-3](sql-cookbook.html#vav-3) | match |  |
 | <a id="vav-4"></a>[VAV-4](sql-cookbook.html#vav-4) | match |  |
 | <a id="vav-5"></a>[VAV-5](sql-cookbook.html#vav-5) | match |  |
-| <a id="vav-6"></a>[VAV-6](sql-cookbook.html#vav-6) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="vav-6"></a>[VAV-6](sql-cookbook.html#vav-6) | match |  |
 | <a id="vav-7"></a>[VAV-7](sql-cookbook.html#vav-7) | match | match; differs only on edge data: Duplicate (equipment, timestamp) rows: SQL scores the rows as delivered, the reference de-duplicates first (the input contract is one row per timestamp). Verified: de-duplicating the rows before SQL makes SQL equal pandas. |
-| <a id="vav-ahu-leave"></a>[VAV-AHU-LEAVE](sql-cookbook.html#vav-ahu-leave) | known divergence | SQL holds the fan-restart / mode-delay window over rolling rows, pandas GL36 suppresses after a mode change: differs by a few samples at fault edges |
+| <a id="vav-ahu-leave"></a>[VAV-AHU-LEAVE](sql-cookbook.html#vav-ahu-leave) | known divergence | pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646). |
 | <a id="vav-reheat"></a>[VAV-REHEAT](sql-cookbook.html#vav-reheat) | match | match; differs only on stress-only data: pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL |
 | <a id="vlv-1"></a>[VLV-1](sql-cookbook.html#vlv-1) | match |  |
 | <a id="wx-1"></a>[WX-1](sql-cookbook.html#wx-1) | match | match; differs only on edge data: Gap handling: SQL flags \|oa_t - previous sample\| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only. |
@@ -124,25 +124,21 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 
 | Rule | Scope | 4 equip x 3 d | 8 equip x 7 d (CI stress size) |
 |---|---|---|---|
-| [AHU-SATDEV](#ahu-satdev) | all | 4.5 h &plusmn; 0.01 | 5.6667 h &plusmn; 0.01 |
+| [AHU-SATDEV](#ahu-satdev) | all | 0.5 h &plusmn; 0.01 | 0.8333 h &plusmn; 0.01 |
 | [CHW-1](#chw-1) | all | 0.3333 h &plusmn; 0.01 | 0.5 h &plusmn; 0.01 |
 | [CHW-NOLOAD-1](#chw-noload-1) | all | 3.0833 h &plusmn; 0.01 | 5.1667 h &plusmn; 0.01 |
 | [ECON-3](#econ-3) | edge | - | - |
-| [ECON-4](#econ-4) | all | 1.0833 h &plusmn; 0.01 | 2.8333 h &plusmn; 0.01 |
+| [ECON-4](#econ-4) | all | 0.1667 h &plusmn; 0.01 | 0.4167 h &plusmn; 0.01 |
 | [ECON-7](#econ-7) | all | 0.25 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
 | [FC13-SAT-HIGH](#fc13-sat-high) | all | 10.0833 h &plusmn; 0.01 | 26.0833 h &plusmn; 0.01 |
 | [FC14](#fc14) | all | 62.5 h &plusmn; 0.01 | 292.917 h &plusmn; 0.01 |
 | [FC3](#fc3) | edge | - | - |
-| [FC5](#fc5) | all | 1.8333 h &plusmn; 0.01 | 3.9167 h &plusmn; 0.01 |
+| [FC5](#fc5) | edge | - | - |
 | [FC6](#fc6) | all | 6.75 h &plusmn; 0.01 | 15.75 h &plusmn; 0.01 |
-| [FC7](#fc7) | all | 3.9167 h &plusmn; 0.01 | 4.5833 h &plusmn; 0.01 |
 | [FC8](#fc8) | edge | - | - |
 | [FC9](#fc9) | edge | - | - |
-| [FCU-HTG-COIL](#fcu-htg-coil) | all | 4.6667 h &plusmn; 0.01 | 5.4167 h &plusmn; 0.01 |
-| [FCU-MODE-CYCLE](#fcu-mode-cycle) | all | 1 h &plusmn; 0.01 | 1.75 h &plusmn; 0.01 |
 | [FCU-VALVE-PASS-CLG](#fcu-valve-pass-clg) | edge | - | - |
-| [HP-1](#hp-1) | all | 2.9167 h &plusmn; 0.01 | 3 h &plusmn; 0.01 |
-| [MECH-OAT-1](#mech-oat-1) | edge | - | - |
+| [HP-1](#hp-1) | all | 0.0833 h &plusmn; 0.01 | 0.1667 h &plusmn; 0.01 |
 | [OA-1](#oa-1) | all | 0.1667 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
 | [OAT-METEO](#oat-meteo) | all | 77 h &plusmn; 0.01 | 359.333 h &plusmn; 0.01 |
 | [SV-RATE](#sv-rate) | all | 44 h &plusmn; 0.01 | 199.25 h &plusmn; 0.01 |
@@ -150,7 +146,6 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [TRIM-3](#trim-3) | stress-only | 0 h &plusmn; 0.01 | 0.9167 h &plusmn; 0.01 |
 | [TRIM-4](#trim-4) | stress-only | 0 h &plusmn; 0.01 | 0.9167 h &plusmn; 0.01 |
 | [VAV-1](#vav-1) | edge | - | - |
-| [VAV-6](#vav-6) | all | 1.25 h &plusmn; 0.01 | 3.6667 h &plusmn; 0.01 |
 | [VAV-7](#vav-7) | edge | - | - |
 | [VAV-AHU-LEAVE](#vav-ahu-leave) | all | 0.3333 h &plusmn; 0.01 | 1.3333 h &plusmn; 0.01 |
 | [VAV-REHEAT](#vav-reheat) | stress-only | 0 h &plusmn; 0.01 | 0.1667 h &plusmn; 0.01 |

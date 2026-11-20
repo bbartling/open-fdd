@@ -14,14 +14,17 @@
 //   get_fdd_fault_timeline      {site?, equip, rule, days=1, dense?}  confirmed | ok | unknown per assessed timestamp,
 //                                                            from the FDD hook's timeline point (never fault_pct)
 //   resolve_equipment_roles     {equipUuid} | {siteRef, equipRef}     the roles fdd.js binds for one equip
+//   sql_grid                    {kind, grid, specs?}         the dashboard's SQL analytics on a grid the browser sends
 //   explain_missing_rcx_view    {viewId, site?, equip?}      why an RCx view is not available here
 // `site` / `siteRef` and `equip` / `equipRef` / `equipUuid` are synonyms (equip matches an NF uuid first, then a Haystack
 // id or name). A single-equip tool whose equip matches several sites is an ERROR listing the candidates, never a guess;
 // the list tools simply return every matching equip, each under its own equipUuid.
 //
-// The math is the dashboard's: static/rcx.js + rcx-overview.js (+ schedule.js, fdd.js, model.js) run unchanged in a vm
-// sandbox, the same way hooks/fdd.js shares model.js / fdd.js (browser fetchSeries -> sdk.http GET /api/v1/point/data).
-// Numbers integrate on the fine grid (ctx.alignedFine), never on the ~360-point display grid.
+// The numbers are the SQL analytics (#1649: sql/analytics/*.sql, run in-process by hooks/lib/sql-analytics.js on sql.js).
+// The dashboard's grid building (static/rcx.js + rcx-overview.js + schedule.js, fdd.js, model.js) runs unchanged in a
+// vm sandbox, the same way hooks/fdd.js shares model.js / fdd.js (browser fetchSeries -> sdk.http GET /api/v1/point/data),
+// with ctx.sqlAnalytics bound to the in-process SQL. Hours integrate on the fine grid (ctx.alignedFine), never on the
+// ~360-point display grid. sql_grid serves the same SQL to the browser (static/sql-analytics-client.js).
 //
 // READ ONLY, enforced: every call goes through readOnlyHttp(), a proxy that lets GET and the read POSTs
 // (/api/v1/point/query, /api/v1/auth/token) through and throws on every other method or route. The hook never writes
@@ -35,6 +38,7 @@ const vm = require('vm');
 const STATIC = path.join(__dirname, '..', 'static');
 const { queryPoints } = require('./lib/paging.js');
 const MAX_RESULT_CHARS = 200000;
+const SQL_GRID_MAX_CHARS = 32 * 1024 * 1024;   // sql_grid: raw JSON per argument (the decoded grid has its own limits)
 const FINE_SEC = 300;                   // the pack grid: native cadence of the FDD timeline points
 const FINE_MAX_SAMPLES = 9000;          // per series per request (NF caps at ~10000)
 const MAX_DAYS = 366;
@@ -108,6 +112,13 @@ function loadSandbox(http, nowMs, tzSources) {
   const ctx = vm.createContext({
     console, URLSearchParams, TextDecoder, atob, btoa, Intl, Date: PinnedDate,
     localStorage: { getItem: () => 'si' },                  // calculations are SI whatever the display system
+    // #1649: the analytics are SQL (sql/analytics/*.sql) run in-process on SQLite, never JS math
+    ofddSqlAnalytics: {
+      runtime: (g, specs) => require('./lib/sql-analytics.js').runtimeFromGrid('sqlite', g, specs),
+      mech: (g, specs) => require('./lib/sql-analytics.js').mechFromGrid('sqlite', g, specs),
+      econ: (g) => require('./lib/sql-analytics.js').econFromGrid('sqlite', g),
+      bas: (g) => require('./lib/sql-analytics.js').basFromGrid('sqlite', g),
+    },
     api: async (p) => (await http.get(p)).data,
   });
   for (const f of SCRIPTS) vm.runInContext(fs.readFileSync(path.join(STATIC, f), 'utf8'), ctx, { filename: f });
@@ -179,7 +190,7 @@ function daysOf(args, dflt) {
 }
 const viewOf = (g, pred) => Array.from(g('RCX_VIEWS')).find(pred);
 
-/** Local-Monday label "YYYY-Www" for a week start (the week key of weeklyRuntime). */
+/** Local-Monday label "YYYY-Www" for a week start (the week key of the SQL weekly runtime). */
 function weekLabel(g, startMs, tz) {
   const S = g('ofddSchedule'), M = g('rcxOverviewMath');
   const p = tz ? S.localParts(startMs + 6 * 3600e3, tz) : null;           // noon-ish: the civil date of that Monday
@@ -273,8 +284,7 @@ async function analyze_economizer(sb, args) {
     if (!bound.length) continue;
     const ctx = ctxFor(g, view, bound, hours, model);
     for (const eq of bound) {
-      const { rows: samples } = await D.econGrid(ctx, eq, true);      // fine grid
-      const s = M.economizerSummary(samples);
+      const { summary: s } = await D.econGrid(ctx, eq, true);      // fine grid; the SQL metrics (#1649)
       rows.push({ ...identity(g, eq.rec), n: s.n, n_identifiable: s.nIdent, median_residual_k: round(s.medianResid), mae_k: round(s.maeResid),
         has_damper: !!ctx.first(eq, 'oa_damper_pct'), min_delta_k: round(M.ECON_DT_MIN_C, 4) });
     }
@@ -386,6 +396,28 @@ async function explain_missing_rcx_view(sb, args) {
   };
 }
 
+/**
+ * sql_grid {kind: runtime | mech | econ | bas, grid, specs?}: the dashboard's SQL analytics on a grid the browser sends
+ * (static/sql-analytics-client.js wire format). The answer is never capped: a truncated chart would be wrong.
+ */
+async function sqlGrid(args) {
+  const wire = require('../static/sql-analytics-client.js');
+  const SA = require('./lib/sql-analytics.js');
+  const kind = String(args.kind || '');
+  if (!['runtime', 'mech', 'econ', 'bas'].includes(kind)) throw new ToolError('sql_grid: args.kind must be runtime, mech, econ or bas');
+  const parse = (k) => {
+    const raw = String(args[k] ?? '');
+    if (raw.length > SQL_GRID_MAX_CHARS) throw new ToolError(`sql_grid: args.${k} is over ${SQL_GRID_MAX_CHARS} characters`);
+    try { return JSON.parse(raw); } catch (_) { throw new ToolError(`sql_grid: args.${k} is not JSON`); }
+  };
+  const asTool = (f) => { try { return f(); } catch (e) { throw e instanceof ToolError ? e : new ToolError(errText(e)); } };
+  const g = asTool(() => wire.decodeGrid(parse('grid')));
+  const specs = kind === 'runtime' || kind === 'mech' ? asTool(() => wire.checkSpecs(parse('specs'))) : null;
+  const run = { runtime: () => SA.runtimeFromGrid('sqlite', g, specs), mech: () => SA.mechFromGrid('sqlite', g, specs),
+    econ: () => SA.econFromGrid('sqlite', g), bas: () => SA.basFromGrid('sqlite', g) }[kind];
+  return { kind, result: wire.encodeResult(kind, await run()) };
+}
+
 const TOOLS = { analyze_ahu_weekly_runtime, analyze_mechanical_cooling, analyze_economizer, get_fdd_fault_timeline, resolve_equipment_roles, explain_missing_rcx_view };
 
 // ---- hook ------------------------------------------------------------------------------------------------------------
@@ -445,7 +477,15 @@ async function handle({ sdk, args = {}, config = {}, now = () => Date.now(), con
   const tool = String((args && args.tool) || '');
   let result;
   try {
-    if (!Object.prototype.hasOwnProperty.call(TOOLS, tool)) throw new ToolError(`args.tool must be one of ${Object.keys(TOOLS).join(', ')}`);
+    if (!Object.prototype.hasOwnProperty.call(TOOLS, tool) && tool !== 'sql_grid') throw new ToolError(`args.tool must be one of ${[...Object.keys(TOOLS), 'sql_grid'].join(', ')}`);
+    if (tool === 'sql_grid') {
+      // #1649: the dashboard's analytics, run as SQL on the grid the browser sends (no NF reads, no model)
+      result = { ok: true, tool, ...(await sqlGrid(args)) };
+      result.ms = now() - t0;
+      const text = JSON.stringify(result);
+      log(text);
+      return JSON.parse(text);
+    }
     const http = readOnlyHttp(sdk.http);
     const nowMs = now();
     const cfg = settings.normalizeConfig(config);

@@ -1,6 +1,6 @@
 ---
 name: deploy-to-nf-box
-description: Deploy full or Lite to an NF box. Pointer to the Open-FDD agent spec.
+description: Deploy the Open-FDD full app or Lite to an NF box with nf_app_sync.py or the NF MCP.
 ---
 # deploy-to-nf-box
 

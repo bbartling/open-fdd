@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/nf-app-ci.yml/badge.svg" alt="NF app CI"></a>
-  <a href="https://x.ai/bot/COWOKNgQRUjlFqo6m0DY7"><img src="https://img.shields.io/badge/Grok%20bot-Open--FDD%20skills-000000?logo=x&logoColor=white" alt="Open-FDD Grok bot skills"></a>
+  <a href="#grok-bot-and-agent-skills"><img src="https://img.shields.io/badge/Grok%20bot-Open--FDD%20skills-000000?logo=x&logoColor=white" alt="Open-FDD Grok bot skills"></a>
   <a href="https://github.com/bbartling/open-fdd/actions/workflows/security.yml"><img src="https://github.com/bbartling/open-fdd/actions/workflows/security.yml/badge.svg" alt="Security (ZAP, audit, gitleaks)"></a>
 </p>
 
@@ -15,7 +15,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-77%20SQL%20%2B%2071%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 77 SQL + 71 pandas, SI units">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-78%20SQL%20%2B%2073%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 78 SQL + 73 pandas, SI units">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -29,7 +29,7 @@
   <a href="https://bbartling.github.io/open-fdd/architecture/adr-014-open-fdd-as-nf-plugin.html">
     <img src="https://img.shields.io/badge/ADR--014-NF%20plugin-6D28D9?style=for-the-badge" alt="ADR-014: Open-FDD as an NF plugin">
   </a>
-  <a href="https://x.ai/bot/COWOKNgQRUjlFqo6m0DY7">
+  <a href="#grok-bot-and-agent-skills">
     <img src="https://img.shields.io/badge/Grok%20Bot-Open--FDD%20skills-000000?style=for-the-badge&logo=x&logoColor=white" alt="Open-FDD skills on Grok bot">
   </a>
 </p>
@@ -96,6 +96,23 @@ The rules also run without NF: SQL on PostgreSQL / TimescaleDB, or pandas in Pyt
 | Thresholds | [`sql/fdd/tuning_catalog.json`](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/tuning_catalog.json): defaults for every rule | SI defaults in each rule; any difference from SQL is listed in the parity report |
 
 CI checks the two against each other; the [parity report](https://bbartling.github.io/open-fdd/rules/parity.html) explains each known difference.
+
+## Grok Bot and agent skills
+
+The [Open-FDD Grok Bot](https://x.ai/bot/COWOKNgQRUjlFqo6m0DY7) provides an agent template for working with the
+project. Open the link to access the shared bot; availability and import controls depend on your account.
+You can also use the repository skills directly with Claude, Codex or Cursor: start with [AGENTS.md](https://github.com/bbartling/open-fdd/blob/master/AGENTS.md).
+
+The canonical recipes live in [openfdd_agent_spec/skills/](https://github.com/bbartling/open-fdd/tree/master/openfdd_agent_spec/skills/):
+
+- Build: [charts](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/add-rcx-chart.md), [rules and tuning](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/add-or-tune-fdd-rule.md), [TypeScript checks](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/typescript.md).
+- Operate: [site modeling](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/model-a-site-in-nf.md), [deployment](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/deploy-to-nf-box.md), [install/upgrade/troubleshooting](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/install-upgrade-troubleshoot.md), [NF gotchas](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/nf-gotchas.md).
+- Validate: [security](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/security-checks.md), [BACnet](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/bacnet-validate.md), [ontology](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/audit-ontology-coverage.md).
+- Python tools: [NF agent](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/pypi-nf-agent.md), [ML FDD](https://github.com/bbartling/open-fdd/blob/master/openfdd_agent_spec/skills/ml-fdd.md).
+
+The `.agents/skills/` and `.claude/skills/` files are generated discovery pointers, not separate instructions.
+After editing a canonical recipe, run `python scripts/check_skills_sync.py --write`; CI checks for drift,
+including README cookbook counts and the NF version pin. The PyPI badge follows the published package version.
 
 ## AI agent tools (Python)
 

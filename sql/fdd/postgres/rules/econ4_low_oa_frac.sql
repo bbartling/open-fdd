@@ -17,7 +17,6 @@ h AS (
     mat,
     rat,
     oa_t,
-    COALESCE(COALESCE(fan_cmd, 0.0), 0.0) AS fan,
     CASE
       WHEN fan_status IS NOT NULL THEN CASE WHEN fan_status > 0.05 THEN 1 ELSE 0 END
       WHEN fan_cmd IS NOT NULL THEN CASE WHEN fan_cmd > 0.01 THEN 1 ELSE 0 END
@@ -33,7 +32,8 @@ base AS (
     CAST(CASE
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
-      WHEN fan > 0.01 AND mat IS NOT NULL AND rat IS NOT NULL AND oa_t IS NOT NULL
+      -- #1642: fan = status when bound, else command (fan_on above), as pandas _fan
+      WHEN fan_on = 1 AND mat IS NOT NULL AND rat IS NOT NULL AND oa_t IS NOT NULL
        AND ABS(rat - oa_t) > {{OAT_RAT_DELTA_MIN}}
        AND ((mat - rat) / NULLIF(oa_t - rat, 0)) * 100.0 < {{OA_MIN_PCT}}
       THEN 1 ELSE 0 END AS INT) AS raw_fault,

@@ -1,6 +1,6 @@
 ---
 name: bacnet-validate
-description: Validate NF against the BACnet wire from a PC. Pointer to the Open-FDD agent spec.
+description: Prove NF's values equal what the BACnet devices answer on the wire (read-only, from a PC, never from the NF box).
 ---
 # bacnet-validate
 
