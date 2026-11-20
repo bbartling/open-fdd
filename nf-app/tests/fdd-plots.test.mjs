@@ -322,3 +322,24 @@ test("health states are still available as a pure helper (heat map option)", () 
   const ctx = load();
   assert.equal(typeof ctx.fddPlotHealthStates, "function");
 });
+
+test("#1646 run-proof legend: a VAV's off-shading comes from its AHU's fan status, named 'via feeder' (else own bound role)", () => {
+  const ctx = load();
+  vm.runInContext(readFileSync(new URL("run-proof.js", dir), "utf8"), ctx, { filename: "run-proof.js" });
+  const rec = (uuid, name, markers, attrs) => ({ uuid, name, pointType: "POINT", attrs: { siteRef: "site-a", markers: ["point", "his", ...markers].join(","), dis: name, ...attrs } });
+  const ahu = { uuid: "e1", name: "AHU-1", pointType: "EQUIPMENT", attrs: { id: "AHU-1", siteRef: "site-a", markers: "equip,ahu" } };
+  const vav = { uuid: "e2", name: "VAV-1", pointType: "EQUIPMENT", attrs: { id: "VAV-1", siteRef: "site-a", markers: "equip,vav", airRef: "@AHU-1" } };
+  const toPoint = ctx.get("toPoint");
+  const model = { sites: [{ uuid: "s", name: "site-a", pointType: "SITE", attrs: { id: "site-a", markers: "site" } }], equips: [ahu, vav], devices: [],
+    points: [rec("u-fan", "AHU-1 fan", ["discharge", "fan", "run", "sensor"], { equipRef: "AHU-1", class: "discharge-run-sensor", kind: "Bool" }),
+      rec("u-rh", "VAV-1 RH", ["reheat", "cmd"], { equipRef: "VAV-1", class: "reheat-cmd", unit: "%" })].map(toPoint) };
+  const viaFeeder = ctx.fddPlotProof(vav, {}, model, catalog);
+  assert.equal(viaFeeder.point.uuid, "u-fan");
+  assert.equal(viaFeeder.role, "fan_status");
+  assert.equal(viaFeeder.where, "fan status AHU-1 fan, via feeder AHU-1 (airRef)");
+  assert.match(ctx.fddPlotProof(ahu, {}, model, catalog).where, /^fan status AHU-1 fan, own$/);
+  // no model / no resolver: the rule's own bound proof role, as before
+  const ownOnly = ctx.fddPlotProof(vav, { fan_status: [pt("x", "VAV fan")] }, null, null);
+  assert.equal(ownOnly.where, "fan status VAV fan, own");
+  assert.equal(ctx.fddPlotProof(vav, {}, null, null).point, null);
+});

@@ -300,6 +300,22 @@
   }
 
   /**
+   * #1646: the run proof that grey "equipment off" shading comes from, resolved like the FDD hook (static/run-proof.js:
+   * own status, own command, then one hop to the feeding equipment over an explicit RDF link). Without the resolver
+   * or a model, the rule's own bound proof roles. -> { point | null, role, where: "<role> <point>, own | via feeder <id> (<link>)" }
+   * @param {any} equipRec @param {Record<string, any[]>} bound @param {any} model @param {any} catalog
+   */
+  function fddPlotProof(equipRec, bound, model, catalog) {
+    const resolved = model && catalog && typeof resolveRunProof === "function" ? resolveRunProof(equipRec, model, catalog) : null;
+    const ownRole = RUN_PROOF_ROLES.find((r) => bound[r] && bound[r][0]);
+    const role = resolved && resolved.found ? resolved.role : ownRole;
+    const point = resolved && resolved.found ? resolved.point : ownRole ? bound[ownRole][0] : null;
+    const where = !point ? "" : `${String(role).replace(/_/g, " ")} ${point.dis || point.name || point.uuid}`
+      + (resolved && resolved.found && resolved.tier === "feeder" ? `, via feeder ${resolved.equip} (${resolved.via})` : ", own");
+    return { point, role, where };
+  }
+
+  /**
    * Per-rule result plot: bound inputs grouped by unit family plus either the equipment fault
    * lane or one sensor-specific lane per sweep input. Returns a short note.
    */
@@ -376,8 +392,11 @@
     });
     if (!built.option) return "No history for the bound inputs in this range.";
     // red = confirmed fault, grey = the equipment's run proof says OFF (status first, else command; SI fraction <= 5 %)
-    const proofRole = RUN_PROOF_ROLES.find((r) => bound[r] && bound[r][0]);
-    const proofPt = proofRole ? bound[proofRole][0] : null;
+    let proofCatalog = null;   // only when the resolver is loaded; a catalog that fails to load falls back to own roles
+    if (model && typeof resolveRunProof === "function" && typeof loadCatalog === "function") {
+      try { proofCatalog = await loadCatalog(); } catch (_) { proofCatalog = null; }
+    }
+    const { point: proofPt, where: proofWhere } = fddPlotProof(equipRec, bound, model, proofCatalog);
     const proofSeries = proofPt ? (sigRaw.get(proofPt.uuid) || (await fetchSeries([proofPt], hours, { windowSec })).get(proofPt.uuid) || []) : [];
     const offSpans = proofPt ? fddPlotSpans(rcxToSI(proofSeries, proofPt), (v) => v != null && Number(v) <= 0.05) : [];
     const faultSpans = sensorLanes.length ? [] : fddPlotSpans(lane, (f) => f === 1);
@@ -401,7 +420,7 @@
     }
     if (lane.source === "none") return `${roles.length} inputs · no result point yet (the FDD hook has not written ${rule.id} for this equip)`;
     const confirmed = lane.filter(([, f]) => f === 1).length, gaps = lane.filter(([, f]) => f == null).length;
-    const shadeNote = faultSpans.length || offSpans.length ? ` · shaded: ${[faultSpans.length ? "red = confirmed fault" : "", offSpans.length ? `grey = equipment off (${proofRole.replace(/_/g, " ")})` : ""].filter(Boolean).join(", ")}` : "";
+    const shadeNote = faultSpans.length || offSpans.length ? ` · shaded: ${[faultSpans.length ? "red = confirmed fault" : "", offSpans.length ? `grey = equipment off (${proofWhere})` : ""].filter(Boolean).join(", ")}` : "";
     if (lane.source === "timeline") {
       return `${roles.length} inputs · confirmed fault in ${confirmed} of ${lane.length - gaps} assessed samples`
         + (gaps ? ` · ${gaps} gap${gaps === 1 ? "" : "s"} (not assessed)` : "") + sensorNote + shadeNote;
@@ -582,7 +601,7 @@
   });
 
   Object.assign(globalThis, {
-    fddPlotSpans, fddPlotShade, fddRulePlot, fddPlotMaskLanes, fddPlotExpandRoles, fddPlotRuleOption, fddPlotOatOption, fddPlotHealthStates,
+    fddPlotSpans, fddPlotShade, fddRulePlot, fddPlotProof, fddPlotMaskLanes, fddPlotExpandRoles, fddPlotRuleOption, fddPlotOatOption, fddPlotHealthStates,
     fddPlotHealthOption, fddPlotSensorMasks, fddPlotSensorFaultOption, fddPlotUnitFamily: unitFamily, fddPlotLimits: SENSOR_LIMITS,
     fddPlotSweepLanes, fddPlotSweepLimits, fddPlotHookSensors, fddPlotSweepScore, fddPlotWorstSensor, FDD_SWEEP_LANES: SWEEP_LANES,
   });
