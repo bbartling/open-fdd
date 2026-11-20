@@ -2040,7 +2040,7 @@ RULES: list[CookbookRule] = [
         "DSP < DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.",
         fc1, params=[
             CookbookParam("eps_dsp", "Duct-static error εDSP", "Pa", 0.0, 124.42, 2.4884, 29.8608),
-            CookbookParam("eps_vfd_spd", "VFD speed error εVFDSPD (GL36 default 5%)", "frac", 0.0, 0.5, 0.01, 0.13),
+            CookbookParam("eps_vfd_spd", "VFD speed error εVFDSPD (fraction; G36-2018 lists 0.05)", "frac", 0.0, 0.5, 0.01, 0.13),
             CookbookParam("duct_static_err", "Legacy duct-static error (sets εDSP)", "Pa", 0.0, 124.42, 2.4884, 29.8608),
             CookbookParam("fan_hi", "Legacy fan-high threshold (sets εVFDSPD)", "frac", 0.5, 1.0, 0.01, 0.87),
             MODE_DELAY_PARAM(),
@@ -2092,7 +2092,7 @@ RULES: list[CookbookRule] = [
         fc7, params=[
             EPS_TEMP_PARAM("eps_sat", "SAT sensor error εSAT"),
             CookbookParam("sat_err", "Legacy SAT error (sets εSAT)", "Δ°C", 0.0, 5.555556, 0.138889, 0.555556),
-            CookbookParam("htg_full_min", "Full-heating threshold (GL36 99%)", "frac", 0.5, 1.0, 0.01, 0.90),
+            CookbookParam("htg_full_min", "Full-heating threshold (fraction)", "frac", 0.5, 1.0, 0.01, 0.90),
             FAN_ON_PARAM(), MODE_DELAY_PARAM(), CONFIRM_PARAM()], confirm_seconds=600),
     CookbookRule("FC8", "SAT/MAT mismatch in economizer (GL36)", "ahu", ["ahu"],
         ["discharge-air-temp", "mixed-air-temp", "outside-air-damper", "cooling-valve"],
@@ -2139,7 +2139,7 @@ RULES: list[CookbookRule] = [
         fc13, params=[
             EPS_TEMP_PARAM("eps_sat", "SAT sensor error εSAT"),
             CookbookParam("sat_err", "Legacy SAT error (sets εSAT)", "Δ°C", 0.0, 5.555556, 0.138889, 0.555556),
-            CookbookParam("clg_full_min", "Full-cooling threshold (GL36 99%)", "frac", 0.5, 1.0, 0.01, 0.01),
+            CookbookParam("clg_full_min", "Full-cooling threshold (fraction)", "frac", 0.5, 1.0, 0.01, 0.01),
             ECON_MIN_PARAM(), ECON_FULL_PARAM(), MODE_DELAY_PARAM(), CONFIRM_PARAM()], confirm_seconds=600),
     CookbookRule("FC14", "CHW coil ΔT when inactive (GL36 L)", "ahu", ["ahu"],
         ["cooling-coil-entering-temp", "cooling-coil-leaving-temp", "outside-air-damper", "cooling-valve"],

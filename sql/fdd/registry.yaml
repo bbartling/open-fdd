@@ -447,7 +447,7 @@ rules:
         frontend_control: slider
         sql_placeholder: EPS_DSP
       eps_vfd_spd:
-        label: VFD speed error epsVFDSPD (GL36 default 5%)
+        label: VFD speed error epsVFDSPD (fraction; G36-2018 lists 0.05)
         default: 0.13
         min: 0.0
         max: 0.5
@@ -683,7 +683,7 @@ rules:
         frontend_control: slider
         sql_placeholder: EPS_SAT
       htg_full_min:
-        label: Full-heating threshold (GL36 99%)
+        label: Full-heating threshold (fraction)
         default: 0.9
         min: 0.5
         max: 1.0
