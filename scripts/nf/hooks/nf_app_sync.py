@@ -1173,7 +1173,8 @@ PRUNE_MCP_HOWTO = ("same cleanup without this tool: NF MCP delete_points with ex
 
 
 def cmd_prune_points(c, m: dict, yes: bool, stale_days: float = DEFAULT_PRUNE_STALE_DAYS,
-                     max_delete: int = DEFAULT_PRUNE_MAX, now: datetime.datetime | None = None) -> int:
+                     max_delete: int = DEFAULT_PRUNE_MAX, now: datetime.datetime | None = None,
+                     self_uninstalled: bool = False) -> int:
     """List (dry run, default) or delete (--yes) this app's orphan and long-stale result points. Reads the apps, the
     automation layer and the model layer; writes nothing unless `yes`, and then only DeletePoints for the listed
     uuids. 0 = nothing to do or done, 1 = a read / delete failed or the candidate list is over --max-delete."""
@@ -1181,7 +1182,17 @@ def cmd_prune_points(c, m: dict, yes: bool, stale_days: float = DEFAULT_PRUNE_ST
     if stale_days < 1:
         raise SystemExit("--stale-days must be at least 1")
     try:
-        installed = {a["id"] for a in c.apps()}
+        apps = c.apps()
+        if not isinstance(apps, list) or not apps or any(
+                not isinstance(app, dict) or not isinstance(app.get("id"), str) or not app["id"].strip()
+                for app in apps):
+            print("prune-points: empty or invalid apps list; nothing was changed")
+            return EXIT_FAILED
+        installed = {a["id"] for a in apps}
+        if m["application"]["id"] not in installed and not self_uninstalled:
+            print("prune-points: own app is missing from the apps list; nothing was changed. "
+                  "Only after confirming it was uninstalled, use --self-uninstalled")
+            return EXIT_FAILED
         automation = automation_points(c)
         model = query_pages(c, {"layer": "model"})
     except SystemExit as e:
@@ -2304,6 +2315,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--max-delete", type=int, default=DEFAULT_PRUNE_MAX, metavar="N",
                     help=f"prune-points: refuse (change nothing) when there are more than N candidates "
                          f"(default {DEFAULT_PRUNE_MAX})")
+    ap.add_argument("--self-uninstalled", action="store_true",
+                    help="prune-points: explicitly confirm this app was removed; permits its missing id in a "
+                         "nonempty apps list (never bypasses an empty/invalid list or the dry-run default)")
     ap.add_argument("--wait", type=float, metavar="SECONDS",
                     help="run: how long to wait for each run (default: the hook's invokeTimeout + 60 s). "
                          "On timeout the run is reported as still running (exit 3) and is never re-started")
@@ -2369,7 +2383,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.action == "doctor":
         return cmd_doctor(c, m, environ=env)
     if a.action == "prune-points":
-        return cmd_prune_points(c, m, a.yes, a.stale_days, a.max_delete)
+        return cmd_prune_points(c, m, a.yes, a.stale_days, a.max_delete, self_uninstalled=a.self_uninstalled)
     return cmd_pull(c, m, write=(a.action == "pull"))
 
 

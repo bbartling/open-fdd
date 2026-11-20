@@ -171,7 +171,11 @@ It lists two groups and deletes nothing else:
   `fddStatus: stale` (the release no longer runs that rule for that equipment) and whose newest value is older than
   `--stale-days` (default 30).
 
-Points of any other app, BACnet or field layers and hand-made points are never candidates. More than `--max-delete`
+Points of any other app, BACnet or field layers and hand-made points are never candidates.
+An empty/invalid apps list always stops pruning. A missing current app also stops it: only after independently
+confirming it was removed, pass `--self-uninstalled` with a nonempty list. This never implies `--yes`.
+
+More than `--max-delete`
 candidates (default 500) stops with nothing changed. `--yes` deletes exactly the listed uuids through the NF point
 API, which removes the point and its NF history in every layer; Timescale tables are not touched. Without the tool,
 the same uuids can be deleted with the NF MCP `delete_points` tool (dry run first).

@@ -158,6 +158,27 @@ def test_own_app_not_installed_makes_its_points_orphans():
     assert sorted(p["uuid"] for p in orphans) == ["a", "b"] and stale == []
 
 
+@pytest.mark.parametrize("yes", [False, True])
+@pytest.mark.parametrize("apps", [[], ["unrelated-app"]])
+def test_empty_or_incomplete_apps_list_cannot_authorize_pruning(apps, yes):
+    nf = MockNF(apps, [auto("live", "open-fdd")], [])
+    assert sync.cmd_prune_points(nf, MANIFEST, yes=yes, now=NOW) == sync.EXIT_FAILED
+    assert nf.writes() == [] and nf.deleted == []
+
+
+def test_empty_list_cannot_be_overridden():
+    nf = MockNF([], [auto("live", "open-fdd")], [])
+    assert sync.cmd_prune_points(nf, MANIFEST, yes=True, now=NOW, self_uninstalled=True) == sync.EXIT_FAILED
+    assert nf.writes() == []
+
+
+@pytest.mark.parametrize("yes", [False, True])
+def test_explicit_self_uninstalled_keeps_dry_run_default_and_exact_scope(yes):
+    nf = MockNF(["unrelated-app"], [auto("removed", "open-fdd"), auto("other", "another-app")], [])
+    assert sync.cmd_prune_points(nf, MANIFEST, yes=yes, now=NOW, self_uninstalled=True) == 0
+    assert nf.deleted == (["removed"] if yes else [])
+
+
 def test_nothing_to_delete_is_a_clean_exit(capsys):
     nf = MockNF(["open-fdd"], [auto("ok-1", "open-fdd")], [model("ok-1", status="ok", latest=RECENT)])
     assert sync.cmd_prune_points(nf, MANIFEST, yes=True, now=NOW) == 0
