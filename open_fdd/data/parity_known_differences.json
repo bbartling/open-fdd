@@ -243,21 +243,6 @@
    }
   },
   {
-   "rule": "VAV-REHEAT",
-   "scope": "stress_only",
-   "reason": "pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 0.1667,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 0.0,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "FC3",
    "scope": "edge",
    "reason": "Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows)."

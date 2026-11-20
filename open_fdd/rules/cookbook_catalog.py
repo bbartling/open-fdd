@@ -1438,26 +1438,6 @@ def vav7(d, p, poll):
     return under.fillna(False) | fixed_high.fillna(False) | high_min.fillna(False)
 
 
-def vav_reheat_stuck(d, p, poll):
-    """Reheat valve commanded open but the box's discharge air never warms above inlet.
-
-    Inlet temp = duct air arriving from the AHU (≈ AHU discharge). Discharge temp = air
-    leaving the box after the reheat coil. Reheat open + air flowing + no rise → stuck /
-    failed reheat valve or coil. Fully computed from VAV-local sensors.
-    """
-    cmd_thr = _f(p, "reheat_cmd", 0.30)
-    min_rise = _param_si_delta_temp_to_series(
-        d, "vav-discharge-air-temp", _f(p, "min_rise", 1.666667)
-    )
-    flow_min = _f(p, "flow_on_min", 11.798689)
-    reheat = norm_cmd(d["reheat-valve"]).fillna(0)
-    rise = d["vav-discharge-air-temp"] - d["vav-inlet-air-temp"]
-    return (
-        _vav_air_on(d, flow_min)
-        & d["vav-discharge-air-temp"].notna() & d["vav-inlet-air-temp"].notna()
-        & (reheat > cmd_thr) & (rise < min_rise)
-    )
-
 
 def vav_vs_ahu_leave(d, p, poll):
     """VAV leave temp far from parent AHU SAT (fedBy) — broken reheat or sensor/rogue box.
@@ -1505,16 +1485,6 @@ def fcu_sensor_null(d, p, poll):
     return eligible & zone.isna() & (null_fraction >= _f(p, "null_fraction", 0.90))
 
 
-def fcu_htg_coil(d, p, poll):
-    heat = norm_cmd(d["heating-valve"])
-    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
-        d["zone-air-temp"], errors="coerce"
-    )
-    coil_delta = _param_si_delta_temp_to_series(
-        d, "discharge-air-temp", _f(p, "coil_delta", 3.0)
-    )
-    return _fcu_fan_on(d) & heat.notna() & (heat >= _f(p, "valve_open", 0.80)) & (rise < coil_delta)
-
 
 def coil_perf(d, p, poll):
     """Generic coil performance (#1641), twin of sql/fdd/postgres/rules/coil_perf.sql.
@@ -1538,15 +1508,19 @@ def coil_perf(d, p, poll):
     htg = htg_v.where(htg_v.notna(), rh_v)
 
     def ladder(pairs):
+        # (value, from_vav): the first complete pair per sample, and whether it was the VAV inlet -> discharge pair
         out = pd.Series(np.nan, index=d.index)
+        vav = pd.Series(False, index=d.index)
         for leave, enter, sign in pairs:
             diff = sign * (col(leave) - col(enter))
-            out = out.where(out.notna(), diff)
-        return out
+            take = out.isna() & diff.notna()
+            vav = vav | (take & (leave == "vav-discharge-air-temp"))
+            out = out.where(~take, diff)
+        return out, vav
 
-    rise = ladder([("heating-coil-leaving-temp", "heating-coil-entering-temp", 1), ("discharge-air-temp", "mixed-air-temp", 1),
+    rise, rise_vav = ladder([("heating-coil-leaving-temp", "heating-coil-entering-temp", 1), ("discharge-air-temp", "mixed-air-temp", 1),
                    ("vav-discharge-air-temp", "vav-inlet-air-temp", 1), ("discharge-air-temp", "zone-air-temp", 1)])
-    drop = ladder([("cooling-coil-leaving-temp", "cooling-coil-entering-temp", -1), ("discharge-air-temp", "mixed-air-temp", -1),
+    drop, drop_vav = ladder([("cooling-coil-leaving-temp", "cooling-coil-entering-temp", -1), ("discharge-air-temp", "mixed-air-temp", -1),
                    ("vav-discharge-air-temp", "vav-inlet-air-temp", -1), ("discharge-air-temp", "zone-air-temp", -1)])
     if not (htg.notna().any() or clg.notna().any()):
         d.attrs["coil_perf_assessment"] = "no_coil_valve"
@@ -1562,18 +1536,18 @@ def coil_perf(d, p, poll):
     flow = col("zone-airflow")
     flow_ok = flow.isna() | (flow > _f(p, "flow_on_min", 11.798675))
 
-    heat = htg.notna() & (htg >= valve_open) & (clg.isna() | (clg <= valve_shut)) & rise.notna() & (rise < min_dt)
-    cool = (clg.notna() & (clg >= valve_open) & (htg_v.isna() | (htg_v <= valve_shut)) & (rh_v.isna() | (rh_v <= valve_shut))
-            & drop.notna() & (drop < min_dt))
-    return (fan_on & flow_ok & (heat | cool)).fillna(False)
+    # #1641: on the VAV inlet -> discharge pair the VAV reheat sensitivity applies (valve_open_vav, min_dt_vav), so the
+    # generic rule keeps VAV-REHEAT's thresholds instead of silently changing them
+    vo_vav, dt_vav = _f(p, "valve_open_vav", 0.3), _f(p, "min_dt_vav", 1.666667)
+    def per_pair(generic, vav_value, from_vav):
+        return pd.Series(generic, index=d.index).where(~from_vav, vav_value)
 
-def fcu_clg_coil(d, p, poll):
-    cool = norm_cmd(d["cooling-valve"])
-    heat = norm_cmd(d["heating-valve"])
-    rise = pd.to_numeric(d["discharge-air-temp"], errors="coerce") - pd.to_numeric(
-        d["zone-air-temp"], errors="coerce"
-    )
-    return _fcu_fan_on(d) & cool.notna() & heat.notna() & (cool >= _f(p, "valve_open", 0.80)) & (heat <= 0.05) & (rise >= 0)
+    h_open, h_dt = per_pair(valve_open, vo_vav, rise_vav), per_pair(min_dt, dt_vav, rise_vav)
+    c_open, c_dt = per_pair(valve_open, vo_vav, drop_vav), per_pair(min_dt, dt_vav, drop_vav)
+    heat = htg.notna() & (htg >= h_open) & (clg.isna() | (clg <= valve_shut)) & rise.notna() & (rise < h_dt)
+    cool = (clg.notna() & (clg >= c_open) & (htg_v.isna() | (htg_v <= valve_shut)) & (rh_v.isna() | (rh_v <= valve_shut))
+            & drop.notna() & (drop < c_dt))
+    return (fan_on & flow_ok & (heat | cool)).fillna(False)
 
 
 def fcu_valve_pass_htg(d, p, poll):
@@ -2325,30 +2299,19 @@ RULES: list[CookbookRule] = [
         fcu_sensor_null, params=[
             CookbookParam("null_fraction", "Null fraction", "frac", 0.5, 1.0, 0.05, 0.90),
             CONFIRM_PARAM()], optional_roles=["zone-air-temp"], confirm_seconds=0),
-    CookbookRule("FCU-HTG-COIL", "FCU heating coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
-        ["discharge-air-temp", "zone-air-temp", "heating-valve"],
-        "Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zone temperature.",
-        fcu_htg_coil, params=[
-            CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
-            CookbookParam("coil_delta", "Minimum heating rise", "°C", 0.555556, 11.111111, 0.277778, 3.0),
-            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
-    CookbookRule("COIL-PERF", "Coil performance (heating and cooling)", "ahu", ["ahu"], [],
+    CookbookRule("COIL-PERF", "Coil performance (heating and cooling)", "ahu", ["ahu", "vav", "zone_other", "general"], [],
         "Coil valve open, opposite valve shut, air temperature change below min_dt.",
         coil_perf, params=[
             CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
             CookbookParam("valve_shut", "Opposite valve shut", "frac", 0.0, 0.2, 0.01, 0.05),
             CookbookParam("min_dt", "Minimum coil temperature change", "°C", 0.555556, 11.111111, 0.277778, 3.0),
+            CookbookParam("valve_open_vav", "Valve open threshold (VAV reheat pair)", "frac", 0.05, 1.0, 0.05, 0.30),
+            CookbookParam("min_dt_vav", "Minimum temperature rise (VAV reheat pair)", "°C", 0.277778, 11.111111, 0.277778, 1.666667),
             CONFIRM_PARAM()],
         optional_roles=["heating-valve", "reheat-valve", "cooling-valve", "heating-coil-entering-temp",
                         "heating-coil-leaving-temp", "cooling-coil-entering-temp", "cooling-coil-leaving-temp",
                         "mixed-air-temp", "discharge-air-temp", "vav-inlet-air-temp", "vav-discharge-air-temp",
                         "zone-air-temp", "zone-airflow", "fan-status", "fan-cmd"], confirm_seconds=900),
-    CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
-        ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
-        "Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.",
-        fcu_clg_coil, params=[
-            CookbookParam("valve_open", "Valve open threshold", "frac", 0.5, 1.0, 0.05, 0.80),
-            CONFIRM_PARAM()], optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FCU-VALVE-PASS-HTG", "FCU heating valve passing", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "heating-valve", "cooling-valve"],
         "Fan on and both valves shut, but discharge air exceeds zone temperature by more than 3 Δ°C.",
@@ -2433,15 +2396,6 @@ RULES: list[CookbookRule] = [
             CookbookParam("reheat_pct", "Reheat frac", "frac", 0.05, 1.0, 0.05, 0.25),
             CONFIRM_PARAM()],
         optional_roles=["cooling-available"], confirm_seconds=900),
-    CookbookRule("VAV-REHEAT", "Reheat valve stuck / no temp rise", "vav", ["vav"],
-        ["reheat-valve", "vav-discharge-air-temp", "vav-inlet-air-temp"],
-        "Air flowing AND reheat valve > 30% AND box discharge temp rises < 1.7 °C above duct inlet "
-        "(air from AHU) — stuck or failed reheat valve/coil.",
-        vav_reheat_stuck, params=[
-            CookbookParam("reheat_cmd", "Reheat open frac", "frac", 0.1, 1.0, 0.05, 0.30),
-            CookbookParam("min_rise", "Min temp rise", "°C", 0.277778, 8.333333, 0.277778, 1.666667),
-            CookbookParam("flow_on_min", "Airflow-on min", "L/s", 0.0, 94.3894, 2.359735, 11.798675),
-            CONFIRM_PARAM()], confirm_seconds=900),
     CookbookRule(
         "VAV-AHU-LEAVE",
         "VAV leave vs parent AHU SAT (fedBy)",
@@ -2680,7 +2634,6 @@ RULE_SUMMARY_OVERRIDES: dict[str, str] = {
     "VAV-2": "Flags unoccupied zones that never drop into heating setback.",
     "VAV-6": "Flags reheat while outdoor air is cool enough for free cooling.",
     "RESET-1": "Flags SAT setpoint that is not tracking the outdoor-air reset curve.",
-    "VAV-REHEAT": "Flags reheat commanded open with airflow but almost no discharge temperature rise.",
     "VAV-AHU-LEAVE": "Flags VAV discharge far from the parent AHU SAT when topology feeds are known.",
     "OAT-METEO": "Flags large disagreement between BAS outdoor-air temp and web weather OAT.",
     "SCHED-1": "Flags fan runtime during unoccupied hours from the Overview calendar.",

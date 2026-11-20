@@ -51,7 +51,7 @@ def test_dataset_is_si(data):
     declared = set(data["units"].values())
     assert declared <= {"°C", "%", "Pa", "°F", None}, declared
     pg = data["results"]["pglite"]
-    assert len(pg) == 78
+    assert len(pg) == 75   # #1641: FCU-HTG-COIL, FCU-CLG-COIL, VAV-REHEAT retired into COIL-PERF
 
 
 def test_dataset_follows_the_declared_scales(data):
@@ -120,7 +120,7 @@ def test_pandas_equals_sql_in_si(report):
 def test_rules_without_pandas_twin_are_listed(report):
     # SQL-only rules (no open_fdd.rules twin): listed by stress.py in the report, never silently skipped
     assert set(report["no_twin"]) == NO_TWIN
-    assert len(report["twins"]) + len(report["no_twin"]) == 78
+    assert len(report["twins"]) + len(report["no_twin"]) == 75
 
 
 # ---- SI-only contract (no imperial anywhere in the pack or the oracle) -------------------------------------------
@@ -251,28 +251,6 @@ def _sql_confirmed_hours(raw, confirm_s):
     return total / 3600.0
 
 
-def test_vav_reheat_difference_is_exactly_the_startup_holdoff(monkeypatch):
-    from dataclasses import replace
-    from open_fdd.rules import operational_gate as og
-
-    n = 30
-    fan = [0] * 4 + [1] * 26
-    rise_bad = [0.5] * 22 + [2.5] * 8  # the fault is present from the first fan-on sample, then ends
-    df = _fixture_frame(n, **{"fan-status": fan, "zone-airflow": [50.0] * n, "reheat-valve": [0.7] * n,
-                              "vav-inlet-air-temp": [15.0] * n,
-                              "vav-discharge-air-temp": [15.0 + r for r in rise_bad]})
-    raw = [f == 1 and r < 1.666667 for f, r in zip(fan, rise_bad)]
-    sql_hours = _sql_confirmed_hours(raw, CATALOG_CONFIRM["VAV-REHEAT"])
-    pandas_hours, status = h.pandas_fault_hours("VAV-REHEAT", df.copy(), None)
-    assert status == "FAULT"
-    assert sql_hours - pandas_hours == pytest.approx(STEP_S / 3600)  # one sample later in pandas
-    # the 600 s startup holdoff is the whole difference: with it removed pandas equals the SQL confirmation model
-    gate = og.RULE_GATES["VAV-REHEAT"]
-    assert gate.startup_delay_seconds == 600
-    monkeypatch.setitem(og.RULE_GATES, "VAV-REHEAT", replace(gate, startup_delay_seconds=0.0))
-    assert h.pandas_fault_hours("VAV-REHEAT", df.copy(), None)[0] == pytest.approx(sql_hours)
-
-
 def test_trim3_is_aligned_with_the_sql_contract_and_differs_only_by_the_startup_holdoff():
     """#1588: pandas TRIM-3 reads the contract role, faults at request sum <= request_lo like SQL, and skips when the
     request sum is absent (SQL has no rows then); what is left is the pandas 600 s hydronic-proof startup holdoff."""
@@ -289,7 +267,7 @@ def test_trim3_is_aligned_with_the_sql_contract_and_differs_only_by_the_startup_
     assert str(h.pandas_fault_hours("TRIM-3", df, None)[1]).startswith("SKIPPED")
 
 
-CATALOG_CONFIRM = {rid: h.CATALOG[rid]["parameters"]["confirm_min"]["default"] * 60 for rid in ("VAV-REHEAT", "TRIM-3")}
+CATALOG_CONFIRM = {rid: h.CATALOG[rid]["parameters"]["confirm_min"]["default"] * 60 for rid in ("TRIM-3",)}
 
 
 def test_pinned_delta_band_catches_a_widened_known_difference():

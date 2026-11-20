@@ -3055,71 +3055,6 @@ rules:
         frontend_control: slider
         sql_placeholder: CONFIRM_SECONDS
 
-  - rule_id: VAV-REHEAT
-    equipment_kinds: [vav]
-    run_proof: gated
-    sql_file: vav_reheat.sql
-    pandas_function: null
-    description: Reheat valve stuck / no temp rise
-    required_roles: [reheat_valve_pct, vav_discharge_t, vav_inlet_t, zone_flow]
-    optional_roles: [fan_status, fan_cmd, run_proof]
-    output_columns: [equipment_id, fault_hours]
-    priority: P0
-    parity_status: sql_screening
-    delete_python_candidate: false
-    confirm_seconds: 900
-    parameters:
-      require_run_proof:
-        label: Require motor status
-        default: 1.0
-        min: 0.0
-        max: 1.0
-        step: 1.0
-        unit: bool
-        kind: boolean
-        frontend_control: slider
-        sql_placeholder: REQUIRE_RUN_PROOF
-      confirm_seconds:
-        label: Confirm time
-        default: 900.0
-        min: 0.0
-        max: 3600.0
-        step: 300.0
-        unit: sec
-        kind: duration_seconds
-        frontend_control: slider
-        sql_placeholder: CONFIRM_SECONDS
-      reheat_cmd:
-        label: Reheat open frac
-        default: 0.3
-        min: 0.1
-        max: 1.0
-        step: 0.05
-        unit: frac
-        kind: fraction
-        frontend_control: slider
-        sql_placeholder: REHEAT_CMD
-      min_rise:
-        label: Min temp rise
-        default: 1.666666667
-        min: 0.277777778
-        max: 8.333333333
-        step: 0.277777778
-        unit: degC
-        kind: temperature_difference
-        frontend_control: slider
-        sql_placeholder: MIN_RISE
-      flow_on_min:
-        label: Airflow-on min
-        default: 11.798675
-        min: 0.0
-        max: 94.3894
-        step: 2.359735
-        unit: L_per_s
-        kind: volumetric_flow
-        frontend_control: slider
-        sql_placeholder: FLOW_ON_MIN
-
   - rule_id: VAV-AHU-LEAVE
     equipment_kinds: [vav]
     run_proof: gated
@@ -4102,66 +4037,6 @@ rules:
         kind: fraction
         frontend_control: slider
         sql_placeholder: NULL_FRACTION
-  - rule_id: FCU-HTG-COIL
-    equipment_kinds: [zone_other, general, ahu]
-    run_proof: exempt
-    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
-    sql_file: fcu_htg_coil.sql
-    pandas_function: fcu_htg_coil
-    description: Fan-on heating coil under-delivery
-    required_roles: [sat, zone_t, htg_valve_pct]
-    optional_roles: [clg_valve_pct, damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
-    output_columns: [equipment_id, fault_hours]
-    priority: P1
-    parity_status: sql_screening
-    delete_python_candidate: false
-    confirm_seconds: 900
-    parameters:
-      valve_open:
-        label: Valve open threshold
-        default: 0.8
-        min: 0.5
-        max: 1
-        step: 0.05
-        unit: frac
-        kind: fraction
-        frontend_control: slider
-        sql_placeholder: VALVE_OPEN
-      coil_delta:
-        label: Minimum heating rise
-        default: 3.0
-        min: 0.555555556
-        max: 11.111111111
-        step: 0.277777778
-        unit: degC
-        kind: temperature_difference
-        frontend_control: slider
-        sql_placeholder: COIL_DELTA
-  - rule_id: FCU-CLG-COIL
-    equipment_kinds: [zone_other, general, ahu]
-    run_proof: exempt
-    run_proof_note: "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
-    sql_file: fcu_clg_coil.sql
-    pandas_function: fcu_clg_coil
-    description: Fan-on cooling coil under-delivery
-    required_roles: [sat, zone_t, clg_valve_pct, htg_valve_pct]
-    optional_roles: [damper_cmd, damper_pct, zone_co2, fan_status, fan_cmd]
-    output_columns: [equipment_id, fault_hours]
-    priority: P1
-    parity_status: sql_screening
-    delete_python_candidate: false
-    confirm_seconds: 900
-    parameters:
-      valve_open:
-        label: Valve open threshold
-        default: 0.8
-        min: 0.5
-        max: 1
-        step: 0.05
-        unit: frac
-        kind: fraction
-        frontend_control: slider
-        sql_placeholder: VALVE_OPEN
   - rule_id: FCU-VALVE-PASS-HTG
     equipment_kinds: [zone_other, general, ahu]
     run_proof: exempt
@@ -4394,9 +4269,10 @@ rules:
         sql_placeholder: UTIL_INTERVAL_MAE
 
   - rule_id: COIL-PERF
-    # #1641: one generic coil-performance rule (heating and cooling modes), applied by bound roles. First slice: air
-    # handlers (FCU-HTG-COIL / FCU-CLG-COIL / VAV-REHEAT stay until parity shows the generic rule matches them).
-    equipment_kinds: [ahu]
+    # #1641: one generic coil-performance rule (heating and cooling modes), applied by bound roles on air handlers, VAV
+    # boxes and fan coils / zone equipment. It replaces FCU-HTG-COIL, FCU-CLG-COIL and VAV-REHEAT; on the VAV inlet ->
+    # discharge pair the VAV reheat sensitivity applies (valve_open_vav, min_dt_vav).
+    equipment_kinds: [ahu, vav, zone_other, general]
     run_proof: gated
     sql_file: coil_perf.sql
     pandas_function: coil_perf
@@ -4449,6 +4325,26 @@ rules:
         kind: temperature_difference
         frontend_control: slider
         sql_placeholder: MIN_DT
+      valve_open_vav:
+        label: Valve open threshold (VAV reheat pair)
+        default: 0.3
+        min: 0.05
+        max: 1.0
+        step: 0.05
+        unit: frac
+        kind: fraction
+        frontend_control: slider
+        sql_placeholder: VALVE_OPEN_VAV
+      min_dt_vav:
+        label: Minimum temperature rise (VAV reheat pair)
+        default: 1.666667
+        min: 0.277778
+        max: 11.111111
+        step: 0.277778
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: MIN_DT_VAV
       require_run_proof:
         label: Require motor status
         default: 1.0

@@ -5932,128 +5932,6 @@
     },
     {
       "confirm_seconds": 900,
-      "delete_python_candidate": false,
-      "description": "Reheat valve stuck / no temp rise",
-      "equipment_kinds": [
-        "vav"
-      ],
-      "optional_roles": [
-        "fan_status",
-        "fan_cmd",
-        "run_proof"
-      ],
-      "output_columns": [
-        "equipment_id",
-        "fault_hours"
-      ],
-      "pandas_function": null,
-      "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 15.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 60.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 5.0,
-          "unit": "min"
-        },
-        "flow_on_min": {
-          "control": "slider",
-          "default": 11.798675,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "flow_on_min",
-          "kind": "volumetric_flow",
-          "label": "Airflow-on min",
-          "max": 94.3894,
-          "min": 0.0,
-          "sql_placeholder": "FLOW_ON_MIN",
-          "step": 2.359735,
-          "unit": "L_per_s"
-        },
-        "min_rise": {
-          "control": "slider",
-          "default": 1.666666667,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "min_rise",
-          "kind": "temperature_difference",
-          "label": "Min temp rise",
-          "max": 8.333333333,
-          "min": 0.277777778,
-          "sql_placeholder": "MIN_RISE",
-          "step": 0.277777778,
-          "unit": "degC"
-        },
-        "reheat_cmd": {
-          "control": "slider",
-          "default": 0.3,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "reheat_cmd",
-          "kind": "fraction",
-          "label": "Reheat open frac",
-          "max": 1.0,
-          "min": 0.1,
-          "sql_placeholder": "REHEAT_CMD",
-          "step": 0.05,
-          "unit": "frac"
-        },
-        "require_run_proof": {
-          "control": "slider",
-          "default": 1.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "require_run_proof",
-          "kind": "boolean",
-          "label": "Require motor status",
-          "max": 1.0,
-          "min": 0.0,
-          "sql_placeholder": "REQUIRE_RUN_PROOF",
-          "step": 1.0,
-          "unit": "bool"
-        }
-      },
-      "parity_status": "sql_screening",
-      "placeholders": [
-        "CONFIRM_ROWS",
-        "FLOW_ON_MIN",
-        "MIN_RISE",
-        "POLL_SECONDS",
-        "REHEAT_CMD",
-        "REQUIRE_RUN_PROOF"
-      ],
-      "port_status": "adapted_not_postgresql_execution_qualified",
-      "priority": "P0",
-      "required_roles": [
-        "reheat_valve_pct",
-        "vav_discharge_t",
-        "vav_inlet_t",
-        "zone_flow"
-      ],
-      "rule_id": "VAV-REHEAT",
-      "sql_file": "vav_reheat.sql",
-      "run_proof": "gated",
-      "legacy_parameters": {
-        "aliases": {},
-        "retired": [
-          "minimum_active_coverage_pct",
-          "startup_delay_min"
-        ],
-        "note": "#1671: one user-facing timer per rule. The startup and mode-change delays, the active-coverage floor, the retired operational gate, join and gap plumbing are fixed internal constants (internal_constants; the shipped defaults, so results do not change). A saved value for a retired key is ignored when read and reported as a migration; new saves reject it."
-      }
-    },
-    {
-      "confirm_seconds": 900,
       "controls_without_sql_effect": [],
       "delete_python_candidate": false,
       "description": "VAV leave vs parent AHU SAT (fedBy)",
@@ -7923,166 +7801,6 @@
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
       "delete_python_candidate": false,
-      "description": "Fan-on heating coil under-delivery",
-      "equipment_kinds": [
-        "zone_other",
-        "general",
-        "ahu"
-      ],
-      "optional_roles": [
-        "clg_valve_pct",
-        "damper_cmd",
-        "damper_pct",
-        "zone_co2",
-        "fan_status",
-        "fan_cmd"
-      ],
-      "output_columns": [
-        "equipment_id",
-        "fault_hours"
-      ],
-      "pandas_function": "fcu_htg_coil",
-      "parameters": {
-        "coil_delta": {
-          "control": "slider",
-          "default": 3.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "coil_delta",
-          "kind": "temperature_difference",
-          "label": "Minimum heating rise",
-          "max": 11.111111111,
-          "min": 0.555555556,
-          "sql_placeholder": "COIL_DELTA",
-          "step": 0.277777778,
-          "unit": "degC"
-        },
-        "confirm_min": {
-          "control": "slider",
-          "default": 15.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
-        "valve_open": {
-          "control": "slider",
-          "default": 0.8,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "valve_open",
-          "kind": "fraction",
-          "label": "Valve open threshold",
-          "max": 1,
-          "min": 0.5,
-          "sql_placeholder": "VALVE_OPEN",
-          "step": 0.05,
-          "unit": "frac"
-        }
-      },
-      "parity_status": "sql_screening",
-      "placeholders": [
-        "COIL_DELTA",
-        "CONFIRM_ROWS",
-        "POLL_SECONDS",
-        "VALVE_OPEN"
-      ],
-      "port_status": "adapted_not_postgresql_execution_qualified",
-      "priority": "P1",
-      "required_roles": [
-        "sat",
-        "zone_t",
-        "htg_valve_pct"
-      ],
-      "rule_id": "FCU-HTG-COIL",
-      "sql_file": "fcu_htg_coil.sql",
-      "run_proof": "exempt",
-      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
-    },
-    {
-      "confirm_seconds": 900,
-      "controls_without_sql_effect": [],
-      "delete_python_candidate": false,
-      "description": "Fan-on cooling coil under-delivery",
-      "equipment_kinds": [
-        "zone_other",
-        "general",
-        "ahu"
-      ],
-      "optional_roles": [
-        "damper_cmd",
-        "damper_pct",
-        "zone_co2",
-        "fan_status",
-        "fan_cmd"
-      ],
-      "output_columns": [
-        "equipment_id",
-        "fault_hours"
-      ],
-      "pandas_function": "fcu_clg_coil",
-      "parameters": {
-        "confirm_min": {
-          "control": "slider",
-          "default": 15.0,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "key": "confirm_min",
-          "kind": "duration_minutes",
-          "label": "Fault confirm delay",
-          "max": 120.0,
-          "min": 0.0,
-          "sql_placeholder": "CONFIRM_SECONDS",
-          "step": 1.0,
-          "unit": "min"
-        },
-        "valve_open": {
-          "control": "slider",
-          "default": 0.8,
-          "effect": "branch_sensitive",
-          "effect_in_sql": true,
-          "frontend_control": "slider",
-          "key": "valve_open",
-          "kind": "fraction",
-          "label": "Valve open threshold",
-          "max": 1,
-          "min": 0.5,
-          "sql_placeholder": "VALVE_OPEN",
-          "step": 0.05,
-          "unit": "frac"
-        }
-      },
-      "parity_status": "sql_screening",
-      "placeholders": [
-        "CONFIRM_ROWS",
-        "POLL_SECONDS",
-        "VALVE_OPEN"
-      ],
-      "port_status": "adapted_not_postgresql_execution_qualified",
-      "priority": "P1",
-      "required_roles": [
-        "sat",
-        "zone_t",
-        "clg_valve_pct",
-        "htg_valve_pct"
-      ],
-      "rule_id": "FCU-CLG-COIL",
-      "sql_file": "fcu_clg_coil.sql",
-      "run_proof": "exempt",
-      "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
-    },
-    {
-      "confirm_seconds": 900,
-      "controls_without_sql_effect": [],
-      "delete_python_candidate": false,
       "description": "Heating valve passing with both commands shut",
       "equipment_kinds": [
         "zone_other",
@@ -8650,7 +8368,10 @@
       "delete_python_candidate": false,
       "description": "Coil valve open but the air temperature changes less than min_dt",
       "equipment_kinds": [
-        "ahu"
+        "ahu",
+        "vav",
+        "zone_other",
+        "general"
       ],
       "optional_roles": [
         "htg_valve_pct",
@@ -8736,6 +8457,36 @@
           "max": 11.111111,
           "min": 0.555556,
           "sql_placeholder": "MIN_DT",
+          "step": 0.277778,
+          "unit": "degC"
+        },
+        "valve_open_vav": {
+          "control": "slider",
+          "default": 0.3,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "valve_open_vav",
+          "kind": "fraction",
+          "label": "Valve open threshold (VAV reheat pair)",
+          "max": 1.0,
+          "min": 0.05,
+          "sql_placeholder": "VALVE_OPEN_VAV",
+          "step": 0.05,
+          "unit": "frac"
+        },
+        "min_dt_vav": {
+          "control": "slider",
+          "default": 1.666667,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "min_dt_vav",
+          "kind": "temperature_difference",
+          "label": "Minimum temperature rise (VAV reheat pair)",
+          "max": 11.111111,
+          "min": 0.277778,
+          "sql_placeholder": "MIN_DT_VAV",
           "step": 0.277778,
           "unit": "degC"
         },

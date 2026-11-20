@@ -81,7 +81,6 @@ RULE_GATES: dict[str, GateSpec] = {
     "VAV-4": GateSpec("control_loop", startup_delay_seconds=300),
     "VAV-5": GateSpec("fan_running", startup_delay_seconds=300),
     "VAV-6": GateSpec("fan_running", startup_delay_seconds=300),
-    "VAV-REHEAT": GateSpec("fan_running", startup_delay_seconds=600),
     "VAV-AHU-LEAVE": GateSpec("fan_running", startup_delay_seconds=600),
     "VAV-7": GateSpec("fan_running", startup_delay_seconds=300),
     "CHW-1": GateSpec("hydronic_flow", startup_delay_seconds=900),

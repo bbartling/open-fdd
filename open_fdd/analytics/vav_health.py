@@ -22,7 +22,7 @@ DEFAULT_BROKEN_RULES = (
     "VAV-4",
     "VAV-5",
     "VAV-7",
-    "VAV-REHEAT",
+    "COIL-PERF",   # #1641: replaces VAV-REHEAT (reheat valve open, no rise)
     "VAV-AHU-LEAVE",
 )
 FULL_OPEN_DEFAULT = 0.975

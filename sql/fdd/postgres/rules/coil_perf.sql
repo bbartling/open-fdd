@@ -51,7 +51,20 @@ h AS (
       WHEN vav_discharge_t IS NOT NULL AND vav_inlet_t IS NOT NULL THEN vav_inlet_t - vav_discharge_t
       WHEN sat IS NOT NULL AND zone_t IS NOT NULL THEN zone_t - sat
       ELSE NULL
-    END AS cool_drop
+    END AS cool_drop,
+    -- #1641: 1 when the VAV inlet -> discharge pair supplies the reading (the VAV reheat sensitivity applies)
+    CASE
+      WHEN heating_coil_leaving_temp IS NOT NULL AND heating_coil_entering_temp IS NOT NULL THEN 0
+      WHEN sat IS NOT NULL AND mat IS NOT NULL THEN 0
+      WHEN vav_discharge_t IS NOT NULL AND vav_inlet_t IS NOT NULL THEN 1
+      ELSE 0
+    END AS heat_vav,
+    CASE
+      WHEN cooling_coil_leaving_temp IS NOT NULL AND cooling_coil_entering_temp IS NOT NULL THEN 0
+      WHEN sat IS NOT NULL AND mat IS NOT NULL THEN 0
+      WHEN vav_discharge_t IS NOT NULL AND vav_inlet_t IS NOT NULL THEN 1
+      ELSE 0
+    END AS cool_vav
   FROM history
 ),
 pairs AS (
@@ -72,12 +85,13 @@ base AS (
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 0) = 0 THEN 0
       WHEN zone_flow IS NOT NULL AND zone_flow <= {{FLOW_ON_MIN}} THEN 0
-      WHEN htg IS NOT NULL AND htg >= {{VALVE_OPEN}} AND (clg IS NULL OR clg <= {{VALVE_SHUT}})
-       AND heat_rise IS NOT NULL AND heat_rise < {{MIN_DT}} THEN 1
-      WHEN clg IS NOT NULL AND clg >= {{VALVE_OPEN}}
+      WHEN htg IS NOT NULL AND htg >= CASE WHEN heat_vav = 1 THEN {{VALVE_OPEN_VAV}} ELSE {{VALVE_OPEN}} END
+       AND (clg IS NULL OR clg <= {{VALVE_SHUT}})
+       AND heat_rise IS NOT NULL AND heat_rise < CASE WHEN heat_vav = 1 THEN {{MIN_DT_VAV}} ELSE {{MIN_DT}} END THEN 1
+      WHEN clg IS NOT NULL AND clg >= CASE WHEN cool_vav = 1 THEN {{VALVE_OPEN_VAV}} ELSE {{VALVE_OPEN}} END
        AND (htg_valve_pct IS NULL OR htg_valve_pct <= {{VALVE_SHUT}})
        AND (reheat_valve_pct IS NULL OR reheat_valve_pct <= {{VALVE_SHUT}})
-       AND cool_drop IS NOT NULL AND cool_drop < {{MIN_DT}} THEN 1
+       AND cool_drop IS NOT NULL AND cool_drop < CASE WHEN cool_vav = 1 THEN {{MIN_DT_VAV}} ELSE {{MIN_DT}} END THEN 1
       ELSE 0
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)

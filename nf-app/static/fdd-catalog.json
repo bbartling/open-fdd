@@ -2506,36 +2506,6 @@
    "run_proof": "gated"
   },
   {
-   "id": "VAV-REHEAT",
-   "description": "Reheat valve stuck / no temp rise",
-   "sql_file": "vav_reheat.sql",
-   "priority": "P0",
-   "equipment_kinds": [
-    "vav"
-   ],
-   "required_roles": [
-    "reheat_valve_pct",
-    "vav_discharge_t",
-    "vav_inlet_t",
-    "zone_flow"
-   ],
-   "optional_roles": [
-    "fan_status",
-    "fan_cmd",
-    "run_proof"
-   ],
-   "unmapped_roles": [],
-   "confirm_seconds": 900,
-   "parameters": {
-    "require_run_proof": 1.0,
-    "confirm_seconds": 900.0,
-    "reheat_cmd": 0.3,
-    "min_rise": 1.666666667,
-    "flow_on_min": 11.798675
-   },
-   "run_proof": "gated"
-  },
-  {
    "id": "VAV-AHU-LEAVE",
    "description": "VAV leave vs parent AHU SAT (fedBy)",
    "sql_file": "vav_ahu_leave.sql",
@@ -3079,69 +3049,6 @@
    "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
   },
   {
-   "id": "FCU-HTG-COIL",
-   "description": "Fan-on heating coil under-delivery",
-   "sql_file": "fcu_htg_coil.sql",
-   "priority": "P1",
-   "equipment_kinds": [
-    "zone_other",
-    "general",
-    "ahu"
-   ],
-   "required_roles": [
-    "sat",
-    "zone_t",
-    "htg_valve_pct"
-   ],
-   "optional_roles": [
-    "clg_valve_pct",
-    "damper_cmd",
-    "damper_pct",
-    "zone_co2",
-    "fan_status",
-    "fan_cmd"
-   ],
-   "unmapped_roles": [],
-   "confirm_seconds": 900,
-   "parameters": {
-    "valve_open": 0.8,
-    "coil_delta": 3.0
-   },
-   "run_proof": "exempt",
-   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
-  },
-  {
-   "id": "FCU-CLG-COIL",
-   "description": "Fan-on cooling coil under-delivery",
-   "sql_file": "fcu_clg_coil.sql",
-   "priority": "P1",
-   "equipment_kinds": [
-    "zone_other",
-    "general",
-    "ahu"
-   ],
-   "required_roles": [
-    "sat",
-    "zone_t",
-    "clg_valve_pct",
-    "htg_valve_pct"
-   ],
-   "optional_roles": [
-    "damper_cmd",
-    "damper_pct",
-    "zone_co2",
-    "fan_status",
-    "fan_cmd"
-   ],
-   "unmapped_roles": [],
-   "confirm_seconds": 900,
-   "parameters": {
-    "valve_open": 0.8
-   },
-   "run_proof": "exempt",
-   "run_proof_note": "deferred: fan-coil rules read zone coil/valve state and need their fan role bound first (follow-up)"
-  },
-  {
    "id": "FCU-VALVE-PASS-HTG",
    "description": "Heating valve passing with both commands shut",
    "sql_file": "fcu_valve_pass_htg.sql",
@@ -3366,7 +3273,10 @@
    "sql_file": "coil_perf.sql",
    "priority": "P1",
    "equipment_kinds": [
-    "ahu"
+    "ahu",
+    "vav",
+    "zone_other",
+    "general"
    ],
    "required_roles": [],
    "optional_roles": [
@@ -3394,6 +3304,8 @@
     "valve_open": 0.8,
     "valve_shut": 0.05,
     "min_dt": 3.0,
+    "valve_open_vav": 0.3,
+    "min_dt_vav": 1.666667,
     "require_run_proof": 1.0
    },
    "run_proof": "gated"

@@ -17,17 +17,13 @@ median, noise deadband, operating-state context) is a different, richer algorith
 SV-RATE remains in `KNOWN_DIVERGENT` and the section above still applies. Only the SQL side reads `rate_per_h`; the pandas
 profile numbers are unchanged. Porting the profile algorithm to SQL is a separate decision, not part of the limits source.
 
-## Stress-only differences: TRIM-3 and VAV-REHEAT (#1582)
+## Stress-only difference: TRIM-3 (#1582)
 
-`python tests/parity/stress.py --equips 8 --days 7` compares 71 pandas twins; the 2x3 pytest dataset never reaches the
-branches below, so these two are pinned in `STRESS_ONLY_DIVERGENT` (tests/parity/test_parity.py), not in `KNOWN_DIVERGENT`.
+`python tests/parity/stress.py --equips 8 --days 7` compares the pandas twins; the 2x3 pytest dataset never reaches the
+branches below, so TRIM-3 (and TRIM-4) are pinned in `STRESS_ONLY_DIVERGENT` (tests/parity/test_parity.py), not in
+`KNOWN_DIVERGENT`. VAV-REHEAT was retired into COIL-PERF (#1641); its startup-holdoff difference is tracked with the
+other SQL startup holdoffs in #1758.
 
-- **VAV-REHEAT** (SQL 16.0833 h, pandas 15.9167 h on one equipment): pandas runs the rule behind the operational gate
-  `fan_running` with `startup_delay_seconds=600`; SQL has no startup holdoff. A standing fault at fan start is confirmed one
-  5-minute sample earlier in SQL at each of the two fan starts in the 7-day run (0.1667 h in total). With the holdoff removed
-  pandas equals SQL (regression test `test_vav_reheat_difference_is_exactly_the_startup_holdoff`). Same family as VAV-AHU-LEAVE,
-  OA-1 and CHW-1 ("Default startup/mode behavior is not yet fully equivalent" above). VAV-6 was a different cause
-  (the pandas frame never mapped `clg_available`) and matches since #1642.
 - **TRIM-3** (SQL 1.5 h, pandas skipped on every equipment): three separate differences. (1) pandas reads the role
   `hw-reset-request-sum`; the SQL contract and the NF role are `hot-water-reset-request-sum` (the same applies to TRIM-4 and
   `chw-reset-request-sum` / `chilled-water-reset-request-sum`), so with contract names pandas has no input and returns
