@@ -346,3 +346,59 @@ def test_postgres_slice3_matches_pandas():
     finally:
         with psycopg.connect(base, autocommit=True) as admin:
             admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
+
+
+# ---- slice 4: zone comfort -----------------------------------------------------------------------------------------
+def _long4():
+    rng = np.random.default_rng(17574)
+    rows = []
+    for i in range(3 * 288):
+        t = T0 + i * 300_000 + int(rng.integers(-30_000, 30_000))
+        rows += [("v1/zt", "VAV-1", "zone_t", t, 22 + float(rng.normal(0, 0.4))),             # comfortable
+                 ("v2/zt", "VAV-2", "zone_t", t, 25.5 + float(rng.normal(0, 0.8))),           # hot
+                 ("v3/zt", "VAV-3", "zone_t", t, 21.0), ("a/sat", "AHU-1", "sat", t, 13.0)]
+    return pd.DataFrame(rows, columns=list(ps.LONG_COLUMNS))
+
+
+OCC = [(T0 + d * 24 * H + 7 * H, T0 + d * 24 * H + 18 * H) for d in range(3)] + [(T0 + 8 * H, T0 + 9 * H)]   # overlap
+
+
+@pytest.mark.parametrize("engine", ["sqlite", "duckdb"])
+def test_slice4_matches_pandas(engine):
+    long = _long4()
+    conn = _connect(engine)
+    try:
+        _load(conn, engine, long)
+        for kw in ({}, {"start_ms": T0 + 24 * H, "end_ms": T0 + 48 * H}):
+            _same(sps.run_zone_comfort_sql(conn, engine, OCC, lo_c=21.0, hi_c=24.0, **kw),
+                  ps.zone_comfort(long, OCC, lo_c=21.0, hi_c=24.0, **kw),
+                  ["point_key", "n_occ", "n_in_band", "pct_in_band"], f"{engine} comfort")
+        rows = sps.run_zone_comfort_sql(conn, engine, OCC, lo_c=24.0, hi_c=21.0)              # band order does not matter
+        assert rows[0]["point_key"] == "v2/zt" and rows[-1]["pct_in_band"] == 100.0           # worst first; 21.0 on the edge
+        assert {r["point_key"] for r in rows} == {"v1/zt", "v2/zt", "v3/zt"}                  # zone_t only
+    finally:
+        conn.close()
+    with pytest.raises(ValueError):
+        sps.render_zone_comfort_sql("sqlite", [(5, 5)], lo_c=21, hi_c=24)
+
+
+@pytest.mark.skipif(not (os.environ.get("POSTGRES_TEST_URL") and os.environ.get("OPENFDD_PG_TEST_DISPOSABLE") == "1"),
+                    reason="needs POSTGRES_TEST_URL and OPENFDD_PG_TEST_DISPOSABLE=1")
+def test_postgres_slice4_matches_pandas():
+    psycopg = pytest.importorskip("psycopg")
+    long = _long4()
+    base = os.environ["POSTGRES_TEST_URL"]
+    dbname = f"openfdd_pstats4_{secrets.token_hex(6)}"
+    with psycopg.connect(base, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{dbname}"')
+    try:
+        url = urlunparse(urlparse(base)._replace(path=f"/{dbname}"))
+        with psycopg.connect(url, autocommit=True) as conn:
+            conn.execute("SET TIME ZONE 'UTC'")
+            _load(conn, "postgres", long)
+            _same(sps.run_zone_comfort_sql(conn, "postgres", OCC, lo_c=21.0, hi_c=24.0),
+                  ps.zone_comfort(long, OCC, lo_c=21.0, hi_c=24.0), ["point_key", "n_occ", "n_in_band", "pct_in_band"],
+                  "postgres comfort")
+    finally:
+        with psycopg.connect(base, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')

@@ -155,3 +155,20 @@ def mv_change_points(long: pd.DataFrame, *, roles=MV_ROLES, limit: int = 2000, s
     out = daily[daily["abs_delta"] >= daily["required_delta"]]
     out = out.sort_values(["day_ms", "abs_delta", "point_key"], ascending=[False, False, True], kind="stable")
     return out.drop(columns="abs_delta").head(int(limit)).reset_index(drop=True)
+
+
+def zone_comfort(long: pd.DataFrame, occupied, *, lo_c: float, hi_c: float, start_ms: int | None = None,
+                 end_ms: int | None = None) -> pd.DataFrame:
+    """Per zone_t point: n_occ (samples in any occupied (start_ms, end_ms) half-open interval), n_in_band and
+    pct_in_band for the band [lo_c, hi_c] degC. Worst first, then point_key; points with no occupied samples omitted."""
+    lo, hi = float(min(lo_c, hi_c)), float(max(lo_c, hi_c))
+    d = _clean(long, start_ms, end_ms)
+    d = d[d["role"] == "zone_t"]
+    occ = pd.Series(False, index=d.index)
+    for a, b in occupied:
+        occ |= (d["ts_ms"] >= int(a)) & (d["ts_ms"] < int(b))
+    d = d[occ].assign(in_band=lambda x: ((x["value"] >= lo) & (x["value"] <= hi)).astype(int))
+    out = d.groupby(["point_key", "equipment_id", "role"], dropna=False, sort=True).agg(
+        n_occ=("value", "size"), n_in_band=("in_band", "sum")).reset_index()
+    out["pct_in_band"] = 100.0 * out["n_in_band"] / out["n_occ"]
+    return out.sort_values(["pct_in_band", "point_key"], kind="stable").reset_index(drop=True)

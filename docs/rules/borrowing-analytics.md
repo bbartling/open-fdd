@@ -23,6 +23,7 @@ The RCx analytics in [`sql/analytics/`](https://github.com/bbartling/open-fdd/tr
 | `pid_hunting_proxy.sql` | Per-point spread screen for hunting control loops |
 | `meter_daily.sql` | Daily meter count, min, max, mean and max - min per point (metering or fuel roles) |
 | `mv_change_point_daily.sql` | Days whose mean changed sharply from the previous day |
+| `zone_comfort.sql` | Share of occupied zone-temperature samples inside the comfort band, worst first |
 
 ## Input
 

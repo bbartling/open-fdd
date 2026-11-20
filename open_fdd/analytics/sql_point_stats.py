@@ -27,7 +27,8 @@ def template(name: str) -> str:
 
 
 def _render(name: str, engine: str, *, site_id: str, point_keys: Iterable[str] | None, roles: Iterable[str] | None,
-            start_ms: int | None, end_ms: int | None, window: int = 0, limit: int = 0) -> str:
+            start_ms: int | None, end_ms: int | None, window: int = 0, limit: int = 0,
+            extra: dict | None = None) -> str:
     if engine not in TS_MS:
         raise ValueError(f"unknown engine {engine!r}")
     if start_ms is not None and end_ms is not None and int(end_ms) <= int(start_ms):
@@ -47,7 +48,7 @@ def _render(name: str, engine: str, *, site_id: str, point_keys: Iterable[str] |
     point_filter_p = point_filter.replace(" AND s.point_key IN", " AND p.point_key IN")
     return body.format(ts_ms=TS_MS[engine], site_id=_quote(site_id), point_filter=point_filter,
                        point_filter_p=point_filter_p, role_filter=role_filter, window_filter=window_filter,
-                       window=int(window), limit=int(limit))
+                       window=int(window), limit=int(limit), **(extra or {}))
 
 
 def render_sensor_stats_sql(engine: str, *, site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
@@ -228,5 +229,35 @@ def run_mv_change_point_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]
         rec["day_ms"], rec["n"] = int(rec["day_ms"]), int(rec["n"])
         for k in ("avg_val", "prev_avg", "delta_avg", "required_delta"):
             rec[k] = float(rec[k])
+        out.append(rec)
+    return out
+
+
+# ---- slice 4: zone comfort -----------------------------------------------------------------------------------------
+COMFORT_COLUMNS = ("point_key", "equipment_id", "role", "n_occ", "n_in_band", "pct_in_band")
+
+
+def render_zone_comfort_sql(engine: str, occupied: Iterable[tuple[int, int]], *, lo_c: float, hi_c: float,
+                            site_id: str = DEFAULT_SITE, point_keys: Iterable[str] | None = None,
+                            start_ms: int | None = None, end_ms: int | None = None) -> str:
+    """``occupied``: (start_ms, end_ms) half-open UTC intervals (the site's occupancy calendar); band in degC."""
+    from open_fdd.analytics.sql_runtime import _inline
+
+    lo, hi = float(min(lo_c, hi_c)), float(max(lo_c, hi_c))
+    if not (math.isfinite(lo) and math.isfinite(hi)):
+        raise ValueError("the comfort band must be finite degC")
+    rows = [(int(a), int(b)) for a, b in occupied]
+    if any(b <= a for a, b in rows):
+        raise ValueError("each occupied interval needs end_ms > start_ms")
+    occ = _inline([("start_ms", "INTEGER"), ("end_ms", "INTEGER")], rows)
+    return _render("zone_comfort", engine, site_id=site_id, point_keys=point_keys, roles=None, start_ms=start_ms,
+                   end_ms=end_ms, extra={"occupied": occ, "lo": repr(lo), "hi": repr(hi)})
+
+
+def run_zone_comfort_sql(conn: Any, engine: str, occupied: Iterable[tuple[int, int]], **kwargs: Any) -> list[dict]:
+    out = []
+    for row in _fetch(conn, engine, render_zone_comfort_sql(engine, occupied, **kwargs)):
+        rec = dict(zip(COMFORT_COLUMNS, row))
+        rec["n_occ"], rec["n_in_band"], rec["pct_in_band"] = int(rec["n_occ"]), int(rec["n_in_band"]), float(rec["pct_in_band"])
         out.append(rec)
     return out
