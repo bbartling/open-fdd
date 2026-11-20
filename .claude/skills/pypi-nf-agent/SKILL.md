@@ -1,6 +1,6 @@
 ---
 name: pypi-nf-agent
-description: Read an NF box and run the pandas FDD rules with the PyPI package open-fdd. Pointer to the Open-FDD agent spec.
+description: Use the PyPI package open-fdd (open-fdd-nf, pandas rules, reports) to read a Normal Framework box and run FDD from an agent.
 ---
 # pypi-nf-agent
 

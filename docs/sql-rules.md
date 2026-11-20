@@ -36,6 +36,8 @@ requirements explicit in the SQL.
 2. Declare the rule, equipment kinds, required and optional roles, parameters, units, confirmation time, and output
    columns in `sql/fdd/registry.yaml` and `sql/fdd/tuning_catalog.json`.
 3. Add any new canonical role in `sql/fdd/role_map.json` and its scale/type in `sql/fdd/input_contract.json`.
+   Add the pandas twin (compute function + `CookbookRule`) in `open_fdd/rules/cookbook_catalog.py`; see
+   [Write your own rule](rules/write-a-rule.html).
 4. Render the rule and build the catalog and both packs with these commands.
 
    ```bash

@@ -81,7 +81,8 @@ def run_rule(
     building_id: str | None = None,
 ) -> RuleResult:
     """Run one rule; equipment context as in :func:`run_all`."""
-    rule = RULES_BY_ID[rule_id]
+    # a CUSTOM-* rule appended to custom_rules.CUSTOM_RULES after import is not in the import-time snapshot
+    rule = RULES_BY_ID.get(rule_id) or active_rules_by_id()[rule_id]
     d = _context(df, equipment_id, equipment_type, site_id, building_id)
     eid = str(d.attrs.get("equipment_id", "") or "")
     return run_cookbook_rule(

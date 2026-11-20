@@ -1,6 +1,6 @@
 ---
 name: model-a-site-in-nf
-description: Tag a site in NF so rules and charts bind. Pointer to the Open-FDD agent spec.
+description: Tag a site in Normal Framework so Open-FDD binds its rules and charts (use the NF MCP).
 ---
 # model-a-site-in-nf
 

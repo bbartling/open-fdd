@@ -1,6 +1,6 @@
 ---
 name: audit-ontology-coverage
-description: Audit modeling requirements against pinned Brick / 223P / Haystack snapshots and doctor a building graph (open-fdd-ontology-audit). Pointer to the Open-FDD agent spec.
+description: Audit modeling requirements against pinned Brick / ASHRAE 223P / Haystack snapshots and inventory the terms a building graph uses (open-fdd-ontology-audit). Offline and read-only; NF optional.
 ---
 # audit-ontology-coverage
 

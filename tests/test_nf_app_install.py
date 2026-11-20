@@ -76,6 +76,11 @@ class FakeNF:
         # When True, a missing app file raises ApiError HTTP 500 with nf_missing_file set
         # (NF 3.10.x application/grpc + empty body signature), instead of returning None/404.
         self.missing_as_nf_500 = missing_as_nf_500
+        # GET /api/v1/platform/info as NF 3.10.9 answers it: static hardware inventory only (#1615)
+        self.platform_info = {"siteName": "test", "version": "3.10.9-1", "domain": "", "services": [],
+                              "machineInfo": base64.b64encode(json.dumps(
+                                  {"block": [{"bytes": 31914983424, "serial": "unknown"}], "cpus": [],
+                                   "net": [{"mac": "00:00:00:00:00:01", "name": "eth0"}]}).encode()).decode()}
 
     def app_rec(self, app_id, version=None):
         return {"id": app_id, "status": "STATUS_INSTALLED", "hooks": [], "files": [],
@@ -95,6 +100,10 @@ class FakeNF:
             return {}
         if base == "/api/v1/sites":
             return {"sites": self.sites}
+        if base == "/api/v1/platform/info" and method == "GET":
+            if isinstance(self.platform_info, BaseException):
+                raise self.platform_info
+            return self.platform_info
         if base == "/api/v1/point/query":
             if body.get("layer") == "automation":
                 return {"points": self.points}

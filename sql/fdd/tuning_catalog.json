@@ -2,7 +2,6 @@
   "rules": [
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan running hours where fan_cmd > 5% (normalized 0-1)",
       "output_columns": [
@@ -38,7 +37,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2",
       "equipment_kinds": [
@@ -146,7 +144,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Night setback miss — unoccupied zone above heating setback",
       "equipment_kinds": [
@@ -223,7 +220,6 @@
         "zone_t_lo",
         "zone_t_hi"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Average zone temperature per equipment",
       "output_columns": [
@@ -289,7 +285,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Percent of samples in comfort band",
       "output_columns": [
@@ -356,7 +351,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Comfort fault sample count → hours",
       "output_columns": [
@@ -425,7 +419,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Equipment OAT vs weather-staged wx OAT",
       "equipment_kinds": [
@@ -510,7 +503,6 @@
       "controls_without_sql_effect": [
         "econ_min_pos"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT above setpoint at full cooling",
       "equipment_kinds": [
@@ -688,7 +680,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Economizing when outdoor air unfavorable",
       "equipment_kinds": [
@@ -793,7 +784,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Duct static below SP at full fan",
       "equipment_kinds": [
@@ -847,7 +837,7 @@
           "frontend_control": "slider",
           "key": "eps_vfd_spd",
           "kind": "fraction",
-          "label": "VFD speed error epsVFDSPD (GL36 default 5%)",
+          "label": "VFD speed error epsVFDSPD (fraction; G36-2018 lists 0.05)",
           "max": 0.5,
           "min": 0.0,
           "sql_placeholder": "EPS_VFD_SPD",
@@ -923,7 +913,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Mixed air below envelope",
       "equipment_kinds": [
@@ -1085,7 +1074,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Mixed air above envelope",
       "equipment_kinds": [
@@ -1248,7 +1236,6 @@
     {
       "blocker": "htg_valve_pct missing on some AHUs — Python and SQL both skip",
       "confirm_seconds": 600,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT low while heating at full",
       "equipment_kinds": [
@@ -1317,7 +1304,7 @@
           "frontend_control": "slider",
           "key": "htg_full_min",
           "kind": "fraction",
-          "label": "Full-heating threshold (GL36 99%)",
+          "label": "Full-heating threshold (fraction)",
           "max": 1.0,
           "min": 0.5,
           "sql_placeholder": "HTG_FULL_MIN",
@@ -1375,7 +1362,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT vs MAT while economizing",
       "equipment_kinds": [
@@ -1588,7 +1574,6 @@
         "eps_sat",
         "eps_oat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "OAT high vs SAT SP while economizing",
       "equipment_kinds": [
@@ -1784,7 +1769,6 @@
       "controls_without_sql_effect": [
         "eps_oat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "MAT-OAT delta while cooling and economizing",
       "equipment_kinds": [
@@ -1965,7 +1949,6 @@
         "eps_sat",
         "eps_oat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "OAT low vs SAT SP while cooling and economizing",
       "equipment_kinds": [
@@ -2163,7 +2146,6 @@
         "eps_sat",
         "eps_mat"
       ],
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT above MAT while cooling",
       "equipment_kinds": [
@@ -2387,7 +2369,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Economizer stuck closed when OAT favorable",
       "equipment_kinds": [
@@ -2493,7 +2474,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Low estimated OA fraction",
       "equipment_kinds": [
@@ -2600,7 +2580,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Sensor out of hard range",
       "equipment_kinds": [
@@ -2751,7 +2730,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Sensor flatline (stuck)",
       "equipment_kinds": [
@@ -2871,7 +2849,6 @@
       "controls_without_sql_effect": [
         "spike_scale"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Sensor rate-of-change spike",
       "equipment_kinds": [
@@ -3036,7 +3013,6 @@
     {
       "confirm_seconds": 0,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Stale data (no fresh samples for longer than the stale threshold)",
       "equipment_kinds": [
@@ -3120,7 +3096,6 @@
         "SV-SLEW"
       ],
       "confirm_seconds": 600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Context-aware sensor rate of change",
       "equipment_kinds": [
@@ -3238,7 +3213,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Suspected control-output hunting",
       "equipment_kinds": [
@@ -3408,7 +3382,6 @@
     },
     {
       "confirm_seconds": 3600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "PID hunting (operating-state oscillation)",
       "equipment_kinds": [
@@ -3521,7 +3494,6 @@
       "controls_without_sql_effect": [
         "eps_sat"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "SAT cold when heating commanded (GL36 D)",
       "equipment_kinds": [
@@ -3698,7 +3670,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Estimated OA fraction mismatch",
       "equipment_kinds": [
@@ -3853,7 +3824,6 @@
         "econ_min_pos",
         "clg_inactive_max"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "CHW coil ΔT when inactive (GL36 L)",
       "equipment_kinds": [
@@ -4084,7 +4054,6 @@
         "econ_full_open",
         "clg_inactive_max"
       ],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "HW coil ΔT when inactive (GL36 M)",
       "equipment_kinds": [
@@ -4323,7 +4292,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "SAT deviation from setpoint",
       "equipment_kinds": [
@@ -4412,7 +4380,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Duct static pressure high",
       "equipment_kinds": [
@@ -4503,7 +4470,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Heating and cooling simultaneous",
       "equipment_kinds": [
@@ -4592,7 +4558,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Mech cooling without integrated economizer",
       "equipment_kinds": [
@@ -4747,7 +4712,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Preheat over-conditioning",
       "equipment_kinds": [
@@ -4854,7 +4818,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Economizing in freezing weather",
       "equipment_kinds": [
@@ -4959,7 +4922,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Economizer OK but not economizing",
       "equipment_kinds": [
@@ -5119,7 +5081,6 @@
     {
       "confirm_seconds": 600,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Mechanical cooling below 15.6 °C web OAT",
       "equipment_kinds": [
@@ -5188,7 +5149,6 @@
     {
       "confirm_seconds": 600,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan cmd/status mismatch",
       "equipment_kinds": [
@@ -5233,7 +5193,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Low OA fraction",
       "equipment_kinds": [
@@ -5340,7 +5299,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "OA damper leakage",
       "equipment_kinds": [
@@ -5430,7 +5388,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Cooling valve leakage",
       "equipment_kinds": [
@@ -5537,7 +5494,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Excessive reheat during warm weather",
       "equipment_kinds": [
@@ -5659,7 +5615,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Damper stuck at full open",
       "equipment_kinds": [
@@ -5770,7 +5725,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Airflow sensor bias",
       "equipment_kinds": [
@@ -5875,7 +5829,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "Reheat when cooling available",
       "equipment_kinds": [
@@ -5979,7 +5932,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Reheat valve stuck / no temp rise",
       "equipment_kinds": [
@@ -6103,7 +6055,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "VAV leave vs parent AHU SAT (fedBy)",
       "equipment_kinds": [
@@ -6201,7 +6152,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Min airflow / fixed high flow",
       "equipment_kinds": [
@@ -6345,7 +6295,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": true,
       "delete_python_candidate": false,
       "description": "SAT reset not tracking outdoor air",
       "equipment_kinds": [
@@ -6482,7 +6431,6 @@
     },
     {
       "confirm_seconds": 1800,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Chiller running with no building load",
       "equipment_kinds": [
@@ -6557,7 +6505,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Low chilled-water ΔT",
       "equipment_kinds": [
@@ -6651,7 +6598,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "DP below SP at max pump speed",
       "equipment_kinds": [
@@ -6755,7 +6701,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Plant supply temp outside deadband",
       "equipment_kinds": [
@@ -6843,7 +6788,6 @@
     },
     {
       "confirm_seconds": 300,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Flow high at max pump",
       "equipment_kinds": [
@@ -6946,7 +6890,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Condenser water not optimized vs wet-bulb",
       "equipment_kinds": [
@@ -7054,7 +6997,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "High CW approach at full tower fan",
       "equipment_kinds": [
@@ -7163,7 +7105,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Excess tower fan energy vs wet-bulb limit",
       "equipment_kinds": [
@@ -7288,7 +7229,6 @@
     },
     {
       "confirm_seconds": 600,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Discharge cold when heating",
       "equipment_kinds": [
@@ -7395,7 +7335,6 @@
     {
       "confirm_seconds": 300,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "OA temperature spike",
       "equipment_kinds": [
@@ -7455,7 +7394,6 @@
     },
     {
       "confirm_seconds": 1800,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Duct static trim advisory",
       "equipment_kinds": [
@@ -7561,7 +7499,6 @@
     },
     {
       "confirm_seconds": 1800,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "HWST trim advisory",
       "equipment_kinds": [
@@ -7667,7 +7604,6 @@
     },
     {
       "confirm_seconds": 1800,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "CHW plant reset advisory",
       "equipment_kinds": [
@@ -7777,7 +7713,6 @@
       ],
       "confirm_seconds": 1800,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Excess / wasted unoccupied fan runtime when the zone is already in the comfort band (optimal-start / schedule misconfig signal). Without zone_t, falls back to unoccupied + fan_on (pandas sched1 base).",
       "equipment_kinds": [
@@ -7859,7 +7794,6 @@
     {
       "confirm_seconds": 3600,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Always-on fan or pump runtime",
       "equipment_kinds": [
@@ -7928,7 +7862,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Own zone setpoint present but zone temperature null for at least 90% of window",
       "equipment_kinds": [
@@ -7989,7 +7922,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan-on heating coil under-delivery",
       "equipment_kinds": [
@@ -8078,7 +8010,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Fan-on cooling coil under-delivery",
       "equipment_kinds": [
@@ -8151,7 +8082,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Heating valve passing with both commands shut",
       "equipment_kinds": [
@@ -8224,7 +8154,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Cooling valve passing with both commands shut",
       "equipment_kinds": [
@@ -8297,7 +8226,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Damper feedback more than 15 points below command",
       "equipment_kinds": [
@@ -8386,7 +8314,6 @@
     {
       "confirm_seconds": 900,
       "controls_without_sql_effect": [],
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "High valid CO2 with low outdoor-air damper command",
       "equipment_kinds": [
@@ -8474,7 +8401,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Heating/cooling pass-through setpoint deadband below 1 C",
       "equipment_kinds": [
@@ -8532,7 +8458,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Four or more heat/cool valve mode changes in window",
       "equipment_kinds": [
@@ -8606,7 +8531,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "BAS monthly kWh vs utility monthly bills (% deviation)",
       "equipment_kinds": [
@@ -8665,7 +8589,6 @@
     },
     {
       "confirm_seconds": 0,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "BAS 15m vs utility interval (MAE threshold)",
       "equipment_kinds": [
@@ -8724,7 +8647,6 @@
     },
     {
       "confirm_seconds": 900,
-      "dashboard_wired": false,
       "delete_python_candidate": false,
       "description": "Coil valve open but the air temperature changes less than min_dt",
       "equipment_kinds": [

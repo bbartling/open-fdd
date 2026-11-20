@@ -12,7 +12,6 @@ rules:
     output_columns: [equipment_id, fan_runtime_hours, total_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
 
@@ -28,7 +27,6 @@ rules:
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -84,7 +82,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -124,7 +121,6 @@ rules:
       max_zone_temp: {unit: degC, kind: absolute_temperature}
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -161,7 +157,6 @@ rules:
       comfort_pct: {unit: percent_0_100, kind: percent}
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -196,7 +191,6 @@ rules:
     output_columns: [equipment_id, fault_samples, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -233,7 +227,6 @@ rules:
     output_columns: [equipment_id, fault_hours, fault_pct]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -270,7 +263,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -366,7 +358,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -422,7 +413,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -457,7 +447,7 @@ rules:
         frontend_control: slider
         sql_placeholder: EPS_DSP
       eps_vfd_spd:
-        label: VFD speed error epsVFDSPD (GL36 default 5%)
+        label: VFD speed error epsVFDSPD (fraction; G36-2018 lists 0.05)
         default: 0.13
         min: 0.0
         max: 0.5
@@ -488,7 +478,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -574,7 +563,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -660,7 +648,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     blocker: "htg_valve_pct missing on some AHUs — Python and SQL both skip"
     confirm_seconds: 600
@@ -696,7 +683,7 @@ rules:
         frontend_control: slider
         sql_placeholder: EPS_SAT
       htg_full_min:
-        label: Full-heating threshold (GL36 99%)
+        label: Full-heating threshold (fraction)
         default: 0.9
         min: 0.5
         max: 1.0
@@ -727,7 +714,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -843,7 +829,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -949,7 +934,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1045,7 +1029,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1151,7 +1134,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1277,7 +1259,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1323,7 +1304,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1382,7 +1362,6 @@ rules:
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -1449,7 +1428,6 @@ rules:
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -1496,7 +1474,6 @@ rules:
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -1576,7 +1553,6 @@ rules:
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -1603,7 +1579,6 @@ rules:
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1659,7 +1634,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -1745,7 +1719,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 3600
     parameters:
@@ -1801,7 +1774,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1897,7 +1869,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -1973,7 +1944,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2099,7 +2069,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2235,7 +2204,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2282,7 +2250,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -2328,7 +2295,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -2374,7 +2340,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -2460,7 +2425,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2516,7 +2480,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2572,7 +2535,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2659,7 +2621,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2695,7 +2656,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -2721,7 +2681,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -2777,7 +2736,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -2823,7 +2781,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -2879,7 +2836,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -2945,7 +2901,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3001,7 +2956,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3057,7 +3011,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3113,7 +3066,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3179,7 +3131,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3235,7 +3186,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3311,7 +3261,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: true
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3388,7 +3337,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
@@ -3424,7 +3372,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3470,7 +3417,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -3526,7 +3472,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -3572,7 +3517,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -3628,7 +3572,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3684,7 +3627,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3740,7 +3682,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -3806,7 +3747,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 600
     parameters:
@@ -3862,7 +3802,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 300
     parameters:
@@ -3898,7 +3837,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
@@ -3954,7 +3892,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
@@ -4010,7 +3947,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
@@ -4071,7 +4007,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 1800
     parameters:
@@ -4118,7 +4053,6 @@ rules:
     output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, window_hours, proven_on_hours, proven_off_hours, unknown_hours, assessment]
     priority: P0
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 3600
     parameters:
@@ -4155,7 +4089,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -4181,7 +4114,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -4217,7 +4149,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -4243,7 +4174,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -4269,7 +4199,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -4295,7 +4224,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -4331,7 +4259,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
@@ -4366,7 +4293,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -4391,7 +4317,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -4428,7 +4353,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -4455,7 +4379,6 @@ rules:
     output_columns: [equipment_id, fault_hours]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 0
     parameters:
@@ -4483,7 +4406,6 @@ rules:
     output_columns: [equipment_id, fault_hours, covered_hours, active_hours, fault_pct, assessment]
     priority: P1
     parity_status: sql_screening
-    dashboard_wired: false
     delete_python_candidate: false
     confirm_seconds: 900
     parameters:
