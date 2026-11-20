@@ -32,6 +32,15 @@ PACK = ROOT / "nf-app" / "rules" / "pack-postgres.json"
 OUT_DIR = ROOT / "docs" / "rules"
 
 GH = "https://github.com/bbartling/open-fdd/blob/master"
+
+
+def source_link(fn) -> str:
+    """GitHub link to the line defining a pandas rule function (regenerated, so it tracks edits)."""
+    import inspect
+
+    line = inspect.getsourcelines(fn)[1]
+    path = inspect.getsourcefile(fn).replace("\\", "/").split("/open_fdd/", 1)[1]
+    return f"{GH}/open_fdd/{path}#L{line}"
 PANDAS_ID = {"FC13-SAT-HIGH": "FC13"}  # SQL rule id -> pandas rule id where they differ (same as tests/parity/harness.py)
 
 def run_proof_section(d: dict, sql: bool) -> str:
@@ -344,7 +353,7 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
             kinds = ", ".join(f"`{k}`" for k in rule.equipment_kinds) or "any equipment"
             out.append(f"{rule.summary or rule.title}\n")
             out.append(f"**{cell(rule.title)}** · **Family** {rule.family} · **Equipment** {kinds} · **Confirm** {fmt(round(rule.confirm_seconds / 60.0, 6))} min · "
-                       f"function `{rule.compute.__name__}` · [SQL entry](sql-cookbook.html#{anchor(rid)})\n")
+                       f"function [`{rule.compute.__name__}`]({source_link(rule.compute)}) · [SQL entry](sql-cookbook.html#{anchor(rid)})\n")
             if rule.equation and rule.equation.strip() != (rule.summary or "").strip():
                 out.append(f"**Equation**: {rule.equation.strip()}\n")
             req = list(rule.required_roles)
@@ -355,11 +364,8 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
                 out.append(run_proof_line(r) + chr(10))
             out.append("**Inputs**\n\n" + inputs_table(d, req, opt) + "\n")
             out.append("**Parameters**\n\n" + ("\n".join(PARAM_HEADER + prow) if prow else "_None._") + "\n")
-            out.append("**Outputs** (the same as the SQL twin)\n\n" + "\n".join(output_rows(cols)) + "\n")
+            out.append("**Outputs**\n\n" + "\n".join(output_rows(cols)) + "\n")
             out.append(parity_line(d, rid) + "\n")
-            note = imperial_note(has_delta, scales_of(d, req + opt))
-            if note:
-                out.append(note + "\n")
     return "\n".join(out).rstrip("\n") + "\n"
 
 
