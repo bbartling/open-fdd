@@ -8,7 +8,10 @@ parsing and Haystack IRI normalization.
 
 Sparse / incomplete graphs are expected in real buildings: when a node or chain ends
 without an upstream feeder link on a non-source equipment, traversal reports
-``unknown_upstream`` instead of guessing links.
+``unknown_upstream`` instead of guessing links. Ontology vocabulary terms bundled in
+a Turtle export are skipped. Nodes also resolve by common alternate identifiers
+(literal local names such as equipmentId, pointId, sourceRef, openfddKey, id, and
+Haystack ids with or without a leading ``@``).
 """
 
 from __future__ import annotations
@@ -48,6 +51,33 @@ SOURCE_ROOT_MARKERS = frozenset(
 
 POINT_MARKERS = frozenset({"point", "sensor", "cmd", "sp", "property", "observableproperty"})
 
+# Schema/vocabulary IRIs that appear in bundled ontology dumps, not site instances.
+VOCAB_IRI_PREFIXES = (
+    "https://project-haystack.org/def/",
+    "https://brickschema.org/schema/",
+    "http://data.ashrae.org/standard223",
+    "http://www.w3.org/",
+    "http://purl.org/dc/",
+    "http://xmlns.com/foaf/",
+)
+
+# Predicate local names (any namespace) that carry alternate equipment/point identifiers.
+ALIAS_PREDICATE_LOCAL_NAMES = frozenset(
+    {
+        "equipmentid",
+        "equipid",
+        "pointid",
+        "sourceref",
+        "openfddkey",
+        "id",
+        "ref",
+        "navname",
+        "hastimeseriesid",
+        "siteid",
+    }
+)
+SITE_ID_PREDICATE_LOCAL_NAMES = frozenset({"siteid", "site_id"})
+
 UPSTREAM_PATH_SPARQL_TEMPLATE = """PREFIX brick: <https://brickschema.org/schema/Brick#>
 PREFIX s223: <http://data.ashrae.org/standard223#>
 PREFIX phIoT: <https://project-haystack.org/def/phIoT/>
@@ -76,6 +106,8 @@ class GraphNode:
     tags: tuple[str, ...] = ()
     is_source_root: bool = False
     is_point: bool = False
+    aliases: tuple[str, ...] = ()
+    site_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -136,6 +168,30 @@ def _is_point(equip_types: Iterable[str], tags: Iterable[str]) -> bool:
     return False
 
 
+def _pred_local_name(iri: str) -> str:
+    return split_iri(iri)[1]
+
+
+def _is_vocab_iri(iri: str) -> bool:
+    lower = iri.lower()
+    return any(lower.startswith(prefix) for prefix in VOCAB_IRI_PREFIXES)
+
+
+def _identifier_forms(value: str) -> tuple[str, ...]:
+    """Exact identifier plus Haystack forms with a leading ``@`` stripped."""
+    text = value.strip()
+    if not text:
+        return ()
+    forms = [text]
+    if text.startswith("@"):
+        forms.append(text[1:])
+    return tuple(dict.fromkeys(forms))
+
+
+def _unique(values: Iterable[str]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(v for v in values if v))
+
+
 class TopologyGraph:
     """Normalized RDF + adjacency index for multi-vocabulary upstream HVAC traversal."""
 
@@ -149,6 +205,32 @@ class TopologyGraph:
         self.nodes = nodes
         self.upstream_edges = upstream_edges
         self.rdflib_graph = rdflib_graph
+        self._alias_exact: dict[str, list[str]] = {}
+        self._alias_ci: dict[str, list[str]] = {}
+        for iri, node in nodes.items():
+            for key in (node.iri, *node.aliases):
+                self._index_alias(key, iri)
+
+    def _index_alias(self, key: str, iri: str) -> None:
+        if not key:
+            return
+        bucket = self._alias_exact.setdefault(key, [])
+        if iri not in bucket:
+            bucket.append(iri)
+        low = key.lower()
+        bucket_ci = self._alias_ci.setdefault(low, [])
+        if iri not in bucket_ci:
+            bucket_ci.append(iri)
+
+    def _site_tokens(self, node: GraphNode) -> set[str]:
+        tokens = {node.site_id, _local_id(node.site_iri), *node.site_ids}
+        return {t.lower() for t in tokens if t}
+
+    def _filter_iris_by_site(self, iris: list[str], site_id: str | None) -> list[str]:
+        if not site_id:
+            return list(iris)
+        wanted = site_id.lower()
+        return [iri for iri in iris if wanted in self._site_tokens(self.nodes[iri])]
 
     @classmethod
     def from_rdflib(cls, graph: Any) -> TopologyGraph:
@@ -171,6 +253,8 @@ class TopologyGraph:
         tags_by_s: dict[str, list[str]] = {}
         labels_by_s: dict[str, str] = {}
         sites_by_s: dict[str, str] = {}
+        aliases_by_s: dict[str, list[str]] = {}
+        site_ids_literal_by_s: dict[str, list[str]] = {}
 
         for s, p, o in g:
             if not isinstance(s, URIRef):
@@ -188,6 +272,14 @@ class TopologyGraph:
             elif p == site_ref and isinstance(o, URIRef):
                 entities.add(s_iri)
                 sites_by_s[s_iri] = str(o)
+            elif isinstance(o, Literal):
+                local = _pred_local_name(str(p)).lower()
+                if local in ALIAS_PREDICATE_LOCAL_NAMES:
+                    entities.add(s_iri)
+                    aliases_by_s.setdefault(s_iri, []).append(str(o))
+                if local in SITE_ID_PREDICATE_LOCAL_NAMES:
+                    entities.add(s_iri)
+                    site_ids_literal_by_s.setdefault(s_iri, []).append(str(o))
 
         edges: dict[str, list[UpstreamEdge]] = {}
         seen_edges: set[tuple[str, str, str]] = set()
@@ -266,18 +358,37 @@ class TopologyGraph:
                     in_s = str(cp_in)
                     if in_s == out_s or in_s not in cp_owner:
                         continue
-                    if (cp_in, rdf_type, inlet_cp) in g or (cp_out, rdf_type, outlet_cp) in g:
+                    if (cp_in, rdf_type, inlet_cp) in g:
                         add_edge(cp_owner[out_s], cp_owner[in_s], "s223:cnx")
 
-        # Build GraphNode objects
+        edge_iris: set[str] = set()
+        for edge_list in edges.values():
+            for edge in edge_list:
+                edge_iris.add(edge.upstream_iri)
+                edge_iris.add(edge.downstream_iri)
+
+        # Build GraphNode objects (skip bundled ontology vocabulary unless it is an edge endpoint)
         nodes: dict[str, GraphNode] = {}
         for iri in sorted(entities):
+            if _is_vocab_iri(iri) and iri not in edge_iris:
+                continue
             eq_types = tuple(sorted(set(types_by_s.get(iri, ()))))
             tags = tuple(sorted(set(tags_by_s.get(iri, ()))))
             site_iri = sites_by_s.get(iri, "")
-            site_id = labels_by_s.get(site_iri, _local_id(site_iri)) if site_iri else ""
+            site_id_tokens = []
+            if site_iri:
+                site_id_tokens.append(labels_by_s.get(site_iri, ""))
+                site_id_tokens.append(_local_id(site_iri))
+                site_id_tokens.extend(site_ids_literal_by_s.get(site_iri, ()))
+                site_id_tokens.extend(aliases_by_s.get(site_iri, ()))
+            site_id_tokens.extend(site_ids_literal_by_s.get(iri, ()))
+            site_id_tokens = list(_unique(site_id_tokens))
+            literal_site = (site_ids_literal_by_s.get(iri) or site_ids_literal_by_s.get(site_iri) or [""])[0]
+            site_id = literal_site or (labels_by_s.get(site_iri, _local_id(site_iri)) if site_iri else "")
             node_id = _local_id(iri)
             label = labels_by_s.get(iri, node_id)
+            alias_vals: list[str] = [node_id, label, *aliases_by_s.get(iri, ())]
+            aliases = _unique(form for val in alias_vals for form in _identifier_forms(val))
             nodes[iri] = GraphNode(
                 iri=iri,
                 node_id=node_id,
@@ -288,38 +399,62 @@ class TopologyGraph:
                 tags=tags,
                 is_source_root=_is_source_root(eq_types, tags),
                 is_point=_is_point(eq_types, tags),
+                aliases=aliases,
+                site_ids=tuple(site_id_tokens),
             )
 
         return cls(nodes=nodes, upstream_edges=edges, rdflib_graph=g)
+
+    def _closed_cycle_frontiers(self, visited: set[str]) -> list[str]:
+        """Node ids in a visited component that has incoming links but no escape to an unvisited feeder."""
+        if not visited:
+            return []
+        ids: list[str] = []
+        for iri in visited:
+            cur = self.nodes.get(iri)
+            if cur is None or cur.is_point:
+                continue
+            incoming = [
+                e
+                for e in self.upstream_edges.get(iri, ())
+                if not (self.nodes.get(e.upstream_iri) and self.nodes[e.upstream_iri].is_point)
+            ]
+            if any(e.upstream_iri not in visited for e in incoming):
+                return []
+            if incoming:
+                ids.append(cur.node_id)
+        return sorted(set(ids))
 
     def resolve_node(self, identifier: str, *, site_id: str | None = None) -> GraphNode | None:
         """Resolve an equipment/space by IRI, local id, or label, scoped by ``site_id`` when given."""
         if not identifier:
             return None
+
+        forms = _identifier_forms(identifier)
+        iris: list[str] = []
         if identifier in self.nodes:
-            return self.nodes[identifier]
-
-        candidates = list(self.nodes.values())
+            iris.append(identifier)
+        for form in forms:
+            for iri in self._alias_exact.get(form, ()):
+                if iri not in iris:
+                    iris.append(iri)
+        scoped = self._filter_iris_by_site(iris, site_id)
         if site_id:
-            scoped = [n for n in candidates if n.site_id == site_id or _local_id(n.site_iri) == site_id]
-            if scoped:
-                candidates = scoped
+            iris = scoped  # do not fall back to another site
+        if len(iris) == 1:
+            return self.nodes[iris[0]]
+        if len(iris) > 1:
+            return None
 
-        # Exact node_id match first, then case-insensitive node_id, then label
-        by_id = [n for n in candidates if n.node_id == identifier]
-        if len(by_id) == 1:
-            return by_id[0]
-        if len(by_id) > 1:
-            return None  # ambiguous across sites when site_id omitted
-
-        ident_low = identifier.lower()
-        by_id_ci = [n for n in candidates if n.node_id.lower() == ident_low]
-        if len(by_id_ci) == 1:
-            return by_id_ci[0]
-
-        by_label = [n for n in candidates if n.label.lower() == ident_low]
-        if len(by_label) == 1:
-            return by_label[0]
+        ci: list[str] = []
+        for form in forms:
+            for iri in self._alias_ci.get(form.lower(), ()):
+                if iri not in ci:
+                    ci.append(iri)
+        if site_id:
+            ci = self._filter_iris_by_site(ci, site_id)
+        if len(ci) == 1:
+            return self.nodes[ci[0]]
         return None
 
     def sparql_upstream(
@@ -402,24 +537,34 @@ class TopologyGraph:
                 )
                 queue.append((up_iri, hop + 1, new_path, new_rels))
 
-        # Include any extra ancestors returned only by an external SPARQL runner
+        # SPARQL-only hits prove reachability, not a verified hop-1 feeder. Skip
+        # point nodes and record them as sparql:reachable beyond max_hops.
         seen_iris = {h.node.iri for h in ancestors} | {node.iri}
         for hit_iri in sparql_hits:
-            if hit_iri not in seen_iris:
-                up_node = self.nodes.get(
-                    hit_iri,
-                    GraphNode(iri=hit_iri, node_id=_local_id(hit_iri), label=_local_id(hit_iri)),
+            if hit_iri in seen_iris:
+                continue
+            up_node = self.nodes.get(
+                hit_iri,
+                GraphNode(iri=hit_iri, node_id=_local_id(hit_iri), label=_local_id(hit_iri)),
+            )
+            if up_node.is_point:
+                continue
+            ancestors.append(
+                UpstreamHop(
+                    node=up_node,
+                    hop=max_hops + 1,
+                    path=(up_node.node_id, node.node_id),
+                    relations=("sparql:reachable",),
                 )
-                ancestors.append(
-                    UpstreamHop(
-                        node=up_node,
-                        hop=1,
-                        path=(up_node.node_id, node.node_id),
-                        relations=("sparql:upstream",),
-                    )
-                )
+            )
+            seen_iris.add(hit_iri)
 
         frontier_unique = sorted(set(frontier_missing))
+        reached_source = bool(node.is_source_root or any(h.node.is_source_root for h in ancestors))
+        if not reached_source and not frontier_unique:
+            cycle_front = self._closed_cycle_frontiers(visited)
+            if cycle_front:
+                frontier_unique = cycle_front
         if not ancestors and not node.is_source_root:
             status = "unknown_upstream"
             unknown = True

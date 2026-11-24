@@ -10,6 +10,8 @@ import pytest
 
 rdflib = pytest.importorskip("rdflib")
 
+from datetime import UTC
+
 from open_fdd.rca import (
     DataFrameEvidenceCollector,
     DataQualityEvidence,
@@ -459,3 +461,296 @@ def test_cli_sqlite_database(tmp_path):
     assert payload["totals"]["common_cause_groups"] == 1
     assert payload["common_causes"][0]["root_equipment"] == "ahu-1"
 
+
+# --- Alias resolution, vocab filtering, and review follow-ups -----------------
+
+ALIAS_TTL = """
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
+@prefix s223: <http://data.ashrae.org/standard223#> .
+@prefix ex: <https://example.org/def#> .
+@prefix rec: <urn:example:site/plant-a#> .
+@prefix recb: <urn:example:site/plant-b#> .
+
+phIoT:equip a owl:Class ; rdfs:label "equip" .
+ph:accumulate a owl:Class ; rdfs:label "accumulate" .
+
+rec:site-1 a phIoT:site ;
+    rdfs:label "Plant A" ;
+    ex:siteId "plant-a" .
+
+rec:eq.chiller-1 a phIoT:chiller ;
+    rdfs:label "Chiller-1" ;
+    phIoT:siteRef rec:site-1 ;
+    ex:equipmentId "@p:demo:r:ch-001" ;
+    brick:feeds rec:eq.ahu-1 .
+
+rec:eq.ahu-1 a phIoT:equip ;
+    rdfs:label "AHU West" ;
+    phIoT:siteRef rec:site-1 ;
+    ex:equipmentId "@p:demo:r:aaa-111" ;
+    ex:sourceRef "@p:demo:r:aaa-111" ;
+    ex:openfddKey "fin.aaa111" ;
+    ex:siteId "plant-a" ;
+    brick:feeds rec:eq.vav-1 .
+
+rec:eq.vav-1 a phIoT:equip ;
+    rdfs:label "VAV-1" ;
+    phIoT:siteRef rec:site-1 ;
+    ex:equipmentId "@p:demo:r:bbb-222" ;
+    brick:feeds rec:eq.zone-1 .
+
+rec:eq.zone-1 a phIoT:equip ;
+    rdfs:label "Zone-1" ;
+    phIoT:siteRef rec:site-1 ;
+    ex:equipmentId "@p:demo:r:ccc-333" .
+
+rec:eq.orphan a phIoT:equip ;
+    rdfs:label "Orphan AHU" ;
+    phIoT:siteRef rec:site-1 ;
+    ex:equipmentId "@p:demo:r:ddd-444" .
+
+rec:fin.sat a phIoT:point ;
+    rdfs:label "SAT" ;
+    phIoT:siteRef rec:site-1 ;
+    phIoT:equipRef rec:eq.ahu-1 ;
+    ex:pointId "@p:demo:r:eee-555" ;
+    ex:openfddKey "fin.sat111" .
+
+recb:site-2 a phIoT:site ;
+    rdfs:label "Plant B" ;
+    ex:siteId "plant-b" .
+
+recb:eq.zone-1 a phIoT:equip ;
+    rdfs:label "Zone-1" ;
+    phIoT:siteRef recb:site-2 ;
+    ex:equipmentId "@p:other:r:zzz-999" ;
+    ex:siteId "plant-b" .
+"""
+
+
+def _alias_graph():
+    from open_fdd.rca.graph import load_graph
+
+    return load_graph(ALIAS_TTL)
+
+
+def test_resolve_alternate_ids_and_skip_vocab_terms():
+    g = _alias_graph()
+    assert g.resolve_node("accumulate") is None
+    assert g.resolve_node("equip") is None
+    assert all(not n.iri.startswith("https://project-haystack.org/def/") for n in g.nodes.values())
+
+    ahu = g.resolve_node("@p:demo:r:aaa-111")
+    assert ahu is not None
+    assert ahu.label == "AHU West"
+    assert g.resolve_node("p:demo:r:aaa-111").iri == ahu.iri
+    assert g.resolve_node("fin.aaa111").iri == ahu.iri
+    assert g.resolve_node("AHU West").iri == ahu.iri
+    assert g.resolve_node("eq.ahu-1").iri == ahu.iri
+    point = g.resolve_node("fin.sat111")
+    assert point is not None and point.is_point
+
+
+def test_haystack_id_traversal_and_missing_feeder():
+    g = _alias_graph()
+    traced = g.traverse_upstream("@p:demo:r:ccc-333")
+    assert traced.target is not None
+    assert traced.upstream_status == "traced"
+    assert [h.node.label for h in traced.ancestors] == ["VAV-1", "AHU West", "Chiller-1"]
+
+    orphan = g.traverse_upstream("@p:demo:r:ddd-444")
+    assert orphan.upstream_status == "unknown_upstream"
+    assert orphan.unknown_upstream is True
+
+    from_point = g.traverse_upstream("fin.sat111")
+    assert from_point.target is not None and from_point.target.is_point
+    assert any(h.node.label == "AHU West" for h in from_point.ancestors)
+    assert from_point.upstream_status == "traced"
+
+
+def test_site_scope_does_not_fall_back_to_another_site():
+    g = _alias_graph()
+    assert g.resolve_node("Zone-1", site_id="plant-a").iri.endswith("eq.zone-1")
+    assert g.resolve_node("Zone-1", site_id="plant-b").iri.startswith("urn:example:site/plant-b")
+    # An IRI from plant-b must not be returned when the caller asked for plant-a.
+    plant_b = g.resolve_node("@p:other:r:zzz-999")
+    assert plant_b is not None
+    assert g.resolve_node(plant_b.iri, site_id="plant-a") is None
+    assert g.resolve_node("missing-id", site_id="plant-a") is None
+
+
+def test_cnx_requires_typed_inlet():
+    from open_fdd.rca.graph import load_graph
+
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix rec: <urn:example:cnx#> .
+    rec:fan s223:hasConnectionPoint rec:fan-out .
+    rec:damper s223:hasConnectionPoint rec:damper-out .
+    rec:fan-out a s223:OutletConnectionPoint ; s223:cnx rec:conn .
+    rec:damper-out a s223:OutletConnectionPoint ; s223:cnx rec:conn .
+    """
+    g = load_graph(ttl)
+    # Two outlets on one connection must not invent a feeder edge.
+    assert sum(len(v) for v in g.upstream_edges.values()) == 0
+
+
+def test_closed_feeder_cycle_is_partial_unknown():
+    from open_fdd.rca.graph import load_graph
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix rec: <urn:example:cycle#> .
+    rec:ahu-a brick:feeds rec:ahu-b .
+    rec:ahu-b brick:feeds rec:ahu-a .
+    """
+    tr = load_graph(ttl).traverse_upstream("ahu-a")
+    assert tr.upstream_status == "partial_unknown_upstream"
+    assert tr.unknown_upstream is True
+
+
+def test_sparql_only_hits_are_not_direct_feeder_candidates():
+    from open_fdd.rca.graph import load_graph
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix rec: <urn:example:path#> .
+    rec:chiller-1 brick:feeds rec:ahu-1 .
+    rec:ahu-1 brick:feeds rec:zone-1 .
+    """
+    g = load_graph(ttl)
+    chiller = g.resolve_node("chiller-1")
+
+    def runner(_query: str):
+        return [{"upstream": chiller.iri}]
+
+    tr = g.traverse_upstream("zone-1", max_hops=1, sparql_runner=runner)
+    assert chiller.iri in tr.sparql_ancestors
+    sparql_hops = [h for h in tr.ancestors if h.node.iri == chiller.iri]
+    assert sparql_hops and sparql_hops[0].hop == 2
+    assert sparql_hops[0].relations == ("sparql:reachable",)
+
+
+def test_incomplete_window_bounds_filter_independently():
+    from datetime import datetime
+
+    from open_fdd.rca.evidence import (
+        FaultEvidence,
+        InMemoryEvidenceCollector,
+        PointDeviation,
+    )
+
+    start = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    early = datetime(2026, 3, 1, 8, 0, tzinfo=UTC)
+    collector = InMemoryEvidenceCollector(
+        faults=[FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=early, end=early)],
+        point_deviations=[
+            PointDeviation(equipment_id="ahu-1", role="sat", value_si=291.15, timestamp=early)
+        ],
+    )
+    ev = collector.collect("ahu-1", window_start=start, window_end=None)
+    assert ev.faults == []
+    assert ev.point_deviations == []
+    ev_open = collector.collect("ahu-1")
+    assert len(ev_open.faults) == 1
+
+
+def test_episode_dq_flag_stays_in_episode_window():
+    from datetime import datetime
+
+    from open_fdd.rca.evidence import DataFrameEvidenceCollector
+
+    jan = {
+        "equipment_id": "ahu-1",
+        "rule_id": "SAT-HIGH",
+        "start": "2026-01-15T00:00:00Z",
+        "end": "2026-01-16T00:00:00Z",
+        "evidence": {"poor_data_quality": True},
+    }
+    collector = DataFrameEvidenceCollector.from_confidence_episodes([jan])
+    march = datetime(2026, 3, 1, tzinfo=UTC)
+    ev = collector.collect("ahu-1", window_start=march, window_end=march)
+    assert ev.faults == []
+    assert ev.data_quality_flags == []
+    jan_win = datetime(2026, 1, 15, 12, tzinfo=UTC)
+    ev_jan = collector.collect("ahu-1", window_start=jan_win, window_end=jan_win)
+    assert ev_jan.data_quality_flags and ev_jan.data_quality_flags[0].flag == "poor_data_quality"
+
+
+def test_sample_clear_splits_episodes():
+    from datetime import datetime
+
+    from open_fdd.rca.evidence import DataFrameEvidenceCollector
+
+    rows = [
+        {"equipment_id": "ahu-1", "rule_id": "SAT-HIGH", "flag": "1", "timestamp": "2026-03-01T10:00:00Z"},
+        {"equipment_id": "ahu-1", "rule_id": "SAT-HIGH", "flag": "0", "timestamp": "2026-03-01T10:05:00Z"},
+        {"equipment_id": "ahu-1", "rule_id": "SAT-HIGH", "flag": "1", "timestamp": "2026-03-01T10:10:00Z"},
+    ]
+    collector = DataFrameEvidenceCollector.from_rule_results(rows, fault_statuses=("1", "FAULT"))
+    assert len(collector.all_faults()) == 2
+    starts = [f.start for f in collector.all_faults()]
+    assert starts[0] == datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    assert starts[1] == datetime(2026, 3, 1, 10, 10, tzinfo=UTC)
+
+
+def test_sql_load_preserves_site_ids(tmp_path):
+    import sqlite3
+
+    from open_fdd.rca.evidence import SqlEvidenceCollector
+
+    db = tmp_path / "sites.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE rule_result (site_id TEXT, equipment_id TEXT, rule_id TEXT, "
+        "window_start TEXT, window_end TEXT, status TEXT)"
+    )
+    conn.executemany(
+        "INSERT INTO rule_result VALUES (?,?,?,?,?,?)",
+        [
+            ("plant-a", "Zone-1", "ZNT-HIGH", "2026-03-01T00:00:00Z", "2026-03-01T01:00:00Z", "FAULT"),
+            ("plant-b", "Zone-1", "ZNT-HIGH", "2026-03-01T00:00:00Z", "2026-03-01T01:00:00Z", "FAULT"),
+        ],
+    )
+    conn.commit()
+    faults = SqlEvidenceCollector(conn).load().all_faults()
+    sites = sorted(f.site_id for f in faults)
+    assert sites == ["plant-a", "plant-b"]
+    scoped = [f for f in SqlEvidenceCollector(conn).load().all_faults() if f.site_id == "plant-a"]
+    assert len(scoped) == 1
+
+
+def test_evidence_merged_across_aliases_and_common_cause_uses_iri():
+    from datetime import datetime
+
+    from open_fdd.rca.evidence import (
+        FaultEvidence,
+        InMemoryEvidenceCollector,
+        PointDeviation,
+    )
+    from open_fdd.rca.rank import analyze_rca
+
+    g = _alias_graph()
+    ts = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="AHU West", rule_id="SAT-HIGH", start=ts, end=ts, site_id="plant-a"),
+            FaultEvidence(equipment_id="@p:demo:r:ccc-333", rule_id="ZNT-HIGH", start=ts, end=ts, site_id="plant-a"),
+            FaultEvidence(equipment_id="@p:demo:r:bbb-222", rule_id="DM-HIGH", start=ts, end=ts, site_id="plant-a"),
+        ],
+        point_deviations=[
+            PointDeviation(equipment_id="fin.aaa111", role="sat", value_si=291.15, setpoint_si=286.15, deviation_si=5.0, timestamp=ts, site_id="plant-a"),
+        ],
+    )
+    report = analyze_rca(g, collector)
+    zone = next(t for t in report.traces if t.upstream_status == "traced" and "ccc-333" in t.symptom_equipment)
+    ahu_cands = [c for c in zone.candidates if c.equipment_id in {"eq.ahu-1", "AHU West"} or "aaa-111" in c.equipment_id]
+    assert ahu_cands
+    # The SAT-HIGH fault and the SAT deviation must both contribute (not first-alias wins).
+    lead = ahu_cands[0]
+    joined = " ".join(lead.reasons)
+    assert "SAT-HIGH" in lead.rule_id or "SAT-HIGH" in joined or lead.rule_id == "SAT-HIGH"

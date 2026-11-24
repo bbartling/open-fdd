@@ -52,6 +52,32 @@ def _opt_bool(value: Any) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "y")
 
 
+def _range_overlaps(
+    ev_start: datetime | None,
+    ev_end: datetime | None,
+    window_start: datetime | None,
+    window_end: datetime | None,
+    *,
+    tolerance: timedelta = timedelta(minutes=30),
+) -> bool:
+    """True when evidence overlaps the query window.
+
+    Undated evidence always matches. Query bounds are applied independently, so an
+    open start or open end still filters against the known side (plus tolerance).
+    """
+    if ev_start is None and ev_end is None:
+        return True
+    if window_start is None and window_end is None:
+        return True
+    ev_s = ev_start if ev_start is not None else ev_end
+    ev_e = ev_end if ev_end is not None else ev_start
+    if ev_s is None or ev_e is None:
+        return True
+    if window_start is not None and ev_e < (window_start - tolerance):
+        return False
+    return window_end is None or ev_s <= (window_end + tolerance)
+
+
 @dataclass(frozen=True)
 class FaultEvidence:
     """A fault episode or active rule failure on an equipment node."""
@@ -76,11 +102,8 @@ class FaultEvidence:
         *,
         tolerance: timedelta = timedelta(minutes=30),
     ) -> bool:
-        """True when this fault overlaps ``[window_start - tolerance, window_end + tolerance]``."""
-        if window_start is None or window_end is None or self.start is None:
-            return True
-        s_end = self.end if self.end is not None else self.start
-        return s_end >= (window_start - tolerance) and self.start <= (window_end + tolerance)
+        """True when this fault overlaps the query window (bounds applied independently)."""
+        return _range_overlaps(self.start, self.end, window_start, window_end, tolerance=tolerance)
 
 
 @dataclass(frozen=True)
@@ -92,6 +115,8 @@ class DataQualityEvidence:
     point_id: str = ""
     detail: str = ""
     site_id: str = ""
+    start: datetime | None = None
+    end: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -187,18 +212,19 @@ class InMemoryEvidenceCollector:
             and match_site(f.site_id)
             and f.overlaps(window_start, window_end, tolerance=tolerance)
         ]
-        dq = [d for d in self._dq if d.equipment_id.lower() == eq_low and match_site(d.site_id)]
+        dq = [
+            d
+            for d in self._dq
+            if d.equipment_id.lower() == eq_low
+            and match_site(d.site_id)
+            and _range_overlaps(d.start, d.end, window_start, window_end, tolerance=tolerance)
+        ]
         devs = [
             p
             for p in self._devs
             if p.equipment_id.lower() == eq_low
             and match_site(p.site_id)
-            and (
-                window_start is None
-                or window_end is None
-                or p.timestamp is None
-                or (window_start - tolerance) <= p.timestamp <= (window_end + tolerance)
-            )
+            and _range_overlaps(p.timestamp, p.timestamp, window_start, window_end, tolerance=tolerance)
         ]
         return NodeEvidence(equipment_id=equipment_id, faults=faults, data_quality_flags=dq, point_deviations=devs)
 
@@ -313,6 +339,8 @@ class DataFrameEvidenceCollector(InMemoryEvidenceCollector):
                         flag="poor_data_quality",
                         detail=f"Confidence evidence flagged poor input data on {rule_id}",
                         site_id=str(rec.get("site_id") or ev.get("site_id") or ""),
+                        start=parse_utc(rec.get("start")),
+                        end=parse_utc(rec.get("end")),
                     )
                 )
 
@@ -329,37 +357,21 @@ def _episodes_from_sample_rows(
     gap: timedelta = timedelta(minutes=15),
 ) -> list[FaultEvidence]:
     """Group sample-level flag rows into fault episodes in Python (portable fallback)."""
-    grouped: dict[tuple[str, str, str], list[datetime]] = {}
+    grouped: dict[tuple[str, str, str], list[tuple[datetime, bool]]] = {}
     for r in rows:
-        flag_val = str(r.get("flag", "")).strip().upper()
-        if flag_val not in want_status and flag_val != "1":
-            continue
         ts = parse_utc(r.get("timestamp"))
         if ts is None:
             continue
+        flag_val = str(r.get("flag", "")).strip().upper()
+        is_fault = flag_val in want_status
         key = (str(r.get("site_id") or ""), str(r["equipment_id"]), str(r["rule_id"]))
-        grouped.setdefault(key, []).append(ts)
+        grouped.setdefault(key, []).append((ts, is_fault))
 
     episodes: list[FaultEvidence] = []
-    for (site_id, eq_id, rule_id), stamps in sorted(grouped.items()):
-        stamps.sort()
-        ep_start = stamps[0]
-        ep_end = stamps[0]
-        for ts in stamps[1:]:
-            if ts - ep_end <= gap:
-                ep_end = ts
-            else:
-                episodes.append(
-                    FaultEvidence(
-                        equipment_id=eq_id,
-                        rule_id=rule_id,
-                        status="FAULT",
-                        start=ep_start,
-                        end=ep_end,
-                        site_id=site_id,
-                    )
-                )
-                ep_start = ep_end = ts
+
+    def _flush(eq_id: str, rule_id: str, site_id: str, ep_start: datetime | None, ep_end: datetime | None) -> None:
+        if ep_start is None or ep_end is None:
+            return
         episodes.append(
             FaultEvidence(
                 equipment_id=eq_id,
@@ -370,6 +382,26 @@ def _episodes_from_sample_rows(
                 site_id=site_id,
             )
         )
+
+    for (site_id, eq_id, rule_id), samples in sorted(grouped.items()):
+        samples.sort(key=lambda item: item[0])
+        ep_start: datetime | None = None
+        ep_end: datetime | None = None
+        last_fault: datetime | None = None
+        for ts, is_fault in samples:
+            if is_fault:
+                if ep_start is None:
+                    ep_start = ep_end = ts
+                elif last_fault is not None and ts - last_fault <= gap:
+                    ep_end = ts
+                else:
+                    _flush(eq_id, rule_id, site_id, ep_start, ep_end)
+                    ep_start = ep_end = ts
+                last_fault = ts
+            elif ep_start is not None:
+                _flush(eq_id, rule_id, site_id, ep_start, ep_end)
+                ep_start = ep_end = last_fault = None
+        _flush(eq_id, rule_id, site_id, ep_start, ep_end)
     return episodes
 
 
@@ -470,6 +502,15 @@ class SqlEvidenceCollector:
         cur.execute(f"SELECT * FROM {self._ident(self.table)} WHERE 1=0")
         return {str(d[0]) for d in cur.description}
 
+    def _site_select(self) -> tuple[str, str]:
+        """Return (select expression, real column name or empty if site_id is absent)."""
+        requested = self.columns.get("site_id", "site_id")
+        present = {name.lower(): name for name in self._present_columns()}
+        actual = present.get(requested.lower())
+        if actual is None:
+            return "''", ""
+        return self._ident(actual), self._ident(actual)
+
     def _source(self, csql: Any, site_id: str | None) -> Any:
         if self.source is not None:
             src = self.source
@@ -528,10 +569,13 @@ class SqlEvidenceCollector:
             eq = self._ident(self.columns.get("equipment_id", "equipment_id"))
             rule = self._ident(self.columns.get("rule_id", "rule_id"))
             flag = self._ident(self.columns.get("flag", "flag"))
-            sql = f"SELECT {ts} AS timestamp, {eq} AS equipment_id, {rule} AS rule_id, {flag} AS flag FROM {table}"
+            site_expr, site_col = self._site_select()
+            sql = (
+                f"SELECT {ts} AS timestamp, {eq} AS equipment_id, {rule} AS rule_id, "
+                f"{flag} AS flag, {site_expr} AS site_id FROM {table}"
+            )
             params: list[Any] = []
-            if site_id:
-                site_col = self._ident(self.columns.get("site_id", "site_id"))
+            if site_id and site_col:
                 sql += f" WHERE {site_col} = ?"
                 params.append(site_id)
             cur = self.conn.cursor()
@@ -545,13 +589,14 @@ class SqlEvidenceCollector:
         t0 = self._ident(self.columns.get("window_start", "window_start"))
         t1 = self._ident(self.columns.get("window_end", "window_end"))
         st = self._ident(self.columns.get("status", "status"))
+        site_expr, site_col = self._site_select()
         sql = (
             f"SELECT {eq} AS equipment_id, {rule} AS rule_id, {t0} AS window_start, "
-            f"{t1} AS window_end, {st} AS status FROM {table} WHERE UPPER(CAST({st} AS VARCHAR)) = 'FAULT'"
+            f"{t1} AS window_end, {st} AS status, {site_expr} AS site_id FROM {table} "
+            f"WHERE UPPER(CAST({st} AS VARCHAR)) = 'FAULT'"
         )
         params: list[Any] = []
-        if site_id:
-            site_col = self._ident(self.columns.get("site_id", "site_id"))
+        if site_id and site_col:
             sql += f" AND {site_col} = ?"
             params.append(site_id)
         cur = self.conn.cursor()

@@ -87,7 +87,11 @@ class RCAReport:
 def _ts_iso(dt: Any) -> str | None:
     if dt is None:
         return None
-    return dt.strftime("%Y-%m-%dT%H:%MZ")
+    if getattr(dt, "tzinfo", None) is not None:
+        from datetime import UTC
+
+        dt = dt.astimezone(UTC)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _collect_for_node(
@@ -96,8 +100,15 @@ def _collect_for_node(
     symptom: FaultEvidence,
     tolerance: timedelta,
 ) -> NodeEvidence:
-    """Try node_id, then label, then full IRI so callers can key faults by any standard id."""
-    for ident in dict.fromkeys((node.node_id, node.label, node.iri)):
+    """Merge evidence keyed by any unambiguous alias of this graph node."""
+    faults: list = []
+    dq: list = []
+    devs: list = []
+    seen_faults: set[tuple] = set()
+    seen_dq: set[tuple] = set()
+    seen_devs: set[tuple] = set()
+    idents = dict.fromkeys((node.node_id, node.label, node.iri, *node.aliases))
+    for ident in idents:
         if not ident:
             continue
         ev = collector.collect(
@@ -107,8 +118,28 @@ def _collect_for_node(
             site_id=symptom.site_id or node.site_id,
             tolerance=tolerance,
         )
-        if ev.faults or ev.data_quality_flags or ev.point_deviations:
-            return ev
+        for f in ev.faults:
+            key = (f.equipment_id, f.rule_id, f.start, f.end, f.site_id)
+            if key not in seen_faults:
+                seen_faults.add(key)
+                faults.append(f)
+        for d in ev.data_quality_flags:
+            key = (d.equipment_id, d.flag, d.point_id, d.detail, d.site_id, d.start, d.end)
+            if key not in seen_dq:
+                seen_dq.add(key)
+                dq.append(d)
+        for p in ev.point_deviations:
+            key = (p.equipment_id, p.role, p.timestamp, p.site_id, p.value_si)
+            if key not in seen_devs:
+                seen_devs.add(key)
+                devs.append(p)
+    if faults or dq or devs:
+        return NodeEvidence(
+            equipment_id=node.node_id,
+            faults=faults,
+            data_quality_flags=dq,
+            point_deviations=devs,
+        )
     return NodeEvidence(equipment_id=node.node_id)
 
 
@@ -128,7 +159,9 @@ def _select_symptoms(
         node = graph.resolve_node(symptom_equip, site_id=site_id)
         aliases = {eq_low}
         if node is not None:
-            aliases.update({node.node_id.lower(), node.label.lower(), node.iri.lower()})
+            aliases.update(
+                {node.node_id.lower(), node.label.lower(), node.iri.lower(), *(a.lower() for a in node.aliases)}
+            )
         faults = [f for f in faults if f.equipment_id.lower() in aliases]
     if symptom_rule:
         r_low = symptom_rule.lower()
@@ -385,10 +418,11 @@ def analyze_rca(
         if normalized:
             lead = normalized[0]
             if lead.hop_distance > 0:
-                key = (lead.equipment_id, lead.rule_id)
+                key = (lead.equipment_iri, lead.rule_id)
                 slot = rollup_acc.setdefault(
                     key,
                     {
+                        "display": lead.equipment_id,
                         "conf": [],
                         "equips": set(),
                         "rules": set(),
@@ -404,7 +438,7 @@ def analyze_rca(
             CauseTrace(
                 symptom_equipment=sym.equipment_id,
                 symptom_rule=sym.rule_id,
-                symptom_site=sym.site_id,
+                symptom_site=(tr.target.site_id if tr.target is not None else "") or sym.site_id,
                 symptom_start=_ts_iso(sym.start),
                 symptom_end=_ts_iso(sym.end),
                 upstream_status=tr.upstream_status,
@@ -417,11 +451,11 @@ def analyze_rca(
         )
 
     rollups: list[CommonCauseRollup] = []
-    for (eq_id, rule_id), slot in rollup_acc.items():
+    for (_iri, rule_id), slot in rollup_acc.items():
         if len(slot["equips"]) >= 2:
             rollups.append(
                 CommonCauseRollup(
-                    root_equipment=eq_id,
+                    root_equipment=slot["display"],
                     root_rule=rule_id,
                     confidence=round(sum(slot["conf"]) / len(slot["conf"]), 3),
                     downstream_symptom_count=len(slot["equips"]),
