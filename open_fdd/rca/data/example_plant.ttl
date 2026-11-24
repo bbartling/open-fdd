@@ -1,0 +1,64 @@
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix ph: <https://project-haystack.org/def/ph/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix local: <urn:openfdd:example:plant:> .
+
+local:site-1
+    a phIoT:site ;
+    rdfs:label "Example Building" ;
+    ph:hasTag phIoT:site .
+
+local:wx-1
+    a phIoT:weatherStation ;
+    rdfs:label "wx-1" ;
+    ph:hasTag phIoT:weatherStation .
+
+local:chiller-1
+    a brick:Chiller, phIoT:equip ;
+    rdfs:label "chiller-1" ;
+    ph:hasTag phIoT:equip, phIoT:chiller ;
+    phIoT:siteRef local:site-1 ;
+    brick:feeds local:ahu-1 .
+
+local:ahu-1
+    a brick:Air_Handling_Unit, phIoT:equip ;
+    rdfs:label "ahu-1" ;
+    ph:hasTag phIoT:equip, phIoT:ahu ;
+    phIoT:siteRef local:site-1 ;
+    phIoT:weatherStationRef local:wx-1 ;
+    brick:feeds local:vav-1, local:vav-2 .
+
+local:vav-1
+    a brick:VAV, phIoT:equip ;
+    rdfs:label "vav-1" ;
+    ph:hasTag phIoT:equip, phIoT:vav ;
+    phIoT:siteRef local:site-1 ;
+    brick:feeds local:zone-1 .
+
+local:vav-2
+    a brick:VAV, phIoT:equip ;
+    rdfs:label "vav-2" ;
+    ph:hasTag phIoT:equip, phIoT:vav ;
+    phIoT:siteRef local:site-1 ;
+    brick:feeds local:zone-2 .
+
+local:zone-1
+    a brick:HVAC_Zone, phIoT:space ;
+    rdfs:label "zone-1" ;
+    ph:hasTag phIoT:space, phIoT:zone ;
+    phIoT:siteRef local:site-1 .
+
+local:zone-2
+    a brick:HVAC_Zone, phIoT:space ;
+    rdfs:label "zone-2" ;
+    ph:hasTag phIoT:space, phIoT:zone ;
+    phIoT:siteRef local:site-1 .
+
+# Incomplete topology example: zone-unlinked has no upstream brick:feeds / airRef link.
+local:zone-unlinked
+    a brick:HVAC_Zone, phIoT:space ;
+    rdfs:label "zone-unlinked" ;
+    ph:hasTag phIoT:space, phIoT:zone ;
+    phIoT:siteRef local:site-1 .
