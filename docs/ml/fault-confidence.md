@@ -107,10 +107,18 @@ most units is reported as a data problem across equipment.
 `p_real`, confirmed data issues, repeating false-positive patterns per rule, rules to review, and an equipment health
 ranking. A unit with two or more independent rules labeled likely real is `equipment issue likely`.
 
+## Calibrating against reviewed episodes
+
+With reviewer verdicts, `--labels verdicts.csv` (`equipment_id, start_ts, end_ts, label`, optional `rule_id`; label
+`fault` or `normal`) fits an L2-regularised logistic regression on the episode evidence (numpy only) and adds
+`p_real_calibrated` to every episode. The report shows held-out Brier score, expected calibration error and AUC for
+the heuristic and the calibrated model on the same episodes, with folds grouped by equipment. A rule-specific verdict
+overrides a rule-agnostic one. Fitting needs at least 20 labeled episodes and 5 of each verdict; otherwise the report
+says it was not fitted. Public labeled data (#1721) can seed the fit before a site has its own verdicts.
+
 ## What the scores are not
 
-The scores are heuristic log-odds turned into shares; they are not calibrated probabilities until fitted to labeled
-episodes (see #1721). A quiet anomaly score alone never yields `likely_false_positive`; that label needs data-quality
+Without `--labels` the scores are heuristic log-odds turned into shares, not calibrated probabilities. A quiet anomaly score alone never yields `likely_false_positive`; that label needs data-quality
 or operating-context evidence. Rule-review suggestions carry no new values; propose and replay those through the
 normal tuning workflow.
 

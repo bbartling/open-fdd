@@ -96,6 +96,13 @@ def test_flag_text_and_bool_inputs():
     assert ep["n_samples"].tolist() == [1, 1]
 
 
+def test_mixed_iso_timestamps_are_accepted():
+    fl = pd.DataFrame({"timestamp": ["2026-01-01T00:00:00Z", "2026-01-01T00:15:00.250Z", "2026-01-01T00:30:00+00:00"],
+                       "equipment_id": "A", "rule_id": "R", "flag": [1, 1, 0]})
+    ep = screen(fl)["episodes"]
+    assert len(ep) == 1 and ep.iloc[0]["n_samples"] == 2
+
+
 def test_missing_columns_raise():
     with pytest.raises(ValueError, match="missing"):
         screen(pd.DataFrame({"timestamp": [], "rule_id": []}))
@@ -413,3 +420,81 @@ def test_cli_reads_sqlite_and_duckdb_files(tmp_path):
                  "--fault-status", "ALARM", "--pass-status", "OK", "--no-history", "--out-dir", str(out2),
                  "--print", "none"]) == 0
     assert json.loads((out2 / "report.json").read_text())["totals"]["episodes"] == 5
+
+
+# --------------------------------------------------------------------------- calibration against reviewed episodes
+
+
+def _labeled_fleet(units: int = 30, seed: int = 4) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    rng = np.random.default_rng(seed)
+    ts = pd.date_range("2026-03-01", periods=3 * 96, freq="15min", tz="UTC")
+    flags, hist, labels = [], [], []
+    for u in range(units):
+        eq = f"U{u:02d}"
+        kind = ("real", "fp", "none")[u % 3]
+        sat = 13.0 + rng.normal(0, 0.4, ts.size)
+        run = np.ones(ts.size, dtype=int)
+        a = int(rng.integers(20, 200))
+        b = a + int(rng.integers(8, 40))
+        if kind == "real":
+            sat[a:b] += rng.uniform(3, 7)
+        elif kind == "fp":
+            sat[a:b] = sat[a - 1] + rng.uniform(2.0, 3.0)
+            run[a:b] = 0
+        tight = 13.2 + rng.uniform(-0.1, 0.1)
+        for i, t in enumerate(ts):
+            hist.append((t, eq, "sat", sat[i]))
+            flags.append((t, eq, "R-SAT", int(sat[i] > 15.0), sat[i], 15.0, run[i]))
+            flags.append((t, eq, "R-TIGHT", int(sat[i] > tight), sat[i], tight, run[i]))
+        if kind != "none":
+            labels.append((eq, ts[a], ts[b - 1], "fault" if kind == "real" else "normal", "R-SAT"))
+        labels.append((eq, ts[0], ts[-1], "normal", "R-TIGHT"))
+    fl = pd.DataFrame(flags, columns=["timestamp", "equipment_id", "rule_id", "flag", "value", "threshold", "running"])
+    hs = pd.DataFrame(hist, columns=["timestamp", "equipment_id", "point_id", "value"])
+    lb = pd.DataFrame(labels, columns=["equipment_id", "start_ts", "end_ts", "label", "rule_id"])
+    return fl, hs, lb
+
+
+def test_calibration_fits_and_reports_held_out_metrics():
+    from open_fdd.ml.confidence_calibrate import calibrate
+
+    fl, hs, lb = _labeled_fleet()
+    scored = screen(fl, hs)["episodes"]
+    out, info = calibrate(scored, lb)
+    assert info["status"] == "fitted", info
+    assert info["fault"] >= 5 and info["normal"] >= 5
+    ho = info["held_out"]
+    assert ho["calibrated"]["auc"] >= 0.8
+    assert ho["calibrated"]["brier"] <= ho["heuristic"]["brier"] + 0.02
+    assert out["p_real_calibrated"].between(0, 1).all()
+
+
+def test_calibration_needs_enough_labels():
+    from open_fdd.ml.confidence_calibrate import calibrate
+
+    fl, hs, lb = _labeled_fleet(units=6)
+    out, info = calibrate(screen(fl, hs)["episodes"], lb.head(3))
+    assert info["status"].startswith("not fitted")
+    assert out["p_real_calibrated"].isna().all()
+
+
+def test_rule_specific_label_beats_rule_agnostic():
+    from open_fdd.ml.confidence_calibrate import label_episodes
+
+    ep = pd.DataFrame({"equipment_id": ["E1"], "rule_id": ["FC1"], "start": [pd.Timestamp("2026-01-01T00:00Z")],
+                       "end": [pd.Timestamp("2026-01-01T01:00Z")]})
+    lb = pd.DataFrame({"equipment_id": ["E1", "E1"], "start_ts": ["2026-01-01T00:00Z"] * 2, "end_ts": ["2026-01-01T01:00Z"] * 2,
+                       "label": ["fault", "normal"], "rule_id": [None, "FC1"]})
+    assert label_episodes(ep, lb).tolist() == [0.0]
+
+
+def test_cli_with_labels_adds_calibration(tmp_path):
+    fl, hs, lb = _labeled_fleet(units=15)
+    fl.to_csv(tmp_path / "f.csv", index=False)
+    hs.to_csv(tmp_path / "h.csv", index=False)
+    lb.to_csv(tmp_path / "l.csv", index=False)
+    assert main(["--flags", str(tmp_path / "f.csv"), "--history", str(tmp_path / "h.csv"), "--labels", str(tmp_path / "l.csv"),
+                 "--out-dir", str(tmp_path / "o"), "--print", "none"]) == 0
+    rep = json.loads((tmp_path / "o" / "report.json").read_text())
+    assert rep["calibration"]["status"] == "fitted"
+    assert "Calibration against reviewed episodes" in (tmp_path / "o" / "report.md").read_text()

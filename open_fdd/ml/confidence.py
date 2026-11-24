@@ -81,8 +81,19 @@ class ConfidenceConfig:
 # --------------------------------------------------------------------------- input adapters
 
 
+def to_utc(values: Any) -> pd.Series:
+    """Parse timestamps to UTC, accepting mixed ISO 8601 forms (with or without fractions or offsets)."""
+    s = pd.Series(values)
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return pd.to_datetime(s, utc=True)
+    try:
+        return pd.to_datetime(s, utc=True, format="ISO8601")
+    except (ValueError, TypeError):
+        return pd.to_datetime(s, utc=True, format="mixed")
+
+
 def _iso(series: pd.Series) -> pd.Series:
-    return pd.to_datetime(series, utc=True).dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return to_utc(series).dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ").set_axis(series.index)
 
 
 def frame_to_sqlite(flags: pd.DataFrame | None = None, results: pd.DataFrame | None = None) -> tuple[sqlite3.Connection, SourceMap]:
@@ -121,7 +132,7 @@ def frame_history_provider(history: pd.DataFrame) -> HistoryProvider:
     if missing:
         raise ValueError(f"history is missing columns: {sorted(missing)}")
     h = history.copy()
-    h["timestamp"] = pd.to_datetime(h["timestamp"], utc=True)
+    h["timestamp"] = to_utc(h["timestamp"]).set_axis(h.index)
     h["equipment_id"] = h["equipment_id"].astype(str)
     h["value"] = pd.to_numeric(h["value"], errors="coerce")
     if "kind" not in h.columns:
@@ -151,7 +162,7 @@ def sql_history_provider(conn: Any, hm: HistoryMap | None = None) -> HistoryProv
         cols, rows = fetch(conn, sql, params)
         df = pd.DataFrame(rows, columns=cols)
         if not df.empty:
-            df["ts"] = pd.to_datetime(df["ts"], utc=True)
+            df["ts"] = to_utc(df["ts"]).set_axis(df.index)
             df["value"] = pd.to_numeric(df["value"], errors="coerce")
         return df
 
@@ -209,8 +220,8 @@ def load_episodes(conn: Any, src: SourceMap, config: ConfidenceConfig | None = N
     num = ("rn_min", "rn_max", "n_samples", "fault_h", "covered_h", "exceed_mean", "n_exceed", "n_survive", "running_share")
     for c in num:
         isl[c] = pd.to_numeric(isl[c], errors="coerce")
-    isl["start_ts"] = pd.to_datetime(isl["start_ts"], utc=True)
-    isl["end_ts"] = pd.to_datetime(isl["end_ts"], utc=True)
+    isl["start_ts"] = to_utc(isl["start_ts"]).set_axis(isl.index)
+    isl["end_ts"] = to_utc(isl["end_ts"]).set_axis(isl.index)
     ep = _merge_islands(isl, cfg.gap_samples)
     ep["duration_h"] = (ep["end"] - ep["start"]).dt.total_seconds() / 3600.0
     span = (ep["rn_max"] - ep["rn_min"] + 1).clip(lower=1)
@@ -639,6 +650,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     db.add_argument("--history-map", action="append", metavar="NAME=COLUMN", help="rename a history column (ts, point_key, value, ...)")
     db.add_argument("--no-history", action="store_true", help="skip point-history evidence")
     ap.add_argument("--history", help="CSV of long SI history: timestamp, equipment_id, point_id, value (with --flags/--results)")
+    ap.add_argument("--labels", help="CSV of reviewed verdicts (equipment_id, start_ts, end_ts, label [, rule_id]) to calibrate the scores")
     ap.add_argument("--data-quality-rules", default="", help="comma list of rule-id prefixes that are sensor/data validation rules")
     ap.add_argument("--gap-samples", type=int, default=ConfidenceConfig.gap_samples)
     ap.add_argument("--sensitivity-frac", type=float, default=ConfidenceConfig.sensitivity_frac)
@@ -650,9 +662,14 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
 
 def _connect(args: argparse.Namespace) -> tuple[Any, str]:
     if args.sqlite:
+        if not Path(args.sqlite).is_file():
+            raise FileNotFoundError(f"no SQLite database at {args.sqlite}")
         return sqlite3.connect(f"file:{Path(args.sqlite).as_posix()}?mode=ro", uri=True), "sqlite"
     if args.duckdb:
         import duckdb
+
+        if not Path(args.duckdb).is_file():
+            raise FileNotFoundError(f"no DuckDB database at {args.duckdb}")
 
         return duckdb.connect(args.duckdb, read_only=True), "duckdb"
     if args.postgres:
@@ -703,11 +720,16 @@ def run_cli(args: argparse.Namespace) -> int:
         finally:
             conn.close()
         source_desc = {"input": engine, "layout": args.layout, "table": src.table}
+    calibration = None
+    if args.labels:
+        from open_fdd.ml.confidence_calibrate import calibrate
+
+        result["episodes"], calibration = calibrate(result["episodes"], pd.read_csv(args.labels))
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for name, df in result.items():
         df.to_csv(out / f"{name}.csv", index=False)
-    report = build_report(result, top=args.top, config=cfg, source=source_desc)
+    report = build_report(result, top=args.top, config=cfg, source=source_desc, calibration=calibration)
     (out / "report.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     md = to_markdown(report)
     (out / "report.md").write_text(md, encoding="utf-8")

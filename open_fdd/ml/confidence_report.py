@@ -32,6 +32,11 @@ def _episode(r: pd.Series) -> dict[str, Any]:
     }
     if r.get("subject"):
         out["subject"] = r["subject"]
+    cal = r.get("p_real_calibrated")
+    if cal is not None and not pd.isna(cal):
+        out["p_real_calibrated"] = float(cal)
+    if "verdict" in r and not pd.isna(r["verdict"]):
+        out["verdict"] = "fault" if r["verdict"] == 1 else "normal"
     return out
 
 
@@ -47,7 +52,7 @@ def _fp_pattern(reason: str) -> str:
 
 
 def build_report(result: dict[str, pd.DataFrame], *, top: int = 10, config: ConfidenceConfig | None = None,
-                 source: dict[str, Any] | None = None) -> dict[str, Any]:
+                 source: dict[str, Any] | None = None, calibration: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = config or ConfidenceConfig()
     ep, eq, rules = result["episodes"], result["equipment"], result["rules"]
     counts = ep["label"].value_counts().to_dict() if not ep.empty else {}
@@ -73,7 +78,14 @@ def build_report(result: dict[str, pd.DataFrame], *, top: int = 10, config: Conf
         report["likely_real"] = [_episode(r) for _, r in equip_real.head(top).iterrows()]
         data_real = real[real["data_quality_rule"].astype(bool)]
         if not data_real.empty:
-            report["confirmed_data_issues"] = [_episode(r) for _, r in data_real.head(top).iterrows()]
+            g = data_real.groupby(["equipment_id", "rule_id"]).agg(
+                subjects=("subject", lambda s: int(s.replace("", pd.NA).nunique()) or 1), episodes=("episode_id", "size"),
+                hours=("duration_h", "sum"), p_real=("p_real", "max"), first=("start", "min"), last=("end", "max"),
+            ).reset_index().sort_values(["subjects", "hours"], ascending=False)
+            report["confirmed_data_issues"] = [
+                {"equipment_id": r.equipment_id, "rule_id": r.rule_id, "subjects": int(r.subjects), "episodes": int(r.episodes),
+                 "hours": round(float(r.hours), 1), "p_real": float(r.p_real), "start": _ts(r.first), "end": _ts(r.last)}
+                for r in g.head(top).itertuples()]
         fp = ep[ep["label"] == "likely_false_positive"].copy()
         if not fp.empty:
             fp["pattern"] = fp["reason"].map(_fp_pattern)
@@ -94,6 +106,8 @@ def build_report(result: dict[str, pd.DataFrame], *, top: int = 10, config: Conf
         {"equipment_id": r.equipment_id, "health": r.health, "rules_likely_real": int(r.rules_likely_real),
          "data_issues": int(r.data_issues), "episodes": int(r.episodes), "expected_real": float(r.expected_real)}
         for r in bad.itertuples()]
+    if calibration is not None:
+        report["calibration"] = calibration
     report["next_checks"] = next_checks(report)
     report["config"] = {k: (list(v) if isinstance(v, tuple) else v) for k, v in asdict(cfg).items()}
     return report
@@ -142,10 +156,20 @@ def to_markdown(report: dict[str, Any]) -> str:
         for r in rows:
             lines.append("| " + " | ".join(str(r.get(c, "")).replace("|", "/") for c in cols) + " |")
 
-    table("Likely real faults", report["likely_real"], ["equipment_id", "rule_id", "start", "duration_h", "p_real", "reason"])
-    table("Confirmed data issues", report.get("confirmed_data_issues", []), ["equipment_id", "rule_id", "start", "p_real"])
+    table("Likely real faults", report["likely_real"], ["equipment_id", "rule_id", "subject", "start", "duration_h", "p_real", "reason"])
+    table("Confirmed data issues", report.get("confirmed_data_issues", []), ["equipment_id", "rule_id", "subjects", "hours", "p_real"])
     table("False-positive patterns", report["false_positive_patterns"], ["rule_id", "pattern", "episodes", "equipment", "hours"])
     table("Rules to review", report["rules_to_review"], ["rule_id", "suggestion", "fires_on_share", "equipment_evaluated"])
     table("Equipment health", report["equipment_ranking"], ["equipment_id", "health", "rules_likely_real", "data_issues", "episodes"])
+    cal = report.get("calibration")
+    if cal:
+        lines.extend(["", "## Calibration against reviewed episodes", "",
+                      f"{cal['labeled_episodes']} labeled episodes ({cal['fault']} fault, {cal['normal']} normal): {cal['status']}."])
+        ho = cal.get("held_out")
+        if ho:
+            lines.extend(["", "| held-out | Brier | ECE | AUC |", "|---|---|---|---|"])
+            for k in ("heuristic", "calibrated"):
+                m = ho[k]
+                lines.append(f"| {k} | {m['brier']} | {m['ece']} | {m['auc']} |")
     lines.extend(["", f"_{report['advisory']}_", ""])
     return "\n".join(lines)
