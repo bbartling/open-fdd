@@ -431,18 +431,29 @@ def _score_row(r: dict[str, Any], cfg: ConfidenceConfig) -> dict[str, Any]:
     if not dq_assessed:
         real -= 0.5
         caveats.append("input data quality not assessed (no history read for this episode)")
-    if dq >= 0.5:
+    if dq >= 0.25:
         fp += 3.0 * dq
         why_fp.append(f"input data quality is poor during the episode (stale/gap/clipped share {dq:.0%})")
     run = r.get("running_share")
-    if run is not None and math.isfinite(_nz(run, float("nan"))) and run < 0.5:
-        fp += 2.0 * (1 - run)
-        why_fp.append(f"equipment proven running for only {run:.0%} of the episode")
+    run_assessed = run is not None and math.isfinite(_nz(run, float("nan")))
+    run_trust = 1.0
+    if run_assessed:
+        # Process-fault evidence (persistence, anomaly, margin, co-faults) only applies while the
+        # equipment is in a state the rule can judge. A SAT or coil rule firing while the fan is
+        # proven off is usually a context false positive, not a confirmed process fault.
+        run_trust = float(min(max(run, 0.0), 1.0))
+        if run < 0.5:
+            fp += 2.0 * (1 - run)
+            why_fp.append(f"equipment proven running for only {run:.0%} of the episode")
     if _nz(r.get("n_samples"), 1) <= 2 and _nz(r.get("persistence"), 1) < 1.0:
         fp += 0.8
         why_fp.append("very short, intermittent episode")
 
-    trust = 1.0 - dq
+    # Process-fault features (persistence, anomaly, margin, co-faults) need mostly-fresh inputs
+    # in a state the rule can judge. Trust falls to zero once half the episode is stale, gapped
+    # or clipped — a stuck or missing series looking "persistently abnormal" is not independent
+    # confirmation of a process fault.
+    trust = max(0.0, 1.0 - 2.0 * dq) * run_trust
     pers = _nz(r.get("persistence"), 1.0)
     dur = _nz(r.get("duration_h"))
     real += trust * (1.0 * (pers - 0.5) + 0.6 * math.log1p(dur))
@@ -466,7 +477,8 @@ def _score_row(r: dict[str, Any], cfg: ConfidenceConfig) -> dict[str, Any]:
     co = _nz(r.get("co_rules"))
     if co > 0:
         real += trust * 0.6 * min(co, 3)
-        why_real.append(f"{int(co)} other rule(s) fault on the same equipment at the same time")
+        if trust >= 0.5:
+            why_real.append(f"{int(co)} other rule(s) fault on the same equipment at the same time")
     peer = _nz(r.get("peer_fire_share"))
     npeer = int(_nz(r.get("peer_equipment"), 1))
     if npeer >= cfg.peer_min_equipment and peer >= cfg.peer_fire_share:
@@ -798,13 +810,23 @@ def run_cli(args: argparse.Namespace) -> int:
         write_benchmark(make_benchmark(seed=args.seed, units_per_case=args.units_per_case), Path(write_bench))
         return 0
     if want_eval and (args.synthetic or not (args.flags or args.results or args.sqlite or args.duckdb or args.postgres)):
-        from open_fdd.ml.confidence_evaluate import evaluate_benchmark, write_benchmark
-
-        bench, result, ev = evaluate_benchmark(
-            cfg, target_recall=getattr(args, "target_recall", 0.9),
-            seed=getattr(args, "seed", 7), units_per_case=getattr(args, "units_per_case", 5),
+        from open_fdd.ml.confidence_evaluate import (
+            evaluate_benchmark,
+            evaluate_suite,
+            parse_seeds,
+            write_benchmark,
         )
-        if write_bench:
+
+        seeds = parse_seeds(args)
+        kw = {"target_recall": getattr(args, "target_recall", 0.9),
+              "units_per_case": getattr(args, "units_per_case", 5)}
+        if len(seeds) == 1:
+            bench, result, ev = evaluate_benchmark(cfg, seed=seeds[0], **kw)
+        else:
+            bundle = evaluate_suite(seeds, cfg, **kw)
+            bench, result = bundle.pop("_bench"), bundle.pop("_result")
+            ev = bundle
+        if write_bench and bench is not None:
             write_benchmark(bench, Path(write_bench))
         _write_outputs(args, result, cfg, ev.get("source") or {"input": "synthetic"}, None, ev)
         return 0

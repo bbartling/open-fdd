@@ -77,6 +77,73 @@ def test_scoring_separates_planted_cases():
     assert eqh.loc["EQ-1", "likely_real"] > eqh.loc["EQ-3", "likely_real"]
 
 
+
+def _off_stale_real_frames(seed: int = 3):
+    """Hand-built flags: a running SAT fault (one with a brief history gap), a fully stuck sensor,
+    a partially stuck sensor, and a high SAT while the fan is off.
+
+    Independent of the evaluation generator so the default-cutoff behaviour is not fitted to that fixture.
+    """
+    rng = np.random.default_rng(seed)
+    ts = pd.date_range("2026-04-01", periods=6 * 96, freq="15min", tz="UTC")
+    flags, hist = [], []
+    plants = {
+        "EQ-REAL": "real",
+        "EQ-GAP": "real_gap",
+        "EQ-STALE": "stale",
+        "EQ-PARTIAL": "stale_partial",
+        "EQ-OFF": "off",
+        "EQ-CLEAN": "clean",
+    }
+    sl = slice(200, 240)  # 10 h
+    for eq, case in plants.items():
+        sat = 13.0 + rng.normal(0, 0.4, ts.size)
+        running = np.ones(ts.size, dtype=int)
+        skip = set()
+        if case in {"real", "real_gap"}:
+            sat[sl] += 5.0 + rng.normal(0, 0.2, 40)
+            if case == "real_gap":
+                skip = set(range(sl.start + 18, sl.start + 21))  # three missing SAT samples
+        elif case == "stale":
+            sat[sl] = 17.5
+        elif case == "stale_partial":
+            cut = sl.start + 24  # first 60% stuck, then moving but still high
+            sat[sl.start:cut] = 17.5
+            sat[cut:sl.stop] = 16.0 + rng.normal(0, 0.25, sl.stop - cut)
+        elif case == "off":
+            sat[sl] += 5.0 + rng.normal(0, 0.2, 40)
+            running[sl] = 0
+        for i, t in enumerate(ts):
+            if i not in skip:
+                hist.append((t, eq, "supply_air_temp", float(sat[i])))
+            hist.append((t, eq, "fan_status", float(running[i])))
+            flags.append((t, eq, "R-SAT-HIGH", int(sat[i] > 15.0), float(sat[i]), 15.0, int(running[i])))
+    fl = pd.DataFrame(flags, columns=["timestamp", "equipment_id", "rule_id", "flag", "value", "threshold", "running"])
+    hs = pd.DataFrame(hist, columns=["timestamp", "equipment_id", "point_id", "value"])
+    return fl, hs
+
+
+def test_stale_and_off_false_positives_at_default_cutoff():
+    """Default 0.45 cutoff: stuck-sensor and fan-off flags are false positives; a running SAT fault stays real."""
+    for seed in (3, 8, 17):
+        fl, hs = _off_stale_real_frames(seed)
+        ep = screen(fl, hs)["episodes"]
+        def lab(eq, episodes=ep, run_seed=seed):
+            rows = episodes[(episodes["equipment_id"] == eq) & (episodes["rule_id"] == "R-SAT-HIGH")]
+            assert not rows.empty, (run_seed, eq)
+            return rows.sort_values("duration_h").iloc[-1]
+        real, gap, stale, partial, off = (lab(eq) for eq in
+                                          ("EQ-REAL", "EQ-GAP", "EQ-STALE", "EQ-PARTIAL", "EQ-OFF"))
+        assert real["label"] == "likely_real", (seed, real["reason"], real["p_real"])
+        assert gap["label"] == "likely_real", (seed, gap["reason"], gap["p_real"], gap.get("dq_gap"))
+        assert stale["label"] == "likely_false_positive", (seed, stale["reason"], stale["p_real"])
+        assert partial["label"] == "likely_false_positive", (seed, partial["reason"], partial["p_real"], partial.get("dq_stale"))
+        assert off["label"] == "likely_false_positive", (seed, off["reason"], off["p_real"])
+        assert off["running_share"] == pytest.approx(0.0)
+        assert real["p_real"] > 0.45 and gap["p_real"] > 0.45
+        assert stale["p_false_positive"] > 0.45 and partial["p_false_positive"] > 0.45 and off["p_false_positive"] > 0.45
+
+
 def test_probabilities_sum_to_one_and_reasons_present():
     fl, hs = _fixture(seed=11)
     ep = screen(fl, hs)["episodes"]

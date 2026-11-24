@@ -109,8 +109,8 @@ left out when `--site` is set. These three filters apply to database sources onl
 | Inputs abnormal versus the same point outside the episode (robust z-score) | real |
 | Average exceedance of the threshold, in standard deviations of the compared value | real |
 | Other rules fault on the same equipment at the same time | real |
-| Stale, missing or clipped inputs during the episode | false positive, and discounts the real evidence above |
-| Equipment not proven running for most of the episode | false positive |
+| Stale, missing or clipped inputs during the episode | false positive, and discounts process-fault evidence (persistence, anomaly, margin, co-faults), falling to zero once half the episode is stale, gapped or clipped |
+| Equipment not proven running for most of the episode | false positive, and discounts the real evidence above (a process rule cannot confirm a fault while the unit is off) |
 | Very short, intermittent episode | false positive |
 | Few flagged samples survive a 10 % standard-deviation threshold nudge | review |
 | Rule fires on at least 60 % of the equipment it runs on (at least 3 units) | review |
@@ -149,21 +149,25 @@ helps, you need ground truth: a reviewer verdict per episode, or the built-in sy
 known.
 
 ```
-# Built-in benchmark (no site data): planted real faults, stale-sensor and equipment-off false positives,
-# and a tight-threshold rule that fires on healthy operation, across several equipment
+# Built-in benchmark (no site data). Default: several seeds, mean and spread reported.
+# Planted cases: real faults (one with a brief history gap), full and partial stale sensors,
+# equipment-off false positives, mixed rule tightness, and sensor noise.
 open-fdd-ml confidence --evaluate --out-dir eval
-# the same CSVs, if you want to inspect or re-run them
-open-fdd-ml confidence --write-benchmark bench --evaluate --out-dir eval
+# one seed, and the CSVs if you want to inspect or re-run them
+open-fdd-ml confidence --evaluate --seeds 7 --write-benchmark bench --out-dir eval
 ```
 
 `eval/evaluation.json` and `eval/evaluation.md` report:
 
-* **Raw rule vs screen** precision, recall and F1 for the *real-fault* class. The raw rule treats every flagged
-  episode as a predicted real fault. The screen keeps only episodes labeled `likely_real`.
-* **False-positive reduction** at a fixed real-fault recall (default 0.90, also 0.80 and 1.00). A 60 % reduction at
-  0.90 recall means the screen dropped three fifths of the non-real flags while still catching at least 90 % of the
-  labeled real faults. Change the target with `--target-recall`. The report also repeats the curve on real vs
-  false-positive labels only, so a noisy mis-tuned rule does not dominate the figure.
+* **Operational precision and recall** for the *real-fault* class, scored only on labeled real faults vs labeled
+  false positives so a mis-tuned rule does not dominate. The raw rule treats every flagged episode as a predicted
+  real fault; the screen keeps only episodes labeled `likely_real`. Overall figures (including tuning episodes) are
+  listed as well. Tuning episodes are reported separately (how often they are labeled `tuning_suggested`).
+* **False-positive reduction** at a fixed real-fault recall (default 0.90, also 0.80 and 1.00), on the operational
+  set. A 60 % reduction at 0.90 recall means the screen dropped three fifths of the labeled false positives while
+  still catching at least 90 % of the labeled real faults. Change the target with `--target-recall`.
+* **Several seeds** (default `7,11,19,23,31`): mean, standard deviation, min and max of the headline metrics.
+  Pass `--seeds 7` for a single run.
 * **Confusion matrix** of the three ground-truth classes (`real`, `false_positive`, `tuning`) against the four
   screen labels (`likely_real`, `likely_false_positive`, `tuning_suggested`, `uncertain`).
 * **Calibration** of `p_real` as a probability that the episode is a real fault (Brier score, expected calibration

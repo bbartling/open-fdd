@@ -54,6 +54,23 @@ class Benchmark:
     meta: dict[str, Any] = field(default_factory=dict)
 
 
+DEFAULT_SEEDS = (7, 11, 19, 23, 31)
+
+# default mix: more operational episodes than the old "tight rule on every 15-min sample" design
+def _mix(units_per_case: int) -> dict[str, int]:
+    n = max(int(units_per_case), 1)
+    out = {
+        "real": n,
+        "real_gap": max(n - 1, 1),
+        "stale": max(n - 1, 1),
+        "stale_partial": max(n - 1, 1),
+        "off": n,
+    }
+    # majority healthy, so a well-tuned SAT rule does not look like a fleet-wide (tuning) fire
+    out["clean"] = max(sum(out.values()), 2 * n)
+    return out
+
+
 def make_benchmark(
     *,
     units_per_case: int = 5,
@@ -61,70 +78,111 @@ def make_benchmark(
     freq: str = "15min",
     seed: int = 7,
     site_id: str = "bench",
+    mix: dict[str, int] | None = None,
 ) -> Benchmark:
     """Build a multi-equipment flag + history set with planted ground truth.
 
-    Four equipment groups, each with ``units_per_case`` units:
+    Equipment groups (counts from ``mix`` or ``units_per_case``):
 
     * ``real`` — a long supply-temperature excursion while the fan is on; a second rule co-faults.
+    * ``real_gap`` — the same real fault, with a brief hole in the SAT history (a few missing samples).
     * ``stale`` — the sensor sticks above the threshold while the fan is on (false positive).
-    * ``off`` — the same excursion while the fan is off (false positive).
-    * ``clean`` — no planted SAT fault, only the tight-threshold rule (tuning).
+    * ``stale_partial`` — the sensor is stuck for only part of the episode, then moves again (false positive).
+    * ``off`` — a noisy SAT excursion while the fan is off (false positive).
+    * ``clean`` — no planted SAT fault; may see a brief noise spike.
 
-    Every unit also carries ``R-TIGHT``, a threshold inside normal noise, labeled ``tuning``.
+    Rules are mixed: ``R-SAT-HIGH`` (15 °C) on every unit, ``R-COIL`` on planted real faults,
+    ``R-TIGHT`` (chronic, 12.95 °C) on half the fleet, and ``R-MED`` (mildly tight, 14.3 °C) on the other half.
+    SAT traces include realistic sensor noise.
     """
     _require_pandas()
     if units_per_case < 1:
         raise ValueError("units_per_case must be at least 1")
+    counts = _mix(units_per_case) if mix is None else {k: int(v) for k, v in mix.items() if int(v) > 0}
     rng = np.random.default_rng(seed)
     ts = pd.date_range("2026-03-01", periods=int(pd.Timedelta(days=days) / pd.Timedelta(freq)), freq=freq, tz="UTC")
     n = ts.size
     # windows sit in the middle of the record so each episode has baseline history on both sides
-    real_sl = slice(int(n * 0.30), int(n * 0.30) + 40)   # 10 h at 15 min
-    stale_sl = slice(int(n * 0.50), int(n * 0.50) + 24)  # 6 h stuck
-    off_sl = slice(int(n * 0.65), int(n * 0.65) + 24)    # 6 h off
-    groups = (("real", real_sl), ("stale", stale_sl), ("off", off_sl), ("clean", None))
+    real_sl = slice(int(n * 0.30), int(n * 0.30) + 40)    # 10 h
+    stale_sl = slice(int(n * 0.50), int(n * 0.50) + 28)   # 7 h
+    off_sl = slice(int(n * 0.65), int(n * 0.65) + 24)     # 6 h
+    windows = {
+        "real": real_sl, "real_gap": real_sl,
+        "stale": stale_sl, "stale_partial": stale_sl,
+        "off": off_sl, "clean": None,
+    }
     flags, hist, labels, cases = [], [], [], []
-    for case, sl in groups:
-        for k in range(1, units_per_case + 1):
-            eq = f"AHU-{case[:3].upper()}{k:02d}"
+    skip_sat: set[tuple[str, pd.Timestamp]] = set()
+    for case, n_units in counts.items():
+        sl = windows.get(case)
+        for k in range(1, n_units + 1):
+            prefix = {
+                "real": "REA", "real_gap": "GAP",
+                "stale": "STA", "stale_partial": "PST",
+                "off": "OFF", "clean": "CLE",
+            }.get(case, case[:3].upper())
+            eq = f"AHU-{prefix}{k:02d}"
             cases.append({"equipment_id": eq, "case": case, "site_id": site_id})
-            sat = 13.0 + rng.normal(0, 0.35, n)
+            sat = 13.0 + rng.normal(0, 0.5, n)
+            # occasional isolated spikes (noise), kept mostly below the well-tuned 15 °C rule
+            spike_i = rng.choice(n, size=2, replace=False)
+            sat[spike_i] += rng.choice([0.6, 0.8, 1.0], size=2)
             running = np.ones(n, dtype=int)
-            if case == "real" and sl is not None:
-                sat[sl] += 6.0
+            coil = np.zeros(n, dtype=int)
+            if case in {"real", "real_gap"} and sl is not None:
+                sat[sl] = 13.0 + 5.5 + rng.normal(0, 0.25, sl.stop - sl.start)
+                coil[sl] = 1
+                if case == "real_gap":
+                    mid = (sl.start + sl.stop) // 2
+                    for t in ts[mid:mid + 3]:
+                        skip_sat.add((eq, t))
             elif case == "stale" and sl is not None:
                 sat[sl] = 18.0
+            elif case == "stale_partial" and sl is not None:
+                cut = sl.start + int(0.6 * (sl.stop - sl.start))
+                sat[sl.start:cut] = 18.0
+                sat[cut:sl.stop] = 16.0 + rng.normal(0, 0.3, sl.stop - cut)
             elif case == "off" and sl is not None:
-                sat[sl] += 6.0
+                sat[sl] = 13.0 + 5.5 + rng.normal(0, 0.3, sl.stop - sl.start)
                 running[sl] = 0
-            coil = np.zeros(n, dtype=int)
-            if case == "real" and sl is not None:
-                coil[sl] = 1
+            tight = bool(rng.integers(0, 2))  # mixed tightness, reproducible from seed
             for i, t in enumerate(ts):
-                hist.append((t, eq, "supply_air_temp", float(sat[i]), "numeric"))
+                if (eq, t) not in skip_sat:
+                    hist.append((t, eq, "supply_air_temp", float(sat[i]), "numeric"))
                 hist.append((t, eq, "fan_status", float(running[i]), "bool"))
                 flags.append((t, eq, "R-SAT-HIGH", int(sat[i] > 15.0), float(sat[i]), 15.0, int(running[i])))
-                flags.append((t, eq, "R-TIGHT", int(sat[i] > 13.2), float(sat[i]), 13.2, int(running[i])))
                 flags.append((t, eq, "R-COIL", int(coil[i]), float("nan"), float("nan"), int(running[i])))
-            if case == "real" and sl is not None:
+                if tight:
+                    flags.append((t, eq, "R-TIGHT", int(sat[i] > 12.95), float(sat[i]), 12.95, int(running[i])))
+                else:
+                    flags.append((t, eq, "R-MED", int(sat[i] > 14.3), float(sat[i]), 14.3, int(running[i])))
+            if case in {"real", "real_gap"} and sl is not None:
                 labels.append((eq, ts[sl.start], ts[sl.stop - 1], "R-SAT-HIGH", "fault", case))
                 labels.append((eq, ts[sl.start], ts[sl.stop - 1], "R-COIL", "fault", case))
-            elif case in {"stale", "off"} and sl is not None:
+            elif case in {"stale", "stale_partial", "off"} and sl is not None:
                 labels.append((eq, ts[sl.start], ts[sl.stop - 1], "R-SAT-HIGH", "false_positive", case))
-            # the tight rule is a threshold problem on every unit, including those with a planted SAT event
-            labels.append((eq, ts[0], ts[-1], "R-TIGHT", "tuning", "tuning"))
+            if tight:
+                labels.append((eq, ts[0], ts[-1], "R-TIGHT", "tuning", "tuning"))
+            else:
+                labels.append((eq, ts[0], ts[-1], "R-MED", "tuning", "tuning"))
     fl = pd.DataFrame(flags, columns=["timestamp", "equipment_id", "rule_id", "flag", "value", "threshold", "running"])
     hs = pd.DataFrame(hist, columns=["timestamp", "equipment_id", "point_id", "value", "kind"])
     lab = pd.DataFrame(labels, columns=["equipment_id", "start_ts", "end_ts", "rule_id", "label", "case"])
     lab["site_id"] = site_id
     eq = pd.DataFrame(cases)
+    if eq["equipment_id"].duplicated().any():
+        raise ValueError("make_benchmark assigned the same equipment_id to more than one case")
     meta = {
         "generator": "open_fdd.ml.confidence_evaluate.make_benchmark",
         "seed": seed, "days": days, "freq": freq, "units_per_case": units_per_case,
         "site_id": site_id, "n_equipment": len(eq), "n_flag_rows": len(fl),
-        "cases": {c: units_per_case for c, _ in groups},
-        "rules": {"R-SAT-HIGH": 15.0, "R-TIGHT": 13.2, "R-COIL": "co-faults with the planted real SAT event"},
+        "cases": dict(counts),
+        "rules": {
+            "R-SAT-HIGH": 15.0,
+            "R-COIL": "co-faults with the planted real SAT event",
+            "R-TIGHT": 12.95,
+            "R-MED": 14.3,
+        },
     }
     return Benchmark(flags=fl, history=hs, labels=lab, cases=eq, meta=meta)
 
@@ -241,11 +299,19 @@ def evaluate(scored: pd.DataFrame, labels: pd.DataFrame, *, target_recall: float
     report["screen"] = _pr(y, pred_screen)
     targets = tuple(sorted({0.8, 0.9, 1.0, float(target_recall)}))
     report["false_positive_reduction"] = _fp_reduction(y, scores, targets)
-    # same curve but only on real vs planted false positives, so a noisy tight rule does not dominate
-    op = ep.loc[known, "truth"].isin(["real", "false_positive"]).to_numpy()
-    if op.any() and int((ep.loc[known, "truth"] == "real").sum()) and int((ep.loc[known, "truth"] == "false_positive").sum()):
-        y_op = (ep.loc[known, "truth"][op] == "real").to_numpy()
-        report["false_positive_reduction_operational"] = _fp_reduction(y_op, scores[op], targets)
+    # operational = labeled real faults vs labeled false positives; tuning is reported separately
+    op_mask = ep.loc[known, "truth"].isin(["real", "false_positive"]).to_numpy()
+    if op_mask.any() and int((ep.loc[known, "truth"] == "real").sum()) and int((ep.loc[known, "truth"] == "false_positive").sum()):
+        y_op, s_op = y[op_mask], scores[op_mask]
+        pred_screen_op = pred_screen[op_mask]
+        pred_raw_op = pred_raw[op_mask]
+        report["operational"] = {
+            "rule": _pr(y_op, pred_raw_op),
+            "screen": _pr(y_op, pred_screen_op),
+            "false_positive_reduction": _fp_reduction(y_op, s_op, targets),
+            "truth": {"real": int(y_op.sum()), "false_positive": int((~y_op).sum())},
+        }
+        report["false_positive_reduction_operational"] = report["operational"]["false_positive_reduction"]
     truth = ep.loc[known, "truth"].to_numpy()
     pred = ep.loc[known, "label"].to_numpy()
     matrix = [[int(((truth == t) & (pred == p)).sum()) for p in PRED_LABELS] for t in TRUE_CLASSES]
@@ -274,6 +340,13 @@ def evaluate(scored: pd.DataFrame, labels: pd.DataFrame, *, target_recall: float
         sub = ep.loc[known & (ep["truth"] == c), "label"]
         by_truth[c] = {lab: int((sub == lab).sum()) for lab in LABELS}
     report["labels_by_truth"] = by_truth
+    tun = ep.loc[known & (ep["truth"] == "tuning"), "label"]
+    if len(tun):
+        report["tuning"] = {
+            "episodes": len(tun),
+            "labels": {lab: int((tun == lab).sum()) for lab in LABELS},
+            "share_tuning_suggested": round(float((tun == "tuning_suggested").mean()), 4),
+        }
     if config is not None:
         report["uncertain_below"] = config.uncertain_below
     report["status"] = "ok"
@@ -294,6 +367,93 @@ def evaluate_benchmark(config: ConfidenceConfig | None = None, target_recall: fl
     return bench, result, report
 
 
+def _conf_rate(report: dict[str, Any], truth: str, pred: str) -> float:
+    conf = report.get("confusion") or {}
+    rows, cols, counts = conf.get("rows") or [], conf.get("columns") or [], conf.get("counts") or []
+    if truth not in rows or pred not in cols:
+        return float("nan")
+    row = counts[rows.index(truth)]
+    tot = sum(row)
+    return (row[cols.index(pred)] / tot) if tot else float("nan")
+
+
+def _fpr_at(report: dict[str, Any], target: float = 0.9, *, operational: bool = True) -> float:
+    key = "false_positive_reduction_operational" if operational else "false_positive_reduction"
+    rows = report.get(key) or (report.get("operational") or {}).get("false_positive_reduction") or []
+    for r in rows:
+        if r.get("target_recall") == target and r.get("achieved"):
+            return float(r["false_positive_reduction"])
+    return float("nan")
+
+
+def _stat(values: list[float]) -> dict[str, Any]:
+    arr = np.array(values, dtype=float)
+    arr = arr[np.isfinite(arr)]
+    if arr.size == 0:
+        return {"mean": None, "std": None, "min": None, "max": None, "values": values}
+    std = float(arr.std(ddof=1)) if arr.size > 1 else 0.0
+    return {"mean": round(float(arr.mean()), 4), "std": round(std, 4),
+            "min": round(float(arr.min()), 4), "max": round(float(arr.max()), 4),
+            "values": [None if not np.isfinite(v) else round(float(v), 4) for v in values]}
+
+
+def summarize_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    """Mean and spread of the headline metrics across several evaluation reports (usually several seeds)."""
+
+    def grab(fn):
+        return _stat([fn(r) for r in reports])
+
+    def op(r, side, key):
+        return (r.get("operational") or {}).get(side, {}).get(key, float("nan"))
+
+    return {
+        "n": len(reports),
+        "operational_screen_precision": grab(lambda r: op(r, "screen", "precision")),
+        "operational_screen_recall": grab(lambda r: op(r, "screen", "recall")),
+        "operational_rule_precision": grab(lambda r: op(r, "rule", "precision")),
+        "operational_fp_reduction_at_0_9": grab(lambda r: _fpr_at(r, 0.9, operational=True)),
+        "real_as_likely_real": grab(lambda r: _conf_rate(r, "real", "likely_real")),
+        "false_positive_as_likely_false_positive": grab(lambda r: _conf_rate(r, "false_positive", "likely_false_positive")),
+        "tuning_as_tuning_suggested": grab(lambda r: (r.get("tuning") or {}).get("share_tuning_suggested", float("nan"))),
+        "heuristic_auc": grab(lambda r: ((r.get("calibration") or {}).get("heuristic") or {}).get("auc", float("nan"))),
+        "heuristic_brier": grab(lambda r: ((r.get("calibration") or {}).get("heuristic") or {}).get("brier", float("nan"))),
+    }
+
+
+def evaluate_suite(seeds: tuple[int, ...] | list[int] = DEFAULT_SEEDS, config: ConfidenceConfig | None = None,
+                   target_recall: float = 0.9, **kw: Any) -> dict[str, Any]:
+    """Run the synthetic benchmark on several seeds and return per-seed reports plus a mean/spread summary."""
+    per: list[dict[str, Any]] = []
+    first_bench = first_result = None
+    for seed in seeds:
+        bench, result, report = evaluate_benchmark(config, target_recall=target_recall, seed=int(seed), **kw)
+        if first_bench is None:
+            first_bench, first_result = bench, result
+        per.append({"seed": int(seed), **{k: report[k] for k in (
+            "status", "episodes", "labeled_episodes", "truth", "rule", "screen", "operational", "tuning",
+            "confusion", "calibration", "labels_by_truth", "false_positive_reduction",
+            "false_positive_reduction_operational",
+        ) if k in report}})
+    out = {
+        "evaluation_version": EVAL_VERSION,
+        "advisory": "The screen is advisory; nothing was tuned or written back. Metrics are only as good as the labels.",
+        "seeds": [int(s) for s in seeds],
+        "summary": summarize_reports(per),
+        "per_seed": per,
+        "status": "ok",
+    }
+    # keep a representative single-seed view (first seed) so to_markdown and the CLI still work
+    if per:
+        for k, v in per[0].items():
+            if k != "seed":
+                out.setdefault(k, v)
+        if first_bench is not None:
+            out["source"] = {"input": "synthetic", "seeds": [int(s) for s in seeds], **first_bench.meta}
+    out["_bench"] = first_bench
+    out["_result"] = first_result
+    return out
+
+
 def to_markdown(report: dict[str, Any]) -> str:
     """A short Markdown summary of an evaluation report."""
     lines = ["# Rule vs screen evaluation", ""]
@@ -305,20 +465,58 @@ def to_markdown(report: dict[str, Any]) -> str:
     if truth:
         bits = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in truth.items())
         lines.append(f"Ground truth: {bits}.")
-    lines += ["", "## Precision and recall for real faults", ""]
-    if "rule" in report and "screen" in report:
+    if report.get("summary"):
+        su = report["summary"]
+        lines += ["", f"## Mean and spread across {su['n']} seeds", "",
+                  "| Metric | Mean | Std | Min | Max |",
+                  "|---| ---:| ---:| ---:| ---:|"]
+        labels = (
+            ("operational_screen_precision", "Operational precision (after screen)"),
+            ("operational_screen_recall", "Operational recall (after screen)"),
+            ("operational_rule_precision", "Operational precision (raw rule)"),
+            ("operational_fp_reduction_at_0_9", "Operational FP reduction at 0.90 recall"),
+            ("real_as_likely_real", "Real faults labeled likely_real"),
+            ("false_positive_as_likely_false_positive", "False positives labeled likely_false_positive"),
+            ("tuning_as_tuning_suggested", "Tuning episodes labeled tuning_suggested"),
+            ("heuristic_auc", "Heuristic AUC"),
+            ("heuristic_brier", "Heuristic Brier"),
+        )
+        for key, title in labels:
+            st = su.get(key) or {}
+            if st.get("mean") is None:
+                continue
+            lines.append(f"| {title} | {st['mean']:.3f} | {st['std']:.3f} | {st['min']:.3f} | {st['max']:.3f} |")
+        lines.append("")
+        if report.get("seeds"):
+            lines.append("Figures below are the first seed. Tuning episodes are excluded from the operational tables.")
+    op = report.get("operational")
+    lines += ["", "## Precision and recall for real faults (operational: real vs false positive)", ""]
+    block = op if op else report
+    if "rule" in block and "screen" in block:
         lines += [
             "| Method | Precision | Recall | F1 | False positives | False negatives |",
             "|---| ---:| ---:| ---:| ---:| ---:|",
         ]
         for name, key in (("Raw rule (every flag is a predicted fault)", "rule"),
-                          ("After screening (`likely_real` only)", "screen")):
-            m = report[key]
+                          ("After screening (likely_real only)", "screen")):
+            m = block[key]
             lines.append(f"| {name} | {m['precision']:.3f} | {m['recall']:.3f} | {m['f1']:.3f} | "
                          f"{m['false_positives']} | {m['false_negatives']} |")
-    rows = report.get("false_positive_reduction") or []
+    if op and report.get("rule") and report.get("screen"):
+        lines += ["", ("Including tuning episodes as not-real (overall): raw rule "
+                    f"precision {report['rule']['precision']:.3f}, screen "
+                    f"precision {report['screen']['precision']:.3f}, recall "
+                    f"{report['screen']['recall']:.3f}.")]
+    tun = report.get("tuning")
+    if tun:
+        lines += ["", f"## Tuning episodes ({tun['episodes']} labeled)", "",
+                  ("{:.0%} were labeled `tuning_suggested` ({} of {}).".format(
+                      tun["share_tuning_suggested"],
+                      tun["labels"].get("tuning_suggested", 0),
+                      tun["episodes"]))]
+    rows = (report.get("operational") or {}).get("false_positive_reduction") or report.get("false_positive_reduction_operational") or report.get("false_positive_reduction") or []
     if rows:
-        lines += ["", "## False-positive reduction at fixed real-fault recall", "",
+        lines += ["", "## False-positive reduction at fixed real-fault recall (operational)", "",
                   "| Target recall | Achieved | Threshold `p_real` | Precision | FP after | FP raw | FP reduction |",
                   "| ---:|---| ---:| ---:| ---:| ---:| ---:|"]
         for r in rows:
@@ -328,18 +526,6 @@ def to_markdown(report: dict[str, Any]) -> str:
             lines.append(f"| {r['target_recall']:.2f} | {r['recall']:.3f} | {r['threshold_p_real']:.3f} | "
                          f"{r['precision']:.3f} | {r['false_positives']} | {r['false_positives_raw']} | "
                          f"{r['false_positive_reduction']:.1%} |")
-        op_rows = report.get("false_positive_reduction_operational") or []
-        if op_rows:
-            lines += ["", "Restricted to labeled real faults vs labeled false positives (tuning episodes omitted):", ""]
-            lines += ["| Target recall | Achieved | Threshold `p_real` | Precision | FP after | FP raw | FP reduction |",
-                      "| ---:|---| ---:| ---:| ---:| ---:| ---:|"]
-            for r in op_rows:
-                if not r.get("achieved"):
-                    lines.append(f"| {r['target_recall']:.2f} | no | — | — | — | — | — |")
-                    continue
-                lines.append(f"| {r['target_recall']:.2f} | {r['recall']:.3f} | {r['threshold_p_real']:.3f} | "
-                             f"{r['precision']:.3f} | {r['false_positives']} | {r['false_positives_raw']} | "
-                             f"{r['false_positive_reduction']:.1%} |")
     conf = report.get("confusion")
     if conf:
         lines += ["", "## Confusion (truth \\ predicted)", "",
@@ -365,6 +551,16 @@ def to_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def parse_seeds(args: Any) -> list[int]:
+    raw = getattr(args, "seeds", None)
+    if raw:
+        seeds = [int(x.strip()) for x in str(raw).split(",") if x.strip()]
+        if not seeds:
+            raise ValueError("--seeds needs at least one integer")
+        return seeds
+    return list(DEFAULT_SEEDS)
+
+
 def add_evaluate_arguments(ap: Any) -> None:
     ev = ap.add_argument_group("evaluation")
     ev.add_argument("--evaluate", action="store_true",
@@ -374,7 +570,9 @@ def add_evaluate_arguments(ap: Any) -> None:
     ev.add_argument("--write-benchmark", metavar="DIR", help="write the synthetic flags, history and labels CSVs to DIR")
     ev.add_argument("--target-recall", type=float, default=0.9,
                     help="real-fault recall at which to report false-positive reduction (default 0.9)")
-    ev.add_argument("--seed", type=int, default=7, help="generator seed for --synthetic / --write-benchmark")
+    ev.add_argument("--seed", type=int, default=7, help="generator seed for --write-benchmark or a single --evaluate run")
+    ev.add_argument("--seeds", default=None,
+                    help="comma list of generator seeds for --evaluate (default 7,11,19,23,31); pass one seed for a faster run")
     ev.add_argument("--units-per-case", type=int, default=5, help="equipment in each planted case group (default 5)")
 
 
