@@ -130,8 +130,7 @@ def prose_words(body: str) -> int:
     body = re.sub(r"\{%.*?%\}", " ", body, flags=re.S)
     text = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("|"))
     text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
-    text = re.sub(r"`[^`
-]*`", " ", text)   # one line only: an unbalanced backtick cannot hide later prose (#1769)
+    text = re.sub(r"`[^`\n]*`", " ", text)   # one line only: an unbalanced backtick cannot hide later prose (#1769)
     text = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>", " ", text)   # real tags only: "rise < 1.7" is prose (#1769)
     return len(re.findall(r"[A-Za-z][A-Za-z'-]*", text))
 
