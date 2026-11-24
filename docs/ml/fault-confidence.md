@@ -33,6 +33,7 @@ Any engine works (SQLite, PostgreSQL/Timescale, DuckDB, pandas). Export two long
 
 ```bash
 open-fdd-ml confidence --flags flags.csv --history history.csv --out-dir confidence_out
+open-fdd-ml confidence --flags flags.csv --history history.csv --data-quality-rules SV-
 ```
 
 ```python
@@ -59,10 +60,18 @@ The output folder holds `episodes.csv`, `equipment.csv`, `rules.csv` and `summar
 
 The threshold nudge is computed offline from the data. Nothing is re-run or saved.
 
+### Data-quality rules
+
+Pass sensor-validation rules (stale, flatline, range checks) with `--data-quality-rules SV-,DQ-` (rule-id prefixes).
+For those rules, measured poor data confirms the fault instead of discounting it, and clean inputs suggest tuning.
+Their likely-real episodes are counted as `data_issues`, not equipment faults, so a unit with only data problems is
+reported as `sensor or data issue`. A data-quality rule confirmed on most units is reported as a data problem across
+equipment (trending, polling or sensors) rather than a threshold problem.
+
 ## Roll-ups
 
-`equipment.csv` counts episodes and labels per unit. Two or more distinct rules labeled `likely_real` on one unit
-gives `equipment issue likely`. Only tuning or data labels give `faults look like tuning` or
+`equipment.csv` counts episodes and labels per unit. Two or more distinct equipment rules labeled `likely_real` on
+one unit gives `equipment issue likely`. Only tuning or data labels give `faults look like tuning` or
 `faults look like data or context`.
 
 `rules.csv` compares each rule across its equipment. A rule that fires on most units, or whose episodes mostly score

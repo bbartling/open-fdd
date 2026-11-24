@@ -6,7 +6,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from open_fdd.ml.confidence import ConfidenceConfig, build_episodes, normalize_flags, screen, summarize
+from open_fdd.ml.confidence import (
+    ConfidenceConfig,
+    build_episodes,
+    normalize_flags,
+    screen,
+    summarize,
+)
 
 
 def _fixture(seed: int = 7) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, str]]:
@@ -113,3 +119,33 @@ def test_cli_writes_outputs(tmp_path):
     assert main(["--flags", str(tmp_path / "flags.csv"), "--history", str(tmp_path / "history.csv"), "--out-dir", str(tmp_path / "out")]) == 0
     for name in ("episodes.csv", "equipment.csv", "rules.csv", "summary.json"):
         assert (tmp_path / "out" / name).is_file()
+
+
+def test_data_quality_rule_is_confirmed_by_stale_inputs():
+    fl, hs, _ = _fixture()
+    stale = (fl["equipment_id"] == "EQ-2") & (fl["rule_id"] == "R-SAT-HIGH")
+    dq = fl[stale].copy()
+    dq["rule_id"] = "DQ-STALE"
+    dq["flag"] = 0
+    dq.loc[dq.index[200:216], "flag"] = 1
+    dq = dq.drop(columns=["value", "threshold", "direction"])
+    fl2 = pd.concat([fl, dq], ignore_index=True)
+    ep = screen(fl2, hs, ConfidenceConfig(data_quality_rules=("DQ-",)))["episodes"]
+    row = ep[ep["rule_id"] == "DQ-STALE"].iloc[0]
+    assert row["label"] == "likely_real", row["reason"]
+    assert "data-quality rule confirmed" in row["reason"]
+
+
+def test_data_rule_rollup_is_not_an_equipment_issue():
+    fl, hs, _ = _fixture()
+    fl = fl[fl["rule_id"] != "R-TIGHT"]
+    dq = fl[fl["rule_id"] == "R-SAT-HIGH"].copy()
+    dq["rule_id"] = "DQ-STALE"
+    dq["flag"] = 0
+    eq2 = dq.index[dq["equipment_id"] == "EQ-2"]
+    dq.loc[eq2[200:216], "flag"] = 1
+    res = screen(pd.concat([fl, dq.drop(columns=["value", "threshold", "direction"])], ignore_index=True), hs,
+                 ConfidenceConfig(data_quality_rules=("DQ-",)))
+    eqh = res["equipment"].set_index("equipment_id")
+    assert eqh.loc["EQ-2", "health"] == "sensor or data issue"
+    assert eqh.loc["EQ-1", "health"] in {"equipment issue likely", "check equipment"}

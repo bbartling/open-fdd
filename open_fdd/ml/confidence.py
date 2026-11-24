@@ -49,6 +49,8 @@ class ConfidenceConfig:
     chronic_share: float = 0.5  # rule flagged at least this share of the time on one equipment suggests tuning
     stale_run: int = 6  # identical consecutive readings that count as stale
     uncertain_below: float = 0.45  # top probability under this gives the label "uncertain"
+    # rules whose purpose is sensor or data validation; their faults are confirmed, not discounted, by poor data
+    data_quality_rules: tuple[str, ...] = ()
 
 
 # --------------------------------------------------------------------------- input normalisation
@@ -267,13 +269,33 @@ def _nz(x: float, default: float = 0.0) -> float:
     return default if x is None or not math.isfinite(float(x)) else float(x)
 
 
+def is_data_quality_rule(rule_id: str, cfg: ConfidenceConfig) -> bool:
+    rid = str(rule_id).upper()
+    return any(rid.startswith(p.upper()) for p in cfg.data_quality_rules)
+
+
 def _score_row(r: pd.Series, cfg: ConfidenceConfig) -> dict[str, Any]:
     real, fp, tune = 0.0, -0.5, -0.5
     why_real: list[str] = []
     why_fp: list[str] = []
     why_tune: list[str] = []
 
-    dq = max(_nz(r.get("dq_stale")), _nz(r.get("dq_gap")), _nz(r.get("dq_clip")))
+    dq_parts = [r.get("dq_stale"), r.get("dq_gap"), r.get("dq_clip")]
+    dq_assessed = any(x is not None and math.isfinite(float(x)) for x in dq_parts)
+    dq = max(_nz(x) for x in dq_parts)
+    if is_data_quality_rule(r.get("rule_id"), cfg):
+        # a sensor-validation rule: measured poor data corroborates it; clean data argues against it
+        if dq_assessed and dq >= 0.5:
+            real += 1.0 + 2.0 * dq
+            why_real.append(f"data-quality rule confirmed by the inputs (stale/gap/clipped share {dq:.0%})")
+        elif dq_assessed and dq < 0.1:
+            tune += 1.0
+            why_tune.append("data-quality rule fired but the inputs look clean")
+        dq = 0.0
+    caveats: list[str] = []
+    if not dq_assessed:
+        real -= 0.5
+        caveats.append("input data quality not assessed (no history for this equipment)")
     if dq >= 0.5:
         fp += 3.0 * dq
         why_fp.append(f"input data quality is poor during the episode (stale/gap/clipped share {dq:.0%})")
@@ -289,8 +311,8 @@ def _score_row(r: pd.Series, cfg: ConfidenceConfig) -> dict[str, Any]:
     trust = 1.0 - dq
     pers = _nz(r.get("persistence"), 1.0)
     dur = _nz(r.get("duration_h"))
-    real += 1.0 * (pers - 0.5) + 0.6 * math.log1p(dur)
-    if dur >= 1 and pers >= 0.8:
+    real += trust * (1.0 * (pers - 0.5) + 0.6 * math.log1p(dur))
+    if dur >= 1 and pers >= 0.8 and trust >= 0.5:
         why_real.append(f"persistent ({pers:.0%} of samples) for {dur:.1f} h")
     anom = r.get("anomaly_share")
     if anom is not None and math.isfinite(anom):
@@ -329,6 +351,7 @@ def _score_row(r: pd.Series, cfg: ConfidenceConfig) -> dict[str, Any]:
     k = int(np.argmax(p))
     label = LABELS[k] if p[k] >= cfg.uncertain_below else "uncertain"
     reasons = (why_real, why_fp, why_tune)[k] if label != "uncertain" else why_real + why_fp + why_tune
+    reasons = list(reasons) + caveats
     return {
         "p_real": round(float(p[0]), 3),
         "p_false_positive": round(float(p[1]), 3),
@@ -344,7 +367,9 @@ def score_episodes(features: pd.DataFrame, config: ConfidenceConfig | None = Non
     if features.empty:
         return features.assign(p_real=[], p_false_positive=[], p_tuning=[], label=[], reason=[])
     scored = pd.DataFrame([_score_row(r, cfg) for _, r in features.iterrows()])
-    return pd.concat([features.reset_index(drop=True), scored], axis=1).drop(columns=["row_lo", "row_hi"], errors="ignore")
+    out = pd.concat([features.reset_index(drop=True), scored], axis=1).drop(columns=["row_lo", "row_hi"], errors="ignore")
+    out["data_quality_rule"] = out["rule_id"].map(lambda rid: is_data_quality_rule(rid, cfg))
+    return out
 
 
 # --------------------------------------------------------------------------- roll-ups
@@ -369,10 +394,15 @@ def equipment_health(scored: pd.DataFrame, flags: pd.DataFrame) -> pd.DataFrame:
         }
     )
     out = evaluated.join(out, how="left").fillna(0)
-    real_rules = scored[scored["label"] == "likely_real"].groupby("equipment_id")["rule_id"].nunique()
-    out["rules_likely_real"] = real_rules.reindex(out.index).fillna(0).astype(int)
+    dq_mask = scored["data_quality_rule"] if "data_quality_rule" in scored.columns else pd.Series(False, index=scored.index)
+    real = scored[(scored["label"] == "likely_real") & ~dq_mask]
+    data_real = scored[(scored["label"] == "likely_real") & dq_mask]
+    out["rules_likely_real"] = real.groupby("equipment_id")["rule_id"].nunique().reindex(out.index).fillna(0).astype(int)
+    out["data_issues"] = data_real.groupby("equipment_id")["rule_id"].nunique().reindex(out.index).fillna(0).astype(int)
 
     def verdict(r: pd.Series) -> str:
+        if r["rules_likely_real"] == 0 and r["data_issues"] > 0:
+            return "sensor or data issue"
         if r["rules_likely_real"] >= 2:
             return "equipment issue likely"
         if r["rules_likely_real"] == 1:
@@ -387,7 +417,7 @@ def equipment_health(scored: pd.DataFrame, flags: pd.DataFrame) -> pd.DataFrame:
     return out.reset_index().sort_values(["expected_real", "episodes"], ascending=False)
 
 
-def rule_summary(scored: pd.DataFrame, flags: pd.DataFrame) -> pd.DataFrame:
+def rule_summary(scored: pd.DataFrame, flags: pd.DataFrame, config: ConfidenceConfig | None = None) -> pd.DataFrame:
     """Per-rule peer comparison. A rule firing everywhere is a tuning or applicability question."""
     base = flags.groupby("rule_id").agg(equipment_evaluated=("equipment_id", "nunique"), flagged_share=("flag", "mean"))
     if scored.empty:
@@ -412,6 +442,11 @@ def rule_summary(scored: pd.DataFrame, flags: pd.DataFrame) -> pd.DataFrame:
         "review threshold or applicability",
         np.where(out["mean_p_real"] >= 0.5, "faults look real", "mixed"),
     )
+    cfg = config or ConfidenceConfig()
+    dq_rule = out.index.to_series().map(lambda rid: is_data_quality_rule(rid, cfg))
+    out.loc[dq_rule & (out["mean_p_real"] >= 0.5) & (out["fires_on_share"] >= 0.6), "suggestion"] = (
+        "data problem across equipment (check trending, polling or sensors)"
+    )
     out.loc[out["episodes"] == 0, "suggestion"] = "no faults"
     return out.reset_index().sort_values(["episodes"], ascending=False)
 
@@ -430,14 +465,14 @@ def screen(
     hist = normalize_history(history)
     ep = build_episodes(fl, cfg)
     scored = score_episodes(episode_features(fl, ep, hist, cfg), cfg)
-    return {"episodes": scored, "equipment": equipment_health(scored, fl), "rules": rule_summary(scored, fl)}
+    return {"episodes": scored, "equipment": equipment_health(scored, fl), "rules": rule_summary(scored, fl, cfg)}
 
 
 def summarize(result: dict[str, pd.DataFrame]) -> dict[str, Any]:
     ep = result["episodes"]
     counts = ep["label"].value_counts().to_dict() if not ep.empty else {}
     return {
-        "episodes": int(len(ep)),
+        "episodes": len(ep),
         "labels": {k: int(counts.get(k, 0)) for k in LABELS},
         "equipment_flagged": int((result["equipment"]["episodes"] > 0).sum()) if not result["equipment"].empty else 0,
         "rules_to_review": result["rules"].loc[result["rules"]["suggestion"] == "review threshold or applicability", "rule_id"].tolist()
@@ -453,10 +488,12 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--out-dir", default="confidence_out", help="where to write episodes.csv, equipment.csv, rules.csv, summary.json")
     ap.add_argument("--gap-samples", type=int, default=ConfidenceConfig.gap_samples)
     ap.add_argument("--sensitivity-frac", type=float, default=ConfidenceConfig.sensitivity_frac)
+    ap.add_argument("--data-quality-rules", default="", help="comma list of rule-id prefixes that are sensor/data validation rules")
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    cfg = ConfidenceConfig(gap_samples=args.gap_samples, sensitivity_frac=args.sensitivity_frac)
+    dq_rules = tuple(p.strip() for p in (args.data_quality_rules or "").split(",") if p.strip())
+    cfg = ConfidenceConfig(gap_samples=args.gap_samples, sensitivity_frac=args.sensitivity_frac, data_quality_rules=dq_rules)
     flags = pd.read_csv(args.flags)
     history = pd.read_csv(args.history) if args.history else None
     result = screen(flags, history, cfg)
