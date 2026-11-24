@@ -30,8 +30,18 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import pandas as pd
+try:  # pandas/numpy come with the ml extra; keep `open-fdd-ml --help` working on a core install
+    import numpy as np
+    import pandas as pd
+except ImportError:  # pragma: no cover
+    np = pd = None  # type: ignore[assignment]
+
+_EXTRA_HINT = "open-fdd-ml confidence needs pandas and numpy: pip install 'open-fdd[ml]'"
+
+
+def _require_pandas() -> None:
+    if pd is None or np is None:
+        raise ImportError(_EXTRA_HINT)
 
 LABELS = ("likely_real", "likely_false_positive", "tuning_suggested", "uncertain")
 _TRUE_TEXT = {"1", "true", "t", "yes", "y", "fault", "on"}
@@ -460,6 +470,7 @@ def screen(
     config: ConfidenceConfig | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Run the whole screen. Returns ``episodes``, ``equipment`` and ``rules`` DataFrames."""
+    _require_pandas()
     cfg = config or ConfidenceConfig()
     fl = normalize_flags(flags)
     hist = normalize_history(history)
@@ -492,6 +503,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
 
 
 def run_cli(args: argparse.Namespace) -> int:
+    _require_pandas()
     dq_rules = tuple(p.strip() for p in (args.data_quality_rules or "").split(",") if p.strip())
     cfg = ConfidenceConfig(gap_samples=args.gap_samples, sensitivity_frac=args.sensitivity_frac, data_quality_rules=dq_rules)
     flags = pd.read_csv(args.flags)
