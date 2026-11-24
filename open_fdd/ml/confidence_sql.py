@@ -115,15 +115,18 @@ def base_cte(src: SourceMap, ph: str = "?") -> tuple[str, list[Any]]:
         subj = src.col("subject_key")
         t0, t1, st = src.col("window_start"), src.col("window_end"), src.col("status")
         fh, ch = src.col("fault_hours"), src.col("covered_hours")
+        if not src.fault_status:
+            raise ValueError("fault_status needs at least one status value")
         faults = ", ".join(_quote(s) for s in src.fault_status)
         passes = ", ".join(_quote(s) for s in src.pass_status)
+        pass_when = f"WHEN {st} IN ({passes}) THEN 0 " if src.pass_status else ""
         where, params = _filters(src, t1, ph)
         sql = (
             "base AS (SELECT "
             f"{eq} AS equipment_id, {rule} AS rule_id, "
             f"{'COALESCE(' + subj + ', ' + _quote('') + ')' if subj else _quote('')} AS subject, "
             f"{t0} AS t0, {t1} AS t1, "
-            f"CASE WHEN {st} IN ({faults}) THEN 1 WHEN {st} IN ({passes}) THEN 0 ELSE NULL END AS flag, "
+            f"CASE WHEN {st} IN ({faults}) THEN 1 {pass_when}ELSE NULL END AS flag, "
             f"{fh if fh else _NULL} AS fault_h, {ch if ch else _NULL} AS covered_h, "
             f"{_NULL} AS v, {_NULL} AS thr, {_NULL} AS run "
             f"FROM {t}{where})"
@@ -191,16 +194,20 @@ def episodes_sql(src: SourceMap, sensitivity_frac: float, ph: str = "?") -> tupl
         "AVG(s.exceed) AS exceed_mean, COUNT(s.exceed) AS n_exceed, "
         f"SUM(CASE WHEN s.exceed IS NOT NULL AND s.exceed * s.exceed > {k2!r} * (st.m2 - st.m * st.m) "
         "THEN 1 ELSE 0 END) AS n_survive, "
-        "AVG(1.0 * s.run) AS running_share "
+        "AVG(1.0 * s.run) AS running_share, COUNT(s.run) AS n_run "
         "FROM seq s JOIN stats st ON st.equipment_id = s.equipment_id AND st.rule_id = s.rule_id "
         "WHERE s.flag = 1 GROUP BY s.equipment_id, s.rule_id, s.subject, s.grp"
     )
     return sql, params
 
 
-def history_sql(hm: HistoryMap, ph: str = "?") -> str:
-    """Points of one equipment between two timestamps: ``ts, point_id, value, kind``."""
+def history_sql(hm: HistoryMap, ph: str = "?", *, by_site: bool = False) -> str:
+    """Points of one equipment between two timestamps: ``ts, point_id, value, kind``.
+
+    With ``by_site=True`` the query takes the site id as its last parameter (needs a mapped ``site_id`` column)."""
     h = ident(hm.table)
+    if by_site and not hm.col("site_id"):
+        raise ValueError("history has no site_id column to filter on")
     ts, pk, val = hm.col("ts"), hm.col("point_key"), hm.col("value")
     if hm.point_table:
         p = ident(hm.point_table)
@@ -212,11 +219,13 @@ def history_sql(hm: HistoryMap, ph: str = "?") -> str:
             f"SELECT s.{ts} AS ts, s.{pk} AS point_id, s.{val} AS value, {('p.' + kind) if kind else 'NULL'} AS kind "
             f"FROM {h} s JOIN {p} p ON {join} "
             f"WHERE p.{eq} = {ph} AND s.{ts} >= {ph} AND s.{ts} <= {ph}"
+            + (f" AND s.{site} = {ph}" if by_site else "")
         )
     eq = hm.col("equipment_id")
     return (
         f"SELECT {ts} AS ts, {pk} AS point_id, {val} AS value, NULL AS kind FROM {h} "
         f"WHERE {eq} = {ph} AND {ts} >= {ph} AND {ts} <= {ph}"
+        + (f" AND {hm.col('site_id')} = {ph}" if by_site else "")
     )
 
 

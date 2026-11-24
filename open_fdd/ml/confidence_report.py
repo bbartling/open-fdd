@@ -129,7 +129,10 @@ def next_checks(report: dict[str, Any]) -> list[str]:
         checks.append(f"{r['rule_id']}: {r['suggestion']} (fires on {r['fires_on_share']:.0%} of "
                       f"{r['equipment_evaluated']} equipment). Review with the engineer; no change was made.")
     if not checks:
-        checks.append("No faults need attention in this window.")
+        if report["totals"].get("episodes", 0):
+            checks.append("Fault episodes remain without a clear call; review their evidence in episodes.csv.")
+        else:
+            checks.append("No faults need attention in this window.")
     return checks[:10]
 
 

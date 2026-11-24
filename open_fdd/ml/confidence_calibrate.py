@@ -117,8 +117,10 @@ def _metrics(y: np.ndarray, p: np.ndarray, bins: int = 10) -> dict[str, float]:
     edges = np.linspace(0, 1, bins + 1)
     idx = np.clip(np.digitize(p, edges) - 1, 0, bins - 1)
     ece = float(sum(abs(p[idx == b].mean() - y[idx == b].mean()) * (idx == b).mean() for b in range(bins) if (idx == b).any()))
-    pos, neg = p[y == 1], p[y == 0]
-    auc = float(((pos[:, None] > neg[None, :]).sum() + 0.5 * (pos[:, None] == neg[None, :]).sum()) / (len(pos) * len(neg)))
+    n1, n0 = int((y == 1).sum()), int((y == 0).sum())
+    # Mann-Whitney with average ranks for ties: same as pairwise counting with half credit, in O(n log n)
+    ranks = pd.Series(p).rank(method="average").to_numpy()
+    auc = float((ranks[y == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
     return {"brier": round(brier, 4), "ece": round(ece, 4), "auc": round(auc, 4)}
 
 

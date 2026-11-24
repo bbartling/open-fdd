@@ -27,7 +27,7 @@ import math
 import os
 import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -149,16 +149,24 @@ def frame_history_provider(history: pd.DataFrame) -> HistoryProvider:
     return provide
 
 
-def sql_history_provider(conn: Any, hm: HistoryMap | None = None) -> HistoryProvider:
-    """History provider that reads one equipment's points per call with a parameterised query."""
+def _bound(conn: Any, value: Any) -> Any:
+    """A timestamp parameter in the form the engine compares: canonical ISO UTC text for SQLite, else a datetime."""
+    if value is None:
+        return None
+    t = to_utc(pd.Series([value])).iloc[0]
+    return t.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if isinstance(conn, sqlite3.Connection) else t.to_pydatetime()
+
+
+def sql_history_provider(conn: Any, hm: HistoryMap | None = None, site_id: str | None = None) -> HistoryProvider:
+    """History provider that reads one equipment's points per call with a parameterised query.
+
+    With ``site_id`` the reads are scoped to that site."""
     hm = hm or HistoryMap()
     ph = paramstyle(conn)
-    sql = history_sql(hm, ph)
-    text_ts = isinstance(conn, sqlite3.Connection)
+    sql = history_sql(hm, ph, by_site=site_id is not None)
 
     def provide(equipment_id: str, start: Any, end: Any) -> pd.DataFrame:
-        a, b = (pd.Timestamp(start), pd.Timestamp(end))
-        params = [equipment_id, *(x.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if text_ts else x.to_pydatetime() for x in (a, b))]
+        params = [equipment_id, _bound(conn, start), _bound(conn, end)] + ([site_id] if site_id is not None else [])
         cols, rows = fetch(conn, sql, params)
         df = pd.DataFrame(rows, columns=cols)
         if not df.empty:
@@ -180,15 +188,14 @@ def _merge_islands(isl: pd.DataFrame, gap: int) -> pd.DataFrame:
     prev_end = isl.groupby(key)["rn_max"].shift()
     new = prev_end.isna() | ((isl["rn_min"] - prev_end - 1) > gap)
     isl["ep"] = new.cumsum()
-    w = isl["n_samples"]
     agg = isl.assign(
-        _ex=isl["exceed_mean"] * isl["n_exceed"], _run=isl["running_share"] * w,
+        _ex=isl["exceed_mean"] * isl["n_exceed"], _run=isl["running_share"].fillna(0.0) * isl["n_run"],
     ).groupby("ep").agg(
         equipment_id=("equipment_id", "first"), rule_id=("rule_id", "first"), subject=("subject", "first"),
         start=("start_ts", "min"), end=("end_ts", "max"), rn_min=("rn_min", "min"), rn_max=("rn_max", "max"),
         n_samples=("n_samples", "sum"), fault_h=("fault_h", "sum"), covered_h=("covered_h", "sum"),
         _ex=("_ex", "sum"), n_exceed=("n_exceed", "sum"), n_survive=("n_survive", "sum"),
-        _run=("_run", "sum"), _runw=("running_share", lambda s: w.loc[s.dropna().index].sum()),
+        _run=("_run", "sum"), _runw=("n_run", "sum"),
         _fhn=("fault_h", "count"), _chn=("covered_h", "count"),
     )
     agg["exceed_mean"] = np.where(agg["n_exceed"] > 0, agg["_ex"] / agg["n_exceed"].replace(0, np.nan), np.nan)
@@ -203,6 +210,7 @@ def load_episodes(conn: Any, src: SourceMap, config: ConfidenceConfig | None = N
     _require_pandas()
     cfg = config or ConfidenceConfig()
     ph = paramstyle(conn)
+    src = replace(src, since=_bound(conn, src.since), until=_bound(conn, src.until))
     tcols, trows = fetch(conn, *totals_sql(src, ph))
     totals = pd.DataFrame(trows, columns=tcols)
     for c in ("n_assessed", "n_flagged", "n_unassessed"):
@@ -217,7 +225,8 @@ def load_episodes(conn: Any, src: SourceMap, config: ConfidenceConfig | None = N
         return pd.DataFrame(columns=["episode_id", "equipment_id", "rule_id", "subject", "start", "end"]), totals
     for c in ("equipment_id", "rule_id", "subject"):
         isl[c] = isl[c].astype(str)
-    num = ("rn_min", "rn_max", "n_samples", "fault_h", "covered_h", "exceed_mean", "n_exceed", "n_survive", "running_share")
+    num = ("rn_min", "rn_max", "n_samples", "fault_h", "covered_h", "exceed_mean", "n_exceed", "n_survive", "running_share",
+           "n_run")
     for c in num:
         isl[c] = pd.to_numeric(isl[c], errors="coerce")
     isl["start_ts"] = to_utc(isl["start_ts"]).set_axis(isl.index)
@@ -244,26 +253,25 @@ def load_episodes(conn: Any, src: SourceMap, config: ConfidenceConfig | None = N
 
 
 def _co_rules(ep: pd.DataFrame) -> np.ndarray:
-    """Distinct other rules with an overlapping episode on the same equipment."""
+    """Distinct other rules with an overlapping episode on the same equipment (touching endpoints count).
+
+    For each other rule, its episodes sorted by start with a running maximum of their ends answer "does any of them
+    overlap [start, end]?" with one binary search, so the cost is O(n log n) per rule rather than pairwise."""
     out = np.zeros(len(ep))
     for _, g in ep.groupby("equipment_id"):
         if g["rule_id"].nunique() < 2:
             continue
-        s = g["start"].to_numpy()
-        e = g["end"].to_numpy()
+        s, e = (to_utc(g[c]).dt.tz_localize(None).to_numpy().astype("datetime64[ns]").astype(np.int64) for c in ("start", "end"))
         r = g["rule_id"].to_numpy()
-        order = np.argsort(s)
-        for pos, i in enumerate(order):
-            seen = set()
-            for j in order[pos + 1:]:
-                if s[j] > e[i]:
-                    break
-                if r[j] != r[i]:
-                    seen.add(r[j])
-            for j in order[:pos][::-1]:
-                if e[j] >= s[i] and r[j] != r[i]:
-                    seen.add(r[j])
-            out[g.index[i]] = len(seen)
+        count = np.zeros(len(g))
+        for rule in np.unique(r):
+            m = r == rule
+            order = np.argsort(s[m], kind="stable")
+            rs, re_max = s[m][order], np.maximum.accumulate(e[m][order])
+            k = np.searchsorted(rs, e, side="right") - 1
+            hit = (k >= 0) & (re_max[np.clip(k, 0, None)] >= s) & ~m
+            count += hit
+        out[g.index.to_numpy()] = count
     return out
 
 
@@ -362,16 +370,21 @@ def add_history_evidence(ep: pd.DataFrame, provider: HistoryProvider | None, cfg
     pick = ep.sort_values("duration_h", ascending=False).head(cfg.max_history_episodes)
     pad = pd.Timedelta(hours=cfg.baseline_hours)
     for eq, g in pick.groupby("equipment_id"):
-        h = provider(eq, g["start"].min() - pad, g["end"].max() + pad)
-        for i, row in g.iterrows():
-            if h is not None and not h.empty:
-                win = h[(h["ts"] >= row["start"] - pad) & (h["ts"] <= row["end"] + pad)]
-            else:
-                win = h
-            ev = history_evidence(win, row["start"], row["end"], cfg)
-            for c in cols:
-                out.at[i, c] = ev[c]
-            out.at[i, "history_assessed"] = bool(ev["history_points"] > 0)
+        g = g.sort_values("start")
+        lo, hi = g["start"] - pad, g["end"] + pad
+        # one read per run of overlapping padded windows, so far-apart episodes do not pull the span between them
+        block = (lo > hi.cummax().shift()).cumsum()
+        for _, b in g.groupby(block.to_numpy()):
+            h = provider(eq, b["start"].min() - pad, b["end"].max() + pad)
+            for i, row in b.iterrows():
+                if h is not None and not h.empty:
+                    win = h[(h["ts"] >= row["start"] - pad) & (h["ts"] <= row["end"] + pad)]
+                else:
+                    win = h
+                ev = history_evidence(win, row["start"], row["end"], cfg)
+                for c in cols:
+                    out.at[i, c] = ev[c]
+                out.at[i, "history_assessed"] = bool(ev["history_points"] > 0)
     return out
 
 
@@ -583,7 +596,12 @@ def screen_sql(
     cfg = config or ConfidenceConfig()
     src = source or SourceMap()
     ep, totals = load_episodes(conn, src, cfg)
-    provider = sql_history_provider(conn, history) if isinstance(history, HistoryMap) else history
+    if isinstance(history, HistoryMap):
+        # with a site filter, history that cannot be scoped to the site is left out rather than mixed in
+        scoped = src.site_id is None or bool(history.col("site_id"))
+        provider = sql_history_provider(conn, history, src.site_id) if scoped else None
+    else:
+        provider = history
     ep = add_history_evidence(ep, provider, cfg) if not ep.empty else ep
     scored = score_episodes(ep, cfg)
     return {"episodes": scored, "equipment": equipment_health(scored, totals), "rules": rule_summary(scored, totals, cfg)}
@@ -668,7 +686,7 @@ def _connect(args: argparse.Namespace) -> tuple[Any, str]:
     if args.sqlite:
         if not Path(args.sqlite).is_file():
             raise FileNotFoundError(f"no SQLite database at {args.sqlite}")
-        return sqlite3.connect(f"file:{Path(args.sqlite).as_posix()}?mode=ro", uri=True), "sqlite"
+        return sqlite3.connect(Path(args.sqlite).resolve().as_uri() + "?mode=ro", uri=True), "sqlite"
     if args.duckdb:
         import duckdb
 
@@ -684,6 +702,8 @@ def _connect(args: argparse.Namespace) -> tuple[Any, str]:
             raise ValueError("set OPENFDD_CONFIDENCE_DSN to a read-only PostgreSQL connection string")
         conn = psycopg.connect(dsn)
         conn.read_only = True
+        # totals and episodes are two reads; one REPEATABLE READ transaction gives them the same snapshot
+        conn.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
         return conn, "postgres"
     raise ValueError("pick one of --flags, --results, --sqlite, --duckdb, --postgres")
 
@@ -696,6 +716,8 @@ def run_cli(args: argparse.Namespace) -> int:
     cfg = ConfidenceConfig(gap_samples=args.gap_samples, sensitivity_frac=args.sensitivity_frac,
                            data_quality_rules=dq_rules, max_history_episodes=args.max_history_episodes)
     if args.flags or args.results:
+        if args.since or args.until or args.site:
+            raise ValueError("--since, --until and --site apply to database sources; filter the CSV before screening")
         history = pd.read_csv(args.history) if args.history else None
         if args.flags:
             result = screen(pd.read_csv(args.flags), history, cfg)
