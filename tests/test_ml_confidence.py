@@ -173,6 +173,12 @@ def test_absent_timestamps_count_as_gaps():
     assert ev["dq_gap"] == pytest.approx(0.6, abs=0.01)
 
 
+def test_configured_interval_scores_gaps_with_few_readings():
+    h = _hist([13.0, 13.4], freq="60min")
+    ev = history_evidence(h, h["ts"].iloc[0], h["ts"].iloc[1], ConfidenceConfig(expected_interval_s=900))
+    assert ev["dq_gap"] == pytest.approx(0.6, abs=0.01)
+
+
 def test_irregular_event_history_is_not_called_a_gap():
     rng = np.random.default_rng(2)
     offsets = np.cumsum(rng.exponential(600, 200))

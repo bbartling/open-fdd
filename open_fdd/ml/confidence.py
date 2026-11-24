@@ -307,17 +307,21 @@ def history_evidence(h: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp, cf
         inside = (s["ts"] >= start).to_numpy() & (s["ts"] <= end).to_numpy()
         vin, vout = vals[inside], vals[~inside]
         status = _is_status_point(vals, s["kind"].iloc[0] if "kind" in s.columns else None)
-        # gaps against the expected cadence
-        if ts.size >= 20:
+        # gaps against the expected cadence: the configured interval, or the point's own median spacing when it has
+        # enough readings to establish one
+        cadence, regular = None, False
+        if cfg.expected_interval_s:
+            cadence, regular = float(cfg.expected_interval_s), True
+        elif ts.size >= 20:
             d = np.diff(ts).astype("timedelta64[ms]").astype(float) / 1000.0
             d = d[d > 0]
             if d.size:
-                cadence = cfg.expected_interval_s or float(np.median(d))
-                regular = cfg.expected_interval_s is not None or float(np.std(d) / max(np.mean(d), 1e-9)) <= 0.5
-                if regular and cadence > 0:
-                    expected = dur_s / cadence + 1.0
-                    observed = float(np.isfinite(vin).sum())
-                    gap.append(float(np.clip(1.0 - observed / expected, 0.0, 1.0)))
+                cadence = float(np.median(d))
+                regular = float(np.std(d) / max(np.mean(d), 1e-9)) <= 0.5
+        if regular and cadence and cadence > 0:
+            expected = dur_s / cadence + 1.0
+            observed = float(np.isfinite(vin).sum())
+            gap.append(float(np.clip(1.0 - observed / expected, 0.0, 1.0)))
         if not status:
             fin = vin[np.isfinite(vin)]
             if fin.size >= cfg.stale_run:
