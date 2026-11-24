@@ -364,3 +364,98 @@ def test_cli_missing_inputs_returns_2(capsys):
     rc = rca_main(["--print", "none"])
     assert rc == 2
     assert "error:" in capsys.readouterr().err
+
+def test_sql_collector_fallback_keeps_fault_rows_when_confidence_sql_missing(monkeypatch):
+    from open_fdd.rca import evidence as evmod
+
+    monkeypatch.setattr(evmod, "confidence_sql_module", lambda: None)
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE rule_result (site_id TEXT, equipment_id TEXT, rule_id TEXT, window_start TEXT, window_end TEXT, status TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', '2026-11-24T10:00:00Z', '2026-11-24T10:15:00Z', 'FAULT')"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', '2026-11-24T10:15:00Z', '2026-11-24T10:30:00Z', 'FAULT')"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', '2026-11-24T11:00:00Z', '2026-11-24T11:15:00Z', 'PASS')"
+    )
+    collector = evmod.SqlEvidenceCollector(conn).load(site_id="site-a")
+    faults = collector.all_faults()
+    assert len(faults) == 2
+    assert {f.rule_id for f in faults} == {"SAT-HIGH"}
+    conn.close()
+
+
+def test_sql_collector_merges_episodes_and_reads_si_history_with_confidence_sql():
+    csql = pytest.importorskip("open_fdd.ml.confidence_sql")
+    from open_fdd.rca.evidence import SqlEvidenceCollector
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE rule_result (site_id TEXT, equipment_id TEXT, rule_id TEXT, subject_key TEXT, window_start TEXT, window_end TEXT, status TEXT, fault_hours DOUBLE, covered_hours DOUBLE)"
+    )
+    # Two adjacent FAULT windows should become one episode.
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', '', '2026-11-24T10:00:00Z', '2026-11-24T10:15:00Z', 'FAULT', 0.25, 0.25)"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', '', '2026-11-24T10:15:00Z', '2026-11-24T10:30:00Z', 'FAULT', 0.25, 0.25)"
+    )
+    conn.execute(
+        "CREATE TABLE input_sample (site_id TEXT, point_key TEXT, ts TEXT, value DOUBLE)"
+    )
+    conn.execute(
+        "CREATE TABLE point (site_id TEXT, point_key TEXT, equipment_id TEXT, kind TEXT)"
+    )
+    conn.execute("INSERT INTO point VALUES ('site-a', 'discharge-air-temp', 'ahu-1', 'Number')")
+    conn.execute("INSERT INTO point VALUES ('site-a', 'discharge-air-temp-sp', 'ahu-1', 'Number')")
+    conn.execute("INSERT INTO input_sample VALUES ('site-a', 'discharge-air-temp', '2026-11-24T10:10:00Z', 18.5)")
+    conn.execute("INSERT INTO input_sample VALUES ('site-a', 'discharge-air-temp-sp', '2026-11-24T10:10:00Z', 13.0)")
+    collector = SqlEvidenceCollector(
+        conn,
+        table="rule_result",
+        history_table="input_sample",
+        point_table="point",
+        history_columns={"site_id": "site_id"},
+    ).load(site_id="site-a")
+    faults = collector.all_faults()
+    assert len(faults) == 1
+    assert faults[0].equipment_id == "ahu-1"
+    assert faults[0].start == parse_utc("2026-11-24T10:00:00Z")
+    assert faults[0].end == parse_utc("2026-11-24T10:30:00Z")
+    devs = {d.role: d for d in collector.all_deviations()}
+    assert "discharge-air-temp" in devs
+    assert devs["discharge-air-temp"].value_si == 18.5
+    assert devs["discharge-air-temp"].setpoint_si == 13.0
+    assert devs["discharge-air-temp"].resolved_deviation_si == 5.5
+    conn.close()
+    assert csql.episodes_sql is not None
+
+
+def test_cli_sqlite_database(tmp_path):
+    db = tmp_path / "fdd.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE rule_result (site_id TEXT, equipment_id TEXT, rule_id TEXT, window_start TEXT, window_end TEXT, status TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('Example Building', 'ahu-1', 'SAT-HIGH', '2026-11-24T10:00:00Z', '2026-11-24T12:00:00Z', 'FAULT')"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('Example Building', 'zone-1', 'ZNT-HIGH', '2026-11-24T10:15:00Z', '2026-11-24T12:00:00Z', 'FAULT')"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('Example Building', 'zone-2', 'ZNT-HIGH', '2026-11-24T10:20:00Z', '2026-11-24T12:00:00Z', 'FAULT')"
+    )
+    conn.commit()
+    conn.close()
+    out = tmp_path / "rca_out"
+    rc = rca_main(["--graph", str(EXAMPLE_PLANT_TTL), "--sqlite", str(db), "--out-dir", str(out), "--print", "none"])
+    assert rc == 0
+    payload = json.loads((out / "rca_report.json").read_text(encoding="utf-8"))
+    assert payload["totals"]["common_cause_groups"] == 1
+    assert payload["common_causes"][0]["root_equipment"] == "ahu-1"
+
