@@ -93,7 +93,7 @@ AHU / RTU / MAU / DOAS: duct static, supply air, economizer, mixing and mode fau
 
 Duct static > static SP + margin.
 
-**Duct static pressure high** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function `ahu_duct_high` · [SQL entry](sql-cookbook.html#ahu-ducthi)
+**Duct static pressure high** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function [`ahu_duct_high`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1236) · [SQL entry](sql-cookbook.html#ahu-ducthi)
 
 **Equation**: Duct static > static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).
 
@@ -114,7 +114,7 @@ Duct static > static SP + margin.
 | `duct_high_margin` | High margin | 62.21 | 12.442 | 248.84 | Pa |
 | `pressure_on_min` | Pressure-on evidence | 49.768 | 12.442 | 248.84 | Pa |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -130,7 +130,7 @@ Duct static > static SP + margin.
 
 |SAT − SAT SP| > 2.8 Δ°C.
 
-**SAT deviation from setpoint** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `ahu_sat_dev` · [SQL entry](sql-cookbook.html#ahu-satdev)
+**SAT deviation from setpoint** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`ahu_sat_dev`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1231) · [SQL entry](sql-cookbook.html#ahu-satdev)
 
 **Inputs**
 
@@ -146,7 +146,7 @@ Duct static > static SP + margin.
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `sat_dev_err` | SAT deviation | 2.77778 | 0.555556 | 8.33333 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -158,14 +158,12 @@ Duct static > static SP + margin.
 
 **Parity** [known divergence](parity.html#ahu-satdev): Small residual left after #1642; not yet attributed.
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### AHU-SIMUL {#ahu-simul}
 
 Heating valve > 10% AND cooling valve > 10% at once.
 
-**Heating and cooling simultaneous** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function `ahu_simul_heat_cool` · [SQL entry](sql-cookbook.html#ahu-simul)
+**Heating and cooling simultaneous** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function [`ahu_simul_heat_cool`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1247) · [SQL entry](sql-cookbook.html#ahu-simul)
 
 **Inputs**
 
@@ -181,7 +179,7 @@ Heating valve > 10% AND cooling valve > 10% at once.
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `valve_open_pct` | Valve open threshold | 0.1 | 0.05 | 0.5 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -198,7 +196,7 @@ Heating valve > 10% AND cooling valve > 10% at once.
 
 Fan command and proven status disagree.
 
-**Fan cmd/status mismatch** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `cmd1` · [SQL entry](sql-cookbook.html#cmd-1)
+**Fan cmd/status mismatch** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`cmd1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1896) · [SQL entry](sql-cookbook.html#cmd-1)
 
 **Run proof** not gated.
 
@@ -215,7 +213,7 @@ Fan command and proven status disagree.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -231,7 +229,7 @@ Fan command and proven status disagree.
 
 Coil valve open, opposite valve shut, air temperature change below min_dt.
 
-**Coil performance (heating and cooling)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `coil_perf` · [SQL entry](sql-cookbook.html#coil-perf)
+**Coil performance (heating and cooling)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function [`coil_perf`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1519) · [SQL entry](sql-cookbook.html#coil-perf)
 
 **Inputs**
 
@@ -262,7 +260,7 @@ Coil valve open, opposite valve shut, air temperature change below min_dt.
 | `valve_open` | Valve open threshold | 0.8 | 0.5 | 1 | fraction (0-1) |
 | `valve_shut` | Opposite valve shut | 0.05 | 0 | 0.2 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -280,7 +278,7 @@ Coil valve open, opposite valve shut, air temperature change below min_dt.
 
 Damper ≤ 5% but MAT tracks OAT within 1.1 Δ°C — leaking OA damper.
 
-**OA damper leakage** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `dmp1` · [SQL entry](sql-cookbook.html#dmp-1)
+**OA damper leakage** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function [`dmp1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1912) · [SQL entry](sql-cookbook.html#dmp-1)
 
 **Inputs**
 
@@ -297,7 +295,7 @@ Damper ≤ 5% but MAT tracks OAT within 1.1 Δ°C — leaking OA damper.
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `leak_delta` | Leak ΔT | 1.11111 | 0.277778 | 3.33333 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -309,14 +307,12 @@ Damper ≤ 5% but MAT tracks OAT within 1.1 Δ°C — leaking OA damper.
 
 **Parity** [match](parity.html#dmp-1)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### ECON-1 {#econ-1}
 
 Fan on, OA damper < 5%, OAT > 12.8 °C (should be economizing).
 
-**Economizer stuck closed** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `econ1` · [SQL entry](sql-cookbook.html#econ-1)
+**Economizer stuck closed** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`econ1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1259) · [SQL entry](sql-cookbook.html#econ-1)
 
 **Inputs**
 
@@ -333,7 +329,7 @@ Fan on, OA damper < 5%, OAT > 12.8 °C (should be economizing).
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `econ1_oat_min` | Favorable OAT | 12.7778 | 7.22222 | 21.1111 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -350,7 +346,7 @@ Fan on, OA damper < 5%, OAT > 12.8 °C (should be economizing).
 
 OAT > 17.2 °C AND OA damper > 42% (should be at minimum).
 
-**Economizing when outdoor unfavorable** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function `econ2` · [SQL entry](sql-cookbook.html#econ-2)
+**Economizing when outdoor unfavorable** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function [`econ2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1266) · [SQL entry](sql-cookbook.html#econ-2)
 
 **Inputs**
 
@@ -367,7 +363,7 @@ OAT > 17.2 °C AND OA damper > 42% (should be at minimum).
 | `econ2_damper` | Damper open frac | 0.42 | 0.2 | 0.9 | fraction (0-1) |
 | `econ2_oat_hi` | OAT high cutoff | 17.2222 | 12.7778 | 26.6667 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -384,7 +380,7 @@ OAT > 17.2 °C AND OA damper > 42% (should be at minimum).
 
 Flags mechanical cooling during web free-cool weather when the OA damper is not fully integrated.
 
-**Mech cooling without integrated economizer** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function `econ2` · [SQL entry](sql-cookbook.html#econ-3)
+**Mech cooling without integrated economizer** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function [`econ2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1266) · [SQL entry](sql-cookbook.html#econ-3)
 
 **Equation**: Web free-cooling opportunity: 15.6 °C ≤ dry-bulb < 22.2 °C AND dewpoint < 15.6 °C (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.
 
@@ -408,7 +404,7 @@ Flags mechanical cooling during web free-cool weather when the OA damper is not 
 | `econ3_db_min` | Free-cool OA dry-bulb min | 15.5556 | 10 | 20 | °C |
 | `econ3_dp_max` | Free-cool OA dew point max | 15.5556 | 7.22222 | 20 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -425,7 +421,7 @@ Flags mechanical cooling during web free-cool weather when the OA damper is not 
 
 Fan on, |RAT−OAT| > 1.2 Δ°C, estimated OA fraction < 21%.
 
-**Low estimated OA fraction** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `econ4` · [SQL entry](sql-cookbook.html#econ-4)
+**Low estimated OA fraction** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`econ4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1273) · [SQL entry](sql-cookbook.html#econ-4)
 
 **Inputs**
 
@@ -443,7 +439,7 @@ Fan on, |RAT−OAT| > 1.2 Δ°C, estimated OA fraction < 21%.
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `oa_min_pct` | Min OA fraction | 21 | 5 | 40 | % |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -460,7 +456,7 @@ Fan on, |RAT−OAT| > 1.2 Δ°C, estimated OA fraction < 21%.
 
 Preheat leaving air > 1.2°C above target while preheat active.
 
-**Preheat over-conditioning** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `econ5` · [SQL entry](sql-cookbook.html#econ-5)
+**Preheat over-conditioning** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`econ5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1284) · [SQL entry](sql-cookbook.html#econ-5)
 
 **Inputs**
 
@@ -478,7 +474,7 @@ Preheat leaving air > 1.2°C above target while preheat active.
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `preheat_over` | Preheat over ΔT | 1.22222 | 0.277778 | 4.44444 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -490,14 +486,12 @@ Preheat leaving air > 1.2°C above target while preheat active.
 
 **Parity** [match](parity.html#econ-5)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### ECON-6 {#econ-6}
 
 Flags an AHU economizing above min-OA when web outdoor air is below freezing (−3.9 °C).
 
-**Economizing in freezing weather** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `econ6_compute` · [SQL entry](sql-cookbook.html#econ-6)
+**Economizing in freezing weather** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`econ6_compute`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/economizer_weather.py#L147) · [SQL entry](sql-cookbook.html#econ-6)
 
 **Equation**: Web dry-bulb < −3.9°C AND OA damper above winter min-OA ceiling (default 25%). AHU should be at minimum OA in cold weather.
 
@@ -516,7 +510,7 @@ Flags an AHU economizing above min-OA when web outdoor air is below freezing (�
 | `econ6_damper_max` | Winter min-OA damper | 0.25 | 0.05 | 0.5 | fraction (0-1) |
 | `econ6_oat_max` | Winter OAT ceiling | -3.88889 | -9.44444 | 4.44444 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -533,7 +527,7 @@ Flags an AHU economizing above min-OA when web outdoor air is below freezing (�
 
 Flags cooling demand during economizer-OK web weather (dew point < 15.6 °C, dry-bulb < 22.2 °C) while the OA damper is not economizing.
 
-**Economizer OK but not economizing** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `econ7_compute` · [SQL entry](sql-cookbook.html#econ-7)
+**Economizer OK but not economizing** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`econ7_compute`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/economizer_weather.py#L90) · [SQL entry](sql-cookbook.html#econ-7)
 
 **Equation**: Economizer-OK web weather: dew point < 15.6°C AND dry-bulb < 22.2°C (above a 1.7°C freeze-guard floor; dewpoint from web sensor or calculated from web DB+RH). Fault when there is cooling demand (cooling valve open or proven DX/chiller cooling) but the OA damper stays below the economizing threshold (default 50%). Expected: economizer-only below 15.6°C DB (MECH-OAT-1) and mech + integrated economizer in the 15.6–22.2°C band (ECON-3). All temperature thresholds are SI.
 
@@ -559,7 +553,7 @@ Flags cooling demand during economizer-OK web weather (dew point < 15.6 °C, dry
 | `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | 1.66667 | -6.66667 | 10 | °C |
 | `econ7_dp_max` | Econ-OK dew point max | 15.5556 | 7.22222 | 20 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -576,7 +570,7 @@ Flags cooling demand during economizer-OK web weather (dew point < 15.6 °C, dry
 
 Flags duct static too low while the supply fan is near full speed.
 
-**Duct static below SP at full fan (GL36 A)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function `fc1` · [SQL entry](sql-cookbook.html#fc1)
+**Duct static below SP at full fan (GL36 A)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 5 min · function [`fc1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L958) · [SQL entry](sql-cookbook.html#fc1)
 
 **Equation**: DSP < DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 
@@ -599,7 +593,7 @@ Flags duct static too low while the supply fan is near full speed.
 | `fan_hi` | Legacy fan-high threshold (sets εVFDSPD) | 0.87 | 0.5 | 1 | fraction (0-1) |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -616,7 +610,7 @@ Flags duct static too low while the supply fan is near full speed.
 
 |MATavg − OATavg| > √(εMAT² + εOAT²) in OS#3.
 
-**OAT/MAT mismatch + mech cooling (GL36 H)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc10` · [SQL entry](sql-cookbook.html#fc10)
+**OAT/MAT mismatch + mech cooling (GL36 H)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc10`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1130) · [SQL entry](sql-cookbook.html#fc10)
 
 **Inputs**
 
@@ -639,7 +633,7 @@ Flags duct static too low while the supply fan is near full speed.
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -651,14 +645,12 @@ Flags duct static too low while the supply fan is near full speed.
 
 **Parity** [match](parity.html#fc10)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC11 {#fc11}
 
 OATavg + εOAT < SATSP − ΔTSF − εSAT in OS#3.
 
-**OAT/MAT mismatch economizer-only (GL36 I)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc11` · [SQL entry](sql-cookbook.html#fc11)
+**OAT/MAT mismatch economizer-only (GL36 I)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc11`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1143) · [SQL entry](sql-cookbook.html#fc11)
 
 **Inputs**
 
@@ -682,7 +674,7 @@ OATavg + εOAT < SATSP − ΔTSF − εSAT in OS#3.
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -694,14 +686,12 @@ OATavg + εOAT < SATSP − ΔTSF − εSAT in OS#3.
 
 **Parity** [match](parity.html#fc11)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC12 {#fc12}
 
 SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 
-**SAT above blend in cooling (GL36 J)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc12` · [SQL entry](sql-cookbook.html#fc12)
+**SAT above blend in cooling (GL36 J)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc12`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1158) · [SQL entry](sql-cookbook.html#fc12)
 
 **Inputs**
 
@@ -727,7 +717,7 @@ SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `supply_tol` | Legacy SAT tolerance master (sets εSAT) | 0.638889 | 0 | 5.55556 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -739,14 +729,12 @@ SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 
 **Parity** [match](parity.html#fc12)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC13-SAT-HIGH {#fc13-sat-high}
 
 SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
-**SAT above SP at full cooling (GL36 K)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc13` · [SQL entry](sql-cookbook.html#fc13-sat-high)
+**SAT above SP at full cooling (GL36 K)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc13`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1176) · [SQL entry](sql-cookbook.html#fc13-sat-high)
 
 **Inputs**
 
@@ -769,7 +757,7 @@ SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `sat_err` | Legacy SAT error (sets εSAT) | 0.555556 | 0 | 5.55556 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -781,14 +769,12 @@ SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
 **Parity** [known divergence](parity.html#fc13-sat-high): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC14 {#fc14}
 
 Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inactive.
 
-**CHW coil ΔT when inactive (GL36 L)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc14` · [SQL entry](sql-cookbook.html#fc14)
+**CHW coil ΔT when inactive (GL36 L)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc14`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1190) · [SQL entry](sql-cookbook.html#fc14)
 
 **Inputs**
 
@@ -813,7 +799,7 @@ Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inact
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -825,14 +811,12 @@ Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inact
 
 **Parity** [known divergence](parity.html#fc14): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC15 {#fc15}
 
 Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inactive.
 
-**HW coil ΔT when inactive (GL36 M)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc15` · [SQL entry](sql-cookbook.html#fc15)
+**HW coil ΔT when inactive (GL36 M)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc15`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1211) · [SQL entry](sql-cookbook.html#fc15)
 
 **Inputs**
 
@@ -858,7 +842,7 @@ Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inact
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -870,14 +854,12 @@ Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inact
 
 **Parity** [match](parity.html#fc15)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC2 {#fc2}
 
 Flags mixed-air temperature colder than the OAT/RAT mixing envelope allows.
 
-**MAT below OAT/RAT envelope (GL36 B)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc2` · [SQL entry](sql-cookbook.html#fc2)
+**MAT below OAT/RAT envelope (GL36 B)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L977) · [SQL entry](sql-cookbook.html#fc2)
 
 **Equation**: MATavg + εMAT < min(RATavg − εRAT, OATavg − εOAT).
 
@@ -902,7 +884,7 @@ Flags mixed-air temperature colder than the OAT/RAT mixing envelope allows.
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -914,14 +896,12 @@ Flags mixed-air temperature colder than the OAT/RAT mixing envelope allows.
 
 **Parity** [match](parity.html#fc2)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC3 {#fc3}
 
 Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.
 
-**MAT above OAT/RAT envelope (GL36 C)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc3` · [SQL entry](sql-cookbook.html#fc3)
+**MAT above OAT/RAT envelope (GL36 C)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L997) · [SQL entry](sql-cookbook.html#fc3)
 
 **Equation**: MATavg − εMAT > max(RATavg + εRAT, OATavg + εOAT).
 
@@ -946,7 +926,7 @@ Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -958,14 +938,12 @@ Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.
 
 **Parity** [match](parity.html#fc3); differs only on edge data: Same cause as FC8: the series begins with the fan already running (edge DST-week start is 18:00 local); pandas applies its 600 s operational startup holdoff at the first sample, SQL does not (verified by trimming the first 6 h of rows).
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC4 {#fc4}
 
 ΔOS > ΔOSmax during the prior 60-minute moving window.
 
-**PID hunting (operating-state oscillation)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 60 min · function `fc4` · [SQL entry](sql-cookbook.html#fc4)
+**PID hunting (operating-state oscillation)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 60 min · function [`fc4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1011) · [SQL entry](sql-cookbook.html#fc4)
 
 **Inputs**
 
@@ -983,7 +961,7 @@ Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.
 | `delta_os_max` | Max mode changes/hr ΔOSmax (GL36 default 7) | 5 | 1 | 30 | count |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1000,7 +978,7 @@ Flags mixed-air temperature warmer than the OAT/RAT mixing envelope allows.
 
 SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
-**SAT cold when heating commanded (GL36 D)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc5` · [SQL entry](sql-cookbook.html#fc5)
+**SAT cold when heating commanded (GL36 D)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1050) · [SQL entry](sql-cookbook.html#fc5)
 
 **Inputs**
 
@@ -1024,7 +1002,7 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1036,14 +1014,12 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 **Parity** [match](parity.html#fc5); differs only on edge data: Edge profile only: after a data gap pandas re-applies its 600 s startup delay; the SQL has no startup holdoff (#1646). Basic datasets match.
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC6 {#fc6}
 
 |RATavg−OATavg| ≥ ΔTmin AND |estimated OA% − design min OA%| > εF.
 
-**Estimated OA fraction mismatch** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc6` · [SQL entry](sql-cookbook.html#fc6)
+**Estimated OA fraction mismatch** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc6`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1067) · [SQL entry](sql-cookbook.html#fc6)
 
 **Inputs**
 
@@ -1067,7 +1043,7 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `oat_rat_delta_min` | Legacy OAT/RAT guard (sets ΔTmin) | 2.77778 | 0 | 16.6667 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1079,14 +1055,12 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 **Parity** [known divergence](parity.html#fc6): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC7 {#fc7}
 
 SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 
-**SAT low with full heating (GL36 E)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc7` · [SQL entry](sql-cookbook.html#fc7)
+**SAT low with full heating (GL36 E)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc7`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1084) · [SQL entry](sql-cookbook.html#fc7)
 
 **Inputs**
 
@@ -1108,7 +1082,7 @@ SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `sat_err` | Legacy SAT error (sets εSAT) | 0.555556 | 0 | 5.55556 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1120,14 +1094,12 @@ SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 
 **Parity** [match](parity.html#fc7)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC8 {#fc8}
 
 |SATavg − ΔTSF − MATavg| > √(εSAT² + εMAT²) in OS#2.
 
-**SAT/MAT mismatch in economizer (GL36)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc8` · [SQL entry](sql-cookbook.html#fc8)
+**SAT/MAT mismatch in economizer (GL36)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc8`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1097) · [SQL entry](sql-cookbook.html#fc8)
 
 **Inputs**
 
@@ -1152,7 +1124,7 @@ SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `supply_tol` | Legacy SAT tolerance master (sets εSAT) | 0.638889 | 0 | 5.55556 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1164,14 +1136,12 @@ SATavg < SATSP − εSAT AND HC ≥ full-heating threshold.
 
 **Parity** [match](parity.html#fc8); differs only on edge data: Series starts with the fan already running (edge DST-week start is 18:00 local): pandas applies its 600 s operational startup holdoff at the first sample, SQL has none, so SQL confirms one 5-minute sample earlier. Verified: trimming the first 6 h of rows makes SQL equal pandas.
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### FC9 {#fc9}
 
 OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.
 
-**OAT too warm for free cooling (GL36 G)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function `fc9` · [SQL entry](sql-cookbook.html#fc9)
+**OAT too warm for free cooling (GL36 G)** · **Family** ahu · **Equipment** `ahu` · **Confirm** 10 min · function [`fc9`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1114) · [SQL entry](sql-cookbook.html#fc9)
 
 **Inputs**
 
@@ -1195,7 +1165,7 @@ OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1207,14 +1177,12 @@ OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.
 
 **Parity** [match](parity.html#fc9); differs only on edge data: Same cause as FC8: the series begins with the fan already running; pandas holds off 600 s from the first sample, SQL does not (verified by trimming the start).
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### MECH-OAT-1 {#mech-oat-1}
 
 Flags proven DX or chiller cooling while web dry-bulb is below 15.6 °C.
 
-**Mechanical cooling below 15.6 °C web OAT** · **Family** ahu · **Equipment** `ahu`, `chiller`, `heatpump` · **Confirm** 10 min · function `mech_oat1_compute` · [SQL entry](sql-cookbook.html#mech-oat-1)
+**Mechanical cooling below 15.6 °C web OAT** · **Family** ahu · **Equipment** `ahu`, `chiller`, `heatpump` · **Confirm** 10 min · function [`mech_oat1_compute`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/economizer_weather.py#L132) · [SQL entry](sql-cookbook.html#mech-oat-1)
 
 **Equation**: Proven DX/chiller mechanical cooling while web dry-bulb < 15.6 °C. Uses compressor/chiller/pump/amps/power proof — not AHU cooling-valve alone. Below 15.6 °C is outside the free-cool + integrated economizer band.
 
@@ -1237,7 +1205,7 @@ Flags proven DX or chiller cooling while web dry-bulb is below 15.6 °C.
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `mech_oat_max` | Mech-cool OAT ceiling | 15.5556 | 7.22222 | 18.3333 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1253,7 +1221,7 @@ Flags proven DX or chiller cooling while web dry-bulb is below 15.6 °C.
 
 Estimated OA fraction < 15% with adequate OAT/RAT split.
 
-**Low OA fraction** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `oa1` · [SQL entry](sql-cookbook.html#oa-1)
+**Low OA fraction** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function [`oa1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1901) · [SQL entry](sql-cookbook.html#oa-1)
 
 **Inputs**
 
@@ -1272,7 +1240,7 @@ Estimated OA fraction < 15% with adequate OAT/RAT split.
 | `min_oa_frac` | Min OA fraction | 0.15 | 0.05 | 0.4 | fraction (0-1) |
 | `oat_rat_guard` | Min \|RAT−OAT\| guard | 1.22222 | 0.277778 | 3.33333 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1284,14 +1252,12 @@ Estimated OA fraction < 15% with adequate OAT/RAT split.
 
 **Parity** [known divergence](parity.html#oa-1): pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646).
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### RESET-1 {#reset-1}
 
 Flags SAT setpoint that is not tracking the outdoor-air reset curve.
 
-**SAT reset not tracking outdoor air** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `reset1` · [SQL entry](sql-cookbook.html#reset-1)
+**SAT reset not tracking outdoor air** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function [`reset1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1852) · [SQL entry](sql-cookbook.html#reset-1)
 
 **Equation**: Fan on AND |SAT SP − (11.1 + 0.25×(OAT−18.3))| > 1.7 Δ°C.
 
@@ -1314,7 +1280,7 @@ Flags SAT setpoint that is not tracking the outdoor-air reset curve.
 | `reset_sat_at_ref` | SAT SP at the reset OAT reference | 11.1111 | 7.22222 | 18.3333 | °C |
 | `reset_slope` | Reset slope | 0.25 | 0.05 | 1 | Δ°C/Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1326,14 +1292,12 @@ Flags SAT setpoint that is not tracking the outdoor-air reset curve.
 
 **Parity** [match](parity.html#reset-1)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### SCHED-1 {#sched-1}
 
 Flags fan runtime during unoccupied hours from the Overview calendar.
 
-**Unoccupied runtime** · **Family** schedule · **Equipment** `ahu` · **Confirm** 30 min · function `sched1` · [SQL entry](sql-cookbook.html#sched-1)
+**Unoccupied runtime** · **Family** schedule · **Equipment** `ahu` · **Confirm** 30 min · function [`sched1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1869) · [SQL entry](sql-cookbook.html#sched-1)
 
 **Equation**: Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside comfort_low…comfort_high (defaults 21.1–23.9 °C; synced from Overview zone band).
 
@@ -1355,7 +1319,7 @@ Flags fan runtime during unoccupied hours from the Overview calendar.
 | `comfort_low` | Comfort low | 21.1111 | 10 | 26.6667 | °C |
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1371,7 +1335,7 @@ Flags fan runtime during unoccupied hours from the Overview calendar.
 
 Flags fans or pumps that stay on for nearly the entire analysis window (24/7 runtime).
 
-**Always-on fan or pump runtime** · **Family** schedule · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `heatpump` · **Confirm** 60 min · function `_sched247` · [SQL entry](sql-cookbook.html#sched-247)
+**Always-on fan or pump runtime** · **Family** schedule · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `heatpump` · **Confirm** 60 min · function [`_sched247`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L124) · [SQL entry](sql-cookbook.html#sched-247)
 
 **Equation**: Ranked proof (status/current > command) is on for ≥ always_on_pct of the window. Pressure is inferred runtime only and does not trip this rule ID.
 
@@ -1403,7 +1367,7 @@ Flags fans or pumps that stay on for nearly the entire analysis window (24/7 run
 | `confirm_min` | Fault confirm delay | 60 | 0 | 60 | min |
 | `pressure_on_min` | Pressure-on evidence | 49.768 | 12.442 | 497.68 | Pa |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1424,7 +1388,7 @@ Flags fans or pumps that stay on for nearly the entire analysis window (24/7 run
 
 Duct static high (> 336 Pa) while VAV pressure requests are low.
 
-**Duct static trim advisory** · **Family** trim · **Equipment** `ahu` · **Confirm** 30 min · function `trim1` · [SQL entry](sql-cookbook.html#trim-1)
+**Duct static trim advisory** · **Family** trim · **Equipment** `ahu` · **Confirm** 30 min · function [`trim1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1820) · [SQL entry](sql-cookbook.html#trim-1)
 
 **Inputs**
 
@@ -1441,7 +1405,7 @@ Duct static high (> 336 Pa) while VAV pressure requests are low.
 | `duct_hi` | Duct static high | 335.934 | 124.42 | 746.52 | Pa |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1458,7 +1422,7 @@ Duct static high (> 336 Pa) while VAV pressure requests are low.
 
 Flags a closed cooling valve while SAT still looks like valve leakage.
 
-**Cooling valve leakage** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `vlv1` · [SQL entry](sql-cookbook.html#vlv-1)
+**Cooling valve leakage** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function [`vlv1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1918) · [SQL entry](sql-cookbook.html#vlv-1)
 
 **Equation**: Cooling valve ≤ 5% AND (SAT < sat_sp − sat_err OR SAT < MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).
 
@@ -1481,7 +1445,7 @@ Flags a closed cooling valve while SAT still looks like valve leakage.
 | `mat_leak_delta` | SAT vs MAT leak ΔT | 1.11111 | 0.277778 | 6.66667 | Δ°C |
 | `sat_err` | SAT vs SP leak ΔT | 1.11111 | 0.277778 | 4.44444 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1493,8 +1457,6 @@ Flags a closed cooling valve while SAT still looks like valve leakage.
 
 **Parity** [match](parity.html#vlv-1)
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ## VAV terminals {#group-vav}
 
@@ -1505,7 +1467,7 @@ VAV boxes and other zone terminals: comfort, airflow, reheat and damper faults.
 
 Flags occupied-band zone temperature violations.
 
-**Zone comfort band** · **Family** vav · **Equipment** `vav`, `zone_other`, `heatpump`, `baseboard` · **Confirm** 15 min · function `vav1` · [SQL entry](sql-cookbook.html#vav-1)
+**Zone comfort band** · **Family** vav · **Equipment** `vav`, `zone_other`, `heatpump`, `baseboard` · **Confirm** 15 min · function [`vav1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1357) · [SQL entry](sql-cookbook.html#vav-1)
 
 **Equation**: Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied hours when an occupancy column or Overview calendar is set (require_occupied, default on). Unoccupied setback stays on VAV-2.
 
@@ -1528,7 +1490,7 @@ Flags occupied-band zone temperature violations.
 | `zone_hi` | Zone high | 23.8889 | 22.2222 | 29.4444 | °C |
 | `zone_lo` | Zone low | 21.1111 | 12.7778 | 22.2222 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1544,7 +1506,7 @@ Flags occupied-band zone temperature violations.
 
 Flags unoccupied zones that never drop into heating setback.
 
-**Night setback miss** · **Family** vav · **Equipment** `vav`, `zone_other`, `heatpump`, `baseboard` · **Confirm** 15 min · function `vav2` · [SQL entry](sql-cookbook.html#vav-2)
+**Night setback miss** · **Family** vav · **Equipment** `vav`, `zone_other`, `heatpump`, `baseboard` · **Confirm** 15 min · function [`vav2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1366) · [SQL entry](sql-cookbook.html#vav-2)
 
 **Equation**: Unoccupied AND zone temp > setback_hi (default 20 °C) — heating setback not taken.
 
@@ -1565,7 +1527,7 @@ Flags unoccupied zones that never drop into heating setback.
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `setback_hi` | Setback high | 20 | 12.7778 | 22.2222 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1581,7 +1543,7 @@ Flags unoccupied zones that never drop into heating setback.
 
 Air flowing AND OAT > 25.6 °C AND reheat valve > 52%.
 
-**Excessive reheat during warm weather** · **Family** vav · **Equipment** `vav` · **Confirm** 5 min · function `vav3` · [SQL entry](sql-cookbook.html#vav-3)
+**Excessive reheat during warm weather** · **Family** vav · **Equipment** `vav` · **Confirm** 5 min · function [`vav3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1373) · [SQL entry](sql-cookbook.html#vav-3)
 
 **Inputs**
 
@@ -1599,7 +1561,7 @@ Air flowing AND OAT > 25.6 °C AND reheat valve > 52%.
 | `reheat_oat` | Warm OAT | 25.5556 | 18.3333 | 32.2222 | °C |
 | `reheat_pct` | Reheat frac | 0.52 | 0.1 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1616,7 +1578,7 @@ Air flowing AND OAT > 25.6 °C AND reheat valve > 52%.
 
 Air flowing AND damper > 97.5% sustained across the window.
 
-**Damper stuck at full open** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function `vav4` · [SQL entry](sql-cookbook.html#vav-4)
+**Damper stuck at full open** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function [`vav4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1381) · [SQL entry](sql-cookbook.html#vav-4)
 
 **Inputs**
 
@@ -1633,7 +1595,7 @@ Air flowing AND damper > 97.5% sustained across the window.
 | `full_open_pct` | Full open frac | 0.975 | 0.8 | 1 | fraction (0-1) |
 | `sustain_hours` | Sustain window | 1.5 | 0.5 | 6 | h |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1650,7 +1612,7 @@ Air flowing AND damper > 97.5% sustained across the window.
 
 Airflow > ~24 L/s while damper < 10% (implausible flow).
 
-**Airflow sensor bias** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function `vav5` · [SQL entry](sql-cookbook.html#vav-5)
+**Airflow sensor bias** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function [`vav5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1393) · [SQL entry](sql-cookbook.html#vav-5)
 
 **Inputs**
 
@@ -1665,7 +1627,7 @@ Airflow > ~24 L/s while damper < 10% (implausible flow).
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1682,7 +1644,7 @@ Airflow > ~24 L/s while damper < 10% (implausible flow).
 
 Flags reheat while outdoor air is cool enough for free cooling.
 
-**Reheat when cooling available** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function `vav6` · [SQL entry](sql-cookbook.html#vav-6)
+**Reheat when cooling available** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function [`vav6`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1399) · [SQL entry](sql-cookbook.html#vav-6)
 
 **Equation**: OAT < 18.3 °C AND reheat valve > 25% (optional cooling-available must be true when mapped).
 
@@ -1702,7 +1664,7 @@ Flags reheat while outdoor air is cool enough for free cooling.
 | `free_cool_oat` | Free-cool OAT | 18.3333 | 7.22222 | 23.8889 | °C |
 | `reheat_pct` | Reheat frac | 0.25 | 0.05 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1719,7 +1681,7 @@ Flags reheat while outdoor air is cool enough for free cooling.
 
 Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.
 
-**Min airflow / fixed high flow** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function `vav7` · [SQL entry](sql-cookbook.html#vav-7)
+**Min airflow / fixed high flow** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function [`vav7`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1411) · [SQL entry](sql-cookbook.html#vav-7)
 
 **Inputs**
 
@@ -1737,7 +1699,7 @@ Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a hi
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `high_min_flow_sp` | High min-flow SP | 117.987 | 23.5973 | 943.894 | L/s |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1754,7 +1716,7 @@ Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a hi
 
 Flags VAV discharge far from the parent AHU SAT when topology feeds are known.
 
-**VAV leave vs parent AHU SAT (fedBy)** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function `vav_vs_ahu_leave` · [SQL entry](sql-cookbook.html#vav-ahu-leave)
+**VAV leave vs parent AHU SAT (fedBy)** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function [`vav_vs_ahu_leave`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1462) · [SQL entry](sql-cookbook.html#vav-ahu-leave)
 
 **Equation**: Air flowing AND |VAV discharge − parent AHU SAT| > band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.
 
@@ -1773,7 +1735,7 @@ Flags VAV discharge far from the parent AHU SAT when topology feeds are known.
 | `delta` | Leave Δ vs AHU SAT | 4.44444 | 1.11111 | 13.8889 | °C |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1790,7 +1752,7 @@ Flags VAV discharge far from the parent AHU SAT when topology feeds are known.
 
 Flags reheat commanded open with airflow but almost no discharge temperature rise.
 
-**Reheat valve stuck / no temp rise** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function `vav_reheat_stuck` · [SQL entry](sql-cookbook.html#vav-reheat)
+**Reheat valve stuck / no temp rise** · **Family** vav · **Equipment** `vav` · **Confirm** 15 min · function [`vav_reheat_stuck`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1441) · [SQL entry](sql-cookbook.html#vav-reheat)
 
 **Equation**: Air flowing AND reheat valve > 30% AND box discharge temp rises < 1.7 °C above duct inlet (air from AHU) — stuck or failed reheat valve/coil.
 
@@ -1811,7 +1773,7 @@ Flags reheat commanded open with airflow but almost no discharge temperature ris
 | `min_rise` | Min temp rise | 1.66667 | 0.277778 | 8.33333 | °C |
 | `reheat_cmd` | Reheat open frac | 0.3 | 0.1 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1833,7 +1795,7 @@ Fan coils, unit ventilators and other `zone_other` equipment.
 
 Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.
 
-**FCU cooling coil under-delivery** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_clg_coil` · [SQL entry](sql-cookbook.html#fcu-clg-coil)
+**FCU cooling coil under-delivery** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function [`fcu_clg_coil`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1570) · [SQL entry](sql-cookbook.html#fcu-clg-coil)
 
 **Run proof** not gated.
 
@@ -1855,7 +1817,7 @@ Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below z
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `valve_open` | Valve open threshold | 0.8 | 0.5 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1871,7 +1833,7 @@ Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below z
 
 Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 
-**FCU high CO2 with low outdoor-air command** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_co2_damper` · [SQL entry](sql-cookbook.html#fcu-co2-damper)
+**FCU high CO2 with low outdoor-air command** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function [`fcu_co2_damper`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1609) · [SQL entry](sql-cookbook.html#fcu-co2-damper)
 
 **Run proof** not gated.
 
@@ -1892,7 +1854,7 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `damper_low` | Low damper command | 0.1 | 0 | 0.5 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1908,7 +1870,7 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 
 Fan on and damper command ≥15%, but feedback is more than 15 percentage points below command.
 
-**FCU damper command/position mismatch** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_damper_pos` · [SQL entry](sql-cookbook.html#fcu-damper-pos)
+**FCU damper command/position mismatch** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function [`fcu_damper_pos`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1603) · [SQL entry](sql-cookbook.html#fcu-damper-pos)
 
 **Run proof** not gated.
 
@@ -1929,7 +1891,7 @@ Fan on and damper command ≥15%, but feedback is more than 15 percentage points
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `position_error` | Position error | 0.15 | 0.05 | 0.5 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1945,7 +1907,7 @@ Fan on and damper command ≥15%, but feedback is more than 15 percentage points
 
 Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 
-**FCU heat/cool deadband collapse** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function `fcu_deadband` · [SQL entry](sql-cookbook.html#fcu-deadband)
+**FCU heat/cool deadband collapse** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function [`fcu_deadband`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1615) · [SQL entry](sql-cookbook.html#fcu-deadband)
 
 **Run proof** not gated.
 
@@ -1963,7 +1925,7 @@ Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 | `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
 | `deadband` | Minimum deadband | 1 | 0 | 5 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -1979,7 +1941,7 @@ Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 
 Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zone temperature.
 
-**FCU heating coil under-delivery** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_htg_coil` · [SQL entry](sql-cookbook.html#fcu-htg-coil)
+**FCU heating coil under-delivery** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function [`fcu_htg_coil`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1508) · [SQL entry](sql-cookbook.html#fcu-htg-coil)
 
 **Run proof** not gated.
 
@@ -2001,7 +1963,7 @@ Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zo
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `valve_open` | Valve open threshold | 0.8 | 0.5 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2017,7 +1979,7 @@ Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zo
 
 At least four heating/cooling valve mode changes occur in the analysis window.
 
-**FCU heating/cooling mode cycling** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function `fcu_mode_cycle` · [SQL entry](sql-cookbook.html#fcu-mode-cycle)
+**FCU heating/cooling mode cycling** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function [`fcu_mode_cycle`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1622) · [SQL entry](sql-cookbook.html#fcu-mode-cycle)
 
 **Run proof** not gated.
 
@@ -2036,7 +1998,7 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 | `mode_changes` | Mode changes | 4 | 1 | 20 | count |
 | `mode_valve_min` | Active valve threshold | 0.1 | 0 | 0.5 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2052,7 +2014,7 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 
 Own zone setpoint is present while zone temperature is null for at least 90% of the window.
 
-**Missing FCU zone sensor** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function `fcu_sensor_null` · [SQL entry](sql-cookbook.html#fcu-sensor-null)
+**Missing FCU zone sensor** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 0 min · function [`fcu_sensor_null`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1498) · [SQL entry](sql-cookbook.html#fcu-sensor-null)
 
 **Run proof** not gated.
 
@@ -2070,7 +2032,7 @@ Own zone setpoint is present while zone temperature is null for at least 90% of 
 | `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
 | `null_fraction` | Null fraction | 0.9 | 0.5 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2086,7 +2048,7 @@ Own zone setpoint is present while zone temperature is null for at least 90% of 
 
 Fan on and both valves shut, but zone temperature exceeds discharge air by more than 3 Δ°C.
 
-**FCU cooling valve passing** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_valve_pass_clg` · [SQL entry](sql-cookbook.html#fcu-valve-pass-clg)
+**FCU cooling valve passing** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function [`fcu_valve_pass_clg`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1591) · [SQL entry](sql-cookbook.html#fcu-valve-pass-clg)
 
 **Run proof** not gated.
 
@@ -2108,7 +2070,7 @@ Fan on and both valves shut, but zone temperature exceeds discharge air by more 
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `pass_delta` | Passing temperature drop | 3 | 0.555556 | 11.1111 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2124,7 +2086,7 @@ Fan on and both valves shut, but zone temperature exceeds discharge air by more 
 
 Fan on and both valves shut, but discharge air exceeds zone temperature by more than 3 Δ°C.
 
-**FCU heating valve passing** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function `fcu_valve_pass_htg` · [SQL entry](sql-cookbook.html#fcu-valve-pass-htg)
+**FCU heating valve passing** · **Family** fcu · **Equipment** `zone_other`, `general`, `ahu` · **Confirm** 15 min · function [`fcu_valve_pass_htg`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1579) · [SQL entry](sql-cookbook.html#fcu-valve-pass-htg)
 
 **Run proof** not gated.
 
@@ -2146,7 +2108,7 @@ Fan on and both valves shut, but discharge air exceeds zone temperature by more 
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `pass_delta` | Passing temperature rise | 3 | 0.555556 | 11.1111 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2167,7 +2129,7 @@ Chillers, chilled water and condenser water plants, cooling towers.
 
 Pump on AND (CHWR − CHWS) < 2.2 Δ°C.
 
-**Low chilled-water ΔT** · **Family** plant · **Equipment** `chiller` · **Confirm** 15 min · function `chw1` · [SQL entry](sql-cookbook.html#chw-1)
+**Low chilled-water ΔT** · **Family** plant · **Equipment** `chiller` · **Confirm** 15 min · function [`chw1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1640) · [SQL entry](sql-cookbook.html#chw-1)
 
 **Inputs**
 
@@ -2183,7 +2145,7 @@ Pump on AND (CHWR − CHWS) < 2.2 Δ°C.
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `min_dt` | Min ΔT | 2.22222 | 0.555556 | 6.66667 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2200,7 +2162,7 @@ Pump on AND (CHWR − CHWS) < 2.2 Δ°C.
 
 Pump ≥ 87% AND CHW DP < DP SP − 2.2.
 
-**DP below SP at max pump speed** · **Family** plant · **Equipment** `chiller` · **Confirm** 5 min · function `chw2` · [SQL entry](sql-cookbook.html#chw-2)
+**DP below SP at max pump speed** · **Family** plant · **Equipment** `chiller` · **Confirm** 5 min · function [`chw2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1650) · [SQL entry](sql-cookbook.html#chw-2)
 
 **Inputs**
 
@@ -2218,7 +2180,7 @@ Pump ≥ 87% AND CHW DP < DP SP − 2.2.
 | `dp_margin` | DP margin | 15168.5 | 3447.38 | 41368.5 | Pa |
 | `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2235,7 +2197,7 @@ Pump ≥ 87% AND CHW DP < DP SP − 2.2.
 
 Pump on AND |CHWS − CHWS SP| > 1.2 Δ°C.
 
-**Plant supply temp outside deadband** · **Family** plant · **Equipment** `chiller` · **Confirm** 5 min · function `chw3` · [SQL entry](sql-cookbook.html#chw-3)
+**Plant supply temp outside deadband** · **Family** plant · **Equipment** `chiller` · **Confirm** 5 min · function [`chw3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1660) · [SQL entry](sql-cookbook.html#chw-3)
 
 **Inputs**
 
@@ -2252,7 +2214,7 @@ Pump on AND |CHWS − CHWS SP| > 1.2 Δ°C.
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `sp_band` | SP band | 1.22222 | 0.277778 | 3.33333 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2269,7 +2231,7 @@ Pump on AND |CHWS − CHWS SP| > 1.2 Δ°C.
 
 Pump ≥ 87% AND CHW flow > 69.4 L/s.
 
-**Flow high at max pump** · **Family** plant · **Equipment** `chiller` · **Confirm** 5 min · function `chw4` · [SQL entry](sql-cookbook.html#chw-4)
+**Flow high at max pump** · **Family** plant · **Equipment** `chiller` · **Confirm** 5 min · function [`chw4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1669) · [SQL entry](sql-cookbook.html#chw-4)
 
 **Inputs**
 
@@ -2286,7 +2248,7 @@ Pump ≥ 87% AND CHW flow > 69.4 L/s.
 | `flow_hi` | Flow high | 69.3992 | 12.618 | 189.271 | L/s |
 | `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2303,7 +2265,7 @@ Pump ≥ 87% AND CHW flow > 69.4 L/s.
 
 Flags a chiller running while mapped zones or AHU SAT show the building is satisfied.
 
-**Chiller running with no building load** · **Family** plant · **Equipment** `chiller` · **Confirm** 30 min · function `chw_noload1_compute` · [SQL entry](sql-cookbook.html#chw-noload-1)
+**Chiller running with no building load** · **Family** plant · **Equipment** `chiller` · **Confirm** 30 min · function [`chw_noload1_compute`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/economizer_weather.py#L162) · [SQL entry](sql-cookbook.html#chw-noload-1)
 
 **Equation**: Chiller/plant proven running while building load is satisfied: all mapped zones inside comfort band OR all mapped AHU SAT within sat_band of setpoint. Default confirm 30 min.
 
@@ -2328,7 +2290,7 @@ Flags a chiller running while mapped zones or AHU SAT show the building is satis
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
 | `sat_band` | AHU SAT≈SP band | 1.11111 | 0.277778 | 3.33333 | Δ°C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2340,14 +2302,12 @@ Flags a chiller running while mapped zones or AHU SAT show the building is satis
 
 **Parity** [known divergence](parity.html#chw-noload-1): pandas proves equipment/cooling from typed roles (mechanical_proof_mask, equipment_type); SQL ORs chiller status / valve
 
-**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
-
 
 ### CW-APR-1 {#cw-apr-1}
 
 Flags high CW–wet-bulb approach at full tower fan — sensor mismatch or tower degradation.
 
-**High CW approach at full tower fan** · **Family** plant · **Equipment** `chiller`, `cooling_tower` · **Confirm** 15 min · function `cw_apr` · [SQL entry](sql-cookbook.html#cw-apr-1)
+**High CW approach at full tower fan** · **Family** plant · **Equipment** `chiller`, `cooling_tower` · **Confirm** 15 min · function [`cw_apr`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1745) · [SQL entry](sql-cookbook.html#cw-apr-1)
 
 **Equation**: At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.44°C, typically 2.8–5.6°C). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.
 
@@ -2369,7 +2329,7 @@ Flags high CW–wet-bulb approach at full tower fan — sensor mismatch or tower
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2386,7 +2346,7 @@ Flags high CW–wet-bulb approach at full tower fan — sensor mismatch or tower
 
 Flags full-speed tower fans while CW is well above theoretical WB+approach — excess fan energy.
 
-**Excess tower fan energy vs wet-bulb limit** · **Family** plant · **Equipment** `chiller`, `cooling_tower` · **Confirm** 15 min · function `cw_fan_excess` · [SQL entry](sql-cookbook.html#cw-fan-1)
+**Excess tower fan energy vs wet-bulb limit** · **Family** plant · **Equipment** `chiller`, `cooling_tower` · **Confirm** 15 min · function [`cw_fan_excess`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1763) · [SQL entry](sql-cookbook.html#cw-fan-1)
 
 **Equation**: Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.
 
@@ -2409,7 +2369,7 @@ Flags full-speed tower fans while CW is well above theoretical WB+approach — e
 | `excess_beyond_approach` | Excess beyond approach | 2.77778 | 1.11111 | 11.1111 | °C |
 | `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2426,7 +2386,7 @@ Flags full-speed tower fans while CW is well above theoretical WB+approach — e
 
 Flags condenser water colder than wet-bulb + approach — tower over-cooling / not optimized.
 
-**Condenser water not optimized vs wet-bulb** · **Family** plant · **Equipment** `chiller`, `cooling_tower` · **Confirm** 15 min · function `cw_opt` · [SQL entry](sql-cookbook.html#cw-opt-1)
+**Condenser water not optimized vs wet-bulb** · **Family** plant · **Equipment** `chiller`, `cooling_tower` · **Confirm** 15 min · function [`cw_opt`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1712) · [SQL entry](sql-cookbook.html#cw-opt-1)
 
 **Equation**: CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.
 
@@ -2444,7 +2404,7 @@ Flags condenser water colder than wet-bulb + approach — tower over-cooling / n
 | `cw_approach` | Design approach | 3.88889 | 1.66667 | 8.33333 | °C |
 | `cw_slack` | Slack below target | 1.11111 | 0.277778 | 3.33333 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2461,7 +2421,7 @@ Flags condenser water colder than wet-bulb + approach — tower over-cooling / n
 
 CHW supply < 7.2 °C while the reset request sum is at or below request_lo.
 
-**CHW plant reset advisory** · **Family** trim · **Equipment** `chiller` · **Confirm** 30 min · function `trim4` · [SQL entry](sql-cookbook.html#trim-4)
+**CHW plant reset advisory** · **Family** trim · **Equipment** `chiller` · **Confirm** 30 min · function [`trim4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1838) · [SQL entry](sql-cookbook.html#trim-4)
 
 **Inputs**
 
@@ -2478,7 +2438,7 @@ CHW supply < 7.2 °C while the reset request sum is at or below request_lo.
 | `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2500,7 +2460,7 @@ Boiler plants.
 
 HW supply > 71.1 °C while the reset request sum is at or below request_lo.
 
-**HWST trim advisory** · **Family** trim · **Equipment** `boiler` · **Confirm** 30 min · function `trim3` · [SQL entry](sql-cookbook.html#trim-3)
+**HWST trim advisory** · **Family** trim · **Equipment** `boiler` · **Confirm** 30 min · function [`trim3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1829) · [SQL entry](sql-cookbook.html#trim-3)
 
 **Inputs**
 
@@ -2517,7 +2477,7 @@ HW supply > 71.1 °C while the reset request sum is at or below request_lo.
 | `hwst_hi` | HWST high | 71.1111 | 48.8889 | 93.3333 | °C |
 | `request_lo` | Request sum low | 1 | 0 | 10 | count |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2539,7 +2499,7 @@ Heat pumps.
 
 Fan on, zone < 20.6 °C, discharge SAT < 29.4 °C.
 
-**Discharge cold when heating** · **Family** heatpump · **Equipment** `heatpump` · **Confirm** 10 min · function `hp1` · [SQL entry](sql-cookbook.html#hp-1)
+**Discharge cold when heating** · **Family** heatpump · **Equipment** `heatpump` · **Confirm** 10 min · function [`hp1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1681) · [SQL entry](sql-cookbook.html#hp-1)
 
 **Inputs**
 
@@ -2557,7 +2517,7 @@ Fan on, zone < 20.6 °C, discharge SAT < 29.4 °C.
 | `min_sat` | Min heating SAT | 29.4444 | 21.1111 | 43.3333 | °C |
 | `zone_cold` | Zone cold | 20.5556 | 15.5556 | 22.2222 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2598,7 +2558,7 @@ Range, flatline, spike, stale and rate checks on every modeled sensor; PID hunti
 
 Flags control outputs that oscillate enough to suggest loop hunting.
 
-**Suspected control-output hunting** · **Family** control · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `heatpump` · **Confirm** 0 min · function `_pid_hunt_1` · [SQL entry](sql-cookbook.html#pid-hunt-1)
+**Suspected control-output hunting** · **Family** control · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `heatpump` · **Confirm** 0 min · function [`_pid_hunt_1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L884) · [SQL entry](sql-cookbook.html#pid-hunt-1)
 
 **Equation**: Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).
 
@@ -2620,7 +2580,7 @@ Flags control outputs that oscillate enough to suggest loop hunting.
 | `minimum_span_pct` | Minimum observed span | 20 | 5 | 100 | % out |
 | `total_variation_fault_pct` | Total travel threshold | 500 | 50 | 2000 | %/h |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2637,7 +2597,7 @@ Flags control outputs that oscillate enough to suggest loop hunting.
 
 Flags a sensor that stays stuck within a tiny band for too long.
 
-**Sensor flatline (stuck)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function `_sweep_flatline` · [SQL entry](sql-cookbook.html#sv-flatline)
+**Sensor flatline (stuck)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function [`_sweep_flatline`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L768) · [SQL entry](sql-cookbook.html#sv-flatline)
 
 **Equation**: Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.
 
@@ -2656,7 +2616,7 @@ Flags a sensor that stays stuck within a tiny band for too long.
 | `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
 | `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2673,7 +2633,7 @@ Flags a sensor that stays stuck within a tiny band for too long.
 
 Flags any modeled sensor reading outside its physical hard range.
 
-**Sensor out of hard range** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function `_sweep_range` · [SQL entry](sql-cookbook.html#sv-range)
+**Sensor out of hard range** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function [`_sweep_range`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L736) · [SQL entry](sql-cookbook.html#sv-range)
 
 **Equation**: Any modeled sensor reads outside its physical hard range (e.g. OAT −51–54 °C, SAT −1–66 °C, CHWS −1–27 °C).
 
@@ -2692,7 +2652,7 @@ Flags any modeled sensor reading outside its physical hard range.
 | `range_scale_pressure` | Pressure range scale | 1 | 0.5 | 2 | × (scale) |
 | `range_scale_temperature` | Temp range scale | 1 | 0.5 | 2 | × (scale) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2709,7 +2669,7 @@ Flags any modeled sensor reading outside its physical hard range.
 
 Flags implausible sustained sensor rates of change using location- and state-aware thresholds.
 
-**Context-aware sensor rate of change** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 10 min · function `_sv_rate_compute` · [SQL entry](sql-cookbook.html#sv-rate)
+**Context-aware sensor rate of change** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 10 min · function [`_sv_rate_compute`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L71) · [SQL entry](sql-cookbook.html#sv-rate)
 
 **Equation**: Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.
 
@@ -2729,7 +2689,7 @@ Flags implausible sustained sensor rates of change using location- and state-awa
 | `sensor_span` | Sensor span (flow/pressure) | 0 | 0 | 100000 | eng |
 | `transition_window_min` | Transition window | 20 | 5 | 60 | min |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2746,7 +2706,7 @@ Flags implausible sustained sensor rates of change using location- and state-awa
 
 Flags an implausible sample-to-sample jump for the sensor type.
 
-**Sensor rate-of-change spike** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function `_sweep_spike` · [SQL entry](sql-cookbook.html#sv-spike)
+**Sensor rate-of-change spike** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 5 min · function [`_sweep_spike`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L804) · [SQL entry](sql-cookbook.html#sv-spike)
 
 **Equation**: Sample-to-sample jump exceeds the physical spike limit for the sensor type.
 
@@ -2768,7 +2728,7 @@ Flags an implausible sample-to-sample jump for the sensor type.
 | `spike_scale_pressure` | Pressure spike scale | 1 | 0.25 | 3 | × (scale) |
 | `spike_scale_temperature` | Temp spike scale | 1 | 0.25 | 3 | × (scale) |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2785,7 +2745,7 @@ Flags an implausible sample-to-sample jump for the sensor type.
 
 Flags a sensor that sent no valid sample for longer than the stale threshold — missing data.
 
-**Stale data (no fresh samples for longer than the stale threshold)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 0 min · function `_sweep_stale` · [SQL entry](sql-cookbook.html#sv-stale)
+**Stale data (no fresh samples for longer than the stale threshold)** · **Family** sensor · **Equipment** `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · **Confirm** 0 min · function [`_sweep_stale`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L846) · [SQL entry](sql-cookbook.html#sv-stale)
 
 **Equation**: A sensor sent no valid sample for longer than the stale threshold (gap or missing series); not gated by run proof.
 
@@ -2803,7 +2763,7 @@ Flags a sensor that sent no valid sample for longer than the stale threshold —
 | `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
 | `stale_after_hours` | Stale after | 0.5 | 0.25 | 12 | h |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2825,7 +2785,7 @@ Web weather versus the site's own outside air sensor.
 
 Flags large disagreement between BAS outdoor-air temp and web weather OAT.
 
-**BAS outdoor-air sensor vs Open-Meteo** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `oat_vs_meteo` · [SQL entry](sql-cookbook.html#oat-meteo)
+**BAS outdoor-air sensor vs Open-Meteo** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function [`oat_vs_meteo`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1782) · [SQL entry](sql-cookbook.html#oat-meteo)
 
 **Equation**: BAS OAT sensor differs from Open-Meteo dry bulb by more than 2.8 Δ°C.
 
@@ -2847,7 +2807,7 @@ Flags large disagreement between BAS outdoor-air temp and web weather OAT.
 | `web_asof_margin_seconds` | Web as-of margin | 300 | 0 | 1800 | s |
 | `web_cadence_seconds` | Web weather cadence | 1200 | 300 | 7200 | s |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
@@ -2863,7 +2823,7 @@ Flags large disagreement between BAS outdoor-air temp and web weather OAT.
 
 OAT sample-to-sample jump > 8.9 Δ°C.
 
-**OA temperature spike** · **Family** weather · **Equipment** `weather` · **Confirm** 5 min · function `wx1` · [SQL entry](sql-cookbook.html#wx-1)
+**OA temperature spike** · **Family** weather · **Equipment** `weather` · **Confirm** 5 min · function [`wx1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1696) · [SQL entry](sql-cookbook.html#wx-1)
 
 **Run proof** not gated.
 
@@ -2880,7 +2840,7 @@ OAT sample-to-sample jump > 8.9 Δ°C.
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `spike_limit` | Spike limit | 8.88889 | 2.22222 | 22.2222 | °C |
 
-**Outputs** (the same as the SQL twin)
+**Outputs**
 
 | Output | Unit | Meaning |
 |---|---|---|
