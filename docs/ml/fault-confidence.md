@@ -14,6 +14,9 @@ and the original rule results stay the source of record.
 # Open-FDD rule results in a database (default table fdd.rule_result; rule_result on SQLite)
 open-fdd-ml confidence --sqlite fdd.db --out-dir triage
 open-fdd-ml confidence --duckdb fdd.duckdb --site main-campus --since 2026-11-01
+
+# Compare the screen to the raw rules (synthetic planted-fault benchmark)
+open-fdd-ml confidence --evaluate --out-dir eval
 OPENFDD_CONFIDENCE_DSN="postgresql://readonly@host/db" open-fdd-ml confidence --postgres --data-quality-rules SV-
 
 # Sample-level flags from any engine, as a table or a CSV
@@ -138,6 +141,47 @@ With reviewer verdicts, `--labels verdicts.csv` (`equipment_id, start_ts, end_ts
 the heuristic and the calibrated model on the same episodes, with folds grouped by equipment. A rule-specific verdict
 overrides a rule-agnostic one. Fitting needs at least 20 labeled episodes and 5 of each verdict; otherwise the report
 says it was not fitted. Public labeled data (#1721) can seed the fit before a site has its own verdicts.
+
+## Comparing the screen to the rules
+
+The screen does not replace the rules; it ranks the episodes they already flagged. To measure whether that ranking
+helps, you need ground truth: a reviewer verdict per episode, or the built-in synthetic set whose planted cases are
+known.
+
+```
+# Built-in benchmark (no site data): planted real faults, stale-sensor and equipment-off false positives,
+# and a tight-threshold rule that fires on healthy operation, across several equipment
+open-fdd-ml confidence --evaluate --out-dir eval
+# the same CSVs, if you want to inspect or re-run them
+open-fdd-ml confidence --write-benchmark bench --evaluate --out-dir eval
+```
+
+`eval/evaluation.json` and `eval/evaluation.md` report:
+
+* **Raw rule vs screen** precision, recall and F1 for the *real-fault* class. The raw rule treats every flagged
+  episode as a predicted real fault. The screen keeps only episodes labeled `likely_real`.
+* **False-positive reduction** at a fixed real-fault recall (default 0.90, also 0.80 and 1.00). A 60 % reduction at
+  0.90 recall means the screen dropped three fifths of the non-real flags while still catching at least 90 % of the
+  labeled real faults. Change the target with `--target-recall`. The report also repeats the curve on real vs
+  false-positive labels only, so a noisy mis-tuned rule does not dominate the figure.
+* **Confusion matrix** of the three ground-truth classes (`real`, `false_positive`, `tuning`) against the four
+  screen labels (`likely_real`, `likely_false_positive`, `tuning_suggested`, `uncertain`).
+* **Calibration** of `p_real` as a probability that the episode is a real fault (Brier score, expected calibration
+  error, AUC). With enough labels the logistic fit from `--labels` is shown on held-out folds as well.
+
+To score your own rule output the same way, pass the usual input plus a verdict file. Labels are
+`equipment_id, start_ts, end_ts, label` with optional `rule_id`. `label` is `fault`, `false_positive` or `tuning`
+(`real` / `confirmed` and `normal` / `stale` / `off` / `review` are accepted). A rule-specific verdict wins over a
+rule-agnostic one.
+
+```
+open-fdd-ml confidence --evaluate --flags flags.csv --history history.csv --labels reviews.csv --out-dir eval
+open-fdd-ml confidence --evaluate --sqlite fdd.db --labels reviews.csv --out-dir eval
+```
+
+Without reviewed labels you cannot compute precision or recall on a site. Run `--evaluate` on the synthetic set to
+see how the method behaves on planted cases, then use `report.md` on the site as a qualitative triage (likely-real
+faults, false-positive patterns, rules to review). The screen still does not change a threshold or a stored result.
 
 ## What the scores are not
 

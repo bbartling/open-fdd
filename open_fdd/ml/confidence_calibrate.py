@@ -21,7 +21,7 @@ import pandas as pd
 
 from open_fdd.ml.confidence import to_utc
 
-LABEL_MAP = {"fault": 1, "confirmed": 1, "true_fault": 1, "normal": 0, "false_positive": 0, "healthy": 0}
+LABEL_MAP = {"fault": 1, "confirmed": 1, "true_fault": 1, "real": 1, "normal": 0, "false_positive": 0, "healthy": 0, "tuning": 0, "review": 0}
 MIN_LABELS = 20
 MIN_PER_CLASS = 5
 

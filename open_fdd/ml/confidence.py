@@ -721,6 +721,9 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--top", type=int, default=10, help="items per section in the triage report")
     ap.add_argument("--out-dir", default="confidence_out", help="writes episodes.csv, episodes.jsonl, equipment.csv, rules.csv, report.json, report.md")
     ap.add_argument("--print", dest="print_format", choices=("json", "md", "none"), default="json", help="what to print to stdout")
+    from open_fdd.ml.confidence_evaluate import add_evaluate_arguments
+
+    add_evaluate_arguments(ap)
 
 
 def _connect(args: argparse.Namespace) -> tuple[Any, str]:
@@ -749,13 +752,62 @@ def _connect(args: argparse.Namespace) -> tuple[Any, str]:
     raise ValueError("pick one of --flags, --results, --sqlite, --duckdb, --postgres")
 
 
+def _write_outputs(args: argparse.Namespace, result: dict[str, pd.DataFrame], cfg: ConfidenceConfig,
+                   source_desc: dict[str, Any], calibration: dict[str, Any] | None,
+                   evaluation: dict[str, Any] | None = None) -> Path:
+    """Write the triage artefacts (and evaluation files when present) into ``args.out_dir``."""
+    from open_fdd.ml.confidence_report import build_report, to_markdown
+
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, df in result.items():
+        df.to_csv(out / f"{name}.csv", index=False)
+    with (out / "episodes.jsonl").open("w", encoding="utf-8") as fh:
+        for rec in episode_records(result["episodes"]):
+            fh.write(json.dumps(rec, allow_nan=False) + "\n")
+    report = build_report(result, top=args.top, config=cfg, source=source_desc, calibration=calibration)
+    (out / "report.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
+    (out / "report.md").write_text(to_markdown(report), encoding="utf-8")
+    printed = json.dumps(report, default=str)
+    printed_md = to_markdown(report)
+    if evaluation is not None:
+        from open_fdd.ml.confidence_evaluate import to_markdown as ev_markdown
+
+        (out / "evaluation.json").write_text(json.dumps(evaluation, indent=1, default=str), encoding="utf-8")
+        (out / "evaluation.md").write_text(ev_markdown(evaluation), encoding="utf-8")
+        printed = json.dumps(evaluation, default=str)
+        printed_md = ev_markdown(evaluation)
+    if args.print_format == "json":
+        print(printed)
+    elif args.print_format == "md":
+        print(printed_md)
+    return out
+
+
 def run_cli(args: argparse.Namespace) -> int:
     _require_pandas()
-    from open_fdd.ml.confidence_report import build_report, to_markdown
 
     dq_rules = tuple(p.strip() for p in (args.data_quality_rules or "").split(",") if p.strip())
     cfg = ConfidenceConfig(gap_samples=args.gap_samples, sensitivity_frac=args.sensitivity_frac,
                            data_quality_rules=dq_rules, max_history_episodes=args.max_history_episodes)
+    want_eval = bool(getattr(args, "evaluate", False) or getattr(args, "synthetic", False))
+    write_bench = getattr(args, "write_benchmark", None)
+    if write_bench and not want_eval and not (args.flags or args.results or args.sqlite or args.duckdb or args.postgres):
+        from open_fdd.ml.confidence_evaluate import make_benchmark, write_benchmark
+
+        write_benchmark(make_benchmark(seed=args.seed, units_per_case=args.units_per_case), Path(write_bench))
+        return 0
+    if want_eval and (args.synthetic or not (args.flags or args.results or args.sqlite or args.duckdb or args.postgres)):
+        from open_fdd.ml.confidence_evaluate import evaluate_benchmark, write_benchmark
+
+        bench, result, ev = evaluate_benchmark(
+            cfg, target_recall=getattr(args, "target_recall", 0.9),
+            seed=getattr(args, "seed", 7), units_per_case=getattr(args, "units_per_case", 5),
+        )
+        if write_bench:
+            write_benchmark(bench, Path(write_bench))
+        _write_outputs(args, result, cfg, ev.get("source") or {"input": "synthetic"}, None, ev)
+        return 0
     if args.flags or args.results:
         if args.since or args.until or args.site:
             raise ValueError("--since, --until and --site apply to database sources; filter the CSV before screening")
@@ -788,25 +840,20 @@ def run_cli(args: argparse.Namespace) -> int:
             conn.close()
         source_desc = {"input": engine, "layout": args.layout, "table": src.table}
     calibration = None
-    if args.labels:
+    labels_df = pd.read_csv(args.labels) if args.labels else None
+    if labels_df is not None:
         from open_fdd.ml.confidence_calibrate import calibrate
 
-        result["episodes"], calibration = calibrate(result["episodes"], pd.read_csv(args.labels))
-    out = Path(args.out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    for name, df in result.items():
-        df.to_csv(out / f"{name}.csv", index=False)
-    with (out / "episodes.jsonl").open("w", encoding="utf-8") as fh:
-        for rec in episode_records(result["episodes"]):
-            fh.write(json.dumps(rec, allow_nan=False) + "\n")
-    report = build_report(result, top=args.top, config=cfg, source=source_desc, calibration=calibration)
-    (out / "report.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
-    md = to_markdown(report)
-    (out / "report.md").write_text(md, encoding="utf-8")
-    if args.print_format == "json":
-        print(json.dumps(report, default=str))
-    elif args.print_format == "md":
-        print(md)
+        result["episodes"], calibration = calibrate(result["episodes"], labels_df)
+    ev = None
+    if want_eval:
+        from open_fdd.ml.confidence_evaluate import evaluate
+
+        if labels_df is None:
+            raise ValueError("--evaluate on your own rule output needs --labels (or pass --synthetic)")
+        ev = evaluate(result["episodes"], labels_df, target_recall=getattr(args, "target_recall", 0.9), config=cfg)
+        ev["source"] = {**source_desc, "input": source_desc.get("input", "user")}
+    _write_outputs(args, result, cfg, source_desc, calibration, ev)
     return 0
 
 
