@@ -92,6 +92,16 @@ def paramstyle(conn: Any) -> str:
     return "%s" if mod in {"psycopg", "psycopg2", "pg8000"} else "?"
 
 
+def _site_expr(src: SourceMap) -> str:
+    """SQL expression for ``site_id``: the mapped column, else a literal filter value, else NULL."""
+    site = src.col("site_id") if src.columns.get("site_id", "site_id") else None
+    if site:
+        return site
+    if src.site_id is not None:
+        return _quote(str(src.site_id))
+    return _NULL
+
+
 def _filters(src: SourceMap, ts_col: str, ph: str) -> tuple[str, list[Any]]:
     where, params = [], []
     site = src.col("site_id") if src.columns.get("site_id", "site_id") else None
@@ -123,7 +133,7 @@ def base_cte(src: SourceMap, ph: str = "?") -> tuple[str, list[Any]]:
         where, params = _filters(src, t1, ph)
         sql = (
             "base AS (SELECT "
-            f"{eq} AS equipment_id, {rule} AS rule_id, "
+            f"{_site_expr(src)} AS site_id, {eq} AS equipment_id, {rule} AS rule_id, "
             f"{'COALESCE(' + subj + ', ' + _quote('') + ')' if subj else _quote('')} AS subject, "
             f"{t0} AS t0, {t1} AS t1, "
             f"CASE WHEN {st} IN ({faults}) THEN 1 {pass_when}ELSE NULL END AS flag, "
@@ -142,7 +152,7 @@ def base_cte(src: SourceMap, ph: str = "?") -> tuple[str, list[Any]]:
     where, params = _filters(src, ts, ph)
     sql = (
         "base AS (SELECT "
-        f"{eq} AS equipment_id, {rule} AS rule_id, {_quote('')} AS subject, {ts} AS t0, {ts} AS t1, "
+        f"{_site_expr(src)} AS site_id, {eq} AS equipment_id, {rule} AS rule_id, {_quote('')} AS subject, {ts} AS t0, {ts} AS t1, "
         f"CASE WHEN {fl} IS NULL THEN NULL WHEN LOWER(CAST({fl} AS VARCHAR)) IN ({truthy}) THEN 1 ELSE 0 END AS flag, "
         f"{_NULL} AS fault_h, {_NULL} AS covered_h, "
         f"{v if v else _NULL} AS v, {thr if thr else _NULL} AS thr, "
@@ -188,7 +198,7 @@ def episodes_sql(src: SourceMap, sensitivity_frac: float, ph: str = "?") -> tupl
         "CASE WHEN a.v IS NULL OR a.thr IS NULL THEN NULL "
         "WHEN a.v >= a.thr THEN 1.0 * a.v - a.thr ELSE 1.0 * a.thr - a.v END AS exceed "
         "FROM assessed a) "
-        "SELECT s.equipment_id, s.rule_id, s.subject, MIN(s.t0) AS start_ts, MAX(s.t1) AS end_ts, "
+        "SELECT MAX(s.site_id) AS site_id, s.equipment_id, s.rule_id, s.subject, MIN(s.t0) AS start_ts, MAX(s.t1) AS end_ts, "
         "MIN(s.rn) AS rn_min, MAX(s.rn) AS rn_max, COUNT(*) AS n_samples, "
         "SUM(s.fault_h) AS fault_h, SUM(s.covered_h) AS covered_h, "
         "AVG(s.exceed) AS exceed_mean, COUNT(s.exceed) AS n_exceed, "

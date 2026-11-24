@@ -30,6 +30,9 @@ def _episode(r: pd.Series) -> dict[str, Any]:
         "p_real": r["p_real"], "p_false_positive": r["p_false_positive"], "p_tuning": r["p_tuning"],
         "label": r["label"], "reason": r["reason"],
     }
+    site = r["site_id"] if "site_id" in r.index else None
+    if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) not in {"", "None", "nan"}:
+        out["site_id"] = str(site)
     if r.get("subject"):
         out["subject"] = r["subject"]
     cal = r.get("p_real_calibrated")
@@ -78,14 +81,21 @@ def build_report(result: dict[str, pd.DataFrame], *, top: int = 10, config: Conf
         report["likely_real"] = [_episode(r) for _, r in equip_real.head(top).iterrows()]
         data_real = real[real["data_quality_rule"].astype(bool)]
         if not data_real.empty:
-            g = data_real.groupby(["equipment_id", "rule_id"]).agg(
+            keys = ["equipment_id", "rule_id"] + (["site_id"] if "site_id" in data_real.columns else [])
+            g = data_real.groupby(keys, dropna=False).agg(
                 subjects=("subject", lambda s: int(s.replace("", pd.NA).nunique()) or 1), episodes=("episode_id", "size"),
                 hours=("duration_h", "sum"), p_real=("p_real", "max"), first=("start", "min"), last=("end", "max"),
             ).reset_index().sort_values(["subjects", "hours"], ascending=False)
-            report["confirmed_data_issues"] = [
-                {"equipment_id": r.equipment_id, "rule_id": r.rule_id, "subjects": int(r.subjects), "episodes": int(r.episodes),
-                 "hours": round(float(r.hours), 1), "p_real": float(r.p_real), "start": _ts(r.first), "end": _ts(r.last)}
-                for r in g.head(top).itertuples()]
+            issues = []
+            for r in g.head(top).itertuples():
+                item = {"equipment_id": r.equipment_id, "rule_id": r.rule_id, "subjects": int(r.subjects),
+                        "episodes": int(r.episodes), "hours": round(float(r.hours), 1), "p_real": float(r.p_real),
+                        "start": _ts(r.first), "end": _ts(r.last)}
+                site = getattr(r, "site_id", None)
+                if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) not in {"", "None", "nan"}:
+                    item["site_id"] = str(site)
+                issues.append(item)
+            report["confirmed_data_issues"] = issues
         fp = ep[ep["label"] == "likely_false_positive"].copy()
         if not fp.empty:
             fp["pattern"] = fp["reason"].map(_fp_pattern)
@@ -102,10 +112,15 @@ def build_report(result: dict[str, pd.DataFrame], *, top: int = 10, config: Conf
          "equipment_evaluated": int(r.equipment_evaluated), "episodes": int(r.episodes),
          "mean_p_tuning": float(r.mean_p_tuning)} for r in rv.head(top).itertuples()]
     bad = eq[eq["episodes"] > 0].head(top)
-    report["equipment_ranking"] = [
-        {"equipment_id": r.equipment_id, "health": r.health, "rules_likely_real": int(r.rules_likely_real),
-         "data_issues": int(r.data_issues), "episodes": int(r.episodes), "expected_real": float(r.expected_real)}
-        for r in bad.itertuples()]
+    ranking = []
+    for r in bad.itertuples():
+        item = {"equipment_id": r.equipment_id, "health": r.health, "rules_likely_real": int(r.rules_likely_real),
+                "data_issues": int(r.data_issues), "episodes": int(r.episodes), "expected_real": float(r.expected_real)}
+        site = getattr(r, "site_id", None)
+        if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) not in {"", "None", "nan"}:
+            item["site_id"] = str(site)
+        ranking.append(item)
+    report["equipment_ranking"] = ranking
     if calibration is not None:
         report["calibration"] = calibration
     report["next_checks"] = next_checks(report)

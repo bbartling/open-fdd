@@ -36,6 +36,23 @@ By default the compact JSON report is printed to stdout; `--print md` prints the
 one JSON object per episode (identity, label, the three probabilities and the reason, then an `evidence` object), with
 UTC timestamps and `null` for evidence that was not assessed, for agents that page through episodes.
 
+## Identifiers for downstream tools
+
+`episodes.jsonl` and `report.json` copy source identifiers verbatim so a downstream graph, review bundle or root-cause
+tool can join without a lookup table:
+
+| Field | Contract |
+|---|---|
+| `equipment_id` | Exactly the `equipment_id` stored on the rule-result or flags row. No slug, display name or hash is substituted. |
+| `rule_id` | Exactly the source `rule_id`. |
+| `subject` | The source `subject_key`, or `""` when the table has none. |
+| `site_id` | The source `site_id` column when present, otherwise the `--site` filter. `null` in `episodes.jsonl` (omitted from `report.json` objects) when neither was given. |
+| `episode_id` | `E000001`, `E000002`, … stable for one run of the command, not a durable identifier across runs. |
+| `start`, `end` | ISO 8601 UTC ending in `Z` (`episodes.jsonl` uses seconds; `report.json` minute precision). |
+
+`report.json` repeats the same `equipment_id` (and `site_id` when known) on `likely_real`, `confirmed_data_issues` and
+`equipment_ranking`. Unassessed numeric evidence is JSON `null`, never `0`.
+
 ## Supported inputs
 
 | Input | Engines | Notes |

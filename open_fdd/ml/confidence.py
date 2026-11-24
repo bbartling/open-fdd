@@ -191,7 +191,7 @@ def _merge_islands(isl: pd.DataFrame, gap: int) -> pd.DataFrame:
     agg = isl.assign(
         _ex=isl["exceed_mean"] * isl["n_exceed"], _run=isl["running_share"].fillna(0.0) * isl["n_run"],
     ).groupby("ep").agg(
-        equipment_id=("equipment_id", "first"), rule_id=("rule_id", "first"), subject=("subject", "first"),
+        site_id=("site_id", "first"), equipment_id=("equipment_id", "first"), rule_id=("rule_id", "first"), subject=("subject", "first"),
         start=("start_ts", "min"), end=("end_ts", "max"), rn_min=("rn_min", "min"), rn_max=("rn_max", "max"),
         n_samples=("n_samples", "sum"), fault_h=("fault_h", "sum"), covered_h=("covered_h", "sum"),
         _ex=("_ex", "sum"), n_exceed=("n_exceed", "sum"), n_survive=("n_survive", "sum"),
@@ -223,6 +223,12 @@ def load_episodes(conn: Any, src: SourceMap, config: ConfidenceConfig | None = N
     isl = pd.DataFrame(erows, columns=ecols)
     if isl.empty:
         return pd.DataFrame(columns=["episode_id", "equipment_id", "rule_id", "subject", "start", "end"]), totals
+    if "site_id" in isl.columns:
+        isl["site_id"] = isl["site_id"].where(isl["site_id"].notna(), None)
+        if src.site_id is not None:
+            isl["site_id"] = isl["site_id"].fillna(src.site_id)
+    else:
+        isl["site_id"] = src.site_id
     for c in ("equipment_id", "rule_id", "subject"):
         isl[c] = isl[c].astype(str)
     num = ("rn_min", "rn_max", "n_samples", "fault_h", "covered_h", "exceed_mean", "n_exceed", "n_survive", "running_share",
@@ -547,6 +553,10 @@ def equipment_health(scored: pd.DataFrame, totals: pd.DataFrame) -> pd.DataFrame
         return "review"
 
     out["health"] = out.apply(verdict, axis=1)
+    src = scored if (not scored.empty and "site_id" in scored.columns) else totals
+    if "site_id" in getattr(src, "columns", []):
+        first_site = src.dropna(subset=["site_id"]).groupby("equipment_id")["site_id"].agg(lambda s: str(s.iloc[0]))
+        out["site_id"] = first_site.reindex(out.index)
     return out.reset_index().sort_values(["rules_likely_real", "expected_real", "episodes"], ascending=False).reset_index(drop=True)
 
 
@@ -637,15 +647,17 @@ def summarize(result: dict[str, pd.DataFrame]) -> dict[str, Any]:
     }
 
 
-_RECORD_HEAD = ("episode_id", "equipment_id", "rule_id", "subject", "start", "end", "label", "p_real",
+_RECORD_HEAD = ("episode_id", "site_id", "equipment_id", "rule_id", "subject", "start", "end", "label", "p_real",
                 "p_false_positive", "p_tuning", "reason")
 
 
 def episode_records(episodes: pd.DataFrame) -> list[dict[str, Any]]:
     """One plain-JSON record per scored episode: identity, label, probabilities and reason first, then ``evidence``.
 
-    Timestamps are ISO 8601 UTC with ``Z``; missing evidence is ``None`` (never 0), so an agent can tell
-    "not assessed" from "assessed and clean"."""
+    ``equipment_id``, ``rule_id``, ``subject`` and ``site_id`` are the source identifiers copied verbatim so a
+    downstream graph or review tool can join without a lookup table. ``site_id`` is ``None`` when the source has
+    no site column and ``--site`` was not set. Timestamps are ISO 8601 UTC with ``Z``; missing evidence is ``None``
+    (never 0), so an agent can tell "not assessed" from "assessed and clean"."""
 
     def clean(v: Any) -> Any:
         if isinstance(v, pd.Timestamp):

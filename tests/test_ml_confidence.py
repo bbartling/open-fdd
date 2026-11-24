@@ -13,6 +13,7 @@ import pytest
 from open_fdd.ml.confidence import (
     ConfidenceConfig,
     _co_rules,
+    episode_records,
     history_evidence,
     main,
     screen,
@@ -627,3 +628,28 @@ def test_cli_writes_episode_jsonl_without_nan(tmp_path):
     assert {"episode_id", "label", "p_real", "reason", "evidence"} <= set(recs[0])
     assert recs[0]["start"].endswith("Z")
     assert all(abs(r["p_real"] + r["p_false_positive"] + r["p_tuning"] - 1) <= 2e-3 for r in recs)
+
+
+def test_source_identifiers_are_copied_verbatim(tmp_path):
+    df = _results_rows()
+    assert set(df["site_id"]) == {"S"}
+    df.to_csv(tmp_path / "r.csv", index=False)
+    assert main(["--results", str(tmp_path / "r.csv"), "--print", "none", "--out-dir", str(tmp_path / "o")]) == 0
+    recs = [json.loads(x) for x in (tmp_path / "o" / "episodes.jsonl").read_text().splitlines()]
+    assert recs
+    assert all(r["site_id"] == "S" for r in recs)
+    assert all(r["equipment_id"] in {f"U{i}" for i in range(1, 5)} for r in recs)
+    # no normalisation: punctuation in a source id is preserved
+    weird = df.copy()
+    weird["equipment_id"] = "@p:campus:r:abc-123"
+    weird["site_id"] = "campus"
+    res = screen(results=weird)
+    recs = episode_records(res["episodes"])
+    assert {r["equipment_id"] for r in recs} == {"@p:campus:r:abc-123"}
+    assert {r["site_id"] for r in recs} == {"campus"}
+    rep = build_report(res, top=5)
+    assert all(e.get("site_id") == "campus" for e in rep["equipment_ranking"] if e["episodes"])
+    # flags with no site column leave site_id null
+    fl, _ = _fixture(units=2)
+    recs = episode_records(screen(fl)["episodes"])
+    assert recs and all(r["site_id"] is None for r in recs)
