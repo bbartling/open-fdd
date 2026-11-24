@@ -42,6 +42,9 @@ class CandidateCause:
     data_quality_caveats: tuple[str, ...] = ()
     reasons: tuple[str, ...] = ()
     score_breakdown: dict[str, float] = field(default_factory=dict)
+    inferred: bool = False
+    topology_source: str = "modeled"
+    edge_confidences: tuple[float, ...] = ()
 
 
 @dataclass
@@ -59,6 +62,8 @@ class CauseTrace:
     candidates: list[CandidateCause]
     symptom_data_quality: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    topology_source: str = "modeled"
+    inferred_edges_used: int = 0
 
 
 @dataclass
@@ -72,6 +77,10 @@ class CommonCauseRollup:
     downstream_equipment: list[str]
     downstream_rules: list[str]
     reasons: list[str]
+    root_iri: str = ""
+    root_site: str = ""
+    inferred: bool = False
+    topology_source: str = "modeled"
 
 
 @dataclass
@@ -96,21 +105,27 @@ def _ts_iso(dt: Any) -> str | None:
 
 def _collect_for_node(
     collector: EvidenceCollector,
+    graph: TopologyGraph,
     node: GraphNode,
     symptom: FaultEvidence,
     tolerance: timedelta,
 ) -> NodeEvidence:
-    """Merge evidence keyed by any unambiguous alias of this graph node."""
+    """Merge evidence keyed by any alias that resolves unambiguously to this node."""
     faults: list = []
     dq: list = []
     devs: list = []
     seen_faults: set[tuple] = set()
     seen_dq: set[tuple] = set()
     seen_devs: set[tuple] = set()
+    scope_site = symptom.site_id or node.site_id or None
     idents = dict.fromkeys((node.node_id, node.label, node.iri, *node.aliases))
     for ident in idents:
         if not ident:
             continue
+        if ident != node.iri:
+            resolved = graph.resolve_node(ident, site_id=scope_site)
+            if resolved is None or resolved.iri != node.iri:
+                continue
         ev = collector.collect(
             ident,
             window_start=symptom.start,
@@ -129,7 +144,15 @@ def _collect_for_node(
                 seen_dq.add(key)
                 dq.append(d)
         for p in ev.point_deviations:
-            key = (p.equipment_id, p.role, p.timestamp, p.site_id, p.value_si)
+            key = (
+                p.equipment_id,
+                p.role,
+                p.timestamp,
+                p.site_id,
+                p.value_si,
+                p.setpoint_si,
+                p.deviation_si,
+            )
             if key not in seen_devs:
                 seen_devs.add(key)
                 devs.append(p)
@@ -181,7 +204,7 @@ def _select_symptoms(
     for f in faults:
         tr = graph.traverse_upstream(f.equipment_id, site_id=f.site_id or site_id)
         for hop in tr.ancestors:
-            if hop.node.iri in faulted_iris:
+            if not hop.inferred and hop.node.iri in faulted_iris:
                 upstream_of_faulted.add(hop.node.iri)
 
     leaf_faults: list[FaultEvidence] = []
@@ -275,8 +298,14 @@ def _score_candidate(
         reasons.append(f"confidence discounted for data quality ({flag_names})")
 
     prox_mult = 1.0 if hop.hop <= 1 else 1.0 / (1.0 + 0.12 * (hop.hop - 1))
+    inferred_mult = 1.0
+    if hop.inferred:
+        min_edge_conf = min(hop.edge_confidences) if hop.edge_confidences else 0.5
+        inferred_mult = max(0.30, min(0.72, 0.35 + 0.40 * min_edge_conf))
+        caveats.append(f"topology path is {hop.topology_source} (min edge conf={min_edge_conf:.2f})")
+        reasons.append(f"inferred, not modeled (discounted x{inferred_mult:.2f})")
 
-    raw = (fault_pts + prec_pts + cc_pts + dev_pts) * dq_mult * prox_mult
+    raw = (fault_pts + prec_pts + cc_pts + dev_pts) * dq_mult * prox_mult * inferred_mult
     confidence = round(max(0.0, min(1.0, raw)), 3)
 
     breakdown = {
@@ -286,6 +315,7 @@ def _score_candidate(
         "deviation": round(dev_pts, 3),
         "dq_multiplier": round(dq_mult, 3),
         "proximity_multiplier": round(prox_mult, 3),
+        "inferred_topology_multiplier": round(inferred_mult, 3),
     }
 
     return CandidateCause(
@@ -305,6 +335,9 @@ def _score_candidate(
         data_quality_caveats=tuple(caveats),
         reasons=tuple(reasons),
         score_breakdown=breakdown,
+        inferred=hop.inferred,
+        topology_source=hop.topology_source,
+        edge_confidences=hop.edge_confidences,
     )
 
 
@@ -350,7 +383,7 @@ def analyze_rca(
 
         sym_dq: list[str] = []
         if tr.target is not None:
-            self_ev = _collect_for_node(collector, tr.target, sym, tolerance)
+            self_ev = _collect_for_node(collector, graph, tr.target, sym, tolerance)
             sym_dq = sorted({d.flag for d in self_ev.data_quality_flags})
 
         hops_to_check: list[UpstreamHop] = list(tr.ancestors)
@@ -359,7 +392,7 @@ def analyze_rca(
 
         raw_candidates: list[CandidateCause] = []
         for hop in hops_to_check:
-            ev = _collect_for_node(collector, hop.node, sym, tolerance)
+            ev = _collect_for_node(collector, graph, hop.node, sym, tolerance)
             down_n = len(downstream_by_ancestor.get(hop.node.iri, ())) if hop.hop > 0 else 1
 
             # Exclude the symptom fault itself at hop == 0
@@ -379,7 +412,7 @@ def analyze_rca(
                     cand = _score_candidate(sym, hop, None, ev.data_quality_flags, ev.point_deviations, down_n)
                     raw_candidates.append(cand)
 
-        raw_candidates.sort(key=lambda c: (-c.confidence, c.hop_distance, c.equipment_id, c.rule_id))
+        raw_candidates.sort(key=lambda c: (-c.confidence, c.inferred, c.hop_distance, c.equipment_id, c.rule_id))
         top_cands = raw_candidates[: max(1, top)]
         total_conf = sum(c.confidence for c in top_cands)
         normalized: list[CandidateCause] = []
@@ -403,6 +436,9 @@ def analyze_rca(
                     data_quality_caveats=c.data_quality_caveats,
                     reasons=c.reasons,
                     score_breakdown=c.score_breakdown,
+                    inferred=c.inferred,
+                    topology_source=c.topology_source,
+                    edge_confidences=c.edge_confidences,
                 )
             )
 
@@ -412,27 +448,38 @@ def analyze_rca(
         elif tr.upstream_status == "partial_unknown_upstream":
             at = ", ".join(tr.unknown_upstream_at)
             notes.append(f"partial trace — unknown upstream above: {at}.")
+        elif tr.upstream_status == "traced_inferred":
+            notes.append("inferred, not modeled: upstream path uses inferred telemetry/role links; verify before modeling.")
         elif tr.upstream_status == "target_not_found":
             notes.append(f"symptom equipment {sym.equipment_id!r} not found in RDF topology graph.")
+        if tr.inferred_edges_used and tr.upstream_status != "traced_inferred":
+            notes.append("inferred, not modeled: path includes inferred feeder link(s).")
 
         if normalized:
             lead = normalized[0]
             if lead.hop_distance > 0:
                 key = (lead.equipment_iri, lead.rule_id)
+                lead_node = graph.nodes.get(lead.equipment_iri)
+                lead_site = (lead_node.site_id if lead_node else "") or sym.site_id or (site_id or "")
                 slot = rollup_acc.setdefault(
                     key,
                     {
                         "display": lead.equipment_id,
+                        "iri": lead.equipment_iri,
+                        "site": lead_site,
                         "conf": [],
                         "equips": set(),
                         "rules": set(),
                         "reasons": set(),
+                        "inferred": False,
                     },
                 )
                 slot["conf"].append(lead.confidence)
                 slot["equips"].add(sym.equipment_id)
                 slot["rules"].add(sym.rule_id)
                 slot["reasons"].update(lead.reasons)
+                if lead.inferred:
+                    slot["inferred"] = True
 
         traces.append(
             CauseTrace(
@@ -447,11 +494,13 @@ def analyze_rca(
                 candidates=normalized,
                 symptom_data_quality=sym_dq,
                 notes=notes,
+                topology_source=tr.topology_source,
+                inferred_edges_used=tr.inferred_edges_used,
             )
         )
 
     rollups: list[CommonCauseRollup] = []
-    for (_iri, rule_id), slot in rollup_acc.items():
+    for (root_iri, rule_id), slot in rollup_acc.items():
         if len(slot["equips"]) >= 2:
             rollups.append(
                 CommonCauseRollup(
@@ -462,14 +511,20 @@ def analyze_rca(
                     downstream_equipment=sorted(slot["equips"]),
                     downstream_rules=sorted(slot["rules"]),
                     reasons=sorted(slot["reasons"]),
+                    root_iri=root_iri,
+                    root_site=slot["site"],
+                    inferred=bool(slot["inferred"]),
+                    topology_source="inferred, not modeled" if slot["inferred"] else "modeled",
                 )
             )
     rollups.sort(key=lambda r: (-r.downstream_symptom_count, -r.confidence, r.root_equipment))
 
+    inferred_traces = sum(1 for t in traces if t.inferred_edges_used > 0)
     totals = {
         "symptoms_analyzed": len(traces),
         "traced_with_candidates": sum(1 for t in traces if t.candidates),
         "unknown_upstream_traces": unknown_count,
+        "inferred_topology_traces": inferred_traces,
         "common_cause_groups": len(rollups),
         "false_positives_downweighted": fp_downweighted,
     }

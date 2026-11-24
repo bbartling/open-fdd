@@ -19,6 +19,14 @@ from open_fdd.rca.graph import (
     load_graph,
     load_graph_from_nf,
 )
+from open_fdd.rca.infer import (
+    InferredEdge,
+    infer_topology,
+    load_telemetry_csv,
+    load_telemetry_sql,
+    suggested_links_to_csv,
+    suggested_links_to_ttl,
+)
 from open_fdd.rca.rank import (
     CandidateCause,
     CauseTrace,
@@ -38,6 +46,7 @@ __all__ = [
     "FaultEvidence",
     "GraphNode",
     "InMemoryEvidenceCollector",
+    "InferredEdge",
     "NodeEvidence",
     "PointDeviation",
     "RCAReport",
@@ -47,9 +56,14 @@ __all__ = [
     "UpstreamHop",
     "UpstreamTraversal",
     "analyze_rca",
+    "infer_topology",
     "load_graph",
     "load_graph_from_nf",
+    "load_telemetry_csv",
+    "load_telemetry_sql",
     "report_to_dict",
     "report_to_json",
     "report_to_markdown",
+    "suggested_links_to_csv",
+    "suggested_links_to_ttl",
 ]

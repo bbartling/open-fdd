@@ -208,12 +208,13 @@ local:loop-2 a brick:AHU ; brick:feeds local:loop-1 .
     tr_loop = graph.traverse_upstream("loop-1")
     assert [h.node.node_id for h in tr_loop.ancestors] == ["loop-2"]
 
-    # Custom SPARQL runner fallback/extension
+    # Custom SPARQL runner fallback/extension stays in sparql_ancestors without inventing hops
     tr_custom = graph.traverse_upstream(
         "zone-a",
         sparql_runner=lambda _q: [{"upstream": "urn:test:multi:extra-plant"}],
     )
-    assert any(h.node.node_id == "extra-plant" for h in tr_custom.ancestors)
+    assert "urn:test:multi:extra-plant" in tr_custom.sparql_ancestors
+    assert all(h.node.node_id != "extra-plant" for h in tr_custom.ancestors)
 
 
 def test_temporal_precedence_and_data_quality_discount():
@@ -593,6 +594,7 @@ def test_cnx_requires_typed_inlet():
     rec:damper s223:hasConnectionPoint rec:damper-out .
     rec:fan-out a s223:OutletConnectionPoint ; s223:cnx rec:conn .
     rec:damper-out a s223:OutletConnectionPoint ; s223:cnx rec:conn .
+    rec:conn s223:cnx rec:damper-out .
     """
     g = load_graph(ttl)
     # Two outlets on one connection must not invent a feeder edge.
@@ -614,7 +616,12 @@ def test_closed_feeder_cycle_is_partial_unknown():
 
 
 def test_sparql_only_hits_are_not_direct_feeder_candidates():
+    from datetime import datetime
+
+    from open_fdd.rca.evidence import FaultEvidence, InMemoryEvidenceCollector
     from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.rank import analyze_rca
+    from open_fdd.rca.report import report_to_markdown
 
     ttl = """
     @prefix brick: <https://brickschema.org/schema/Brick#> .
@@ -624,15 +631,29 @@ def test_sparql_only_hits_are_not_direct_feeder_candidates():
     """
     g = load_graph(ttl)
     chiller = g.resolve_node("chiller-1")
+    tr_unverified = g.traverse_upstream(
+        "zone-1",
+        max_hops=1,
+        sparql_runner=lambda _q: [{"upstream": chiller.iri}, {"upstream": "urn:example:path#phantom"}],
+    )
+    assert chiller.iri in tr_unverified.sparql_ancestors
+    assert "urn:example:path#phantom" in tr_unverified.sparql_ancestors
+    assert all(h.node.iri != chiller.iri for h in tr_unverified.ancestors)
+    assert all(h.node.node_id != "phantom" for h in tr_unverified.ancestors)
 
-    def runner(_query: str):
-        return [{"upstream": chiller.iri}]
-
-    tr = g.traverse_upstream("zone-1", max_hops=1, sparql_runner=runner)
-    assert chiller.iri in tr.sparql_ancestors
-    sparql_hops = [h for h in tr.ancestors if h.node.iri == chiller.iri]
-    assert sparql_hops and sparql_hops[0].hop == 2
-    assert sparql_hops[0].relations == ("sparql:reachable",)
+    # Default analyze_rca + markdown must not invent unverified SPARQL-only ancestors
+    ts = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="zone-1", rule_id="ZNT-HIGH", start=ts, end=ts),
+            FaultEvidence(equipment_id="phantom", rule_id="PLANT-DOWN", start=ts, end=ts),
+        ]
+    )
+    report = analyze_rca(g, collector)
+    zone_tr = next(t for t in report.traces if t.symptom_equipment == "zone-1")
+    assert all(c.equipment_id != "phantom" for c in zone_tr.candidates)
+    md = report_to_markdown(report)
+    assert "phantom -> zone-1" not in md
 
 
 def test_incomplete_window_bounds_filter_independently():
@@ -720,8 +741,14 @@ def test_sql_load_preserves_site_ids(tmp_path):
     faults = SqlEvidenceCollector(conn).load().all_faults()
     sites = sorted(f.site_id for f in faults)
     assert sites == ["plant-a", "plant-b"]
-    scoped = [f for f in SqlEvidenceCollector(conn).load().all_faults() if f.site_id == "plant-a"]
+    collector = SqlEvidenceCollector(conn).load()
+    scoped = [f for f in collector.all_faults() if f.site_id == "plant-a"]
     assert len(scoped) == 1
+    g = _alias_graph()
+    rep_a = analyze_rca(g, collector, site_id="plant-a")
+    rep_b = analyze_rca(g, collector, site_id="plant-b")
+    assert len(rep_a.traces) == 1 and rep_a.traces[0].symptom_site == "plant-a"
+    assert len(rep_b.traces) == 1 and rep_b.traces[0].symptom_site == "plant-b"
 
 
 def test_evidence_merged_across_aliases_and_common_cause_uses_iri():
@@ -754,3 +781,311 @@ def test_evidence_merged_across_aliases_and_common_cause_uses_iri():
     lead = ahu_cands[0]
     joined = " ".join(lead.reasons)
     assert "SAT-HIGH" in lead.rule_id or "SAT-HIGH" in joined or lead.rule_id == "SAT-HIGH"
+
+
+def test_common_cause_next_checks_includes_site_and_iri():
+    from datetime import datetime
+
+    from open_fdd.rca.evidence import FaultEvidence, InMemoryEvidenceCollector
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.rank import analyze_rca
+    from open_fdd.rca.report import next_checks
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix s1: <urn:example:site/north#> .
+    @prefix s2: <urn:example:site/south#> .
+
+    s1:ahu-shared a brick:AHU ; rdfs:label "AHU-1" ; phIoT:siteRef s1:site-north ; brick:feeds s1:z1, s1:z2 .
+    s1:z1 a brick:HVAC_Zone ; phIoT:siteRef s1:site-north .
+    s1:z2 a brick:HVAC_Zone ; phIoT:siteRef s1:site-north .
+
+    s2:ahu-shared a brick:AHU ; rdfs:label "AHU-1" ; phIoT:siteRef s2:site-south ; brick:feeds s2:z3, s2:z4 .
+    s2:z3 a brick:HVAC_Zone ; phIoT:siteRef s2:site-south .
+    s2:z4 a brick:HVAC_Zone ; phIoT:siteRef s2:site-south .
+    """
+    g = load_graph(ttl)
+    ts = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="urn:example:site/north#ahu-shared", rule_id="SAT-HIGH", start=ts, end=ts, site_id="site-north"),
+            FaultEvidence(equipment_id="urn:example:site/north#z1", rule_id="ZNT-HIGH", start=ts, end=ts, site_id="site-north"),
+            FaultEvidence(equipment_id="urn:example:site/north#z2", rule_id="ZNT-HIGH", start=ts, end=ts, site_id="site-north"),
+            FaultEvidence(equipment_id="urn:example:site/south#ahu-shared", rule_id="SAT-HIGH", start=ts, end=ts, site_id="site-south"),
+            FaultEvidence(equipment_id="urn:example:site/south#z3", rule_id="ZNT-HIGH", start=ts, end=ts, site_id="site-south"),
+            FaultEvidence(equipment_id="urn:example:site/south#z4", rule_id="ZNT-HIGH", start=ts, end=ts, site_id="site-south"),
+        ]
+    )
+    report = analyze_rca(g, collector)
+    assert len(report.common_causes) == 2
+    iris = {cc.root_iri for cc in report.common_causes}
+    sites = {cc.root_site for cc in report.common_causes}
+    assert iris == {"urn:example:site/north#ahu-shared", "urn:example:site/south#ahu-shared"}
+    assert sites == {"site-north", "site-south"}
+    checks = " | ".join(next_checks(report))
+    assert "site-north" in checks and "site-south" in checks
+    assert "urn:example:site/north#ahu-shared" in checks
+
+
+def test_shared_label_does_not_leak_evidence_and_preserves_distinct_deviations():
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.evidence import (
+        FaultEvidence,
+        InMemoryEvidenceCollector,
+        PointDeviation,
+    )
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.rank import _collect_for_node, analyze_rca
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix rec: <urn:example:dup#> .
+
+    rec:ahu-1 a brick:AHU ; rdfs:label "Shared AHU" ; brick:feeds rec:zone-1 .
+    rec:ahu-2 a brick:AHU ; rdfs:label "Shared AHU" ; brick:feeds rec:zone-2 .
+    rec:zone-1 a brick:HVAC_Zone .
+    rec:zone-2 a brick:HVAC_Zone .
+    """
+    g = load_graph(ttl)
+    ts = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="Shared AHU", rule_id="SAT-HIGH", start=ts, end=ts),
+            FaultEvidence(equipment_id="zone-1", rule_id="ZNT-HIGH", start=ts, end=ts),
+        ],
+        point_deviations=[
+            PointDeviation(equipment_id="ahu-1", role="sat", value_si=290.0, setpoint_si=286.0, deviation_si=4.0, timestamp=ts),
+            PointDeviation(equipment_id="ahu-1", role="sat", value_si=290.0, setpoint_si=284.0, deviation_si=6.0, timestamp=ts),
+        ],
+    )
+    node1 = g.resolve_node("ahu-1")
+    ev1 = _collect_for_node(collector, g, node1, FaultEvidence(equipment_id="zone-1", rule_id="ZNT-HIGH", start=ts, end=ts), tolerance=timedelta(minutes=30))
+    # Shared ambiguous label must not be pulled into ahu-1
+    assert ev1.faults == []
+    # Distinct setpoint_si / deviation_si at identical timestamp & value_si must both survive dedup
+    assert len(ev1.point_deviations) == 2
+
+    report = analyze_rca(g, collector)
+    z1 = next(t for t in report.traces if t.symptom_equipment == "zone-1")
+    assert all(c.rule_id != "SAT-HIGH" for c in z1.candidates)
+
+
+def test_inferred_topology_recovers_hidden_chain_and_discounts_weight(tmp_path):
+    import csv
+    import math
+    from datetime import datetime, timedelta
+
+    import rdflib
+
+    from open_fdd.rca.evidence import FaultEvidence, InMemoryEvidenceCollector
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.infer import (
+        infer_topology,
+        load_telemetry_csv,
+        suggested_links_to_csv,
+        suggested_links_to_ttl,
+    )
+    from open_fdd.rca.rank import analyze_rca
+    from open_fdd.rca.report import next_checks, report_to_dict, report_to_markdown
+
+    # Full modeled baseline vs. stripped TTL with ZERO feeds links
+    ttl_modeled = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix ex: <urn:test:hidden#> .
+
+    ex:chiller-1 a brick:Chiller ; rdfs:label "Chiller-1" ; brick:feeds ex:ahu-1 .
+    ex:ahu-1 a brick:AHU ; rdfs:label "AHU-1" ; brick:feeds ex:vav-1, ex:vav-2 .
+    ex:vav-1 a brick:VAV ; rdfs:label "VAV-1" ; brick:feeds ex:zone-1 .
+    ex:vav-2 a brick:VAV ; rdfs:label "VAV-2" ; brick:feeds ex:zone-2 .
+    ex:zone-1 a brick:HVAC_Zone ; rdfs:label "Zone-1" .
+    ex:zone-2 a brick:HVAC_Zone ; rdfs:label "Zone-2" .
+    """
+
+    ttl_hidden = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix ex: <urn:test:hidden#> .
+
+    ex:chiller-1 a brick:Chiller ; rdfs:label "Chiller-1" .
+    ex:ahu-1 a brick:AHU ; rdfs:label "AHU-1" .
+    ex:vav-1 a brick:VAV ; rdfs:label "VAV-1" .
+    ex:vav-2 a brick:VAV ; rdfs:label "VAV-2" .
+    ex:zone-1 a brick:HVAC_Zone ; rdfs:label "Zone-1" .
+    ex:zone-2 a brick:HVAC_Zone ; rdfs:label "Zone-2" .
+
+    ex:chiller_chwst a brick:Chilled_Water_Supply_Temperature_Sensor ;
+        rdfs:label "Chiller-1 CHWST" ; phIoT:equipRef ex:chiller-1 .
+    ex:ahu_sat a brick:Supply_Air_Temperature_Sensor ;
+        rdfs:label "AHU-1 SAT" ; phIoT:equipRef ex:ahu-1 .
+    ex:ahu_sat_sp a brick:Supply_Air_Temperature_Setpoint ;
+        rdfs:label "AHU-1 SAT SP" ; phIoT:equipRef ex:ahu-1 .
+    ex:vav1_dat a brick:Discharge_Air_Temperature_Sensor ;
+        rdfs:label "VAV-1 DAT" ; phIoT:equipRef ex:vav-1 .
+    ex:vav2_dat a brick:Discharge_Air_Temperature_Sensor ;
+        rdfs:label "VAV-2 DAT" ; phIoT:equipRef ex:vav-2 .
+    ex:zone1_temp a brick:Zone_Air_Temperature_Sensor ;
+        rdfs:label "Zone-1 Temp" ; phIoT:equipRef ex:zone-1 .
+    ex:zone2_temp a brick:Zone_Air_Temperature_Sensor ;
+        rdfs:label "Zone-2 Temp" ; phIoT:equipRef ex:zone-2 .
+    """
+
+    # Build lagged synthetic telemetry:
+    # chiller_chwst(t) -> ahu_sat(t+1) -> vav1_dat(t+2), vav2_dat(t+2) -> zone1_temp(t+3), zone2_temp(t+3)
+    n_steps = 60
+    t0 = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
+    csv_path = tmp_path / "telemetry.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow([
+            "timestamp",
+            "chiller_chwst",
+            "ahu_sat",
+            "ahu_sat_sp",
+            "vav1_dat",
+            "vav2_dat",
+            "zone1_temp",
+            "zone2_temp",
+        ])
+        base = [280.0 + 4.0 * math.sin(i / 4.0) + 0.1 * (i % 5) for i in range(n_steps + 5)]
+        for i in range(n_steps):
+            ts = (t0 + timedelta(minutes=15 * i)).isoformat()
+            chwst = base[i + 3]
+            ahu_sat = 286.0 + 0.9 * (base[i + 2] - 280.0)
+            vav1 = ahu_sat + 1.5
+            vav2 = ahu_sat + 2.0
+            # lag +1 from ahu_sat -> vav1/vav2 -> zone1/zone2: use i+1 for vav and i+0 for zone
+            ahu_sat = 286.0 + 0.9 * (base[i + 2] - 280.0)
+            vav1 = 287.5 + 0.85 * (base[i + 1] - 280.0)
+            vav2 = 288.0 + 0.80 * (base[i + 1] - 280.0)
+            z1 = 294.0 + 0.75 * (base[i] - 280.0)
+            z2 = 294.5 + 0.70 * (base[i] - 280.0)
+            w.writerow([ts, round(chwst, 3), round(ahu_sat, 3), 286.0, round(vav1, 3), round(vav2, 3), round(z1, 3), round(z2, 3)])
+
+    g_hidden = load_graph(ttl_hidden)
+    assert sum(1 for lst in g_hidden.upstream_edges.values() for e in lst if not g_hidden.nodes[e.downstream_iri].is_point) == 0
+
+    telemetry = load_telemetry_csv(csv_path)
+    edges = infer_topology(g_hidden, telemetry, min_correlation=0.70, max_lag=3, min_samples=20)
+    pairs = {(e.upstream_label, e.downstream_label) for e in edges}
+    assert ("Chiller-1", "AHU-1") in pairs
+    assert ("AHU-1", "VAV-1") in pairs
+    assert ("AHU-1", "VAV-2") in pairs
+    assert ("VAV-1", "Zone-1") in pairs
+    assert ("VAV-2", "Zone-2") in pairs
+    # Setpoints must not drive edges, and original graph must remain untouched
+    assert all("SP" not in e.upstream_point and "SP" not in e.downstream_point for e in edges)
+    assert sum(1 for lst in g_hidden.upstream_edges.values() for e in lst if not g_hidden.nodes[e.downstream_iri].is_point) == 0
+
+    g_inferred = g_hidden.with_inferred_edges(edges)
+    # Original hidden graph is still empty (never mutated)
+    assert sum(1 for lst in g_hidden.upstream_edges.values() for e in lst if not g_hidden.nodes[e.downstream_iri].is_point) == 0
+
+    ts_fault = datetime(2026, 3, 1, 6, 0, tzinfo=UTC)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=ts_fault, end=ts_fault),
+            FaultEvidence(equipment_id="zone-1", rule_id="ZNT-HIGH", start=ts_fault + timedelta(minutes=15), end=ts_fault + timedelta(minutes=30)),
+            FaultEvidence(equipment_id="zone-2", rule_id="ZNT-HIGH", start=ts_fault + timedelta(minutes=15), end=ts_fault + timedelta(minutes=30)),
+        ]
+    )
+
+    rep_modeled = analyze_rca(load_graph(ttl_modeled), collector)
+    rep_inferred = analyze_rca(g_inferred, collector)
+
+    # Without inference, zones are unknown_upstream; with inference, both recover ahu-1 at discounted confidence
+    rep_hidden_only = analyze_rca(g_hidden, collector)
+    assert rep_hidden_only.totals["unknown_upstream_traces"] == 3
+
+    z1_mod = next(t for t in rep_modeled.traces if t.symptom_equipment == "zone-1")
+    z1_inf = next(t for t in rep_inferred.traces if t.symptom_equipment == "zone-1")
+    assert z1_inf.upstream_status == "traced_inferred"
+    assert z1_inf.topology_source == "inferred, not modeled"
+    assert z1_inf.candidates[0].equipment_id == "ahu-1"
+    assert z1_inf.candidates[0].inferred is True
+    assert z1_inf.candidates[0].confidence < z1_mod.candidates[0].confidence
+    assert "inferred_topology_multiplier" in z1_inf.candidates[0].score_breakdown
+
+    assert rep_inferred.totals["inferred_topology_traces"] >= 2
+    assert any(cc.root_equipment == "ahu-1" and cc.inferred for cc in rep_inferred.common_causes)
+
+    # JSON, Markdown, and next_checks clearly mark inferred, not modeled
+    payload = report_to_dict(rep_inferred)
+    assert any(t["topology_source"] == "inferred, not modeled" for t in payload["traces"])
+    md = report_to_markdown(rep_inferred)
+    assert "inferred, not modeled" in md
+    assert any("inferred, not modeled" in chk for chk in next_checks(rep_inferred))
+
+    # Suggested-links outputs (TTL + CSV) are valid for human review
+    ttl_out = suggested_links_to_ttl(edges)
+    csv_out = suggested_links_to_csv(edges)
+    parsed_suggestions = rdflib.Graph()
+    parsed_suggestions.parse(data=ttl_out, format="turtle")
+    assert len(parsed_suggestions) == len(edges)
+    assert "inferred, not modeled" in csv_out
+    assert "brick:feeds" in csv_out
+
+
+def test_cli_infer_topology_writes_suggested_links(tmp_path):
+    import csv
+    import json
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.cli import main
+
+    ttl_path = tmp_path / "model.ttl"
+    ttl_path.write_text(
+        """
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <urn:test:cli#> .
+
+ex:ahu-1 a brick:AHU ; rdfs:label "AHU-1" .
+ex:vav-1 a brick:VAV ; rdfs:label "VAV-1" .
+ex:ahu_sat a brick:Supply_Air_Temperature_Sensor ; phIoT:equipRef ex:ahu-1 .
+ex:vav_dat a brick:Discharge_Air_Temperature_Sensor ; phIoT:equipRef ex:vav-1 .
+""",
+        encoding="utf-8",
+    )
+    res_path = tmp_path / "results.csv"
+    res_path.write_text(
+        "equipment_id,rule_id,status,window_start,window_end\n"
+        "ahu-1,SAT-HIGH,FAULT,2026-03-01T02:00:00Z,2026-03-01T04:00:00Z\n"
+        "vav-1,DAT-LOW,FAULT,2026-03-01T02:15:00Z,2026-03-01T04:00:00Z\n",
+        encoding="utf-8",
+    )
+    hist_path = tmp_path / "history.csv"
+    t0 = datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
+    with hist_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["timestamp", "ahu_sat", "vav_dat"])
+        for i in range(40):
+            ts = (t0 + timedelta(minutes=15 * i)).isoformat()
+            sig = 285.0 + 2.0 * ((i % 6) - 2.5)
+            sig_lag = 286.0 + 2.0 * (((i - 1) % 6) - 2.5)
+            w.writerow([ts, sig, sig_lag])
+
+    out_dir = tmp_path / "out"
+    rc = main([
+        "--graph", str(ttl_path),
+        "--results", str(res_path),
+        "--infer-topology",
+        "--history-csv", str(hist_path),
+        "--infer-min-corr", "0.5",
+        "--infer-min-samples", "20",
+        "--out-dir", str(out_dir),
+    ])
+    assert rc == 0
+    assert (out_dir / "suggested_links.ttl").is_file()
+    assert (out_dir / "suggested_links.csv").is_file()
+    report_json = json.loads((out_dir / "rca_report.json").read_text(encoding="utf-8"))
+    assert report_json["source"]["inferred_topology"]["enabled"] is True
+    assert report_json["source"]["inferred_topology"]["proposed_edges"] >= 1
+    assert "inferred, not modeled" in (out_dir / "rca_report.md").read_text(encoding="utf-8")

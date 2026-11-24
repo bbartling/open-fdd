@@ -117,6 +117,9 @@ class UpstreamEdge:
     upstream_iri: str
     downstream_iri: str
     predicate: str
+    inferred: bool = False
+    confidence: float | None = None
+    evidence: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,9 @@ class UpstreamHop:
     hop: int
     path: tuple[str, ...]  # ordered upstream -> ... -> symptom node_id
     relations: tuple[str, ...]
+    inferred: bool = False
+    edge_confidences: tuple[float, ...] = ()
+    topology_source: str = "modeled"
 
 
 @dataclass
@@ -137,9 +143,11 @@ class UpstreamTraversal:
     target: GraphNode | None
     ancestors: list[UpstreamHop] = field(default_factory=list)
     unknown_upstream: bool = False
-    upstream_status: str = "traced"  # traced | partial_unknown_upstream | unknown_upstream | target_not_found
+    upstream_status: str = "traced"  # traced | traced_inferred | partial_unknown_upstream | unknown_upstream | target_not_found
     unknown_upstream_at: list[str] = field(default_factory=list)
     sparql_ancestors: list[str] = field(default_factory=list)
+    topology_source: str = "modeled"
+    inferred_edges_used: int = 0
 
 
 def _norm_token(value: str) -> str:
@@ -163,7 +171,9 @@ def _is_source_root(equip_types: Iterable[str], tags: Iterable[str]) -> bool:
 def _is_point(equip_types: Iterable[str], tags: Iterable[str]) -> bool:
     for item in (*equip_types, *tags):
         tok = _norm_token(split_iri(item)[1])
-        if tok in POINT_MARKERS:
+        if tok in POINT_MARKERS or tok.endswith(
+            ("_sensor", "_setpoint", "_command", "_status", "_alarm", "_point", "sensor", "setpoint")
+        ):
             return True
     return False
 
@@ -231,6 +241,44 @@ class TopologyGraph:
             return list(iris)
         wanted = site_id.lower()
         return [iri for iri in iris if wanted in self._site_tokens(self.nodes[iri])]
+
+    def with_inferred_edges(self, inferred_edges: Iterable[Any]) -> TopologyGraph:
+        """Return a new TopologyGraph adding inferred edges without mutating this graph."""
+        nodes = dict(self.nodes)
+        edges: dict[str, list[UpstreamEdge]] = {k: list(v) for k, v in self.upstream_edges.items()}
+        existing_pairs = {
+            (e.upstream_iri, e.downstream_iri)
+            for edge_list in edges.values()
+            for e in edge_list
+        }
+        for inf in inferred_edges:
+            up_iri = str(inf.upstream_iri)
+            dn_iri = str(inf.downstream_iri)
+            if not up_iri or not dn_iri or up_iri == dn_iri:
+                continue
+            if (up_iri, dn_iri) in existing_pairs:
+                continue
+            existing_pairs.add((up_iri, dn_iri))
+            if up_iri not in nodes:
+                uid = getattr(inf, "upstream_id", "") or _local_id(up_iri)
+                ulab = getattr(inf, "upstream_label", "") or uid
+                nodes[up_iri] = GraphNode(iri=up_iri, node_id=uid, label=ulab)
+            if dn_iri not in nodes:
+                did = getattr(inf, "downstream_id", "") or _local_id(dn_iri)
+                dlab = getattr(inf, "downstream_label", "") or did
+                nodes[dn_iri] = GraphNode(iri=dn_iri, node_id=did, label=dlab)
+            pred = getattr(inf, "predicate", "brick:feeds") or "brick:feeds"
+            edges.setdefault(dn_iri, []).append(
+                UpstreamEdge(
+                    upstream_iri=up_iri,
+                    downstream_iri=dn_iri,
+                    predicate=f"{pred} (inferred)",
+                    inferred=True,
+                    confidence=getattr(inf, "confidence", None),
+                    evidence=tuple(getattr(inf, "evidence", ()) or ()),
+                )
+            )
+        return TopologyGraph(nodes=nodes, upstream_edges=edges, rdflib_graph=self.rdflib_graph)
 
     @classmethod
     def from_rdflib(cls, graph: Any) -> TopologyGraph:
@@ -500,21 +548,26 @@ class TopologyGraph:
             # TODO(5.0.22): surface remote SPARQL endpoint errors as warnings rather than silent fallback.
             sparql_hits = []
 
-        # Python BFS from target upstream, avoiding cycles and recording shortest paths + edge provenance
+        # Python BFS from target upstream, avoiding cycles and preferring modeled edges first
         visited: set[str] = {node.iri}
         ancestors: list[UpstreamHop] = []
         frontier_missing: list[str] = []
-        queue: deque[tuple[str, int, tuple[str, ...], tuple[str, ...]]] = deque(
-            [(node.iri, 0, (node.node_id,), ())]
-        )
+        used_inferred_edges: set[tuple[str, str]] = set()
+        queue: deque[
+            tuple[str, int, tuple[str, ...], tuple[str, ...], tuple[bool, ...], tuple[float, ...]]
+        ] = deque([(node.iri, 0, (node.node_id,), (), (), ())])
 
         while queue:
-            cur_iri, hop, path_ids, rels = queue.popleft()
+            cur_iri, hop, path_ids, rels, inf_flags, confs = queue.popleft()
             cur_node = self.nodes.get(cur_iri)
-            incoming = [
-                e for e in self.upstream_edges.get(cur_iri, ())
-                if not (self.nodes.get(e.upstream_iri) and self.nodes[e.upstream_iri].is_point)
-            ]
+            incoming = sorted(
+                [
+                    e
+                    for e in self.upstream_edges.get(cur_iri, ())
+                    if not (self.nodes.get(e.upstream_iri) and self.nodes[e.upstream_iri].is_point)
+                ],
+                key=lambda e: (e.inferred, -(e.confidence or 0.0), e.predicate, e.upstream_iri),
+            )
             if not incoming:
                 if cur_node is not None and not cur_node.is_source_root:
                     frontier_missing.append(cur_node.node_id)
@@ -532,32 +585,35 @@ class TopologyGraph:
                 )
                 new_path = (up_node.node_id, *path_ids)
                 new_rels = (edge.predicate, *rels)
+                new_inf = (edge.inferred, *inf_flags)
+                new_confs = (
+                    (edge.confidence if edge.confidence is not None else 0.5, *confs)
+                    if edge.inferred
+                    else confs
+                )
+                if edge.inferred:
+                    used_inferred_edges.add((up_iri, cur_iri))
+                hop_inf = any(new_inf)
+                if not hop_inf:
+                    hop_src = "modeled"
+                elif all(new_inf):
+                    hop_src = "inferred, not modeled"
+                else:
+                    hop_src = "mixed (modeled + inferred, not modeled)"
                 ancestors.append(
-                    UpstreamHop(node=up_node, hop=hop + 1, path=new_path, relations=new_rels)
+                    UpstreamHop(
+                        node=up_node,
+                        hop=hop + 1,
+                        path=new_path,
+                        relations=new_rels,
+                        inferred=hop_inf,
+                        edge_confidences=new_confs,
+                        topology_source=hop_src,
+                    )
                 )
-                queue.append((up_iri, hop + 1, new_path, new_rels))
+                queue.append((up_iri, hop + 1, new_path, new_rels, new_inf, new_confs))
 
-        # SPARQL-only hits prove reachability, not a verified hop-1 feeder. Skip
-        # point nodes and record them as sparql:reachable beyond max_hops.
-        seen_iris = {h.node.iri for h in ancestors} | {node.iri}
-        for hit_iri in sparql_hits:
-            if hit_iri in seen_iris:
-                continue
-            up_node = self.nodes.get(
-                hit_iri,
-                GraphNode(iri=hit_iri, node_id=_local_id(hit_iri), label=_local_id(hit_iri)),
-            )
-            if up_node.is_point:
-                continue
-            ancestors.append(
-                UpstreamHop(
-                    node=up_node,
-                    hop=max_hops + 1,
-                    path=(up_node.node_id, node.node_id),
-                    relations=("sparql:reachable",),
-                )
-            )
-            seen_iris.add(hit_iri)
+        # Keep unverified SPARQL-only hits in sparql_ancestors (never synthesize unverified paths).
 
         frontier_unique = sorted(set(frontier_missing))
         reached_source = bool(node.is_source_root or any(h.node.is_source_root for h in ancestors))
@@ -565,11 +621,23 @@ class TopologyGraph:
             cycle_front = self._closed_cycle_frontiers(visited)
             if cycle_front:
                 frontier_unique = cycle_front
+        any_inf = any(h.inferred for h in ancestors)
+        any_mod = any(not h.inferred for h in ancestors)
+        if not any_inf:
+            trav_source = "modeled"
+        elif any_mod:
+            trav_source = "mixed (modeled + inferred, not modeled)"
+        else:
+            trav_source = "inferred, not modeled"
+
         if not ancestors and not node.is_source_root:
             status = "unknown_upstream"
             unknown = True
         elif frontier_unique:
             status = "partial_unknown_upstream"
+            unknown = True
+        elif any_inf:
+            status = "traced_inferred"
             unknown = True
         else:
             status = "traced"
@@ -583,6 +651,8 @@ class TopologyGraph:
             upstream_status=status,
             unknown_upstream_at=frontier_unique,
             sparql_ancestors=sparql_hits,
+            topology_source=trav_source,
+            inferred_edges_used=len(used_inferred_edges),
         )
 
 

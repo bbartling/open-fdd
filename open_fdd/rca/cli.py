@@ -29,6 +29,14 @@ from open_fdd.rca.evidence import (
     parse_utc,
 )
 from open_fdd.rca.graph import load_graph, load_graph_from_nf
+from open_fdd.rca.infer import (
+    InferredEdge,
+    infer_topology,
+    load_telemetry_csv,
+    load_telemetry_sql,
+    suggested_links_to_csv,
+    suggested_links_to_ttl,
+)
 from open_fdd.rca.rank import analyze_rca
 from open_fdd.rca.report import report_to_json, report_to_markdown
 
@@ -50,6 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
     src.add_argument("--nf-url", help="NF URL (else NF_URL / NFURL / NF_LAN_URL)")
     src.add_argument("--env", help="KEY=VALUE env file for the NF client")
     src.add_argument("--app", choices=("full", "lite"), default="full")
+    src.add_argument("--infer-topology", action="store_true", help="Opt-in read-only topology inference from telemetry + tags (discounted, never written back)")
+    src.add_argument("--history-csv", type=Path, help="Wide or long telemetry CSV for --infer-topology")
+    src.add_argument("--suggest-links-ttl", type=Path, help="Optional path to write proposed brick:feeds Turtle links for human review")
+    src.add_argument("--suggest-links-csv", type=Path, help="Optional path to write proposed brick:feeds CSV links for human review")
+    src.add_argument("--infer-min-corr", type=float, default=0.50, help="Min |correlation| for --infer-topology (default 0.50)")
+    src.add_argument("--infer-max-lag", type=int, default=3, help="Max positive lag steps for --infer-topology (default 3)")
+    src.add_argument("--infer-min-samples", type=int, default=24, help="Min aligned samples for --infer-topology (default 24)")
 
     ev = ap.add_argument_group("fault & evidence input")
     ev.add_argument("--results", type=Path, help="CSV of Open-FDD rule_result or long-format fault flags")
@@ -239,6 +254,47 @@ def run(args: argparse.Namespace) -> int:
         else:
             raise ValueError("Provide --results, --episodes, --sqlite, --duckdb, or --example")
 
+    inferred_edges: list[InferredEdge] = []
+    if getattr(args, "infer_topology", False) and not args.example:
+        telemetry: dict[str, Any] = {}
+        if getattr(args, "history_csv", None) is not None:
+            telemetry = load_telemetry_csv(args.history_csv)
+        elif args.sqlite or args.duckdb:
+            sql_collector, sql_conn, engine = _open_sql_collector(args)
+            try:
+                htable = args.history_table or ("fdd.input_sample" if engine == "duckdb" else "input_sample")
+                telemetry = load_telemetry_sql(
+                    sql_conn,
+                    history_table=htable,
+                    columns=_kv(args.history_map),
+                    site_id=args.site,
+                )
+            finally:
+                sql_conn.close()
+        if telemetry:
+            inferred_edges = infer_topology(
+                graph,
+                telemetry,
+                site_id=args.site,
+                min_correlation=args.infer_min_corr,
+                max_lag=args.infer_max_lag,
+                min_samples=args.infer_min_samples,
+            )
+            graph = graph.with_inferred_edges(inferred_edges)
+        source_meta["inferred_topology"] = {
+            "enabled": True,
+            "proposed_edges": len(inferred_edges),
+            "edges": [
+                {
+                    "upstream": e.upstream_label,
+                    "downstream": e.downstream_label,
+                    "confidence": e.confidence,
+                    "status": "inferred, not modeled",
+                }
+                for e in inferred_edges
+            ],
+        }
+
     report = analyze_rca(
         graph,
         collector,
@@ -254,6 +310,15 @@ def run(args: argparse.Namespace) -> int:
         args.out_dir.mkdir(parents=True, exist_ok=True)
         (args.out_dir / "rca_report.json").write_text(json_text + "\n", encoding="utf-8")
         (args.out_dir / "rca_report.md").write_text(md_text, encoding="utf-8")
+        if getattr(args, "infer_topology", False):
+            (args.out_dir / "suggested_links.ttl").write_text(suggested_links_to_ttl(inferred_edges), encoding="utf-8")
+            (args.out_dir / "suggested_links.csv").write_text(suggested_links_to_csv(inferred_edges), encoding="utf-8")
+    if getattr(args, "suggest_links_ttl", None) is not None:
+        args.suggest_links_ttl.parent.mkdir(parents=True, exist_ok=True)
+        args.suggest_links_ttl.write_text(suggested_links_to_ttl(inferred_edges), encoding="utf-8")
+    if getattr(args, "suggest_links_csv", None) is not None:
+        args.suggest_links_csv.parent.mkdir(parents=True, exist_ok=True)
+        args.suggest_links_csv.write_text(suggested_links_to_csv(inferred_edges), encoding="utf-8")
 
     if args.print_format == "json":
         print(json_text)
