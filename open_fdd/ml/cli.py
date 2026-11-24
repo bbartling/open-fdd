@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     from open_fdd.ml import confidence as _confidence
 
     conf = sub.add_parser("confidence", help="Score rule fault episodes as likely real, false positive or tuning (advisory)",
-                          description=_confidence.__doc__.split("\n\n")[1])
+                          description=_confidence.DESCRIPTION)
     _confidence.add_arguments(conf)
 
     dl = sub.add_parser("download", help="Fetch the 8-file LBNL single-duct AHU subset (about 1.1 GB of CSV on disk) into the cache",
