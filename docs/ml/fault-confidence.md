@@ -65,7 +65,11 @@ open-fdd-ml confidence --duckdb plant.duckdb --table alarms --map equipment_id=e
 Names are validated as plain SQL identifiers (`name` or `schema.name`). On SQLite, store timestamps as ISO 8601 UTC
 text (`2026-11-01T06:00:00.000000Z`) so text order is time order; use native timestamps elsewhere. Use read-only
 credentials; the PostgreSQL connection is opened read-only and the DSN is read from `OPENFDD_CONFIDENCE_DSN`, not the
-command line.
+command line. Both PostgreSQL reads run in one REPEATABLE READ transaction, so they see the same snapshot.
+
+`--since` (inclusive) and `--until` (exclusive) accept any ISO 8601 time with or without an offset and are converted to
+UTC in the form each engine compares. `--site` also scopes the history reads; history without a `site_id` column is
+left out when `--site` is set. These three filters apply to database sources only; filter a CSV before screening it.
 
 ## Labels and scores
 

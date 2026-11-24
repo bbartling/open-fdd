@@ -12,6 +12,7 @@ import pytest
 
 from open_fdd.ml.confidence import (
     ConfidenceConfig,
+    _co_rules,
     history_evidence,
     main,
     screen,
@@ -312,12 +313,17 @@ def test_default_open_fdd_schema_on_each_engine(engine, tmp_path):
     """Default names: fdd.rule_result, fdd.point, fdd.input_sample (SQLite: a database attached as ``fdd``)."""
     df = _results_rows()
     conn = _connect(engine, tmp_path)
+    created_pg_schema = False
     ts_type = "TEXT" if engine == "sqlite" else "TIMESTAMPTZ"
     ph = "%s" if engine == "postgres" else "?"
     try:
         cur = conn.cursor()
         if engine == "postgres":
-            cur.execute("DROP SCHEMA IF EXISTS fdd CASCADE")
+            # never touch a real Open-FDD schema: run only where fdd does not exist yet, and drop only what we made
+            cur.execute("SELECT 1 FROM information_schema.schemata WHERE schema_name = 'fdd'")
+            if cur.fetchone():
+                pytest.skip("schema fdd already exists in the test database; use a disposable database")
+            created_pg_schema = True
         if engine == "sqlite":
             cur.execute(f"ATTACH DATABASE '{(tmp_path / 'fdd.db').as_posix()}' AS fdd")
         else:
@@ -341,6 +347,10 @@ def test_default_open_fdd_schema_on_each_engine(engine, tmp_path):
         conn.commit()
         got = screen_sql(conn, SourceMap(site_id="S"), HistoryMap())
     finally:
+        if engine == "postgres" and created_pg_schema:
+            conn.rollback()
+            conn.cursor().execute("DROP SCHEMA fdd CASCADE")
+            conn.commit()
         conn.close()
     ref = screen(results=df)
     assert len(got["episodes"]) == len(ref["episodes"]) == 5
@@ -504,3 +514,101 @@ def test_cli_with_labels_adds_calibration(tmp_path):
     rep = json.loads((tmp_path / "o" / "report.json").read_text())
     assert rep["calibration"]["status"] == "fitted"
     assert "Calibration against reviewed episodes" in (tmp_path / "o" / "report.md").read_text()
+
+
+# --------------------------------------------------------------------------- review regressions
+
+
+def test_co_rules_sweep_matches_pairwise():
+    rng = np.random.default_rng(11)
+    t0 = pd.Timestamp("2026-01-01", tz="UTC")
+    rows = []
+    for i in range(300):
+        s = t0 + pd.Timedelta(hours=int(rng.integers(0, 2000)))
+        rows.append({"equipment_id": f"U{i % 3}", "rule_id": f"R{rng.integers(0, 6)}", "start": s,
+                     "end": s + pd.Timedelta(hours=int(rng.integers(0, 30)))})
+    ep = pd.DataFrame(rows)
+    want = []
+    for i, a in ep.iterrows():
+        o = ep[(ep["equipment_id"] == a["equipment_id"]) & (ep["rule_id"] != a["rule_id"])
+               & (ep["start"] <= a["end"]) & (ep["end"] >= a["start"])]
+        want.append(o["rule_id"].nunique())
+    np.testing.assert_array_equal(_co_rules(ep), np.array(want, dtype=float))
+
+
+def test_empty_fault_status_is_rejected():
+    conn = sqlite3.connect(":memory:")
+    with pytest.raises(ValueError):
+        screen_sql(conn, SourceMap(table="t", fault_status=()))
+
+
+def test_csv_input_rejects_database_filters(tmp_path):
+    _results_rows().to_csv(tmp_path / "r.csv", index=False)
+    with pytest.raises(ValueError):
+        main(["--results", str(tmp_path / "r.csv"), "--since", "2026-02-05", "--print", "none",
+              "--out-dir", str(tmp_path / "o")])
+
+
+def test_sqlite_path_with_hash_opens_that_file_read_only(tmp_path):
+    db = tmp_path / "building#east.db"
+    df = _results_rows()
+    conn = sqlite3.connect(db)
+    df.assign(window_start=df["window_start"].dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+              window_end=df["window_end"].dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")).to_sql("rr", conn, index=False)
+    conn.close()
+    assert main(["--sqlite", str(db), "--table", "rr", "--no-history", "--print", "none",
+                 "--out-dir", str(tmp_path / "o")]) == 0
+    assert json.loads((tmp_path / "o" / "report.json").read_text())["totals"]["episodes"] == 5
+    assert not (tmp_path / "building").exists()
+
+
+def test_since_bound_is_normalised_for_sqlite_text_timestamps(tmp_path):
+    df = _results_rows()
+    conn = sqlite3.connect(":memory:")
+    df.assign(window_start=df["window_start"].dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+              window_end=df["window_end"].dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")).to_sql("rr", conn, index=False)
+    # window_end of day 8 is 2026-02-10T00:00Z; a space-separated, offset bound must compare the same instant
+    got = screen_sql(conn, SourceMap(table="rr", since="2026-02-09 18:00:00-06:00"), None)
+    assert set(got["episodes"]["start"].dt.day) == {10}
+
+
+def test_history_is_scoped_to_the_requested_site():
+    conn = sqlite3.connect(":memory:")
+    cur = conn.cursor()
+    cur.execute("CREATE TABLE rr (site_id TEXT, equipment_id TEXT, rule_id TEXT, window_start TEXT, window_end TEXT, "
+                "status TEXT)")
+    cur.execute("CREATE TABLE p (site_id TEXT, point_key TEXT, equipment_id TEXT, kind TEXT)")
+    cur.execute("CREATE TABLE h (site_id TEXT, point_key TEXT, ts TEXT, value REAL)")
+    cur.execute("INSERT INTO rr VALUES ('A', 'U1', 'R', '2026-02-01T00:00:00.000000Z', '2026-02-01T06:00:00.000000Z', "
+                "'FAULT')")
+    for site in ("A", "B"):
+        cur.execute("INSERT INTO p VALUES (?, 'P1', 'U1', 'numeric')", (site,))
+    ts = pd.date_range("2026-01-31", periods=200, freq="15min", tz="UTC").strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    cur.executemany("INSERT INTO h VALUES ('B', 'P1', ?, 1.0)", [(t,) for t in ts])
+    got = screen_sql(conn, SourceMap(table="rr", site_id="A", columns={"subject_key": "", "fault_hours": "",
+                                                                       "covered_hours": ""}),
+                     HistoryMap(table="h", point_table="p"))
+    assert not got["episodes"]["history_assessed"].any()
+    # without a site filter the default point join still reads history (three parameters, no site binding)
+    cur.executemany("INSERT INTO h VALUES ('A', 'P1', ?, 1.0)", [(t,) for t in ts])
+    got = screen_sql(conn, SourceMap(table="rr", columns={"subject_key": "", "fault_hours": "", "covered_hours": ""}),
+                     HistoryMap(table="h", point_table="p"))
+    assert got["episodes"]["history_assessed"].all()
+
+
+def test_unresolved_episodes_are_not_reported_all_clear():
+    from open_fdd.ml.confidence_report import next_checks
+
+    rep = {"equipment_ranking": [], "likely_real": [], "false_positive_patterns": [], "rules_to_review": [],
+           "totals": {"episodes": 2}}
+    assert "review" in next_checks(rep)[0]
+
+
+def test_auc_counts_ties_as_half():
+    from open_fdd.ml.confidence_calibrate import _metrics
+
+    y = np.array([1, 1, 0, 0, 1, 0])
+    p = np.array([0.9, 0.5, 0.5, 0.1, 0.7, 0.7])
+    pos, neg = p[y == 1], p[y == 0]
+    want = ((pos[:, None] > neg).sum() + 0.5 * (pos[:, None] == neg).sum()) / (len(pos) * len(neg))
+    assert _metrics(y, p)["auc"] == pytest.approx(round(want, 4))
