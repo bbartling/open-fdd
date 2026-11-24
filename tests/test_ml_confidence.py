@@ -612,3 +612,18 @@ def test_auc_counts_ties_as_half():
     pos, neg = p[y == 1], p[y == 0]
     want = ((pos[:, None] > neg).sum() + 0.5 * (pos[:, None] == neg).sum()) / (len(pos) * len(neg))
     assert _metrics(y, p)["auc"] == pytest.approx(round(want, 4))
+
+
+def test_cli_writes_episode_jsonl_without_nan(tmp_path):
+    fl, hs = _fixture()
+    fl.to_csv(tmp_path / "f.csv", index=False)
+    hs.to_csv(tmp_path / "h.csv", index=False)
+    assert main(["--flags", str(tmp_path / "f.csv"), "--history", str(tmp_path / "h.csv"), "--print", "none",
+                 "--out-dir", str(tmp_path / "o")]) == 0
+    lines = (tmp_path / "o" / "episodes.jsonl").read_text().splitlines()
+    eps = pd.read_csv(tmp_path / "o" / "episodes.csv")
+    assert len(lines) == len(eps) > 0
+    recs = [json.loads(x) for x in lines]
+    assert {"episode_id", "label", "p_real", "reason", "evidence"} <= set(recs[0])
+    assert recs[0]["start"].endswith("Z")
+    assert all(abs(r["p_real"] + r["p_false_positive"] + r["p_tuning"] - 1) <= 2e-3 for r in recs)

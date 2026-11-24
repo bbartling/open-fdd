@@ -637,6 +637,35 @@ def summarize(result: dict[str, pd.DataFrame]) -> dict[str, Any]:
     }
 
 
+_RECORD_HEAD = ("episode_id", "equipment_id", "rule_id", "subject", "start", "end", "label", "p_real",
+                "p_false_positive", "p_tuning", "reason")
+
+
+def episode_records(episodes: pd.DataFrame) -> list[dict[str, Any]]:
+    """One plain-JSON record per scored episode: identity, label, probabilities and reason first, then ``evidence``.
+
+    Timestamps are ISO 8601 UTC with ``Z``; missing evidence is ``None`` (never 0), so an agent can tell
+    "not assessed" from "assessed and clean"."""
+
+    def clean(v: Any) -> Any:
+        if isinstance(v, pd.Timestamp):
+            return v.tz_convert("UTC").strftime("%Y-%m-%dT%H:%M:%SZ") if v.tzinfo else v.strftime("%Y-%m-%dT%H:%M:%SZ")
+        if isinstance(v, (np.bool_, bool)):
+            return bool(v)
+        if isinstance(v, (np.integer,)):
+            return int(v)
+        if isinstance(v, (float, np.floating)):
+            return None if not math.isfinite(float(v)) else round(float(v), 4)
+        return None if v is None or (not isinstance(v, str) and pd.isna(v)) else v
+
+    out = []
+    for r in episodes.to_dict("records"):
+        rec = {k: clean(r.get(k)) for k in _RECORD_HEAD}
+        rec["evidence"] = {k: clean(v) for k, v in r.items() if k not in _RECORD_HEAD}
+        out.append(rec)
+    return out
+
+
 # --------------------------------------------------------------------------- CLI
 
 
@@ -678,7 +707,7 @@ def add_arguments(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--sensitivity-frac", type=float, default=ConfidenceConfig.sensitivity_frac)
     ap.add_argument("--max-history-episodes", type=int, default=ConfidenceConfig.max_history_episodes)
     ap.add_argument("--top", type=int, default=10, help="items per section in the triage report")
-    ap.add_argument("--out-dir", default="confidence_out", help="writes episodes.csv, equipment.csv, rules.csv, report.json, report.md")
+    ap.add_argument("--out-dir", default="confidence_out", help="writes episodes.csv, episodes.jsonl, equipment.csv, rules.csv, report.json, report.md")
     ap.add_argument("--print", dest="print_format", choices=("json", "md", "none"), default="json", help="what to print to stdout")
 
 
@@ -755,6 +784,9 @@ def run_cli(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
     for name, df in result.items():
         df.to_csv(out / f"{name}.csv", index=False)
+    with (out / "episodes.jsonl").open("w", encoding="utf-8") as fh:
+        for rec in episode_records(result["episodes"]):
+            fh.write(json.dumps(rec, allow_nan=False) + "\n")
     report = build_report(result, top=args.top, config=cfg, source=source_desc, calibration=calibration)
     (out / "report.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     md = to_markdown(report)

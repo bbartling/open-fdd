@@ -31,8 +31,10 @@ report = build_report(result)        # dict, JSON-serialisable
 print(to_markdown(report))
 ```
 
-The output folder holds `report.json`, `report.md`, `episodes.csv`, `equipment.csv` and `rules.csv`. By default the
-compact JSON report is printed to stdout; `--print md` prints the Markdown instead.
+The output folder holds `report.json`, `report.md`, `episodes.csv`, `episodes.jsonl`, `equipment.csv` and `rules.csv`.
+By default the compact JSON report is printed to stdout; `--print md` prints the Markdown instead. `episodes.jsonl` has
+one JSON object per episode (identity, label, the three probabilities and the reason, then an `evidence` object), with
+UTC timestamps and `null` for evidence that was not assessed, for agents that page through episodes.
 
 ## Supported inputs
 
