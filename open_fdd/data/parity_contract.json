@@ -356,6 +356,7 @@
   "FCU-VALVE-PASS-CLG": 15.0,
   "FCU-VALVE-PASS-HTG": 15.0,
   "HP-1": 10.0,
+  "HW-OAT-1": 30.0,
   "MECH-OAT-1": 10.0,
   "OA-1": 15.0,
   "OAT-METEO": 15.0,

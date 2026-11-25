@@ -2308,6 +2308,31 @@
    "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
   },
   {
+   "id": "HW-OAT-1",
+   "description": "Hot-water plant proven on above 18.3 °C web OAT",
+   "sql_file": "hw_oat_1.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "boiler"
+   ],
+   "required_roles": [
+    "web_oa_t"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "hw_supply_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 1800,
+   "parameters": {
+    "confirm_seconds": 1800.0,
+    "hw_oat_min": 18.333333,
+    "hw_on_min": 43.333333
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
+  },
+  {
    "id": "CMD-1",
    "description": "Fan cmd/status mismatch",
    "sql_file": "cmd1_fan_mismatch.sql",

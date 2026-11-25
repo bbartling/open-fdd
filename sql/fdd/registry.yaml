@@ -2645,6 +2645,53 @@ rules:
         frontend_control: slider
         sql_placeholder: MECH_OAT_MAX
 
+  - rule_id: HW-OAT-1
+    # #1782: hot-water summer lockout, the heating-side twin of MECH-OAT-1 (same web dry bulb source).
+    equipment_kinds: [boiler]
+    run_proof: exempt
+    run_proof_note: "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
+    sql_file: hw_oat_1.sql
+    pandas_function: hw_oat1_compute
+    description: Hot-water plant proven on above 18.3 °C web OAT
+    required_roles: [web_oa_t]
+    optional_roles: [pump_status, hw_supply_t]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 1800
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 1800.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      hw_oat_min:
+        label: HW lockout OAT
+        default: 18.333333
+        min: 12.777778
+        max: 23.888889
+        step: 0.555556
+        unit: degC
+        kind: absolute_temperature
+        frontend_control: slider
+        sql_placeholder: HW_OAT_MIN
+      hw_on_min:
+        label: HW supply running cut
+        default: 43.333333
+        min: 32.222222
+        max: 60.0
+        step: 0.555556
+        unit: degC
+        kind: absolute_temperature
+        frontend_control: slider
+        sql_placeholder: HW_ON_MIN
+
   - rule_id: CMD-1
     equipment_kinds: [ahu]
     run_proof: exempt

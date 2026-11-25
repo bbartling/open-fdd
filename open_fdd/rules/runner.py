@@ -181,12 +181,18 @@ def _missing_roles(rule: cb.CookbookRule, df: pd.DataFrame) -> list[str]:
         if not has_demand:
             base.append("cooling-valve|dx_or_chiller_proof")
         return base + missing_wx
-    if rule.id in {"MECH-OAT-1", "ECON-6"}:
+    if rule.id in {"MECH-OAT-1", "ECON-6", "HW-OAT-1"}:
         if "web-outside-air-temp" not in df.columns or not df["web-outside-air-temp"].notna().any():
             return ["web-outside-air-temp"]
         if rule.id == "ECON-6":
             if "outside-air-damper" not in df.columns or not df["outside-air-damper"].notna().any():
                 return ["outside-air-damper"]
+        if rule.id == "HW-OAT-1":
+            # #1782: no hot-water pump status and no supply temperature -> no proof (SQL assessment no_proof)
+            from open_fdd.rules.economizer_weather import HW_PROOF_ROLES
+
+            if not any(r in df.columns and df[r].notna().any() for r in HW_PROOF_ROLES):
+                return ["pump-status|hot-water-supply-temp"]
         return []
     if rule.id == "CHW-NOLOAD-1":
         from open_fdd.analytics.load_satisfaction import AHU_SAT_COL, ZONE_SAT_COL
@@ -694,6 +700,8 @@ def run_cookbook_rule(
         for attr_key, metric_key in (
             ("mech_oat1_weather_source", "weather_source"),
             ("mech_oat1_proof", "mech_proof"),
+            ("hw_oat1_weather_source", "weather_source"),
+            ("hw_oat1_proof", "hw_proof"),
             ("econ6_weather_source", "weather_source"),
             ("chw_noload_proof", "mech_proof"),
         ):

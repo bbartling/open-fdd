@@ -15,7 +15,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-79%20SQL%20%2B%2074%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 79 SQL + 74 pandas, SI units">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-80%20SQL%20%2B%2075%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 80 SQL + 75 pandas, SI units">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
