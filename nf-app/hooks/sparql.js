@@ -106,10 +106,10 @@ async function handle({ sdk, args = {}, now = () => Date.now() }) {
   try {
     const shared = loadShared();
     const model = await loadModel(sdk.http, shared);
-    // Base IRI: the UI's own rdfBaseOf (static/model.js), from the model and never from the host (#1773), so the
+    // Base IRI: the UI's own rdfBaseOf (static/model.js, fixed `urn:nf:`), never the host (#1773), so the
     // subjects match the Model & RDF tab and the rdf hook. args.base overrides it; args.nfBase adds the
     // schema:url history links (without it only ref:hasTimeseriesId is exported).
-    const base = String(args.base || shared.rdfBaseOf(model));
+    const base = String(args.base || shared.rdfBaseOf());
     const { turtle } = shared.modelToTurtle(model, base, { nfBase: args.nfBase || '' });
     const r = runSparql(turtle, args.query, args.format, { maxTriples: args.maxTriples });
     result = { ok: true, ms: now() - t0, base, ...r };

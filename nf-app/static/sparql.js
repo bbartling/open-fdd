@@ -297,7 +297,7 @@ if (typeof document !== "undefined") (function mountSparqlPanel() {
   const turtleNow = () => {
     if (typeof rdf !== "undefined" && rdf && rdf.turtle) return rdf.turtle;
     if (typeof model !== "undefined" && model && typeof modelToTurtle === "function") {
-      return modelToTurtle(model, rdfBaseOf(model)).turtle;
+      return modelToTurtle(model, rdfBaseOf()).turtle;
     }
     return null;
   };

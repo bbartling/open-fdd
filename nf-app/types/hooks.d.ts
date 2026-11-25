@@ -3,4 +3,4 @@
 declare const rdf: any;
 declare const model: any;
 declare function modelToTurtle(m: any, base: string, opts?: any): { turtle: string };
-declare function rdfBaseOf(m: any): string;
+declare function rdfBaseOf(): string;

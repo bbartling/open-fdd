@@ -24,7 +24,12 @@ const sdkOn = (baseURL, records = fixture.records) => {
   const pts = records.filter((r) => r.pointType === "POINT");
   const http = {
     defaults: { baseURL },
-    post: async (_url, body) => ({ data: { points: body.layer === "model" ? model : pts, totalCount: (body.layer === "model" ? model : pts).length } }),
+    post: async (_url, body) => {
+      // the default layer is read one site at a time (structuredQuery siteRef)
+      const site = body.structuredQuery && body.structuredQuery.field && body.structuredQuery.field.text;
+      const out = body.layer === "model" ? model : pts.filter((r) => !site || (r.attrs || {}).siteRef === site);
+      return { data: { points: out, totalCount: out.length } };
+    },
   };
   return { http, logEvent: () => {} };
 };
@@ -40,31 +45,44 @@ const uiTurtle = (app, host, records = fixture.records) => {
   const model = { sites: of("SITE"), equips: of("EQUIPMENT"), devices: of("DEVICE"),
     points: records.filter((r) => !ENTITY_TYPES.includes(r.pointType)).map(toPoint) };
   // nfBase "" as the hooks default: only the subjects (not the schema:url history links) are compared by host
-  const base = get("rdfBaseOf")(model);
+  const base = get("rdfBaseOf")();
   return { base, turtle: get("modelToTurtle")(model, base, { nfBase: "" }).turtle };
 };
 
+/** A fixture copy with one more site (and an equip on it) whose uuid sorts before every existing one. */
+const withLowerSite = () => [
+  { uuid: "00000000-0000-4000-8000-000000000001", name: "Site Zero", pointType: "SITE", attrs: { id: "site-0", markers: "site", dis: "Site Zero" } },
+  { uuid: "00000000-0000-4000-8000-000000000002", name: "AHU-0", pointType: "EQUIPMENT", attrs: { id: "AHU-0", siteRef: "site-0", markers: "equip,ahu" } },
+  ...fixture.records,
+];
+
 const subjects = (ttl) => [...ttl.matchAll(/^(local:\S+)$/gm)].map((m) => m[1]).sort();
 
-test("the UI calls rdfBaseOf(model), never location.host, for the Turtle base", () => {
+test("the UI calls rdfBaseOf(), never location.host, for the Turtle base", () => {
   for (const f of ["shared/static/app-core.js", "nf-app/static/app-core.js", "lite/static/app-core.js", "nf-app/static/sparql.js"]) {
     const src = readFileSync(new URL(`../../${f}`, import.meta.url), "utf8");
     assert.ok(!/modelToTurtle\([^)]*location\.host/.test(src), `${f} builds the base from location.host`);
-    assert.match(src, /modelToTurtle\(model, rdfBaseOf\(model\)\)/, f);
+    assert.match(src, /modelToTurtle\(model, rdfBaseOf\(\)\)/, f);
   }
 });
 
-test("rdfBaseOf: from the site uuid, order-independent, no host", () => {
-  const { base } = uiTurtle("nf-app", "10.0.0.9:8090");
-  assert.equal(base, `urn:nf:site:${SITE}:`);
-  const ctx = vm.createContext({});
-  vm.runInContext(readFileSync(new URL("../static/model.js", import.meta.url), "utf8"), ctx);
-  const of = vm.runInContext("rdfBaseOf", ctx);
-  const a = { uuid: "bbbb", attrs: { id: "a" } }, b = { uuid: "aaaa", attrs: { id: "b" } };
-  assert.equal(of({ sites: [a, b] }), "urn:nf:site:aaaa:");
-  assert.equal(of({ sites: [b, a] }), "urn:nf:site:aaaa:");
-  assert.equal(of({ sites: [{ name: "S 1", attrs: { id: "site one" } }] }), "urn:nf:site:site_one:");
-  assert.equal(of({ sites: [] }), "urn:nf:");
+test("rdfBaseOf: the fixed urn:nf:, so a subject is urn:nf:<NF uuid>", () => {
+  const { base, turtle } = uiTurtle("nf-app", "10.0.0.9:8090");
+  assert.equal(base, "urn:nf:");
+  assert.match(turtle, /@prefix local: <urn:nf:> \./);
+  assert.ok(subjects(turtle).includes(`local:${SITE}`) && subjects(turtle).includes(`local:${SAT}`));
+});
+
+test("adding a site whose uuid sorts lower leaves every existing subject unchanged", async () => {
+  const before = uiTurtle("nf-app", "192.168.1.50:8090");
+  const after = uiTurtle("nf-app", "192.168.1.50:8090", withLowerSite());
+  assert.equal(after.base, before.base);
+  const was = subjects(before.turtle), now = subjects(after.turtle);
+  for (const s of was) assert.ok(now.includes(s), `${s} was rewritten`);
+  assert.ok(now.includes("local:00000000-0000-4000-8000-000000000001"), "the new site is a subject");
+  const hook = await rdfFull.handle({ sdk: sdkOn(HOSTS[0], withLowerSite()), args: { limit: "190000" } });
+  assert.equal(hook.ok, true, JSON.stringify(hook));
+  assert.equal(hook.turtle, after.turtle);
 });
 
 test("UI and rdf hook (Full and Lite): byte-identical Turtle whatever host or baseURL", async () => {
@@ -104,11 +122,12 @@ test("sparql hook: same base and subjects as the UI whatever baseURL", async () 
   assert.ok(seen[0].includes(`${want}${SAT}`), seen[0]);
 });
 
-test("sparql-data: point IRIs in the new base and older host-based IRIs both name the point", () => {
+test("sparql-data: point IRIs in the fixed base and older host- or site-based IRIs all name the point", () => {
   const points = [{ uuid: SAT }];
-  const base = `urn:nf:site:${SITE}:`;
+  const base = "urn:nf:";
   assert.deepEqual(sparqlData.pickPoints(["p"], [[`${base}${SAT}`]], points, base).uuids, [SAT]);
   assert.deepEqual(sparqlData.pickPoints(["p"], [[`urn:nf:192.168.1.50:8090:${SAT}`]], points, base).uuids, [SAT]);
+  assert.deepEqual(sparqlData.pickPoints(["p"], [[`urn:nf:site:${SITE}:${SAT}`]], points, base).uuids, [SAT]);
   assert.throws(() => sparqlData.pickPoints(["p"], [["urn:nf:192.168.1.50:8090:not-a-point"]], points, base), /names no point/);
   assert.throws(() => sparqlData.pickPoints(["p"], [[`http://x.test/${SAT}`]], points, base), /names no point/);
 });

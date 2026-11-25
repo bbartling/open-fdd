@@ -227,8 +227,8 @@ async function timescaleSeries(ts, conn, uuids, a, limits) {
 
 /**
  * Model points named by the result. `points` are toPoint() records. Returns {uuidVar, uuids (sorted, distinct)}.
- * A value names a point when it is its uuid or its IRI (base + uuid), or an older host-based IRI
- * `urn:nf:<host>:<uuid>` (before #1773) of a model point.
+ * A value names a point when it is its uuid or its IRI (base + uuid), or an older IRI of a model point:
+ * `urn:nf:<host>:<uuid>` or `urn:nf:site:<site>:<uuid>` (before #1773 settled on `urn:nf:<uuid>`).
  */
 function pickPoints(vars, rows, points, base, uuidVar = '') {
   const byKey = new Map();

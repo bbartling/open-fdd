@@ -43,19 +43,19 @@ async function loadModel(http, shared) {
 }
 
 /**
- * Base IRI: the UI's own rdfBaseOf (static/model.js, `urn:nf:site:<site uuid>:`), from the model, never from the
- * access host or sdk.http's baseURL (#1773), so the hook and the Model & RDF tab give the same subjects. args.base wins.
+ * Base IRI: the UI's own rdfBaseOf (static/model.js, the fixed `urn:nf:`), never the access host or sdk.http's
+ * baseURL (#1773), so the hook and the Model & RDF tab give the same subjects. args.base wins.
  */
-function baseOf(model, args = {}, shared = loadShared()) {
+function baseOf(args = {}, shared = loadShared()) {
   if (args.base) return String(args.base);
-  return shared.rdfBaseOf(model);
+  return shared.rdfBaseOf();
 }
 
 /** {model, turtle, base, shared} for the NF this hook runs on. */
 async function buildTurtle(sdk, args = {}) {
   const shared = loadShared();
   const model = await loadModel(sdk.http, shared);
-  const base = baseOf(model, args, shared);
+  const base = baseOf(args, shared);
   const { turtle } = shared.modelToTurtle(model, base, { nfBase: args.nfBase || '' });
   return { model, turtle, base, shared };
 }

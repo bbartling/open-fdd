@@ -55,10 +55,10 @@ Sensor-validation rules also require the sensor's declared unit to match its SI 
 The Model and RDF tab exports the Haystack model as Turtle with stable subjects. References resolve within their site and each point
 links to its NF time-series id. The tab flags dangling references and non-standard tags.
 
-Subjects use the base `urn:nf:site:<site uuid>:` (the lowest site uuid when NF has several), never the host the page or
-hook was reached through. The tab, the `rdf`, `sparql` and `sparql-data` hooks and the Python client give the same IRIs;
-the hooks take `base` to override it. A point IRI from an older `urn:nf:<host>:<uuid>` export still names its point
-in `sparql-data` and `open_fdd.nf.sparql_data`.
+Subjects are `urn:nf:<NF uuid>` (base `urn:nf:`). They depend neither on the host the page or hook was reached through nor
+on the sites, so adding a site rewrites no subject. The tab, the `rdf`, `sparql` and `sparql-data` hooks and the Python
+client give the same IRIs; the hooks take `base` to override it. A point IRI from an older `urn:nf:<host>:<uuid>` or
+`urn:nf:site:<site>:<uuid>` export still names its point in `sparql-data` and `open_fdd.nf.sparql_data`.
 
 | Use | How |
 |---|---|

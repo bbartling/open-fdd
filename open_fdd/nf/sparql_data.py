@@ -372,8 +372,8 @@ def rdf_turtle(transport: Transport) -> tuple[str, str]:
 
 
 def _key(value, keys: Mapping[str, str]) -> str | None:
-    """The point uuid a result value names: a key of ``keys`` (uuid or base + uuid), or an older host-based IRI
-    ``urn:nf:<host>:<uuid>`` (before #1773) of a model point."""
+    """The point uuid a result value names: a key of ``keys`` (uuid or base + uuid), or an older IRI of a model point,
+    ``urn:nf:<host>:<uuid>`` or ``urn:nf:site:<site>:<uuid>`` (before #1773 settled on ``urn:nf:<uuid>``)."""
     if not isinstance(value, str):
         return None
     if value in keys:
