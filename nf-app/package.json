@@ -16,5 +16,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.chart.json && tsc -p tsconfig.tree.json && tsc -p tsconfig.hooks.json",
     "typecheck:lite": "tsc -p ../lite/tsconfig.json && tsc -p ../lite/tsconfig.chart.json && tsc -p ../lite/tsconfig.tree.json && tsc -p ../lite/tsconfig.hooks.json"
+  },
+  "optionalDependencies": {
+    "@duckdb/node-api": "2.0.0-r.1"
   }
 }

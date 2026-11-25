@@ -403,6 +403,153 @@ async function createTimescale(pack, opts = {}) {
   };
 }
 
+// ---------------------------------------------------------------- duckdb (#1645: native DuckDB, warm in-memory instance)
+
+/**
+ * Native DuckDB (@duckdb/node-api, pinned in package.json optionalDependencies) runs the Postgres pack as written; the
+ * fdd.* helpers are the SQL macros of pack.duckdb_helpers_sql (sql/fdd/duckdb/duckdb_helpers.sql).
+ *
+ * Lifetime: ONE in-memory DuckDB instance per hook process, created on first use and kept warm between runs (no
+ * re-initialisation, macros installed once). Each createEngine() opens its own connection and loads the inputs into
+ * TEMP tables of that connection, so overlapping runs never see each other's rows; close() disconnects, which drops
+ * them. releaseDuckDb() closes the instance itself (tests, shutdown). Incremental append and Parquet history are later
+ * slices of #1645: today every run reloads its window, as the other in-process engines do.
+ *
+ * Memory (1 GB edges): the instance is capped by DuckDB's memory_limit (default DUCKDB_DEFAULTS.memoryLimit) and
+ * threads. An in-memory database has no temp directory, so a query over the cap fails with an out-of-memory error
+ * (the rule is reported as a rule error) instead of spilling to the SD card. Settings: app options duckdbMemoryLimit
+ * ("256MB") and duckdbThreads (2), passed here as opts.config { memoryLimit, threads }; env OPENFDD_DUCKDB_MEMORY_LIMIT /
+ * OPENFDD_DUCKDB_THREADS when unset.
+ * The settings of the first engine of a process win until releaseDuckDb().
+ */
+const DUCKDB_PACKAGE = "@duckdb/node-api";
+const DUCKDB_DEFAULTS = Object.freeze({ memoryLimit: "256MB", threads: 2 });
+const DUCK_TYPE = { double: "DOUBLE", text: "VARCHAR", timestamp: "TIMESTAMPTZ" };
+let duck = null;   // { api, instance, options, ready: Promise } of this process
+
+/** Validated DuckDB options: memory_limit like "256MB" / "1GB", threads 1..64. Throws on anything else. */
+function duckDbOptions(cfg = {}) {
+  const env = (typeof process !== "undefined" && process.env) || {};
+  const mem = String(cfg.memoryLimit ?? env.OPENFDD_DUCKDB_MEMORY_LIMIT ?? DUCKDB_DEFAULTS.memoryLimit).trim();
+  if (!/^\d+(\.\d+)?\s*(KB|MB|GB|KiB|MiB|GiB)$/i.test(mem)) throw new Error(`duckdb memoryLimit ${JSON.stringify(mem)}: use e.g. "256MB" or "1GB"`);
+  const threads = Number(cfg.threads ?? env.OPENFDD_DUCKDB_THREADS ?? DUCKDB_DEFAULTS.threads);
+  if (!Number.isInteger(threads) || threads < 1 || threads > 64) throw new Error(`duckdb threads ${JSON.stringify(cfg.threads)}: use an integer 1..64`);
+  return { memory_limit: mem.replace(/\s+/g, ""), threads: String(threads), TimeZone: "UTC" };
+}
+
+async function loadDuckDbApi() {
+  try {
+    return await import(DUCKDB_PACKAGE);
+  } catch (e) {
+    const err = new Error(`duckdb not installed or not loadable on this platform (${e && e.message}): install the app dependencies `
+      + `(nf_app_sync.py install, or PATCH /api/v1/apps/<app-id>/dependencies then restart); ${DUCKDB_PACKAGE} ships `
+      + "native builds for linux x64/arm64 (glibc, musl), win32 x64/arm64 and darwin only");
+    /** @type {any} */ (err).code = "OPENFDD_DUCKDB_UNAVAILABLE";
+    throw err;
+  }
+}
+
+/** The warm process instance, created on first use; macros installed once. */
+async function warmDuckDb(pack, cfg) {
+  if (!pack.duckdb_helpers_sql) throw new Error("duckdb engine needs pack-postgres.json with duckdb_helpers_sql (rebuild: scripts/nf/build_sql_pack.py)");
+  if (!duck) {
+    const options = duckDbOptions(cfg);
+    const state = { api: null, instance: null, options, helpers: pack.duckdb_helpers_sql, ready: null };
+    state.ready = (async () => {
+      state.api = await loadDuckDbApi();
+      state.instance = await state.api.DuckDBInstance.create(":memory:", options);
+      const conn = await state.instance.connect();
+      try { await conn.run(pack.duckdb_helpers_sql); } finally { conn.closeSync(); }
+    })();
+    duck = state;
+    try { await state.ready; } catch (e) { if (duck === state) duck = null; throw e; }
+  } else {
+    await duck.ready;
+    if (duck.helpers !== pack.duckdb_helpers_sql) {   // a newer pack in the same process: refresh the macros
+      const conn = await duck.instance.connect();
+      try { await conn.run(pack.duckdb_helpers_sql); duck.helpers = pack.duckdb_helpers_sql; } finally { conn.closeSync(); }
+    }
+  }
+  return duck;
+}
+
+/** Close the warm instance (frees its memory). The next duckdb engine creates a new one. */
+async function releaseDuckDb() {
+  const state = duck;
+  duck = null;
+  if (!state) return;
+  try { await state.ready; } catch { return; }
+  state.instance.closeSync();
+}
+
+/** DuckDB JS values -> the plain values the other engines return (BIGINT/HUGEINT/DECIMAL -> number). */
+const duckValue = (v) => {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "number" || typeof v === "string" || typeof v === "boolean" || v instanceof Date) return v;
+  if (typeof v.toDouble === "function") return v.toDouble();   // DuckDBDecimalValue and friends
+  return v;
+};
+const duckRows = (reader) => reader.getRowObjectsJS().map((r) => {
+  const o = {};
+  for (const [k, v] of Object.entries(r)) o[k] = duckValue(v);
+  return o;
+});
+
+async function createDuckDb(pack, opts = {}) {
+  const state = await warmDuckDb(pack, opts.config);
+  const { api } = state;
+  const conn = await state.instance.connect();
+  let loaded = false;
+  let closed = false;
+  const runSql = async (ruleId, sql, which) => {
+    if (!loaded) throw new Error(`engine: call load(input) before ${which}()`);
+    return duckRows(await conn.runAndReadAll(sql));
+  };
+  const ruleOf = (ruleId, sql) => {
+    const rule = pack.rules[ruleId];
+    if (!rule) throw new Error(`unknown rule ${ruleId}`);
+    return sql ? { ...rule, ...sql } : rule;
+  };
+  return {
+    kind: "duckdb",
+    /** DuckDB version string of the warm instance (e.g. "v2.0.0"). */
+    async version() { return (await conn.runAndReadAll("SELECT version() AS v")).getRowObjectsJS()[0].v; },
+    async load(input) {
+      const cols = tableColumns(pack, input);
+      for (const [table, spec] of Object.entries(cols)) {
+        await conn.run(`CREATE OR REPLACE TEMP TABLE ${table} (${spec.map((c) => `${quoteId(c.name)} ${DUCK_TYPE[c.type]}`).join(", ")})`);
+        const rows = input[TABLE_INPUT_KEY[table]] || [];
+        if (!rows.length) continue;
+        const app = await conn.createAppender(table, "main", "temp");
+        try {
+          for (const row of rows) {
+            for (const c of spec) {
+              const v = cellValue(row, c);
+              if (v === null) app.appendNull();
+              else if (c.type === "timestamp") app.appendTimestampTZ(new api.DuckDBTimestampTZValue(BigInt(Math.round(Number(v) * 1000))));
+              else if (c.type === "text") app.appendVarchar(v);
+              else app.appendDouble(v);   // NaN / +-Infinity kept, as in Postgres
+            }
+            app.endRow();
+          }
+          app.flushSync();
+        } finally { app.closeSync(); }
+      }
+      loaded = true;
+    },
+    /** sql: optional { sql, timeline_sql } re-rendered with tuning overrides (#1589); default the pack's. */
+    async query(ruleId, sql) { return runSql(ruleId, ruleOf(ruleId, sql).sql, "query"); },
+    async timeline(ruleId, sql) {
+      const rule = pack.rules[ruleId] ? ruleOf(ruleId, sql) : null;
+      if (!rule || !rule.timeline_sql) return [];
+      return runSql(ruleId, rule.timeline_sql, "timeline");
+    },
+    /** Disconnects (drops this run's TEMP tables); the warm instance stays for the next run. */
+    async close() { if (!closed) { closed = true; conn.closeSync(); } },
+  };
+}
+
 // ---------------------------------------------------------------- public
 
 async function createEngine({ kind, pack, ...opts }) {
@@ -410,7 +557,8 @@ async function createEngine({ kind, pack, ...opts }) {
   if (kind === "sqlite") return createSqlite(pack);
   if (kind === "pglite") return createPglite(pack);
   if (kind === "timescale") return createTimescale(pack, opts);
-  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite" or "timescale")`);
+  if (kind === "duckdb") return createDuckDb(pack, opts);
+  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite", "duckdb" or "timescale")`);
 }
 
-module.exports = { createEngine, HELPERS, loadSqlJs };
+module.exports = { createEngine, HELPERS, loadSqlJs, releaseDuckDb, duckDbOptions, DUCKDB_DEFAULTS };

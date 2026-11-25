@@ -64,7 +64,7 @@ reads and is not a deployment route.
 
 ## Timescale option and schema preflight
 
-Full can use SQLite, PGlite, or TimescaleDB. Lite does not use Timescale. For Timescale, configure the app option
+Full can use SQLite, PGlite, or TimescaleDB, and an opt-in native DuckDB engine on trial (app option `engine` `duckdb`). Lite does not use Timescale. For Timescale, configure the app option
 `timescale` as a JSON string or PostgreSQL URL, then apply `core.sql`, `adapter_nf.sql` and `install.sql` (in that
 order, `psql -v ON_ERROR_STOP=1 -1`) using a database installer role. Give the hooks a separate least-privilege runtime role. See the
 [`nf-app/timescale` guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
