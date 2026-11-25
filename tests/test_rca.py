@@ -641,7 +641,8 @@ def test_sparql_only_hits_are_not_direct_feeder_candidates():
     assert all(h.node.iri != chiller.iri for h in tr_unverified.ancestors)
     assert all(h.node.node_id != "phantom" for h in tr_unverified.ancestors)
 
-    # Default analyze_rca + markdown must not invent unverified SPARQL-only ancestors
+    # Default analyze_rca + markdown must not invent unverified SPARQL-only ancestors.
+    # Patch sparql_upstream so analyze_rca actually sees the SPARQL-only hit.
     ts = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
     collector = InMemoryEvidenceCollector(
         faults=[
@@ -649,9 +650,11 @@ def test_sparql_only_hits_are_not_direct_feeder_candidates():
             FaultEvidence(equipment_id="phantom", rule_id="PLANT-DOWN", start=ts, end=ts),
         ]
     )
+    g.sparql_upstream = lambda _iri, sparql_runner=None: [chiller.iri, "urn:example:path#phantom"]
     report = analyze_rca(g, collector)
     zone_tr = next(t for t in report.traces if t.symptom_equipment == "zone-1")
     assert all(c.equipment_id != "phantom" for c in zone_tr.candidates)
+    assert all("phantom" not in c.cause_chain for c in zone_tr.candidates)
     md = report_to_markdown(report)
     assert "phantom -> zone-1" not in md
 
@@ -1089,3 +1092,161 @@ ex:vav_dat a brick:Discharge_Air_Temperature_Sensor ; phIoT:equipRef ex:vav-1 .
     assert report_json["source"]["inferred_topology"]["enabled"] is True
     assert report_json["source"]["inferred_topology"]["proposed_edges"] >= 1
     assert "inferred, not modeled" in (out_dir / "rca_report.md").read_text(encoding="utf-8")
+
+
+def test_sql_fallback_uses_configured_fault_statuses(monkeypatch, tmp_path):
+    from open_fdd.rca import evidence as evmod
+
+    monkeypatch.setattr(evmod, "confidence_sql_module", lambda: None)
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE rule_result (site_id TEXT, equipment_id TEXT, rule_id TEXT, "
+        "window_start TEXT, window_end TEXT, status TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', "
+        "'2026-11-24T10:00:00Z', '2026-11-24T10:15:00Z', 'ALARM')"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', "
+        "'2026-11-24T11:00:00Z', '2026-11-24T11:15:00Z', 'FAULT')"
+    )
+    default_faults = evmod.SqlEvidenceCollector(conn).load(site_id="site-a").all_faults()
+    assert len(default_faults) == 1
+    assert default_faults[0].status == "FAULT"
+    alarm_faults = evmod.SqlEvidenceCollector(conn, fault_status=("ALARM",)).load(site_id="site-a").all_faults()
+    assert len(alarm_faults) == 1
+    assert alarm_faults[0].status == "ALARM"
+    conn.close()
+
+
+def test_sql_history_loads_each_window_and_preserves_zero_setpoint():
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.evidence import FaultEvidence, SqlEvidenceCollector
+
+    class _FakeCsql:
+        def paramstyle(self, conn):
+            return "?"
+
+        def history_sql(self, hm, ph, by_site=False):
+            return "history"
+
+        def fetch(self, conn, sql, params):
+            eq, start, end = params[0], params[1], params[2]
+            cols = ["ts", "point_id", "value"]
+            rows = [
+                ("2026-01-15T12:00:00Z", "sat", 290.0),
+                ("2026-01-15T12:00:00Z", "sat-sp", 0.0),
+                ("2026-03-15T12:00:00Z", "sat", 291.0),
+                ("2026-03-15T12:00:00Z", "sat-sp", 286.0),
+            ]
+            return cols, [r for r in rows if start <= r[0] <= end and eq == "ahu-1"]
+
+    jan = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+    march = datetime(2026, 3, 15, 12, 0, tzinfo=UTC)
+    faults = [
+        FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=jan, end=jan + timedelta(hours=1), site_id="site-a"),
+        FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=march, end=march + timedelta(hours=1), site_id="site-a"),
+        FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=None, end=None, site_id="site-a"),
+    ]
+    collector = SqlEvidenceCollector(sqlite3.connect(":memory:"), history_table="input_sample")
+    class _FakeHist:
+        def col(self, name):
+            return "site_id" if name == "site_id" else None
+
+    devs = collector._load_history_deviations(_FakeCsql(), _FakeHist(), faults, site_id="site-a")
+    by_month = {(d.timestamp.month if d.timestamp else None): d for d in devs}
+    assert set(by_month) == {1, 3}
+    assert by_month[1].setpoint_si == 0.0
+    assert by_month[1].value_si == 290.0
+    assert by_month[3].setpoint_si == 286.0
+
+
+def test_cli_defaults_history_table_when_present(tmp_path):
+    import sqlite3
+
+    from open_fdd.rca.cli import _open_sql_collector, build_parser
+
+    db = tmp_path / "fdd.db"
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE rule_result (equipment_id TEXT, rule_id TEXT, window_start TEXT, window_end TEXT, status TEXT)")
+    conn.execute("CREATE TABLE input_sample (point_key TEXT, ts TEXT, value DOUBLE)")
+    conn.commit()
+    conn.close()
+    args = build_parser().parse_args(["--sqlite", str(db), "--graph", "unused.ttl"])
+    collector, sql_conn, engine = _open_sql_collector(args)
+    try:
+        assert engine == "sqlite"
+        assert collector.history_table == "input_sample"
+        assert collector.point_table == "point"
+    finally:
+        sql_conn.close()
+
+    args_off = build_parser().parse_args(["--sqlite", str(db), "--graph", "unused.ttl", "--no-history"])
+    collector_off, sql_conn_off, _ = _open_sql_collector(args_off)
+    try:
+        assert collector_off.history_table is None
+    finally:
+        sql_conn_off.close()
+
+    db_missing = tmp_path / "nohist.db"
+    conn = sqlite3.connect(db_missing)
+    conn.execute("CREATE TABLE rule_result (equipment_id TEXT, rule_id TEXT, window_start TEXT, window_end TEXT, status TEXT)")
+    conn.commit()
+    conn.close()
+    args_missing = build_parser().parse_args(["--sqlite", str(db_missing), "--graph", "unused.ttl"])
+    collector_missing, sql_conn_m, _ = _open_sql_collector(args_missing)
+    try:
+        assert collector_missing.history_table is None
+    finally:
+        sql_conn_m.close()
+
+
+def test_inferred_negative_correlation_explained_in_evidence(tmp_path):
+    import csv
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.infer import (
+        infer_topology,
+        load_telemetry_csv,
+        suggested_links_to_csv,
+    )
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix ex: <urn:test:inverse#> .
+
+    ex:chiller-1 a brick:Chiller ; rdfs:label "Chiller-1" .
+    ex:loop-1 a brick:Chilled_Water_Loop ; rdfs:label "CHW Loop" .
+    ex:chwst a brick:Chilled_Water_Supply_Temperature_Sensor ;
+        rdfs:label "CHWST" ; phIoT:equipRef ex:chiller-1 .
+    ex:loop_rwt a brick:Chilled_Water_Return_Temperature_Sensor ;
+        rdfs:label "CHWRT" ; phIoT:equipRef ex:loop-1 .
+    """
+    csv_path = tmp_path / "hist.csv"
+    t0 = datetime(2026, 3, 1, tzinfo=UTC)
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["timestamp", "chwst", "loop_rwt"])
+        for i in range(40):
+            ts = (t0 + timedelta(minutes=15 * i)).isoformat()
+            # Upstream leaving temp falls as downstream loop/return temp rises (inverse, lag +1)
+            leaving = 280.0 - 3.0 * ((i % 8) - 3.5)
+            loop = 285.0 + 2.5 * (((i - 1) % 8) - 3.5)
+            w.writerow([ts, leaving, loop])
+
+    edges = infer_topology(load_graph(ttl), load_telemetry_csv(csv_path), min_correlation=0.50, min_samples=20)
+    pairs = {(e.upstream_label, e.downstream_label) for e in edges}
+    assert ("Chiller-1", "CHW Loop") in pairs
+    edge = next(e for e in edges if e.upstream_label == "Chiller-1")
+    assert edge.correlation is not None and edge.correlation < 0
+    joined = " | ".join(edge.evidence)
+    assert "r=-" in joined or "r=-0" in f"r={edge.correlation:+.3f}"
+    assert "inverse co-movement allowed" in joined or "negative correlation is expected" in joined
+    assert "does not require a positive sign" in joined
+    csv_text = suggested_links_to_csv(edges)
+    assert "negative correlation is expected" in csv_text

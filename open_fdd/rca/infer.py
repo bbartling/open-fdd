@@ -346,7 +346,13 @@ def _signal_pair_allowed(
     d_sig: str,
     d_pt_med: str,
 ) -> tuple[bool, bool]:
-    """Return ``(allowed, require_positive)`` for an upstream/downstream signal pair."""
+    """Return ``(allowed, require_positive)`` for an upstream/downstream signal pair.
+
+    Air-side discharge/supply to terminal or zone temperatures require a positive
+    correlation. Plant/loop/coil pairs may move inversely (chiller leaving or
+    capacity vs loop temperature, valve or status vs coil/loop temperature), so
+    ``require_positive`` is False and the signed coefficient is kept as evidence.
+    """
     if u_sig == "ignore" or d_sig == "ignore":
         return False, False
 
@@ -590,17 +596,35 @@ def infer_topology(
             if best is None:
                 continue
 
-            _, r_best, lag_best, n_best, pu_best, pd_best, _ = best
+            _, r_best, lag_best, n_best, pu_best, pd_best, req_pos = best
             tele_score = min(1.0, abs(r_best))
             name_score = _naming_similarity(u, d)
             lag_bonus = 0.04 if lag_best > 0 else 0.0
             raw_conf = 0.55 * tele_score + 0.30 * struct + 0.11 * name_score + lag_bonus
             conf = round(max(0.05, min(0.95, raw_conf)), 3)
+            u_sig_best, _ = pt_classes.get(pu_best.iri, ("ignore", ""))
+            d_sig_best, _ = pt_classes.get(pd_best.iri, ("ignore", ""))
+            lag_min = lag_best * step_s // 60
+            sign_note = (
+                "positive correlation required"
+                if req_pos
+                else "signed; inverse co-movement allowed for this signal type"
+            )
 
             ev_list = [
                 f"role pair: {u_role} -> {d_role} (inferred, not modeled)",
-                f"lagged correlation r={r_best:+.3f} at lag +{lag_best} ({lag_best * step_s // 60} min) over {n_best} samples: {pu_best.label} -> {pd_best.label}",
+                (
+                    f"lagged correlation r={r_best:+.3f} ({sign_note}) at lag +{lag_best} "
+                    f"({lag_min} min) over {n_best} samples: "
+                    f"{pu_best.label} ({u_sig_best}) -> {pd_best.label} ({d_sig_best})"
+                ),
             ]
+            if r_best < 0:
+                ev_list.append(
+                    "negative correlation is expected for this pair: plant leaving temperature, "
+                    "capacity/status, or valve position may move opposite a loop or coil temperature; "
+                    f"accepted because {u_sig_best} -> {d_sig_best} ({u_role} -> {d_role}) does not require a positive sign"
+                )
             if name_score > 0:
                 ev_list.append(f"naming similarity hint={name_score:.2f}")
 

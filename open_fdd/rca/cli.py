@@ -161,6 +161,22 @@ def _example_collector() -> InMemoryEvidenceCollector:
 
 
 
+def _sql_relation_exists(conn: Any, name: str) -> bool:
+    """True when ``name`` can be queried (schema.table or table)."""
+    if not name or not all(ch.isalnum() or ch in ("_", ".") for ch in name):
+        return False
+    cur = conn.cursor()
+    try:
+        cur.execute(f"SELECT * FROM {name} WHERE 1=0")
+    except (OSError, RuntimeError, ValueError, AttributeError):
+        return False
+    except Exception as exc:  # driver-specific missing-relation errors (sqlite3, duckdb, ...)
+        if exc.__class__.__name__ in {"ProgrammingError", "OperationalError", "CatalogException", "BinderException", "Error"}:
+            return False
+        raise
+    return True
+
+
 def _kv(items: list[str] | None) -> dict[str, str]:
     out: dict[str, str] = {}
     for item in items or []:
@@ -194,7 +210,13 @@ def _open_sql_collector(args: argparse.Namespace) -> tuple[SqlEvidenceCollector,
         default_point = "fdd.point"
     else:
         raise ValueError("pick --sqlite or --duckdb")
-    history_table = None if args.no_history else args.history_table
+    if args.no_history:
+        history_table = None
+    elif args.history_table:
+        history_table = args.history_table
+    else:
+        candidate = "fdd.input_sample" if engine == "duckdb" else "input_sample"
+        history_table = candidate if _sql_relation_exists(conn, candidate) else None
     point_table = args.point_table
     if history_table and point_table is None:
         point_table = default_point

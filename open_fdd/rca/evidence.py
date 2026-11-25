@@ -590,12 +590,14 @@ class SqlEvidenceCollector:
         t1 = self._ident(self.columns.get("window_end", "window_end"))
         st = self._ident(self.columns.get("status", "status"))
         site_expr, site_col = self._site_select()
+        statuses = [s.upper() for s in (self.fault_status or ("FAULT",))]
+        placeholders = ", ".join("?" for _ in statuses)
         sql = (
             f"SELECT {eq} AS equipment_id, {rule} AS rule_id, {t0} AS window_start, "
             f"{t1} AS window_end, {st} AS status, {site_expr} AS site_id FROM {table} "
-            f"WHERE UPPER(CAST({st} AS VARCHAR)) = 'FAULT'"
+            f"WHERE UPPER(CAST({st} AS VARCHAR)) IN ({placeholders})"
         )
-        params: list[Any] = []
+        params: list[Any] = list(statuses)
         if site_id and site_col:
             sql += f" AND {site_col} = ?"
             params.append(site_id)
@@ -618,16 +620,14 @@ class SqlEvidenceCollector:
         by_site = bool(site_id and hm.col("site_id"))
         sql = csql.history_sql(hm, ph, by_site=by_site)
         samples: list[PointDeviation] = []
-        seen: set[tuple[str, str]] = set()
+        seen: set[tuple[str, str, object, object]] = set()
         for fault in faults:
-            if fault.equipment_id in seen and fault.start is None:
+            if fault.start is None or fault.end is None:
                 continue
-            key = (fault.site_id or site_id or "", fault.equipment_id)
+            key = (fault.site_id or site_id or "", fault.equipment_id, fault.start, fault.end)
             if key in seen:
                 continue
             seen.add(key)
-            if fault.start is None or fault.end is None:
-                continue
             params: list[Any] = [fault.equipment_id, fault.start.strftime("%Y-%m-%dT%H:%M:%SZ"), fault.end.strftime("%Y-%m-%dT%H:%M:%SZ")]
             if by_site:
                 params.append(site_id or fault.site_id)
@@ -653,7 +653,14 @@ class SqlEvidenceCollector:
             for pid, (ts, val) in by_point.items():
                 if pid in setpoints:
                     continue
-                sp = setpoints.get(pid + "-sp") or setpoints.get(pid + "-setpoint") or setpoints.get(pid + "Setpoint")
+                sp = next(
+                    (
+                        setpoints[k]
+                        for k in (pid + "-sp", pid + "-setpoint", pid + "Setpoint")
+                        if k in setpoints
+                    ),
+                    None,
+                )
                 samples.append(
                     PointDeviation(
                         equipment_id=fault.equipment_id,
