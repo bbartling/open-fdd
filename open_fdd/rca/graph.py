@@ -232,9 +232,21 @@ class TopologyGraph:
         if iri not in bucket_ci:
             bucket_ci.append(iri)
 
-    def _site_tokens(self, node: GraphNode) -> set[str]:
+    def _site_tokens(self, node: GraphNode, *, _seen: frozenset[str] | None = None) -> set[str]:
         tokens = {node.site_id, _local_id(node.site_iri), *node.site_ids}
-        return {t.lower() for t in tokens if t}
+        out = {t.lower() for t in tokens if t}
+        if out:
+            return out
+        seen = set(_seen or ())
+        seen.add(node.iri)
+        for edge in self.upstream_edges.get(node.iri, ()):
+            parent = self.nodes.get(edge.upstream_iri)
+            if parent is None or parent.iri in seen:
+                continue
+            out |= self._site_tokens(parent, _seen=frozenset(seen))
+            if out:
+                return out
+        return out
 
     def _filter_iris_by_site(self, iris: list[str], site_id: str | None) -> list[str]:
         if not site_id:

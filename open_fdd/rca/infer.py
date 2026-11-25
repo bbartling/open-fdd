@@ -435,6 +435,22 @@ def _pearson_lag(
     return cov / math.sqrt(vx * vy), n
 
 
+TelemetryKey = tuple[str, str]
+TelemetryMap = Mapping[str | TelemetryKey, Sequence[tuple[datetime, float]]]
+
+
+def _telemetry_key(site: str | None, point: str) -> TelemetryKey:
+    """Return a (site, point) series key; site is empty when unknown."""
+    return ((site or "").strip(), point)
+
+
+def _split_telemetry_key(key: str | TelemetryKey) -> TelemetryKey:
+    """Split a loader key or a bare point id into (site, point)."""
+    if isinstance(key, tuple) and len(key) == 2:
+        return (str(key[0] or "").strip(), str(key[1]))
+    return ("", str(key))
+
+
 def _align_series(
     telemetry: Mapping[str, Sequence[tuple[datetime, float]]],
     bucket_seconds: int | None,
@@ -490,22 +506,39 @@ def _align_series(
 
 def _resolve_telemetry_to_points(
     graph: TopologyGraph,
-    telemetry: Mapping[str, Sequence[tuple[datetime, float]]],
+    telemetry: TelemetryMap,
     *,
     site_id: str | None = None,
 ) -> dict[str, Sequence[tuple[datetime, float]]]:
-    """Map telemetry keys (point id, openfddKey, IRI, label) to canonical point IRIs."""
-    resolved: dict[str, Sequence[tuple[datetime, float]]] = {}
+    """Map telemetry keys (point id, openfddKey, IRI, label) to canonical point IRIs.
+
+    Series are resolved with their own site when the key carries one, so identical
+    point keys at different sites never share a series or a resolved point.
+    """
+    resolved: dict[str, list[tuple[datetime, float]]] = {}
+    resolved_site: dict[str, str] = {}
     for key, samples in telemetry.items():
-        node = graph.resolve_node(key, site_id=site_id)
-        if node is not None and node.is_point:
-            resolved[node.iri] = samples
+        series_site, point = _split_telemetry_key(key)
+        if not point:
+            continue
+        scope = series_site or site_id or None
+        node = graph.resolve_node(point, site_id=scope)
+        if node is None or not node.is_point:
+            continue
+        prev_site = resolved_site.get(node.iri)
+        if prev_site and series_site and prev_site.lower() != series_site.lower():
+            continue
+        if node.iri in resolved:
+            resolved[node.iri].extend(samples)
+        else:
+            resolved[node.iri] = list(samples)
+            resolved_site[node.iri] = series_site
     return resolved
 
 
 def infer_topology(
     graph: TopologyGraph,
-    telemetry: Mapping[str, Sequence[tuple[datetime, float]]],
+    telemetry: TelemetryMap,
     *,
     site_id: str | None = None,
     min_correlation: float = 0.50,
@@ -759,7 +792,8 @@ def load_telemetry_csv(
                 except (TypeError, ValueError):
                     continue
                 if math.isfinite(val):
-                    series[pk].append((ts, val))
+                    row_site = (row.get(site_col) or "").strip() if site_col else ""
+                    series[_telemetry_key(row_site or site_id, pk)].append((ts, val))
             return dict(series)
 
         # Wide format: every non-metadata column is a point identifier
@@ -780,7 +814,8 @@ def load_telemetry_csv(
                 except (TypeError, ValueError):
                     continue
                 if math.isfinite(val):
-                    series[pk].append((ts, val))
+                    row_site = (row.get(site_col) or "").strip() if site_col else ""
+                    series[_telemetry_key(row_site or site_id, pk)].append((ts, val))
     return dict(series)
 
 
@@ -796,8 +831,12 @@ def load_telemetry_sql(
     history_table: str = "input_sample",
     columns: Mapping[str, str] | None = None,
     site_id: str | None = None,
-) -> dict[str, list[tuple[datetime, float]]]:
-    """Read telemetry samples from a SQLite/DuckDB connection without writing anything."""
+) -> dict[TelemetryKey, list[tuple[datetime, float]]]:
+    """Read telemetry samples from a SQLite/DuckDB connection without writing anything.
+
+    Samples are grouped by ``(site, point_key)`` whenever a site column is present,
+    so unscoped loads never pool identical point keys across sites.
+    """
     col_map = dict(columns or {})
     table = _sql_ident(history_table)
     cur = conn.cursor()
@@ -816,20 +855,29 @@ def load_telemetry_sql(
     pk_col = pick("point_key", ("point_key", "openfdd_key", "point_id"))
     ts_col = pick("ts", ("ts", "timestamp", "timestamp_utc"))
     val_col = pick("value", ("value", "val"))
-    site_col = col_map.get("site_id") or present.get("site_id")
+    site_col = col_map.get("site_id") or present.get("site_id") or present.get("site")
+    site_ident = _sql_ident(site_col) if site_col else None
 
-    sql = f"SELECT {pk_col} AS point_key, {ts_col} AS ts, {val_col} AS value FROM {table}"
+    if site_ident:
+        sql = f"SELECT {pk_col} AS point_key, {ts_col} AS ts, {val_col} AS value, {site_ident} AS site_id FROM {table}"
+    else:
+        sql = f"SELECT {pk_col} AS point_key, {ts_col} AS ts, {val_col} AS value FROM {table}"
     params: list[Any] = []
-    if site_id and site_col:
+    if site_id and site_ident:
         from open_fdd.rca.evidence import sql_placeholder
 
-        sql += f" WHERE {_sql_ident(site_col)} = {sql_placeholder(conn)}"
+        sql += f" WHERE {site_ident} = {sql_placeholder(conn)}"
         params.append(site_id)
     sql += f" ORDER BY {ts_col}"
 
     cur.execute(sql, params)
-    series: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
-    for pk, ts_raw, val_raw in cur.fetchall():
+    series: dict[TelemetryKey, list[tuple[datetime, float]]] = defaultdict(list)
+    for rec in cur.fetchall():
+        if site_ident:
+            pk, ts_raw, val_raw, row_site = rec
+        else:
+            pk, ts_raw, val_raw = rec
+            row_site = ""
         ts = parse_utc(ts_raw)
         if ts is None or not pk or val_raw is None:
             continue
@@ -838,7 +886,8 @@ def load_telemetry_sql(
         except (TypeError, ValueError):
             continue
         if math.isfinite(val):
-            series[str(pk)].append((ts, val))
+            row_site_s = str(row_site).strip() if row_site is not None else ""
+            series[_telemetry_key(row_site_s or site_id, str(pk))].append((ts, val))
     return dict(series)
 
 

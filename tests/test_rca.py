@@ -1428,10 +1428,15 @@ def test_load_telemetry_csv_filters_by_site(tmp_path):
         rows.append(f"{ts},plant-b,sat,{10 + i}" + nl)
     path.write_text("".join(rows), encoding="utf-8")
     series_a = load_telemetry_csv(path, site_id="plant-a")
-    assert len(series_a["sat"]) == 5
-    assert series_a["sat"][0][1] == 280
+    assert len(series_a[("plant-a", "sat")]) == 5
+    assert series_a[("plant-a", "sat")][0][1] == 280
+    assert ("plant-b", "sat") not in series_a
     series_all = load_telemetry_csv(path)
-    assert len(series_all["sat"]) == 10
+    assert set(series_all) == {("plant-a", "sat"), ("plant-b", "sat")}
+    assert len(series_all[("plant-a", "sat")]) == 5
+    assert len(series_all[("plant-b", "sat")]) == 5
+    assert series_all[("plant-a", "sat")][0][1] == 280
+    assert series_all[("plant-b", "sat")][0][1] == 10
 
 
 def test_infer_keeps_same_site_iri_with_distinct_site_ids(tmp_path):
@@ -1534,3 +1539,85 @@ def test_open_sql_collector_rejects_missing_explicit_history_table(tmp_path):
     ])
     with pytest.raises(ValueError, match="history table"):
         _open_sql_collector(args)
+
+
+def test_unscoped_telemetry_does_not_correlate_across_sites(tmp_path):
+    import csv
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.infer import (
+        infer_topology,
+        load_telemetry_csv,
+        load_telemetry_sql,
+    )
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix s1: <urn:example:site/a#> .
+    @prefix s2: <urn:example:site/b#> .
+
+    s1:site a phIoT:site ; rdfs:label "plant-a" .
+    s2:site a phIoT:site ; rdfs:label "plant-b" .
+    s1:ahu a brick:AHU ; rdfs:label "AHU-A" ; phIoT:siteRef s1:site .
+    s1:vav a brick:VAV ; rdfs:label "VAV-A" ; phIoT:siteRef s1:site .
+    s2:ahu a brick:AHU ; rdfs:label "AHU-B" ; phIoT:siteRef s2:site .
+    s2:vav a brick:VAV ; rdfs:label "VAV-B" ; phIoT:siteRef s2:site .
+    s1:sat a brick:Supply_Air_Temperature_Sensor ; phIoT:equipRef s1:ahu ; rdfs:label "sat" .
+    s1:dat a brick:Discharge_Air_Temperature_Sensor ; phIoT:equipRef s1:vav ; rdfs:label "dat" .
+    s2:sat a brick:Supply_Air_Temperature_Sensor ; phIoT:equipRef s2:ahu ; rdfs:label "sat" .
+    s2:dat a brick:Discharge_Air_Temperature_Sensor ; phIoT:equipRef s2:vav ; rdfs:label "dat" .
+    """
+    graph = load_graph(ttl)
+    csv_path = tmp_path / "h.csv"
+    t0 = datetime(2026, 3, 1, tzinfo=UTC)
+    rows = []
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["timestamp", "site_id", "point_key", "value"])
+        for i in range(40):
+            ts = (t0 + timedelta(minutes=15 * i)).isoformat()
+            sig_a = 285.0 + ((i % 6) - 2.5)
+            sig_b = 260.0 + 2.0 * ((i % 5) - 2.0)
+            w.writerow([ts, "plant-a", "sat", sig_a])
+            w.writerow([ts, "plant-a", "dat", sig_a + 0.2])
+            w.writerow([ts, "plant-b", "sat", sig_b])
+            w.writerow([ts, "plant-b", "dat", sig_b - 0.2])
+            rows.extend(
+                [
+                    (ts, "plant-a", "sat", sig_a),
+                    (ts, "plant-a", "dat", sig_a + 0.2),
+                    (ts, "plant-b", "sat", sig_b),
+                    (ts, "plant-b", "dat", sig_b - 0.2),
+                ]
+            )
+
+    csv_series = load_telemetry_csv(csv_path)
+    assert set(csv_series) == {
+        ("plant-a", "sat"),
+        ("plant-a", "dat"),
+        ("plant-b", "sat"),
+        ("plant-b", "dat"),
+    }
+    assert csv_series[("plant-a", "sat")][0][1] != csv_series[("plant-b", "sat")][0][1]
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE input_sample (ts TEXT, site_id TEXT, point_key TEXT, value DOUBLE)"
+    )
+    conn.executemany("INSERT INTO input_sample VALUES (?, ?, ?, ?)", rows)
+    sql_series = load_telemetry_sql(conn)
+    conn.close()
+    assert set(sql_series) == set(csv_series)
+    assert [v for _, v in sql_series[("plant-a", "sat")]] == [v for _, v in csv_series[("plant-a", "sat")]]
+    assert [v for _, v in sql_series[("plant-b", "dat")]] == [v for _, v in csv_series[("plant-b", "dat")]]
+
+    for telemetry in (csv_series, sql_series):
+        edges = infer_topology(graph, telemetry, min_correlation=0.5, min_samples=20)
+        pairs = {(e.upstream_label, e.downstream_label) for e in edges}
+        assert ("AHU-A", "VAV-A") in pairs
+        assert ("AHU-B", "VAV-B") in pairs
+        assert ("AHU-A", "VAV-B") not in pairs
+        assert ("AHU-B", "VAV-A") not in pairs
