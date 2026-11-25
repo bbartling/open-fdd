@@ -122,10 +122,10 @@ def _collect_for_node(
     for ident in idents:
         if not ident:
             continue
-        if ident != node.iri:
-            resolved = graph.resolve_node(ident, site_id=scope_site)
-            if resolved is None or resolved.iri != node.iri:
-                continue
+        # Collector IDs match case-insensitively, so require a unique case-insensitive alias.
+        owners = graph.iris_matching_alias(ident, site_id=scope_site, ignore_case=True)
+        if owners != [node.iri]:
+            continue
         ev = collector.collect(
             ident,
             window_start=symptom.start,

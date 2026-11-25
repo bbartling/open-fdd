@@ -1250,3 +1250,41 @@ def test_inferred_negative_correlation_explained_in_evidence(tmp_path):
     assert "does not require a positive sign" in joined
     csv_text = suggested_links_to_csv(edges)
     assert "negative correlation is expected" in csv_text
+
+
+def test_case_distinct_aliases_do_not_leak_evidence():
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.evidence import FaultEvidence, InMemoryEvidenceCollector
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.rank import _collect_for_node, analyze_rca
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix rec: <urn:example:case#> .
+
+    rec:ahu-west a brick:AHU ; rdfs:label "AHU West" ; brick:feeds rec:zone-1 .
+    rec:ahu-west-b a brick:AHU ; rdfs:label "ahu west" ; brick:feeds rec:zone-2 .
+    rec:zone-1 a brick:HVAC_Zone .
+    rec:zone-2 a brick:HVAC_Zone .
+    """
+    g = load_graph(ttl)
+    ts = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="AHU West", rule_id="SAT-HIGH", start=ts, end=ts),
+            FaultEvidence(equipment_id="zone-1", rule_id="ZNT-HIGH", start=ts, end=ts),
+            FaultEvidence(equipment_id="zone-2", rule_id="ZNT-HIGH", start=ts, end=ts),
+        ]
+    )
+    west = g.resolve_node("ahu-west")
+    west_b = g.resolve_node("ahu-west-b")
+    ev_a = _collect_for_node(collector, g, west, FaultEvidence(equipment_id="zone-1", rule_id="ZNT-HIGH", start=ts, end=ts), tolerance=timedelta(minutes=30))
+    ev_b = _collect_for_node(collector, g, west_b, FaultEvidence(equipment_id="zone-2", rule_id="ZNT-HIGH", start=ts, end=ts), tolerance=timedelta(minutes=30))
+    assert ev_a.faults == []
+    assert ev_b.faults == []
+
+    report = analyze_rca(g, collector)
+    for tr in report.traces:
+        assert all(c.rule_id != "SAT-HIGH" for c in tr.candidates)

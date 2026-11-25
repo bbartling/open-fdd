@@ -242,6 +242,24 @@ class TopologyGraph:
         wanted = site_id.lower()
         return [iri for iri in iris if wanted in self._site_tokens(self.nodes[iri])]
 
+    def iris_matching_alias(
+        self,
+        identifier: str,
+        *,
+        site_id: str | None = None,
+        ignore_case: bool = False,
+    ) -> list[str]:
+        """Return IRIs whose aliases match ``identifier``, optionally case-insensitively."""
+        if not identifier:
+            return []
+        if ignore_case:
+            iris = list(self._alias_ci.get(identifier.lower(), ()))
+        else:
+            iris = list(self._alias_exact.get(identifier, ()))
+            if identifier in self.nodes and identifier not in iris:
+                iris.insert(0, identifier)
+        return self._filter_iris_by_site(iris, site_id)
+
     def with_inferred_edges(self, inferred_edges: Iterable[Any]) -> TopologyGraph:
         """Return a new TopologyGraph adding inferred edges without mutating this graph."""
         nodes = dict(self.nodes)
