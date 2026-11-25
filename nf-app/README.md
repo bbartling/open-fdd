@@ -128,7 +128,9 @@ The Lite edition and the `sqlite` / `pglite` / `duckdb` engines create no persis
 `optionalDependencies` entry). The `fdd.*` helpers are DuckDB macros (`sql/fdd/duckdb/duckdb_helpers.sql`, shipped in
 `pack-postgres.json` as `duckdb_helpers_sql`). `auto` never picks it. When the package has no native build for the box
 (linux x64/arm64 glibc or musl, win32, darwin; no 32-bit ARM), the run falls back to the `auto` engine and `engine_note`
-says so. `tests/duckdb-engine.test.mjs` checks every rule and timeline against PGlite and sql.js.
+says so. With the app option `timescale` set, it reads the saved tuning (`fdd.rule_config`) like the `timescale`
+engine, and a fallback on such a box picks `timescale`. `tests/duckdb-engine.test.mjs` checks every rule and timeline
+against PGlite and sql.js, with and without saved tuning.
 
 | App option | Default | Meaning |
 |---|---|---|

@@ -511,8 +511,21 @@ async function createDuckDb(pack, opts = {}) {
     if (!rule) throw new Error(`unknown rule ${ruleId}`);
     return sql ? { ...rule, ...sql } : rule;
   };
+  // Saved tuning (#1589/#1636): the store is fdd.rule_config in the app's Timescale database. When the app has one
+  // (option timescale, or opts.tuningClient in tests), this engine reads the same active revisions as the timescale
+  // engine, and the hook renders the tuned Postgres SQL (DuckDB runs it as is) into query(ruleId, sql) / timeline().
+  const tuningSource = opts.tuningClient || (opts.config && opts.config.timescale) || null;
+  const tuning = tuningSource ? {
+    async ruleConfigOverrides() {
+      const ts = require("./timescale");
+      if (opts.tuningClient) return ts.activeRuleConfigs(opts.tuningClient);
+      const client = await ts.connect(opts.config.timescale);
+      try { return await ts.activeRuleConfigs(client); } finally { await client.end(); }
+    },
+  } : {};
   return {
     kind: "duckdb",
+    ...tuning,
     /** DuckDB version string of the warm instance (e.g. "v2.0.0"). */
     async version() { return (await conn.runAndReadAll("SELECT version() AS v")).getRowObjectsJS()[0].v; },
     async load(input) {

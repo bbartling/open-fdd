@@ -64,6 +64,7 @@
 //   engine        "auto" | "sqlite" | "pglite" | "duckdb" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
 //                 duckdb (#1645, opt-in): native DuckDB, warm in-memory; when its package is not installed the run falls back to the
 //                 auto choice and says so in engine_note
+//                 With the option timescale set, duckdb reads the saved tuning (fdd.rule_config) from it like the timescale engine
 //   duckdbMemoryLimit  DuckDB memory cap, e.g. "256MB" (default) or "1GB"; duckdbThreads  DuckDB threads (default 2). Engine duckdb only
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
@@ -743,7 +744,8 @@ async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInsta
   if (wanted === 'sqlite' || wanted === 'pglite') return { kind: wanted, note: '' };
   if (wanted === 'duckdb') {
     if (hasDuckdb()) return { kind: 'duckdb', note: '' };
-    const auto = await pickEngine(http, 'auto', undefined, hasPglite, hasDuckdb);
+    // a box with a Timescale store falls back to the timescale engine, which reads the saved tuning too
+    const auto = await pickEngine(http, 'auto', timescaleConfig, hasPglite, hasDuckdb);
     return { kind: auto.kind, note: `engine duckdb: @duckdb/node-api is not installed or has no native build for this box; using ${auto.kind}`
       + (auto.note ? ` (${auto.note})` : '') };
   }
@@ -977,7 +979,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const queue = { meta: [], values: [], series: [] };    // writes, flushed in batches after all equips ran
   const occCache = { logged: new Set() };    // NF schedules (read once per run) and which sites were logged
   const warnedUnits = new Set();
-  const engine = await createEngine({ kind, pack, config: kind === 'duckdb' ? { memoryLimit: config.duckdbMemoryLimit, threads: config.duckdbThreads } : config.timescale });
+  const engine = await createEngine({ kind, pack, config: kind === 'duckdb'
+    ? { memoryLimit: config.duckdbMemoryLimit, threads: config.duckdbThreads, timescale: config.timescale }   // timescale: saved tuning store
+    : config.timescale });
   try {
     const tuning = await loadRoleLimitOverrides({ engine, pack, log });
     summary.role_limits = tuning.summary;

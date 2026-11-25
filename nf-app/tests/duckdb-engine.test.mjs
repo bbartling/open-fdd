@@ -6,6 +6,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { ruleConfigClient } from "./fixtures/rule-config-client.mjs";
 
 const require = createRequire(import.meta.url);
 const engines = require("../hooks/lib/engines.js");
@@ -185,4 +186,58 @@ test("pickEngine: duckdb only when configured; auto never picks it; a missing pa
   assert.match(fb.note, /duckdb.*not installed.*using pglite/);
   const small = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 1024 ** 3 } }] } }) };
   assert.equal((await fdd.pickEngine(small, "duckdb", undefined, () => true, () => false)).kind, "sqlite");
+});
+
+// ---- saved tuning (#1589): a duckdb run with a tuning store applies the same overrides as the timescale engine ----
+test("duckdb applies saved site and equipment tuning (fdd.rule_config) and equals PGlite running the same tuned SQL", opts, async () => {
+  const client = ruleConfigClient();
+  const SITE = "site-1";
+  client.rows.push(
+    { site_id: SITE, rule_id: "FC1", scope_key: "site", revision: 1, active: true, parameters: { version: 1, params: { eps_dsp: 5, confirm_min: 15 } } },
+    { site_id: SITE, rule_id: "FC1", scope_key: "equip:AHU-2", revision: 1, active: true, parameters: { version: 1, params: { confirm_min: 30 } } },
+    { site_id: SITE, rule_id: "FC2", scope_key: "equip:AHU-1", revision: 2, active: true, parameters: { version: 1, params: { mix_tol: 0.5, eps_mat: 0.3 } } },
+  );
+  const eng = await createEngine({ kind: "duckdb", pack: pgPack, tuningClient: client });
+  const logs = [];
+  try {
+    assert.equal(typeof eng.ruleConfigOverrides, "function", "a tuning store gives the duckdb engine the overrides reader");
+    const tuning = await fdd.loadRoleLimitOverrides({ engine: eng, pack: pgPack, log: (m) => logs.push(m) });
+    assert.equal(tuning.summary.source, "fdd.rule_config");
+    assert.equal(tuning.summary.rule_revisions, 3);
+    await eng.load(input);
+    let changed = 0;
+    for (const [rid, equip] of [["FC1", "AHU-1"], ["FC1", "AHU-2"], ["FC2", "AHU-1"], ["FC2", "AHU-2"]]) {
+      const tuned = tuning.forRule(SITE, equip, rid);
+      if (rid === "FC2" && equip === "AHU-2") { assert.equal(tuned, null, "no override for FC2 on AHU-2: shipped SQL"); continue; }
+      assert.ok(tuned && tuned.sql !== pgPack.rules[rid].sql, `${rid}/${equip}: tuned SQL rendered`);
+      const mine = (rows) => rows.filter((r) => r.equipment_id === equip);
+      const d = mine(await eng.query(rid, { sql: tuned.sql, timeline_sql: tuned.timeline_sql }));
+      const dTl = mine(await eng.timeline(rid, { sql: tuned.sql, timeline_sql: tuned.timeline_sql }));
+      const tunedPack = { ...pgPack, rules: { ...pgPack.rules, [rid]: { ...pgPack.rules[rid], sql: tuned.sql, timeline_sql: tuned.timeline_sql } } };
+      const p = await createEngine({ kind: "pglite", pack: tunedPack });
+      try {
+        await p.load(input);
+        const g = mine(await p.query(rid)), gTl = mine(await p.timeline(rid));
+        assert.deepEqual(diffRows(d, g, ["duckdb", "pglite"]), [], `${rid}/${equip} tuned rows`);
+        assert.deepEqual(diffRows(dTl, gTl, ["duckdb", "pglite"]), [], `${rid}/${equip} tuned timeline`);
+      } finally { await p.close(); }
+      const shipped = mine(res.duck[rid]);
+      if (diffRows(d, shipped, ["tuned", "shipped"]).length) changed++;
+    }
+    assert.ok(changed >= 2, `the overrides change the result (${changed} of 3 tuned rule/equip pairs differ from shipped)`);
+  } finally { await eng.close(); }
+});
+
+test("duckdb without a tuning store has no overrides reader (no store, nothing saved); with option timescale it reads it", opts, async () => {
+  const plain = await createEngine({ kind: "duckdb", pack: pgPack });
+  try { assert.equal(plain.ruleConfigOverrides, undefined); } finally { await plain.close(); }
+  const withStore = await createEngine({ kind: "duckdb", pack: pgPack, config: { timescale: { host: "db.invalid", database: "x" } } });
+  try { assert.equal(typeof withStore.ruleConfigOverrides, "function"); } finally { await withStore.close(); }
+});
+
+test("pickEngine: duckdb falling back on a box with a Timescale store picks timescale (which reads saved tuning)", async () => {
+  const http = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 1024 ** 3 } }] } }) };
+  const fb = await fdd.pickEngine(http, "duckdb", { host: "db" }, () => true, () => false);
+  assert.equal(fb.kind, "timescale");
+  assert.match(fb.note, /using timescale/);
 });
