@@ -119,17 +119,18 @@ test("resolveOverviewOatC prefers fresh local BAS OAT over weather and rejects s
     weatherStationRef: "wx-1",
     tags: ["point", "weather", "outside", "air", "temp", "sensor", "his"],
     units: "°C",
-    latest: { ts: freshTs, double: 28 },
+    latest: { ts: freshTs, double: 14 },
   });
   const res1 = ctx.resolveOverviewOatC({ equips, points: [basOat, wxOat] }, "site-a", { nowMs: now });
   assert.equal(res1.source, "local");
   assert.ok(Math.abs(res1.tempC - 10) < 1e-9);
+  assert.equal(res1.disagree, undefined);
 
   // Stale local BAS OAT falls back explicitly to valid weather OAT
   const staleBas = { ...basOat, latest: { ts: staleTs, double: 30 } };
   const res2 = ctx.resolveOverviewOatC({ equips, points: [staleBas, wxOat] }, "site-a", { nowMs: now });
   assert.equal(res2.source, "weather");
-  assert.equal(res2.tempC, 28);
+  assert.equal(res2.tempC, 14);
 
   // Untyped local OAT falls back to weather
   const untypedBas = { ...basOat, units: "" };
@@ -140,6 +141,106 @@ test("resolveOverviewOatC prefers fresh local BAS OAT over weather and rejects s
   const basOat2 = { ...basOat, uuid: "oat-bas-2", latest: { ts: freshTs, double: 55 } };
   const res4 = ctx.resolveOverviewOatC({ equips, points: [basOat, basOat2, wxOat] }, "site-a", { nowMs: now });
   assert.equal(res4.source, "weather");
+});
+
+// #1774: the picker's OAT, its band and its reason are shown in the display units; the pick stays in SI.
+const oatPickerModel = (now, { localC = null, weatherC = null } = {}) => {
+  const freshTs = new Date(now - 2 * 60e3).toISOString();
+  const points = [];
+  if (localC != null) {
+    points.push(mkPoint("oat-bas", {
+      equipRef: "rtu-1", dis: "RTU 1 OAT", tags: ["point", "outside", "air", "temp", "sensor", "his"],
+      units: "°C", latest: { ts: freshTs, double: localC },
+    }));
+  }
+  if (weatherC != null) {
+    points.push(mkPoint("oat-wx", {
+      weatherStationRef: "wx-1", tags: ["point", "weather", "outside", "air", "temp", "his"],
+      units: "°C", latest: { ts: freshTs, double: weatherC },
+    }));
+  }
+  return {
+    equips: [
+      mkEquip("ahu-1", { dis: "AHU 1", markers: ["equip", "ahu"] }),
+      mkEquip("rtu-1", { dis: "RTU 1", markers: ["equip", "rtu"] }),
+      mkEquip("blr-1", { dis: "Boiler 1", markers: ["equip", "boiler"] }),
+    ],
+    points,
+  };
+};
+
+test("autoSelectOverviewEquip reason and band follow the imperial display units (default)", () => {
+  const { ctx } = loadSharedUi();
+  const now = Date.UTC(2026, 10, 13, 18, 0, 0);
+  const auto = ctx.autoSelectOverviewEquip(oatPickerModel(now, { weatherC: 23.3 }), "site-a", { nowMs: now });
+  assert.equal(auto.equipId, "rtu-1");
+  assert.equal(auto.reason, "Auto-selected RTU 1 (RTU; OAT 73.9 °F from site weather)");
+  assert.equal(auto.band, "53.6 °F to < 75.2 °F");
+  assert.equal(auto.oat.tempC, 23.3);
+  assert.doesNotMatch(auto.reason, /°C/);
+
+  const cold = ctx.autoSelectOverviewEquip(oatPickerModel(now, { weatherC: 1.3 }), "site-a", { nowMs: now });
+  assert.equal(cold.equipId, "blr-1");
+  assert.equal(cold.band, "< 53.6 °F");
+  assert.match(cold.reason, /OAT 34\.3 °F from site weather/);
+
+  const hot = ctx.autoSelectOverviewEquip(oatPickerModel(now, { weatherC: 30 }), "site-a", { nowMs: now });
+  assert.equal(hot.equipId, "rtu-1");
+  assert.equal(hot.band, ">= 75.2 °F");
+  assert.equal(hot.reason, "Auto-selected RTU 1 (no chiller/chilled-water for OAT 86.0 °F from site weather; fallback RTU)");
+});
+
+test("autoSelectOverviewEquip reason and band follow the SI display units when chosen", () => {
+  const { ctx } = loadSharedUi();
+  ctx.ofddUnits = { ...ctx.ofddUnits, displaySystem: () => "si" };
+  const now = Date.UTC(2026, 10, 13, 18, 0, 0);
+  const auto = ctx.autoSelectOverviewEquip(oatPickerModel(now, { weatherC: 23.3 }), "site-a", { nowMs: now });
+  assert.equal(auto.reason, "Auto-selected RTU 1 (RTU; OAT 23.3 °C from site weather)");
+  assert.equal(auto.band, "12.0 °C to < 24.0 °C");
+});
+
+test("autoSelectOverviewEquip without units.js (Lite) shows imperial", () => {
+  const { ctx } = loadSharedUi();
+  delete ctx.ofddUnits;
+  const now = Date.UTC(2026, 10, 13, 18, 0, 0);
+  const auto = ctx.autoSelectOverviewEquip(oatPickerModel(now, { weatherC: 23.3 }), "site-a", { nowMs: now });
+  assert.equal(auto.reason, "Auto-selected RTU 1 (RTU; OAT 73.9 °F from site weather)");
+  assert.equal(auto.band, "53.6 °F to < 75.2 °F");
+  const bad = ctx.autoSelectOverviewEquip(oatPickerModel(now, { localC: 23.3, weatherC: 1.3 }), "site-a", { nowMs: now });
+  assert.match(bad.reason, /local BAS OAT 73\.9 °F ignored: differs from site weather by more than 18 Δ°F\)$/);
+});
+
+test("Overview OAT: a local BAS OAT that disagrees with site weather is not trusted (#1774)", () => {
+  const { ctx } = loadSharedUi();
+  const now = Date.UTC(2026, 10, 13, 18, 0, 0);
+  // The issue's case: an indoor or mis-tagged "OAT" reads 23.3 °C while web weather says 1.3 °C.
+  const model = oatPickerModel(now, { localC: 23.3, weatherC: 1.3 });
+  const oat = ctx.resolveOverviewOatC(model, "site-a", { nowMs: now });
+  assert.equal(oat.source, "weather");
+  assert.equal(oat.tempC, 1.3);
+  assert.ok(Math.abs(oat.disagree.deltaK - 22) < 1e-9);
+  assert.equal(oat.disagree.localC, 23.3);
+  assert.equal(oat.disagree.maxK, 10);
+
+  const auto = ctx.autoSelectOverviewEquip(model, "site-a", { nowMs: now });
+  assert.equal(auto.equipId, "blr-1");
+  assert.equal(auto.reason, "Auto-selected Boiler 1 (boiler/heating-water; OAT 34.3 °F from site weather; "
+    + "local BAS OAT 73.9 °F ignored: differs from site weather by more than 18 Δ°F)");
+
+  // Within the delta the local sensor is still preferred.
+  const close = ctx.resolveOverviewOatC(oatPickerModel(now, { localC: 8, weatherC: 1.3 }), "site-a", { nowMs: now });
+  assert.equal(close.source, "local");
+  assert.equal(close.disagree, undefined);
+
+  // The delta is configurable.
+  const strict = ctx.resolveOverviewOatC(oatPickerModel(now, { localC: 8, weatherC: 1.3 }), "site-a", { nowMs: now, maxOatDisagreeK: 5 });
+  assert.equal(strict.source, "weather");
+
+  // No usable weather (disabled or missing): the local sensor is all there is, so it is used.
+  const noWx = ctx.resolveOverviewOatC(oatPickerModel(now, { localC: 23.3 }), "site-a", { nowMs: now });
+  assert.equal(noWx.source, "local");
+  const wxOff = ctx.resolveOverviewOatC(model, "site-a", { nowMs: now, weatherOff: true });
+  assert.equal(wxOff.source, "local");
 });
 
 test("autoSelectOverviewEquip follows <12 C boiler, 12-24 C RTU, >=24 C chiller bands and deterministic fallbacks", () => {
