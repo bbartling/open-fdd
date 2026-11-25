@@ -640,7 +640,10 @@ class TopologyGraph:
             if cycle_front:
                 frontier_unique = cycle_front
         any_inf = any(h.inferred for h in ancestors)
-        any_mod = any(not h.inferred for h in ancestors)
+        any_mod = any(
+            h.topology_source in {"modeled", "mixed (modeled + inferred, not modeled)"}
+            for h in ancestors
+        )
         if not any_inf:
             trav_source = "modeled"
         elif any_mod:

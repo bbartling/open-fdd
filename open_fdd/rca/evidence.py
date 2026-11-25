@@ -453,6 +453,19 @@ def confidence_sql_module():
     return mod
 
 
+def sql_placeholder(conn: Any) -> str:
+    """Return the bound-parameter marker for ``conn`` (``?`` or ``%s``)."""
+    import sys
+
+    style = getattr(conn, "paramstyle", None) or getattr(type(conn), "paramstyle", None)
+    if not style:
+        mod = sys.modules.get(type(conn).__module__)
+        style = getattr(mod, "paramstyle", None)
+    if str(style) in {"format", "pyformat"}:
+        return "%s"
+    return "?"
+
+
 class SqlEvidenceCollector:
     """Read-only SQL evidence loader for ``fdd.rule_result`` (SQLite / DuckDB / PostgreSQL).
 
@@ -576,7 +589,7 @@ class SqlEvidenceCollector:
             )
             params: list[Any] = []
             if site_id and site_col:
-                sql += f" WHERE {site_col} = ?"
+                sql += f" WHERE {site_col} = {sql_placeholder(self.conn)}"
                 params.append(site_id)
             cur = self.conn.cursor()
             cur.execute(sql, params)
@@ -591,15 +604,16 @@ class SqlEvidenceCollector:
         st = self._ident(self.columns.get("status", "status"))
         site_expr, site_col = self._site_select()
         statuses = [s.upper() for s in (self.fault_status or ("FAULT",))]
-        placeholders = ", ".join("?" for _ in statuses)
+        ph = sql_placeholder(self.conn)
+        placeholders = ", ".join(ph for _ in statuses)
         sql = (
             f"SELECT {eq} AS equipment_id, {rule} AS rule_id, {t0} AS window_start, "
             f"{t1} AS window_end, {st} AS status, {site_expr} AS site_id FROM {table} "
-            f"WHERE UPPER(CAST({st} AS VARCHAR)) IN ({placeholders})"
+            f"WHERE UPPER(TRIM(CAST({st} AS VARCHAR))) IN ({placeholders})"
         )
         params: list[Any] = list(statuses)
         if site_id and site_col:
-            sql += f" AND {site_col} = ?"
+            sql += f" AND {site_col} = {ph}"
             params.append(site_id)
         cur = self.conn.cursor()
         cur.execute(sql, params)

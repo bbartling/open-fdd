@@ -564,6 +564,12 @@ def infer_topology(
         for d in equips:
             if u.iri == d.iri or (u.iri, d.iri) in modeled_pairs:
                 continue
+            if u.site_iri and d.site_iri and u.site_iri != d.site_iri:
+                continue
+            u_ids = {t.lower() for t in (u.site_id, *u.site_ids) if t and t.lower() not in {"site"}}
+            d_ids = {t.lower() for t in (d.site_id, *d.site_ids) if t and t.lower() not in {"site"}}
+            if u_ids and d_ids and not (u_ids & d_ids):
+                continue
             d_role, d_media = roles[d.iri]
             struct = ALLOWED_ROLE_FLOWS.get((u_role, d_role))
             if struct is None or not _media_compatible(u_role, u_media, d_role, d_media):
@@ -578,7 +584,7 @@ def infer_topology(
                 for pd in d_pts:
                     d_sig, d_pmed = pt_classes.get(pd.iri, ("ignore", ""))
                     allowed, req_pos = _signal_pair_allowed(u_role, u_sig, u_pmed, d_role, d_sig, d_pmed)
-                    if not allowed:
+                    if not allowed or pu.iri == pd.iri:
                         continue
                     for lag in range(max(0, max_lag) + 1):
                         r, n = _pearson_lag(aligned[pu.iri], aligned[pd.iri], lag, min_samples=min_samples)
@@ -651,12 +657,26 @@ def infer_topology(
                 )
             )
 
-    # Suppress direct shortcuts when a loop (plant -> loop -> AHU) or VAV (AHU -> VAV -> zone) bridges them
+    # Cap feeders first, then drop shortcuts only if the bridge path survived the cap
+    grouped: dict[tuple[str, str], list[InferredEdge]] = defaultdict(list)
+    for edge in candidates:
+        cap_key = edge.upstream_role
+        if edge.upstream_role == "loop":
+            u_media = roles[edge.upstream_iri][1]
+            cap_key = "loop:" + ",".join(sorted(u_media & {"chw", "hw", "cw", "steam"}))
+        grouped[(edge.downstream_iri, cap_key)].append(edge)
+
+    kept: list[InferredEdge] = []
+    for (dn_iri, cap_key), bucket in grouped.items():
+        bucket.sort(key=lambda e: (-e.confidence, -abs(e.correlation or 0.0), e.upstream_label))
+        limit = 1 if cap_key in ("ahu", "vav") else max(1, max_feeders_per_domain)
+        kept.extend(bucket[:limit])
+
     loop_in: dict[str, set[str]] = defaultdict(set)
     loop_out: dict[str, set[str]] = defaultdict(set)
     vav_in: dict[str, set[str]] = defaultdict(set)
     vav_out: dict[str, set[str]] = defaultdict(set)
-    for edge in candidates:
+    for edge in kept:
         if edge.downstream_role == "loop":
             loop_in[edge.downstream_iri].add(edge.upstream_iri)
         if edge.upstream_role == "loop":
@@ -677,30 +697,14 @@ def infer_topology(
             for dn_iri in vav_out[vav_iri]:
                 bridged_air.add((up_iri, dn_iri))
 
-    filtered = [
+    kept = [
         e
-        for e in candidates
+        for e in kept
         if not (
             (e.upstream_role in ("boiler", "chiller", "pump") and e.downstream_role in ("ahu", "vav") and (e.upstream_iri, e.downstream_iri) in bridged)
             or (e.upstream_role == "ahu" and e.downstream_role == "zone" and (e.upstream_iri, e.downstream_iri) in bridged_air)
         )
     ]
-
-    # Keep strongest candidates per (downstream, upstream_role, upstream_media_tag)
-    grouped: dict[tuple[str, str], list[InferredEdge]] = defaultdict(list)
-    for edge in filtered:
-        cap_key = edge.upstream_role
-        if edge.upstream_role == "loop":
-            u_media = roles[edge.upstream_iri][1]
-            cap_key = "loop:" + ",".join(sorted(u_media & {"chw", "hw", "cw", "steam"}))
-        grouped[(edge.downstream_iri, cap_key)].append(edge)
-
-    kept: list[InferredEdge] = []
-    for (dn_iri, cap_key), bucket in grouped.items():
-        bucket.sort(key=lambda e: (-e.confidence, -abs(e.correlation or 0.0), e.upstream_label))
-        limit = 1 if cap_key in ("ahu", "vav") else max(1, max_feeders_per_domain)
-        kept.extend(bucket[:limit])
-
     kept.sort(key=lambda e: (-e.confidence, e.downstream_label, e.upstream_label))
     return kept
 
@@ -711,6 +715,7 @@ def load_telemetry_csv(
     point_column: str = "point_key",
     timestamp_column: str = "timestamp",
     value_column: str = "value",
+    site_id: str | None = None,
 ) -> dict[str, list[tuple[datetime, float]]]:
     """Load wide or long telemetry CSV read-only into ``point_id -> [(ts, value), ...]``."""
     series: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
@@ -723,6 +728,13 @@ def load_telemetry_csv(
             (c for c in (timestamp_column, "timestamp_utc", "ts", "timestamp", "time") if c in cols),
             None,
         )
+        site_col = next((c for c in ("site_id", "site", "Site") if c in cols), None)
+
+        def _row_in_site(row: dict[str, Any]) -> bool:
+            if not site_id or not site_col:
+                return True
+            raw = (row.get(site_col) or "").strip()
+            return raw.lower() == site_id.lower()
         pt_col = next(
             (c for c in (point_column, "point_key", "openfdd_key", "point_id", "point") if c in cols),
             None,
@@ -733,6 +745,8 @@ def load_telemetry_csv(
 
         if pt_col and val_col:
             for row in reader:
+                if not _row_in_site(row):
+                    continue
                 ts = parse_utc(row.get(ts_col))
                 pk = (row.get(pt_col) or "").strip()
                 raw_v = row.get(val_col)
@@ -750,6 +764,8 @@ def load_telemetry_csv(
         meta_cols = {ts_col, "site_id", "site"}
         pt_cols = [c for c in cols if c not in meta_cols]
         for row in reader:
+            if not _row_in_site(row):
+                continue
             ts = parse_utc(row.get(ts_col))
             if ts is None:
                 continue
@@ -803,7 +819,9 @@ def load_telemetry_sql(
     sql = f"SELECT {pk_col} AS point_key, {ts_col} AS ts, {val_col} AS value FROM {table}"
     params: list[Any] = []
     if site_id and site_col:
-        sql += f" WHERE {_sql_ident(site_col)} = ?"
+        from open_fdd.rca.evidence import sql_placeholder
+
+        sql += f" WHERE {_sql_ident(site_col)} = {sql_placeholder(conn)}"
         params.append(site_id)
     sql += f" ORDER BY {ts_col}"
 
@@ -881,8 +899,8 @@ def suggested_links_to_ttl(edges: Sequence[InferredEdge]) -> str:
     ]
     for e in edges:
         ev = "; ".join(e.evidence)
-        lines.append(
-            f"# {e.upstream_label} -> {e.downstream_label} | confidence={e.confidence:.3f} | {ev}"
-        )
+        comment = f"# {e.upstream_label} -> {e.downstream_label} | confidence={e.confidence:.3f} | {ev}"
+        comment = " ".join(comment.splitlines())
+        lines.append(comment)
         lines.append(f"<{e.upstream_iri}> brick:feeds <{e.downstream_iri}> .")
     return "\n".join(lines) + "\n"

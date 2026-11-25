@@ -280,17 +280,24 @@ def run(args: argparse.Namespace) -> int:
     if getattr(args, "infer_topology", False) and not args.example:
         telemetry: dict[str, Any] = {}
         if getattr(args, "history_csv", None) is not None:
-            telemetry = load_telemetry_csv(args.history_csv)
+            telemetry = load_telemetry_csv(args.history_csv, site_id=args.site)
         elif args.sqlite or args.duckdb:
             sql_collector, sql_conn, engine = _open_sql_collector(args)
             try:
-                htable = args.history_table or ("fdd.input_sample" if engine == "duckdb" else "input_sample")
-                telemetry = load_telemetry_sql(
-                    sql_conn,
-                    history_table=htable,
-                    columns=_kv(args.history_map),
-                    site_id=args.site,
-                )
+                if args.history_table:
+                    htable = args.history_table
+                    if not _sql_relation_exists(sql_conn, htable):
+                        raise ValueError(f"history table {htable!r} not found")
+                else:
+                    candidate = "fdd.input_sample" if engine == "duckdb" else "input_sample"
+                    htable = candidate if _sql_relation_exists(sql_conn, candidate) else None
+                if htable:
+                    telemetry = load_telemetry_sql(
+                        sql_conn,
+                        history_table=htable,
+                        columns=_kv(args.history_map),
+                        site_id=args.site,
+                    )
             finally:
                 sql_conn.close()
         if telemetry:

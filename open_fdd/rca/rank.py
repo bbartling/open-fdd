@@ -109,6 +109,8 @@ def _collect_for_node(
     node: GraphNode,
     symptom: FaultEvidence,
     tolerance: timedelta,
+    *,
+    requested_site: str | None = None,
 ) -> NodeEvidence:
     """Merge evidence keyed by any alias that resolves unambiguously to this node."""
     faults: list = []
@@ -117,7 +119,7 @@ def _collect_for_node(
     seen_faults: set[tuple] = set()
     seen_dq: set[tuple] = set()
     seen_devs: set[tuple] = set()
-    scope_site = symptom.site_id or node.site_id or None
+    scope_site = symptom.site_id or requested_site or node.site_id or None
     idents = dict.fromkeys((node.node_id, node.label, node.iri, *node.aliases))
     for ident in idents:
         if not ident:
@@ -130,7 +132,7 @@ def _collect_for_node(
             ident,
             window_start=symptom.start,
             window_end=symptom.end,
-            site_id=symptom.site_id or node.site_id,
+            site_id=symptom.site_id or requested_site or node.site_id,
             tolerance=tolerance,
         )
         for f in ev.faults:
@@ -383,7 +385,7 @@ def analyze_rca(
 
         sym_dq: list[str] = []
         if tr.target is not None:
-            self_ev = _collect_for_node(collector, graph, tr.target, sym, tolerance)
+            self_ev = _collect_for_node(collector, graph, tr.target, sym, tolerance, requested_site=site_id)
             sym_dq = sorted({d.flag for d in self_ev.data_quality_flags})
 
         hops_to_check: list[UpstreamHop] = list(tr.ancestors)
@@ -392,7 +394,7 @@ def analyze_rca(
 
         raw_candidates: list[CandidateCause] = []
         for hop in hops_to_check:
-            ev = _collect_for_node(collector, graph, hop.node, sym, tolerance)
+            ev = _collect_for_node(collector, graph, hop.node, sym, tolerance, requested_site=site_id)
             down_n = len(downstream_by_ancestor.get(hop.node.iri, ())) if hop.hop > 0 else 1
 
             # Exclude the symptom fault itself at hop == 0

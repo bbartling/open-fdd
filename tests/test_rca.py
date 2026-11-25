@@ -1288,3 +1288,138 @@ def test_case_distinct_aliases_do_not_leak_evidence():
     report = analyze_rca(g, collector)
     for tr in report.traces:
         assert all(c.rule_id != "SAT-HIGH" for c in tr.candidates)
+
+
+def test_sql_fallback_trims_status_and_uses_question_placeholder(monkeypatch):
+    from open_fdd.rca import evidence as evmod
+
+    monkeypatch.setattr(evmod, "confidence_sql_module", lambda: None)
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE rule_result (site_id TEXT, equipment_id TEXT, rule_id TEXT, "
+        "window_start TEXT, window_end TEXT, status TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', "
+        "'2026-11-24T10:00:00Z', '2026-11-24T10:15:00Z', ' ALARM ')"
+    )
+    faults = evmod.SqlEvidenceCollector(conn, fault_status=("ALARM",)).load(site_id="site-a").all_faults()
+    assert len(faults) == 1
+    assert evmod.sql_placeholder(conn) == "?"
+    conn.close()
+
+
+def test_mixed_modeled_and_inferred_path_is_labeled_mixed():
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.infer import InferredEdge
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix rec: <urn:example:mix#> .
+    rec:ahu-1 brick:feeds rec:zone-1 .
+    rec:chiller-1 a brick:Chiller .
+    rec:ahu-1 a brick:AHU .
+    rec:zone-1 a brick:HVAC_Zone .
+    """
+    g = load_graph(ttl)
+    inferred = g.with_inferred_edges(
+        [
+            InferredEdge(
+                upstream_iri="urn:example:mix#chiller-1",
+                downstream_iri="urn:example:mix#ahu-1",
+                upstream_id="chiller-1",
+                downstream_id="ahu-1",
+                upstream_label="chiller-1",
+                downstream_label="ahu-1",
+                confidence=0.8,
+            )
+        ]
+    )
+    tr = inferred.traverse_upstream("zone-1")
+    assert tr.topology_source == "mixed (modeled + inferred, not modeled)"
+    assert tr.inferred_edges_used == 1
+    assert any(not h.inferred or "mixed" in h.topology_source for h in tr.ancestors)
+
+
+def test_infer_skips_cross_site_pairs_and_shared_points(tmp_path):
+    import csv
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.infer import infer_topology, load_telemetry_csv
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix s1: <urn:example:site/a#> .
+    @prefix s2: <urn:example:site/b#> .
+
+    s1:site a phIoT:site ; rdfs:label "plant-a" .
+    s2:site a phIoT:site ; rdfs:label "plant-b" .
+    s1:ahu a brick:AHU ; rdfs:label "AHU-A" ; phIoT:siteRef s1:site .
+    s1:vav a brick:VAV ; rdfs:label "VAV-A" ; phIoT:siteRef s1:site .
+    s2:vav a brick:VAV ; rdfs:label "VAV-B" ; phIoT:siteRef s2:site .
+    s1:sat a brick:Supply_Air_Temperature_Sensor ; phIoT:equipRef s1:ahu, s1:vav ; rdfs:label "SAT shared" .
+    s2:dat a brick:Discharge_Air_Temperature_Sensor ; phIoT:equipRef s2:vav ; rdfs:label "DAT-B" .
+    """
+    csv_path = tmp_path / "h.csv"
+    t0 = datetime(2026, 3, 1, tzinfo=UTC)
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["timestamp", "sat", "dat"])
+        for i in range(40):
+            sig = 285.0 + ((i % 6) - 2.5)
+            w.writerow([(t0 + timedelta(minutes=15 * i)).isoformat(), sig, sig])
+    edges = infer_topology(load_graph(ttl), load_telemetry_csv(csv_path), min_correlation=0.5, min_samples=20)
+    pairs = {(e.upstream_label, e.downstream_label) for e in edges}
+    assert ("AHU-A", "VAV-B") not in pairs
+    assert all(e.upstream_point != e.downstream_point or e.upstream_iri == e.downstream_iri for e in edges)
+    assert all(e.upstream_point != "SAT shared" or e.downstream_point != "SAT shared" for e in edges)
+
+
+def test_suggested_links_ttl_flattens_multiline_labels():
+    import rdflib
+
+    from open_fdd.rca.infer import InferredEdge, suggested_links_to_ttl
+
+    nl = chr(10)
+    edges = [
+        InferredEdge(
+            upstream_iri="urn:ex:ahu",
+            downstream_iri="urn:ex:vav",
+            upstream_id="ahu",
+            downstream_id="vav",
+            upstream_label=f"AHU West{nl}Second floor",
+            downstream_label="VAV-1",
+            confidence=0.7,
+            evidence=(f"line1{nl}line2",),
+        )
+    ]
+    ttl = suggested_links_to_ttl(edges)
+    for line in ttl.splitlines():
+        assert line.startswith(("@", "#", "<")) or not line.strip()
+    parsed = rdflib.Graph()
+    parsed.parse(data=ttl, format="turtle")
+    assert len(parsed) == 1
+
+
+def test_load_telemetry_csv_filters_by_site(tmp_path):
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.infer import load_telemetry_csv
+
+    path = tmp_path / "t.csv"
+    t0 = datetime(2026, 3, 1, tzinfo=UTC)
+    nl = chr(10)
+    rows = ["timestamp,site_id,point_key,value" + nl]
+    for i in range(5):
+        ts = (t0 + timedelta(minutes=15 * i)).isoformat()
+        rows.append(f"{ts},plant-a,sat,{280 + i}" + nl)
+        rows.append(f"{ts},plant-b,sat,{10 + i}" + nl)
+    path.write_text("".join(rows), encoding="utf-8")
+    series_a = load_telemetry_csv(path, site_id="plant-a")
+    assert len(series_a["sat"]) == 5
+    assert series_a["sat"][0][1] == 280
+    series_all = load_telemetry_csv(path)
+    assert len(series_all["sat"]) == 10
