@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from docs_units import (INPUT_HEADER, PARAM_HEADER, Contract, cell, fmt, imperial_note, output_rows, param_rows,  # noqa: E402
+from docs_units import (INPUT_HEADER, PARAM_HEADER, Contract, cell, fmt, md_text, output_rows, param_rows,  # noqa: E402
                         parity_status, read_parity, read_pins, units_convention)
 
 CATALOG = ROOT / "nf-app" / "static" / "fdd-catalog.json"
@@ -46,8 +46,8 @@ PANDAS_ID = {"FC13-SAT-HIGH": "FC13"}  # SQL rule id -> pandas rule id where the
 def run_proof_section(d: dict, sql: bool) -> str:
     """The run-proof gate (#1608), from sql/fdd/run_proof.json (shipped in the catalog as `run_proof`)."""
     rp = d["cat"]["run_proof"]
-    own_s = " > ".join(f"`{x}`" for x in rp["own"]["status"])
-    own_c = " > ".join(f"`{x}`" for x in rp["own"]["command"])
+    own_s = " &gt; ".join(f"`{x}`" for x in rp["own"]["status"])
+    own_c = " &gt; ".join(f"`{x}`" for x in rp["own"]["command"])
     refs = ", ".join(f"`{x}`" for x in rp["feeders"]["refs"])
     n_gated = sum(1 for r in d["rules"] if r.get("run_proof") == "gated")
     where = (f"the `history` column `run_proof` (0/1 or a 0-1 fraction; running when above {rp['threshold']})" if sql
@@ -73,13 +73,6 @@ Rules that are not gated, and why:
 | Rule | Why not |
 |---|---|
 """ + chr(10).join(f"| `{r['id']}` | {cell(r.get('run_proof_note', ''))} |" for r in d["rules"] if r.get("run_proof") != "gated")
-
-
-def run_proof_line(r: dict) -> str:
-    """One line per rule: gated (and the parameter) or not gated (and why)."""
-    if r.get("run_proof") == "gated":
-        return ""
-    return "**Run proof** not gated."
 
 
 GROUPS = [
@@ -176,13 +169,11 @@ def toc(d: dict) -> list[str]:
 
 
 def parity_line(d: dict, rid: str) -> str:
+    """Status only; the reason is written once, on the parity page the status links to (#1769)."""
     status = parity_status(rid, d["known"], d["no_twin"])
     text = f"**Parity** [{status}](parity.html#{anchor(rid)})"
-    if status == "known divergence":
-        text += f": {d['known'][rid]}"
-    elif rid in d["other"]:
-        scope, why = d["other"][rid]
-        text += f"; differs only on {scope.replace('_', '-')} data: {why}"
+    if status != "known divergence" and rid in d["other"]:
+        text += f", except on {d['other'][rid][0].replace('_', '-')} data"
     return text
 
 
@@ -196,11 +187,6 @@ def inputs_table(d: dict, required: list[str], optional: list[str]) -> str:
             seen.add(n)
             rows.append(d["contract"].input_row(n, need))
     return "\n".join(rows)
-
-
-def scales_of(d: dict, names: list[str]) -> set[str]:
-    roles = (d["contract"].sql_role(n) for n in names)
-    return {d["contract"].scale(r) for r in roles if r}
 
 
 def params_block(rows: list[str], info: bool) -> str:
@@ -249,18 +235,15 @@ unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More i
             twin_txt = f"[pandas twin](pandas-cookbook.html#{anchor(rid)})" if twin else "SQL only"
             req = r.get("required_roles") or []
             opt = [x for x in (r.get("optional_roles") or []) if x not in req]
-            prow, has_delta, info = param_rows(tun.get("parameters") or {})
+            prow, _has_delta, info = param_rows(tun.get("parameters") or {})
             out.append(f"\n### {rid} {{#{anchor(rid)}}}\n")
-            out.append(f"{r.get('description', '')}\n")
+            out.append(f"{md_text(r.get('description', ''))}\n")
             out.append(f"**Priority** {r.get('priority', '')} · **Equipment** {kinds} · **Confirm** {confirm_text(r)} · "
                        f"[SQL file]({GH}/sql/fdd/postgres/rules/{tun['sql_file']}) · {twin_txt}\n")
             out.append("**Inputs**\n\n" + inputs_table(d, req, opt) + "\n")
             out.append("**Parameters**\n\n" + (params_block(prow, info) if prow else "_None._") + "\n")
             out.append("**Outputs**\n\n" + "\n".join(output_rows(cols)) + "\n")
             out.append(parity_line(d, rid) + "\n")
-            note = imperial_note(has_delta, scales_of(d, req + opt))
-            if note:
-                out.append(note + "\n")
     return "\n".join(out).rstrip("\n") + "\n"
 
 
@@ -303,6 +286,15 @@ def example_code(rule) -> tuple[str, str]:
     return "\n".join(src), note
 
 
+def rule_text(rule) -> list[str]:
+    """The line under the title: the equation, or the summary when there is none. The bold title already names the rule
+    in words and the "Flags ..." summary only restates it, so each entry says it once (#1769)."""
+    summary, eq = (rule.summary or "").strip(), (rule.equation or "").strip()
+    if eq:
+        return [eq]
+    return [summary] if summary and summary != rule.title else []
+
+
 def render_pandas(d: dict) -> str:
     twins = d["twins"]
     sql_only = [r for r in d["rules"] if r["id"] not in twins]
@@ -319,8 +311,9 @@ nav_order: 2
 <!-- GENERATED by scripts/nf/gen_cookbook.py from open_fdd/rules/cookbook_catalog.py and the unit tables. Do not edit by hand. -->
 
 **{n} rules as pandas functions**: the reference twin of the [SQL cookbook](sql-cookbook.html), for notebooks, CSV studies and
-the parity tests ([parity](parity.html)). The function behind each rule is in
-[`open_fdd/rules/cookbook_catalog.py`]({GH}/open_fdd/rules/cookbook_catalog.py). The {len(sql_only)} rules without a twin are marked **SQL only**.
+the parity tests ([parity](parity.html)). Each entry opens with the rule name, its equipment kinds, its function in
+[`open_fdd/rules/`]({GH}/open_fdd/rules/cookbook_catalog.py) and its SQL entry, then the equation. The {len(sql_only)} rules
+without a twin are marked **SQL only**.
 
 **Conventions**
 
@@ -328,7 +321,8 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
   The rules never convert units or guess a scale.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours` (h), and the `raw_fault` and `confirmed_fault` boolean masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]`.
-- The runner applies the [run-proof gate](sql-cookbook.html#run-proof) and the confirm delay (`confirm_min`, minutes). Parameter keys match the SQL catalog.
+- The runner applies the [run-proof gate](sql-cookbook.html#run-proof) (the rules it does not gate are listed there) and the
+  confirm delay (`confirm_min`, minutes, in each Parameters table). Parameter keys match the SQL catalog.
 
 ```python
 {quick}
@@ -336,32 +330,30 @@ the parity tests ([parity](parity.html)). The function behind each rule is in
 
 {quick_note}
 
-""" + units_convention()]
+""" + units_convention(rules_text=False)]
     out += toc(d)
     out.append("\n---\n")
-    for key, title, blurb, members in grouped(d):
-        out.append(f"\n## {title} {{#group-{key}}}\n\n{blurb}\n")
+    for key, title, _blurb, members in grouped(d):  # the group blurbs are said once, in the SQL cookbook
+        out.append(f"\n## {title} {{#group-{key}}}\n")
         for r in members:
             rid = r["id"]
             rule = twins.get(rid)
             out.append(f"\n### {rid} {{#{anchor(rid)}}}\n")
             if rule is None:
-                out.append(f"{r.get('description', '')}\n")
-                out.append(f"**SQL only.** No pandas twin: an aggregate or utility analytic. See the [SQL entry](sql-cookbook.html#{anchor(rid)}) "
-                           f"and [parity](parity.html#{anchor(rid)}).\n")
+                out.append(f"**SQL only.** [SQL entry](sql-cookbook.html#{anchor(rid)}).\n")
                 continue
             kinds = ", ".join(f"`{k}`" for k in rule.equipment_kinds) or "any equipment"
-            out.append(f"{rule.summary or rule.title}\n")
-            out.append(f"**{cell(rule.title)}** · **Family** {rule.family} · **Equipment** {kinds} · **Confirm** {fmt(round(rule.confirm_seconds / 60.0, 6))} min · "
-                       f"function [`{rule.compute.__name__}`]({source_link(rule.compute)}) · [SQL entry](sql-cookbook.html#{anchor(rid)})\n")
-            if rule.equation and rule.equation.strip() != (rule.summary or "").strip():
-                out.append(f"**Equation**: {rule.equation.strip()}\n")
+            confirm = fmt(round(rule.confirm_seconds / 60.0, 6))
+            # the confirm time is the confirm_min default in the Parameters table; say it here only if it is not there
+            shown = any(p.key == "confirm_min" and fmt(p.default) == confirm for p in rule.params)
+            out.append(f"**{md_text(rule.title)}** · {kinds} · " + ("" if shown else f"**Confirm** {confirm} min · ")
+                       + f"[`{rule.compute.__name__}`]({source_link(rule.compute)}) · [SQL](sql-cookbook.html#{anchor(rid)})\n")
+            for line in rule_text(rule):
+                out.append(md_text(line) + "\n")
             req = list(rule.required_roles)
             opt = [x for x in rule.optional_roles if x not in req]
-            prow, has_delta = pandas_param_rows(rule)
+            prow, _has_delta = pandas_param_rows(rule)
             cols = d["pack"][rid].get("output_columns") or d["tuning"][rid].get("output_columns") or []
-            if run_proof_line(r):
-                out.append(run_proof_line(r) + chr(10))
             out.append("**Inputs**\n\n" + inputs_table(d, req, opt) + "\n")
             out.append("**Parameters**\n\n" + ("\n".join(PARAM_HEADER + prow) if prow else "_None._") + "\n")
             out.append("**Outputs**\n\n" + "\n".join(output_rows(cols)) + "\n")

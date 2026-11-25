@@ -38,7 +38,7 @@ FORBIDDEN_NAV = tuple(d + "/" for d in INTERNAL_DIRS)
 DEFAULT_BUDGET = 800  # prose words per published page (tables, code, link targets excluded)
 BUDGETS = {
     # generated reference: one structured entry per rule; the prose is the per-rule description and the intro
-    "rules/sql-cookbook.md": 3725,   # + the run-proof gate section (#1608), + COIL-PERF (#1641)
+    "rules/sql-cookbook.md": 2800,   # honest count since #1769 (inequalities are prose; parity reasons live on parity.md)
     "rules/pandas-cookbook.md": 2500,
 }
 TOTAL_BUDGET = 12000  # prose words across every published page
@@ -129,9 +129,12 @@ def prose_words(body: str) -> int:
     body = re.sub(r"<!--.*?-->", " ", body, flags=re.S)
     body = re.sub(r"\{%.*?%\}", " ", body, flags=re.S)
     text = "\n".join(ln for ln in body.splitlines() if not ln.lstrip().startswith("|"))
-    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
-    text = re.sub(r"`[^`\n]*`", " ", text)   # one line only: an unbalanced backtick cannot hide later prose (#1769)
-    text = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>", " ", text)   # real tags only: "rise < 1.7" is prose (#1769)
+    # Every pattern below stays on one line, so an unbalanced bracket, backtick or "<" cannot hide later prose (#1769).
+    text = re.sub(r"!?\[([^\]\n]*)\]\([^)\n]*\)", r"\1", text)            # links and images count their text only
+    text = re.sub(r"`[^`\n]*`", " ", text)                                   # inline code
+    text = re.sub(r"<(?:https?|mailto):[^\s<>]*>", " ", text)               # autolinks
+    text = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>\n]*)?/?>", " ", text)  # real tags only: "rise < 1.7" is prose
+    text = re.sub(r"&(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#[xX][0-9A-Fa-f]+);", " ", text)  # entities (&lt; is not a word)
     return len(re.findall(r"[A-Za-z][A-Za-z'-]*", text))
 
 
