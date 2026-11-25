@@ -213,6 +213,9 @@ def _open_sql_collector(args: argparse.Namespace) -> tuple[SqlEvidenceCollector,
     if args.no_history:
         history_table = None
     elif args.history_table:
+        if not _sql_relation_exists(conn, args.history_table):
+            conn.close()
+            raise ValueError(f"history table {args.history_table!r} not found")
         history_table = args.history_table
     else:
         candidate = "fdd.input_sample" if engine == "duckdb" else "input_sample"
@@ -300,6 +303,7 @@ def run(args: argparse.Namespace) -> int:
                     )
             finally:
                 sql_conn.close()
+        infer_skip = None
         if telemetry:
             inferred_edges = infer_topology(
                 graph,
@@ -310,6 +314,12 @@ def run(args: argparse.Namespace) -> int:
                 min_samples=args.infer_min_samples,
             )
             graph = graph.with_inferred_edges(inferred_edges)
+        elif not getattr(args, "history_csv", None) and (args.sqlite or args.duckdb):
+            infer_skip = "inference skipped: no history telemetry table was available"
+            print(f"warning: {infer_skip}", file=sys.stderr)
+        elif getattr(args, "history_csv", None) or args.sqlite or args.duckdb:
+            infer_skip = "inference skipped: no telemetry rows were loaded"
+            print(f"warning: {infer_skip}", file=sys.stderr)
         source_meta["inferred_topology"] = {
             "enabled": True,
             "proposed_edges": len(inferred_edges),
@@ -323,6 +333,8 @@ def run(args: argparse.Namespace) -> int:
                 for e in inferred_edges
             ],
         }
+        if infer_skip:
+            source_meta["inferred_topology"]["skipped"] = infer_skip
 
     report = analyze_rca(
         graph,

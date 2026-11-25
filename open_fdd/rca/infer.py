@@ -564,12 +564,14 @@ def infer_topology(
         for d in equips:
             if u.iri == d.iri or (u.iri, d.iri) in modeled_pairs:
                 continue
-            if u.site_iri and d.site_iri and u.site_iri != d.site_iri:
-                continue
-            u_ids = {t.lower() for t in (u.site_id, *u.site_ids) if t and t.lower() not in {"site"}}
-            d_ids = {t.lower() for t in (d.site_id, *d.site_ids) if t and t.lower() not in {"site"}}
-            if u_ids and d_ids and not (u_ids & d_ids):
-                continue
+            if u.site_iri and d.site_iri:
+                if u.site_iri != d.site_iri:
+                    continue
+            else:
+                u_ids = {t.lower() for t in (u.site_id, *u.site_ids) if t and t.lower() not in {"site"}}
+                d_ids = {t.lower() for t in (d.site_id, *d.site_ids) if t and t.lower() not in {"site"}}
+                if u_ids and d_ids and not (u_ids & d_ids):
+                    continue
             d_role, d_media = roles[d.iri]
             struct = ALLOWED_ROLE_FLOWS.get((u_role, d_role))
             if struct is None or not _media_compatible(u_role, u_media, d_role, d_media):

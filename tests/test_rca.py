@@ -1299,12 +1299,21 @@ def test_sql_fallback_trims_status_and_uses_question_placeholder(monkeypatch):
         "CREATE TABLE rule_result (site_id TEXT, equipment_id TEXT, rule_id TEXT, "
         "window_start TEXT, window_end TEXT, status TEXT)"
     )
-    conn.execute(
-        "INSERT INTO rule_result VALUES ('site-a', 'ahu-1', 'SAT-HIGH', "
-        "'2026-11-24T10:00:00Z', '2026-11-24T10:15:00Z', ' ALARM ')"
-    )
-    faults = evmod.SqlEvidenceCollector(conn, fault_status=("ALARM",)).load(site_id="site-a").all_faults()
-    assert len(faults) == 1
+    padded = [
+        " ALARM ",
+        chr(9) + "ALARM" + chr(9),
+        chr(10) + "ALARM" + chr(10),
+    ]
+    for i, status in enumerate(padded):
+        conn.execute(
+            "INSERT INTO rule_result VALUES (?, 'ahu-1', 'SAT-HIGH', "
+            "'2026-11-24T10:00:00Z', '2026-11-24T10:15:00Z', ?)",
+            (f"site-{i}", status),
+        )
+    for i, _status in enumerate(padded):
+        faults = evmod.SqlEvidenceCollector(conn, fault_status=("ALARM",)).load(site_id=f"site-{i}").all_faults()
+        assert len(faults) == 1, _status
+        assert faults[0].status == "ALARM"
     assert evmod.sql_placeholder(conn) == "?"
     conn.close()
 
@@ -1423,3 +1432,105 @@ def test_load_telemetry_csv_filters_by_site(tmp_path):
     assert series_a["sat"][0][1] == 280
     series_all = load_telemetry_csv(path)
     assert len(series_all["sat"]) == 10
+
+
+def test_infer_keeps_same_site_iri_with_distinct_site_ids(tmp_path):
+    import csv
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.graph import load_graph
+    from open_fdd.rca.infer import infer_topology, load_telemetry_csv
+
+    ttl = """
+    @prefix brick: <https://brickschema.org/schema/Brick#> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix s1: <urn:example:site/a#> .
+
+    s1:site a phIoT:site .
+    s1:ahu a brick:AHU ; rdfs:label "AHU-A" ; phIoT:siteRef s1:site ; phIoT:siteId "campus-west" .
+    s1:vav a brick:VAV ; rdfs:label "VAV-A" ; phIoT:siteRef s1:site ; phIoT:siteId "wing-2" .
+    s1:sat a brick:Supply_Air_Temperature_Sensor ; phIoT:equipRef s1:ahu ; rdfs:label "SAT-A" .
+    s1:dat a brick:Discharge_Air_Temperature_Sensor ; phIoT:equipRef s1:vav ; rdfs:label "DAT-A" .
+    """
+    g = load_graph(ttl)
+    ahu = g.resolve_node("AHU-A")
+    vav = g.resolve_node("VAV-A")
+    assert ahu is not None and vav is not None
+    assert ahu.site_iri == vav.site_iri != ""
+    assert ahu.site_id != vav.site_id
+    csv_path = tmp_path / "h.csv"
+    t0 = datetime(2026, 3, 1, tzinfo=UTC)
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["timestamp", "sat", "dat"])
+        for i in range(40):
+            sig = 285.0 + ((i % 6) - 2.5)
+            w.writerow([(t0 + timedelta(minutes=15 * i)).isoformat(), sig, sig + 0.2])
+    edges = infer_topology(g, load_telemetry_csv(csv_path), min_correlation=0.5, min_samples=20)
+    pairs = {(e.upstream_label, e.downstream_label) for e in edges}
+    assert ("AHU-A", "VAV-A") in pairs
+
+
+def test_cli_infer_warns_when_default_history_table_missing(tmp_path, capsys):
+    import json
+
+    from open_fdd.rca.cli import main
+
+    ttl = tmp_path / "model.ttl"
+    ttl.write_text(
+        """
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <urn:test:skip#> .
+ex:ahu-1 a brick:AHU ; rdfs:label "AHU-1" .
+""",
+        encoding="utf-8",
+    )
+    db = tmp_path / "fdd.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE rule_result (equipment_id TEXT, rule_id TEXT, "
+        "window_start TEXT, window_end TEXT, status TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO rule_result VALUES ('ahu-1', 'SAT-HIGH', "
+        "'2026-03-01T02:00:00Z', '2026-03-01T04:00:00Z', 'FAULT')"
+    )
+    conn.commit()
+    conn.close()
+    out_dir = tmp_path / "out"
+    rc = main([
+        "--graph", str(ttl),
+        "--sqlite", str(db),
+        "--infer-topology",
+        "--out-dir", str(out_dir),
+    ])
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "inference skipped" in err
+    report = json.loads((out_dir / "rca_report.json").read_text(encoding="utf-8"))
+    meta = report["source"]["inferred_topology"]
+    assert meta["enabled"] is True
+    assert meta["proposed_edges"] == 0
+    assert "skipped" in meta
+
+
+def test_open_sql_collector_rejects_missing_explicit_history_table(tmp_path):
+    from open_fdd.rca.cli import _open_sql_collector, build_parser
+
+    db = tmp_path / "fdd.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE rule_result (equipment_id TEXT, rule_id TEXT, "
+        "window_start TEXT, window_end TEXT, status TEXT)"
+    )
+    conn.commit()
+    conn.close()
+    args = build_parser().parse_args([
+        "--sqlite", str(db),
+        "--graph", "unused.ttl",
+        "--history-table", "nope",
+    ])
+    with pytest.raises(ValueError, match="history table"):
+        _open_sql_collector(args)

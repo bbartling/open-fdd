@@ -453,6 +453,22 @@ def confidence_sql_module():
     return mod
 
 
+def _sql_chr(conn: Any, code: int) -> str:
+    """Return a SQL character literal for ``code`` (SQLite ``char``, else ``chr``)."""
+    mod = type(conn).__module__.split(".")[0].lower()
+    if mod in {"sqlite3", "sqlite"}:
+        return f"char({code})"
+    return f"chr({code})"
+
+
+def sql_status_norm(conn: Any, ident: str) -> str:
+    """Uppercase status after stripping space, tab, CR, and LF (Python ``str.strip``)."""
+    expr = f"CAST({ident} AS VARCHAR)"
+    for code in (9, 10, 13):
+        expr = f"REPLACE({expr}, {_sql_chr(conn, code)}, '')"
+    return f"UPPER(TRIM({expr}))"
+
+
 def sql_placeholder(conn: Any) -> str:
     """Return the bound-parameter marker for ``conn`` (``?`` or ``%s``)."""
     import sys
@@ -609,7 +625,7 @@ class SqlEvidenceCollector:
         sql = (
             f"SELECT {eq} AS equipment_id, {rule} AS rule_id, {t0} AS window_start, "
             f"{t1} AS window_end, {st} AS status, {site_expr} AS site_id FROM {table} "
-            f"WHERE UPPER(TRIM(CAST({st} AS VARCHAR))) IN ({placeholders})"
+            f"WHERE {sql_status_norm(self.conn, st)} IN ({placeholders})"
         )
         params: list[Any] = list(statuses)
         if site_id and site_col:
