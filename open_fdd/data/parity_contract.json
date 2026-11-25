@@ -386,6 +386,9 @@
   "VAV-REHEAT": 15.0,
   "VLV-1": 15.0,
   "WX-1": 5.0,
+  "XS-CLIP": 0.0,
+  "XS-COPY": 120.0,
+  "XS-MIX": 15.0,
   "ZONE-COMFORT-PCT": 0.0
  }
 }
