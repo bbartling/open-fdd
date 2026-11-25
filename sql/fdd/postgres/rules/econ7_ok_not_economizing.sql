@@ -88,6 +88,20 @@ demand AS (
   FROM h
   JOIN proof_pick pp ON pp.equipment_id = h.equipment_id
 ),
+started AS (
+  -- #1758 startup holdoff (pandas operational_gate.apply_startup_delay): a sample counts only once the fan has been on
+  -- for STARTUP_DELAY_ROWS samples in a row, this one included; the first sample of the series counts as a start.
+  SELECT
+    *,
+    CASE
+      WHEN MIN(COALESCE(fan_on, 0)) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc
+             ROWS BETWEEN {{STARTUP_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) = 1
+       AND COUNT(*) OVER (PARTITION BY equipment_id ORDER BY timestamp_utc
+             ROWS BETWEEN {{STARTUP_DELAY_ROWS_PRECEDING}} PRECEDING AND CURRENT ROW) > {{STARTUP_DELAY_ROWS_PRECEDING}}
+      THEN 1 ELSE 0
+    END AS startup_ok
+  FROM demand
+),
 base AS (
   SELECT
     equipment_id,
@@ -95,6 +109,7 @@ base AS (
     CAST(CASE
       WHEN {{REQUIRE_RUN_PROOF}} >= 0.5 AND COALESCE(run_proof, 0) <= 0.05 THEN 0
       WHEN COALESCE(fan_on, 1) = 0 THEN 0
+      WHEN startup_ok = 0 THEN 0
       WHEN web_oa_t IS NULL OR web_oa_dp IS NULL OR oa_d IS NULL THEN 0
       WHEN web_oa_t >= {{ECON7_DB_MIN}} AND web_oa_t < {{ECON7_DB_MAX}} AND web_oa_dp < {{ECON7_DP_MAX}}
        AND cooling_demand = 1 AND oa_d < {{ECON7_DAMPER_MIN}} THEN 1
@@ -102,7 +117,7 @@ base AS (
     END AS INT) AS raw_fault,
     -- #1631: proven-on (the run-proof gate passes) time is the fault_pct denominator (active_hours)
     CASE WHEN {{REQUIRE_RUN_PROOF}} < 0.5 THEN 1 WHEN run_proof > 0.05 THEN 1 ELSE 0 END AS proof_active
-  FROM demand
+  FROM started
 ),
 elapsed_hold AS (
   -- Forward sample-and-hold. A gap longer than MAX_GAP_HOURS is unknown:

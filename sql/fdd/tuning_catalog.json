@@ -1205,7 +1205,8 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1221,7 +1222,7 @@
       "internal_constants": {
         "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
         "MODE_DELAY_MIN": 10.0,
-        "STARTUP_DELAY_MIN": 0.0
+        "STARTUP_DELAY_MIN": 10.0
       },
       "legacy_parameters": {
         "aliases": {},
@@ -1540,7 +1541,8 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1556,7 +1558,7 @@
       "internal_constants": {
         "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
         "MODE_DELAY_MIN": 10.0,
-        "STARTUP_DELAY_MIN": 0.0
+        "STARTUP_DELAY_MIN": 10.0
       },
       "legacy_parameters": {
         "aliases": {},
@@ -1736,7 +1738,8 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -1752,7 +1755,7 @@
       "internal_constants": {
         "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
         "MODE_DELAY_MIN": 10.0,
-        "STARTUP_DELAY_MIN": 0.0
+        "STARTUP_DELAY_MIN": 10.0
       },
       "legacy_parameters": {
         "aliases": {},
@@ -2556,7 +2559,8 @@
         "OAT_RAT_DELTA_MIN",
         "OA_MIN_PCT",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -2569,6 +2573,9 @@
       "rule_id": "ECON-4",
       "sql_file": "econ4_low_oa_frac.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [
@@ -3640,7 +3647,8 @@
         "MINIMUM_ACTIVE_COVERAGE_PCT",
         "MODE_DELAY_ROWS_PRECEDING",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -3656,7 +3664,7 @@
       "internal_constants": {
         "MINIMUM_ACTIVE_COVERAGE_PCT": 5.0,
         "MODE_DELAY_MIN": 10.0,
-        "STARTUP_DELAY_MIN": 0.0
+        "STARTUP_DELAY_MIN": 10.0
       },
       "legacy_parameters": {
         "aliases": {},
@@ -4358,7 +4366,8 @@
         "CONFIRM_ROWS",
         "POLL_SECONDS",
         "REQUIRE_RUN_PROOF",
-        "SAT_DEV_ERR"
+        "SAT_DEV_ERR",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -4369,6 +4378,9 @@
       "rule_id": "AHU-SATDEV",
       "sql_file": "ahu_satdev.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [
@@ -5058,7 +5070,8 @@
         "ECON7_DB_MIN",
         "ECON7_DP_MAX",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -5069,6 +5082,9 @@
       "rule_id": "ECON-7",
       "sql_file": "econ7_ok_not_economizing.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [
@@ -5275,7 +5291,8 @@
         "MIN_OA_FRAC",
         "OAT_RAT_GUARD",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -5288,6 +5305,9 @@
       "rule_id": "OA-1",
       "sql_file": "oa1_low_oa_frac.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [
@@ -6137,7 +6157,8 @@
         "DELTA",
         "FLOW_ON_MIN",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -6148,7 +6169,10 @@
       ],
       "rule_id": "VAV-AHU-LEAVE",
       "sql_file": "vav_ahu_leave.sql",
-      "run_proof": "gated"
+      "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      }
     },
     {
       "confirm_seconds": 900,
@@ -6576,7 +6600,8 @@
         "CONFIRM_ROWS",
         "MIN_DT",
         "POLL_SECONDS",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -6587,6 +6612,9 @@
       "rule_id": "CHW-1",
       "sql_file": "chw1_low_dt.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 15.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [
@@ -7311,6 +7339,7 @@
         "MIN_SAT",
         "POLL_SECONDS",
         "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING",
         "ZONE_COLD"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
@@ -7323,6 +7352,9 @@
       "rule_id": "HP-1",
       "sql_file": "hp1_discharge_cold.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [
@@ -7583,7 +7615,8 @@
         "HWST_HI",
         "POLL_SECONDS",
         "REQUEST_LO",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7593,6 +7626,9 @@
       "rule_id": "TRIM-3",
       "sql_file": "trim3_hwst.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [
@@ -7688,7 +7724,8 @@
         "CONFIRM_ROWS",
         "POLL_SECONDS",
         "REQUEST_LO",
-        "REQUIRE_RUN_PROOF"
+        "REQUIRE_RUN_PROOF",
+        "STARTUP_DELAY_ROWS_PRECEDING"
       ],
       "port_status": "adapted_not_postgresql_execution_qualified",
       "priority": "P0",
@@ -7698,6 +7735,9 @@
       "rule_id": "TRIM-4",
       "sql_file": "trim4_chw_reset.sql",
       "run_proof": "gated",
+      "internal_constants": {
+        "STARTUP_DELAY_MIN": 10.0
+      },
       "legacy_parameters": {
         "aliases": {},
         "retired": [

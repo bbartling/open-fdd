@@ -273,23 +273,64 @@ def test_vav_reheat_difference_is_exactly_the_startup_holdoff(monkeypatch):
     assert h.pandas_fault_hours("VAV-REHEAT", df.copy(), None)[0] == pytest.approx(sql_hours)
 
 
-def test_trim3_is_aligned_with_the_sql_contract_and_differs_only_by_the_startup_holdoff():
+def test_trim3_is_aligned_with_the_sql_contract():
     """#1588: pandas TRIM-3 reads the contract role, faults at request sum <= request_lo like SQL, and skips when the
-    request sum is absent (SQL has no rows then); what is left is the pandas 600 s hydronic-proof startup holdoff."""
+    request sum is absent (SQL has no rows then). The startup holdoff that was left is in the SQL since #1758
+    (test_sql_startup_holdoff_matches_pandas)."""
     n = 24
     common = {"hot-water-supply-temp": [75.0] * n, "pump-status": [1] * n}
     df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [1.0] * n})     # exactly at request_lo
     pandas_hours, status = h.pandas_fault_hours("TRIM-3", df, None)
     assert not str(status).startswith("SKIPPED") and pandas_hours > 0.0
-    sql_hours = _sql_confirmed_hours([True] * n, CATALOG_CONFIRM["TRIM-3"])
-    assert sql_hours >= pandas_hours and sql_hours - pandas_hours <= 600 / 3600 + 1e-9, (sql_hours, pandas_hours)
     df = _fixture_frame(n, **common, **{"hot-water-reset-request-sum": [2.0] * n})     # above request_lo: no fault
     assert h.pandas_fault_hours("TRIM-3", df, None)[0] == 0.0
     df = _fixture_frame(n, **common)                                                    # absent: not assessed
     assert str(h.pandas_fault_hours("TRIM-3", df, None)[1]).startswith("SKIPPED")
 
 
-CATALOG_CONFIRM = {rid: h.CATALOG[rid]["parameters"]["confirm_min"]["default"] * 60 for rid in ("VAV-REHEAT", "TRIM-3")}
+CATALOG_CONFIRM = {rid: h.CATALOG[rid]["parameters"]["confirm_min"]["default"] * 60 for rid in ("VAV-REHEAT",)}
+
+# #1758: the rules whose SQL carries the pandas operational-gate startup holdoff (STARTUP_DELAY_MIN internal constant).
+# FC3, FC8, FC9 and ECON-7 carry it too; their fixtures need economizer or weather inputs and the stress runs cover them.
+STARTUP_HOLDOFF_RULES = ("AHU-SATDEV", "CHW-1", "ECON-4", "FC5", "HP-1", "OA-1", "TRIM-3", "TRIM-4", "VAV-AHU-LEAVE")
+
+
+def test_sql_startup_holdoff_matches_pandas():
+    """#1758: a fault present from the moment the proof turns on is held off for the rule's startup delay in both engines,
+    at the first sample of the series (already running) and after a restart; without the pandas delay the hours differ,
+    so the fixture exercises the holdoff. Runs the shipped pack SQL in DuckDB."""
+    pytest.importorskip("duckdb")
+    from types import SimpleNamespace
+
+    from adapters import DuckDBAdapter
+    from open_fdd.parity import reference
+    from open_fdd.rules.operational_gate import RULE_GATES
+
+    on = [1] * 16 + [0] * 6 + [1] * 20 + [0] * 6           # starts running, stops, restarts, stops
+    values = {"chw_supply_t": 7.0, "chw_return_t": 8.0, "hw_supply_t": 75.0, "hw_reset_request_sum": 0.0,
+              "chw_reset_request_sum": 0.0, "mat": 22.0, "rat": 22.0, "oa_t": 5.0, "sat": 12.0, "sat_sp": 18.0,
+              "zone_t": 18.0, "htg_valve_pct": 0.6, "vav_discharge_t": 30.0, "ahu_sat": 13.0, "zone_flow": 200.0}
+    status = ("run_proof", "fan_status", "fan_cmd", "pump_status", "compressor_status")
+    t0 = 1767600000000                                         # 2026-01-05T08:00:00Z, epoch ms
+    rows = [{"equipment_id": "E1", "ts": t0 + i * STEP_S * 1000, **values, **{c: float(s) for c in status}}
+            for i, s in enumerate(on)]
+    ds = SimpleNamespace(history=rows, history_columns=[{"name": c, "type": "double"} for c in (*values, *status)],
+                         weather=[], sensor_history=[], utility_interval=[], utility_monthly=[], units={},
+                         equipment=[{"equipment_id": "E1"}], step_seconds=STEP_S)
+    duck = DuckDBAdapter()
+    duck.load(ds)
+    try:
+        sql = duck.run(list(STARTUP_HOLDOFF_RULES))
+    finally:
+        duck.close()
+    ref = reference(ds, rules=STARTUP_HOLDOFF_RULES)
+    no_delay = reference(ds, rules=STARTUP_HOLDOFF_RULES, params={"startup_delay_min": 0})
+    for rule in STARTUP_HOLDOFF_RULES:
+        assert RULE_GATES[rule].startup_delay_seconds / 60 == h.CATALOG[rule]["internal_constants"]["STARTUP_DELAY_MIN"]
+        sql_hours = sql[rule][0]["fault_hours"]
+        pandas_hours = ref[rule]["E1"]["pandas"]
+        assert pandas_hours and sql_hours == pytest.approx(pandas_hours, abs=1e-9), (rule, sql_hours, pandas_hours)
+        assert no_delay[rule]["E1"]["pandas"] > pandas_hours, rule
 
 
 def test_pinned_delta_band_catches_a_widened_known_difference():
