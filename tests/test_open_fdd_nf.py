@@ -465,6 +465,7 @@ def test_turtle_reader_builds_a_bindable_model():
     ("equip,chilledWaterPlant", "chwPlant"), ("equip,chilled,water,plant,chilled-water-plant", "chwPlant"),
     ("equip,condenser,water,plant,condenser-water-plant", "cooling_tower"),
     ("equip,hot,water,pump", None), ("equip,plant", None),
+    ("equip,hot,chilled,water,plant", "chwPlant,boiler"),  # a combined plant has both kinds
 ])
 def test_haystack4_plant_conjuncts_get_the_camelcase_kind(markers, kind):
     """#1777: a Haystack 4 conjunct matches the literal tag or every part; the same kinds as static/fdd.js equipKinds."""
@@ -472,7 +473,7 @@ def test_haystack4_plant_conjuncts_get_the_camelcase_kind(markers, kind):
     from open_fdd.nf.model import equip_kinds
     cat = load_catalog()
     e = {"attrs": {"id": "P", "siteRef": "s", "markers": markers}}
-    want = ([kind] if kind else []) + ["general"]
+    want = (kind.split(",") if kind else []) + ["general"]
     assert equip_kinds(e, cat) == want
     assert ps._equip_kinds(e, cat) == want
 

@@ -37,6 +37,13 @@ test("Haystack 4 plant conjuncts map to the same kind as the camelCase / boiler 
   for (const markers of ["equip,hot,water,pump", "equip,plant", "equip,water,plant"]) {
     assert.deepEqual(Array.from(ctx.equipKinds(equip("P", markers), catalog)), ["general"], markers);
   }
+  // a combined plant (hot, chilled, water, plant) has both kinds, like an equip tagged boiler and chiller: both rule
+  // families apply, and each binds only the roles whose points the plant has
+  for (const markers of ["equip,hot,chilled,water,plant", "equip,boiler,chiller"]) {
+    const kinds = Array.from(ctx.equipKinds(equip("P", markers), catalog));
+    assert.ok(kinds.includes("boiler") && (kinds.includes("chwPlant") || kinds.includes("chiller")), markers);
+  }
+  assert.deepEqual(Array.from(ctx.equipKinds(equip("P", "equip,hot,chilled,water,plant"), catalog)), ["chwPlant", "boiler", "general"]);
 });
 
 test("a Haystack 4 hot-water plant binds the boiler rules exactly like a boiler-marker plant", () => {
