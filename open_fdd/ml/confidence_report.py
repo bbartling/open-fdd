@@ -23,6 +23,23 @@ def _ts(x: Any) -> str | None:
     return pd.Timestamp(x).strftime("%Y-%m-%dT%H:%MZ")
 
 
+def _optional_site(value: Any) -> str | None:
+    """Copy a site identifier when one is actually present.
+
+    The strings ``"None"`` and ``"nan"`` are kept as identifiers; only a missing
+    value or an empty string is omitted from the report object.
+    """
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    text = str(value)
+    return None if text == "" else text
+
+
 def _episode(r: pd.Series) -> dict[str, Any]:
     out = {
         "episode_id": r["episode_id"], "equipment_id": r["equipment_id"], "rule_id": r["rule_id"],
@@ -30,9 +47,9 @@ def _episode(r: pd.Series) -> dict[str, Any]:
         "p_real": r["p_real"], "p_false_positive": r["p_false_positive"], "p_tuning": r["p_tuning"],
         "label": r["label"], "reason": r["reason"],
     }
-    site = r["site_id"] if "site_id" in r.index else None
-    if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) not in {"", "None", "nan"}:
-        out["site_id"] = str(site)
+    site = _optional_site(r["site_id"] if "site_id" in r.index else None)
+    if site is not None:
+        out["site_id"] = site
     if r.get("subject"):
         out["subject"] = r["subject"]
     cal = r.get("p_real_calibrated")
@@ -91,9 +108,9 @@ def build_report(result: dict[str, pd.DataFrame], *, top: int = 10, config: Conf
                 item = {"equipment_id": r.equipment_id, "rule_id": r.rule_id, "subjects": int(r.subjects),
                         "episodes": int(r.episodes), "hours": round(float(r.hours), 1), "p_real": float(r.p_real),
                         "start": _ts(r.first), "end": _ts(r.last)}
-                site = getattr(r, "site_id", None)
-                if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) not in {"", "None", "nan"}:
-                    item["site_id"] = str(site)
+                site = _optional_site(getattr(r, "site_id", None))
+                if site is not None:
+                    item["site_id"] = site
                 issues.append(item)
             report["confirmed_data_issues"] = issues
         fp = ep[ep["label"] == "likely_false_positive"].copy()
@@ -116,9 +133,9 @@ def build_report(result: dict[str, pd.DataFrame], *, top: int = 10, config: Conf
     for r in bad.itertuples():
         item = {"equipment_id": r.equipment_id, "health": r.health, "rules_likely_real": int(r.rules_likely_real),
                 "data_issues": int(r.data_issues), "episodes": int(r.episodes), "expected_real": float(r.expected_real)}
-        site = getattr(r, "site_id", None)
-        if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) not in {"", "None", "nan"}:
-            item["site_id"] = str(site)
+        site = _optional_site(getattr(r, "site_id", None))
+        if site is not None:
+            item["site_id"] = site
         ranking.append(item)
     report["equipment_ranking"] = ranking
     if calibration is not None:

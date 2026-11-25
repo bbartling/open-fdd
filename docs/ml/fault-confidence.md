@@ -49,12 +49,15 @@ tool can join without a lookup table:
 | `equipment_id` | Exactly the `equipment_id` stored on the rule-result or flags row. No slug, display name or hash is substituted. |
 | `rule_id` | Exactly the source `rule_id`. |
 | `subject` | The source `subject_key`, or `""` when the table has none. |
-| `site_id` | The source `site_id` column when present, otherwise the `--site` filter. `null` in `episodes.jsonl` (omitted from `report.json` objects) when neither was given. |
+| `site_id` | The source `site_id` column when present, otherwise the `--site` filter. `null` in `episodes.jsonl` (omitted from `report.json` objects) when neither was given. The literal strings `"None"` and `"nan"` are kept as identifiers, not treated as missing. Flags input that includes a `site_id` column is copied through. When a table covers more than one site and `--site` is not set, the command errors instead of merging episodes that share an `equipment_id` across sites. |
 | `episode_id` | `E000001`, `E000002`, … stable for one run of the command, not a durable identifier across runs. |
 | `start`, `end` | ISO 8601 UTC ending in `Z` (`episodes.jsonl` uses seconds; `report.json` minute precision). |
 
 `report.json` repeats the same `equipment_id` (and `site_id` when known) on `likely_real`, `confirmed_data_issues` and
-`equipment_ranking`. Unassessed numeric evidence is JSON `null`, never `0`.
+`equipment_ranking`. Unassessed numeric evidence is JSON `null`, never `0`. CSV inputs (`--flags`, `--results`,
+`--history`, `--labels`) read identifier columns (`equipment_id`, `rule_id`, `site_id`, `point_id`, `subject`,
+`subject_key`) as text so leading zeros are kept. When both the episodes and the `--labels` table have a `site_id`,
+a label only matches an episode at the same site (a label with no site still matches by equipment).
 
 ## Supported inputs
 
@@ -176,7 +179,8 @@ open-fdd-ml confidence --evaluate --seeds 7 --write-benchmark bench --out-dir ev
   set. A 60 % reduction at 0.90 recall means the screen dropped three fifths of the labeled false positives while
   still catching at least 90 % of the labeled real faults. Change the target with `--target-recall`.
 * **Several seeds** (default `7,11,19,23,31`): mean, standard deviation, min and max of the headline metrics.
-  Pass `--seeds 7` for a single run.
+  Pass `--seeds 7` or `--seed 7` for a single run. `--seed` also sets the generator seed for `--write-benchmark`
+  (default 7). `--seeds` overrides `--seed` when both are given.
 * **Confusion matrix** of the three ground-truth classes (`real`, `false_positive`, `tuning`) against the four
   screen labels (`likely_real`, `likely_false_positive`, `tuning_suggested`, `uncertain`).
 * **Calibration** of `p_real` as a probability that the episode is a real fault (Brier score, expected calibration

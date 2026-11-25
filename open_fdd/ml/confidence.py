@@ -44,6 +44,7 @@ from open_fdd.ml.confidence_sql import (
     fetch,
     history_sql,
     paramstyle,
+    require_scoped_site,
     totals_sql,
 )
 
@@ -96,6 +97,27 @@ def _iso(series: pd.Series) -> pd.Series:
     return to_utc(series).dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ").set_axis(series.index)
 
 
+_ID_COLS = ("equipment_id", "rule_id", "site_id", "point_id", "subject", "subject_key")
+_CSV_NA = ("", "#N/A", "#N/A N/A", "#NA", "-1.#IND", "-1.#QNAN", "-NaN", "-nan",
+           "1.#IND", "1.#QNAN", "<NA>", "N/A", "NA", "NULL", "NaN", "None", "n/a", "nan", "null")
+
+
+def read_identifier_csv(path: str | Path) -> pd.DataFrame:
+    """Read a flags, results, history or labels CSV, keeping identifier columns as text.
+
+    Pandas would otherwise infer a column of numeric-looking ids (``00123``) as integers
+    and drop the leading zeros that a downstream join may need. Identifier cells are not
+    turned into missing values, so the literal strings ``"None"`` and ``"nan"`` survive.
+    """
+    _require_pandas()
+    header = pd.read_csv(path, nrows=0)
+    id_cols = [c for c in header.columns if c in _ID_COLS]
+    dtypes = {c: "string" for c in id_cols}
+    # Default NA tokens still apply to non-identifier columns (values, flags, timestamps).
+    na_values = {c: list(_CSV_NA) for c in header.columns if c not in _ID_COLS}
+    return pd.read_csv(path, dtype=dtypes, keep_default_na=False, na_values=na_values)
+
+
 def frame_to_sqlite(flags: pd.DataFrame | None = None, results: pd.DataFrame | None = None) -> tuple[sqlite3.Connection, SourceMap]:
     """Load a flags or Open-FDD results DataFrame into in-memory SQLite and return the matching ``SourceMap``."""
     _require_pandas()
@@ -108,10 +130,16 @@ def frame_to_sqlite(flags: pd.DataFrame | None = None, results: pd.DataFrame | N
         df["timestamp"] = _iso(df["timestamp"])
         for c in ("equipment_id", "rule_id"):
             df[c] = df[c].astype(str)
+        site_col = ""
+        if "site_id" in df.columns:
+            df["site_id"] = df["site_id"].map(
+                lambda v: None if v is None or (not isinstance(v, str) and pd.isna(v)) else str(v)
+            )
+            site_col = "site_id"
         cols = {c: c for c in ("value", "threshold", "running") if c in df.columns}
-        keep = ["timestamp", "equipment_id", "rule_id", "flag", *cols]
+        keep = ["timestamp", "equipment_id", "rule_id", "flag", *([site_col] if site_col else []), *cols]
         df[keep].to_sql("fault_flags", conn, index=False)
-        src = SourceMap.for_flags("fault_flags", columns={"site_id": "", **{c: cols.get(c, "") for c in ("value", "threshold", "running")}})
+        src = SourceMap.for_flags("fault_flags", columns={"site_id": site_col, **{c: cols.get(c, "") for c in ("value", "threshold", "running")}})
         return conn, src
     if results is not None:
         missing = {"equipment_id", "rule_id", "window_start", "window_end", "status"} - set(results.columns)
@@ -211,6 +239,9 @@ def load_episodes(conn: Any, src: SourceMap, config: ConfidenceConfig | None = N
     cfg = config or ConfidenceConfig()
     ph = paramstyle(conn)
     src = replace(src, since=_bound(conn, src.since), until=_bound(conn, src.until))
+    if src.layout == "results" and not src.fault_status:
+        raise ValueError("fault_status needs at least one status value")
+    require_scoped_site(conn, src, ph)
     tcols, trows = fetch(conn, *totals_sql(src, ph))
     totals = pd.DataFrame(trows, columns=tcols)
     for c in ("n_assessed", "n_flagged", "n_unassessed"):
@@ -807,7 +838,8 @@ def run_cli(args: argparse.Namespace) -> int:
     if write_bench and not want_eval and not (args.flags or args.results or args.sqlite or args.duckdb or args.postgres):
         from open_fdd.ml.confidence_evaluate import make_benchmark, write_benchmark
 
-        write_benchmark(make_benchmark(seed=args.seed, units_per_case=args.units_per_case), Path(write_bench))
+        write_benchmark(make_benchmark(seed=args.seed if args.seed is not None else 7,
+                                       units_per_case=args.units_per_case), Path(write_bench))
         return 0
     if want_eval and (args.synthetic or not (args.flags or args.results or args.sqlite or args.duckdb or args.postgres)):
         from open_fdd.ml.confidence_evaluate import (
@@ -833,11 +865,11 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.flags or args.results:
         if args.since or args.until or args.site:
             raise ValueError("--since, --until and --site apply to database sources; filter the CSV before screening")
-        history = pd.read_csv(args.history) if args.history else None
+        history = read_identifier_csv(args.history) if args.history else None
         if args.flags:
-            result = screen(pd.read_csv(args.flags), history, cfg)
+            result = screen(read_identifier_csv(args.flags), history, cfg)
         else:
-            result = screen(history=history, config=cfg, results=pd.read_csv(args.results))
+            result = screen(history=history, config=cfg, results=read_identifier_csv(args.results))
         source_desc = {"input": "csv", "layout": "flags" if args.flags else "results"}
     else:
         conn, engine = _connect(args)
@@ -862,7 +894,7 @@ def run_cli(args: argparse.Namespace) -> int:
             conn.close()
         source_desc = {"input": engine, "layout": args.layout, "table": src.table}
     calibration = None
-    labels_df = pd.read_csv(args.labels) if args.labels else None
+    labels_df = read_identifier_csv(args.labels) if args.labels else None
     if labels_df is not None:
         from open_fdd.ml.confidence_calibrate import calibrate
 

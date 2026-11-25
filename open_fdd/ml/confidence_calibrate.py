@@ -21,13 +21,18 @@ import pandas as pd
 
 from open_fdd.ml.confidence import to_utc
 
-LABEL_MAP = {"fault": 1, "confirmed": 1, "true_fault": 1, "real": 1, "normal": 0, "false_positive": 0, "healthy": 0, "tuning": 0, "review": 0}
+LABEL_MAP = {"fault": 1, "confirmed": 1, "true_fault": 1, "real": 1, "normal": 0, "false_positive": 0,
+            "healthy": 0, "stale": 0, "off": 0, "tuning": 0, "review": 0}
 MIN_LABELS = 20
 MIN_PER_CLASS = 5
 
 
 def label_episodes(episodes: pd.DataFrame, labels: pd.DataFrame) -> pd.Series:
-    """1 (fault), 0 (normal) or NaN (unlabeled) per episode."""
+    """1 (fault), 0 (normal) or NaN (unlabeled) per episode.
+
+    When both frames have a ``site_id`` and the episode's site is set, a label with a
+    different site does not match; a label with a missing site still matches by equipment.
+    """
     missing = {"equipment_id", "start_ts", "end_ts", "label"} - set(labels.columns)
     if missing:
         raise ValueError(f"labels is missing columns: {sorted(missing)}")
@@ -45,6 +50,11 @@ def label_episodes(episodes: pd.DataFrame, labels: pd.DataFrame) -> pd.Series:
         if g is None:
             continue
         hit = g[(g["start_ts"] <= r.end) & (g["end_ts"] >= r.start)]
+        if "site_id" in lab.columns:
+            site = getattr(r, "site_id", None)
+            if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) != "":
+                missing = hit["site_id"].isna() | (hit["site_id"].astype(str) == "")
+                hit = hit[missing | (hit["site_id"].astype(str) == str(site))]
         if hit.empty:
             continue
         specific = hit[hit["rule_id"].astype(str) == str(r.rule_id)]

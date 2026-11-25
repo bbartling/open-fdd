@@ -117,6 +117,40 @@ def _filters(src: SourceMap, ts_col: str, ph: str) -> tuple[str, list[Any]]:
     return (" WHERE " + " AND ".join(where)) if where else "", params
 
 
+def require_scoped_site(conn: Any, src: SourceMap, ph: str = "?") -> None:
+    """Error if the table has more than one site and no site filter is set.
+
+    Episode aggregation groups by equipment_id, rule_id and subject, so two sites
+    that reuse an equipment_id would otherwise be merged. Pass ``SourceMap.site_id``
+    (``--site``) or filter the table first. Sources with no site column, a single
+    site, or an explicit site filter are unchanged.
+    """
+    if src.site_id is not None:
+        return
+    site = src.col("site_id") if src.columns.get("site_id", "site_id") else None
+    if not site:
+        return
+    t = ident(src.table)
+    ts_col = src.col("window_end") if src.layout == "results" else src.col("timestamp")
+    where, params = [], []
+    if src.since is not None and ts_col:
+        where.append(f"{ts_col} >= {ph}")
+        params.append(src.since)
+    if src.until is not None and ts_col:
+        where.append(f"{ts_col} < {ph}")
+        params.append(src.until)
+    where.append(f"{site} IS NOT NULL")
+    clause = " WHERE " + " AND ".join(where)
+    sql = f"SELECT COUNT(*) FROM (SELECT {site} FROM {t}{clause} GROUP BY {site}) sites"
+    _cols, rows = fetch(conn, sql, params)
+    n = int(rows[0][0]) if rows else 0
+    if n > 1:
+        raise ValueError(
+            "input covers more than one site; pass --site (or filter first) so episodes "
+            "are not merged across sites that share an equipment_id"
+        )
+
+
 def base_cte(src: SourceMap, ph: str = "?") -> tuple[str, list[Any]]:
     """``base`` CTE: one normalised row per evaluation with ``flag`` 1, 0 or NULL (not assessed)."""
     t = ident(src.table)

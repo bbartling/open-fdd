@@ -11,9 +11,11 @@ import pytest
 from open_fdd.ml.confidence import ConfidenceConfig, main
 from open_fdd.ml.confidence_evaluate import (
     TRUE_CLASSES,
+    _fp_reduction,
     class_labels,
     evaluate_benchmark,
     make_benchmark,
+    parse_seeds,
     to_markdown,
     write_benchmark,
 )
@@ -141,3 +143,72 @@ def test_evaluate_suite_reports_mean_and_spread():
     # spread is reported (std may be zero if all seeds agree)
     assert "std" in su["operational_screen_precision"]
     assert "_bench" in bundle and bundle["_result"]["episodes"] is not None
+
+
+def test_make_benchmark_windows_follow_freq():
+    default = make_benchmark(units_per_case=1, days=8, freq="15min", seed=7)
+    # 10 h / 15 min = 40 samples, same as the original fixed windows
+    sat = default.flags[(default.flags["equipment_id"] == "AHU-REA01") & (default.flags["rule_id"] == "R-SAT-HIGH")]
+    assert int(sat["flag"].sum()) == 40
+    hourly = make_benchmark(units_per_case=1, days=2, freq="1h", seed=7)
+    assert not hourly.flags.empty
+    sat_h = hourly.flags[(hourly.flags["equipment_id"] == "AHU-REA01") & (hourly.flags["rule_id"] == "R-SAT-HIGH")]
+    assert int(sat_h["flag"].sum()) == 10  # 10 h at 1 h cadence
+
+
+def test_class_labels_require_site_when_both_provide_it():
+    start, end = pd.Timestamp("2026-03-01", tz="UTC"), pd.Timestamp("2026-03-02", tz="UTC")
+    ep = pd.DataFrame({
+        "equipment_id": ["AHU-01", "AHU-01"], "rule_id": ["R1", "R1"],
+        "site_id": ["campus-a", "campus-b"],
+        "start": [start, start], "end": [end, end],
+    })
+    lab = pd.DataFrame({
+        "equipment_id": ["AHU-01", "AHU-01"], "start_ts": [start, start], "end_ts": [end, end],
+        "rule_id": ["R1", "R1"], "label": ["fault", "false_positive"], "site_id": ["campus-a", "campus-b"],
+    })
+    got = class_labels(ep, lab)
+    assert list(got) == ["real", "false_positive"]
+
+
+def test_fp_reduction_counts_tied_scores_in_the_threshold_mask():
+    y = np.array([1, 1, 1, 0, 0])
+    scores = np.array([0.8, 0.5, 0.5, 0.5, 0.2])
+    rows = {r["target_recall"]: r for r in _fp_reduction(y, scores, targets=(1.0,))}
+    row = rows[1.0]
+    assert row["achieved"] is True
+    assert row["threshold_p_real"] == 0.5
+    assert row["false_positives"] == 1
+    assert row["recall"] == 1.0
+
+
+def test_markdown_does_not_call_fallback_tables_operational():
+    metrics = {"precision": 0.5, "recall": 1.0, "f1": 0.667, "false_positives": 1, "false_negatives": 0}
+    report = {"rule": metrics, "screen": metrics,
+              "false_positive_reduction": [{"target_recall": 1.0, "achieved": True, "threshold_p_real": 0.5,
+                                            "precision": 0.5, "false_positives": 1, "false_positives_raw": 1,
+                                            "false_positive_reduction": 0.0, "recall": 1.0}]}
+    md = to_markdown(report)
+    assert "overall, including tuning episodes" in md
+    assert "operational: real vs false positive" not in md
+    assert "recall (operational)" not in md
+
+
+def test_parse_seeds_uses_explicit_seed():
+    class Args:
+        seeds = None
+        seed = 11
+    assert parse_seeds(Args()) == [11]
+
+    class Defaulted:
+        seeds = None
+        seed = None
+    assert parse_seeds(Defaulted()) == [7, 11, 19, 23, 31]
+
+
+def test_cli_evaluate_seed_runs_one_seed(tmp_path):
+    assert main(["--evaluate", "--seed", "11", "--units-per-case", "2",
+                 "--out-dir", str(tmp_path / "o"), "--print", "none"]) == 0
+    ev = json.loads((tmp_path / "o" / "evaluation.json").read_text())
+    assert ev.get("seeds") == [11] or ev.get("seed") == 11 or ev.get("source", {}).get("seed") == 11
+

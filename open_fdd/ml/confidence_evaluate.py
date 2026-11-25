@@ -102,10 +102,24 @@ def make_benchmark(
     rng = np.random.default_rng(seed)
     ts = pd.date_range("2026-03-01", periods=int(pd.Timedelta(days=days) / pd.Timedelta(freq)), freq=freq, tz="UTC")
     n = ts.size
-    # windows sit in the middle of the record so each episode has baseline history on both sides
-    real_sl = slice(int(n * 0.30), int(n * 0.30) + 40)    # 10 h
-    stale_sl = slice(int(n * 0.50), int(n * 0.50) + 28)   # 7 h
-    off_sl = slice(int(n * 0.65), int(n * 0.65) + 24)     # 6 h
+    # windows sit in the middle of the record so each episode has baseline history on both sides.
+    # Length follows ``freq`` so a coarser cadence (for example days=2, freq=1h) still fits.
+    step = pd.Timedelta(freq)
+
+    def _window(start_frac: float, hours: float) -> slice:
+        start = int(n * start_frac)
+        length = max(1, int(pd.Timedelta(hours=hours) / step))
+        stop = start + length
+        if stop > n:
+            raise ValueError(
+                f"a {hours:g} h planted window starting at {start_frac:.0%} does not fit in "
+                f"{days} days at {freq}; use a longer record or a shorter window"
+            )
+        return slice(start, stop)
+
+    real_sl = _window(0.30, 10)   # 10 h (40 samples at the default 15 min)
+    stale_sl = _window(0.50, 7)   # 7 h
+    off_sl = _window(0.65, 6)     # 6 h
     windows = {
         "real": real_sl, "real_gap": real_sl,
         "stale": stale_sl, "stale_partial": stale_sl,
@@ -134,8 +148,8 @@ def make_benchmark(
                 coil[sl] = 1
                 if case == "real_gap":
                     mid = (sl.start + sl.stop) // 2
-                    for t in ts[mid:mid + 3]:
-                        skip_sat.add((eq, t))
+                    for stamp in ts[mid:min(mid + 3, sl.stop)]:
+                        skip_sat.add((eq, stamp))
             elif case == "stale" and sl is not None:
                 sat[sl] = 18.0
             elif case == "stale_partial" and sl is not None:
@@ -203,7 +217,8 @@ def class_labels(episodes: pd.DataFrame, labels: pd.DataFrame) -> pd.Series:
 
     Overlap and precedence match :func:`open_fdd.ml.confidence_calibrate.label_episodes`: a rule-specific label
     wins over a rule-agnostic one; when several labels of the same specificity overlap, ``real`` beats
-    ``false_positive``, which beats ``tuning``.
+    ``false_positive``, which beats ``tuning``. When both frames have a ``site_id`` and the episode's site is
+    set, a label with a different site does not match; a label with a missing site still matches by equipment.
     """
     missing = {"equipment_id", "start_ts", "end_ts", "label"} - set(labels.columns)
     if missing:
@@ -223,6 +238,11 @@ def class_labels(episodes: pd.DataFrame, labels: pd.DataFrame) -> pd.Series:
         if g is None:
             continue
         hit = g[(g["start_ts"] <= r.end) & (g["end_ts"] >= r.start)]
+        if "site_id" in lab.columns:
+            site = getattr(r, "site_id", None)
+            if site is not None and not (isinstance(site, float) and pd.isna(site)) and str(site) != "":
+                missing = hit["site_id"].isna() | (hit["site_id"].astype(str) == "")
+                hit = hit[missing | (hit["site_id"].astype(str) == str(site))]
         if hit.empty:
             continue
         specific = hit[hit["rule_id"].astype(str) == str(r.rule_id)]
@@ -251,23 +271,27 @@ def _fp_reduction(y: np.ndarray, scores: np.ndarray, targets: tuple[float, ...] 
     out = []
     if n_real == 0:
         return out
-    order = np.argsort(-scores)
-    y_s, s_s = y[order], scores[order]
-    tp = np.cumsum(y_s == 1)
-    recall = tp / n_real
-    fp = np.cumsum(y_s == 0)
-    for t in targets:
-        hit = np.where(recall >= t)[0]
-        if hit.size == 0:
-            out.append({"target_recall": t, "achieved": False})
+    # Tightest (highest) threshold whose mask ``scores >= thr`` meets the recall target.
+    # Metrics come from that same mask so ties at the cut are counted consistently.
+    uniq_desc = np.unique(scores)[::-1]
+    for target in targets:
+        chosen = None
+        for thr in uniq_desc:
+            pred = scores >= thr
+            rec = float((y[pred] == 1).sum() / n_real)
+            if rec >= target:
+                chosen = float(thr)
+                break
+        if chosen is None:
+            out.append({"target_recall": target, "achieved": False})
             continue
-        i = int(hit[0])
-        fp_after = int(fp[i])
+        pred = scores >= chosen
+        m = _pr(y, pred)
+        fp_after = int(m["false_positives"])
         red = (1.0 - fp_after / raw_fp) if raw_fp else 0.0
-        pred = scores >= s_s[i]
         out.append({
-            "target_recall": t, "achieved": True, "recall": round(float(recall[i]), 4),
-            "threshold_p_real": round(float(s_s[i]), 4), "precision": round(_pr(y, pred)["precision"], 4),
+            "target_recall": target, "achieved": True, "recall": round(float(m["recall"]), 4),
+            "threshold_p_real": round(chosen, 4), "precision": round(m["precision"], 4),
             "false_positives": fp_after, "false_positives_raw": raw_fp,
             "false_positive_reduction": round(red, 4),
         })
@@ -504,13 +528,14 @@ def to_markdown(report: dict[str, Any]) -> str:
         if report.get("seeds"):
             lines.append("Figures below are the first seed. Tuning episodes are excluded from the operational tables.")
     op = report.get("operational")
-    lines += ["", "## Precision and recall for real faults (operational: real vs false positive)", ""]
     block = op if op else report
     if "rule" in block and "screen" in block:
-        lines += [
-            "| Method | Precision | Recall | F1 | False positives | False negatives |",
-            "|---| ---:| ---:| ---:| ---:| ---:|",
-        ]
+        heading = ("## Precision and recall for real faults (operational: real vs false positive)"
+                   if op else
+                   "## Precision and recall for real faults (overall, including tuning episodes)")
+        lines += ["", heading, "",
+                  "| Method | Precision | Recall | F1 | False positives | False negatives |",
+                  "|---| ---:| ---:| ---:| ---:| ---:|"]
         for name, key in (("Raw rule (every flag is a predicted fault)", "rule"),
                           ("After screening (likely_real only)", "screen")):
             m = block[key]
@@ -528,9 +553,14 @@ def to_markdown(report: dict[str, Any]) -> str:
                       tun["share_tuning_suggested"],
                       tun["labels"].get("tuning_suggested", 0),
                       tun["episodes"]))]
-    rows = (report.get("operational") or {}).get("false_positive_reduction") or report.get("false_positive_reduction_operational") or report.get("false_positive_reduction") or []
+    op_rows = ((report.get("operational") or {}).get("false_positive_reduction")
+               or report.get("false_positive_reduction_operational"))
+    rows = op_rows or report.get("false_positive_reduction") or []
     if rows:
-        lines += ["", "## False-positive reduction at fixed real-fault recall (operational)", "",
+        fp_heading = ("## False-positive reduction at fixed real-fault recall (operational)"
+                      if op_rows else
+                      "## False-positive reduction at fixed real-fault recall (overall, including tuning episodes)")
+        lines += ["", fp_heading, "",
                   "| Target recall | Achieved | Threshold `p_real` | Precision | FP after | FP raw | FP reduction |",
                   "| ---:|---| ---:| ---:| ---:| ---:| ---:|"]
         for r in rows:
@@ -581,6 +611,9 @@ def parse_seeds(args: Any) -> list[int]:
         if not seeds:
             raise ValueError("--seeds needs at least one integer")
         return seeds
+    seed = getattr(args, "seed", None)
+    if seed is not None:
+        return [int(seed)]
     return list(DEFAULT_SEEDS)
 
 
@@ -593,9 +626,11 @@ def add_evaluate_arguments(ap: Any) -> None:
     ev.add_argument("--write-benchmark", metavar="DIR", help="write the synthetic flags, history and labels CSVs to DIR")
     ev.add_argument("--target-recall", type=float, default=0.9,
                     help="real-fault recall at which to report false-positive reduction (default 0.9)")
-    ev.add_argument("--seed", type=int, default=7, help="generator seed for --write-benchmark or a single --evaluate run")
+    ev.add_argument("--seed", type=int, default=None,
+                    help="single generator seed for --evaluate, or the seed for --write-benchmark (default 7)")
     ev.add_argument("--seeds", default=None,
-                    help="comma list of generator seeds for --evaluate (default 7,11,19,23,31); pass one seed for a faster run")
+                    help="comma list of generator seeds for --evaluate (default 7,11,19,23,31); "
+                         "overrides --seed. Pass one seed for a faster run")
     ev.add_argument("--units-per-case", type=int, default=5, help="equipment in each planted case group (default 5)")
 
 
@@ -605,7 +640,9 @@ def run_evaluate(args: Any, cfg: ConfidenceConfig, result: dict[str, pd.DataFram
     bench = None
     if args.synthetic or result is None:
         bench, result, report = evaluate_benchmark(
-            cfg, target_recall=args.target_recall, seed=args.seed, units_per_case=args.units_per_case,
+            cfg, target_recall=args.target_recall,
+            seed=args.seed if args.seed is not None else 7,
+            units_per_case=args.units_per_case,
         )
         if args.write_benchmark:
             write_benchmark(bench, Path(args.write_benchmark))

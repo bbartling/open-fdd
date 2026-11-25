@@ -16,10 +16,12 @@ from open_fdd.ml.confidence import (
     episode_records,
     history_evidence,
     main,
+    read_identifier_csv,
     screen,
     screen_sql,
     summarize,
 )
+from open_fdd.ml.confidence_calibrate import LABEL_MAP, label_episodes
 from open_fdd.ml.confidence_report import build_report, to_markdown
 from open_fdd.ml.confidence_sql import HistoryMap, SourceMap, ident
 
@@ -750,3 +752,80 @@ def test_source_identifiers_are_copied_verbatim(tmp_path):
     fl, _ = _fixture(units=2)
     recs = episode_records(screen(fl)["episodes"])
     assert recs and all(r["site_id"] is None for r in recs)
+
+
+def test_label_map_covers_stale_and_off():
+    assert LABEL_MAP["stale"] == 0 and LABEL_MAP["off"] == 0
+    start, end = pd.Timestamp("2026-03-01", tz="UTC"), pd.Timestamp("2026-03-02", tz="UTC")
+    ep = pd.DataFrame({"equipment_id": ["U1", "U2"], "rule_id": ["R1", "R1"],
+                       "start": [start, start], "end": [end, end]})
+    lab = pd.DataFrame({
+        "equipment_id": ["U1", "U2"], "start_ts": [start, start], "end_ts": [end, end],
+        "rule_id": ["R1", "R1"], "label": ["stale", "off"],
+    })
+    got = label_episodes(ep, lab)
+    assert list(got) == [0.0, 0.0]
+
+
+def test_label_episodes_require_site_when_both_provide_it():
+    start, end = pd.Timestamp("2026-03-01", tz="UTC"), pd.Timestamp("2026-03-02", tz="UTC")
+    ep = pd.DataFrame({
+        "equipment_id": ["AHU-01", "AHU-01"], "rule_id": ["R1", "R1"],
+        "site_id": ["campus-a", "campus-b"],
+        "start": [start, start], "end": [end, end],
+    })
+    lab = pd.DataFrame({
+        "equipment_id": ["AHU-01", "AHU-01"], "start_ts": [start, start], "end_ts": [end, end],
+        "rule_id": ["R1", "R1"], "label": ["fault", "normal"], "site_id": ["campus-a", "campus-b"],
+    })
+    got = label_episodes(ep, lab)
+    assert list(got) == [1.0, 0.0]
+
+
+def test_flags_copy_site_id_including_none_string():
+    fl, _ = _fixture(units=2)
+    fl = fl.copy()
+    fl["site_id"] = "None"
+    recs = episode_records(screen(fl)["episodes"])
+    assert recs and all(r["site_id"] == "None" for r in recs)
+    rep = build_report(screen(fl), top=5)
+    ranked = [e for e in rep["equipment_ranking"] if e["episodes"]]
+    assert ranked and all(e.get("site_id") == "None" for e in ranked)
+
+
+def test_cli_reads_identifier_columns_as_text(tmp_path):
+    fl, hs = _fixture(units=2)
+    fl = fl.copy()
+    fl["equipment_id"] = "00123"
+    fl["site_id"] = "None"
+    hs = hs.copy()
+    hs["equipment_id"] = "00123"
+    fl.to_csv(tmp_path / "f.csv", index=False)
+    hs.to_csv(tmp_path / "h.csv", index=False)
+    df = read_identifier_csv(tmp_path / "f.csv")
+    assert str(df["equipment_id"].iloc[0]) == "00123"
+    assert main(["--flags", str(tmp_path / "f.csv"), "--history", str(tmp_path / "h.csv"),
+                 "--print", "none", "--out-dir", str(tmp_path / "o")]) == 0
+    recs = [json.loads(x) for x in (tmp_path / "o" / "episodes.jsonl").read_text().splitlines()]
+    assert recs
+    assert all(r["equipment_id"] == "00123" for r in recs)
+    assert all(r["site_id"] == "None" for r in recs)
+
+
+def test_unscoped_multi_site_is_rejected():
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE rr (site_id TEXT, equipment_id TEXT, rule_id TEXT, window_start TEXT, "
+                 "window_end TEXT, status TEXT)")
+    for site in ("A", "B"):
+        conn.execute("INSERT INTO rr VALUES (?, 'AHU-01', 'R1', '2026-03-01T00:00:00Z', "
+                     "'2026-03-01T04:00:00Z', 'FAULT')", (site,))
+    conn.commit()
+    src = SourceMap(table="rr", columns={"subject_key": "", "fault_hours": "", "covered_hours": ""})
+    with pytest.raises(ValueError, match="more than one site"):
+        screen_sql(conn, src, None)
+    # an explicit site filter keeps the current single-site behaviour
+    got = screen_sql(conn, SourceMap(table="rr", site_id="A",
+                                     columns={"subject_key": "", "fault_hours": "", "covered_hours": ""}), None)
+    assert not got["episodes"].empty
+    assert set(got["episodes"]["site_id"]) == {"A"}
+
