@@ -8772,6 +8772,124 @@
       "rule_id": "COIL-PERF",
       "sql_file": "coil_perf.sql",
       "run_proof": "gated"
+    },
+    {
+      "confirm_seconds": 1200,
+      "delete_python_candidate": false,
+      "description": "Filter pressure drop above dp_dirty, or fan effort high for the airflow",
+      "equipment_kinds": [
+        "ahu"
+      ],
+      "optional_roles": [
+        "filter_dp",
+        "fan_power",
+        "zone_flow",
+        "fan_status",
+        "fan_cmd",
+        "run_proof"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "active_hours",
+        "fault_pct",
+        "assessment",
+        "filter_path"
+      ],
+      "pandas_function": "filter_load",
+      "parameters": {
+        "confirm_min": {
+          "control": "slider",
+          "default": 20.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "key": "confirm_min",
+          "kind": "duration_minutes",
+          "label": "Fault confirm delay",
+          "max": 60.0,
+          "min": 0.0,
+          "sql_placeholder": "CONFIRM_SECONDS",
+          "step": 5.0,
+          "unit": "min"
+        },
+        "dp_dirty": {
+          "control": "slider",
+          "default": 248.84,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "dp_dirty",
+          "kind": "air_pressure",
+          "label": "Dirty filter pressure drop",
+          "max": 995.36,
+          "min": 49.768,
+          "sql_placeholder": "DP_DIRTY",
+          "step": 12.442,
+          "unit": "Pa"
+        },
+        "flow_frac": {
+          "control": "slider",
+          "default": 0.5,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "flow_frac",
+          "kind": "fraction",
+          "label": "Minimum airflow fraction",
+          "max": 0.9,
+          "min": 0.0,
+          "sql_placeholder": "FLOW_FRAC",
+          "step": 0.05,
+          "unit": "frac"
+        },
+        "effort_ratio": {
+          "control": "slider",
+          "default": 1.3,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "effort_ratio",
+          "kind": "dimensionless",
+          "label": "Fan effort ratio",
+          "max": 3.0,
+          "min": 1.05,
+          "sql_placeholder": "EFFORT_RATIO",
+          "step": 0.05,
+          "unit": "x"
+        },
+        "require_run_proof": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "require_run_proof",
+          "kind": "boolean",
+          "label": "Require motor status",
+          "max": 1.0,
+          "min": 0.0,
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
+          "step": 1.0,
+          "unit": "bool"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "CONFIRM_SECONDS",
+        "DP_DIRTY",
+        "EFFORT_RATIO",
+        "FAN_ON_MIN",
+        "FLOW_FRAC",
+        "MAX_GAP_HOURS",
+        "REQUIRE_RUN_PROOF"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P2",
+      "required_roles": [],
+      "rule_id": "FILTER-LOAD",
+      "sql_file": "filter_load.sql",
+      "run_proof": "gated"
     }
   ]
 }

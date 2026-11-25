@@ -233,6 +233,7 @@ OUTPUT_COLUMNS = {
     "proven_off_hours": ("h", "time with run proof OFF"),
     "unknown_hours": ("h", "window time with no known run proof (missing proof or gaps)"),
     "assessment": ("-", "assessed, insufficient_proof or no_proof"),
+    "filter_path": ("-", "filter_dp, or fan_effort (advisory)"),
 }
 
 

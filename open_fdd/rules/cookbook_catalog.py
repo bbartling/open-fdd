@@ -1567,6 +1567,55 @@ def coil_perf(d, p, poll):
             & drop.notna() & (drop < min_dt))
     return (fan_on & flow_ok & (heat | cool)).fillna(False)
 
+
+def _rank_pick(values: pd.Series, k: int) -> float:
+    """Lowest value whose 1-based rank r satisfies r * 10 >= n * k: the portable percentile of filter_load.sql."""
+    s = np.sort(values.to_numpy(dtype=float))
+    n = len(s)
+    return float(s[-(-n * k // 10) - 1]) if n else float("nan")
+
+
+def filter_load(d, p, poll):
+    """Filter loading / fouling (#1783), twin of sql/fdd/postgres/rules/filter_load.sql.
+
+    With a filter DP: fault when DP > dp_dirty (Pa, readings outside 0-2500 Pa ignored as a sensor problem), the fan
+    on (status, else command) and, where airflow is bound, airflow >= flow_frac x its own 90th percentile over fan-on
+    samples. Without a filter DP, with fan power and airflow: advisory when fan effort (kW per L/s, fan on, airflow at
+    or above that floor) > effort_ratio x its own 10th percentile; under 4 h of such samples the rule is not assessed.
+    ``d.attrs["filter_load_assessment"]`` names the path (``filter_dp``, ``fan_effort``, ``insufficient_baseline``)."""
+    from open_fdd.rules.base import _eligible_hold_seconds
+
+    def col(name):
+        return pd.to_numeric(d[name], errors="coerce") if name in d.columns else pd.Series(np.nan, index=d.index)
+
+    dp, power, flow = col("filter-diff-pressure"), col("fan-elec-power"), col("zone-airflow")
+    status = col("fan-status")
+    fan_cmd = norm_cmd(d["fan-cmd"]) if "fan-cmd" in d.columns else pd.Series(np.nan, index=d.index)
+    fan_on = pd.Series(True, index=d.index)
+    fan_on = fan_on.where(fan_cmd.isna(), fan_cmd > _gl36_value(p, "fan_on_min", None, FAN_ON_MIN))
+    fan_on = fan_on.where(status.isna(), status > 0.05).astype(bool)
+    on_flow = flow[fan_on & flow.notna()]
+    flow_ref = _rank_pick(on_flow, 9) if len(on_flow) else float("nan")
+    floor = _f(p, "flow_frac", 0.5) * flow_ref
+
+    if dp.notna().any():
+        d.attrs["filter_load_assessment"] = "filter_dp"
+        flow_ok = flow.isna() | (flow >= floor) if not np.isnan(flow_ref) else pd.Series(True, index=d.index)
+        plausible = (dp >= 0.0) & (dp <= 2500.0)
+        return (fan_on & flow_ok & dp.notna() & plausible & (dp > _f(p, "dp_dirty", 248.84))).fillna(False)
+
+    ok = fan_on & (power > 0.0) & (flow > 0.0) & (flow >= floor)
+    effort = (power / flow).where(ok)
+    held = _eligible_hold_seconds(d.index)
+    hours = float(held[effort.notna()].sum()) / 3600.0 if held is not None else 0.0
+    if hours < 4.0:
+        d.attrs["filter_load_assessment"] = "insufficient_baseline"
+        return pd.Series(False, index=d.index)
+    d.attrs["filter_load_assessment"] = "fan_effort"
+    base = _rank_pick(effort.dropna(), 1)
+    return (effort.notna() & (effort > _f(p, "effort_ratio", 1.3) * base)).fillna(False)
+
+
 def fcu_clg_coil(d, p, poll):
     cool = norm_cmd(d["cooling-valve"])
     heat = norm_cmd(d["heating-valve"])
@@ -2343,6 +2392,15 @@ RULES: list[CookbookRule] = [
                         "heating-coil-leaving-temp", "cooling-coil-entering-temp", "cooling-coil-leaving-temp",
                         "mixed-air-temp", "discharge-air-temp", "vav-inlet-air-temp", "vav-discharge-air-temp",
                         "zone-air-temp", "zone-airflow", "fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("FILTER-LOAD", "Filter loading", "ahu", ["ahu"], [],
+        "Fan on: filter DP above dp_dirty, else fan effort high for the airflow.",
+        filter_load, params=[
+            CookbookParam("dp_dirty", "Dirty filter pressure drop", "Pa", 49.768, 995.36, 12.442, 248.84),
+            CookbookParam("flow_frac", "Minimum airflow fraction", "frac", 0.0, 0.9, 0.05, 0.5),
+            CookbookParam("effort_ratio", "Fan effort ratio", "x", 1.05, 3.0, 0.05, 1.3),
+            CONFIRM_PARAM(20.0)],
+        optional_roles=["filter-diff-pressure", "fan-elec-power", "zone-airflow", "fan-status", "fan-cmd"],
+        confirm_seconds=1200),
     CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
         "Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.",
