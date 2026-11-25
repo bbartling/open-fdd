@@ -548,9 +548,39 @@ def test_calibration_fits_and_reports_held_out_metrics():
     assert info["status"] == "fitted", info
     assert info["fault"] >= 5 and info["normal"] >= 5
     ho = info["held_out"]
-    assert ho["calibrated"]["auc"] >= 0.8
-    assert ho["calibrated"]["brier"] <= ho["heuristic"]["brier"] + 0.02
+    assert ho["logistic"]["auc"] >= 0.8
+    assert ho["calibrated"]["auc"] == ho["logistic"]["auc"]
+    assert ho["logistic"]["brier"] <= ho["heuristic"]["brier"] + 0.02
+    for key in ("temperature", "isotonic"):
+        assert key in ho and ho[key]["auc"] >= 0.8
     assert out["p_real_calibrated"].between(0, 1).all()
+    assert out["p_real_temperature"].between(0, 1).all()
+    assert out["p_real_isotonic"].between(0, 1).all()
+    assert info.get("temperature_final", 0) > 0
+
+
+def test_temperature_and_isotonic_reduce_ece_when_scores_are_overconfident():
+    """Synthetic over-confident scores, independent of the evaluation generator."""
+    from open_fdd.ml.confidence_calibrate import (
+        _fit_isotonic,
+        _fit_temperature,
+        _metrics,
+        apply_isotonic,
+        apply_temperature,
+    )
+
+    rng = np.random.default_rng(0)
+    y = np.concatenate([rng.binomial(1, 0.7, 200), rng.binomial(1, 0.3, 200)]).astype(float)
+    p = np.concatenate([np.full(200, 0.95), np.full(200, 0.05)])
+    t = _fit_temperature(p, y)
+    assert t > 1.0
+    pt = apply_temperature(p, t)
+    pi = apply_isotonic(p, _fit_isotonic(p, y))
+    h, tm, iso = _metrics(y, p), _metrics(y, pt), _metrics(y, pi)
+    assert tm["ece"] < h["ece"]
+    assert iso["ece"] < h["ece"]
+    order = np.argsort(p, kind="mergesort")
+    assert np.all(np.diff(pi[order]) >= -1e-12)
 
 
 def test_calibration_needs_enough_labels():

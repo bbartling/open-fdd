@@ -136,11 +136,20 @@ ranking. A unit with two or more independent rules labeled likely real is `equip
 ## Calibrating against reviewed episodes
 
 With reviewer verdicts, `--labels verdicts.csv` (`equipment_id, start_ts, end_ts, label`, optional `rule_id`; label
-`fault` or `normal`) fits an L2-regularised logistic regression on the episode evidence (numpy only) and adds
-`p_real_calibrated` to every episode. The report shows held-out Brier score, expected calibration error and AUC for
-the heuristic and the calibrated model on the same episodes, with folds grouped by equipment. A rule-specific verdict
-overrides a rule-agnostic one. Fitting needs at least 20 labeled episodes and 5 of each verdict; otherwise the report
-says it was not fitted. Public labeled data (#1721) can seed the fit before a site has its own verdicts.
+`fault` or `normal`) compares the heuristic `p_real` with three numpy-only fits on held-out folds (grouped by
+equipment when there are enough units):
+
+* **Temperature scaling** — one parameter on the heuristic score (`p_real_temperature`). `T > 1` softens
+  over-confident probabilities.
+* **Isotonic regression** — a monotone map of that score (`p_real_isotonic`).
+* **L2-regularised logistic regression** on the episode evidence (`p_real_calibrated`, kept under that name for
+  compatibility).
+
+The report shows held-out Brier score, expected calibration error and AUC for each, next to the heuristic. A
+rule-specific verdict overrides a rule-agnostic one. Fitting needs at least 20 labeled episodes and 5 of each
+verdict; otherwise the report says it was not fitted. Public labeled data (#1721) can seed the fit before a site
+has its own verdicts. These maps are not a substitute for a well-calibrated score in the absence of labels, and
+they are not fitted to the built-in generator.
 
 ## Comparing the screen to the rules
 
@@ -171,7 +180,8 @@ open-fdd-ml confidence --evaluate --seeds 7 --write-benchmark bench --out-dir ev
 * **Confusion matrix** of the three ground-truth classes (`real`, `false_positive`, `tuning`) against the four
   screen labels (`likely_real`, `likely_false_positive`, `tuning_suggested`, `uncertain`).
 * **Calibration** of `p_real` as a probability that the episode is a real fault (Brier score, expected calibration
-  error, AUC). With enough labels the logistic fit from `--labels` is shown on held-out folds as well.
+  error, AUC). With enough labels, held-out temperature scaling, isotonic regression and the logistic fit are shown
+  as well.
 
 To score your own rule output the same way, pass the usual input plus a verdict file. Labels are
 `equipment_id, start_ts, end_ts, label` with optional `rule_id`. `label` is `fault`, `false_positive` or `tuning`

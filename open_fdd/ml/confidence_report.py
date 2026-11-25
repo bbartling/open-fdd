@@ -186,8 +186,18 @@ def to_markdown(report: dict[str, Any]) -> str:
         ho = cal.get("held_out")
         if ho:
             lines.extend(["", "| held-out | Brier | ECE | AUC |", "|---|---|---|---|"])
-            for k in ("heuristic", "calibrated"):
+            seen = set()
+            for k, title in (
+                ("heuristic", "heuristic"),
+                ("temperature", "temperature"),
+                ("isotonic", "isotonic"),
+                ("logistic", "logistic"),
+                ("calibrated", "logistic"),
+            ):
+                if k not in ho or title in seen:
+                    continue
+                seen.add(title)
                 m = ho[k]
-                lines.append(f"| {k} | {m['brier']} | {m['ece']} | {m['auc']} |")
+                lines.append(f"| {title} | {m['brier']} | {m['ece']} | {m['auc']} |")
     lines.extend(["", f"_{report['advisory']}_", ""])
     return "\n".join(lines)

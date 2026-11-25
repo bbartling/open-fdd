@@ -397,6 +397,12 @@ def _stat(values: list[float]) -> dict[str, Any]:
             "values": [None if not np.isfinite(v) else round(float(v), 4) for v in values]}
 
 
+def _held(report: dict[str, Any], method: str, key: str) -> float:
+    ho = (report.get("calibration") or {}).get("held_out") or {}
+    row = ho.get(method) or (ho.get("calibrated") if method == "logistic" else None) or {}
+    return float(row.get(key, float("nan")))
+
+
 def summarize_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
     """Mean and spread of the headline metrics across several evaluation reports (usually several seeds)."""
 
@@ -417,6 +423,10 @@ def summarize_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "tuning_as_tuning_suggested": grab(lambda r: (r.get("tuning") or {}).get("share_tuning_suggested", float("nan"))),
         "heuristic_auc": grab(lambda r: ((r.get("calibration") or {}).get("heuristic") or {}).get("auc", float("nan"))),
         "heuristic_brier": grab(lambda r: ((r.get("calibration") or {}).get("heuristic") or {}).get("brier", float("nan"))),
+        "heuristic_ece": grab(lambda r: ((r.get("calibration") or {}).get("heuristic") or {}).get("ece", float("nan"))),
+        "heldout_temperature_ece": grab(lambda r: _held(r, "temperature", "ece")),
+        "heldout_isotonic_ece": grab(lambda r: _held(r, "isotonic", "ece")),
+        "heldout_logistic_ece": grab(lambda r: _held(r, "logistic", "ece")),
     }
 
 
@@ -480,6 +490,10 @@ def to_markdown(report: dict[str, Any]) -> str:
             ("tuning_as_tuning_suggested", "Tuning episodes labeled tuning_suggested"),
             ("heuristic_auc", "Heuristic AUC"),
             ("heuristic_brier", "Heuristic Brier"),
+            ("heuristic_ece", "Heuristic ECE"),
+            ("heldout_temperature_ece", "Held-out temperature ECE"),
+            ("heldout_isotonic_ece", "Held-out isotonic ECE"),
+            ("heldout_logistic_ece", "Held-out logistic ECE"),
         )
         for key, title in labels:
             st = su.get(key) or {}
@@ -541,10 +555,19 @@ def to_markdown(report: dict[str, Any]) -> str:
         lines.append(f"| Heuristic | {h['brier']:.3f} | {h['ece']:.3f} | {h['auc']:.3f} |")
         if "held_out" in cal:
             ho = cal["held_out"]
-            for key, title in (("heuristic", "Heuristic (held-out)"), ("calibrated", "Calibrated (held-out)")):
-                if key in ho:
-                    m = ho[key]
-                    lines.append(f"| {title} | {m['brier']:.3f} | {m['ece']:.3f} | {m['auc']:.3f} |")
+            seen = set()
+            for key, title in (
+                ("heuristic", "Heuristic (held-out)"),
+                ("temperature", "Temperature (held-out)"),
+                ("isotonic", "Isotonic (held-out)"),
+                ("logistic", "Logistic (held-out)"),
+                ("calibrated", "Logistic (held-out)"),
+            ):
+                if key not in ho or title in seen:
+                    continue
+                seen.add(title)
+                m = ho[key]
+                lines.append(f"| {title} | {m['brier']:.3f} | {m['ece']:.3f} | {m['auc']:.3f} |")
         elif cal.get("status") and cal["status"] != "fitted":
             lines += ["", cal["status"]]
     lines += ["", "The screen does not change a rule, a threshold or a stored result."]
