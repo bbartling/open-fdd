@@ -79,6 +79,21 @@ const ttlStr = (s) => `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').
 const ttlId = (s) => String(s).replace(/[^A-Za-z0-9_-]/g, "_");
 
 /**
+ * Base IRI of the model's Turtle (#1773): `urn:nf:site:<site uuid>:`, from the model alone, never from the host the
+ * model was read through (before, location.host, a LAN / VPN IP, a proxy name or the hook's 127.0.0.1 each gave other
+ * subjects). The Model & RDF tab, the SPARQL tab and the rdf / sparql / sparql-data hooks all call this, so one model
+ * gives one set of subjects. Several sites: the lowest uuid, so record order does not matter. A site without a uuid
+ * uses its id; no site gives `urn:nf:`. Older exports used `urn:nf:<host>:<uuid>`; the sparql-data hook and the
+ * Python client still read such point IRIs.
+ * @param {{sites?: any[]} | null | undefined} model
+ * @returns {string}
+ */
+function rdfBaseOf(model) {
+  const keys = ((model && model.sites) || []).map((s) => s.uuid || idOf(s)).filter(Boolean).map(ttlId).sort();
+  return keys.length ? `urn:nf:site:${keys[0]}:` : "urn:nf:";
+}
+
+/**
  * Turtle for the model + the set of tags that aren't in the Haystack libs above.
  *
  * External time-series references (slice 6): every exported point links to where its history

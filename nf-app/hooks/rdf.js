@@ -21,12 +21,13 @@ const STATIC = path.join(__dirname, '..', 'static');
 const DEFAULT_LIMIT = 150000;   // UTF-8 bytes of Turtle per answer (NF keeps the answer as one event line)
 const MAX_LIMIT = 190000;
 
-/** static/model.js in a sandbox: toPoint, idOf, ENTITY_TYPES, modelToTurtle (the UI's own code). */
+/** static/model.js in a sandbox: toPoint, idOf, ENTITY_TYPES, modelToTurtle, rdfBaseOf (the UI's own code). */
 function loadShared() {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
   vm.runInContext(fs.readFileSync(path.join(STATIC, 'model.js'), 'utf8'), ctx, { filename: 'model.js' });
   const get = (n) => vm.runInContext(n, ctx);
-  return { toPoint: get('toPoint'), idOf: get('idOf'), ENTITY_TYPES: get('ENTITY_TYPES'), modelToTurtle: get('modelToTurtle') };
+  return { toPoint: get('toPoint'), idOf: get('idOf'), ENTITY_TYPES: get('ENTITY_TYPES'), modelToTurtle: get('modelToTurtle'),
+    rdfBaseOf: get('rdfBaseOf') };
 }
 
 /** Model-layer entities plus every point of each site (default layer), as the UI loads them. */
@@ -41,18 +42,20 @@ async function loadModel(http, shared) {
   return model;
 }
 
-/** Base IRI: same scheme as the UI (urn:nf:<host>:); args.base wins. */
-function baseOf(sdk, args = {}) {
+/**
+ * Base IRI: the UI's own rdfBaseOf (static/model.js, `urn:nf:site:<site uuid>:`), from the model, never from the
+ * access host or sdk.http's baseURL (#1773), so the hook and the Model & RDF tab give the same subjects. args.base wins.
+ */
+function baseOf(model, args = {}, shared = loadShared()) {
   if (args.base) return String(args.base);
-  const host = (sdk && sdk.http && sdk.http.defaults && sdk.http.defaults.baseURL) || 'nf';
-  return `urn:nf:${String(host).replace(/^https?:\/\//, '').replace(/\/$/, '')}:`;
+  return shared.rdfBaseOf(model);
 }
 
 /** {model, turtle, base, shared} for the NF this hook runs on. */
 async function buildTurtle(sdk, args = {}) {
   const shared = loadShared();
   const model = await loadModel(sdk.http, shared);
-  const base = baseOf(sdk, args);
+  const base = baseOf(model, args, shared);
   const { turtle } = shared.modelToTurtle(model, base, { nfBase: args.nfBase || '' });
   return { model, turtle, base, shared };
 }

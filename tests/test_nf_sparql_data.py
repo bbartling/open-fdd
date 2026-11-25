@@ -188,6 +188,18 @@ def test_fetch_local_runs_the_query_here_like_lite(tmp_path):
         sd.fetch_local(c, "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }", T0, T0 + timedelta(hours=1),
                        turtle=ttl.read_text(encoding="utf-8"))
 
+def test_point_iri_in_the_site_base_and_older_host_iris_both_name_the_point():
+    """#1773: the base is urn:nf:site:<site uuid>:; an IRI from an older host-based export still names its point."""
+    base, u = "urn:nf:site:s-1:", "11111111-0000-4000-8000-000000000004"
+    keys = {u: u, base + u: u}
+    assert sd._pick(["p"], [{"p": base + u}], keys) == ("p", [u])
+    assert sd._pick(["p"], [{"p": f"urn:nf:192.168.1.50:8090:{u}"}], keys) == ("p", [u])
+    assert sd._pick(["p", "q"], [{"p": None, "q": u}], keys) == ("q", [u])
+    for bad in ("urn:nf:192.168.1.50:8090:nope", f"http://x.test/{u}"):
+        with pytest.raises(NFError):
+            sd._pick(["p"], [{"p": bad}], keys)
+
+
 def test_to_iso_z_keeps_fractions_for_exact_continuation():
     from open_fdd.nf.client import parse_nf_ts, to_iso_z
 
