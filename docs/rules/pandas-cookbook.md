@@ -2380,7 +2380,7 @@ Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 | `pump_operating_status` | `pump_status` | `pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_hot_water_temperature` | `hw_supply_t` | `hot-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 104.44 | optional |
 

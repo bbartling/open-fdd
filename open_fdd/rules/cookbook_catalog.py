@@ -2322,7 +2322,7 @@ RULES: list[CookbookRule] = [
         "Hot-water plant proven on above 18.3 °C web OAT",
         "plant",
         ["boiler"],
-        [],
+        ["web-outside-air-temp"],
         "Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.",
         __import__("open_fdd.rules.economizer_weather", fromlist=["hw_oat1_compute"]).hw_oat1_compute,
         params=[
@@ -2330,7 +2330,7 @@ RULES: list[CookbookRule] = [
             CookbookParam("hw_on_min", "HW supply running cut", "°C", 32.222222, 60.0, 0.555556, 43.333333, direction="fewer"),
             CONFIRM_PARAM(30.0),
         ],
-        optional_roles=["web-outside-air-temp", "pump-status", "hot-water-supply-temp"],
+        optional_roles=["pump-status", "hot-water-supply-temp"],
         confirm_seconds=1800,
     ),
     CookbookRule(
