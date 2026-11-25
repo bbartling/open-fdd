@@ -113,6 +113,15 @@ function fddRuleTitle(rule) {
 /** Catalog rule by id (or a bare { id } when unknown). */
 const fddRuleOf = (catalog, id) => ((catalog && catalog.rules) || []).find((r) => r.id === id) || { id, description: "" };
 
+/**
+ * SI unit of each metric rule output column (#1775). A metric rule (no fault_pct / fault_hours output) publishes its
+ * first output column; the FDD hook writes this unit on the result point and the UI converts it for display. Same
+ * units as scripts/nf/docs_units.py OUTPUT_COLUMNS (tests/metric-display.test.mjs checks every metric rule's output).
+ */
+const FDD_METRIC_UNITS = Object.freeze({
+  fan_runtime_hours: "h", total_hours: "h", avg_zone_temp: "°C", min_zone_temp: "°C", max_zone_temp: "°C", comfort_pct: "%",
+});
+
 const fddEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 /** HTML badge for a rule id: <span class="rule-badge"><i>rule</i><span class="rule-id">VAV-1</span></span>. */

@@ -236,13 +236,18 @@
       const sensorPt = sensorRef ? byUuid.get(sensorRef) : null;
       const sensorLabel = sensorPt ? (sensorPt.dis || sensorPt.name || sensorRef) : sensorRef;
       const outputKind = isTimeline ? "fault_timeline" : String(attrs.fddOutput || "").trim();
-      const unit = p.units || (isTimeline ? "0/1" : outputKind === "fault_hours" ? "h" : outputKind === "fault_pct" ? "%" : "");
+      const isMetric = !isTimeline && tags.includes("metric") && !tags.includes("fault");
+      // #1775: a metric point from 5.0.21 has no unit; its output column's SI unit (static/fdd.js) lets display mode convert it
+      const metricUnits = typeof FDD_METRIC_UNITS === "undefined" ? {} : FDD_METRIC_UNITS;
+      const unit = p.units || (isTimeline ? "0/1" : outputKind === "fault_hours" ? "h" : outputKind === "fault_pct" ? "%"
+        : isMetric ? metricUnits[outputKind] || "" : "");
       let dis = p.dis || p.name || p.uuid;
       if (ruleRef) {
         const parts = [ruleRef];
         if (sensorLabel) parts.push(sensorLabel);
         if (isTimeline) parts.push("fault_timeline");
         else if (outputKind === "fault_hours" || outputKind === "fault_pct") parts.push(outputKind);
+        else if (isMetric && outputKind) parts.push(outputKind);
         else if (!sensorLabel) parts.push("fault");
         dis = parts.join(" · ");
       }
