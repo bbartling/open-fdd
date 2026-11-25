@@ -152,7 +152,7 @@ The `history` columns are bare `DOUBLE PRECISION`, so a stored `1` could mean 1 
 | Scale | Roles | Meaning |
 |---|---|---|
 | `fraction` | `fan_cmd`, `return_fan`, `chw_pump_cmd`, `cw_pump_cmd`, `tower_fan_cmd`, `chiller_cmd`, `clg_valve_pct`, `htg_valve_pct`, `reheat_valve_pct`, `damper_pct`, `damper_cmd`, `oa_damper_pct` | 0-1; 1 is 100 %, 0.01 is 1 %. The `_pct` in a name is historical |
-| `boolean` | `fan_status`, `chiller_status`, `chw_pump_status`, `pump_status`, `compressor_status`, `loop_enabled`, `clg_available`, `building_zone_load_satisfied`, `building_ahu_load_satisfied` | 0 or 1 (a resampled bucket is the on-fraction in [0, 1]) |
+| `boolean` | `fan_status`, `chiller_status`, `chw_pump_status`, `pump_status`, `compressor_status`, `boiler_status`, `loop_enabled`, `clg_available`, `building_zone_load_satisfied`, `building_ahu_load_satisfied` | 0 or 1 (a resampled bucket is the on-fraction in [0, 1]) |
 | `percent_rh` | `oa_h`, `ra_h`, `zone_rh`, `ma_h`, `sa_h`, `web_oa_h` | relative humidity 0-100: a physical quantity, not a command (SV-RANGE and the sensor sweep are %RH) |
 | `text` | `occ_mode` | categorical string |
 | `si:<unit>` | every other role: temperatures `si:degC`, `duct_static`/`chw_dp` `si:Pa`, flows `si:L/s`, `electric_kw`/`chiller_power` `si:kW`, `kwh` `si:kWh`, `chiller_amps`/`chiller_current` `si:A`, `zone_co2` `si:ppm`, `*_request_sum` `si:count` | physical SI, unchanged |

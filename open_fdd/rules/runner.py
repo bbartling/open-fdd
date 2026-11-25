@@ -725,6 +725,26 @@ def run_cookbook_rule(
             result.fault_pct = None
             result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
             result.metrics["assessment"] = why
+        if rule.id == "SHORT-CYCLE":
+            # #1781: no run status -> skipped (never a silent pass); a trend too coarse to count cycles -> not assessed;
+            # a fault found on a coarse trend is a floor (the counts can only be higher)
+            why = d.attrs.get("short_cycle_assessment", "assessed")
+            result.metrics["assessment"] = why
+            result.metrics["run_status_source"] = d.attrs.get("short_cycle_proof", "")
+            if why == "no_run_status":
+                result.status = "SKIPPED_MISSING_ROLES"
+                result.applicable = False
+                result.missing_roles = ["boiler-status|compressor-status|chiller-status|chiller-amps|chiller-power"]
+                result.fault_hours = None
+                result.fault_pct = None
+                result.notes = "SKIPPED — no boiler / compressor / chiller run status, current or power"
+            elif why == "insufficient_trend":
+                result.status = "NOT_ASSESSED_INSUFFICIENT_TREND"
+                result.fault_hours = None
+                result.fault_pct = None
+                result.notes = "NOT ASSESSED — run-status trend too coarse (or too short) to count cycles"
+            elif why == "coarse_floor":
+                result.notes += " (coarse trend: start counts are a floor)"
         if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
             # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
             result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"

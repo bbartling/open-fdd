@@ -1632,6 +1632,13 @@ def fcu_mode_cycle(d, p, poll):
     return (mode != 0) & (changes >= int(_f(p, "mode_changes", 4.0)))
 
 
+def short_cycle(d, p, poll):
+    """#1781 SHORT-CYCLE: starts in the trailing hour, or repeated short on-times, from proven run status (duty-aware)."""
+    from open_fdd.rules.short_cycle import short_cycle_compute
+
+    return short_cycle_compute(d, p, poll)
+
+
 # ---------------------------------------------------------------------------
 # Central plants
 # ---------------------------------------------------------------------------
@@ -2564,6 +2571,15 @@ RULES: list[CookbookRule] = [
             CookbookParam("chw_lo", "CHWS low", "°C", 1.666667, 12.777778, 0.277778, 7.222222, direction="stricter"),
             CookbookParam("request_lo", "Request sum low", "count", 0.0, 10.0, 0.5, 1.0, direction="stricter"),
             CONFIRM_PARAM()], confirm_seconds=1800),
+    CookbookRule("SHORT-CYCLE", "Short cycling", "plant", ["boiler", "chiller", "heatpump", "ahu"], [],
+        "Too many starts per hour, or short on-times.",
+        short_cycle, params=[
+            CookbookParam("max_starts_per_hour", "Max starts per hour", "count", 2.0, 20.0, 1.0, 6.0, direction="fewer"),
+            CookbookParam("min_on_seconds", "Minimum on-time", "sec", 60.0, 1800.0, 60.0, 600.0, direction="stricter"),
+            CookbookParam("min_short_cycles", "Short cycles per hour", "count", 1.0, 10.0, 1.0, 3.0, direction="fewer"),
+            CONFIRM_PARAM(0.0)],
+        optional_roles=["boiler-status", "compressor-status", "chiller-status", "chiller-amps", "chiller-power"],
+        confirm_seconds=0),
 
     # --- Extended families ---
     CookbookRule(

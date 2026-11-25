@@ -6,6 +6,10 @@
    "type": "double"
   },
   {
+   "name": "boiler_status",
+   "type": "double"
+  },
+  {
    "name": "building_ahu_load_satisfied",
    "type": "double"
   },
@@ -359,6 +363,7 @@
   "RESET-1": 15.0,
   "SCHED-1": 30.0,
   "SCHED-247": 60.0,
+  "SHORT-CYCLE": 0.0,
   "SV-FLATLINE": 5.0,
   "SV-RANGE": 5.0,
   "SV-RATE": 10.0,

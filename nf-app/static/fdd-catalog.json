@@ -68,6 +68,16 @@
    ],
    "scale": "si:degC"
   },
+  "boiler_status": {
+   "name": "boiler-status",
+   "classes": [],
+   "markers": [
+    "boiler",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
+  },
   "building_ahu_load_satisfied": {
    "name": "building-ahu-load-satisfied",
    "classes": [],
@@ -3397,6 +3407,35 @@
     "require_run_proof": 1.0
    },
    "run_proof": "gated"
+  },
+  {
+   "id": "SHORT-CYCLE",
+   "description": "Too many starts per hour, or short on-times",
+   "sql_file": "short_cycle.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "boiler",
+    "chiller",
+    "heatpump",
+    "ahu"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "boiler_status",
+    "compressor_status",
+    "chiller_status",
+    "chiller_amps",
+    "chiller_power"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "max_starts_per_hour": 6.0,
+    "min_on_seconds": 600.0,
+    "min_short_cycles": 3.0
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "the run status is the signal: starts and on-times are counted from it"
   }
  ]
 }

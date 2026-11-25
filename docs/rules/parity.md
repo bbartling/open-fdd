@@ -14,9 +14,9 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 
 | | Rules |
 |---|---:|
-| SQL rules | **78** |
-| With a pandas twin | **72** |
-| Match on the synthetic suite | **58** |
+| SQL rules | **79** |
+| With a pandas twin | **73** |
+| Match on the synthetic suite | **59** |
 | Known divergence | **14** |
 | SQL only (no twin) | **6** |
 
@@ -92,6 +92,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="reset-1"></a>[RESET-1](sql-cookbook.html#reset-1) | match |  |
 | <a id="sched-1"></a>[SCHED-1](sql-cookbook.html#sched-1) | match |  |
 | <a id="sched-247"></a>[SCHED-247](sql-cookbook.html#sched-247) | match |  |
+| <a id="short-cycle"></a>[SHORT-CYCLE](sql-cookbook.html#short-cycle) | match |  |
 | <a id="sv-flatline"></a>[SV-FLATLINE](sql-cookbook.html#sv-flatline) | match |  |
 | <a id="sv-range"></a>[SV-RANGE](sql-cookbook.html#sv-range) | match |  |
 | <a id="sv-rate"></a>[SV-RATE](sql-cookbook.html#sv-rate) | known divergence | documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances |

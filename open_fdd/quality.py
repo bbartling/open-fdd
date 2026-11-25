@@ -66,6 +66,7 @@ STATUS_ROLES = {
     "hw-pump-status",
     "chiller-status",
     "compressor-status",
+    "boiler-status",
     "occupied",
     "occ-mode",
     "equipment-enable",

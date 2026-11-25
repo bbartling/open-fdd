@@ -271,6 +271,14 @@
    "sensor"
   ]
  },
+ "boiler_status": {
+  "classes": [],
+  "markers": [
+   "boiler",
+   "run",
+   "sensor"
+  ]
+ },
  "reheat_valve_pct": {
   "classes": [
    "reheat-cmd"

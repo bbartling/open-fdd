@@ -38,6 +38,7 @@
   "min_flow_sp": "min-flow-sp",
   "chw_pump_status": "chw-pump-status",
   "compressor_status": "compressor-status",
+  "boiler_status": "boiler-status",
   "building_zone_load_satisfied": "building-zone-load-satisfied",
   "building_ahu_load_satisfied": "building-ahu-load-satisfied",
   "damper_pct": "damper",
