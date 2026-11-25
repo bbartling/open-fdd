@@ -761,7 +761,7 @@ SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_full_min` | Full-cooling threshold (fraction) | 0.01 | 0.5 | 1 | fraction (0-1) |
+| `clg_full_min` | Full-cooling threshold (fraction) | 0.9 | 0.5 | 1 | fraction (0-1) |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `econ_full_open` | Economizer full-open threshold | 0.9 | 0.5 | 1 | fraction (0-1) |
 | `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
@@ -779,7 +779,7 @@ SATavg > SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fc13-sat-high): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
+**Parity** [match](parity.html#fc13-sat-high)
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 

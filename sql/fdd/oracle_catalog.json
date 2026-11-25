@@ -1646,7 +1646,7 @@
         "min": 0.5,
         "max": 1.0,
         "step": 0.01,
-        "default": 0.01,
+        "default": 0.9,
         "direction": ""
       },
       {

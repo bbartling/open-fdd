@@ -85,6 +85,50 @@
     "SV-FLATLINE": "fea76bfa16c091f229b04ab723370c6d47ff567b9bdf2d1e233a761e23e35e71",
     "SV-RATE": "a9b3d503877261cbc76f73d5ef1252ba7cc3d97cfdcc8121d0d3a8be4dd8e4f6"
    }
+  },
+  {
+   "name": "sensor overrides",
+   "site": {
+    "version": 1,
+    "roles": {
+     "zone-air-temp": {
+      "hi": 30.0
+     }
+    },
+    "sensors": {
+     "zat-2": {
+      "role": "zone-air-temp",
+      "lo": 15.0,
+      "flat_tol": 0.2
+     }
+    }
+   },
+   "equipment": {
+    "version": 1,
+    "roles": {},
+    "sensors": {
+     "zat-2": {
+      "role": "zone-air-temp",
+      "hi": 26.0,
+      "rate_per_h": 4.0
+     },
+     "rh-9": {
+      "role": "zone-air-humidity",
+      "flat_tol": 0.5
+     },
+     "dat-1": {
+      "role": "discharge-air-temp",
+      "spike_delta": 5.0
+     }
+    }
+   },
+   "config_hash": "35d54951a8348498d256533821dbfb96abda94e56124cfff5887f839e60d97ba",
+   "sql_sha256": {
+    "SV-RANGE": "e0002992bcfb298237cd16e967cfdf57734e288c6152cf88f6da93a15672bd5e",
+    "SV-SPIKE": "47f7819164deddfb8681ab9fd7f0781f16526176a6ed1f1eceef5a027b5bf95e",
+    "SV-FLATLINE": "a5c54389472d6619d4a8aa4ea1ae74e2a2ab74105f3bb1d55d60e9b030e0a636",
+    "SV-RATE": "922c8b908fa238774b433ff6b015c61243814fd6e5a206eecc08fb698955c470"
+   }
   }
  ]
 }

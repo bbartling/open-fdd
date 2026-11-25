@@ -19,7 +19,7 @@ ds = generate(seed=0, equips=8, days=7, profile="basic")   # SI samples + Haysta
 ref = reference(ds)                                        # pandas results (needs pandas)
 rows = run_adapter(MyAdapter(), ds)                        # your engine runs the pack SQL on ds
 verdict = compare(rows, ref, Policy.default())
-print(verdict.summary())      # parity: compared=72 matched=55 known-divergent=17 unexpected=0 -> OK
+print(verdict.summary())      # parity: compared=72 matched=56 known-divergent=16 unexpected=0 -> OK
 assert verdict.ok
 ```
 
@@ -139,7 +139,7 @@ the same dataset and the same pinned verdict:
 3. Load through your real ingest path, build the `history` scratch table from `fdd.point` + `fdd.input_sample`, run the pack,
    write `fdd.rule_result` through your product code and read the rows BACK from it as the adapter's result.
 4. Assert: the loaded `history` equals `ds.history` cell for cell (1e-9 relative); the verdict equals
-   `tests/parity/baseline.json` (`compared=72 matched=55 known-divergent=17 unexpected=0` for 8 equipment x 7 days, 58/14 for 4 x 3; see the file); a second run writes zero new rows (the upsert key is the primary key).
+   `tests/parity/baseline.json` (`compared=72 matched=56 known-divergent=16 unexpected=0` for 8 equipment x 7 days, 59/13 for 4 x 3; see the file); a second run writes zero new rows (the upsert key is the primary key).
 
 The in-repo reference is `TimescaleAdapter` (`tests/parity/adapters.py`, runner `nf-app/timescale/test/parity_run.mjs`);
 `python tests/parity/stress.py --engines pglite,sqlite,timescale` runs it against a disposable TimescaleDB

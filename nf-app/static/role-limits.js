@@ -8,6 +8,8 @@
  * SI only in storage. An override is { version: 1, roles: { "<role>": { lo?, hi?, spike_delta?, flat_tol?, stale_tol?,
  * rate_per_h? } } }, one revision of fdd.rule_config (rule_id "SV-LIMITS", scope_key "site" or "equip:<equipment id>").
  * Precedence per field: shipped file (open_fdd/data/sensor_sweep_limits.json), then site, then equipment.
+ * #1763: an override may also carry sensors: { "<series id>": { role, lo?, hi?, ... } }: that one point's own values,
+ * which win over every role value (equipment over site per field) and never touch another point of the same role.
  * The merged document is validated exactly like validate_role_limits() before a save, and the hook re-renders the
  * five sweep rules from the pack's role_limit_templates (byte-identical to the pack SQL with the shipped limits).
  */
@@ -23,6 +25,11 @@
   const QUANTITIES = ['absolute_temperature', 'relative_humidity', 'air_pressure', 'volume_flow', 'power'];
   const DEFAULT_KEYS = ['flat_tol_temperature', 'stale_tol_temperature', 'rate_per_h', 'flat_s', 'stale_s'];
   const ROLE_KEYS = ['role', 'quantity', 'lo', 'hi', 'spike_delta', 'flat_tol', 'stale_tol', 'rate_per_h', 'source'];
+  const SENSOR_KEYS = [...ROLE_KEYS, 'series_id', 'fields'];
+  const SENSOR_FIELDS = ['lo', 'hi', 'spike_delta', 'flat_tol', 'stale_tol', 'rate_per_h'];
+  // A series id is rendered into SQL as a literal: the same characters as sensor_sweep_catalog.SERIES_ID_RE.
+  const SERIES_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$/;
+  const SENSOR_RULE_FIELDS = { 'SV-RANGE': ['lo', 'hi'], 'SV-SPIKE': ['spike_delta'], 'SV-FLATLINE': ['flat_tol'], 'SV-RATE': ['rate_per_h'] };
   const SI_UNIT = { absolute_temperature: 'degC', relative_humidity: '%RH', air_pressure: 'Pa', volume_flow: 'L/s', power: 'kW' };
   // display unit -> SI factor; the numbers of open_fdd/data/unit_factors.json (tests/test_role_limit_overrides.py checks them)
   const MULTIPLY = {
@@ -77,23 +84,40 @@
       throw new Error(`role limits: defaults must have exactly ${DEFAULT_KEYS.join(', ')}`);
     }
     const defaults = Object.fromEntries(DEFAULT_KEYS.map((k) => [k, finite(d[k], `defaults.${k}`, { positive: true })]));
+    const limitEntry = (entry, what) => {
+      if (!QUANTITIES.includes(entry.quantity)) throw new Error(`${what}: unknown quantity ${entry.quantity}`);
+      if (typeof entry.source !== 'string' || !entry.source.trim()) throw new Error(`${what}: source is required`);
+      const lo = finite(entry.lo, `${what}.lo`), hi = finite(entry.hi, `${what}.hi`);
+      if (lo >= hi) throw new Error(`${what}: lo (${lo}) must be < hi (${hi})`);
+      return { role: entry.role, quantity: entry.quantity, lo, hi, source: entry.source,
+        spike_delta: finite(entry.spike_delta, `${what}.spike_delta`, { positive: true, allowNull: true }),
+        flat_tol: finite(entry.flat_tol, `${what}.flat_tol`, { positive: true, allowNull: true }),
+        stale_tol: finite(entry.stale_tol, `${what}.stale_tol`, { positive: true, allowNull: true }),
+        rate_per_h: finite(entry.rate_per_h, `${what}.rate_per_h`, { positive: true, allowNull: true }) };
+    };
+    const exactKeys = (entry, keys) => entry && typeof entry === 'object' && Object.keys(entry).length === keys.length && keys.every((k) => has(entry, k));
     const roles = {};
     for (const entry of doc.roles || []) {
-      if (!entry || typeof entry !== 'object' || Object.keys(entry).length !== ROLE_KEYS.length || !ROLE_KEYS.every((k) => has(entry, k))) {
-        throw new Error(`role limits: each role needs exactly ${[...ROLE_KEYS].sort().join(', ')}`);
-      }
+      if (!exactKeys(entry, ROLE_KEYS)) throw new Error(`role limits: each role needs exactly ${[...ROLE_KEYS].sort().join(', ')}`);
       const role = entry.role;
       if (typeof role !== 'string' || !role.trim()) throw new Error('role limits: role must be a non-empty string');
       if (has(roles, role)) throw new Error(`role limits: duplicate role ${role}`);
-      if (!QUANTITIES.includes(entry.quantity)) throw new Error(`${role}: unknown quantity ${entry.quantity}`);
-      if (typeof entry.source !== 'string' || !entry.source.trim()) throw new Error(`${role}: source is required`);
-      const lo = finite(entry.lo, `${role}.lo`), hi = finite(entry.hi, `${role}.hi`);
-      if (lo >= hi) throw new Error(`${role}: lo (${lo}) must be < hi (${hi})`);
-      roles[role] = { role, quantity: entry.quantity, lo, hi, source: entry.source,
-        spike_delta: finite(entry.spike_delta, `${role}.spike_delta`, { positive: true, allowNull: true }),
-        flat_tol: finite(entry.flat_tol, `${role}.flat_tol`, { positive: true, allowNull: true }),
-        stale_tol: finite(entry.stale_tol, `${role}.stale_tol`, { positive: true, allowNull: true }),
-        rate_per_h: finite(entry.rate_per_h, `${role}.rate_per_h`, { positive: true, allowNull: true }) };
+      roles[role] = limitEntry(entry, role);
+    }
+    const sensors = {};
+    for (const entry of doc.sensors || []) {
+      if (!exactKeys(entry, SENSOR_KEYS)) throw new Error(`sensor limits: each sensor needs exactly ${[...SENSOR_KEYS].sort().join(', ')}`);
+      const sid = entry.series_id;
+      if (typeof sid !== 'string' || !SERIES_ID_RE.test(sid)) throw new Error(`sensor limits: invalid series id ${JSON.stringify(sid)}`);
+      if (has(sensors, sid)) throw new Error(`sensor limits: duplicate series id ${sid}`);
+      const role = has(roles, entry.role) ? roles[entry.role] : null;
+      if (!role) throw new Error(`sensor ${sid}: unknown role ${entry.role}`);
+      const fields = entry.fields;
+      if (!Array.isArray(fields) || !fields.length || fields.some((f) => !SENSOR_FIELDS.includes(f))) {
+        throw new Error(`sensor ${sid}: fields must name its own limits (${SENSOR_FIELDS.join(', ')})`);
+      }
+      if (entry.quantity !== role.quantity) throw new Error(`sensor ${sid}: quantity ${entry.quantity} != role quantity ${role.quantity}`);
+      sensors[sid] = { ...limitEntry(entry, `sensor ${sid}`), series_id: sid, fields: [...new Set(fields)].sort() };
     }
     for (const [ruleId, names] of Object.entries(allowlists || {})) {
       for (const name of names) {
@@ -107,7 +131,7 @@
         }
       }
     }
-    return { defaults, roles };
+    return { defaults, roles, sensors };
   }
 
   // ---- overrides -------------------------------------------------------------------------------------------------
@@ -132,6 +156,24 @@
       }
     }
     const doc = { version: 1, roles: out };
+    const sensors = params.sensors;
+    if (sensors !== undefined && sensors !== null) {
+      if (typeof sensors !== 'object' || Array.isArray(sensors)) throw new Error('override: sensors must be an object');
+      doc.sensors = {};
+      for (const [sid, fields] of Object.entries(sensors)) {
+        if (!SERIES_ID_RE.test(sid)) throw new Error(`override: invalid series id ${JSON.stringify(sid)}`);
+        if (!fields || typeof fields !== 'object' || !known.has(fields.role)) throw new Error(`override: sensor ${sid} needs a known role`);
+        const own = Object.entries(fields).filter(([k]) => k !== 'role');
+        if (!own.length) throw new Error(`override: sensor ${sid} needs at least one field`);
+        const entry = { role: fields.role };
+        for (const [field, value] of own) {
+          if (!has(FIELD_KIND, field)) throw new Error(`override: sensor ${sid}.${field} is not editable (${Object.keys(FIELD_KIND).join(', ')})`);
+          if (!isNum(value)) throw new Error(`override: sensor ${sid}.${field} must be a finite SI number`);
+          entry[field] = value;
+        }
+        doc.sensors[sid] = entry;
+      }
+    }
     for (const k of ['note', 'reset', 'rollback_of']) if (has(params, k)) doc[k] = params[k];
     return doc;
   }
@@ -141,14 +183,33 @@
     const sources = {};
     const byRole = {};
     for (const e of base.roles) { byRole[e.role] = e; sources[e.role] = Object.fromEntries(Object.keys(FIELD_KIND).map((f) => [f, 'shipped'])); }
+    /** @type {Record<string, any>} series id -> { role, field: value, _layer: { field: layer }, _label } */
+    const own = {};
     for (const [layer, override] of [['site', site], ['equipment', equipment]]) {
       if (!override) continue;
       const doc = normalizeOverride(override, base);
       const rev = revisions[layer];
+      const label = `${layer} override` + (rev != null ? ` revision ${rev}` : '');
       for (const [role, fields] of Object.entries(doc.roles)) {
         for (const [field, value] of Object.entries(fields)) { byRole[role][field] = value; sources[role][field] = layer; }
-        byRole[role].source = `${layer} override` + (rev != null ? ` revision ${rev}` : '');
+        byRole[role].source = label;
       }
+      for (const [sid, fields] of Object.entries(doc.sensors || {})) {
+        const cur = has(own, sid) ? own[sid] : (own[sid] = { role: fields.role, _layer: {} });
+        if (cur.role !== fields.role) throw new Error(`override: sensor ${sid} is ${cur.role} at one scope and ${fields.role} at another`);
+        for (const [field, value] of Object.entries(fields)) if (field !== 'role') { cur[field] = value; cur._layer[field] = layer; }
+        cur._label = `${label} (sensor)`;
+      }
+    }
+    const sids = Object.keys(own).sort();
+    if (sids.length) {
+      // #1763: a sensor = its role's merged entry with its own fields on top (validated with the roles)
+      base.sensors = sids.map((sid) => {
+        const cur = own[sid];
+        const fields = Object.keys(cur._layer).sort();
+        sources[`sensor:${sid}`] = Object.fromEntries(Object.keys(FIELD_KIND).map((f) => [f, cur._layer[f] || 'role']));
+        return { ...byRole[cur.role], ...Object.fromEntries(fields.map((f) => [f, cur[f]])), source: cur._label, series_id: sid, fields };
+      });
     }
     return { doc: base, sources };
   }
@@ -230,6 +291,9 @@
     const layers = {};
     if (site && site.roles && Object.keys(site.roles).length) layers.site = site.roles;
     if (equipment && equipment.roles && Object.keys(equipment.roles).length) layers.equipment = equipment.roles;
+    // #1763: per-sensor values under their own keys, so a config without them keeps its earlier hash
+    if (site && site.sensors && Object.keys(site.sensors).length) layers.site_sensors = site.sensors;
+    if (equipment && equipment.sensors && Object.keys(equipment.sensors).length) layers.equipment_sensors = equipment.sensors;
     return Object.keys(layers).length ? pyJson(layers) : '';
   }
 
@@ -246,21 +310,32 @@
   }
   function sweepFragment(ruleId, limits, sqlRoles) {
     const entries = Object.keys(limits.roles).filter((n) => has(sqlRoles, n)).map((n) => limits.roles[n]);
+    // #1763: a sensor with its own value for this rule gets its own arm (series_id = '<id>'), first; its role's arm leaves it out
+    const sensors = limits.sensors || {};
+    const own = Object.keys(sensors).sort().map((sid) => sensors[sid])
+      .filter((s) => has(sqlRoles, s.role) && (SENSOR_RULE_FIELDS[ruleId] || []).some((f) => s.fields.includes(f)));
+    const sidOf = (s) => `series_id = '${s.series_id}'`;   // validated by SERIES_ID_RE: safe as a SQL literal
+    const exclude = (role) => {
+      const ids = own.filter((s) => s.role === role).map((s) => `'${s.series_id}'`);
+      return ids.length ? ` AND series_id NOT IN (${ids.join(',')})` : '';
+    };
+    const heads = [...own.map((s) => [s, `${sidOf(s)} AND sensor_role = '${sqlRoles[s.role]}'`]),
+      ...entries.map((e) => [e, `sensor_role = '${sqlRoles[e.role]}'${exclude(e.role)}`])];
     if (ruleId === 'SV-RANGE') {
-      return entries.map((e) => {
+      return heads.map(([e, head]) => {
         const lo = dec(pyRepr(e.lo)), hi = dec(pyRepr(e.hi));
         const c = numText(decHalf(decAdd(lo, hi)));
         const h = numText(decHalf(decSub(hi, lo)));
         const scale = RANGE_SCALE[e.quantity];
         const hs = h + (scale ? ' * ' + scale : '');
-        return `(sensor_role = '${sqlRoles[e.role]}' AND (value < (${c} - ${hs}) OR value > (${c} + ${hs})))`;
+        return `(${head} AND (value < (${c} - ${hs}) OR value > (${c} + ${hs})))`;
       }).join(' OR ');
     }
     if (ruleId === 'SV-SPIKE') {
-      return entries.map((e) => {
+      return heads.map(([e, head]) => {
         const scale = SPIKE_SCALE[e.quantity];
         const lim = num(e.spike_delta) + (scale ? ' * ' + scale : '');
-        return `(sensor_role = '${sqlRoles[e.role]}' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= {{MAX_SILENCE_SECONDS}} AND ABS(value - previous_value) > ${lim})`;
+        return `(${head} AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= {{MAX_SILENCE_SECONDS}} AND ABS(value - previous_value) > ${lim})`;
       }).join(' OR ');
     }
     if (ruleId === 'SV-FLATLINE') {
@@ -273,12 +348,13 @@
         if (!groups.has(k)) groups.set(k, []);
         groups.get(k).push(sqlRoles[e.role]);
       }
-      const whens = [...groups].map(([v, roles]) => ' WHEN sensor_role IN (' + roles.map((r) => `'${r}'`).join(',') + ') THEN ' + v).join('');
+      const whens = own.map((s) => ` WHEN ${sidOf(s)} THEN ${num(s[field])}`).join('')
+        + [...groups].map(([v, roles]) => ' WHEN sensor_role IN (' + roles.map((r) => `'${r}'`).join(',') + ') THEN ' + v).join('');
       return whens ? `CASE${whens} ELSE ${tuner} END` : tuner;
     }
     if (ruleId === 'SV-RATE') {
       const base = '({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0)';
-      let whens = '';
+      let whens = own.map((s) => ` WHEN ${sidOf(s)} THEN (${num(s.rate_per_h)} * {{SENSOR_SPAN}} / 100.0)`).join('');
       for (const e of entries) {
         const v = explicitRoleValue(e, 'rate_per_h', limits);
         if (v !== null) whens += ` WHEN sensor_role = '${sqlRoles[e.role]}' THEN (${num(v)} * {{SENSOR_SPAN}} / 100.0)`;
