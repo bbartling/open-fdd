@@ -15,6 +15,8 @@ on:
       - "open_fdd/parity/**"
       - "examples/sparql_data/**"
       - "open_fdd/nf/**"
+      - "openapi/**"
+      - "contract/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
   pull_request:
@@ -29,6 +31,8 @@ on:
       - "open_fdd/parity/**"
       - "examples/sparql_data/**"
       - "open_fdd/nf/**"
+      - "openapi/**"
+      - "contract/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
 
@@ -114,6 +118,21 @@ jobs:
           python3 -m pip install --quiet pyoxigraph rdflib
           node tools/rdf-check/gen_ttl.js tools/rdf-check/fixtures/model.json "$RUNNER_TEMP/model.ttl"
           python3 tools/rdf-check/check_ttl.py "$RUNNER_TEMP/model.ttl"
+
+  # The UI API contract (#1806): the suite in contract/test validates the mock against openapi/open-fdd-ui-api.yaml.
+  contract:
+    name: UI API contract (mock)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Contract suite against the mock (auth on/off, writes on/off)
+        run: cd contract && npm ci && npm test
 
   # Full edition on real TimescaleDB (disposable service DB). Must not skip: a skipped run fails.
   timescale:

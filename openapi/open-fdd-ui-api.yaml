@@ -1,0 +1,685 @@
+openapi: 3.1.0
+info:
+  title: Open-FDD UI API
+  version: 1.0.0
+  summary: The REST contract between the Open-FDD web UI and any host backend.
+  description: |
+    Any host (the NF app, a container deploy, a small edge box, a third-party backend) that implements this
+    contract can serve the Open-FDD UI. `info.version` is the contract version, on its own semver, independent of
+    the Open-FDD app version. A minor version only adds optional fields, endpoints or capability flags; a breaking
+    change bumps the major version.
+
+    Conventions:
+
+    | Topic | Rule |
+    |---|---|
+    | Units | SI on the wire, always. Every numeric value carries or inherits an explicit `unit` (`SiUnit`). Imperial is display-only in the UI. Durations in result rows are hours (`h`). |
+    | Time | RFC 3339 / ISO-8601 strings. Responses are always UTC with a `Z` suffix (`2026-01-05T00:00:00Z`). Query parameters accept `Z` or a numeric offset. Ranges are half-open: `from` inclusive, `to` exclusive. |
+    | Names | Rule inputs use the ASHRAE 223P-derived snake_case names of the rule-input contract (#1804), for example `outside_air_temperature`. See `InputName`. |
+    | Lists | Lists that can grow large are paginated with `limit` and an opaque `cursor`; the envelope is `{items, next_cursor}`. `next_cursor` is `null` on the last page. |
+    | Errors | Every 4xx/5xx JSON body is an `Error`. Clients branch on `error.code`, never on `message`. |
+    | Auth | When `capabilities.auth` is true the host authenticates with `/api/auth/*`: a short-lived bearer access token in the response body and a refresh token only in an `HttpOnly; Secure; SameSite=Strict` cookie. When it is false the host authenticates outside this contract (for example a platform session or a front door) and `/api/auth/*` answer 404. `/api/meta` never requires a token. |
+    | Roles | `viewer` reads. `operator` also tunes rules. `admin` has operator rights plus host-specific administration outside this contract. |
+    | Writes | Off by default. A write needs both the capability flag (`rules_write`) and the operator or admin role. |
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /
+    description: Same origin as the UI.
+tags:
+  - name: meta
+  - name: model
+  - name: data
+  - name: rules
+  - name: auth
+security:
+  - bearerAuth: []
+paths:
+  /api/meta:
+    get:
+      tags: [meta]
+      operationId: getMeta
+      summary: Contract version, app version and capability flags.
+      description: Public. The UI reads this first and hides every feature the host lacks.
+      security: []
+      responses:
+        "200":
+          description: Host metadata.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Meta" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/equipment:
+    get:
+      tags: [model]
+      operationId: listEquipment
+      summary: Equipment of every site the caller can see, as a tree via `parent_id`.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: One page of equipment, ordered by `id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EquipmentPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/points:
+    get:
+      tags: [model]
+      operationId: listPoints
+      summary: Points with their bound rule input, SI unit and freshness.
+      parameters:
+        - name: equipment
+          in: query
+          description: Only points of this equipment id.
+          schema: { type: string, minLength: 1 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: One page of points, ordered by `id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PointPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/samples:
+    get:
+      tags: [data]
+      operationId: listSamples
+      summary: Time series of one point, SI values, ascending time.
+      parameters:
+        - name: point
+          in: query
+          required: true
+          description: Point id.
+          schema: { type: string, minLength: 1 }
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: One page of samples in `[from, to)`, ascending by `t`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SamplePage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/results:
+    get:
+      tags: [data]
+      operationId: listResults
+      summary: Rule results whose window overlaps `[from, to)`.
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: equipment
+          in: query
+          description: Only results of this equipment id.
+          schema: { type: string, minLength: 1 }
+        - name: rule
+          in: query
+          description: Only results of this rule id.
+          schema: { type: string, minLength: 1 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: One page of results, ordered by `window_start`, then `equipment_id`, `rule_id`, `subject_point_id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ResultPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/rules:
+    get:
+      tags: [rules]
+      operationId: listRules
+      summary: Rules the host runs, their inputs and the one user-facing tuner, `confirm_min`.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: One page of rules, ordered by `rule_id`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RulePage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/rules/{rule_id}/confirm_min:
+    put:
+      tags: [rules]
+      operationId: setConfirmMin
+      summary: Set a rule's confirmation delay in minutes.
+      description: |
+        Capability-gated and role-gated. Checks run in this order: authentication (401), the `rules_write`
+        capability (403 `capability_disabled`), the caller's role (403 `forbidden`, operator or admin required),
+        the rule (404 `not_found`; 409 `not_tunable` for a rule without a confirmation delay), the body
+        (400 `bad_request`). Other delays are internal constants and not tunable through this contract.
+      parameters:
+        - name: rule_id
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmMinUpdate" }
+      responses:
+        "200":
+          description: The updated rule.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Exchange a username and password for an access token and a refresh cookie.
+      description: |
+        Only when `capabilities.auth` is true (404 otherwise). Passwords are stored hashed (scrypt, PBKDF2 or
+        argon2). A wrong username and a wrong password give the same 401 `invalid_credentials`. Hosts should rate
+        limit this endpoint (429 `rate_limited`).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: Logged in. The refresh token is only in the cookie, never in the body.
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refresh
+      summary: Exchange the refresh cookie for a new access token; the refresh token rotates.
+      description: |
+        The previous refresh token is rejected after a successful refresh (401). No request body.
+      security:
+        - refreshCookie: []
+      responses:
+        "200":
+          description: New access token and a new refresh cookie.
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+            Cache-Control: { $ref: "#/components/headers/NoStore" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/Error" }
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Revoke the refresh token and clear the cookie.
+      description: Idempotent. Answers 204 with or without a valid cookie.
+      security: []
+      responses:
+        "204":
+          description: Logged out. The cookie is cleared (`Max-Age=0`).
+          headers:
+            Set-Cookie: { $ref: "#/components/headers/RefreshCookie" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        default: { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Short-lived access token from login or refresh (`expires_in` at most 900 s).
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: ofdd_refresh
+      description: Refresh token. Set only as `HttpOnly; Secure; SameSite=Strict; Path=/api/auth`.
+
+  headers:
+    RefreshCookie:
+      description: "`ofdd_refresh=<token>; Path=/api/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=<s>`"
+      schema: { type: string }
+    NoStore:
+      description: "`no-store`"
+      schema: { type: string }
+
+  parameters:
+    From:
+      name: from
+      in: query
+      required: true
+      description: Range start, inclusive. RFC 3339 with `Z` or an offset.
+      schema: { type: string, format: date-time }
+      example: "2026-01-05T00:00:00Z"
+    To:
+      name: to
+      in: query
+      required: true
+      description: Range end, exclusive; must be after `from`. Hosts may answer 400 `range_too_large`.
+      schema: { type: string, format: date-time }
+      example: "2026-01-06T00:00:00Z"
+    Limit:
+      name: limit
+      in: query
+      description: Page size. Default and maximum are host-defined; a host must accept 1 to 1000.
+      schema: { type: integer, minimum: 1, maximum: 10000 }
+    Cursor:
+      name: cursor
+      in: query
+      description: The `next_cursor` of the previous page, passed back unchanged.
+      schema: { type: string, minLength: 1 }
+
+  responses:
+    BadRequest:
+      description: Invalid or missing parameter or body (`bad_request`, `range_too_large`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing, invalid or expired token (`unauthorized`), or wrong login (`invalid_credentials`). Carries `WWW-Authenticate` on bearer-protected endpoints.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: The capability is off (`capability_disabled`) or the role is too low (`forbidden`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Unknown resource, or an auth endpoint on a host with `capabilities.auth` false (`not_found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: The rule has no tunable confirmation delay (`not_tunable`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Too many requests (`rate_limited`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Error:
+      description: Any other error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              pattern: "^[a-z][a-z0-9_]*$"
+              description: |
+                Stable machine code. Defined: `bad_request`, `range_too_large`, `unauthorized`,
+                `invalid_credentials`, `forbidden`, `capability_disabled`, `not_found`, `not_tunable`,
+                `payload_too_large`, `method_not_allowed`, `rate_limited`, `internal`. Clients treat unknown codes by HTTP status.
+            message:
+              type: string
+              description: Human-readable, for logs and display. Never parsed.
+            details:
+              type: object
+              description: Optional structured context, for example the offending parameter.
+      example:
+        error: { code: capability_disabled, message: "rule writes are disabled on this host" }
+
+    Timestamp:
+      type: string
+      format: date-time
+      pattern: "Z$"
+      description: UTC instant, RFC 3339 with a `Z` suffix.
+      example: "2026-01-05T00:00:00Z"
+
+    SiUnit:
+      type: string
+      description: |
+        The SI unit of a value, spelled as Open-FDD's unit table (`open_fdd/data/units.json`). The empty string is a
+        dimensionless value or a boolean (0/1). Imperial or other non-SI units never appear on the wire.
+      enum: ["°C", "Δ°C", "Δ°C/h", "Pa", "L/s", "kW", "kWh", "%", "ppm", "h", ""]
+
+    InputName:
+      type: string
+      pattern: "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
+      description: |
+        ASHRAE 223P-derived snake_case rule-input name (#1804). It names the 223P pattern (medium, aspect,
+        quantity kind, connection point) a point matches; it is the only rule-input vocabulary. Examples:
+
+        | 223P snake_case | Replaces role |
+        |---|---|
+        | `discharge_air_temperature` | `sat` |
+        | `mixed_air_temperature` | `mat` |
+        | `outside_air_temperature` | `oa_t` |
+        | `return_air_temperature` | `rat` |
+        | `discharge_air_temperature_setpoint` | `sat_sp` |
+        | `zone_air_temperature` | `zone_t` |
+        | `supply_fan_run_status` | `fan_status` |
+        | `supply_fan_command` | `fan_cmd` |
+        | `outside_air_damper_position` | `oa_damper_pct` |
+        | `cooling_valve_position` | `clg_valve_pct` |
+        | `heating_valve_position` | `htg_valve_pct` |
+        | `chilled_water_supply_temperature` | `chw_supply_t` |
+        | `hot_water_supply_temperature` | `hw_supply_t` |
+        | `duct_static_pressure` | `duct_static` |
+      example: outside_air_temperature
+
+    Capabilities:
+      type: object
+      required: [rules_write, export_csv, export_parquet, sparql, auth]
+      description: |
+        Host feature switches. The UI hides a feature whose flag is false. Unknown flags are ignored.
+        The export and SPARQL endpoints themselves are outside contract 1.0.0; these flags tell the UI whether the
+        host offers them.
+      properties:
+        rules_write: { type: boolean, description: "`PUT /api/rules/{rule_id}/confirm_min` is enabled. Default false." }
+        export_csv: { type: boolean, description: The host offers CSV export. }
+        export_parquet: { type: boolean, description: The host offers Parquet export. }
+        sparql: { type: boolean, description: The host offers a SPARQL endpoint over its model. }
+        auth: { type: boolean, description: "The host authenticates through `/api/auth/*`." }
+      additionalProperties: { type: boolean }
+
+    Meta:
+      type: object
+      required: [contract_version, app, capabilities]
+      properties:
+        contract_version:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+          description: The `info.version` of this contract the host implements.
+          example: 1.0.0
+        app:
+          type: object
+          required: [name, version]
+          properties:
+            name: { type: string, example: open-fdd }
+            version: { type: string, description: Host application version, independent of the contract. }
+        capabilities: { $ref: "#/components/schemas/Capabilities" }
+
+    Site:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string }
+
+    Equipment:
+      type: object
+      required: [id, name, kind, site, parent_id]
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string }
+        kind:
+          type: string
+          description: |
+            Open-FDD equipment kind: `ahu`, `vav`, `chiller`, `chwPlant`, `cooling_tower`, `boiler`, `heatpump`,
+            `meter`, `baseboard`, `zone_other`, `weather` or `general`. Unknown kinds are shown as `general`.
+          example: ahu
+        site: { $ref: "#/components/schemas/Site" }
+        parent_id:
+          type: [string, "null"]
+          description: The equipment that serves this one (for example a VAV's AHU), or null at the top.
+      example: { id: ahu-1, name: AHU-1, kind: ahu, site: { id: site-demo, name: Demo Site }, parent_id: null }
+
+    Point:
+      type: object
+      required: [id, name, equipment_id, input, unit, value_type, last_sample_time, last_value]
+      properties:
+        id: { type: string, minLength: 1 }
+        name: { type: string }
+        equipment_id: { type: string, minLength: 1 }
+        input:
+          description: The rule input this point is bound to, or null when it binds no rule input.
+          oneOf:
+            - $ref: "#/components/schemas/InputName"
+            - type: "null"
+        unit: { $ref: "#/components/schemas/SiUnit" }
+        value_type:
+          type: string
+          enum: [number, boolean]
+          description: "`boolean` points carry 0 or 1."
+        last_sample_time:
+          description: Freshness. Time of the newest stored sample, or null when there is none.
+          oneOf:
+            - $ref: "#/components/schemas/Timestamp"
+            - type: "null"
+        last_value:
+          type: [number, "null"]
+          description: The newest sample value, SI, in `unit`.
+      example:
+        id: ahu-1.outside_air_temperature
+        name: AHU-1 OAT
+        equipment_id: ahu-1
+        input: outside_air_temperature
+        unit: "°C"
+        value_type: number
+        last_sample_time: "2026-01-07T23:55:00Z"
+        last_value: 4.2
+
+    Sample:
+      type: object
+      required: [t, v]
+      additionalProperties: false
+      properties:
+        t: { $ref: "#/components/schemas/Timestamp" }
+        v: { type: number, description: SI value in the page's `unit`. }
+
+    Metric:
+      type: object
+      required: [value, unit]
+      properties:
+        value: { type: [number, "null"] }
+        unit: { $ref: "#/components/schemas/SiUnit" }
+
+    Result:
+      type: object
+      required: [equipment_id, rule_id, subject_point_id, window_start, window_end, status, reason,
+                 fault_hours, covered_hours, active_hours, fault_pct, metrics]
+      description: |
+        One rule over one window. Hour fields are in `h`; `fault_pct` is in `%`.
+
+        | status | Meaning | Hour fields |
+        |---|---|---|
+        | `PASS` | Assessed, no confirmed fault. | numbers, `fault_hours` 0 |
+        | `FAULT` | Assessed, confirmed fault time in the window. | numbers, `fault_hours` > 0 |
+        | `METRIC` | A statistic rule; values in `metrics`. | null |
+        | `NOT_ASSESSED` | Not run or not judgeable: unbound required input, no data, stale data, no occupancy model. `reason` says which. | null |
+        | `ERROR` | The engine failed for this window. `reason` says why. | null |
+
+        Hosts on the Open-FDD core schema map `INCONCLUSIVE`, `SKIPPED` and `STALE` to `NOT_ASSESSED`.
+      properties:
+        equipment_id: { type: string, minLength: 1 }
+        rule_id: { type: string, minLength: 1 }
+        subject_point_id:
+          type: [string, "null"]
+          description: The point a per-sensor rule judged, or null for an equipment-level result.
+        window_start: { $ref: "#/components/schemas/Timestamp" }
+        window_end: { $ref: "#/components/schemas/Timestamp" }
+        status:
+          type: string
+          enum: [PASS, FAULT, METRIC, NOT_ASSESSED, ERROR]
+        reason:
+          type: [string, "null"]
+          description: Machine-readable reason, required for `NOT_ASSESSED` and `ERROR`; for example `unbound_input:cooling_valve_position`.
+        fault_hours: { type: [number, "null"], minimum: 0, description: Confirmed fault time, h. }
+        covered_hours: { type: [number, "null"], minimum: 0, description: Time with usable data, h. }
+        active_hours:
+          type: [number, "null"]
+          minimum: 0
+          description: Covered time while the equipment's run proof was on, h. Null for rules without a run-proof gate.
+        fault_pct:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 100
+          description: "`100 * fault_hours / active_hours` for run-proof gated rules, else `100 * fault_hours / covered_hours`, %."
+        metrics:
+          type: object
+          description: Named statistics of a `METRIC` result; empty otherwise.
+          additionalProperties: { $ref: "#/components/schemas/Metric" }
+      example:
+        equipment_id: ahu-1
+        rule_id: FC1
+        subject_point_id: null
+        window_start: "2026-01-05T00:00:00Z"
+        window_end: "2026-01-06T00:00:00Z"
+        status: FAULT
+        reason: null
+        fault_hours: 1.5
+        covered_hours: 24
+        active_hours: 12
+        fault_pct: 12.5
+        metrics: {}
+
+    RuleInput:
+      type: object
+      required: [name, required, unit]
+      properties:
+        name: { $ref: "#/components/schemas/InputName" }
+        required: { type: boolean, description: An unbound required input makes the rule `NOT_ASSESSED`. }
+        unit: { $ref: "#/components/schemas/SiUnit" }
+
+    Rule:
+      type: object
+      required: [rule_id, title, kind, equipment_kinds, inputs, confirm_min, confirm_min_default]
+      properties:
+        rule_id: { type: string, minLength: 1, example: FC1 }
+        title: { type: string }
+        kind:
+          type: string
+          enum: [fault, metric]
+          description: "`metric` rules produce `METRIC` results and have no confirmation delay."
+        equipment_kinds:
+          type: array
+          items: { type: string }
+          description: Equipment kinds the rule applies to; empty means any.
+        inputs:
+          type: array
+          items: { $ref: "#/components/schemas/RuleInput" }
+        confirm_min:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 1440
+          description: Minutes a condition must hold before it counts as fault time. The only user-facing tuner. Null when not tunable.
+        confirm_min_default:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 1440
+          description: The shipped default (15 for most fault rules). Null when not tunable.
+
+    ConfirmMinUpdate:
+      type: object
+      required: [confirm_min]
+      additionalProperties: false
+      properties:
+        confirm_min: { type: integer, minimum: 0, maximum: 1440 }
+      example: { confirm_min: 20 }
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string, minLength: 1, maxLength: 1024, format: password }
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user]
+      not: { required: [refresh_token] }
+      properties:
+        access_token: { type: string, minLength: 16 }
+        token_type: { const: Bearer }
+        expires_in: { type: integer, minimum: 1, maximum: 900, description: Access token lifetime, s. }
+        user:
+          type: object
+          required: [username, role]
+          properties:
+            username: { type: string }
+            role: { type: string, enum: [viewer, operator, admin] }
+
+    Page:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array }
+        next_cursor: { type: [string, "null"] }
+
+    EquipmentPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Equipment" } }
+
+    PointPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Point" } }
+
+    SamplePage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - required: [point_id, unit]
+          properties:
+            point_id: { type: string, minLength: 1 }
+            unit: { $ref: "#/components/schemas/SiUnit" }
+            items: { type: array, items: { $ref: "#/components/schemas/Sample" } }
+
+    ResultPage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Result" } }
+
+    RulePage:
+      allOf:
+        - $ref: "#/components/schemas/Page"
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Rule" } }
