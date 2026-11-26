@@ -88,6 +88,16 @@ def test_zip_pins_full_sql_tree_and_confirm_min(tmp_path):
     baked = sum(1 for rule in pack["rules"].values() if rule["confirm_min"] == 15)
     assert baked == sum(1 for rule in by_id.values() if "confirm_min" in rule["parameters"])
     assert "sql/fdd/schema/core.sql" in names
+    for rel in bundle.RENDER_SUPPORT:
+        assert rel in names
+        assert stored[rel] == (ROOT / rel).read_bytes()
+        assert manifest["files"][rel]["sha256"]
+    assert pack["rules"]["VAV-1"]["output_columns"] == [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "fault_pct",
+    ]
 
 
 def test_pack_runs_on_memory_duckdb_without_extension_autoinstall(tmp_path):
@@ -125,7 +135,25 @@ def test_pack_runs_on_memory_duckdb_without_extension_autoinstall(tmp_path):
             except Exception as exc:  # noqa: BLE001 — report every rule, then fail once
                 failures.append(f"{rule_id}: {exc}")
                 continue
+            got = [d[0] for d in cur.description]
+            if got != rule["output_columns"]:
+                failures.append(f"{rule_id}: columns {got} != {rule['output_columns']}")
             assert rows == [] or rows is not None
         assert failures == [], failures
     finally:
         con.close()
+
+
+def test_extracted_archive_renders_fc1(tmp_path):
+    dest = bundle.build_bundle(tmp_path / "open-fdd-rules.zip")
+    extract = tmp_path / "tree"
+    with zipfile.ZipFile(dest) as archive:
+        archive.extractall(extract)
+    spec = importlib.util.spec_from_file_location(
+        "extracted_render_rule", extract / "sql" / "fdd" / "render_rule.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    sql = mod.render("FC1", 300, {"confirm_min": 15})
+    assert "{{" not in sql
+    assert "equipment_id" in sql

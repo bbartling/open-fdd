@@ -31,6 +31,12 @@ CONFIRM_MIN = 15
 USER_TUNERS = [
     {"key": "confirm_min", "default": CONFIRM_MIN, "unit": "min", "min": 0, "max": 60},
 ]
+# render_rule.py loads these from the repository root at import time.
+RENDER_SUPPORT = (
+    "open_fdd/rules/sensor_sweep_catalog.py",
+    "open_fdd/data/sensor_sweep_roles.json",
+    "open_fdd/data/sensor_sweep_limits.json",
+)
 
 
 def version() -> str:
@@ -78,6 +84,111 @@ def _tuning_by_id() -> dict[str, dict]:
     return {rule["rule_id"]: rule for rule in catalog["rules"]}
 
 
+def _strip_sql_comments(sql: str) -> str:
+    out: list[str] = []
+    i = 0
+    while i < len(sql):
+        if sql.startswith("--", i):
+            nl = sql.find("\n", i)
+            i = len(sql) if nl < 0 else nl
+            continue
+        out.append(sql[i])
+        i += 1
+    return "".join(out)
+
+
+def _top_level_spans(sql: str, keyword: str) -> list[int]:
+    """Indexes of ``keyword`` at parenthesis depth 0, outside quotes."""
+    want = keyword.lower()
+    found: list[int] = []
+    depth = 0
+    i = 0
+    quote = ""
+    while i < len(sql):
+        ch = sql[i]
+        if quote:
+            if ch == quote:
+                quote = ""
+            i += 1
+            continue
+        if ch in {"'", '"'}:
+            quote = ch
+            i += 1
+            continue
+        if ch == "(":
+            depth += 1
+            i += 1
+            continue
+        if ch == ")":
+            depth = max(0, depth - 1)
+            i += 1
+            continue
+        if depth == 0 and sql[i : i + len(want)].lower() == want:
+            before = sql[i - 1] if i else " "
+            after = sql[i + len(want)] if i + len(want) < len(sql) else " "
+            if not (before.isalnum() or before == "_") and not (after.isalnum() or after == "_"):
+                found.append(i)
+            i += len(want)
+            continue
+        i += 1
+    return found
+
+
+def _split_top_level(sql: str, sep: str) -> list[str]:
+    parts: list[str] = []
+    depth = 0
+    quote = ""
+    start = 0
+    for i, ch in enumerate(sql):
+        if quote:
+            if ch == quote:
+                quote = ""
+            continue
+        if ch in {"'", '"'}:
+            quote = ch
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif ch == sep and depth == 0:
+            parts.append(sql[start:i])
+            start = i + 1
+    parts.append(sql[start:])
+    return parts
+
+
+def _column_alias(item: str) -> str:
+    text = item.strip()
+    if text.lower().startswith("distinct "):
+        text = text[9:].strip()
+    spans = _top_level_spans(text, "as")
+    if spans:
+        return text[spans[-1] + 2 :].strip().strip('"')
+    token = text.split()[-1].strip('"')
+    if "." in token:
+        token = token.rsplit(".", 1)[-1]
+    return token
+
+
+def select_output_columns(sql: str) -> list[str]:
+    """Column names of the outermost SELECT, in result order.
+
+    Registry ``output_columns`` sometimes omit a selected expression (VAV-1
+    drops ``covered_hours``). The SELECT list is the contract a host maps by position.
+    """
+    body = _strip_sql_comments(sql)
+    selects = _top_level_spans(body, "select")
+    if not selects:
+        raise SystemExit("rendered SQL has no top-level SELECT")
+    rest = body[selects[-1] + len("select") :]
+    forms = _top_level_spans(rest, "from")
+    if not forms:
+        raise SystemExit("rendered SQL SELECT has no FROM")
+    items = [part for part in _split_top_level(rest[: forms[0]], ",") if part.strip()]
+    return [_column_alias(part) for part in items]
+
+
 def render_pack() -> dict:
     """Rendered PostgreSQL pack. confirm_min is 15 on every rule that accepts it."""
     render = _render()
@@ -96,7 +207,7 @@ def render_pack() -> dict:
         rules[rule_id] = {
             "sql": sql,
             "sql_file": rule["sql_file"],
-            "output_columns": list(rule["output_columns"]),
+            "output_columns": select_output_columns(sql),
             "confirm_min": CONFIRM_MIN if accepts else None,
         }
     return {
@@ -135,6 +246,11 @@ def manifest_for(files: dict[str, bytes], pack: dict) -> dict:
 def bundle_bytes(pack: dict | None = None) -> dict[str, bytes]:
     """Archive members except manifest.json (the manifest hashes these bytes)."""
     files = {path.relative_to(ROOT).as_posix(): path.read_bytes() for path in sql_files()}
+    for rel in RENDER_SUPPORT:
+        path = ROOT / rel
+        if not path.is_file():
+            raise SystemExit(f"renderer support file missing: {rel}")
+        files[rel] = path.read_bytes()
     rendered = pack if pack is not None else render_pack()
     files["pack.json"] = _dumps(rendered)
     return files
