@@ -117,7 +117,7 @@ def test_duckdb_matches_the_cases_and_pandas(duck, case):
 def test_dp_threshold_is_tunable():
     case = next(c for c in CASES if c["id"] == "dp_low_pass")
     hours, status, _ = pandas_rule_result("FILTER-LOAD", _frame(case), None, 300.0, params={"dp_dirty": 74.652})
-    assert status == "FAULT" and hours == pytest.approx(7.833333, abs=1e-5)
+    assert status == "FAULT" and hours == pytest.approx(7.75, abs=1e-5)
 
 
 def test_a_clean_filter_is_judged_like_with_like():

@@ -4473,11 +4473,11 @@ rules:
     priority: P2
     parity_status: sql_screening
     delete_python_candidate: false
-    confirm_seconds: 900
+    confirm_seconds: 1200
     parameters:
       confirm_seconds:
         label: Confirm time
-        default: 900.0
+        default: 1200.0
         min: 0.0
         max: 3600.0
         step: 300.0

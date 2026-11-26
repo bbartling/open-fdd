@@ -8774,7 +8774,7 @@
       "run_proof": "gated"
     },
     {
-      "confirm_seconds": 900,
+      "confirm_seconds": 1200,
       "delete_python_candidate": false,
       "description": "Filter pressure drop or fan effort too high",
       "equipment_kinds": [
@@ -8801,7 +8801,7 @@
       "parameters": {
         "confirm_min": {
           "control": "slider",
-          "default": 15.0,
+          "default": 20.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "key": "confirm_min",
