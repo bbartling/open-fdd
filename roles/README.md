@@ -1,18 +1,18 @@
 # Open-FDD point roles
 
 One point-role vocabulary for Open-FDD, open-hvac-edge and nf-hvac-functional-test. Each role is an ASHRAE 223P
-property pattern with a QUDT unit and one Haystack 4 binding. All three apps read this file; none keeps its own role
-table.
+property pattern with a QUDT unit and one Haystack 4 binding. The three apps are intended to adopt this file after
+their migrations. None keeps its own role table.
 
 | File | What |
 |---|---|
-| `openfdd-roles.json` | The vocabulary: sources, lexicon, derivation rule, units, Haystack binding rules, 86 roles |
+| `openfdd-roles.json` | The vocabulary: sources, lexicon, derivation rule, units, Haystack binding rules, 89 roles |
 | `openfdd-roles.schema.json` | JSON Schema (2020-12) for the file |
 | `validate_roles.py` | Checks schema, name derivation, units, binding safety and NF classes; `--ontology-dir` also checks every term against the pinned ontologies |
 | `test_validate_roles.py` | Tests for the validator: the real file passes, and each kind of mutation is flagged |
 | `issues/` | Migration issues for the three apps |
 
-Status: `1.0.0-draft.1`, targeted at Open-FDD 5.0.22. 86 roles: 69 are pure 223P and 17 are extensions.
+Status: `1.1.0-draft.1`, targeted at Open-FDD 5.0.22. 89 roles: 72 are pure 223P and 17 are extensions.
 
 ## A role entry
 
@@ -89,8 +89,9 @@ damper and valve positions. The edge and functional-test apps already use percen
 - A point carries exactly one of `sensor`, `sp` or `cmd`, and the role's class sets which one: setpoints and limits
   use `sp`, actuatable properties use `cmd`, observable properties use `sensor`.
 - Setpoints forbid `max` and `min`. A maximum forbids `min`, and a minimum forbids `max`.
-- `equip_markers` are matched on the parent equipment. `binding_scope` says whose point is meant (own, the air
-  handler that feeds it, an aggregate, weather, or derived).
+- `equip_markers` are matched on the parent equipment. `equip_forbid` are markers the parent must not carry.
+  `binding_scope` says whose point is meant (own, the air handler that feeds it, an aggregate, weather, or derived).
+  A shared NF class is a collision when those parent constraints can both hold.
 - If a point still matches more than one role, a strict superset of markers wins. Any remaining tie leaves the point
   unbound, and the app reports it.
 - `conformance`: `standard` uses Haystack 4 markers in a standard combination, `nonstandard` uses Haystack 4 markers in
@@ -147,8 +148,8 @@ Add one CI test that fails on drift:
    Grep for retired names (`legacy_keys`, `aliases`) and fail on any hit outside migration code.
 3. For every role you use, your unit equals `unit` (or `units[unit].haystack` where you show symbols), and your range
    and writability are no looser than the file's.
-4. Your Haystack matcher, run against the file's own tag sets, reproduces `markers`, `forbid`, `custom_markers` and
-   `equip_markers` for every role. A point carrying the markers of role B never binds a writable role A.
+4. Your Haystack matcher, run against the file's own tag sets, reproduces `markers`, `forbid`, `custom_markers`,
+   `equip_markers` and `equip_forbid` for every role. A point carrying the markers of role B never binds a writable role A.
 
 Example in Python:
 
