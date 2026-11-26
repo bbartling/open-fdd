@@ -74,6 +74,8 @@ Result points use fault or metric markers and carry attributes such as those bel
 | `sensorRef`, `roleRef` | Sensor UUID and role on a per-sensor result |
 | `fddSensorFaultHours` | Per-sensor hours included on the equipment summary |
 
+A metric rule (`AVG-ZONE-TEMP`, `ZONE-COMFORT-PCT`, `FAN-RUNTIME-HOURS`) writes markers `point,his,metric,fdd`, `fddStatus` `ok` and its first output in SI (`°C`, `%` or `h`, in `unit`). The FDD tab shows it as a metric, converted for display; it is never a fault.
+
 With no coverage, status is not-assessed and there is no numeric fault value. Stale means the current run
 could not refresh the point. It does not erase earlier history.
 

@@ -4,12 +4,21 @@
 // marker of the role. Nothing site-specific: equipment kinds come from equip markers.
 // Needs model.js (has, markersOf, idOf). The FDD hook uses the same rules (slice 3).
 
+/**
+ * True when an equip's markers carry catalog marker `m`. A Haystack 4 conjunct (`hot-water-plant`) matches the literal
+ * tag or every part (`hot`, `water`, `plant`). Twins: plot-spec.js, open_fdd/nf/model.py, open_fdd/plot_spec.py.
+ * @param {Set<string>} markers @param {string} m @returns {boolean}
+ */
+function hasKindMarker(markers, m) {
+  return markers.has(m) || (m.includes("-") && m.split("-").every((x) => markers.has(x)));
+}
+
 /** Equipment kinds (ahu, vav, chiller, …) an equip record has, from its Haystack markers. */
 /** @param {NfRecord} equipRec @param {FddCatalog} catalog @returns {string[]} */
 function equipKinds(equipRec, catalog) {
   const markers = new Set(markersOf(equipRec));
   return Object.entries(catalog.equipment_kinds)
-    .filter(([, ms]) => ms.some((m) => markers.has(m)))
+    .filter(([, ms]) => ms.some((m) => hasKindMarker(markers, m)))
     .map(([kind]) => kind);
 }
 
@@ -112,6 +121,15 @@ function fddRuleTitle(rule) {
 
 /** Catalog rule by id (or a bare { id } when unknown). */
 const fddRuleOf = (catalog, id) => ((catalog && catalog.rules) || []).find((r) => r.id === id) || { id, description: "" };
+
+/**
+ * SI unit of each metric rule output column (#1775). A metric rule (no fault_pct / fault_hours output) publishes its
+ * first output column; the FDD hook writes this unit on the result point and the UI converts it for display. Same
+ * units as scripts/nf/docs_units.py OUTPUT_COLUMNS (tests/metric-display.test.mjs checks every metric rule's output).
+ */
+const FDD_METRIC_UNITS = Object.freeze({
+  fan_runtime_hours: "h", total_hours: "h", avg_zone_temp: "°C", min_zone_temp: "°C", max_zone_temp: "°C", comfort_pct: "%",
+});
 
 const fddEsc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 

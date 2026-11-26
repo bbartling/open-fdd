@@ -870,7 +870,7 @@ SAT above setpoint at full cooling
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fc13-sat-high): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
+**Parity** [match](parity.html#fc13-sat-high)
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 

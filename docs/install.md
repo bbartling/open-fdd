@@ -156,6 +156,10 @@ the framework's release instructions and verify its console before installing Op
 upgrade, and rollback steps, see the [NF Compose guide](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-upgrade-compose.md).
 App uninstall is not a substitute for an NF backup.
 
+A release that drops a file: `install` and `push` delete files an earlier push wrote that the new manifest no longer
+lists, only when unchanged since that push and not a hook's entry point. Files the tool never wrote and NF's own files
+stay. `install --dry-run` and `doctor` (`extra files`) list them; `--keep-files` keeps them.
+
 Points the app leaves behind are cleaned up with `prune-points`, which is a dry run unless `--yes` is given:
 
 ```bash
