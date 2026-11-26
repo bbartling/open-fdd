@@ -25,26 +25,39 @@ def _num(value):
     """Six-decimal SI literal (half-up), e.g. 1.666667, 20.0, 870.94."""
     return repr(float(Decimal(repr(float(value))).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)))
 
+_SENSOR_RULE_FIELDS = {'SV-RANGE': ('lo', 'hi'), 'SV-SPIKE': ('spike_delta',), 'SV-FLATLINE': ('flat_tol',),
+                       'SV-RATE': ('rate_per_h',)}
+
 def _sweep_fragments(rule, role_limits, sql_by_name, names):
-    """SQL fragments for the per-role limits of one sweep rule, in role-limit file order."""
+    """SQL fragments for the per-role limits of one sweep rule, in role-limit file order. #1763: a sensor with its own
+    value for this rule gets its own arm (series_id = '<id>'), first, and its role's arm leaves it out."""
     entries = [role_limits['roles'][n] for n in role_limits['roles'] if n in names]
     frag = {}
     rid = rule['rule_id']
+    own = [s for _, s in sorted((role_limits.get('sensors') or {}).items())
+           if s['role'] in names and any(f in s['fields'] for f in _SENSOR_RULE_FIELDS.get(rid, ()))]
+    def sid_of(s):   # the id is validated (sweep_catalog.SERIES_ID_RE): safe as a SQL literal
+        return f"series_id = '{s['series_id']}'"
+    def exclude(role):
+        ids = ["'" + s['series_id'] + "'" for s in own if s['role'] == role]
+        return f" AND series_id NOT IN ({','.join(ids)})" if ids else ''
+    heads = [(s, f"{sid_of(s)} AND sensor_role = '{sql_by_name[s['role']]}'") for s in own] + \
+            [(e, f"sensor_role = '{sql_by_name[e['role']]}'{exclude(e['role'])}") for e in entries]
     if rid == 'SV-RANGE':
         terms = []
-        for e in entries:
+        for e, head in heads:
             c = _num((Decimal(repr(e['lo'])) + Decimal(repr(e['hi']))) / 2)
             h = _num((Decimal(repr(e['hi'])) - Decimal(repr(e['lo']))) / 2)
             scale = _RANGE_SCALE.get(e['quantity'])
             hs = h + (' * ' + scale if scale else '')
-            terms.append(f"(sensor_role = '{sql_by_name[e['role']]}' AND (value < ({c} - {hs}) OR value > ({c} + {hs})))")
+            terms.append(f"({head} AND (value < ({c} - {hs}) OR value > ({c} + {hs})))")
         frag['SV_RANGE_BANDS'] = ' OR '.join(terms)
     elif rid == 'SV-SPIKE':
         terms = []
-        for e in entries:
+        for e, head in heads:
             scale = _SPIKE_SCALE.get(e['quantity'])
             lim = _num(e['spike_delta']) + (' * ' + scale if scale else '')
-            terms.append(f"(sensor_role = '{sql_by_name[e['role']]}' AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= {{{{MAX_SILENCE_SECONDS}}}} AND ABS(value - previous_value) > {lim})")
+            terms.append(f"({head} AND previous_value IS NOT NULL AND epoch_seconds - previous_epoch <= {{{{MAX_SILENCE_SECONDS}}}} AND ABS(value - previous_value) > {lim})")
         frag['SV_SPIKE_BANDS'] = ' OR '.join(terms)
     elif rid == 'SV-FLATLINE':   # SV-STALE (#1673) is a missing-data rule: no per-role value tolerance
         field, tuner = 'flat_tol', '{{FLATLINE_TOL}}'
@@ -53,11 +66,12 @@ def _sweep_fragments(rule, role_limits, sql_by_name, names):
             v = sweep_catalog.explicit_role_value(e, field, role_limits)
             if v is not None:
                 groups.setdefault(_num(v), []).append(sql_by_name[e['role']])
-        whens = ''.join(" WHEN sensor_role IN (" + ','.join("'" + r + "'" for r in roles) + ") THEN " + v for v, roles in groups.items())
+        whens = ''.join(f" WHEN {sid_of(s)} THEN {_num(s[field])}" for s in own)
+        whens += ''.join(" WHEN sensor_role IN (" + ','.join("'" + r + "'" for r in roles) + ") THEN " + v for v, roles in groups.items())
         frag['SV_FLATLINE_TOL'] = f'CASE{whens} ELSE {tuner} END' if whens else tuner
     elif rid == 'SV-RATE':
         base = '({{STEADY_FAULT_PER_HOUR}} * {{SENSOR_SPAN}} / 100.0)'
-        whens = ''
+        whens = ''.join(f" WHEN {sid_of(s)} THEN ({_num(s['rate_per_h'])} * {{{{SENSOR_SPAN}}}} / 100.0)" for s in own)
         for e in entries:
             v = sweep_catalog.explicit_role_value(e, 'rate_per_h', role_limits)
             if v is not None:
