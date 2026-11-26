@@ -413,6 +413,14 @@ function rcxResultPoint(model, equip, ruleId, sensorRef = null) {
   return rcxBestPoint(model, equip, ruleId, ["fdd", "fault"], sensorRef);
 }
 
+/**
+ * The hook's summary result point of an equip + rule for the FDD tab: the fault point (fdd + fault), else a metric rule's
+ * point (fdd + metric, #1775). Fault lanes keep rcxResultPoint, so a metric value is never drawn as a fault.
+ */
+function rcxRuleResultPoint(model, equip, ruleId) {
+  return rcxResultPoint(model, equip, ruleId) || rcxBestPoint(model, equip, ruleId, ["fdd", "metric"]);
+}
+
 /** The hook's per-timestamp confirmed-fault point (marker fault_timeline, ruleRef) of an equip + rule, site scoped, or null. */
 function rcxTimelinePoint(model, equip, ruleId, sensorRef = null) {
   return rcxBestPoint(model, equip, ruleId, ["fault_timeline"], sensorRef);
