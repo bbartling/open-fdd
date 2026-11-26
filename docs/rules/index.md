@@ -52,7 +52,7 @@ each input, parameter and output.
 | [**ECON-5**](sql-cookbook.html#econ-5) | Preheat over-conditioning | ahu | 10 min | [pandas](pandas-cookbook.html#econ-5) | match |
 | [**ECON-6**](sql-cookbook.html#econ-6) | Economizing in freezing weather | ahu | 10 min | [pandas](pandas-cookbook.html#econ-6) | match |
 | [**ECON-7**](sql-cookbook.html#econ-7) | Economizer OK but not economizing | ahu | 10 min | [pandas](pandas-cookbook.html#econ-7) | match |
-| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd > 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
+| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd &gt; 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
 | [**FAULT-ELAPSED-HOURS**](sql-cookbook.html#fault-elapsed-hours) | Comfort fault sample count → hours | any | immediate | SQL only | SQL only |
 | [**FC1**](sql-cookbook.html#fc1) | Duct static below SP at full fan | ahu | 5 min | [pandas](pandas-cookbook.html#fc1) | match |
 | [**FC10**](sql-cookbook.html#fc10) | MAT-OAT delta while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc10) | match |

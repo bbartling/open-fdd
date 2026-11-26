@@ -112,7 +112,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="vav-ahu-leave"></a>[VAV-AHU-LEAVE](sql-cookbook.html#vav-ahu-leave) | match |  |
 | <a id="vav-reheat"></a>[VAV-REHEAT](sql-cookbook.html#vav-reheat) | match | match; differs only on stress-only data: pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL |
 | <a id="vlv-1"></a>[VLV-1](sql-cookbook.html#vlv-1) | match |  |
-| <a id="wx-1"></a>[WX-1](sql-cookbook.html#wx-1) | match | match; differs only on edge data: Gap handling: SQL flags \|oa_t - previous sample\| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only. |
+| <a id="wx-1"></a>[WX-1](sql-cookbook.html#wx-1) | match | match; differs only on edge data: Gap handling: SQL flags \|oa_t - previous sample\| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a &gt;2 h gap is a spike in SQL only. |
 | <a id="zone-comfort-pct"></a>[ZONE-COMFORT-PCT](sql-cookbook.html#zone-comfort-pct) | SQL only | aggregate or utility analytic, no pandas function |
 
 ## Pinned deltas
