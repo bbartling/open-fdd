@@ -371,10 +371,22 @@ def rdf_turtle(transport: Transport) -> tuple[str, str]:
     raise NFError("rdf: too many pages")
 
 
+def _key(value, keys: Mapping[str, str]) -> str | None:
+    """The point uuid a result value names: a key of ``keys`` (uuid or base + uuid), or an older IRI of a model point,
+    ``urn:nf:<host>:<uuid>`` or ``urn:nf:site:<site>:<uuid>`` (before #1773 settled on ``urn:nf:<uuid>``)."""
+    if not isinstance(value, str):
+        return None
+    if value in keys:
+        return keys[value]
+    if value.startswith("urn:nf:"):
+        return keys.get(value.rsplit(":", 1)[-1])
+    return None
+
+
 def _pick(vars_: list[str], rows: list[dict], keys: Mapping[str, str], uuid_var: str = "") -> tuple[str, list[str]]:
     order = [uuid_var] if uuid_var else [*[v for v in UUID_VARS if v in vars_], *[v for v in vars_ if v not in UUID_VARS]]
     for v in order:
-        ids = sorted({keys[r[v]] for r in rows if r.get(v) in keys})
+        ids = sorted({k for r in rows if (k := _key(r.get(v), keys))})
         if ids:
             return v, ids
     raise NFError("the result names no point of the model: select a uuid (ref:hasTimeseriesId) or a point IRI")

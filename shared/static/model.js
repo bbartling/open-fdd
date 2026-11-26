@@ -80,6 +80,19 @@ const ttlStr = (s) => `"${String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').
 const ttlId = (s) => String(s).replace(/[^A-Za-z0-9_-]/g, "_");
 
 /**
+ * Base IRI of the model's Turtle (#1773): the fixed `urn:nf:`, so a subject is `urn:nf:<NF uuid>` (uuids are globally
+ * unique). It depends neither on the host the model was read through (before, location.host, a LAN / VPN IP, a proxy
+ * name or the hook's 127.0.0.1 each gave other subjects) nor on the sites, so adding a site never rewrites a subject.
+ * The Model & RDF tab, the SPARQL tab and the rdf / sparql / sparql-data hooks all call this. Older exports used
+ * `urn:nf:<host>:<uuid>` (and briefly `urn:nf:site:<site>:<uuid>`); the sparql-data hook and the Python client still
+ * read such point IRIs.
+ * @returns {string}
+ */
+function rdfBaseOf() {
+  return "urn:nf:";
+}
+
+/**
  * Turtle for the model + the set of tags that aren't in the Haystack libs above.
  *
  * External time-series references (slice 6): every exported point links to where its history
