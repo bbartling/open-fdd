@@ -56,8 +56,10 @@ def test_manifest_covers_every_pack_rule_and_input(manifest, unpacked):
         for i in r["inputs"]:
             ref = roles[i["role"]]                                    # every input is a roles-file role, exactly
             assert i["legacy_key"] in ref["legacy_keys"], (r["rule_id"], i)
-            assert i["unit_qudt"] == ref["unit"] and i["value_type"] == ref["value_type"]
-            assert i["unit"] == (units[ref["unit"]]["haystack"] if ref["unit"] else None)
+            assert i["unit"] == (ref["unit"].split(":", 1)[1] if ref["unit"] else None)   # QUDT local name
+            assert i["value_type"] == ref["value_type"]
+            assert i["unit_display"] == (units[ref["unit"]]["haystack"] if ref["unit"] else None)
+            assert i["unit"] is None or i["unit"] == units[ref["unit"]]["wire"]
         for dialect in ("postgresql", "timescaledb", "duckdb"):
             assert (unpacked / r["dialects"][dialect]["file"]).is_file()
         assert "{{" not in (unpacked / r["dialects"]["duckdb"]["file"]).read_text(encoding="utf-8")

@@ -128,8 +128,12 @@ def role_inputs(contract: dict, roles_doc: dict) -> dict[str, dict]:
         r = hits[0]
         scale = spec["scale"]
         sql_scale = scale[3:] if scale.startswith("si:") else SQL_SCALE[scale]
-        unit = units[r["unit"]]["haystack"] if r.get("unit") else None
-        entry = {"role": r["role"], "unit": unit, "unit_qudt": r.get("unit"), "value_type": r["value_type"],
+        # unit: the QUDT local name (wire token, #1807); unit_display: the Haystack symbol, display only
+        unit = r["unit"].split(":", 1)[1] if r.get("unit") else None
+        if unit is not None and unit != units[r["unit"]]["wire"]:
+            errs.append(f"{key}: QUDT local name {unit} != roles-file wire token {units[r['unit']]['wire']}")
+        display = units[r["unit"]]["haystack"] if r.get("unit") else None
+        entry = {"role": r["role"], "unit": unit, "unit_display": display, "value_type": r["value_type"],
                  "range": r.get("range"), "haystack": {"classes": r["haystack"].get("classes", []),
                                                        "markers": r["haystack"].get("markers", [])},
                  "sql_scale": sql_scale}
@@ -180,11 +184,13 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
         rule_inputs = []
         for need, keys in (("required", cat["required_roles"]), ("optional", cat["optional_roles"])):
             for key in keys:
+                if need == "optional" and key in cat["required_roles"]:
+                    continue                                  # listed twice in the catalog: required wins
                 if key not in inputs:
                     raise SystemExit(f"{rid}: input {key!r} has no roles-file entry (roles/openfdd-roles.json)")
                 i = inputs[key]
                 rule_inputs.append({"role": i["role"], "legacy_key": key, "unit": i["unit"],
-                                    "unit_qudt": i["unit_qudt"], "value_type": i["value_type"], "required": need == "required"})
+                                    "unit_display": i["unit_display"], "value_type": i["value_type"], "required": need == "required"})
         pg_path = f"rules/postgres/{rid}.sql"
         files[pg_path] = _sql_file(prule["sql"])
         sqlite_rule = lite["rules"].get(rid)
@@ -242,7 +248,8 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
                "the unrendered templates and render_rule.py. Values are SI; rules never convert units. Always "
                "SET TimeZone = 'UTC'.",
         "roles_vocabulary": {"file": "roles/openfdd-roles.json", "version": roles_doc["version"],
-                             "doc": "Input role ids and units are the roles file's; legacy_key is the input_contract.json "
+                             "doc": "Input role ids and units are the roles file's: unit is the QUDT local name (the wire token), "
+                                    "unit_display the Haystack symbol (display only); legacy_key is the input_contract.json "
                                     "column the rule SQL reads; sql_scale is that column's scale (apply to_sql at ingest)."},
         "confirm_min": {"default": CONFIRM_MIN_DEFAULT,
                         "doc": "Minutes a condition must hold before it counts as a fault. Each rule's value is the "
@@ -278,7 +285,7 @@ def validate(manifest: dict) -> list[str]:
             ref = roles.get(i["role"])
             if ref is None or i["legacy_key"] not in (ref.get("legacy_keys") or []):
                 errs.append(f"{r['rule_id']}: input {i['legacy_key']} -> {i['role']} is not in roles/openfdd-roles.json")
-            elif i["value_type"] == "number" and i["unit_qudt"] != ref.get("unit"):
+            elif (f"unit:{i['unit']}" if i["unit"] else None) != ref.get("unit"):
                 errs.append(f"{r['rule_id']}: numeric input {i['role']} unit differs from the roles file")
     return errs
 
