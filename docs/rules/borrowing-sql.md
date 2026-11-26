@@ -81,13 +81,27 @@ The [beginner DuckDB browser tutorial](https://github.com/bbartling/open-fdd/tre
 
 The [standalone DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) includes executable pandas-versus-SQL assertions for FC1, FC2 and CMD-1, plus SPARQL point discovery joined to a DuckDB long-form historian. Both scripts run locally without an NF server. Follow its README for PowerShell or Linux setup.
 
+## Pinned rules bundle
+
+Each release tag attaches `open-fdd-rules-<version>.zip` and its `.zip.sha256`. Build one locally with
+`python scripts/build_rules_bundle.py`.
+
+| Entry | Content |
+|---|---|
+| `rules-manifest.json` | Per rule: id, title, equipment kinds, inputs (role, 223P name, SI unit, required), `confirm_min`, dialects, parity |
+| `rules/postgres/<ID>.sql` | Rendered at the shipped defaults; PostgreSQL, TimescaleDB and DuckDB |
+| `rules/sqlite/<ID>.sql` | SQLite translation; register the UDFs in `sqlite_udfs` |
+| `helpers/postgres.sql`, `helpers/duckdb.sql` | The `fdd.*` helpers |
+| `schema/core.sql`, `schema/core.duckdb.sql` | `fdd.point`, `fdd.rule_result`, `fdd.rule_config` |
+| `schema/input_sample.sql`, `schema/inputs.sql` | `fdd.input_sample` and the input tables below |
+
 ## Setup by database
 
 | Database | Rule SQL | Shims |
 |---|---|---|
 | PostgreSQL 14+ | `nf-app/rules/pack-postgres.json` or `sql/fdd/postgres/rules/*.sql` | Run `sql/fdd/postgres/postgres_helpers.sql` once (`fdd.try_double`, `fdd.mask_sweep_val` and the unit gates); `SET TimeZone = 'UTC'` |
 | Timescale | same as PostgreSQL | same; Timescale only supplies `history` |
-| DuckDB | the PostgreSQL pack | Define the `fdd.*` helpers as DuckDB macros (plpgsql does not parse); needed only by the occupancy and sensor-sweep rules; `SET TimeZone = 'UTC'` |
+| DuckDB | the PostgreSQL pack | Run `sql/fdd/duckdb/duckdb_helpers.sql` (the `fdd.*` helpers as macros; plpgsql does not parse); needed only by the occupancy and sensor-sweep rules; `SET TimeZone = 'UTC'` |
 | SQLite | `nf-app/rules/pack-sqlite.json` | Built in; use the SQLite pack, not the PostgreSQL one |
 
 `DATE_TRUNC('hour', timestamp_utc)` follows the session time zone, so always set UTC.
