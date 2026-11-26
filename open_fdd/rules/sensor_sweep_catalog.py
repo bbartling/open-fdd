@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 from typing import Final
 
@@ -27,6 +28,12 @@ _DEFAULT_KEYS: Final[tuple[str, ...]] = (
 _ROLE_KEYS: Final[frozenset[str]] = frozenset(
     {"role", "quantity", "lo", "hi", "spike_delta", "flat_tol", "stale_tol", "rate_per_h", "source"}
 )
+# #1763: per-sensor limits. A merged document (role_limit_overrides.merge) may carry "sensors": one resolved entry per
+# point (series_id) = its role's entry with the sensor's own fields on top; "fields" names the sensor's own fields.
+_SENSOR_KEYS: Final[frozenset[str]] = _ROLE_KEYS | {"series_id", "fields"}
+SENSOR_FIELDS: Final[tuple[str, ...]] = ("lo", "hi", "spike_delta", "flat_tol", "stale_tol", "rate_per_h")
+# A series id is rendered into SQL as a literal: only these characters (NF point uuids, parity ids) are accepted.
+SERIES_ID_RE: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}")   # use fullmatch
 
 
 def _finite(value: object, what: str, *, positive: bool = False, allow_none: bool = False) -> float | None:
@@ -66,20 +73,25 @@ def validate_role_limits(
             raise ValueError("role limits: role must be a non-empty string")
         if role in roles:
             raise ValueError(f"role limits: duplicate role {role!r}")
-        if entry["quantity"] not in SWEEP_QUANTITIES:
-            raise ValueError(f"{role}: unknown quantity {entry['quantity']!r}")
-        if not isinstance(entry["source"], str) or not entry["source"].strip():
-            raise ValueError(f"{role}: source is required")
-        lo, hi = _finite(entry["lo"], f"{role}.lo"), _finite(entry["hi"], f"{role}.hi")
-        if lo >= hi:
-            raise ValueError(f"{role}: lo ({lo}) must be < hi ({hi})")
-        roles[role] = {
-            "role": role, "quantity": entry["quantity"], "lo": lo, "hi": hi, "source": entry["source"],
-            "spike_delta": _finite(entry["spike_delta"], f"{role}.spike_delta", positive=True, allow_none=True),
-            "flat_tol": _finite(entry["flat_tol"], f"{role}.flat_tol", positive=True, allow_none=True),
-            "stale_tol": _finite(entry["stale_tol"], f"{role}.stale_tol", positive=True, allow_none=True),
-            "rate_per_h": _finite(entry["rate_per_h"], f"{role}.rate_per_h", positive=True, allow_none=True),
-        }
+        roles[role] = _limit_entry(entry, role)
+    sensors: dict[str, dict] = {}
+    for entry in doc.get("sensors") or []:
+        if not isinstance(entry, dict) or set(entry) != _SENSOR_KEYS:
+            raise ValueError(f"sensor limits: each sensor needs exactly {sorted(_SENSOR_KEYS)}")
+        sid = entry["series_id"]
+        if not isinstance(sid, str) or not SERIES_ID_RE.fullmatch(sid):
+            raise ValueError(f"sensor limits: invalid series id {sid!r}")
+        if sid in sensors:
+            raise ValueError(f"sensor limits: duplicate series id {sid!r}")
+        role = roles.get(entry["role"])
+        if role is None:
+            raise ValueError(f"sensor {sid}: unknown role {entry['role']!r}")
+        fields = entry["fields"]
+        if not isinstance(fields, list) or not fields or any(f not in SENSOR_FIELDS for f in fields):
+            raise ValueError(f"sensor {sid}: fields must name its own limits ({', '.join(SENSOR_FIELDS)})")
+        if entry["quantity"] != role["quantity"]:
+            raise ValueError(f"sensor {sid}: quantity {entry['quantity']!r} != role quantity {role['quantity']!r}")
+        sensors[sid] = {**_limit_entry(entry, f"sensor {sid}"), "series_id": sid, "fields": sorted(set(fields))}
     for rule_id, names in (allowlists or {}).items():
         for name in names:
             entry = roles.get(name)
@@ -93,7 +105,25 @@ def validate_role_limits(
                 field = "flat_tol"
                 if entry["quantity"] == "relative_humidity" and entry[field] is None:
                     raise ValueError(f"{rule_id}: humidity role {name!r} needs {field}")
-    return {"defaults": out_defaults, "fallback": fallback, "roles": roles}
+    return {"defaults": out_defaults, "fallback": fallback, "roles": roles, "sensors": sensors}
+
+
+def _limit_entry(entry: dict, what: str) -> dict:
+    """One validated role (or sensor) limit entry, SI floats."""
+    if entry["quantity"] not in SWEEP_QUANTITIES:
+        raise ValueError(f"{what}: unknown quantity {entry['quantity']!r}")
+    if not isinstance(entry["source"], str) or not entry["source"].strip():
+        raise ValueError(f"{what}: source is required")
+    lo, hi = _finite(entry["lo"], f"{what}.lo"), _finite(entry["hi"], f"{what}.hi")
+    if lo >= hi:
+        raise ValueError(f"{what}: lo ({lo}) must be < hi ({hi})")
+    return {
+        "role": entry["role"], "quantity": entry["quantity"], "lo": lo, "hi": hi, "source": entry["source"],
+        "spike_delta": _finite(entry["spike_delta"], f"{what}.spike_delta", positive=True, allow_none=True),
+        "flat_tol": _finite(entry["flat_tol"], f"{what}.flat_tol", positive=True, allow_none=True),
+        "stale_tol": _finite(entry["stale_tol"], f"{what}.stale_tol", positive=True, allow_none=True),
+        "rate_per_h": _finite(entry["rate_per_h"], f"{what}.rate_per_h", positive=True, allow_none=True),
+    }
 
 
 def load_role_limits(source: dict | Path | str | None = None) -> dict:
@@ -159,6 +189,73 @@ def limits_for_haystack_role(role: str, limits: dict | None = None) -> dict[str,
     if q and q in table["fallback"]:
         return dict(table["fallback"][q])
     return None
+
+
+def sensor_override(role: str, series_id: str | None, field: str, limits: dict | None = None) -> float | None:
+    """The sensor's own saved ``field`` (#1763), else None (its role entry or the rule tuner applies)."""
+    if not series_id:
+        return None
+    entry = ((limits or ROLE_LIMITS).get("sensors") or {}).get(series_id)
+    if entry is None or entry["role"] != role or field not in entry["fields"]:
+        return None
+    return entry[field]
+
+
+def starter_profile(
+    role: str,
+    unit: str | None = None,
+    *,
+    series_id: str | None = None,
+    limits: dict | None = None,
+    flatline_tol: float | None = None,
+    rate_per_h: float | None = None,
+) -> dict:
+    """The SI limits one sensor starts from, and where each came from (#1763).
+
+    Per field: the sensor's own saved value, then its role entry (shipped, or a saved site / equipment override), then
+    the rule tuner (temperature flatline tolerance, rate), then the quantity starter (range and spike band of a
+    temperature, humidity or pressure role with no entry). ``flatline_tol`` / ``rate_per_h`` are the rule tuners in
+    effect (default: the shipped defaults). Rate has no quantity starter: it stays role-specific. Expected-constant
+    roles, an unknown quantity, a unit that is not the quantity's SI unit, or a quantity with no starter and no role
+    entry (flow, power) give ``{"assessed": False, "reason": ...}``: never a PASS."""
+    table = limits or ROLE_LIMITS
+    if is_expected_constant_role(role):
+        return {"assessed": False, "reason": "commands, setpoints and states step by design"}
+    q = quantity_for_haystack_role(role, table)
+    if q is None:
+        return {"assessed": False, "reason": "unknown quantity"}
+    if unit is not None and not unit_declares_quantity(unit, q):
+        return {"assessed": False, "reason": f"unit {unit!r} is not the SI unit of {q}"}
+    entry = table["roles"].get(role)
+    base = entry if entry is not None else table["fallback"].get(q)
+    if base is None:
+        return {"assessed": False, "reason": f"{q} needs a role entry (no quantity starter)"}
+    layer = "role" if entry is not None else "quantity starter"
+    out = {"assessed": True, "role": role, "quantity": q, "lo": base["lo"], "hi": base["hi"],
+           "spike_delta": base["spike_delta"] if entry is not None else base["spike"]}
+    sources = {"lo": layer, "hi": layer, "spike_delta": layer}
+    flat = explicit_role_value(entry, "flat_tol", table) if entry is not None else None
+    if flat is not None:
+        out["flat_tol"], sources["flat_tol"] = flat, "role"
+    elif q == "absolute_temperature":
+        out["flat_tol"] = float(flatline_tol if flatline_tol is not None else table["defaults"]["flat_tol_temperature"])
+        sources["flat_tol"] = "rule tuner"
+    else:
+        out["flat_tol"], sources["flat_tol"] = None, "none"
+    rate = explicit_role_value(entry, "rate_per_h", table) if entry is not None else None
+    if rate is not None:
+        out["rate_per_h"], sources["rate_per_h"] = rate, "role"
+    elif entry is not None and role in ASSESSABLE_ROLES_BY_SWEEP["SV-RATE"]:
+        out["rate_per_h"] = float(rate_per_h if rate_per_h is not None else table["defaults"]["rate_per_h"])
+        sources["rate_per_h"] = "rule tuner"
+    else:
+        out["rate_per_h"], sources["rate_per_h"] = None, "none"
+    for field in ("lo", "hi", "spike_delta", "flat_tol", "rate_per_h"):
+        own = sensor_override(role, series_id, field, table)
+        if own is not None:
+            out[field], sources[field] = own, "sensor"
+    out["sources"] = sources
+    return out
 
 
 def _tolerance_for_role(role: str, temperature_tol: float, field: str, limits: dict | None) -> float:

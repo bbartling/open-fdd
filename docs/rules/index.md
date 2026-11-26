@@ -52,13 +52,13 @@ each input, parameter and output.
 | [**ECON-5**](sql-cookbook.html#econ-5) | Preheat over-conditioning | ahu | 10 min | [pandas](pandas-cookbook.html#econ-5) | match |
 | [**ECON-6**](sql-cookbook.html#econ-6) | Economizing in freezing weather | ahu | 10 min | [pandas](pandas-cookbook.html#econ-6) | match |
 | [**ECON-7**](sql-cookbook.html#econ-7) | Economizer OK but not economizing | ahu | 10 min | [pandas](pandas-cookbook.html#econ-7) | known divergence |
-| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd > 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
+| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd &gt; 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
 | [**FAULT-ELAPSED-HOURS**](sql-cookbook.html#fault-elapsed-hours) | Comfort fault sample count → hours | any | immediate | SQL only | SQL only |
 | [**FC1**](sql-cookbook.html#fc1) | Duct static below SP at full fan | ahu | 5 min | [pandas](pandas-cookbook.html#fc1) | match |
 | [**FC10**](sql-cookbook.html#fc10) | MAT-OAT delta while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc10) | match |
 | [**FC11**](sql-cookbook.html#fc11) | OAT low vs SAT SP while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc11) | match |
 | [**FC12**](sql-cookbook.html#fc12) | SAT above MAT while cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc12) | match |
-| [**FC13-SAT-HIGH**](sql-cookbook.html#fc13-sat-high) | SAT above setpoint at full cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc13-sat-high) | known divergence |
+| [**FC13-SAT-HIGH**](sql-cookbook.html#fc13-sat-high) | SAT above setpoint at full cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc13-sat-high) | match |
 | [**FC14**](sql-cookbook.html#fc14) | CHW coil ΔT when inactive (GL36 L) | ahu | 10 min | [pandas](pandas-cookbook.html#fc14) | known divergence |
 | [**FC15**](sql-cookbook.html#fc15) | HW coil ΔT when inactive (GL36 M) | ahu | 10 min | [pandas](pandas-cookbook.html#fc15) | match |
 | [**FC2**](sql-cookbook.html#fc2) | Mixed air below envelope | ahu | 10 min | [pandas](pandas-cookbook.html#fc2) | match |

@@ -242,7 +242,7 @@ test("toCsv neutralises malicious point and equip names in the header, not the d
 
 test("export locks before resolving its range and restores state when that lookup fails", async () => {
   const saved = new Map();
-  const globals = ["document", "renderRangeControl", "getChartRangeState", "resolveChartSelection", "chartTimeZone", "ofddUnits", "esc"];
+  const globals = ["document", "renderRangeControl", "getChartRangeState", "resolveChartSelection", "syncRangeInputs", "chartTimeZone", "ofddUnits", "esc"];
   for (const key of globals) saved.set(key, { had: Object.hasOwn(globalThis, key), value: globalThis[key] });
   const listeners = new Map(), elements = new Map();
   const element = (id) => {
@@ -256,7 +256,9 @@ test("export locks before resolving its range and restores state when that looku
   const gates = [];
   try {
     globalThis.document = { getElementById: element };
+    const synced = [];
     globalThis.renderRangeControl = () => {};
+    globalThis.syncRangeInputs = (el, bounds, tz) => synced.push({ el, bounds, tz });
     globalThis.getChartRangeState = () => ({ preset: "all" });
     globalThis.chartTimeZone = () => "UTC";
     globalThis.ofddUnits = { displaySystem: () => "si", display: () => ({ unit: "" }) };
@@ -268,6 +270,11 @@ test("export locks before resolving its range and restores state when that looku
     await new Promise(setImmediate);
     gates[0].resolve({ resolvedBounds: { fromMs: 1000, toMs: 3600e3 } });
     await new Promise(setImmediate);
+    // "All" resolved: From / To now show those bounds, not the 24 h placeholder (#1771)
+    assert.equal(synced.length, 1);
+    assert.equal(synced[0].el, element("exRangeControl"));
+    assert.deepEqual(synced[0].bounds, { fromMs: 1000, toMs: 3600e3 });
+    assert.equal(synced[0].tz, "UTC");
 
     const go = element("exGo");
     listeners.get("exGo:click")();

@@ -20,6 +20,20 @@ const dispVal = (p, v) => (typeof ofddUnits === "undefined" || v == null ? v : o
 const dispUnit = (p) => (typeof ofddUnits === "undefined" ? p.units || "" : ofddUnits.display(0, p.units, unitSystem()).unit);
 /** [[ms, value], ...] of point `p` converted to the display system. */
 const dispSeries = (p, arr) => (typeof ofddUnits === "undefined" || !arr ? arr : arr.map(([t, v]) => [t, dispVal(p, v)]));
+/** An SI temperature (°C) as display text, e.g. "74.0 °F" (imperial) or "23.3 °C" (si). Without units.js
+ *  (Lite) the display system is imperial, as everywhere else in the UI. */
+const dispTempC = (c, d = 1) => {
+  if (c == null || !Number.isFinite(Number(c))) return "–";
+  const r = typeof ofddUnits !== "undefined" ? ofddUnits.fromSI(Number(c), "°C", unitSystem())
+    : unitSystem() === "si" ? { value: Number(c), unit: "°C" } : { value: Number(c) * 9 / 5 + 32, unit: "°F" };
+  return `${r.value.toFixed(d)} ${r.unit}`;
+};
+/** An SI temperature difference (K) as display text, e.g. "18 Δ°F" (imperial) or "10 Δ°C" (si). */
+const dispDeltaK = (k, d = 1) => {
+  const r = typeof ofddUnits !== "undefined" ? ofddUnits.deltaFromSI(Number(k), "°C", unitSystem())
+    : unitSystem() === "si" ? { value: Number(k), unit: "Δ°C" } : { value: Number(k) * 9 / 5, unit: "Δ°F" };
+  return `${r.value.toFixed(d)} ${r.unit}`;
+};
 const parseTs = (ts) => Date.parse(ts.replace(/(\.\d{3})\d+/, "$1"));
 const fmt = (v, d = 1) => (v == null || isNaN(v) ? "–" : v.toFixed(d));
 const latestOf = (p) => p.latest?.double ?? p.latest?.real;
@@ -116,7 +130,27 @@ function sortOverviewEquips(equips) {
     || label(a).localeCompare(label(b)) || String(idOf(a)).localeCompare(String(idOf(b))));
 }
 
+/** Default largest |local BAS OAT - site weather OAT| (K) the Overview picker still trusts the local sensor (#1774). */
+const OVERVIEW_OAT_MAX_DISAGREE_K = 10;
+
+/** The Overview's outside-air temperature (°C): a fresh, unambiguous local BAS sensor first, else site weather.
+ *  When both are valid and differ by more than opts.maxOatDisagreeK (default OVERVIEW_OAT_MAX_DISAGREE_K), the
+ *  local sensor is not trusted (indoors or mis-tagged): site weather is used and `disagree` says why. */
 function inspectOverviewOatC(model, site, opts = {}) {
+  const local = inspectOverviewOatSource(model, site, opts);
+  if (!local.result || local.result.source !== "local" || (opts.weatherOff ?? weatherDisabled())) return local;
+  const maxK = Number.isFinite(opts.maxOatDisagreeK) ? opts.maxOatDisagreeK : OVERVIEW_OAT_MAX_DISAGREE_K;
+  const wx = inspectOverviewOatSource(model, site, { ...opts, skipLocal: true });
+  if (!wx.result) return local;
+  const deltaK = local.result.tempC - wx.result.tempC;
+  if (Math.abs(deltaK) <= maxK) return local;
+  return {
+    result: { ...wx.result, disagree: { localC: local.result.tempC, weatherC: wx.result.tempC, deltaK, maxK, localLabel: local.result.label } },
+    reason: "weather",
+  };
+}
+
+function inspectOverviewOatSource(model, site, opts = {}) {
   const nowMs = opts.nowMs ?? Date.now();
   const maxBasAgeMs = opts.maxBasAgeMs ?? 30 * 60e3;
   const maxWeatherAgeMs = opts.maxWeatherAgeMs ?? 2 * 3600e3;
@@ -138,7 +172,8 @@ function inspectOverviewOatC(model, site, opts = {}) {
     && !isWeatherPoint(p) && !isFddResult(p) && !has(p, "spare")
     && (!p.equipRef || equipIds.has(p.equipRef)));
   let localReason = "none";
-  if (opts.configuredOatUuid) {
+  if (opts.skipLocal) localReason = "skipped";
+  else if (opts.configuredOatUuid) {
     const picked = basCandidates.find((p) => p.uuid === opts.configuredOatUuid);
     if (picked) {
       const ev = evalPoint(picked, maxBasAgeMs);
@@ -188,14 +223,18 @@ function autoSelectOverviewEquip(model, site, opts = {}) {
   const pickByClass = (cls) => equips.find((e) => overviewEquipClass(e) === cls) || null;
   const labelOf = (e) => (e.attrs || {}).dis || e.name || idOf(e);
   if (oat) {
+    // Bands and the pick stay in SI (°C); only the text goes through the display units (#1774).
     const targetCls = oat.tempC < 12 ? "boiler" : oat.tempC < 24 ? "rtu" : "chiller";
-    const band = oat.tempC < 12 ? "< 12 °C" : oat.tempC < 24 ? "12–24 °C" : ">= 24 °C";
+    const band = oat.tempC < 12 ? `< ${dispTempC(12)}` : oat.tempC < 24 ? `${dispTempC(12)} to < ${dispTempC(24)}` : `>= ${dispTempC(24)}`;
     const clsName = targetCls === "boiler" ? "boiler/heating-water" : targetCls === "rtu" ? "RTU" : "chiller/chilled-water";
+    const oatText = `OAT ${dispTempC(oat.tempC)} from ${oat.source === "local" ? "local BAS" : "site weather"}`;
+    const d = oat.disagree;
+    const hint = d ? `; local BAS OAT ${dispTempC(d.localC)} ignored: differs from site weather by more than ${dispDeltaK(d.maxK, 0)}` : "";
     const match = pickByClass(targetCls);
     if (match) {
       return {
         equipId: idOf(match), equip: match, oat, band, fallback: false,
-        reason: `Auto-selected ${labelOf(match)} (${clsName}; OAT ${oat.tempC.toFixed(1)} °C from ${oat.source === "local" ? "local BAS" : "site weather"})`,
+        reason: `Auto-selected ${labelOf(match)} (${clsName}; ${oatText}${hint})`,
       };
     }
     for (const fb of ["rtu", "ahu"]) {
@@ -203,13 +242,13 @@ function autoSelectOverviewEquip(model, site, opts = {}) {
       if (hit) {
         return {
           equipId: idOf(hit), equip: hit, oat, band, fallback: true,
-          reason: `Auto-selected ${labelOf(hit)} (no ${clsName} for OAT ${oat.tempC.toFixed(1)} °C; fallback ${fb.toUpperCase()})`,
+          reason: `Auto-selected ${labelOf(hit)} (no ${clsName} for ${oatText}; fallback ${fb.toUpperCase()}${hint})`,
         };
       }
     }
     return {
       equipId: idOf(equips[0]), equip: equips[0], oat, band, fallback: true,
-      reason: `Auto-selected ${labelOf(equips[0])} (no ${clsName}, RTU, or AHU for OAT ${oat.tempC.toFixed(1)} °C)`,
+      reason: `Auto-selected ${labelOf(equips[0])} (no ${clsName}, RTU, or AHU for ${oatText}${hint})`,
     };
   }
   for (const fb of ["rtu", "ahu"]) {
@@ -525,6 +564,27 @@ const dateTimeInputMs = (value, siteTz) => {
   return fields(t) === wall ? t : NaN;
 };
 
+// container -> the state it last rendered; state -> the control that rendered it (both weak: controls re-render often).
+const rangeControlShows = new WeakMap(), rangeControlOf = new WeakMap();
+
+/** Write resolved bounds into a range control's From / To inputs, as site-local wall time, so Apply keeps the range
+ * the chart shows (#1771). A field the user is editing is left alone.
+ * @param {HTMLElement | null | undefined} container
+ * @param {{fromMs:number,toMs:number} | null | undefined} bounds
+ * @param {string} [siteTz]
+ */
+function syncRangeInputs(container, bounds, siteTz = "UTC") {
+  if (!container || !bounds || !Number.isFinite(bounds.fromMs) || !Number.isFinite(bounds.toMs)) return false;
+  const tz = chartTimeZone(siteTz), active = container.ownerDocument?.activeElement;
+  const write = (/** @type {string} */ sel, /** @type {number} */ ms) => {
+    const input = /** @type {HTMLInputElement | null} */ (container.querySelector(sel));
+    if (input && input !== active) input.value = dateTimeInputValue(ms, tz);
+  };
+  write("[data-range-from]", bounds.fromMs);
+  write("[data-range-to]", bounds.toMs);
+  return true;
+}
+
 /** Mount shared range buttons and site-timezone custom fields.
  * @param {HTMLElement} container
  * @param {{key?:string,state?:any,siteTz?:string,onChange?:(state:any)=>void}} options
@@ -532,6 +592,10 @@ const dateTimeInputMs = (value, siteTz) => {
 function renderRangeControl(container, { key = "default", state = getChartRangeState(key), siteTz = "UTC", onChange } = {}) {
   const tz = chartTimeZone(siteTz), now = Date.now();
   container.classList.add("chart-range-control");
+  // The inputs start from a placeholder ("All" does not know its oldest sample yet); resolveChartSelection writes the
+  // resolved bounds back once it has them (#1771), as long as this control still shows this state.
+  rangeControlShows.set(container, state);
+  if (state && typeof state === "object") rangeControlOf.set(state, { container, tz });
   const bounds = state.preset === "custom" ? state : resolveChartRange(state, { nowMs: now, oldestMs: now - 24 * 3600e3 });
   container.innerHTML = `<div class="seg chart-range-presets">${[["1h", "1 h"], ["24h", "24 h"], ["1w", "1 week"], ["all", "All"]].map(([v, label]) =>
     `<button type="button" data-range="${v}" class="${state.preset === v ? "on" : ""}">${label}</button>`).join("")}</div>
@@ -687,7 +751,10 @@ async function resolveChartSelection(list, state, { siteTz = "UTC", nowMs = Date
       }
     }
   }
-  return { ...state, resolvedBounds: resolveChartRange(state, { nowMs, oldestMs }), timeZone: chartTimeZone(siteTz),
+  const resolvedBounds = resolveChartRange(state, { nowMs, oldestMs });
+  const control = state && typeof state === "object" ? rangeControlOf.get(state) : null;
+  if (control && rangeControlShows.get(control.container) === state) syncRangeInputs(control.container, resolvedBounds, control.tz);
+  return { ...state, resolvedBounds, timeZone: chartTimeZone(siteTz),
     ...(oldestSource ? { oldestSource } : {}), ...(oldestWarning ? { oldestWarning } : {}) };
 }
 
