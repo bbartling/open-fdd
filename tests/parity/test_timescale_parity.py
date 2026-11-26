@@ -167,5 +167,8 @@ def test_timescale_native_unit_ingestion_conversion_reproduces_the_si_dataset(ds
     assert bad == [], bad
     tie_only = engines_disagree({"pglite": pg_rows, "timescale": pg_same}, "timescale", ref_engine="pglite")
     assert all(not r.startswith(("UTIL-", "OAT-METEO")) for r in tie_only), tie_only
-    verdict = compare(ts_rows, reference(ds), Policy.default(ARGS["profile"], stress=True))
+    # #1758: the verdict is on the inputs the engine saw. The imperial round trip moves a value by ~1e-15, which flips a
+    # sample sitting exactly on a threshold (AHU-SATDEV: sat - sat_sp = 5 degF = SAT_DEV_ERR) in pandas and SQL alike;
+    # conversion accuracy itself is history_mismatches above, and the SI test pins the verdict on the original dataset.
+    verdict = compare(ts_rows, reference(adapter.loaded_dataset(ds)), Policy.default(ARGS["profile"], stress=True))
     assert summary(verdict) == PINNED["verdict"], verdict.summary()
