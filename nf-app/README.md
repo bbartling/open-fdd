@@ -134,8 +134,13 @@ against PGlite and sql.js, with and without saved tuning.
 
 | App option | Default | Meaning |
 |---|---|---|
-| `duckdbMemoryLimit` | `256MB` | DuckDB `memory_limit`. The database is in memory with no temp directory, so a query over the cap fails as a rule error instead of writing to the SD card. 128MB ran the test pack on 2 equipment x 3 days; 64MB did not |
+| `duckdbMemoryLimit` | `256MB` | DuckDB `memory_limit`. Spilling is off (`temp_directory` empty; DuckDB's default would spill to `.tmp` up to 90 % of the free disk), so a query over the cap fails as a rule error instead of writing to the SD card. 128MB ran the test pack on 2 equipment x 3 days; 64MB did not |
 | `duckdbThreads` | `2` | DuckDB worker threads |
+
+The engine never downloads anything: extension autoinstall and autoload are off, and what the pack needs (ICU time zones,
+Parquet, JSON) is built into the 2.0.0 binary. The time zone is set to UTC after start-up, because the `TimeZone` create
+option makes DuckDB fetch ICU from the network. `duckdb-engine.test.mjs` runs it against an unreachable extension
+repository and checks that nothing is downloaded or spilled. If the instance cannot start, the run fails (no engine swap).
 
 One DuckDB instance stays warm in the hook process between runs. Each run opens its own connection and loads its window
 into TEMP tables, so overlapping runs do not share rows; closing the connection drops them. Parquet history, incremental

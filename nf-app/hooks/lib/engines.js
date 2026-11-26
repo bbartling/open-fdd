@@ -415,9 +415,16 @@ async function createTimescale(pack, opts = {}) {
  * them. releaseDuckDb() closes the instance itself (tests, shutdown). Incremental append and Parquet history are later
  * slices of #1645: today every run reloads its window, as the other in-process engines do.
  *
+ * Offline and disk-free by construction (DUCKDB_SAFETY): extension autoinstall and autoload are OFF, so DuckDB never
+ * downloads anything (an edge box may have no internet); everything the pack needs (core functions, ICU time zones,
+ * Parquet, JSON) is statically linked in the 2.0.0 build. TimeZone is set with SET GLOBAL after creation: passing it as
+ * a create option makes DuckDB try to autoinstall ICU from the network first. temp_directory is '' (DuckDB's default for
+ * an in-memory database is '.tmp' with up to 90 % of the free disk), so nothing is ever spilled to the SD card.
+ *
  * Memory (1 GB edges): the instance is capped by DuckDB's memory_limit (default DUCKDB_DEFAULTS.memoryLimit) and
- * threads. An in-memory database has no temp directory, so a query over the cap fails with an out-of-memory error
- * (the rule is reported as a rule error) instead of spilling to the SD card. Settings: app options duckdbMemoryLimit
+ * threads. With spilling off, a query over the cap fails with an out-of-memory error (the rule is reported as a rule
+ * error). If the instance cannot be created at all, createEngine throws and the run fails loudly (no silent engine
+ * swap; only a package that does not load falls back, see fdd.js pickEngine). Settings: app options duckdbMemoryLimit
  * ("256MB") and duckdbThreads (2), passed here as opts.config { memoryLimit, threads }; env OPENFDD_DUCKDB_MEMORY_LIMIT /
  * OPENFDD_DUCKDB_THREADS when unset.
  * The settings of the first engine of a process win until releaseDuckDb().
@@ -425,6 +432,10 @@ async function createTimescale(pack, opts = {}) {
 const DUCKDB_PACKAGE = "@duckdb/node-api";
 const DUCKDB_DEFAULTS = Object.freeze({ memoryLimit: "256MB", threads: 2 });
 const DUCK_TYPE = { double: "DOUBLE", text: "VARCHAR", timestamp: "TIMESTAMPTZ" };
+/** Fixed settings of every instance: no network, no disk (see above). */
+const DUCKDB_SAFETY = Object.freeze({ autoinstall_known_extensions: "false", autoload_known_extensions: "false", temp_directory: "" });
+/** Extra settings a caller may add (tests: point the extension repository at an unreachable host to prove offline use). */
+const DUCKDB_EXTRA_KEYS = ["custom_extension_repository", "extension_directory"];
 let duck = null;   // { api, instance, options, ready: Promise } of this process
 
 /** Validated DuckDB options: memory_limit like "256MB" / "1GB", threads 1..64. Throws on anything else. */
@@ -434,7 +445,12 @@ function duckDbOptions(cfg = {}) {
   if (!/^\d+(\.\d+)?\s*(KB|MB|GB|KiB|MiB|GiB)$/i.test(mem)) throw new Error(`duckdb memoryLimit ${JSON.stringify(mem)}: use e.g. "256MB" or "1GB"`);
   const threads = Number(cfg.threads ?? env.OPENFDD_DUCKDB_THREADS ?? DUCKDB_DEFAULTS.threads);
   if (!Number.isInteger(threads) || threads < 1 || threads > 64) throw new Error(`duckdb threads ${JSON.stringify(cfg.threads)}: use an integer 1..64`);
-  return { memory_limit: mem.replace(/\s+/g, ""), threads: String(threads), TimeZone: "UTC" };
+  const extra = {};
+  for (const [k, v] of Object.entries(cfg.extraSettings || {})) {
+    if (!DUCKDB_EXTRA_KEYS.includes(k)) throw new Error(`duckdb setting ${JSON.stringify(k)} is not allowed`);
+    extra[k] = String(v);
+  }
+  return { memory_limit: mem.replace(/\s+/g, ""), threads: String(threads), ...extra, ...DUCKDB_SAFETY };
 }
 
 async function loadDuckDbApi() {
@@ -459,10 +475,17 @@ async function warmDuckDb(pack, cfg) {
       state.api = await loadDuckDbApi();
       state.instance = await state.api.DuckDBInstance.create(":memory:", options);
       const conn = await state.instance.connect();
-      try { await conn.run(pack.duckdb_helpers_sql); } finally { conn.closeSync(); }
+      try {
+        await conn.run("SET GLOBAL TimeZone = 'UTC'");   // built-in ICU; never a create option (that autoinstalls)
+        await conn.run(pack.duckdb_helpers_sql);
+      } finally { conn.closeSync(); }
     })();
     duck = state;
-    try { await state.ready; } catch (e) { if (duck === state) duck = null; throw e; }
+    try { await state.ready; } catch (e) {
+      if (duck === state) duck = null;
+      try { if (state.instance) state.instance.closeSync(); } catch { /* keep the original error */ }
+      throw e;
+    }
   } else {
     await duck.ready;
     if (duck.helpers !== pack.duckdb_helpers_sql) {   // a newer pack in the same process: refresh the macros
@@ -526,6 +549,14 @@ async function createDuckDb(pack, opts = {}) {
   return {
     kind: "duckdb",
     ...tuning,
+    /** The settings that keep the engine offline and off the disk, as this connection sees them (doctor, tests). */
+    async settings() {
+      return (await conn.runAndReadAll(`SELECT current_setting('TimeZone') AS time_zone, current_setting('temp_directory') AS temp_directory,
+        current_setting('autoinstall_known_extensions') AS autoinstall, current_setting('autoload_known_extensions') AS autoload,
+        current_setting('memory_limit') AS memory_limit, current_setting('threads') AS threads`)).getRowObjectsJS().map((r) => {
+        const o = {}; for (const [k, v] of Object.entries(r)) o[k] = duckValue(v); return o;
+      })[0];
+    },
     /** DuckDB version string of the warm instance (e.g. "v2.0.0"). */
     async version() { return (await conn.runAndReadAll("SELECT version() AS v")).getRowObjectsJS()[0].v; },
     async load(input) {
@@ -574,4 +605,4 @@ async function createEngine({ kind, pack, ...opts }) {
   throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite", "duckdb" or "timescale")`);
 }
 
-module.exports = { createEngine, HELPERS, loadSqlJs, releaseDuckDb, duckDbOptions, DUCKDB_DEFAULTS };
+module.exports = { createEngine, HELPERS, loadSqlJs, releaseDuckDb, duckDbOptions, DUCKDB_DEFAULTS, DUCKDB_SAFETY };

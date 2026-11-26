@@ -4,13 +4,17 @@
 // Skipped, with the reason, when @duckdb/node-api (an optionalDependency) has no native build for this platform.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ruleConfigClient } from "./fixtures/rule-config-client.mjs";
 
 const require = createRequire(import.meta.url);
 const engines = require("../hooks/lib/engines.js");
-const { createEngine, releaseDuckDb, duckDbOptions } = engines;
+const { createEngine, releaseDuckDb, duckDbOptions, DUCKDB_SAFETY } = engines;
 const { buildDataset } = require("./fixtures/synthetic_dataset.js");
 const fdd = require("../hooks/fdd.js");
 
@@ -29,6 +33,7 @@ const close = (a, b) => {
   if (a === null || b === null || a === undefined || b === undefined) return (a ?? null) === (b ?? null);
   if (typeof a === "number" && typeof b === "number") {
     if (Number.isNaN(a) || Number.isNaN(b)) return Number.isNaN(a) && Number.isNaN(b);
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return a === b;   // infinities: exact, never within a tolerance
     return a === b || Math.abs(a - b) <= 1e-9 + REL_TOL * Math.max(Math.abs(a), Math.abs(b));
   }
   if (a instanceof Date || b instanceof Date) return new Date(a).getTime() === new Date(b).getTime();
@@ -46,7 +51,8 @@ function diffRows(a, b, names) {
   sa.forEach((ra, i) => {
     const rb = sb[i];
     const cols = new Set([...Object.keys(ra), ...Object.keys(rb)]);
-    if (Object.keys(ra).length !== Object.keys(rb).length) out.push(`${keyOf(ra)}: columns ${Object.keys(ra)} vs ${Object.keys(rb)}`);
+    const na = Object.keys(ra).sort().join(","), nb = Object.keys(rb).sort().join(",");
+    if (na !== nb) out.push(`${keyOf(ra)}: columns ${na} vs ${nb}`);
     for (const k of cols) if (!close(ra[k], rb[k])) out.push(`${keyOf(ra)}.${k}: ${names[0]}=${ra[k]} ${names[1]}=${rb[k]}`);
   });
   return out;
@@ -169,8 +175,50 @@ test("duckdb engine: a warm instance serves overlapping runs with isolated table
   try { await assert.rejects(c.query("FC1"), /load\(input\) before query/); } finally { await c.close(); }
 });
 
-test("duckdb options: memory limit and threads are validated; defaults suit a 1 GB edge", () => {
-  assert.deepEqual(duckDbOptions({}), { memory_limit: "256MB", threads: "2", TimeZone: "UTC" });
+/** Runs fn with OPENFDD_DUCKDB_* set to vars (undefined = unset), restoring the caller's values afterwards. */
+function withDuckEnv(vars, fn) {
+  const keys = ["OPENFDD_DUCKDB_MEMORY_LIMIT", "OPENFDD_DUCKDB_THREADS"];
+  const saved = Object.fromEntries(keys.map((k) => [k, Object.hasOwn(process.env, k) ? process.env[k] : undefined]));
+  try {
+    for (const k of keys) { if (vars[k] === undefined) delete process.env[k]; else process.env[k] = vars[k]; }
+    return fn();
+  } finally {
+    for (const k of keys) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  }
+}
+
+test("parity guard: close() never treats an infinity as near a finite value or the other infinity", () => {
+  assert.equal(close(Infinity, Infinity), true);
+  assert.equal(close(-Infinity, -Infinity), true);
+  assert.equal(close(1, Infinity), false);
+  assert.equal(close(Infinity, 1e308), false);
+  assert.equal(close(Infinity, -Infinity), false);
+  assert.equal(close(NaN, NaN), true);
+  assert.equal(close(NaN, 1), false);
+  assert.equal(close(100, 100 + 1e-5), true, "within 1e-6 relative");
+  assert.equal(close(100, 100.01), false, "outside the tolerance");
+  assert.equal(close(null, undefined), true);
+  assert.equal(close(null, 0), false);
+});
+
+test("parity guard: diffRows rejects a renamed column even when both values are null", () => {
+  assert.deepEqual(diffRows([{ equipment_id: "A", x: null }], [{ equipment_id: "A", x: null }], ["a", "b"]), []);
+  assert.equal(diffRows([{ equipment_id: "A", x: null }], [{ equipment_id: "A", y: null }], ["a", "b"]).length > 0, true);
+});
+
+test("duckdb options: memory limit and threads are validated; defaults suit a 1 GB edge; no network, no spill", () => {
+  withDuckEnv({}, () => {
+    assert.deepEqual(duckDbOptions({}), { memory_limit: "256MB", threads: "2",
+      autoinstall_known_extensions: "false", autoload_known_extensions: "false", temp_directory: "" });
+    assert.equal("TimeZone" in duckDbOptions({}), false, "TimeZone as a create option autoinstalls ICU over the network");
+    assert.throws(() => duckDbOptions({ extraSettings: { temp_directory: "/tmp" } }), /not allowed/);
+    assert.equal(duckDbOptions({ extraSettings: { custom_extension_repository: "http://x" } }).temp_directory, "", "safety always wins");
+  });
+  withDuckEnv({ OPENFDD_DUCKDB_MEMORY_LIMIT: "512MB", OPENFDD_DUCKDB_THREADS: "4" }, () => {
+    assert.equal(duckDbOptions({}).memory_limit, "512MB", "env override");
+    assert.equal(duckDbOptions({}).threads, "4", "env override");
+    assert.equal(duckDbOptions({ memoryLimit: "128MB" }).memory_limit, "128MB", "the app option beats the env");
+  });
   assert.equal(duckDbOptions({ memoryLimit: "1GB", threads: 4 }).memory_limit, "1GB");
   assert.throws(() => duckDbOptions({ memoryLimit: "lots" }), /memoryLimit/);
   assert.throws(() => duckDbOptions({ threads: 0 }), /threads/);
@@ -240,4 +288,34 @@ test("pickEngine: duckdb falling back on a box with a Timescale store picks time
   const fb = await fdd.pickEngine(http, "duckdb", { host: "db" }, () => true, () => false);
   assert.equal(fb.kind, "timescale");
   assert.match(fb.note, /using timescale/);
+});
+
+// ---- offline and disk-free (#1645 review): no extension download, no spill to the working directory ----
+test("duckdb settings: UTC, spilling off, extension autoinstall and autoload off", opts, async () => {
+  const s = await duck.settings();
+  assert.deepEqual({ ...s, memory_limit: undefined, threads: undefined },
+    { time_zone: "UTC", temp_directory: "", autoinstall: false, autoload: false, memory_limit: undefined, threads: undefined });
+  assert.deepEqual(Object.keys(DUCKDB_SAFETY).sort(), ["autoinstall_known_extensions", "autoload_known_extensions", "temp_directory"]);
+});
+
+test("duckdb runs offline: unreachable extension repository, empty extension dir; an over-cap query fails and writes nothing", opts, () => {
+  const extDir = mkdtempSync(join(tmpdir(), "ofdd-duck-ext-"));
+  const cwd = mkdtempSync(join(tmpdir(), "ofdd-duck-cwd-"));
+  try {
+    const child = fileURLToPath(new URL("./fixtures/duckdb-offline-child.cjs", import.meta.url));
+    const r = spawnSync(process.execPath, [child, extDir], { cwd, encoding: "utf8", timeout: 240000 });
+    const line = (r.stdout || "").trim().split(String.fromCharCode(10)).pop().trim();
+    assert.equal(r.status, 0, `child failed: ${line} ${r.stderr}`);
+    const out = JSON.parse(line);
+    assert.equal(out.settings.time_zone, "UTC");
+    assert.equal(out.settings.temp_directory, "");
+    for (const rid of ["FC1", "UTIL-MONTHLY", "SV-STALE", "OAT-METEO", "FAN-RUNTIME-HOURS"]) assert.ok(out.rules[rid] > 0, `${rid} rows offline`);
+    assert.ok(out.timeline_rows > 0);
+    assert.match(out.oom, /Out of Memory|memory/i, "over the cap: an out-of-memory error, not a spill");
+    assert.deepEqual(readdirSync(extDir), [], "nothing downloaded into the extension directory");
+    assert.deepEqual(readdirSync(cwd), [], "nothing spilled into the working directory (no .tmp)");
+  } finally {
+    rmSync(extDir, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });
