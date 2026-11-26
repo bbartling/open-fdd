@@ -185,6 +185,7 @@
             "custom_markers": {"$ref": "#/$defs/markers"},
             "alt_markers": {"type": "array", "items": {"$ref": "#/$defs/markers"}},
             "equip_markers": {"$ref": "#/$defs/markers"},
+            "equip_forbid": {"$ref": "#/$defs/markers"},
             "binding_scope": {"enum": ["own", "fed_by_air_handling_unit", "aggregate", "weather", "derived"]},
             "conformance": {"enum": ["standard", "nonstandard", "custom"]},
             "note": {"type": "string"}
