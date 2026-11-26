@@ -8,13 +8,13 @@ const fddExpandedGroups = new Set();
 // ---- FDD tab --------------------------------------------------------------------------
 // Which rules from the catalog the selected equipment can run (fdd.js binds inputs by tags) and what the hook found. The
 // tab has its own equipment picker (always ONE equipment, no "all"); the top bar only picks the site. Layout: a summary
-// strip (Faults / Pass / Skipped / Insufficient chips that filter the list), the rules faults-first with pass and skipped
-// behind "show all", one rule open at a time (plot, SI thresholds, inputs), tuning in a side drawer, and the rest
+// strip (Faults / Insufficient / Metrics / Pass / Skipped chips that filter the list), the rules faults-first with metric,
+// pass and skipped behind "show all", one rule open at a time (plot, SI thresholds, inputs), tuning in a side drawer, and the rest
 // (heat map, FDD charts, the rule-input table) under "More". Equipment, filter and open rule are kept in the URL.
 const tabEquip = () => (scope.equip && scope.equip !== WEATHER_SCOPE ? scope.equip : "");
 const fddEquipsInScope = () => (tabEquip() ? model.equips.filter((e) => (e.attrs || {}).siteRef === scope.site && idOf(e) === tabEquip()) : []);
 const fddView = { restoreOpen: false, filter: "", showAll: false, open: /** @type {{ruleId: string, equipId: string}|null} */ (null), urlRead: false, entries: /** @type {any[]} */ ([]) };
-const FDD_STATUS_ONE = { fault: "Fault", pass: "Pass", skipped: "Skipped", insufficient: "Insufficient data" };
+const FDD_STATUS_ONE = { fault: "Fault", metric: "Metric", pass: "Pass", skipped: "Skipped", insufficient: "Insufficient data" };
 
 /** One input chip: role -> bound point (got), optional and missing (opt), required and missing (miss). */
 function fddChip(role, pts, optional) {
@@ -46,23 +46,23 @@ function renderFddList(entries) {
   if (panel && panel.parentElement !== $("tab-fdd")) $("tab-fdd").appendChild(panel);   // keep the open-rule panel alive across redraws
   if (fddView.restoreOpen) {
     const restored = entries.find((e) => fddView.open && e.ruleId === fddView.open.ruleId && e.equipId === fddView.open.equipId);
-    if (restored && !fddView.filter && ["pass", "skipped"].includes(restored.status)) fddView.showAll = true;
+    if (restored && !fddView.filter && ["metric", "pass", "skipped"].includes(restored.status)) fddView.showAll = true;
     fddView.restoreOpen = false;
   }
   const { shown, hidden } = fddVisibleEntries(entries, fddView);
   const all = $("fddShowAll");
   all.hidden = !!fddView.filter || (!hidden && !fddView.showAll);
-  all.textContent = fddView.showAll ? "faults first only" : `show all (${hidden} more: pass and skipped)`;
+  all.textContent = fddView.showAll ? "faults first only" : `show all (${hidden} more: metric, pass and skipped)`;
   all.setAttribute("aria-pressed", String(fddView.showAll));
   const isOpen = (e) => !!fddView.open && fddView.open.ruleId === e.ruleId && fddView.open.equipId === e.equipId;
   list.innerHTML = shown.map((e) => `<div class="fdd-item ${e.status}${isOpen(e) ? " open" : ""}" data-status="${e.status}" data-rule="${esc(e.ruleId)}" data-equip="${esc(e.equipId)}">
       <button type="button" class="fdd-row" aria-expanded="${isOpen(e)}">
         <span class="fdd-badge ${e.status}">${esc(FDD_STATUS_ONE[e.status])}</span>
         <span class="fdd-title">${fddRuleCellHtml(e.rule)} <span class="sub">${esc(e.rule.description || "")}</span></span>
-        <span class="fdd-hours">${e.status === "fault" || e.status === "pass" ? `${formatFaultNumber(e.faultHours ?? 0)} h` : ""}</span>
+        <span class="fdd-hours">${e.status === "fault" || e.status === "pass" ? `${formatFaultNumber(e.faultHours ?? 0)} h` : e.status === "metric" ? esc(fddMetricText(e, unitSystem())) : ""}</span>
         ${e.reason ? `<span class="fdd-reason">${esc(e.reason)}</span>` : ""}
       </button><div class="fdd-slot"></div></div>`).join("")
-    || `<p class="sub">${!tabEquip() ? "Pick an equipment to see its rules." : fddView.filter ? `No ${esc(FDD_STATUS_LABELS[fddView.filter].toLowerCase())} rules on this equipment.` : "No faults or data problems on this equipment. Use show all for passing and skipped rules."}</p>`;
+    || `<p class="sub">${!tabEquip() ? "Pick an equipment to see its rules." : fddView.filter ? `No ${esc(FDD_STATUS_LABELS[fddView.filter].toLowerCase())} rules on this equipment.` : "No faults or data problems on this equipment. Use show all for metric, passing and skipped rules."}</p>`;
   const openItem = shown.find(isOpen);
   if (fddView.open && !openItem) closeRulePlot();
   else if (openItem) {
@@ -112,7 +112,7 @@ async function renderFdd() {
   ].join("");
   const only = $("fddRunnableOnly").checked;
   const chip = fddChip;
-  fddView.entries = rows.map((r) => fddEntryOf(r, rcxResultPoint(model, r.equip, r.rule.id)));
+  fddView.entries = rows.map((r) => fddEntryOf(r, rcxRuleResultPoint(model, r.equip, r.rule.id)));
   renderFddSummary(fddView.entries);
   renderFddList(fddView.entries);
   fddWriteUrl();

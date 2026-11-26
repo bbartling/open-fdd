@@ -71,9 +71,12 @@
   const has = (p, ...m) => m.every((x) => (p.tags || []).includes(x));
   const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
+  // A Haystack 4 conjunct (hot-water-plant) matches the literal tag or every part (fdd.js hasKindMarker).
+  const hasKindMarker = (markers, m) => markers.has(m) || (m.includes("-") && m.split("-").every((x) => markers.has(x)));
+
   function equipKinds(equipRec, catalog) {
     const markers = new Set(markersOf(equipRec));
-    return Object.entries(catalog.equipment_kinds).filter(([, ms]) => ms.some((m) => markers.has(m))).map(([k]) => k);
+    return Object.entries(catalog.equipment_kinds).filter(([, ms]) => ms.some((m) => hasKindMarker(markers, m))).map(([k]) => k);
   }
 
   const isWebRole = (role) => role.startsWith(WEB_ROLE_PREFIX);

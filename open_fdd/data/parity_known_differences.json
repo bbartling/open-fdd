@@ -18,21 +18,6 @@
    }
   },
   {
-   "rule": "FC13-SAT-HIGH",
-   "scope": "all",
-   "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",
-   "expected": {
-    "basic/0/8/7": {
-     "hours": 26.0833,
-     "tol": 0.01
-    },
-    "basic/0/4/3": {
-     "hours": 10.0833,
-     "tol": 0.01
-    }
-   }
-  },
-  {
    "rule": "FC14",
    "scope": "all",
    "reason": "SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds",

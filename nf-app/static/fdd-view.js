@@ -4,16 +4,26 @@
 //
 // Statuses (one per rule row):
 //   fault         the hook's latest result is a confirmed fault (fault hours > 0)
+//   metric        a statistic rule (AVG-ZONE-TEMP, ...; markers fdd + metric) wrote a value: shown with its unit, never a
+//                 fault and never insufficient (#1775)
 //   pass          assessed, no fault
 //   skipped       the rule did not run here: no run proof, missing inputs, a rule that reads meter data, ...
 //   insufficient  ran without enough data: no covered time (equipment off the whole window), stale or missing input data,
 //                 or no result written yet
 // Needs: model.js (has), fdd.js (equipRules rows passed in).
 
-/** @typedef {{ ruleId: string, equipId: string, rule: any, row: any, result: any, status: string, faultHours: number|null, reason: string }} FddEntry */
+/** @typedef {{ ruleId: string, equipId: string, rule: any, row: any, result: any, status: string, faultHours: number|null, reason: string, value: number|null, unit: string }} FddEntry */
 
-const FDD_STATUSES = Object.freeze(["fault", "insufficient", "pass", "skipped"]);
-const FDD_STATUS_LABELS = Object.freeze({ fault: "Faults", pass: "Pass", skipped: "Skipped", insufficient: "Insufficient" });
+const FDD_STATUSES = Object.freeze(["fault", "insufficient", "metric", "pass", "skipped"]);
+const FDD_STATUS_LABELS = Object.freeze({ fault: "Faults", metric: "Metrics", pass: "Pass", skipped: "Skipped", insufficient: "Insufficient" });
+
+/** True for a metric rule's result point (markers fdd + metric; the hook never gives it the fault marker). */
+function fddIsMetricResult(result) {
+  if (!result) return false;
+  const tags = Array.isArray(result.tags) ? result.tags
+    : String(((result.rec && result.rec.attrs) || {}).markers || "").split(",").map((m) => m.trim());
+  return tags.includes("metric") && !tags.includes("fault");
+}
 
 /** A plain-language reason for a result that is not a fault / pass, from the hook's attrs (fddStatus, fddReason). */
 function fddPlainReason(attrs = {}, row = null) {
@@ -32,6 +42,7 @@ function fddPlainReason(attrs = {}, row = null) {
 function fddEntryOf(row, result) {
   const attrs = (result && result.rec && result.rec.attrs) || {};
   const latest = result ? (result.latest ? (result.latest.double ?? result.latest.real) : null) : null;
+  const metric = fddIsMetricResult(result);
   const hoursOut = attrs.fddOutput === "fault_hours" || (result && (result.units === "h" || attrs.unit === "h"));
   const faultHours = latest == null || !Number.isFinite(Number(latest)) ? null
     : hoursOut ? Number(latest) : attrs.fddWindowHours ? Number(latest) * Number(attrs.fddWindowHours) / 100 : null;
@@ -40,14 +51,29 @@ function fddEntryOf(row, result) {
   else if (!result) status = "insufficient";
   else if (attrs.fddStatus === "not-assessed") status = /^no_run_proof/.test(String(attrs.fddReason || "")) ? "skipped" : "insufficient";
   else if (attrs.fddStatus === "stale") status = "insufficient";
+  else if (metric) status = latest == null || !Number.isFinite(Number(latest)) ? "insufficient" : "metric";
   else if (attrs.fddStatus === "fault" || (latest != null && Number(latest) > 0)) status = "fault";
   else if (latest == null) status = "insufficient";
   else status = "pass";
-  const reason = status === "fault" || status === "pass" ? "" : (fddPlainReason(attrs, row) || (result ? "" : "no result written yet"));
-  return { ruleId: row.rule.id, equipId: idOf(row.equip), rule: row.rule, row, result, status, faultHours: status === "skipped" ? null : faultHours, reason };
+  const reason = status === "fault" || status === "pass" || status === "metric" ? ""
+    : (fddPlainReason(attrs, row) || (result ? (metric ? "no value written yet" : "") : "no result written yet"));
+  // a metric's unit: the point's SI unit, else (5.0.21 points were written without one) the output column's unit
+  const metricUnits = typeof FDD_METRIC_UNITS === "undefined" ? {} : FDD_METRIC_UNITS;
+  const unit = metric ? String(attrs.unit || (result && result.units) || metricUnits[attrs.fddOutput] || "") : "";
+  return { ruleId: row.rule.id, equipId: idOf(row.equip), rule: row.rule, row, result, status,
+    faultHours: status === "skipped" || metric ? null : faultHours, reason,
+    value: status === "metric" ? Number(latest) : null, unit };
 }
 
-/** Faults first (most fault hours first), then insufficient, pass, skipped; ties by rule id. @param {FddEntry[]} entries */
+/** A metric entry's value for display: SI unit -> the display system ("imperial" | "si") via ofddUnits, e.g. "69.2 °F". */
+function fddMetricText(entry, system) {
+  if (!entry || entry.status !== "metric" || entry.value == null) return "";
+  const shown = typeof ofddUnits === "undefined" ? { value: entry.value, unit: entry.unit } : ofddUnits.display(entry.value, entry.unit, system);
+  const v = Number(shown.value);
+  return `${Number.isFinite(v) ? String(Number(v.toFixed(2))) : "–"}${shown.unit ? ` ${shown.unit}` : ""}`;
+}
+
+/** Faults first (most fault hours first), then insufficient, metric, pass, skipped; ties by rule id. @param {FddEntry[]} entries */
 function fddSortEntries(entries) {
   const rank = (s) => FDD_STATUSES.indexOf(s);
   return [...entries].sort((a, b) => rank(a.status) - rank(b.status)
@@ -65,14 +91,14 @@ function fddSummary(entries) {
 }
 
 /**
- * Rows on screen: a chip filter shows that status only; otherwise faults and insufficient rows, with pass and skipped
- * behind "show all". Returns { shown, hidden } (hidden = how many rows "show all" would add).
+ * Rows on screen: a chip filter shows that status only; otherwise faults and insufficient rows, with metric, pass and
+ * skipped behind "show all". Returns { shown, hidden } (hidden = how many rows "show all" would add).
  * @param {FddEntry[]} entries @param {{ filter?: string, showAll?: boolean }} [o]
  */
 function fddVisibleEntries(entries, { filter = "", showAll = false } = {}) {
   const sorted = fddSortEntries(entries);
   if (filter && FDD_STATUSES.includes(filter)) return { shown: sorted.filter((e) => e.status === filter), hidden: 0 };
-  const collapsed = (e) => e.status === "pass" || e.status === "skipped";
+  const collapsed = (e) => e.status === "metric" || e.status === "pass" || e.status === "skipped";
   return { shown: showAll ? sorted : sorted.filter((e) => !collapsed(e)), hidden: showAll ? 0 : sorted.filter(collapsed).length };
 }
 
