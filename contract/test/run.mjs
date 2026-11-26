@@ -36,6 +36,22 @@ if (!BASE) {
 const SPEC_PATH = path.resolve(arg("spec", path.join(HERE, "..", "..", "openapi", "open-fdd-ui-api.yaml")));
 const VIEWER = creds("viewer", "OFDD_CONTRACT_VIEWER", "viewer:viewer-demo");
 const OPERATOR = creds("operator", "OFDD_CONTRACT_OPERATOR", "operator:operator-demo");
+const ROLES_PATH = path.resolve(arg("roles", path.join(HERE, "..", "..", "roles", "openfdd-roles.json")));
+const MANIFEST_PATH = arg("manifest", process.env.OFDD_CONTRACT_MANIFEST || "");
+
+// ---- vocabulary: roles/openfdd-roles.json is the only source of role names and unit spellings ----------------
+const rolesFile = JSON.parse(fs.readFileSync(ROLES_PATH, "utf8"));
+/** role -> {unit: wire symbol ("" when the role has none), value_type} */
+const VOCAB = new Map(rolesFile.roles.map((r) => [r.role, { unit: r.haystack.unit ?? "", value_type: r.value_type }]));
+const unitLabel = (u) => (u === "" ? '""' : u);
+
+/** Fail unless `name` is a role of the roles file and `unit` (and `valueType`, when given) match it. */
+function assertRole(name, unit, valueType, where) {
+  const r = VOCAB.get(name);
+  assert.ok(r, `${where}: ${name} is not a role in ${path.basename(ROLES_PATH)}`);
+  assert.equal(unit, r.unit, `${where}: ${name} unit ${unitLabel(unit)} != roles file ${unitLabel(r.unit)}`);
+  if (valueType !== undefined) assert.equal(valueType, r.value_type, `${where}: ${name} value_type`);
+}
 
 // ---- schema ---------------------------------------------------------------------------------------------------
 const spec = YAML.parse(fs.readFileSync(SPEC_PATH, "utf8"));
@@ -95,7 +111,7 @@ const errorValidator = ajv.compile({ $ref: `${SCHEMA_ID}#/$defs/Error` });
  *          json?: unknown, raw?: string, contentType?: string}} [o]
  */
 async function call(method, template, o = {}) {
-  let p = template.replace(/\{(\w+)\}/g, (_, k) => encodeURIComponent(o.params[k]));
+  let p = (o.path ?? template).replace(/\{(\w+)\}/g, (_, k) => encodeURIComponent(o.params[k]));
   const qs = new URLSearchParams(Object.entries(o.query || {}).map(([k, v]) => [k, String(v)])).toString();
   if (qs) p += `?${qs}`;
   const headers = { Accept: "application/json" };
@@ -216,6 +232,12 @@ test("unknown endpoint: 404 with an error body", async () => {
   expectError(r, 404, "not_found");
 });
 
+test("wrong method on a known path: 405 with an Allow header", async () => {
+  const r = await call("DELETE", "/api/contract-test-405", { token: viewerToken, path: "/api/rules" });
+  expectError(r, 405, "method_not_allowed");
+  assert.match(r.headers.get("allow") || "", /(^|[ ,])GET([ ,]|$)/, "Allow lists GET");
+});
+
 // ---- auth -----------------------------------------------------------------------------------------------------
 test("auth off: /api/auth/* answer 404 and data needs no bearer token", async (t) => {
   if (caps.auth) return t.skip("host authenticates through /api/auth");
@@ -267,7 +289,6 @@ test("auth: login, refresh rotation, logout; refresh token only in an HttpOnly S
   assert.notEqual(r2.json.access_token, r.json.access_token, "new access token");
   assert.equal(r2.json.user.username, VIEWER.username);
   assert.equal((await call("GET", "/api/equipment", { token: r2.json.access_token })).status, 200);
-  expectError(await call("POST", "/api/auth/refresh", { cookie: `ofdd_refresh=${c1.value}` }), 401, "unauthorized");
 
   const out = await call("POST", "/api/auth/logout", { cookie: `ofdd_refresh=${c2.value}` });
   assert.equal(out.status, 204);
@@ -275,6 +296,16 @@ test("auth: login, refresh rotation, logout; refresh token only in an HttpOnly S
   assert.ok(cleared.attrs["max-age"] === "0" || (cleared.attrs.expires && Date.parse(cleared.attrs.expires) < Date.now()), "logout clears the cookie");
   expectError(await call("POST", "/api/auth/refresh", { cookie: `ofdd_refresh=${c2.value}` }), 401, "unauthorized");
   assert.equal((await call("POST", "/api/auth/logout")).status, 204, "logout is idempotent");
+});
+
+test("auth: reuse of a rotated refresh token is 401 and revokes the newest token of that login", async (t) => {
+  if (!caps.auth) return t.skip("auth capability is off");
+  const c1 = refreshCookie(await login(VIEWER));
+  const r2 = await call("POST", "/api/auth/refresh", { cookie: `ofdd_refresh=${c1.value}` });
+  assert.equal(r2.status, 200, r2.text);
+  const c2 = refreshCookie(r2);
+  expectError(await call("POST", "/api/auth/refresh", { cookie: `ofdd_refresh=${c1.value}` }), 401, "unauthorized");
+  expectError(await call("POST", "/api/auth/refresh", { cookie: `ofdd_refresh=${c2.value}` }), 401, "unauthorized");
 });
 
 // ---- model ----------------------------------------------------------------------------------------------------
@@ -288,6 +319,7 @@ test("equipment: valid tree (parent ids exist), stable pagination", async () => 
 });
 
 test("points: SI unit, 223P input names, freshness, equipment filter", async () => {
+  for (const p of points) if (p.input !== null) assertRole(p.input, p.unit, p.value_type, `point ${p.id}`);
   assert.ok(points.length > 0, "the host lists at least one point");
   const equipment = new Set((await all("/api/equipment", { token: viewerToken })).map((e) => e.id));
   for (const p of points) {
@@ -326,6 +358,7 @@ test("samples: SI unit of the point, ascending, inside [from, to), last sample =
     assert.ok(t > prev, "strictly ascending time");
     assert.ok(t >= Date.parse(from) && t < Date.parse(to), "inside [from, to)");
     if (p.value_type === "boolean") assert.ok(s.v === 0 || s.v === 1, "boolean samples are 0/1");
+    else assert.equal(typeof s.v, p.value_type === "enumeration" ? "string" : "number", "sample value type");
     prev = t;
   }
   assert.equal(items.at(-1).t.replace(/\.000Z$/, "Z"), p.last_sample_time.replace(/\.000Z$/, "Z"), "last sample time equals the point's freshness");
@@ -351,6 +384,7 @@ test("rules: inputs by 223P name with SI units; confirm_min null exactly when no
   const rules = await all("/api/rules", { token: viewerToken });
   assert.ok(rules.length > 0, "the host lists at least one rule");
   for (const r of rules) {
+    for (const x of r.inputs) assertRole(x.name, x.unit, undefined, `rule ${r.rule_id}`);
     assert.equal(r.confirm_min === null, r.confirm_min_default === null, `${r.rule_id}: confirm_min and its default are both null or both set`);
     const names = r.inputs.map((x) => x.name);
     assert.equal(new Set(names).size, names.length, `${r.rule_id}: input names unique`);
@@ -442,4 +476,46 @@ test("spec: every component schema compiles and its example validates", () => {
     const v = ajv.compile({ $ref: `${SCHEMA_ID}#/$defs/${name}` });
     if (schema.example !== undefined) assertValid(v, schema.example, `example of ${name}`);
   }
+});
+
+test("vocabulary: SiUnit is the roles file's unit symbols plus h and the empty string, same spelling", () => {
+  const fromRoles = new Set(rolesFile.roles.map((r) => r.haystack.unit ?? ""));
+  const want = [...new Set([...fromRoles, "h", ""])].sort();
+  assert.deepEqual([...spec.components.schemas.SiUnit.enum].sort(), want, "SiUnit enum vs roles/openfdd-roles.json");
+  // The mapping table: every QUDT unit row names the roles file's symbol.
+  const rows = [...spec.components.schemas.SiUnit.description.matchAll(/^\| `(unit:[^`]+)`[^|]*\| `([^`]*)`/gm)];
+  assert.ok(rows.length > 0, "SiUnit description has a unit table");
+  for (const [, qudt, wire] of rows) {
+    const u = rolesFile.units[qudt];
+    assert.ok(u, `SiUnit table: ${qudt} is not in the roles file`);
+    assert.equal(wire === '""' ? "" : wire, u.haystack ?? "", `SiUnit table: ${qudt}`);
+  }
+  for (const qudt of new Set(rolesFile.roles.map((r) => r.unit).filter(Boolean))) {
+    assert.ok(rows.some(([, q]) => q === qudt), `SiUnit table lacks ${qudt}`);
+  }
+});
+
+test("vocabulary: every role the spec names (InputName table, examples) is a roles-file role with its unit", () => {
+  const rows = [...spec.components.schemas.InputName.description.matchAll(/^\| `([a-z0-9_]+)` \| `([^`]*)` \|/gm)];
+  assert.ok(rows.length > 0, "InputName description has a role table");
+  for (const [, name, unit] of rows) assertRole(name, unit === '""' ? "" : unit, undefined, "InputName table");
+  assertRole(spec.components.schemas.InputName.example, VOCAB.get(spec.components.schemas.InputName.example)?.unit, undefined, "InputName example");
+  const pt = spec.components.schemas.Point.example;
+  assertRole(pt.input, pt.unit, pt.value_type, "Point example");
+});
+
+test("vocabulary: the rules bundle manifest uses the same role names and units (--manifest)", (t) => {
+  if (!MANIFEST_PATH) return t.skip("no --manifest given");
+  const manifest = JSON.parse(fs.readFileSync(path.resolve(MANIFEST_PATH), "utf8"));
+  const problems = [];
+  for (const r of manifest.rules || []) {
+    for (const x of r.inputs || []) {
+      const name = x.name ?? x.name_223p ?? x.role;
+      const v = VOCAB.get(name);
+      if (!v) problems.push(`${r.rule_id}: ${name} is not a role`);
+      else if ((x.unit ?? "") !== v.unit) problems.push(`${r.rule_id}: ${name} unit ${unitLabel(x.unit ?? "")} != ${unitLabel(v.unit)}`);
+    }
+  }
+  const uniq = [...new Set(problems)];
+  assert.deepEqual(uniq.slice(0, 40), [], `${uniq.length} manifest mismatch(es) against ${path.basename(ROLES_PATH)}`);
 });

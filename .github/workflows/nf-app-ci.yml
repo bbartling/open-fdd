@@ -17,6 +17,7 @@ on:
       - "open_fdd/nf/**"
       - "openapi/**"
       - "contract/**"
+      - "roles/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
   pull_request:
@@ -33,6 +34,7 @@ on:
       - "open_fdd/nf/**"
       - "openapi/**"
       - "contract/**"
+      - "roles/**"
       - "VERSION"
       - ".github/workflows/nf-app-ci.yml"
 

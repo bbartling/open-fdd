@@ -15,9 +15,9 @@ info:
     |---|---|
     | Units | SI on the wire, always. Every numeric value carries or inherits an explicit `unit` (`SiUnit`). Imperial is display-only in the UI. Durations in result rows are hours (`h`). |
     | Time | RFC 3339 / ISO-8601 strings. Responses are always UTC with a `Z` suffix (`2026-01-05T00:00:00Z`). Query parameters accept `Z` or a numeric offset. Ranges are half-open: `from` inclusive, `to` exclusive. |
-    | Names | Rule inputs use the ASHRAE 223P-derived snake_case names of the rule-input contract (#1804), for example `outside_air_temperature`. See `InputName`. |
+    | Names | Point roles and rule inputs use the ASHRAE 223P-derived snake_case role names of the canonical vocabulary, exactly as `roles/openfdd-roles.json`, for example `outdoor_air_intake_temperature`. See `InputName` and `SiUnit`. |
     | Lists | Lists that can grow large are paginated with `limit` and an opaque `cursor`; the envelope is `{items, next_cursor}`. `next_cursor` is `null` on the last page. |
-    | Errors | Every 4xx/5xx JSON body is an `Error`. Clients branch on `error.code`, never on `message`. |
+    | Errors | Every 4xx/5xx JSON body is an `Error`. Clients branch on `error.code`, never on `message`. A wrong method on a known path is 405 `method_not_allowed` with an `Allow` header. |
     | Auth | When `capabilities.auth` is true the host authenticates with `/api/auth/*`: a short-lived bearer access token in the response body and a refresh token only in an `HttpOnly; Secure; SameSite=Strict` cookie. When it is false the host authenticates outside this contract (for example a platform session or a front door) and `/api/auth/*` answer 404. `/api/meta` never requires a token. |
     | Roles | `viewer` reads. `operator` also tunes rules. `admin` has operator rights plus host-specific administration outside this contract. |
     | Writes | Off by default. A write needs both the capability flag (`rules_write`) and the operator or admin role. |
@@ -232,7 +232,9 @@ paths:
       operationId: refresh
       summary: Exchange the refresh cookie for a new access token; the refresh token rotates.
       description: |
-        The previous refresh token is rejected after a successful refresh (401). No request body.
+        The previous refresh token is rejected after a successful refresh (401). Presenting an already-rotated
+        refresh token is treated as theft: the host revokes every refresh token of that login (the token family),
+        so the next refresh with the newest token is also 401. No request body.
       security:
         - refreshCookie: []
       responses:
@@ -306,7 +308,10 @@ components:
     Cursor:
       name: cursor
       in: query
-      description: The `next_cursor` of the previous page, passed back unchanged.
+      description: |
+        The `next_cursor` of the previous page, passed back unchanged. Opaque to clients. Hosts with live data use
+        keyset cursors (encode the last row's sort key), so rows inserted between pages are neither skipped nor
+        repeated; a plain row offset is only acceptable for static data.
       schema: { type: string, minLength: 1 }
 
   responses:
@@ -382,34 +387,60 @@ components:
     SiUnit:
       type: string
       description: |
-        The SI unit of a value, spelled as Open-FDD's unit table (`open_fdd/data/units.json`). The empty string is a
-        dimensionless value or a boolean (0/1). Imperial or other non-SI units never appear on the wire.
-      enum: ["°C", "Δ°C", "Δ°C/h", "Pa", "L/s", "kW", "kWh", "%", "ppm", "h", ""]
+        The unit of a value on the wire: the Haystack symbol of the role's QUDT unit in the canonical role
+        vocabulary `roles/openfdd-roles.json` (`roles[].haystack.unit`), with the same spelling. Roles with no unit
+        (booleans, enumerations, counts) use the empty string. `h` is only for durations in results. Imperial or
+        other non-SI units never appear on the wire; hosts convert at ingest (`ingest_conversions` in the roles
+        file). Temperature differences are also `°C`.
+
+        | Roles file `unit` | Wire | Other spellings it replaces |
+        |---|---|---|
+        | `unit:DEG_C` | `°C` | `degC`, `si:degC`, `K` (offset), `°F` (converted) |
+        | `unit:PA` | `Pa` | |
+        | `unit:L-PER-SEC` | `L/s` | `m³/s`, `cfm` (converted) |
+        | `unit:PERCENT` | `%` (0-100) | `fraction` / 0-1 (x100 at ingest) |
+        | `unit:PERCENT_RH` | `%RH` | `percent_rh` |
+        | `unit:PPM` | `ppm` | |
+        | `unit:KiloW` | `kW` | `W` (converted) |
+        | `unit:KiloW-HR` | `kWh` | |
+        | `unit:A` | `A` | |
+        | `unit:NUM` (counts) | `""` | `count`, `si:count` |
+        | none: `boolean` roles | `""`, values 0/1 | `bool` |
+        | none: `enumeration` roles | `""`, string values | `text` |
+      enum: ["°C", "Pa", "L/s", "%", "%RH", "ppm", "kW", "kWh", "A", "h", ""]
 
     InputName:
       type: string
       pattern: "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
       description: |
-        ASHRAE 223P-derived snake_case rule-input name (#1804). It names the 223P pattern (medium, aspect,
-        quantity kind, connection point) a point matches; it is the only rule-input vocabulary. Examples:
+        A point role, exactly as `roles[].role` in the canonical vocabulary `roles/openfdd-roles.json`: ASHRAE 223P
+        derived snake_case, the only rule-input vocabulary (#1804). Commands and feedback are separate roles
+        (`*_command` vs `*_position` / `*_status`). Old Open-FDD keys (`roles[].legacy_keys`) are for migration only
+        and never appear on the wire. Examples:
 
-        | 223P snake_case | Replaces role |
-        |---|---|
-        | `discharge_air_temperature` | `sat` |
-        | `mixed_air_temperature` | `mat` |
-        | `outside_air_temperature` | `oa_t` |
-        | `return_air_temperature` | `rat` |
-        | `discharge_air_temperature_setpoint` | `sat_sp` |
-        | `zone_air_temperature` | `zone_t` |
-        | `supply_fan_run_status` | `fan_status` |
-        | `supply_fan_command` | `fan_cmd` |
-        | `outside_air_damper_position` | `oa_damper_pct` |
-        | `cooling_valve_position` | `clg_valve_pct` |
-        | `heating_valve_position` | `htg_valve_pct` |
-        | `chilled_water_supply_temperature` | `chw_supply_t` |
-        | `hot_water_supply_temperature` | `hw_supply_t` |
-        | `duct_static_pressure` | `duct_static` |
-      example: outside_air_temperature
+        | Role | Unit | Legacy key |
+        |---|---|---|
+        | `discharge_air_temperature` | `°C` | `sat` |
+        | `mixed_air_temperature` | `°C` | `mat` |
+        | `outdoor_air_intake_temperature` | `°C` | `oa_t` |
+        | `return_air_temperature` | `°C` | `rat` |
+        | `discharge_air_temperature_setpoint` | `°C` | `sat_sp` |
+        | `zone_air_temperature` | `°C` | `zone_t` |
+        | `supply_fan_operating_status` | `""` | `fan_status` |
+        | `supply_fan_command` | `""` | `fan_cmd` |
+        | `supply_fan_speed_command` | `%` | |
+        | `outdoor_air_intake_damper_position_command` | `%` | `oa_damper_pct` |
+        | `outdoor_air_intake_damper_position` | `%` | |
+        | `cooling_valve_position_command` | `%` | `clg_valve_pct` |
+        | `heating_valve_position_command` | `%` | `htg_valve_pct` |
+        | `supply_chilled_water_temperature` | `°C` | `chw_supply_t` |
+        | `supply_hot_water_temperature` | `°C` | `hw_supply_t` |
+        | `discharge_air_static_pressure` | `Pa` | `duct_static` |
+        | `zone_air_co2` | `ppm` | `zone_co2` |
+        | `chiller_electric_current` | `A` | `chiller_amps` |
+        | `chilled_water_reset_request_count` | `""` | `chw_reset_request_sum` |
+        | `occupancy_status` | `""` | `occ_mode` |
+      example: outdoor_air_intake_temperature
 
     Capabilities:
       type: object
@@ -422,7 +453,11 @@ components:
         rules_write: { type: boolean, description: "`PUT /api/rules/{rule_id}/confirm_min` is enabled. Default false." }
         export_csv: { type: boolean, description: The host offers CSV export. }
         export_parquet: { type: boolean, description: The host offers Parquet export. }
-        sparql: { type: boolean, description: The host offers a SPARQL endpoint over its model. }
+        sparql:
+          type: boolean
+          description: |
+            The host offers a SPARQL endpoint over its model. Hosts that expose one follow #1810 (query engine and
+            versions), so every host answers the same query the same way.
         auth: { type: boolean, description: "The host authenticates through `/api/auth/*`." }
       additionalProperties: { type: boolean }
 
@@ -476,28 +511,28 @@ components:
         name: { type: string }
         equipment_id: { type: string, minLength: 1 }
         input:
-          description: The rule input this point is bound to, or null when it binds no rule input.
+          description: The role this point is bound to, or null when it binds none.
           oneOf:
             - $ref: "#/components/schemas/InputName"
             - type: "null"
         unit: { $ref: "#/components/schemas/SiUnit" }
         value_type:
           type: string
-          enum: [number, boolean]
-          description: "`boolean` points carry 0 or 1."
+          enum: [number, boolean, enumeration]
+          description: "The role's `value_type`. `boolean` points carry 0 or 1; `enumeration` points carry the member name as a string."
         last_sample_time:
           description: Freshness. Time of the newest stored sample, or null when there is none.
           oneOf:
             - $ref: "#/components/schemas/Timestamp"
             - type: "null"
         last_value:
-          type: [number, "null"]
+          type: [number, string, "null"]
           description: The newest sample value, SI, in `unit`.
       example:
-        id: ahu-1.outside_air_temperature
+        id: ahu-1.outdoor_air_intake_temperature
         name: AHU-1 OAT
         equipment_id: ahu-1
-        input: outside_air_temperature
+        input: outdoor_air_intake_temperature
         unit: "°C"
         value_type: number
         last_sample_time: "2026-01-07T23:55:00Z"
@@ -509,7 +544,9 @@ components:
       additionalProperties: false
       properties:
         t: { $ref: "#/components/schemas/Timestamp" }
-        v: { type: number, description: SI value in the page's `unit`. }
+        v:
+          type: [number, string]
+          description: SI value in the page's `unit`; a string only for `enumeration` points.
 
     Metric:
       type: object

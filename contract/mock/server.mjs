@@ -52,7 +52,8 @@ export function createApp({ writes = false, auth = true } = {}) {
   const points = [...POINTS].sort((a, b) => cmp(a.id, b.id));
   const results = [...RESULTS].sort((a, b) => a.window_start - b.window_start || cmp(a.equipment_id, b.equipment_id) || cmp(a.rule_id, b.rule_id));
   const access = new Map();   // token -> {user, exp}
-  const refresh = new Map();  // sha256(token) -> {user, exp}
+  const refresh = new Map();  // sha256(token) -> {user, exp, family}
+  const rotated = new Map();  // sha256(rotated-out token) -> family, to detect reuse
 
   const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
   const token = () => crypto.randomBytes(32).toString("base64url");
@@ -64,12 +65,12 @@ export function createApp({ writes = false, auth = true } = {}) {
     return crypto.timingSafeEqual(want, got);
   }
 
-  function issue(res, user) {
+  function issue(res, user, family = crypto.randomUUID()) {
     const now = Date.now();
     const at = token();
     const rt = token();
     access.set(at, { user, exp: now + ACCESS_TTL_S * 1000 });
-    refresh.set(sha(rt), { user, exp: now + REFRESH_TTL_S * 1000 });
+    refresh.set(sha(rt), { user, exp: now + REFRESH_TTL_S * 1000, family });
     res.setHeader("Set-Cookie", `${COOKIE}=${rt}; Path=/api/auth; HttpOnly; Secure; SameSite=Strict; Max-Age=${REFRESH_TTL_S}`);
     return { access_token: at, token_type: "Bearer", expires_in: ACCESS_TTL_S, user: { username: user.username, role: user.role } };
   }
@@ -196,9 +197,15 @@ export function createApp({ writes = false, auth = true } = {}) {
       const rt = cookieToken(req);
       const key = rt && sha(rt);
       const s = key && refresh.get(key);
+      if (key && !s && rotated.has(key)) {
+        // Reuse of a rotated-out token: revoke the whole family (the newest token too).
+        const fam = rotated.get(key);
+        for (const [k, v] of refresh) if (v.family === fam) refresh.delete(k);
+      }
       if (!s || s.exp <= Date.now()) throw new ApiError(401, "unauthorized", "missing, expired or revoked refresh token");
       refresh.delete(key); // rotation: the old refresh token is now rejected
-      return [200, issue(res, s.user)];
+      rotated.set(key, s.family);
+      return [200, issue(res, s.user, s.family)];
     },
     "POST /api/auth/logout": (req, _q, res) => {
       const rt = cookieToken(req);
@@ -238,8 +245,14 @@ export function createApp({ writes = false, auth = true } = {}) {
       const route = routes[`${req.method} ${url.pathname}`];
       if (m && req.method === "PUT") [status, payload] = await putConfirmMin(req, decodeURIComponent(m[1]));
       else if (route) [status, payload] = await route(req, url.searchParams, res);
-      else if (m || Object.keys(routes).some((k) => k.endsWith(` ${url.pathname}`))) throw new ApiError(405, "method_not_allowed", "method not allowed");
-      else throw new ApiError(404, "not_found", "no such endpoint");
+      else {
+        const allow = m ? ["PUT"] : Object.keys(routes).filter((k) => k.endsWith(` ${url.pathname}`)).map((k) => k.split(" ")[0]);
+        if (allow.length) {
+          res.setHeader("Allow", allow.join(", "));
+          throw new ApiError(405, "method_not_allowed", "method not allowed");
+        }
+        throw new ApiError(404, "not_found", "no such endpoint");
+      }
     } catch (e) {
       if (!(e instanceof ApiError)) { console.error(e); e = new ApiError(500, "internal", "internal error"); }
       status = e.status;

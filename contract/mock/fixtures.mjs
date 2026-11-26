@@ -1,6 +1,28 @@
 // Synthetic fixture data for the contract mock: one site, two AHUs, three VAVs, three days of 5-minute samples,
 // four rules and their daily results (FAULT, PASS, METRIC and NOT_ASSESSED). Deterministic: same data every run.
-// All names are synthetic. Values are SI.
+// Equipment and point names are synthetic. Values are SI.
+//
+// Input names, units and value types come from the canonical role vocabulary (roles/openfdd-roles.json); rule
+// inputs and confirmation defaults come from the shipped rule catalog (nf-app/static/fdd-catalog.json), whose
+// legacy role keys are translated through the roles file's `legacy_keys`.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), "utf8"));
+const ROLES = readJson("roles/openfdd-roles.json");
+const CATALOG = readJson("nf-app/static/fdd-catalog.json");
+
+/** role name -> {unit (wire symbol), value_type} */
+export const ROLE = new Map(ROLES.roles.map((r) => [r.role, { unit: r.haystack.unit ?? "", value_type: r.value_type }]));
+const BY_LEGACY = new Map(ROLES.roles.flatMap((r) => r.legacy_keys.map((k) => [k, r.role])));
+
+function role(name) {
+  const r = ROLE.get(name);
+  if (!r) throw new Error(`fixture role ${name} is not in roles/openfdd-roles.json`);
+  return r;
+}
 
 export const START_MS = Date.parse("2026-01-05T00:00:00Z");
 export const DAYS = 3;
@@ -25,31 +47,33 @@ export const EQUIPMENT = [
   { id: "vav-2-01", name: "VAV-2-01", kind: "vav", site: SITE, parent_id: "ahu-2" },
 ];
 
-const AHU_INPUTS = [
-  ["outside_air_temperature", "°C", "number"],
-  ["mixed_air_temperature", "°C", "number"],
-  ["discharge_air_temperature", "°C", "number"],
-  ["duct_static_pressure", "Pa", "number"],
-  ["duct_static_pressure_setpoint", "Pa", "number"],
-  ["supply_fan_command", "%", "number"],
-  ["supply_fan_run_status", "", "boolean"],
-  ["outside_air_damper_position", "%", "number"],
-  ["cooling_valve_position", "%", "number"],
+// Commands and their feedback are separate roles (`*_command` vs `*_position` / `*_status`).
+const AHU_ROLES = [
+  "outdoor_air_intake_temperature",
+  "mixed_air_temperature",
+  "discharge_air_temperature",
+  "discharge_air_static_pressure",
+  "discharge_air_static_pressure_setpoint",
+  "supply_fan_command",
+  "supply_fan_speed_command",
+  "supply_fan_operating_status",
+  "outdoor_air_intake_damper_position_command",
+  "outdoor_air_intake_damper_position",
+  "cooling_valve_position_command",
 ];
 
-// Point definitions; `series` turns a sample time into an SI value.
 const defs = [];
 for (const eq of EQUIPMENT) {
   if (eq.kind === "ahu") {
-    for (const [input, unit, valueType] of AHU_INPUTS) {
-      if (eq.id === "ahu-2" && input === "cooling_valve_position") continue; // unbound: FC8 is NOT_ASSESSED on ahu-2
-      defs.push({ id: `${eq.id}.${input}`, name: `${eq.name} ${input}`, equipment_id: eq.id, input, unit, value_type: valueType });
+    for (const input of AHU_ROLES) {
+      if (eq.id === "ahu-2" && input === "cooling_valve_position_command") continue; // unbound: FC8 is NOT_ASSESSED on ahu-2
+      defs.push({ id: `${eq.id}.${input}`, name: `${eq.name} ${input}`, equipment_id: eq.id, input, ...role(input) });
     }
     if (eq.id === "ahu-1") {
       defs.push({ id: "ahu-1.filter_pressure_drop", name: "AHU-1 filter pressure drop", equipment_id: "ahu-1", input: null, unit: "Pa", value_type: "number" });
     }
   } else {
-    defs.push({ id: `${eq.id}.zone_air_temperature`, name: `${eq.name} zone_air_temperature`, equipment_id: eq.id, input: "zone_air_temperature", unit: "°C", value_type: "number" });
+    defs.push({ id: `${eq.id}.zone_air_temperature`, name: `${eq.name} zone_air_temperature`, equipment_id: eq.id, input: "zone_air_temperature", ...role("zone_air_temperature") });
   }
 }
 
@@ -71,16 +95,19 @@ function value(def, seed, t, i) {
   const oat = 4 + 6 * Math.sin(((hour - 9) / 24) * 2 * Math.PI);
   // ahu-1, first day 13:00-14:30: the fan is at 100 % and duct static cannot reach setpoint (the FC1 fault).
   const fc1 = def.equipment_id === "ahu-1" && t >= START_MS + 13 * 3_600_000 && t < START_MS + 14.5 * 3_600_000;
+  const damper = occ ? 30 + 5 * noise(seed, i) : 0;
   switch (def.input) {
-    case "outside_air_temperature": return oat + 0.3 * noise(seed, i);
+    case "outdoor_air_intake_temperature": return oat + 0.3 * noise(seed, i);
     case "mixed_air_temperature": return (occ ? 0.3 * oat + 0.7 * 21 : 20) + 0.2 * noise(seed, i);
     case "discharge_air_temperature": return (occ ? 13 : 18) + 0.3 * noise(seed, i);
-    case "duct_static_pressure": return occ ? (fc1 ? 150 : 250) + 8 * noise(seed, i) : 0;
-    case "duct_static_pressure_setpoint": return occ ? 250 : 0;
-    case "supply_fan_command": return occ ? (fc1 ? 100 : 70 + 10 * noise(seed, i)) : 0;
-    case "supply_fan_run_status": return occ ? 1 : 0;
-    case "outside_air_damper_position": return occ ? 30 + 5 * noise(seed, i) : 0;
-    case "cooling_valve_position": return occ ? Math.max(0, 20 + 10 * noise(seed, i)) : 0;
+    case "discharge_air_static_pressure": return occ ? (fc1 ? 150 : 250) + 8 * noise(seed, i) : 0;
+    case "discharge_air_static_pressure_setpoint": return occ ? 250 : 0;
+    case "supply_fan_command": return occ ? 1 : 0;
+    case "supply_fan_speed_command": return occ ? (fc1 ? 100 : 70 + 10 * noise(seed, i)) : 0;
+    case "supply_fan_operating_status": return occ ? 1 : 0;
+    case "outdoor_air_intake_damper_position_command": return damper;
+    case "outdoor_air_intake_damper_position": return Math.max(0, damper - 1);
+    case "cooling_valve_position_command": return occ ? Math.max(0, 20 + 10 * noise(seed, i)) : 0;
     case "zone_air_temperature": return (occ ? 22 : 19) + 0.5 * noise(seed, i);
     default: return 120 + 5 * noise(seed, i); // the unbound filter pressure drop, Pa
   }
@@ -105,38 +132,27 @@ export const POINTS = defs.map((def, seed) => {
   return { ...def, series, last_sample_time: last ? last.t : null, last_value: last ? last.v : null };
 });
 
+/** A fixture rule built from the shipped catalog entry: inputs by role name, catalog confirmation default. */
+function ruleFrom(ruleId, kind, title) {
+  const c = CATALOG.rules.find((r) => r.id === ruleId);
+  if (!c) throw new Error(`rule ${ruleId} is not in fdd-catalog.json`);
+  const inputs = [];
+  const add = (key, required) => {
+    const name = BY_LEGACY.get(key);
+    if (!name) throw new Error(`${ruleId}: catalog role ${key} has no role in roles/openfdd-roles.json`);
+    if (!inputs.some((x) => x.name === name)) inputs.push({ name, required, unit: role(name).unit });
+  };
+  c.required_roles.forEach((k) => add(k, true));
+  c.optional_roles.forEach((k) => add(k, false));
+  const confirm = kind === "fault" ? Math.round(c.confirm_seconds / 60) : null;
+  return { rule_id: ruleId, title, kind, equipment_kinds: c.equipment_kinds, inputs, confirm_min: confirm, confirm_min_default: confirm };
+}
+
 export const RULES = [
-  {
-    rule_id: "AVG-ZONE-TEMP", title: "Average zone air temperature", kind: "metric", equipment_kinds: [],
-    inputs: [{ name: "zone_air_temperature", required: true, unit: "°C" }],
-    confirm_min: null, confirm_min_default: null,
-  },
-  {
-    rule_id: "FAN-RUNTIME-HOURS", title: "Supply fan running hours", kind: "metric", equipment_kinds: [],
-    inputs: [{ name: "supply_fan_command", required: true, unit: "%" }],
-    confirm_min: null, confirm_min_default: null,
-  },
-  {
-    rule_id: "FC1", title: "Duct static pressure below setpoint at full fan", kind: "fault", equipment_kinds: ["ahu"],
-    inputs: [
-      { name: "duct_static_pressure", required: true, unit: "Pa" },
-      { name: "duct_static_pressure_setpoint", required: true, unit: "Pa" },
-      { name: "supply_fan_command", required: true, unit: "%" },
-      { name: "supply_fan_run_status", required: false, unit: "" },
-    ],
-    confirm_min: 15, confirm_min_default: 15,
-  },
-  {
-    rule_id: "FC8", title: "Discharge air vs mixed air while economizing", kind: "fault", equipment_kinds: ["ahu"],
-    inputs: [
-      { name: "discharge_air_temperature", required: true, unit: "°C" },
-      { name: "mixed_air_temperature", required: true, unit: "°C" },
-      { name: "outside_air_damper_position", required: true, unit: "%" },
-      { name: "cooling_valve_position", required: true, unit: "%" },
-      { name: "supply_fan_run_status", required: false, unit: "" },
-    ],
-    confirm_min: 15, confirm_min_default: 15,
-  },
+  ruleFrom("AVG-ZONE-TEMP", "metric", "Average zone air temperature"),
+  ruleFrom("FAN-RUNTIME-HOURS", "metric", "Supply fan running hours"),
+  ruleFrom("FC1", "fault", "Duct static pressure below setpoint at full fan"),
+  ruleFrom("FC8", "fault", "Discharge air vs mixed air while economizing"),
 ];
 
 function result(equipment_id, rule_id, day, fields) {
@@ -156,7 +172,7 @@ for (let day = 0; day < DAYS; day++) {
   RESULTS.push(result("ahu-1", "FC1", day, assessed(day === 0 ? 1.5 : 0)));
   RESULTS.push(result("ahu-2", "FC1", day, assessed(0)));
   RESULTS.push(result("ahu-1", "FC8", day, assessed(0)));
-  RESULTS.push(result("ahu-2", "FC8", day, notAssessed("unbound_input:cooling_valve_position")));
+  RESULTS.push(result("ahu-2", "FC8", day, notAssessed("unbound_input:cooling_valve_position_command")));
   for (const ahu of ["ahu-1", "ahu-2"]) {
     RESULTS.push(result(ahu, "FAN-RUNTIME-HOURS", day, { status: "METRIC", metrics: { runtime_hours: { value: 12, unit: "h" } } }));
   }
@@ -167,4 +183,3 @@ for (let day = 0; day < DAYS; day++) {
       : { status: "METRIC", metrics: { mean_zone_air_temperature: { value: 20.5, unit: "°C" } } }));
   }
 }
-RESULTS.sort((a, b) => a.window_start - b.window_start || a.equipment_id.localeCompare(b.equipment_id) || a.rule_id.localeCompare(b.rule_id));
