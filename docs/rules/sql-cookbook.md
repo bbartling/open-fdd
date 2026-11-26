@@ -1341,7 +1341,7 @@ OAT high vs SAT SP while economizing
 
 Filter pressure drop above dp_dirty, or fan effort high for the airflow
 
-**Priority** P2 · **Equipment** `ahu` · **Confirm** 20 min · [SQL file](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/filter_load.sql) · [pandas twin](pandas-cookbook.html#filter-load)
+**Priority** P2 · **Equipment** `ahu` · **Confirm** 15 min · [SQL file](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/filter_load.sql) · [pandas twin](pandas-cookbook.html#filter-load)
 
 **Inputs**
 
@@ -1358,7 +1358,7 @@ Filter pressure drop above dp_dirty, or fan effort high for the airflow
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 20 | 0 | 60 | min |
+| `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `dp_dirty` | Dirty filter pressure drop | 248.84 | 49.768 | 995.36 | Pa |
 | `effort_ratio` | Fan effort ratio | 1.3 | 1.05 | 3 | x (ratio) |
 | `flow_frac` | Minimum airflow fraction | 0.5 | 0 | 0.9 | fraction (0-1) |

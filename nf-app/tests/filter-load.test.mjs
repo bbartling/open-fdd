@@ -18,10 +18,16 @@ const START = Date.UTC(2026, 0, 1);
 
 function input(c) {
   const n = c.n || 97;
-  const cols = [...new Set([...Object.keys(c.row), ...Object.keys(c.second_half || {})])];
+  const { block = 1, ...pattern } = c.pattern || {};
+  const cols = [...new Set([...Object.keys(c.row), ...Object.keys(pattern), ...Object.keys(c.second_half || {})])];
   const history = [];
   for (let i = 0; i < n; i++) {
-    const vals = i >= Math.floor(n / 2) ? { ...c.row, ...(c.second_half || {}) } : c.row;
+    const vals = { ...c.row };
+    for (const [k, seq] of Object.entries(pattern)) vals[k] = seq[Math.floor(i / block) % seq.length];
+    if (i >= Math.floor(n / 2)) {
+      Object.assign(vals, c.second_half || {});
+      for (const [k, f] of Object.entries(c.second_half_scale || {})) vals[k] *= f;
+    }
     history.push({ equipment_id: "ahu-1", ts: START + i * 300_000, ...vals });
   }
   return { historyColumns: cols.map((name) => ({ name, type: "double" })), history, weather: [], sensorHistory: [] };

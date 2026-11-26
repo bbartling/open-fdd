@@ -8774,7 +8774,7 @@
       "run_proof": "gated"
     },
     {
-      "confirm_seconds": 1200,
+      "confirm_seconds": 900,
       "delete_python_candidate": false,
       "description": "Filter pressure drop above dp_dirty, or fan effort high for the airflow",
       "equipment_kinds": [
@@ -8801,7 +8801,7 @@
       "parameters": {
         "confirm_min": {
           "control": "slider",
-          "default": 20.0,
+          "default": 15.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "key": "confirm_min",

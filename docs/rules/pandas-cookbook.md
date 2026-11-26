@@ -1214,7 +1214,7 @@ OATavg − εOAT > SATSP − ΔTSF + εSAT in OS#2.
 
 Fan on: filter DP above dp_dirty, else fan effort high for the airflow.
 
-**Filter loading** · **Family** ahu · **Equipment** `ahu` · **Confirm** 20 min · function `filter_load` · [SQL entry](sql-cookbook.html#filter-load)
+**Filter loading** · **Family** ahu · **Equipment** `ahu` · **Confirm** 15 min · function `filter_load` · [SQL entry](sql-cookbook.html#filter-load)
 
 **Inputs**
 
@@ -1230,7 +1230,7 @@ Fan on: filter DP above dp_dirty, else fan effort high for the airflow.
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 20 | 0 | 60 | min |
+| `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `dp_dirty` | Dirty filter pressure drop | 248.84 | 49.768 | 995.36 | Pa |
 | `effort_ratio` | Fan effort ratio | 1.3 | 1.05 | 3 | × (scale) |
 | `flow_frac` | Minimum airflow fraction | 0.5 | 0 | 0.9 | fraction (0-1) |

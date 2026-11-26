@@ -1580,8 +1580,9 @@ def filter_load(d, p, poll):
 
     With a filter DP: fault when DP > dp_dirty (Pa, readings outside 0-2500 Pa ignored as a sensor problem), the fan
     on (status, else command) and, where airflow is bound, airflow >= flow_frac x its own 90th percentile over fan-on
-    samples. Without a filter DP, with fan power and airflow: advisory when fan effort (kW per L/s, fan on, airflow at
-    or above that floor) > effort_ratio x its own 10th percentile; under 4 h of such samples the rule is not assessed.
+    samples (an unknown airflow is not normal). Without a filter DP, with fan power and airflow: advisory when fan
+    effort (kW per L/s, fan on, airflow at or above that floor) > effort_ratio x the 10th percentile of its own airflow
+    bin (FILTER_LOAD_BIN_EDGES); a bin needs 1 h of samples, and under 4 h in judged bins the rule is not assessed.
     ``d.attrs["filter_load_assessment"]`` names the path (``filter_dp``, ``fan_effort``, ``insufficient_baseline``)."""
     from open_fdd.rules.base import _eligible_hold_seconds
 
@@ -1600,20 +1601,37 @@ def filter_load(d, p, poll):
 
     if dp.notna().any():
         d.attrs["filter_load_assessment"] = "filter_dp"
-        flow_ok = flow.isna() | (flow >= floor) if not np.isnan(flow_ref) else pd.Series(True, index=d.index)
+        # an unknown airflow on a bound airflow series is not "airflow normal"
+        flow_ok = (flow >= floor) if not np.isnan(flow_ref) else pd.Series(True, index=d.index)
         plausible = (dp >= 0.0) & (dp <= 2500.0)
         return (fan_on & flow_ok & dp.notna() & plausible & (dp > _f(p, "dp_dirty", 248.84))).fillna(False)
 
+    # like with like: effort rises with airflow on a clean filter, so each sample is judged against its own airflow bin
     ok = fan_on & (power > 0.0) & (flow > 0.0) & (flow >= floor)
     effort = (power / flow).where(ok)
+    flow_bin = pd.Series(0, index=d.index)
+    for edge in FILTER_LOAD_BIN_EDGES:
+        flow_bin = flow_bin + (flow >= edge * flow_ref).astype(int)
     held = _eligible_hold_seconds(d.index)
-    hours = float(held[effort.notna()].sum()) / 3600.0 if held is not None else 0.0
+    if held is None:
+        held = pd.Series(0.0, index=d.index)
+    base = pd.Series(np.nan, index=d.index)
+    hours = 0.0
+    for b in sorted(flow_bin[effort.notna()].unique()):
+        members = effort.notna() & (flow_bin == b)
+        bin_hours = float(held[members].sum()) / 3600.0
+        if bin_hours >= 1.0:   # a bin needs 1 h of samples to be judged
+            hours += bin_hours
+            base[members] = _rank_pick(effort[members], 1)
     if hours < 4.0:
         d.attrs["filter_load_assessment"] = "insufficient_baseline"
         return pd.Series(False, index=d.index)
     d.attrs["filter_load_assessment"] = "fan_effort"
-    base = _rank_pick(effort.dropna(), 1)
-    return (effort.notna() & (effort > _f(p, "effort_ratio", 1.3) * base)).fillna(False)
+    return (effort.notna() & base.notna() & (effort > _f(p, "effort_ratio", 1.3) * base)).fillna(False)
+
+
+#: FILTER-LOAD airflow bins: fractions of the 90th percentile airflow (0.1 wide; 1.2 and up is one bin)
+FILTER_LOAD_BIN_EDGES = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2)
 
 
 def fcu_clg_coil(d, p, poll):
@@ -2398,9 +2416,9 @@ RULES: list[CookbookRule] = [
             CookbookParam("dp_dirty", "Dirty filter pressure drop", "Pa", 49.768, 995.36, 12.442, 248.84),
             CookbookParam("flow_frac", "Minimum airflow fraction", "frac", 0.0, 0.9, 0.05, 0.5),
             CookbookParam("effort_ratio", "Fan effort ratio", "x", 1.05, 3.0, 0.05, 1.3),
-            CONFIRM_PARAM(20.0)],
+            CONFIRM_PARAM(15.0)],
         optional_roles=["filter-diff-pressure", "fan-elec-power", "zone-airflow", "fan-status", "fan-cmd"],
-        confirm_seconds=1200),
+        confirm_seconds=900),
     CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
         "Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.",

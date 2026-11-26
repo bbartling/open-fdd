@@ -4461,7 +4461,7 @@ rules:
         sql_placeholder: REQUIRE_RUN_PROOF
   - rule_id: FILTER-LOAD
     # #1783: loaded or fouled air filter. Filter DP above dp_dirty with the fan on and airflow normal; without a filter DP,
-    # an advisory on fan effort (kW per L/s) above effort_ratio x its own 10th percentile. Applied by bound roles.
+    # an advisory on fan effort (kW per L/s) above effort_ratio x the 10th percentile of its own airflow bin. Applied by bound roles.
     equipment_kinds: [ahu]
     run_proof: gated
     sql_file: filter_load.sql
@@ -4473,11 +4473,11 @@ rules:
     priority: P2
     parity_status: sql_screening
     delete_python_candidate: false
-    confirm_seconds: 1200
+    confirm_seconds: 900
     parameters:
       confirm_seconds:
         label: Confirm time
-        default: 1200.0
+        default: 900.0
         min: 0.0
         max: 3600.0
         step: 300.0

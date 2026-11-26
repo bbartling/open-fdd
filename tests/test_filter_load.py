@@ -28,10 +28,16 @@ STATUS = {"no_filter_inputs": "SKIPPED_MISSING_ROLES", "insufficient_baseline": 
 
 def _rows(case):
     n = case.get("n", 97)
+    pattern = dict(case.get("pattern", {}))
+    block = pattern.pop("block", 1)
     out = []
     for i in range(n):
-        vals = {**case["row"], **case.get("second_half", {})} if i >= n // 2 else case["row"]
-        out.append((START + pd.Timedelta(minutes=5 * i), {k: float(v) for k, v in vals.items()}))
+        vals = dict(case["row"])
+        vals.update({k: seq[(i // block) % len(seq)] for k, seq in pattern.items()})
+        if i >= n // 2:
+            vals.update(case.get("second_half", {}))
+            vals.update({k: vals[k] * f for k, f in case.get("second_half_scale", {}).items()})
+        out.append((START + pd.Timedelta(minutes=5 * i), {k: None if v is None else float(v) for k, v in vals.items()}))
     return out
 
 
@@ -111,7 +117,17 @@ def test_duckdb_matches_the_cases_and_pandas(duck, case):
 def test_dp_threshold_is_tunable():
     case = next(c for c in CASES if c["id"] == "dp_low_pass")
     hours, status, _ = pandas_rule_result("FILTER-LOAD", _frame(case), None, 300.0, params={"dp_dirty": 74.652})
-    assert status == "FAULT" and hours == pytest.approx(7.75, abs=1e-5)
+    assert status == "FAULT" and hours == pytest.approx(7.833333, abs=1e-5)
+
+
+def test_a_clean_filter_is_judged_like_with_like():
+    """#1783 review: one baseline across every airflow would flag the clean filter's high-flow hours (kW per L/s at
+    2000 L/s is 1.6 x that at 1000 L/s); the per-bin baseline does not, and still flags the loaded filter."""
+    clean = next(c for c in CASES if c["id"] == "clean_filter_flow_swing")
+    p = clean["pattern"]
+    effort = [w / q for w, q in zip(p["fan_power"], p["zone_flow"])]
+    assert max(effort) > 1.3 * min(effort)
+    assert pandas_rule_result("FILTER-LOAD", _frame(clean), None, 300.0)[1] == "PASS"
 
 
 @pytest.mark.skipif(not (os.environ.get("POSTGRES_TEST_URL") and os.environ.get("OPENFDD_PG_TEST_DISPOSABLE") == "1"),
