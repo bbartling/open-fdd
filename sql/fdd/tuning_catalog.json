@@ -5147,7 +5147,7 @@
       "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
     },
     {
-      "confirm_seconds": 1800,
+      "confirm_seconds": 900,
       "controls_without_sql_effect": [],
       "delete_python_candidate": false,
       "description": "Hot-water plant proven on above 18.3 °C web OAT",
@@ -5169,7 +5169,7 @@
       "parameters": {
         "confirm_min": {
           "control": "slider",
-          "default": 30.0,
+          "default": 15.0,
           "effect": "branch_sensitive",
           "effect_in_sql": true,
           "key": "confirm_min",

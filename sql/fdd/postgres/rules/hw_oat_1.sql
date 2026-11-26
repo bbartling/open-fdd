@@ -5,7 +5,8 @@
 -- running cut (hw_supply_t > HW_ON_MIN). Neither bound on any sample -> assessment 'no_proof'.
 -- Web dry bulb as MECH-OAT-1: the equipment's web_oa_t, else the weather sidecar joined as-of (latest sample at or before
 -- the row, at most WEB_ASOF_BOUND_SECONDS old). No outdoor-air sample at all -> assessment 'no_outdoor_air'.
--- Not assessed: fault_hours NULL, covered_hours 0 (never a silent pass).
+-- Not assessed: fault_hours NULL, covered_hours 0 and no timeline samples (never a silent pass). A sample with no OAT or
+-- with neither proof value is unknown: no covered time (fault_pct denominator) and no timeline sample.
 -- Fault: proven on while the web dry bulb AT THAT SAMPLE is above HW_OAT_MIN (never a daily maximum, so a cold morning
 -- is never a fault), held for CONFIRM_SECONDS (the settle time).
 WITH wx_web_oa_t AS (
@@ -46,6 +47,7 @@ base AS (
     h.equipment_id,
     h.timestamp_utc,
     i.assessment,
+    CASE WHEN h.web_oa_t IS NOT NULL AND (h.c1 IS NOT NULL OR h.c2 IS NOT NULL) THEN 1 ELSE 0 END AS known,
     CAST(CASE
       WHEN h.web_oa_t IS NULL THEN 0
       WHEN h.web_oa_t <= {{HW_OAT_MIN}} THEN 0
@@ -112,7 +114,7 @@ ranked AS (
 final AS (
   SELECT
     equipment_id,
-    held_seconds,
+    CASE WHEN assessment = 'assessed' AND known = 1 THEN held_seconds ELSE 0.0 END AS held_seconds,
     assessment,
     CASE WHEN raw_fault = 1 AND streak_elapsed >= {{CONFIRM_SECONDS}} THEN 1 ELSE 0 END AS confirmed
   FROM ranked

@@ -79,7 +79,7 @@ each input, parameter and output.
 | [**FCU-VALVE-PASS-CLG**](sql-cookbook.html#fcu-valve-pass-clg) | Cooling valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-clg) | match |
 | [**FCU-VALVE-PASS-HTG**](sql-cookbook.html#fcu-valve-pass-htg) | Heating valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-htg) | match |
 | [**HP-1**](sql-cookbook.html#hp-1) | Discharge cold when heating | heatpump | 10 min | [pandas](pandas-cookbook.html#hp-1) | known divergence |
-| [**HW-OAT-1**](sql-cookbook.html#hw-oat-1) | Hot-water plant proven on above 18.3 °C web OAT | boiler | 30 min | [pandas](pandas-cookbook.html#hw-oat-1) | match |
+| [**HW-OAT-1**](sql-cookbook.html#hw-oat-1) | Hot-water plant proven on above 18.3 °C web OAT | boiler | 15 min | [pandas](pandas-cookbook.html#hw-oat-1) | match |
 | [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | match |
 | [**OA-1**](sql-cookbook.html#oa-1) | Low OA fraction | ahu | 15 min | [pandas](pandas-cookbook.html#oa-1) | known divergence |
 | [**OAT-METEO**](sql-cookbook.html#oat-meteo) | Equipment OAT vs weather-staged wx OAT | ahu | 15 min | [pandas](pandas-cookbook.html#oat-meteo) | known divergence |

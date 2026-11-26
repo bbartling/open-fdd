@@ -2323,9 +2323,9 @@
     "hw_supply_t"
    ],
    "unmapped_roles": [],
-   "confirm_seconds": 1800,
+   "confirm_seconds": 900,
    "parameters": {
-    "confirm_seconds": 1800.0,
+    "confirm_seconds": 900.0,
     "hw_oat_min": 18.333333,
     "hw_on_min": 43.333333
    },

@@ -2659,11 +2659,11 @@ rules:
     priority: P1
     parity_status: sql_screening
     delete_python_candidate: false
-    confirm_seconds: 1800
+    confirm_seconds: 900
     parameters:
       confirm_seconds:
         label: Confirm time
-        default: 1800.0
+        default: 900.0
         min: 0.0
         max: 3600.0
         step: 300.0

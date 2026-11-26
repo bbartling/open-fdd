@@ -87,3 +87,41 @@ test("no weather point but a local outside-air sensor: it fills web_oa_t (the lo
   const web = vals(seen.input.history, "web_oa_t");
   assert.ok(web.length === 1 && near(web[0], 10), `web_oa_t is the local sensor (50 degF): ${web}`);
 });
+
+// ---- the real pack on the SQLite engine: what the FDD tab draws ------------------------------------------------------
+function recordingHttp(points) {
+  const base = http(points);
+  const writes = { points: [], data: [] };
+  return {
+    writes,
+    async post(p, body) {
+      if (p === "/api/v1/point/points") { writes.points.push(...body.points); return { data: {} }; }
+      if (p === "/api/v1/points/data") { for (const x of body.points) writes.data.push({ uuid: x.uuid, values: x.values }); return { data: { success: true } }; }
+      return base.post(p, body);
+    },
+    get: (p) => base.get(p),
+  };
+}
+async function realRun(points) {
+  const h = recordingHttp(points);
+  const logs = [];
+  const summary = await hook.runFdd({ sdk: { http: h, logEvent: (m) => logs.push(m) }, config: { engine: "sqlite" }, now: NOW });
+  const rec = (marker) => h.writes.points.find((r) => r.layer === "model" && new RegExp(marker).test(r.attrs.markers) && r.attrs.ruleRef === "HW-OAT-1");
+  const timeline = rec("fault_timeline");
+  const lane = timeline ? h.writes.data.filter((d) => d.uuid === timeline.uuid).flatMap((d) => d.values) : [];
+  return { summary, logs, result: rec("(^|,)fdd(,|$)"), lane };
+}
+
+test("real engine: weather only, no pump status and no HW supply -> not assessed and no fault-lane samples", async () => {
+  const { summary, result, lane } = await realRun([WEB]);
+  assert.ok(!summary.results.some((r) => r.rule === "HW-OAT-1"), "no assessed HW-OAT-1 result");
+  assert.ok(result, "the not-assessed result record is written");
+  assert.equal(lane.length, 0, `an unassessed plant is never drawn as a clean no-fault lane: ${JSON.stringify(lane.slice(0, 3))}`);
+});
+
+test("real engine: HW pump proven on at 25 C -> fault, and the lane shows it", async () => {
+  const { summary, lane } = await realRun([PUMP, WEB]);
+  const r = summary.results.find((x) => x.rule === "HW-OAT-1");
+  assert.ok(r && r.fault, JSON.stringify(summary.results));
+  assert.ok(lane.some((v) => v.real === 1), "confirmed fault samples on the lane");
+});

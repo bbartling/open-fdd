@@ -261,7 +261,7 @@ Coil valve open, opposite valve shut, air temperature change below min_dt.
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
-| `assessment` | - | assessed, insufficient_proof or no_proof |
+| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
 
 **Parity** [match](parity.html#coil-perf)
 
@@ -1345,7 +1345,7 @@ Ranked proof (status/current &gt; command) is on for ≥ always_on_pct of the wi
 | `proven_on_hours` | h | time with run proof ON |
 | `proven_off_hours` | h | time with run proof OFF |
 | `unknown_hours` | h | window time with no known run proof (missing proof or gaps) |
-| `assessment` | - | assessed, insufficient_proof or no_proof |
+| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
 
 **Parity** [match](parity.html#sched-247)
 
@@ -2388,7 +2388,7 @@ Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `confirm_min` | Fault confirm delay | 30 | 0 | 60 | min |
+| `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `hw_oat_min` | HW lockout OAT | 18.3333 | 12.7778 | 23.8889 | °C |
 | `hw_on_min` | HW supply running cut | 43.3333 | 32.2222 | 60 | °C |
 
@@ -2400,7 +2400,7 @@ Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.
 | `fault_hours` | h | confirmed fault time |
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
-| `assessment` | - | assessed, insufficient_proof or no_proof |
+| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
 
 **Parity** [match](parity.html#hw-oat-1)
 
@@ -2438,7 +2438,7 @@ Too many starts per hour, or short on-times.
 | `fault_hours` | h | confirmed fault time |
 | `covered_hours` | h | time with data the rule could read (data coverage) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
-| `assessment` | - | assessed, insufficient_proof or no_proof |
+| `assessment` | - | assessed, or why the equipment was not assessed (for example no_proof) |
 
 **Parity** [match](parity.html#short-cycle)
 

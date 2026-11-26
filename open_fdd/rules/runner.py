@@ -553,6 +553,20 @@ def run_cookbook_rule(
     pre_quality = d
     if apply_quality:
         d = apply_normalized(d, quality, attach_raw_and_flags=False)
+        if rule.id == "HW-OAT-1":
+            # #1782: proof that quality nulled entirely (a sentinel on a dead sensor) is no proof: skipped, never a PASS
+            gone = _missing_roles(rule, d)
+            if gone:
+                return skipped(
+                    rule.id,
+                    equipment_id,
+                    gone,
+                    notes="SKIPPED — no valid samples after quality normalization",
+                    site_id=sid,
+                    building_id=bid,
+                    equipment_type=eq_type,
+                    params_fingerprint=fp,
+                )
     if rule.sensor_sweep:
         # #1673: the SQL sweeps judge the stored SI values (masked only by unit). A value quality calls out of range is
         # exactly what SV-RANGE / SV-SPIKE assess; nulling it first hid it, and turned it into a gap (now SV-STALE's).

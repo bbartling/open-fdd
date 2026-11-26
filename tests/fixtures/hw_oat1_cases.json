@@ -1,17 +1,18 @@
 {
-  "_doc": "#1782 HW-OAT-1 cases, shared by tests/test_hw_oat1.py (pandas, SQLite, DuckDB and, when configured, PostgreSQL). Each case: 4 h at 5 min (49 samples) of `row` (SQL role names, SI), with `after` = {at: sample index, row: values from then on} where given, and `weather` = web dry bulb in the weather sidecar every 15 min instead of on the equipment. `expect` = fault hours with the 30 min confirmation (the held time of the first five samples of a streak is not fault time: 43 x 5 min = 3.583333 h), or the SQL assessment of an equipment that is not assessed (pandas: SKIPPED_MISSING_ROLES).",
+  "_doc": "#1782 HW-OAT-1 cases, shared by tests/test_hw_oat1.py (pandas, SQLite, DuckDB and, when configured, PostgreSQL). Each case: 4 h at 5 min (49 samples) of `row` (SQL role names, SI), with `after` = {at: sample index, row: values from then on} where given, and `weather` = web dry bulb in the weather sidecar every 15 min instead of on the equipment. `expect` = fault hours with the 15 min confirmation (the held time of the first two samples of a streak is not fault time: 46 x 5 min = 3.833333 h), or the SQL assessment of an equipment that is not assessed (pandas: SKIPPED_MISSING_ROLES).",
   "cases": [
-    {"id": "warm_pump_on", "row": {"web_oa_t": 25.0, "pump_status": 1}, "expect": 3.583333},
+    {"id": "warm_pump_on", "row": {"web_oa_t": 25.0, "pump_status": 1}, "expect": 3.833333},
     {"id": "cold_pump_on", "row": {"web_oa_t": 5.0, "pump_status": 1}, "expect": 0.0},
-    {"id": "warm_boiler_firing_no_pump_point", "row": {"web_oa_t": 25.0, "hw_supply_t": 60.0}, "expect": 3.583333},
-    {"id": "warm_pump_on_boiler_cool", "row": {"web_oa_t": 25.0, "pump_status": 1, "hw_supply_t": 30.0}, "expect": 3.583333},
+    {"id": "warm_boiler_firing_no_pump_point", "row": {"web_oa_t": 25.0, "hw_supply_t": 60.0}, "expect": 3.833333},
+    {"id": "warm_pump_on_boiler_cool", "row": {"web_oa_t": 25.0, "pump_status": 1, "hw_supply_t": 30.0}, "expect": 3.833333},
     {"id": "warm_plant_off", "row": {"web_oa_t": 25.0, "pump_status": 0, "hw_supply_t": 30.0}, "expect": 0.0},
     {"id": "oat_at_threshold", "row": {"web_oa_t": 18.333333, "pump_status": 1}, "expect": 0.0},
-    {"id": "oat_just_above_threshold", "row": {"web_oa_t": 18.388889, "pump_status": 1}, "expect": 3.583333},
+    {"id": "oat_just_above_threshold", "row": {"web_oa_t": 18.388889, "pump_status": 1}, "expect": 3.833333},
     {"id": "hw_supply_at_running_cut", "row": {"web_oa_t": 25.0, "hw_supply_t": 43.333333}, "expect": 0.0},
-    {"id": "cold_morning_warm_afternoon", "row": {"web_oa_t": 5.0, "pump_status": 1}, "after": {"at": 24, "row": {"web_oa_t": 25.0}}, "expect": 1.583333},
-    {"id": "warm_shorter_than_confirm", "row": {"web_oa_t": 5.0, "pump_status": 1}, "after": {"at": 44, "row": {"web_oa_t": 25.0}}, "expect": 0.0},
-    {"id": "weather_sidecar_oat", "row": {"pump_status": 1}, "weather": 25.0, "expect": 3.583333},
+    {"id": "cold_morning_warm_afternoon", "row": {"web_oa_t": 5.0, "pump_status": 1}, "after": {"at": 24, "row": {"web_oa_t": 25.0}}, "expect": 1.833333},
+    {"id": "warm_shorter_than_confirm", "row": {"web_oa_t": 5.0, "pump_status": 1}, "after": {"at": 46, "row": {"web_oa_t": 25.0}}, "expect": 0.0},
+    {"id": "weather_sidecar_oat", "row": {"pump_status": 1}, "weather": 25.0, "expect": 3.833333},
+    {"id": "proof_unknown_half_the_time", "row": {"web_oa_t": 25.0, "pump_status": 1}, "after": {"at": 24, "row": {"pump_status": null}}, "expect": 1.833333, "covered": 2.0},
     {"id": "no_proof", "row": {"web_oa_t": 25.0}, "expect": "no_proof"},
     {"id": "no_outdoor_air", "row": {"pump_status": 1, "hw_supply_t": 60.0}, "expect": "no_outdoor_air"}
   ]

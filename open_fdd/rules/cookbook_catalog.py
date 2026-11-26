@@ -2328,10 +2328,10 @@ RULES: list[CookbookRule] = [
         params=[
             CookbookParam("hw_oat_min", "HW lockout OAT", "°C", 12.777778, 23.888889, 0.555556, 18.333333, direction="fewer"),
             CookbookParam("hw_on_min", "HW supply running cut", "°C", 32.222222, 60.0, 0.555556, 43.333333, direction="fewer"),
-            CONFIRM_PARAM(30.0),
+            CONFIRM_PARAM(15.0),
         ],
         optional_roles=["pump-status", "hot-water-supply-temp"],
-        confirm_seconds=1800,
+        confirm_seconds=900,
     ),
     CookbookRule(
         "CHW-NOLOAD-1",
