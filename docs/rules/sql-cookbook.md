@@ -853,7 +853,7 @@ SAT above setpoint at full cooling
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fc13-sat-high)
+**Parity** [match](parity.html#fc13-sat-high)
 
 
 ### FC14 {#fc14}

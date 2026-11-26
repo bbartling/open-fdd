@@ -696,6 +696,132 @@ def save_remote_files(drift: dict, folder: Path) -> list[Path]:
     return saved
 
 
+# ---------------------------------------------------------------- leftover files (#1772)
+
+# NF owns or generates these in every app: never removed by push, never reported as leftovers by doctor.
+NF_OWNED_FILES = frozenset({"/app.json", "/static/version.json", "/package-lock.json"})
+NF_OWNED_PREFIXES = ("/hooks-update/", "/node_modules/")
+SAFE_APP_PATH = re.compile(r"/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*")
+
+
+def nf_owned(nf_path: str) -> bool:
+    return nf_path in NF_OWNED_FILES or nf_path.startswith(NF_OWNED_PREFIXES)
+
+
+def removable_path(nf_path) -> bool:
+    """A path push may DELETE: a plain absolute path inside the app (no '.', '..' or empty segment, no URL syntax),
+    not owned by NF."""
+    if not isinstance(nf_path, str) or not SAFE_APP_PATH.fullmatch(nf_path):
+        return False
+    if any(s in (".", "..") for s in nf_path[1:].split("/")):
+        return False
+    return not nf_owned(nf_path)
+
+
+def leftover_files(c, m: dict, hooks: list[dict] | None = None) -> dict:
+    """Read-only: app files an earlier push wrote that this manifest no longer ships (#1772).
+
+    Only paths in the box's push manifest (static/version.json "files", i.e. what this tool wrote) are candidates, so a
+    file the tool never pushed is never removed. A box without a push manifest has no candidates. Each candidate that is
+    still listed on the box lands in exactly one bucket:
+      "remove"  unchanged since the push that wrote it: safe to DELETE;
+      "edited"  changed on the box since then: kept unless --force;
+      "hooked"  {path: hook id}: a hook definition (as it stands after this push, `hooks`) still points at it: kept;
+      "unsafe"  not a plain app path, or NF-owned: kept.
+    "record" maps every candidate still on the box (or all of them when the box listing is unavailable: "unlisted")
+    to its pushed sha256, so whatever is not removed stays in the next push manifest and is offered again.
+    """
+    out = {"remove": [], "edited": {}, "hooked": {}, "unsafe": [], "record": {}, "unlisted": False}
+    app_id = m["application"]["id"]
+    app = c.app(app_id)
+    if not app:
+        return out
+    known = remote_file_paths(c, app_id)
+    info = remote_version_info(c, app_id, known_paths=known)
+    pushed = info.get(PUSH_MANIFEST_KEY)
+    if not isinstance(pushed, dict):
+        return out
+    stale = sorted(p for p in pushed if isinstance(p, str) and p not in m["files"] and p != "/static/version.json")
+    if known is None:
+        out["unlisted"] = bool(stale)
+        out["record"] = {p: pushed[p] for p in stale}
+        return out
+    entry = {h.get("entryPoint"): h.get("id") for h in (app.get("hooks") if hooks is None else hooks) or []
+             if isinstance(h, dict) and h.get("entryPoint")}
+    for p in stale:
+        if p not in known:
+            continue                       # already gone
+        out["record"][p] = pushed[p]
+        if not removable_path(p):
+            out["unsafe"].append(p)
+        elif p in entry:
+            out["hooked"][p] = entry[p]
+        else:
+            data = c.read_file(app_id, p, known_paths=known, push_manifest=pushed)
+            if data is None:
+                del out["record"][p]
+            elif sha256_hex(data) != pushed[p]:
+                out["edited"][p] = data
+            else:
+                out["remove"].append(p)
+    return out
+
+
+def hooks_after_push(c, m: dict, skip_hooks: bool = False, only_hooks: list[str] | None = None) -> list[dict]:
+    """The app's hook definitions as they will stand after a push: the box's, with the manifest's pushed hooks replaced."""
+    current = {h.get("id"): h for h in (c.app(m["application"]["id"]) or {}).get("hooks") or [] if isinstance(h, dict)}
+    if not skip_hooks:
+        current.update({h["id"]: h for h in m["hooks"] if not only_hooks or h["id"] in only_hooks})
+    return list(current.values())
+
+
+def leftovers_to_remove(plan: dict, force: bool = False, keep_files: bool = False) -> list[str]:
+    if keep_files:
+        return []
+    return sorted(plan["remove"] + (list(plan["edited"]) if force else []))
+
+
+def report_leftovers(plan: dict, who: str, force: bool = False, keep_files: bool = False, dry_run: bool = False) -> None:
+    """Say what happens to the leftovers of an earlier push. Prints nothing when there are none."""
+    doomed = leftovers_to_remove(plan, force, keep_files)
+    if doomed:
+        verb = "would remove" if dry_run else "removing"
+        print(f"{who}: {verb} {len(doomed)} file(s) an earlier push wrote that this manifest no longer ships:")
+        for p in doomed:
+            print(f"  {p}")
+    if keep_files and plan["remove"]:
+        print(f"{who}: --keep-files: leaving {len(plan['remove'])} file(s) an earlier push wrote that this manifest no "
+              f"longer ships: {', '.join(plan['remove'])}. Push without --keep-files to remove them")
+    if plan["edited"] and (keep_files or not force):
+        print(f"{who}: keeping {len(plan['edited'])} file(s) this manifest no longer ships because they were edited on "
+              f"the box since they were pushed: {', '.join(plan['edited'])}. --force removes them "
+              "(--save-remote DIR keeps the box copies first)")
+    for p, hook in plan["hooked"].items():
+        print(f"{who}: keeping {p}: hook {hook} still points at it")
+    if plan["unsafe"]:
+        print(f"{who}: keeping {', '.join(plan['unsafe'])}: not a plain app path, never removed")
+    if plan["unlisted"]:
+        print(f"{who}: NF did not list the app's files, so {len(plan['record'])} file(s) an earlier push wrote and this "
+              f"manifest no longer ships were not checked or removed: {', '.join(plan['record'])}")
+
+
+def remove_leftovers(c, app_id: str, paths: list[str]) -> list[str]:
+    """DELETE each path (already vetted by leftover_files). Returns the ones removed; failures are reported, not raised."""
+    removed = []
+    for p in paths:
+        if not removable_path(p):          # belt and braces: never anything outside the app or NF-owned
+            print(f"push: refusing to remove {p!r}")
+            continue
+        try:
+            c.call("DELETE", f"/api/v1/apps/{app_id}/files{p}")
+        except SystemExit as e:
+            print(f"push: could not remove {p} ({e}); it stays in the push manifest for the next push")
+            continue
+        removed.append(p)
+        print(f"removed {p}")
+    return removed
+
+
 def guard_pushed_files(c, m: dict, force: bool = False, save_remote: Path | None = None,
                        only: set[str] | None = None) -> int:
     """Run before a push writes anything. 0 = go ahead; EXIT_DRIFT = stop (nothing was written).
@@ -732,7 +858,7 @@ def guard_pushed_files(c, m: dict, force: bool = False, save_remote: Path | None
 def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str] | None = None,
              skip_deps: bool = False, clock=time.monotonic, sleep=time.sleep,
              force: bool = False, save_remote: Path | None = None, skip_auth: bool = False,
-             on_mutation=None) -> int:
+             on_mutation=None, keep_files: bool = False) -> int:
     spec = m["application"]
     app_id = spec["id"]
     if spec.get("name") and app_slug(spec["name"]) != app_id:
@@ -741,6 +867,11 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
     rc = guard_pushed_files(c, m, force, save_remote)   # before anything is written
     if rc:
         return rc
+    # Files an earlier push wrote that this manifest dropped (#1772): planned read-only before any write.
+    leftovers = leftover_files(c, m, hooks_after_push(c, m, skip_hooks, only_hooks))
+    if save_remote and force and leftovers["edited"] and not keep_files:
+        saved = save_remote_files({"remote": leftovers["edited"]}, save_remote)
+        print(f"push: saved {len(saved)} box copies of edited files this manifest no longer ships to {save_remote}")
     if not c.app(app_id):
         if on_mutation:
             on_mutation()
@@ -768,6 +899,10 @@ def cmd_push(c: Console, m: dict, skip_hooks: bool = False, only_hooks: list[str
     # starts without its packages records a failed run.
     if not skip_deps:
         report_deps(install_deps(c, m, clock, sleep), app_id)
+    report_leftovers(leftovers, "push", force, keep_files)
+    removed = set(remove_leftovers(c, app_id, leftovers_to_remove(leftovers, force, keep_files)))
+    # A leftover that was kept stays in the push manifest, so doctor and the next push still know this tool wrote it.
+    pushed = {**{p: h for p, h in leftovers["record"].items() if p not in removed}, **pushed}
     # The version the UI shows (static/version.js): generated from the repo, never committed.
     info = version_info(m["_dir"])
     info[PUSH_MANIFEST_KEY] = pushed     # the push manifest: what a later push / doctor compares the box against
@@ -1288,7 +1423,11 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
     if rc == EXIT_DRIFT:
         print(f"install: STOPPED (exit {rc}): hand-edited files on the box (see above); the box was not changed")
         return rc
+    force, keep_files = getattr(a, "force", False), getattr(a, "keep_files", False)
+    leftovers = leftover_files(c, m, hooks_after_push(c, m, a.skip_hooks, a.hooks)) if prior else None
     if dry_run:
+        if leftovers:
+            report_leftovers(leftovers, "install: dry run", force, keep_files, dry_run=True)
         print("install: dry run: nothing was changed; re-run without --dry-run to install")
         return 0
     if prior:
@@ -1300,7 +1439,8 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
             print("install: STOPPED: NF did not provide a complete files/hooks listing; cannot snapshot a rollback image")
             return EXIT_FAILED
         known = {x.get("path") for x in listed_files if isinstance(x, dict) and x.get("path")}
-        paths = set(m["files"]) | {"/static/version.json"}
+        # The leftovers push will remove are in the snapshot too, so a rollback puts them back.
+        paths = set(m["files"]) | {"/static/version.json"} | set(leftovers_to_remove(leftovers, force, keep_files))
         new_paths = paths - known
         old_paths = paths & known
         old_files = {}
@@ -1391,7 +1531,7 @@ def cmd_install(c, m: dict, a, clock=time.monotonic, sleep=time.sleep) -> int:
     try:
         rc = cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, clock, sleep,
                       getattr(a, "force", False), getattr(a, "save_remote", None), skip_auth=True,
-                      on_mutation=mark_mutation)
+                      on_mutation=mark_mutation, keep_files=getattr(a, "keep_files", False))
     except SystemExit as e:
         print(f"install: push failed ({e})")
         if mutation_started:
@@ -2103,6 +2243,31 @@ def timescale_schema_check(app: dict, environ=None, runner=subprocess.run) -> tu
     return "PASS", "Timescale schema version 3"
 
 
+def extra_files_line(c, m: dict) -> tuple[str, str, str]:
+    """(level, what, text) for doctor: app files on the box that the manifest does not list (#1772). Read-only.
+    NF-owned paths (app.json, hooks-update/, node_modules/, version.json) are not counted."""
+    known = remote_file_paths(c, m["application"]["id"])
+    if known is None:
+        return "SKIP", "extra files", "NF did not list the app's files"
+    extra = sorted(p for p in known if p not in m["files"] and not nf_owned(p))
+    if not extra:
+        return "PASS", "extra files", "none (every app file on the box is in the manifest)"
+    plan = leftover_files(c, m)
+    shown = ", ".join(extra[:10]) + (f", ... (+{len(extra) - 10} more)" if len(extra) > 10 else "")
+    parts = []
+    if plan["remove"]:
+        parts.append(f"{len(plan['remove'])} written by an earlier push: the next push removes them")
+    if plan["edited"]:
+        parts.append(f"{len(plan['edited'])} written by an earlier push and edited since: kept unless push --force")
+    if plan["hooked"] or plan["unsafe"]:
+        parts.append(f"{len(plan['hooked']) + len(plan['unsafe'])} written by an earlier push but kept "
+                     "(a hook points at it, or not a plain app path)")
+    other = sum(p not in plan["record"] for p in extra)
+    if other:
+        parts.append(f"{other} not written by this tool: push leaves them; remove them in the NF console if unwanted")
+    return "WARN", "extra files", f"{len(extra)} file(s) on the box not in the manifest: {shown}. " + "; ".join(parts)
+
+
 def hand_edit_line(drift: dict) -> tuple[str, str, str]:
     """(level, what, text) for doctor: files on the box that differ from the last push (read-only)."""
     if drift["baseline"] == "none":
@@ -2404,12 +2569,18 @@ def cmd_doctor(c, m: dict, now: datetime.datetime | None = None, environ=None) -
         line("WARN", "hand edits", f"could not compare the files on the box ({e})")
     else:
         line(*hand_edit_line(drift))
+    try:
+        line(*extra_files_line(c, m))
+    except SystemExit as e:
+        line("WARN", "extra files", f"could not list the files on the box ({e})")
     code, headers = c.probe("/")
     target = f"/api/v1/apps/static/{app_id}/"
     if code in (301, 302, 303, 307, 308):
         loc = urllib.parse.urlparse(headers.get("Location", "")).path
         line("PASS" if loc.rstrip("/") == target.rstrip("/") else "FAIL", "/ redirect",
              f"{code} -> {loc or '(none)'}" + ("" if loc.rstrip("/") == target.rstrip("/") else f", expected {target}"))
+    elif code in (401, 403):
+        line("PASS", "/ redirect", f"behind login (HTTP {code}); redirect not checked")
     elif code:
         line("WARN", "/ redirect", f"HTTP {code}, no redirect (fine unless a front door should send / to the app)")
     else:
@@ -2453,6 +2624,10 @@ def build_parser() -> argparse.ArgumentParser:
                     help="push/install: overwrite files on the box that were edited by hand (default: stop and list them)")
     ap.add_argument("--save-remote", type=Path, metavar="DIR",
                     help="push/install: first download the hand-edited box copies to DIR (same folder layout) for review")
+    ap.add_argument("--keep-files", action="store_true",
+                    help="push/install: do not remove files an earlier push wrote that this manifest no longer ships "
+                         "(default: remove the ones unchanged since that push). `install --dry-run` "
+                         "and `doctor` list them without changing anything")
     ap.add_argument("--dry-run", action="store_true",
                     help="install: run the read-only checks (login, schema probe, hand edits) and say what would happen, "
                          "e.g. \"would bootstrap the schema probe\"; writes nothing. Refused for every other action "
@@ -2529,7 +2704,8 @@ def main(argv: list[str] | None = None) -> int:
         rc = push_schema_gate(c, m, env, a.allow_schema_upgrade_pending)   # before any write (#1633)
         if rc:
             return rc
-        return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, force=a.force, save_remote=a.save_remote)
+        return cmd_push(c, m, a.skip_hooks, a.hooks, a.skip_deps, force=a.force, save_remote=a.save_remote,
+                        keep_files=a.keep_files)
     if a.action == "run":
         return cmd_run(c, m, a.hooks, a.wait, a.resume, args=parse_args(a.hook_args) or None)
     if a.action == "install":

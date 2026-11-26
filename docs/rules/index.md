@@ -58,7 +58,7 @@ each input, parameter and output.
 | [**FC10**](sql-cookbook.html#fc10) | MAT-OAT delta while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc10) | match |
 | [**FC11**](sql-cookbook.html#fc11) | OAT low vs SAT SP while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc11) | match |
 | [**FC12**](sql-cookbook.html#fc12) | SAT above MAT while cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc12) | match |
-| [**FC13-SAT-HIGH**](sql-cookbook.html#fc13-sat-high) | SAT above setpoint at full cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc13-sat-high) | known divergence |
+| [**FC13-SAT-HIGH**](sql-cookbook.html#fc13-sat-high) | SAT above setpoint at full cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc13-sat-high) | match |
 | [**FC14**](sql-cookbook.html#fc14) | CHW coil ΔT when inactive (GL36 L) | ahu | 10 min | [pandas](pandas-cookbook.html#fc14) | known divergence |
 | [**FC15**](sql-cookbook.html#fc15) | HW coil ΔT when inactive (GL36 M) | ahu | 10 min | [pandas](pandas-cookbook.html#fc15) | match |
 | [**FC2**](sql-cookbook.html#fc2) | Mixed air below envelope | ahu | 10 min | [pandas](pandas-cookbook.html#fc2) | match |

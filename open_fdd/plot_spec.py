@@ -120,7 +120,10 @@ def _has(p: Mapping[str, Any], *markers: str) -> bool:
 
 def _equip_kinds(equip_rec: Mapping[str, Any], catalog: Mapping[str, Any]) -> list[str]:
     markers = set(_markers_of(equip_rec))
-    return [kind for kind, ms in catalog["equipment_kinds"].items() if any(m in markers for m in ms)]
+    # A Haystack 4 conjunct (hot-water-plant) matches the literal tag or every part (fdd.js hasKindMarker).
+    def has(m: str) -> bool:
+        return m in markers or ("-" in m and all(x in markers for x in m.split("-")))
+    return [kind for kind, ms in catalog["equipment_kinds"].items() if any(has(m) for m in ms)]
 
 
 def _is_web_role(role: str) -> bool:

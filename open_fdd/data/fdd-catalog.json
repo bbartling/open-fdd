@@ -23,13 +23,20 @@
   ],
   "chwPlant": [
    "chilledWaterPlant",
-   "chilledWater"
+   "chilledWater",
+   "chilled-water-plant"
   ],
   "cooling_tower": [
-   "coolingTower"
+   "coolingTower",
+   "condenserWaterPlant",
+   "condenser-water-plant"
   ],
   "boiler": [
-   "boiler"
+   "boiler",
+   "hotWaterPlant",
+   "hot-water-plant",
+   "steamPlant",
+   "steam-plant"
   ],
   "heatpump": [
    "heatPump"

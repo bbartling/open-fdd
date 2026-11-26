@@ -16,8 +16,8 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 |---|---:|
 | SQL rules | **78** |
 | With a pandas twin | **72** |
-| Match on the synthetic suite | **58** |
-| Known divergence | **14** |
+| Match on the synthetic suite | **59** |
+| Known divergence | **13** |
 | SQL only (no twin) | **6** |
 
 **Units.** Parity is checked in SI. Imperial input is converted to SI at ingest, so SQL on imperial input equals SQL on SI input by
@@ -64,7 +64,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fc10"></a>[FC10](sql-cookbook.html#fc10) | match |  |
 | <a id="fc11"></a>[FC11](sql-cookbook.html#fc11) | match |  |
 | <a id="fc12"></a>[FC12](sql-cookbook.html#fc12) | match |  |
-| <a id="fc13-sat-high"></a>[FC13-SAT-HIGH](sql-cookbook.html#fc13-sat-high) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
+| <a id="fc13-sat-high"></a>[FC13-SAT-HIGH](sql-cookbook.html#fc13-sat-high) | match |  |
 | <a id="fc14"></a>[FC14](sql-cookbook.html#fc14) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
 | <a id="fc15"></a>[FC15](sql-cookbook.html#fc15) | match |  |
 | <a id="fc2"></a>[FC2](sql-cookbook.html#fc2) | match |  |
@@ -130,7 +130,6 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [ECON-3](#econ-3) | edge | - | - |
 | [ECON-4](#econ-4) | all | 0.1667 h &plusmn; 0.01 | 0.4167 h &plusmn; 0.01 |
 | [ECON-7](#econ-7) | all | 0.25 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
-| [FC13-SAT-HIGH](#fc13-sat-high) | all | 10.0833 h &plusmn; 0.01 | 26.0833 h &plusmn; 0.01 |
 | [FC14](#fc14) | all | 62.5 h &plusmn; 0.01 | 292.917 h &plusmn; 0.01 |
 | [FC3](#fc3) | edge | - | - |
 | [FC5](#fc5) | edge | - | - |

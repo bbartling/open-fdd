@@ -22,7 +22,10 @@ A rule asks for named roles, for example supply-air temperature or fan command. 
 of the role's classes, or when it carries every marker of the role. Class wins because it is more specific.
 
 - Markers are one comma-separated string in NF. Setting a class does not add markers.
-- Equipment kinds come from the equipment markers. Weather points fill weather roles only.
+- Equipment kinds come from the equipment markers. Haystack 4 plant conjuncts work like the camelCase tags: a
+  `hot-water-plant` or `steam-plant` (or `hot`+`water`+`plant`) is a boiler, a `chilled-water-plant` a chilled-water plant,
+  a `condenser-water-plant` a cooling tower. A combined plant (`hot`+`chilled`+`water`+`plant`) has both kinds: both rule
+  families apply, each to the points it finds. Weather points fill weather roles only.
 - The role-to-class and marker map is `nf-app/static/fdd-catalog.json`. The [rule catalog](rules/) and
   [cookbooks](rules/sql-cookbook.html) list each rule's roles.
 - **Run proof** is the one role no point fills by class: it is resolved from the model. An equipment proves itself by its own fan,
@@ -54,6 +57,11 @@ Sensor-validation rules also require the sensor's declared unit to match its SI 
 
 The Model and RDF tab exports the Haystack model as Turtle with stable subjects. References resolve within their site and each point
 links to its NF time-series id. The tab flags dangling references and non-standard tags.
+
+Subjects are `urn:nf:<NF uuid>` (base `urn:nf:`). They depend neither on the host the page or hook was reached through nor
+on the sites, so adding a site rewrites no subject. The tab, the `rdf`, `sparql` and `sparql-data` hooks and the Python
+client give the same IRIs; the hooks take `base` to override it. A point IRI from an older `urn:nf:<host>:<uuid>` or
+`urn:nf:site:<site>:<uuid>` export still names its point in `sparql-data` and `open_fdd.nf.sparql_data`.
 
 | Use | How |
 |---|---|

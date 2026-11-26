@@ -40,6 +40,18 @@ three separate functions; their mapping to Open-FDD timers is tracked with #1758
 | Spike, unknown quantity | none | 25 % of declared rated span, adjacent samples ≤ 10 min apart |
 | Rate per hour | role-specific | stays role-specific; unknown context is unassessed |
 
+Each sensor takes the first value that exists, per field (SI, one source: `sensor_sweep_limits.json`):
+
+| Order | Source |
+|---|---|
+| 1 | Saved sensor override (one point, by series id) |
+| 2 | Saved equipment, then site, role override |
+| 3 | Saved rule tuner (temperature flatline, rate) |
+| 4 | Shipped role entry, then quantity starter (temperature, %RH, pressure band) |
+
+Flow and power need a role entry; commands, setpoints, unknown quantities and non-SI units are unassessed, never PASS.
+The FC equation tolerances above are separate and unchanged.
+
 Sensor-error allowances belong in the multi-sensor equations above. They are not flatline tolerances, sensor
 validity bands or setpoints. A constant reading can be legitimate (a well-controlled loop or idle equipment), so
 flatline is a suspected-stuck indication only.
@@ -47,5 +59,5 @@ flatline is a suspected-stuck indication only.
 ## Known label and default issues
 
 - FC1 `eps_vfd_spd` was labelled "GL36 default 5 %" with a 0.13 default. The label is corrected; the value is unchanged.
-- FC7 `htg_full_min` and the pandas `clg_full_min` were labelled "GL36 99 %". Labels corrected. `clg_full_min`
-  defaults to 0.01, below its own 0.5 minimum; fixing that changes behavior and is deferred to #1763.
+- FC7 `htg_full_min` and the pandas `clg_full_min` were labelled "GL36 99 %". Labels corrected. The pandas
+  `clg_full_min` default is now 0.9, the SQL FC13 value (it was 0.01, below its own 0.5 minimum).

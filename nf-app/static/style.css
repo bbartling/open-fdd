@@ -96,11 +96,13 @@ tr.clickable:hover td { background: var(--panel2); }
 .fdd-chip b { font-size: 18px; font-variant-numeric: tabular-nums; }
 .fdd-chip.fault b { color: var(--hot); } .fdd-chip.pass b { color: var(--good); }
 .fdd-chip.insufficient b { color: var(--warm); } .fdd-chip.skipped b { color: var(--muted); }
+.fdd-chip.metric b { color: var(--accent); }
 .fdd-chip.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
 .fdd-list { display: grid; gap: 6px; }
 .fdd-item { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
 .fdd-item.fault { border-left: 4px solid var(--hot); } .fdd-item.insufficient { border-left: 4px solid var(--warm); }
 .fdd-item.pass { border-left: 4px solid var(--good); } .fdd-item.skipped { border-left: 4px solid var(--line); }
+.fdd-item.metric { border-left: 4px solid var(--accent); }
 .fdd-row { display: grid; grid-template-columns: 130px 1fr auto; gap: 4px 12px; align-items: center; width: 100%; text-align: left;
   padding: 8px 12px; background: none; border: 0; color: inherit; font: inherit; cursor: pointer; }
 .fdd-row:hover { background: var(--row-hover); border-radius: 10px; }
@@ -110,6 +112,7 @@ tr.clickable:hover td { background: var(--panel2); }
 .fdd-badge.fault { background: color-mix(in srgb, var(--hot) 18%, transparent); color: var(--hot); }
 .fdd-badge.pass { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
 .fdd-badge.insufficient { background: color-mix(in srgb, var(--warm) 18%, transparent); color: var(--warm); }
+.fdd-badge.metric { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
 .fdd-open { padding: 4px 14px 14px; border-top: 1px solid var(--cell-line); }
 .fdd-open h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; margin: 10px 0; }
 .fdd-detail-grid { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 14px; margin-bottom: 8px; }
