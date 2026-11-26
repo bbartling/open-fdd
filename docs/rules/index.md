@@ -52,7 +52,7 @@ each input, parameter and output.
 | [**ECON-5**](sql-cookbook.html#econ-5) | Preheat over-conditioning | ahu | 10 min | [pandas](pandas-cookbook.html#econ-5) | match |
 | [**ECON-6**](sql-cookbook.html#econ-6) | Economizing in freezing weather | ahu | 10 min | [pandas](pandas-cookbook.html#econ-6) | match |
 | [**ECON-7**](sql-cookbook.html#econ-7) | Economizer OK but not economizing | ahu | 10 min | [pandas](pandas-cookbook.html#econ-7) | known divergence |
-| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd > 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
+| [**FAN-RUNTIME-HOURS**](sql-cookbook.html#fan-runtime-hours) | Fan running hours where fan_cmd &gt; 5% (normalized 0-1) | any | immediate | SQL only | SQL only |
 | [**FAULT-ELAPSED-HOURS**](sql-cookbook.html#fault-elapsed-hours) | Comfort fault sample count → hours | any | immediate | SQL only | SQL only |
 | [**FC1**](sql-cookbook.html#fc1) | Duct static below SP at full fan | ahu | 5 min | [pandas](pandas-cookbook.html#fc1) | match |
 | [**FC10**](sql-cookbook.html#fc10) | MAT-OAT delta while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc10) | match |
@@ -78,7 +78,7 @@ each input, parameter and output.
 | [**FCU-SENSOR-NULL**](sql-cookbook.html#fcu-sensor-null) | Own zone setpoint present but zone temperature null for at least 90% of window | zone_other, general, ahu | immediate | [pandas](pandas-cookbook.html#fcu-sensor-null) | match |
 | [**FCU-VALVE-PASS-CLG**](sql-cookbook.html#fcu-valve-pass-clg) | Cooling valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-clg) | match |
 | [**FCU-VALVE-PASS-HTG**](sql-cookbook.html#fcu-valve-pass-htg) | Heating valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-htg) | match |
-| [**FILTER-LOAD**](sql-cookbook.html#filter-load) | Filter pressure drop or fan effort too high | ahu | 15 min | [pandas](pandas-cookbook.html#filter-load) | match |
+| [**FILTER-LOAD**](sql-cookbook.html#filter-load) | Filter pressure drop or fan effort too high | ahu | 20 min | [pandas](pandas-cookbook.html#filter-load) | match |
 | [**HP-1**](sql-cookbook.html#hp-1) | Discharge cold when heating | heatpump | 10 min | [pandas](pandas-cookbook.html#hp-1) | known divergence |
 | [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | match |
 | [**OA-1**](sql-cookbook.html#oa-1) | Low OA fraction | ahu | 15 min | [pandas](pandas-cookbook.html#oa-1) | known divergence |

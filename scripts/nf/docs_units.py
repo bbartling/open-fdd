@@ -31,8 +31,24 @@ def _load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _angles(text: str) -> str:
+    """Escape literal < and > outside `code` spans, so "rise < 1.7" never renders (or counts) as an HTML tag (#1769)."""
+    parts = text.split("`")
+    if len(parts) % 2 == 0:  # unbalanced backtick: no code span, escape everything
+        parts = [text]
+    return "`".join(p if i % 2 else p.replace("<", "&lt;").replace(">", "&gt;") for i, p in enumerate(parts))
+
+
+def md_text(text) -> str:
+    """Rule text (description, equation, title) as one Markdown paragraph: literal < > | cannot become HTML or a table row."""
+    parts = _angles(str(text).replace("\n", " ").strip()).split("`")
+    if len(parts) % 2 == 0:
+        parts = ["`".join(parts)]
+    return "`".join(p if i % 2 else p.replace("|", "\\|") for i, p in enumerate(parts))
+
+
 def cell(text) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ").strip()
+    return _angles(str(text).replace("|", "\\|").replace("\n", " ").strip())
 
 
 def fmt(v) -> str:
@@ -247,11 +263,6 @@ def output_rows(cols: list[str]) -> list[str]:
     return rows
 
 
-def imperial_note(has_delta: bool, scales: set[str]) -> str:
-    """One line, only where the display conversion is not obvious (a temperature difference has no +32)."""
-    return "**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32." if has_delta else ""
-
-
 # --------------------------------------------------------------------------------------------------------------------
 # units convention block (shared by both cookbooks)
 # --------------------------------------------------------------------------------------------------------------------
@@ -263,21 +274,20 @@ _CONVENTION_ROWS = [
 ]
 
 
-def units_convention() -> str:
+def units_convention(rules_text: bool = True) -> str:
+    """The units block. The SQL cookbook carries the rules once; the pandas cookbook links to them (#1769)."""
     rows = ["| Quantity | SI unit (rules compute in this) | Imperial display | Also accepted (converted at ingest) |", "|---|---|---|---|"]
     for label, key in _CONVENTION_ROWS:
         q = _Q[key]
         rows.append(f"| {label} | {q['si']} | {q['display']['imperial']['unit']} | {accepted_units(key) or ('% (the SI unit only)' if key == 'humidity' else 'none')} |")
     rows.append("| Command or position | fraction, 0-1 | % | `%`, ratio |")
     rows.append("| Status | 0/1 | 0/1 | `bool` |")
-    return """## Units convention
-
-- Rules compute in **SI only**. The engineer declares each point's unit in NF; ingest converts it to SI (`open_fdd/data/units.json`).
+    text = """- Rules compute in **SI only**. The engineer declares each point's unit in NF; ingest converts it to SI (`open_fdd/data/units.json`).
   Unknown or incompatible units are skipped, never guessed from the value.
 - Imperial is display-only. Differences (Δ°C) convert with a factor of 1.8 and no +32.
 - Fractions are 0-1, relative humidity is 0-100 %RH, statuses are 0/1.
-
-""" + "\n".join(rows) + "\n"
+""" if rules_text else "The same SI rules as the [SQL cookbook](sql-cookbook.html#units-convention):\n"
+    return "## Units convention\n\n" + text + "\n" + "\n".join(rows) + "\n"
 
 
 # --------------------------------------------------------------------------------------------------------------------

@@ -3443,9 +3443,9 @@
     "run_proof"
    ],
    "unmapped_roles": [],
-   "confirm_seconds": 900,
+   "confirm_seconds": 1200,
    "parameters": {
-    "confirm_seconds": 900.0,
+    "confirm_seconds": 1200.0,
     "dp_dirty": 248.84,
     "flow_frac": 0.5,
     "effort_ratio": 1.3,
