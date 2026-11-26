@@ -563,6 +563,27 @@ const dateTimeInputMs = (value, siteTz) => {
   return fields(t) === wall ? t : NaN;
 };
 
+// container -> the state it last rendered; state -> the control that rendered it (both weak: controls re-render often).
+const rangeControlShows = new WeakMap(), rangeControlOf = new WeakMap();
+
+/** Write resolved bounds into a range control's From / To inputs, as site-local wall time, so Apply keeps the range
+ * the chart shows (#1771). A field the user is editing is left alone.
+ * @param {HTMLElement | null | undefined} container
+ * @param {{fromMs:number,toMs:number} | null | undefined} bounds
+ * @param {string} [siteTz]
+ */
+function syncRangeInputs(container, bounds, siteTz = "UTC") {
+  if (!container || !bounds || !Number.isFinite(bounds.fromMs) || !Number.isFinite(bounds.toMs)) return false;
+  const tz = chartTimeZone(siteTz), active = container.ownerDocument?.activeElement;
+  const write = (/** @type {string} */ sel, /** @type {number} */ ms) => {
+    const input = /** @type {HTMLInputElement | null} */ (container.querySelector(sel));
+    if (input && input !== active) input.value = dateTimeInputValue(ms, tz);
+  };
+  write("[data-range-from]", bounds.fromMs);
+  write("[data-range-to]", bounds.toMs);
+  return true;
+}
+
 /** Mount shared range buttons and site-timezone custom fields.
  * @param {HTMLElement} container
  * @param {{key?:string,state?:any,siteTz?:string,onChange?:(state:any)=>void}} options
@@ -570,6 +591,10 @@ const dateTimeInputMs = (value, siteTz) => {
 function renderRangeControl(container, { key = "default", state = getChartRangeState(key), siteTz = "UTC", onChange } = {}) {
   const tz = chartTimeZone(siteTz), now = Date.now();
   container.classList.add("chart-range-control");
+  // The inputs start from a placeholder ("All" does not know its oldest sample yet); resolveChartSelection writes the
+  // resolved bounds back once it has them (#1771), as long as this control still shows this state.
+  rangeControlShows.set(container, state);
+  if (state && typeof state === "object") rangeControlOf.set(state, { container, tz });
   const bounds = state.preset === "custom" ? state : resolveChartRange(state, { nowMs: now, oldestMs: now - 24 * 3600e3 });
   container.innerHTML = `<div class="seg chart-range-presets">${[["1h", "1 h"], ["24h", "24 h"], ["1w", "1 week"], ["all", "All"]].map(([v, label]) =>
     `<button type="button" data-range="${v}" class="${state.preset === v ? "on" : ""}">${label}</button>`).join("")}</div>
@@ -725,7 +750,10 @@ async function resolveChartSelection(list, state, { siteTz = "UTC", nowMs = Date
       }
     }
   }
-  return { ...state, resolvedBounds: resolveChartRange(state, { nowMs, oldestMs }), timeZone: chartTimeZone(siteTz),
+  const resolvedBounds = resolveChartRange(state, { nowMs, oldestMs });
+  const control = state && typeof state === "object" ? rangeControlOf.get(state) : null;
+  if (control && rangeControlShows.get(control.container) === state) syncRangeInputs(control.container, resolvedBounds, control.tz);
+  return { ...state, resolvedBounds, timeZone: chartTimeZone(siteTz),
     ...(oldestSource ? { oldestSource } : {}), ...(oldestWarning ? { oldestWarning } : {}) };
 }
 

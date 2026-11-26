@@ -239,3 +239,76 @@ test("All on Full fetches a short Timescale-only interval too when Timescale set
   assert.equal(asked.length, 1, "the 30-minute Timescale interval is fetched");
   assert.deepEqual([...r.series.get("num-1")[0]], [tsStart, 7]);
 });
+
+function rangeContext(search = "") { const c = context(search); c.esc = (x) => String(x); return c; }
+// A range control stand-in: innerHTML writes rebuild the From / To inputs from their value attributes.
+function fakeControl() {
+  const inputs = new Map();
+  let html = "";
+  return {
+    classList: { add() {} },
+    get innerHTML() { return html; },
+    set innerHTML(v) {
+      html = v; inputs.clear();
+      for (const [, attr, value] of v.matchAll(/(data-range-from|data-range-to)[^>]*value="([^"]*)"/g))
+        inputs.set(`[${attr}]`, { value, setCustomValidity() {}, reportValidity() {} });
+    },
+    querySelector: (sel) => inputs.get(sel) || null,
+    from() { return inputs.get("[data-range-from]").value; },
+    to() { return inputs.get("[data-range-to]").value; },
+    apply() { this.onclick({ target: { closest: (sel) => (sel === "[data-range-apply]" ? {} : null) } }); },
+  };
+}
+
+test("All: From / To show the resolved oldest sample through now in the site zone, and Apply keeps that range (#1771)", async () => {
+  const c = rangeContext("range.charts=all"), oldest = Date.parse("2026-11-01T00:00:00Z"), tz = "America/Chicago";
+  c.api = async (path) => {
+    const uuids = new URL(path, "https://nf.example.test").searchParams.getAll("uuids");
+    return { data: uuids.map((uuid) => ({ uuid, values: [{ ts: "2026-11-01T00:00:00Z", double: 1 }] })) };
+  };
+  const el = fakeControl(), state = c.get("getChartRangeState")("charts");
+  c.get("renderRangeControl")(el, { key: "charts", state, siteTz: tz });
+  const toInput = c.get("dateTimeInputValue");
+  assert.notEqual(el.from(), toInput(oldest, tz), "before resolving, From is only a placeholder");
+  const now = Date.now();
+  const range = await c.get("resolveChartSelection")([{ uuid: "p-all" }], state, { siteTz: tz, nowMs: now });
+  assert.equal(range.resolvedBounds.fromMs, oldest);
+  assert.equal(el.from(), "2026-10-31T19:00", "oldest sample as Chicago wall time");
+  assert.equal(el.from(), toInput(range.resolvedBounds.fromMs, tz));
+  assert.equal(el.to(), toInput(now, tz));
+  el.apply();
+  const applied = c.get("getChartRangeState")("charts");
+  assert.equal(applied.preset, "custom");
+  assert.equal(applied.fromMs, oldest, "Apply keeps the All start, not 24 h ago");
+  assert.equal(applied.toMs, c.get("dateTimeInputMs")(toInput(now, tz), tz));
+});
+
+test("a normal preset fills From / To with its resolved bounds, also through fetchRange (#1771)", async () => {
+  const c = rangeContext(), tz = "America/Chicago", now = Date.UTC(2026, 10, 23, 20, 45);
+  c.api = async (path) => ({ data: new URL(path, "https://nf.example.test").searchParams.getAll("uuids").map((uuid) => ({ uuid, values: [] })) });
+  const toInput = c.get("dateTimeInputValue");
+  for (const [preset, hours] of [["24h", 24], ["1w", 168]]) {
+    const el = fakeControl(), state = { preset };
+    c.get("renderRangeControl")(el, { key: "overview", state, siteTz: tz });
+    await c.get("fetchRange")([{ uuid: "p-1" }], state, { siteTz: tz, nowMs: now });
+    assert.equal(el.from(), toInput(now - hours * 3600e3, tz), preset);
+    assert.equal(el.to(), toInput(now, tz), preset);
+  }
+  assert.equal(toInput(now - 24 * 3600e3, tz), "2026-11-22T14:45");
+});
+
+test("a late answer for a replaced range does not overwrite the control's newer From / To (#1771)", async () => {
+  const c = rangeContext(), tz = "UTC";
+  let release;
+  c.api = (path) => new Promise((resolve) => { release = () => resolve({ data: new URL(path, "https://nf.example.test").searchParams.getAll("uuids").map((uuid) => ({ uuid, values: [{ ts: "2020-01-01T00:00:00Z", double: 1 }] })) }); });
+  const el = fakeControl(), stale = { preset: "all" }, fresh = { preset: "1h" }, now = Date.UTC(2026, 10, 23, 12);
+  c.get("renderRangeControl")(el, { key: "points", state: stale, siteTz: tz });
+  const pending = c.get("resolveChartSelection")([{ uuid: "p-stale" }], stale, { siteTz: tz, nowMs: now });
+  c.get("renderRangeControl")(el, { key: "points", state: fresh, siteTz: tz });
+  await c.get("resolveChartSelection")([{ uuid: "p-stale" }], fresh, { siteTz: tz, nowMs: now });
+  release();
+  await pending;
+  assert.equal(el.from(), "2026-11-23T11:00");
+  assert.equal(el.to(), "2026-11-23T12:00");
+  assert.equal(c.get("syncRangeInputs")(null, { fromMs: 1, toMs: 2 }), false);
+});

@@ -640,6 +640,8 @@
       const resolved = await root.resolveChartSelection(trendedPts, state, { siteTz: siteTimeZone() });
       if (ticket !== st.rangeTicket) return;
       st.bounds = resolved.resolvedBounds;
+      // From / To show the range the export will use ("All" resolves its start only now, #1771).
+      if (root.syncRangeInputs) root.syncRangeInputs($("exRangeControl"), st.bounds, siteTimeZone());
       if (status) status.textContent = "";
       refreshSummary();
     } catch (e) {
@@ -760,18 +762,22 @@
     $("exGo").addEventListener("click", () => { run().catch((e) => { $("exStatus").textContent = `export failed: ${e.message}`; }); });
   }
 
+  // Re-mounted on every range change too, so the picked preset is the highlighted one.
+  function mountRange() {
+    if (!root.renderRangeControl || !$("exRangeControl")) return;
+    root.renderRangeControl($("exRangeControl"), {
+      key: "export",
+      state: rangeState(),
+      siteTz: siteTimeZone(),
+      onChange: (state) => { mountRange(); refreshRange(state); },
+    });
+  }
+
   function render(ctx) {
     st.cur = ctx;
     if (!st.mounted) mount();
     st.inv = exportCandidates(ctx.model, ctx.scope);
-    if (root.renderRangeControl && $("exRangeControl")) {
-      root.renderRangeControl($("exRangeControl"), {
-        key: "export",
-        state: rangeState(),
-        siteTz: siteTimeZone(),
-        onChange: (state) => refreshRange(state),
-      });
-    }
+    mountRange();
     refreshSummary();
     refreshRange();
   }
