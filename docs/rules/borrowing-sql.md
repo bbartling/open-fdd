@@ -88,12 +88,13 @@ Each release tag attaches `open-fdd-rules-<version>.zip` and its `.zip.sha256`. 
 
 | Entry | Content |
 |---|---|
-| `rules-manifest.json` | Per rule: id, title, equipment kinds, inputs (role, 223P name, SI unit, required), `confirm_min`, dialects, parity |
+| `rules-manifest.json` | Per rule: id, title, equipment kinds, inputs (`roles/openfdd-roles.json` role and unit, input column, required), `confirm_min`, dialects, parity; sha256 of every entry |
 | `rules/postgres/<ID>.sql` | Rendered at the shipped defaults; PostgreSQL, TimescaleDB and DuckDB |
 | `rules/sqlite/<ID>.sql` | SQLite translation; register the UDFs in `sqlite_udfs` |
 | `helpers/postgres.sql`, `helpers/duckdb.sql` | The `fdd.*` helpers |
 | `schema/core.sql`, `schema/core.duckdb.sql` | `fdd.point`, `fdd.rule_result`, `fdd.rule_config` |
 | `schema/input_sample.sql`, `schema/inputs.sql` | `fdd.input_sample` and the input tables below |
+| `templates/` | Unrendered templates and `render_rule.py`, to re-render with other parameters |
 
 ## Setup by database
 

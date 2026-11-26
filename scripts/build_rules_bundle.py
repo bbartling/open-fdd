@@ -8,22 +8,24 @@
 
 Bundle layout (every text file LF, UTF-8):
 
-    rules-manifest.json        per rule: id, title, equipment kinds, inputs (role, 223P name, SI unit, required),
-                               confirm_min default, output columns, dialect notes, parity status
-    rules/postgres/<ID>.sql    rule SQL rendered at the registry defaults (nf-app/rules/pack-postgres.json); PostgreSQL,
+    rules-manifest.json        per rule: id, title, equipment kinds, inputs (roles-file role, unit, required),
+                               confirm_min, output columns, dialect notes, parity status; "files": sha256 + size of
+                               every other entry
+    rules/postgres/<ID>.sql    rule SQL rendered at the shipped defaults (nf-app/rules/pack-postgres.json); PostgreSQL,
                                TimescaleDB and DuckDB run these files unchanged
     rules/sqlite/<ID>.sql      the SQLite translation (nf-app/rules/pack-sqlite.json)
     helpers/postgres.sql       fdd.* helper functions (sql/fdd/postgres/postgres_helpers.sql)
-    helpers/duckdb.sql         the same helpers as DuckDB macros (sql/fdd/duckdb/duckdb_helpers.sql)
-    schema/core.sql            fdd.point, fdd.rule_result, fdd.rule_config (sql/fdd/schema/core.sql, unchanged bytes)
+    helpers/duckdb.sql         the same helpers as DuckDB macros (sql/fdd/duckdb/duckdb_helpers.sql, #1645)
+    schema/core.sql            fdd.point, fdd.rule_result, fdd.rule_config (sql/fdd/schema/core.sql, unchanged)
     schema/core.duckdb.sql     the same tables for DuckDB (jsonb -> JSON, no identity, no partial index)
     schema/input_sample.sql    fdd.input_sample reference table (the column signature of input_contract.json "sources")
-    schema/inputs.sql          the scratch tables the rules read: history, weather, sensor_history, ... (input_contract.sql)
+    schema/inputs.sql          the tables the rules read: history, weather, sensor_history, ... (input_contract.sql)
+    templates/...              the unrendered templates and their renderer at their repo paths, for hosts that
+                               re-render with other parameters: python templates/sql/fdd/render_rule.py FC1 --params '{}'
 
-Rendered, not templated: each file is the exact SQL the NF app runs at the shipped defaults, so a host needs no renderer.
-The templates with ``{{PLACEHOLDER}}`` parameters stay in the repo (sql/fdd/postgres/rules, sql/fdd/render_rule.py).
-The zip has sorted entries, fixed timestamps and fixed attributes, so the same sources give the same sha256 with the
-same zlib build.
+Input names and units come from the canonical role vocabulary ``roles/openfdd-roles.json`` (223P-derived role ids,
+matched on ``legacy_keys``); the build fails when a contract role has no roles-file entry. The zip has sorted entries,
+fixed timestamps and fixed attributes, so the same sources give the same sha256 with the same zlib build.
 """
 from __future__ import annotations
 
@@ -45,19 +47,23 @@ PACK_SQLITE = ROOT / "nf-app" / "rules" / "pack-sqlite.json"
 CATALOG = ROOT / "nf-app" / "static" / "fdd-catalog.json"
 CONTRACT = ROOT / "sql" / "fdd" / "input_contract.json"
 CONTRACT_SQL = ROOT / "sql" / "fdd" / "input_contract.sql"
-ROLE_MAP = ROOT / "sql" / "fdd" / "role_map.json"
-NAMES_223P = ROOT / "sql" / "fdd" / "input_names_223p.json"
+ROLES = ROOT / "roles" / "openfdd-roles.json"
 CORE_SQL = ROOT / "sql" / "fdd" / "schema" / "core.sql"
 PG_HELPERS = ROOT / "sql" / "fdd" / "postgres" / "postgres_helpers.sql"
 DUCK_HELPERS = ROOT / "sql" / "fdd" / "duckdb" / "duckdb_helpers.sql"
 VERSION_FILE = ROOT / "VERSION"
 DIST = ROOT / "dist"
+# What sql/fdd/render_rule.py reads, shipped at the same relative paths under templates/.
+TEMPLATE_FILES = ["sql/fdd/render_rule.py", "sql/fdd/tuning_catalog.json", "sql/fdd/runtime_defaults.json",
+                  "sql/fdd/role_map.json", "open_fdd/rules/sensor_sweep_catalog.py",
+                  "open_fdd/data/sensor_sweep_roles.json", "open_fdd/data/sensor_sweep_limits.json"]
+TEMPLATE_GLOB = "sql/fdd/postgres/rules/*.sql"
 
-MANIFEST_VERSION = 1
+MANIFEST_VERSION = 2
 CONFIRM_MIN_DEFAULT = 15
 FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
-# contract scale -> SI unit on the wire (the unit vocabulary of fdd.point.unit in core.sql)
-SCALE_UNIT = {"fraction": "fraction", "boolean": "bool", "percent_rh": "%RH", "text": "text"}
+# input_contract.json scale -> what the rule SQL column holds
+SQL_SCALE = {"fraction": "0-1", "boolean": "0/1", "percent_rh": "%RH 0-100", "text": "text"}
 # core.sql -> DuckDB: each substitution must apply, so a core schema change fails the build instead of shipping drift.
 CORE_DUCKDB_SUBS = [
     (r"jsonb_typeof\((\w+)\) = 'object'", r"json_type(\1) = 'OBJECT'"),
@@ -84,10 +90,6 @@ def read_version(arg: str | None) -> str:
     return v
 
 
-def si_unit(scale: str) -> str:
-    return scale[3:] if scale.startswith("si:") else SCALE_UNIT[scale]
-
-
 def core_duckdb(core: str) -> str:
     out = core
     for pat, rep in CORE_DUCKDB_SUBS:
@@ -110,6 +112,35 @@ def input_sample_sql(contract: dict) -> str:
             f"CREATE TABLE IF NOT EXISTS fdd.input_sample (\n{cols},\n  PRIMARY KEY (site_id, point_key, ts)\n);\n")
 
 
+def role_inputs(contract: dict, roles_doc: dict) -> dict[str, dict]:
+    """Contract role key -> its roles-file role (223P-derived id, unit as the roles file spells it, SQL scale)."""
+    by_key: dict[str, list[dict]] = {}
+    for r in roles_doc["roles"]:
+        for key in r.get("legacy_keys") or []:
+            by_key.setdefault(key, []).append(r)
+    units = roles_doc["units"]
+    out, errs = {}, []
+    for key, spec in sorted(contract["roles"].items()):
+        hits = by_key.get(key, [])
+        if len(hits) != 1:
+            errs.append(f"{key}: {len(hits)} roles-file entries list it in legacy_keys (need exactly 1)")
+            continue
+        r = hits[0]
+        scale = spec["scale"]
+        sql_scale = scale[3:] if scale.startswith("si:") else SQL_SCALE[scale]
+        unit = units[r["unit"]]["haystack"] if r.get("unit") else None
+        entry = {"role": r["role"], "unit": unit, "unit_qudt": r.get("unit"), "value_type": r["value_type"],
+                 "range": r.get("range"), "haystack": {"classes": r["haystack"].get("classes", []),
+                                                       "markers": r["haystack"].get("markers", [])},
+                 "sql_scale": sql_scale}
+        if r.get("unit") == "unit:PERCENT" and scale == "fraction":
+            entry["to_sql"] = {"multiplier": 0.01, "note": "roles file is percent 0-100; the rule SQL reads 0-1"}
+        out[key] = entry
+    if errs:
+        raise SystemExit("roles/openfdd-roles.json does not cover the input contract:\n  " + "\n  ".join(errs))
+    return out
+
+
 DIALECTS = {
     "postgresql": "PostgreSQL 14+. Run helpers/postgres.sql once, SET TimeZone = 'UTC', then each rules/postgres/<ID>.sql "
                   "over the input tables of schema/inputs.sql.",
@@ -123,27 +154,18 @@ DIALECTS = {
 }
 
 
+def _sql_file(sql: str) -> str:
+    return sql.replace("\r\n", "\n").rstrip("\n") + "\n"
+
+
 def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
     pg, lite = _json(PACK_PG), _json(PACK_SQLITE)
-    contract, role_map = _json(CONTRACT), _json(ROLE_MAP)
-    names = _json(NAMES_223P)["names"]
+    contract, roles_doc = _json(CONTRACT), _json(ROLES)
     catalog = {r["id"]: r for r in _json(CATALOG)["rules"]}
     known, other, no_twin = docs_units.read_parity()
-
-    missing = sorted(set(contract["roles"]) - set(names))
-    if missing:
-        raise SystemExit(f"sql/fdd/input_names_223p.json lacks a 223P name for: {missing}")
-    dup = sorted({n for n in names.values() if list(names.values()).count(n) > 1})
-    if dup:
-        raise SystemExit(f"223P names must be unique; repeated: {dup}")
     if set(pg["rules"]) != set(catalog):
         raise SystemExit(f"pack and catalog disagree: {sorted(set(pg['rules']) ^ set(catalog))}")
-
-    inputs = {}
-    for role, spec in sorted(contract["roles"].items()):
-        info = docs_units.scale_info(spec["scale"])
-        inputs[role] = {"name_223p": names[role], "haystack": role_map.get(role), "quantity": info["quantity"],
-                        "unit": si_unit(spec["scale"])}
+    inputs = role_inputs(contract, roles_doc)
 
     files: dict[str, str] = {}
     rules, other_confirm = [], {}
@@ -156,18 +178,19 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
         if confirm_min != CONFIRM_MIN_DEFAULT:
             other_confirm[rid] = confirm_min
         rule_inputs = []
-        for need, roles in (("required", cat["required_roles"]), ("optional", cat["optional_roles"])):
-            for role in roles:
-                if role not in inputs:
-                    raise SystemExit(f"{rid}: input role {role!r} is not in sql/fdd/input_contract.json")
-                rule_inputs.append({"role": role, "name_223p": inputs[role]["name_223p"], "unit": inputs[role]["unit"],
-                                    "required": need == "required"})
+        for need, keys in (("required", cat["required_roles"]), ("optional", cat["optional_roles"])):
+            for key in keys:
+                if key not in inputs:
+                    raise SystemExit(f"{rid}: input {key!r} has no roles-file entry (roles/openfdd-roles.json)")
+                i = inputs[key]
+                rule_inputs.append({"role": i["role"], "legacy_key": key, "unit": i["unit"],
+                                    "unit_qudt": i["unit_qudt"], "value_type": i["value_type"], "required": need == "required"})
         pg_path = f"rules/postgres/{rid}.sql"
-        files[pg_path] = prule["sql"].replace("\r\n", "\n").rstrip("\n") + "\n"
+        files[pg_path] = _sql_file(prule["sql"])
         sqlite_rule = lite["rules"].get(rid)
         if sqlite_rule:
             sqlite_path = f"rules/sqlite/{rid}.sql"
-            files[sqlite_path] = sqlite_rule["sql"].replace("\r\n", "\n").rstrip("\n") + "\n"
+            files[sqlite_path] = _sql_file(sqlite_rule["sql"])
             sqlite_note = {"file": sqlite_path, "udfs": "fdd_" in sqlite_rule["sql"]}
             if rid in lite.get("notes", {}):
                 sqlite_note["notes"] = lite["notes"][rid]
@@ -187,6 +210,7 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
             "confirm_min": confirm_min,
             "confirm_min_tunable": "confirm_seconds" in cat.get("parameters", {}),
             "output_columns": prule["output_columns"],
+            "template": f"templates/sql/fdd/postgres/rules/{cat['sql_file']}",
             "dialects": {
                 "postgresql": {"file": pg_path, "helpers": uses_helpers},
                 "timescaledb": {"file": pg_path, "helpers": uses_helpers},
@@ -196,16 +220,34 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
             "parity": parity,
         })
 
+    files["helpers/postgres.sql"] = _text(PG_HELPERS)
+    files["helpers/duckdb.sql"] = _text(DUCK_HELPERS)
+    core = _text(CORE_SQL)
+    files["schema/core.sql"] = core
+    files["schema/core.duckdb.sql"] = core_duckdb(core)
+    files["schema/input_sample.sql"] = input_sample_sql(contract)
+    files["schema/inputs.sql"] = _text(CONTRACT_SQL)
+    for rel in TEMPLATE_FILES + sorted(p.relative_to(ROOT).as_posix() for p in ROOT.glob(TEMPLATE_GLOB)):
+        files[f"templates/{rel}"] = _text(ROOT / rel)
+    for r in rules:
+        if r["template"] not in files:
+            raise SystemExit(f"{r['rule_id']}: template {r['template']} is not in the bundle")
+
     manifest = {
         "bundle": "open-fdd-rules",
         "version": version,
         "manifest_version": MANIFEST_VERSION,
         "rule_count": len(rules),
-        "sql": "Rendered at the registry defaults (the SQL the NF app runs); no placeholders. Values are SI; rules never "
-               "convert units. Always SET TimeZone = 'UTC'.",
+        "sql": "rules/* is rendered at the shipped defaults (the SQL the NF app runs); no placeholders. templates/ holds "
+               "the unrendered templates and render_rule.py. Values are SI; rules never convert units. Always "
+               "SET TimeZone = 'UTC'.",
+        "roles_vocabulary": {"file": "roles/openfdd-roles.json", "version": roles_doc["version"],
+                             "doc": "Input role ids and units are the roles file's; legacy_key is the input_contract.json "
+                                    "column the rule SQL reads; sql_scale is that column's scale (apply to_sql at ingest)."},
         "confirm_min": {"default": CONFIRM_MIN_DEFAULT,
                         "doc": "Minutes a condition must hold before it counts as a fault. Each rule's value is the "
-                               "default baked into its rendered SQL; rules_with_other_default lists those not 15.",
+                               "default baked into its rendered SQL (unchanged); rules_with_other_default lists those "
+                               "not 15.",
                         "rules_with_other_default": other_confirm},
         "dialects": DIALECTS,
         "sqlite_udfs": lite["helper_functions"],
@@ -216,15 +258,10 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
         "input_tables": pg["contract"],
         "inputs": inputs,
         "rules": rules,
+        "files": {name: {"sha256": hashlib.sha256(files[name].encode("utf-8")).hexdigest(),
+                         "bytes": len(files[name].encode("utf-8"))} for name in sorted(files)},
     }
-    files["helpers/postgres.sql"] = _text(PG_HELPERS)
-    files["helpers/duckdb.sql"] = _text(DUCK_HELPERS)
-    core = _text(CORE_SQL)
-    files["schema/core.sql"] = core
-    files["schema/core.duckdb.sql"] = core_duckdb(core)
-    files["schema/input_sample.sql"] = input_sample_sql(contract)
-    files["schema/inputs.sql"] = _text(CONTRACT_SQL)
-    files["rules-manifest.json"] = json.dumps(manifest, indent=2, ensure_ascii=False, sort_keys=False) + "\n"
+    files["rules-manifest.json"] = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
     return manifest, files
 
 
@@ -235,12 +272,14 @@ def validate(manifest: dict) -> list[str]:
     ids = [r["rule_id"] for r in manifest["rules"]]
     if set(ids) != pack_ids or len(ids) != len(pack_ids):
         errs.append(f"manifest rules != pack rules: {sorted(set(ids) ^ pack_ids)}")
+    roles = {r["role"]: r for r in _json(ROLES)["roles"]}
     for r in manifest["rules"]:
         for i in r["inputs"]:
-            if not i.get("unit") or not i.get("name_223p"):
-                errs.append(f"{r['rule_id']}: input {i['role']} lacks a unit or a 223P name")
-            elif not re.fullmatch(r"[a-z][a-z0-9_]*", i["name_223p"]):
-                errs.append(f"{r['rule_id']}: 223P name {i['name_223p']!r} is not snake_case")
+            ref = roles.get(i["role"])
+            if ref is None or i["legacy_key"] not in (ref.get("legacy_keys") or []):
+                errs.append(f"{r['rule_id']}: input {i['legacy_key']} -> {i['role']} is not in roles/openfdd-roles.json")
+            elif i["value_type"] == "number" and i["unit_qudt"] != ref.get("unit"):
+                errs.append(f"{r['rule_id']}: numeric input {i['role']} unit differs from the roles file")
     return errs
 
 
@@ -275,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest, files, data = build(version)
     sha = hashlib.sha256(data).hexdigest()
     if args.check:
-        _, files2, data2 = build(version)
+        _, _, data2 = build(version)
         if data2 != data:
             raise SystemExit("two fresh builds differ: the bundle is not reproducible")
         existing = args.out / name

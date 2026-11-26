@@ -8,6 +8,7 @@ on:
       - "scripts/build_rules_bundle.py"
       - "tests/test_rules_bundle.py"
       - "sql/fdd/**"
+      - "roles/openfdd-roles.json"
       - "nf-app/rules/pack-*.json"
       - "nf-app/static/fdd-catalog.json"
       - "open_fdd/parity/**"
@@ -25,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
@@ -61,7 +64,7 @@ jobs:
       - name: Verify the checksum
         run: cd dist && sha256sum -c open-fdd-rules-*.zip.sha256
       - name: Attach to the release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3  # v3.0.4
         with:
           files: |
             dist/open-fdd-rules-*.zip

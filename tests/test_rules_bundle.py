@@ -2,6 +2,7 @@
 
 Set ``RULES_BUNDLE_ZIP`` to test a prebuilt zip (the tag workflow does); otherwise a fresh bundle is built.
 """
+import hashlib
 import importlib.util
 import json
 import os
@@ -47,17 +48,40 @@ def test_manifest_covers_every_pack_rule_and_input(manifest, unpacked):
     assert sorted(r["rule_id"] for r in manifest["rules"]) == sorted(pack["rules"])
     assert manifest["rule_count"] == len(pack["rules"])
     assert bundle.validate(manifest) == []
-    names = [v["name_223p"] for v in manifest["inputs"].values()]
-    assert len(names) == len(set(names))
+    roles = {r["role"]: r for r in json.loads((ROOT / "roles" / "openfdd-roles.json").read_text(encoding="utf-8"))["roles"]}
+    units = json.loads((ROOT / "roles" / "openfdd-roles.json").read_text(encoding="utf-8"))["units"]
+    catalog = {r["id"]: r for r in json.loads((ROOT / "nf-app" / "static" / "fdd-catalog.json").read_text(encoding="utf-8"))["rules"]}
     for r in manifest["rules"]:
-        assert r["title"] and isinstance(r["confirm_min"], (int, float))
+        assert r["title"] and r["confirm_min"] * 60 == catalog[r["rule_id"]]["confirm_seconds"]   # existing default
         for i in r["inputs"]:
-            assert i["unit"] and i["name_223p"] and i["role"] in manifest["inputs"], (r["rule_id"], i)
+            ref = roles[i["role"]]                                    # every input is a roles-file role, exactly
+            assert i["legacy_key"] in ref["legacy_keys"], (r["rule_id"], i)
+            assert i["unit_qudt"] == ref["unit"] and i["value_type"] == ref["value_type"]
+            assert i["unit"] == (units[ref["unit"]]["haystack"] if ref["unit"] else None)
         for dialect in ("postgresql", "timescaledb", "duckdb"):
             assert (unpacked / r["dialects"][dialect]["file"]).is_file()
         assert "{{" not in (unpacked / r["dialects"]["duckdb"]["file"]).read_text(encoding="utf-8")
     other = manifest["confirm_min"]["rules_with_other_default"]
     assert {r["rule_id"] for r in manifest["rules"] if r["confirm_min"] != 15} == set(other)
+
+
+def test_per_file_sha256_matches_every_entry(manifest, unpacked):
+    listed = manifest["files"]
+    on_disk = sorted(p.relative_to(unpacked).as_posix() for p in unpacked.rglob("*") if p.is_file())
+    assert sorted(listed) == [n for n in on_disk if n != "rules-manifest.json"]
+    for name, meta in listed.items():
+        data = (unpacked / name).read_bytes()
+        assert (hashlib.sha256(data).hexdigest(), len(data)) == (meta["sha256"], meta["bytes"]), name
+
+
+def test_templates_rerender_to_the_shipped_sql(manifest, unpacked):
+    spec_r = importlib.util.spec_from_file_location("bundle_render_rule", unpacked / "templates" / "sql" / "fdd" / "render_rule.py")
+    rr = importlib.util.module_from_spec(spec_r)
+    spec_r.loader.exec_module(rr)
+    for r in manifest["rules"]:
+        sql = rr.render(r["rule_id"], 300)
+        shipped = (unpacked / r["dialects"]["postgresql"]["file"]).read_text(encoding="utf-8")
+        assert sql.replace("\r\n", "\n").rstrip("\n") + "\n" == shipped, r["rule_id"]
 
 
 def _offline_duckdb(unpacked):
