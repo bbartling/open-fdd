@@ -6,8 +6,10 @@ nav_order: 3
 
 # Using SQL rules outside Open-FDD
 
-The 77 rule SQL files are ordinary PostgreSQL 14+. They use no `time_bucket`, hypertables or continuous aggregates. Timescale is
+The 78 rule SQL files are ordinary PostgreSQL 14+. They use no `time_bucket`, hypertables or continuous aggregates. Timescale is
 only the runtime that builds the wide `history` input, so any database that can build that table can run them.
+
+`python scripts/nf/build_rules_bundle.py` writes `dist/open-fdd-rules-<version>.zip` (the version is the `VERSION` file). The zip contains every file under `sql/`, not only the sensor sweeps, plus `pack.json` for all 78 registry rules rendered with shipped defaults. `manifest.json` exposes one user tuner, `confirm_min`, default 15 minutes. CI runs that pack on in-memory DuckDB with extension autoinstall and autoload disabled.
 
 The RCx analytics are portable SQL too: [Using the SQL analytics in your own database](borrowing-analytics.html).
 

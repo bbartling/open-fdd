@@ -1,0 +1,56 @@
+# Full SQL catalog zip: every sql/ file, the rendered 78-rule pack, DuckDB offline.
+# Extension autoinstall stays off so the pack cannot fetch DuckDB extensions.
+
+name: Rules bundle
+
+on:
+  pull_request:
+    paths:
+      - "sql/**"
+      - "scripts/nf/build_rules_bundle.py"
+      - "tests/test_rules_bundle_duckdb.py"
+      - "tests/parity/adapters.py"
+      - "open_fdd/data/sensor_sweep_roles.json"
+      - "open_fdd/data/sensor_sweep_limits.json"
+      - "open_fdd/rules/sensor_sweep_catalog.py"
+      - "VERSION"
+      - ".github/workflows/rules-bundle.yml"
+  push:
+    branches: [master, "release/**"]
+    paths:
+      - "sql/**"
+      - "scripts/nf/build_rules_bundle.py"
+      - "tests/test_rules_bundle_duckdb.py"
+      - "tests/parity/adapters.py"
+      - "open_fdd/data/sensor_sweep_roles.json"
+      - "open_fdd/data/sensor_sweep_limits.json"
+      - "open_fdd/rules/sensor_sweep_catalog.py"
+      - "VERSION"
+      - ".github/workflows/rules-bundle.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  duckdb:
+    name: DuckDB offline pack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install DuckDB, PyYAML and pytest
+        run: python -m pip install duckdb pyyaml pytest
+
+      - name: Run the whole pack on in-memory DuckDB
+        run: python -m pytest tests/test_rules_bundle_duckdb.py -q
