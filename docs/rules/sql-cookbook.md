@@ -869,7 +869,7 @@ SAT above setpoint at full cooling
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [known divergence](parity.html#fc13-sat-high): SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds
+**Parity** [match](parity.html#fc13-sat-high)
 
 **Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32.
 
@@ -1339,7 +1339,7 @@ OAT high vs SAT SP while economizing
 
 ### FILTER-LOAD {#filter-load}
 
-Filter pressure drop above dp_dirty, or fan effort high for the airflow
+Filter pressure drop or fan effort too high
 
 **Priority** P2 · **Equipment** `ahu` · **Confirm** 15 min · [SQL file](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/postgres/rules/filter_load.sql) · [pandas twin](pandas-cookbook.html#filter-load)
 
@@ -1374,7 +1374,7 @@ Filter pressure drop above dp_dirty, or fan effort high for the airflow
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 | `assessment` | - | assessed, insufficient_proof or no_proof |
-| `filter_path` | - | filter_dp, or fan_effort (advisory) |
+| `filter_path` | - | filter_dp or fan_effort |
 
 **Parity** [match](parity.html#filter-load)
 

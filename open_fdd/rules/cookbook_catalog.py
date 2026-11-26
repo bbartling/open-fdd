@@ -30,6 +30,7 @@ from open_fdd.rules.sensor_sweep_catalog import (
     limits_for_haystack_role,
     quantity_for_haystack_role,
     stale_tolerance_for_role,
+    starter_profile,
     sweep_assessable_role,
 )
 
@@ -554,6 +555,8 @@ def confirm_sensor_sweep_segments(
             "first_fault_timestamp": first_ts,
             "last_fault_timestamp": last_ts,
         })
+        if (sid := _series_id(d, role)) is not None:   # #1763: the point keeps its identity in the evidence
+            ev["series_id"] = sid
         evidence.append(ev)
     return {
         "raw_mask": raw_union,
@@ -726,6 +729,21 @@ def _sweep_limits(d: pd.DataFrame) -> dict | None:
     return raw if isinstance(raw, dict) else None
 
 
+def _series_id(d: pd.DataFrame, role: str) -> str | None:
+    """#1763: the point (series id) behind a role column (``d.attrs['series_ids']``), for its own saved limits."""
+    raw = d.attrs.get("series_ids")
+    sid = raw.get(role) if isinstance(raw, dict) else None
+    return str(sid) if sid else None
+
+
+def _sweep_profile(d: pd.DataFrame, role: str, limits: dict | None, rule_tag: str, **tuners) -> dict:
+    """The sensor's SI limits (sensor, then role, then rule tuner, then quantity starter; see starter_profile)."""
+    prof = starter_profile(role, series_id=_series_id(d, role), limits=limits, **tuners)
+    if not prof["assessed"]:
+        raise ValueError(f"{rule_tag} role {role!r} has no SI limit ({prof['reason']})")
+    return prof
+
+
 def _units_map(d: pd.DataFrame) -> dict[str, str]:
     raw = d.attrs.get("units_map")
     if isinstance(raw, dict):
@@ -748,10 +766,8 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
             continue
-        lim = limits_for_haystack_role(role, limits)
-        if lim is None:
-            raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
-        base_lo, base_hi = lim["lo"], lim["hi"]
+        prof = _sweep_profile(d, role, limits, "SV-RANGE")
+        base_lo, base_hi = prof["lo"], prof["hi"]
         type_scale = _role_type_scale(p, role, kind="range")
         # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
         mid = (base_lo + base_hi) / 2.0
@@ -766,8 +782,6 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 
 def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    from open_fdd.rules.sensor_sweep_catalog import flatline_tolerance_for_role
-
     tol = _f(p, "flatline_tol", 0.055556)
     hours = _f(p, "flatline_hours", 1.0)
     max_silence = _f(p, "max_silence_hours", 0.5)
@@ -786,13 +800,16 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
             continue
+        flat_tol = _sweep_profile(d, role, limits, "SV-FLATLINE", flatline_tol=tol)["flat_tol"]
+        if flat_tol is None:
+            raise ValueError(f"SV-FLATLINE role {role!r} has no declared tolerance")
         role_gate = gate
         if role_gate is not None:
             role_gate = role_gate.reindex(s.index).fillna(False)
         role_mask = _window_flatline_mask(
             s,
             hours=hours,
-            tolerance=flatline_tolerance_for_role(role, tol, limits),
+            tolerance=flat_tol,
             max_silence_hours=max_silence,
             poll=poll,
             gate=role_gate,
@@ -820,10 +837,10 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not s.notna().any():
             continue
         type_scale = _role_type_scale(p, role, kind="spike")
-        lim = limits_for_haystack_role(role, limits)
-        if lim is None:
+        spike = _sweep_profile(d, role, limits, "SV-SPIKE")["spike_delta"]
+        if spike is None:
             raise ValueError(f"SV-SPIKE role {role!r} has no SI limit")
-        limit = lim["spike"] * type_scale
+        limit = spike * type_scale
         valid = s.dropna().sort_index(kind="mergesort")
         role_mask = _false(s.index)
         if len(valid) > 1:
@@ -1177,7 +1194,7 @@ def fc13(d, p, poll):
     sat_err = _gl36_value(p, "eps_sat", "sat_err", 0.638889)
     econ_min = _f(p, "econ_min_pos", AHU_MIN_OA_DPR)
     econ_full = _f(p, "econ_full_open", 0.9)
-    clg_full = _f(p, "clg_full_min", 0.01)
+    clg_full = _f(p, "clg_full_min", 0.9)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
     raw = (
@@ -2206,7 +2223,7 @@ RULES: list[CookbookRule] = [
         fc13, params=[
             EPS_TEMP_PARAM("eps_sat", "SAT sensor error εSAT"),
             CookbookParam("sat_err", "Legacy SAT error (sets εSAT)", "Δ°C", 0.0, 5.555556, 0.138889, 0.555556),
-            CookbookParam("clg_full_min", "Full-cooling threshold (fraction)", "frac", 0.5, 1.0, 0.01, 0.01),
+            CookbookParam("clg_full_min", "Full-cooling threshold (fraction)", "frac", 0.5, 1.0, 0.01, 0.9),
             ECON_MIN_PARAM(), ECON_FULL_PARAM(), MODE_DELAY_PARAM(), CONFIRM_PARAM()], confirm_seconds=600),
     CookbookRule("FC14", "CHW coil ΔT when inactive (GL36 L)", "ahu", ["ahu"],
         ["cooling-coil-entering-temp", "cooling-coil-leaving-temp", "outside-air-damper", "cooling-valve"],
@@ -2411,7 +2428,7 @@ RULES: list[CookbookRule] = [
                         "mixed-air-temp", "discharge-air-temp", "vav-inlet-air-temp", "vav-discharge-air-temp",
                         "zone-air-temp", "zone-airflow", "fan-status", "fan-cmd"], confirm_seconds=900),
     CookbookRule("FILTER-LOAD", "Filter loading", "ahu", ["ahu"], [],
-        "Fan on: filter DP above dp_dirty, else fan effort high for the airflow.",
+        "Fan on: filter DP, else fan effort, too high.",
         filter_load, params=[
             CookbookParam("dp_dirty", "Dirty filter pressure drop", "Pa", 49.768, 995.36, 12.442, 248.84),
             CookbookParam("flow_frac", "Minimum airflow fraction", "frac", 0.0, 0.9, 0.05, 0.5),

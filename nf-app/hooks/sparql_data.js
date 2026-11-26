@@ -227,12 +227,14 @@ async function timescaleSeries(ts, conn, uuids, a, limits) {
 
 /**
  * Model points named by the result. `points` are toPoint() records. Returns {uuidVar, uuids (sorted, distinct)}.
- * A value names a point when it is its uuid or its IRI (base + uuid).
+ * A value names a point when it is its uuid or its IRI (base + uuid), or an older IRI of a model point:
+ * `urn:nf:<host>:<uuid>` or `urn:nf:site:<site>:<uuid>` (before #1773 settled on `urn:nf:<uuid>`).
  */
 function pickPoints(vars, rows, points, base, uuidVar = '') {
   const byKey = new Map();
   for (const p of points) if (p.uuid) { byKey.set(p.uuid, p.uuid); byKey.set(base + p.uuid, p.uuid); }
-  const hits = (i) => rows.map((r) => byKey.get(r[i])).filter(Boolean);
+  const legacy = (v) => (typeof v === 'string' && v.startsWith('urn:nf:') ? byKey.get(v.slice(v.lastIndexOf(':') + 1)) : undefined);
+  const hits = (i) => rows.map((r) => byKey.get(r[i]) || legacy(r[i])).filter(Boolean);
   let order;
   if (uuidVar) {
     if (!vars.includes(uuidVar)) throw new Error(`args.uuidVar "${uuidVar}" is not a column of the result (${vars.join(', ')})`);

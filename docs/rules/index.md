@@ -58,7 +58,7 @@ each input, parameter and output.
 | [**FC10**](sql-cookbook.html#fc10) | MAT-OAT delta while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc10) | match |
 | [**FC11**](sql-cookbook.html#fc11) | OAT low vs SAT SP while cooling and economizing | ahu | 10 min | [pandas](pandas-cookbook.html#fc11) | match |
 | [**FC12**](sql-cookbook.html#fc12) | SAT above MAT while cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc12) | match |
-| [**FC13-SAT-HIGH**](sql-cookbook.html#fc13-sat-high) | SAT above setpoint at full cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc13-sat-high) | known divergence |
+| [**FC13-SAT-HIGH**](sql-cookbook.html#fc13-sat-high) | SAT above setpoint at full cooling | ahu | 10 min | [pandas](pandas-cookbook.html#fc13-sat-high) | match |
 | [**FC14**](sql-cookbook.html#fc14) | CHW coil ΔT when inactive (GL36 L) | ahu | 10 min | [pandas](pandas-cookbook.html#fc14) | known divergence |
 | [**FC15**](sql-cookbook.html#fc15) | HW coil ΔT when inactive (GL36 M) | ahu | 10 min | [pandas](pandas-cookbook.html#fc15) | match |
 | [**FC2**](sql-cookbook.html#fc2) | Mixed air below envelope | ahu | 10 min | [pandas](pandas-cookbook.html#fc2) | match |
@@ -78,7 +78,7 @@ each input, parameter and output.
 | [**FCU-SENSOR-NULL**](sql-cookbook.html#fcu-sensor-null) | Own zone setpoint present but zone temperature null for at least 90% of window | zone_other, general, ahu | immediate | [pandas](pandas-cookbook.html#fcu-sensor-null) | match |
 | [**FCU-VALVE-PASS-CLG**](sql-cookbook.html#fcu-valve-pass-clg) | Cooling valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-clg) | match |
 | [**FCU-VALVE-PASS-HTG**](sql-cookbook.html#fcu-valve-pass-htg) | Heating valve passing with both commands shut | zone_other, general, ahu | 15 min | [pandas](pandas-cookbook.html#fcu-valve-pass-htg) | match |
-| [**FILTER-LOAD**](sql-cookbook.html#filter-load) | Filter pressure drop above dp_dirty, or fan effort high for the airflow | ahu | 15 min | [pandas](pandas-cookbook.html#filter-load) | match |
+| [**FILTER-LOAD**](sql-cookbook.html#filter-load) | Filter pressure drop or fan effort too high | ahu | 15 min | [pandas](pandas-cookbook.html#filter-load) | match |
 | [**HP-1**](sql-cookbook.html#hp-1) | Discharge cold when heating | heatpump | 10 min | [pandas](pandas-cookbook.html#hp-1) | known divergence |
 | [**MECH-OAT-1**](sql-cookbook.html#mech-oat-1) | Mechanical cooling below 15.6 °C web OAT | ahu, chiller, heatpump | 10 min | [pandas](pandas-cookbook.html#mech-oat-1) | match |
 | [**OA-1**](sql-cookbook.html#oa-1) | Low OA fraction | ahu | 15 min | [pandas](pandas-cookbook.html#oa-1) | known divergence |

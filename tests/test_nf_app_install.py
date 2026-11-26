@@ -127,6 +127,11 @@ class FakeNF:
                 if method == "POST":
                     self.files[key] = base64.b64decode(body)
                     return {}
+                if method == "DELETE":
+                    if key not in self.files:
+                        raise sync.ApiError(f"DELETE {path} -> HTTP 404", 404)
+                    del self.files[key]
+                    return {}
                 if key[1].startswith("/node_modules/"):
                     data = b"{}" if self.deps_installed else None
                 else:

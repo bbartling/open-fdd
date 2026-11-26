@@ -4466,7 +4466,7 @@ rules:
     run_proof: gated
     sql_file: filter_load.sql
     pandas_function: filter_load
-    description: "Filter pressure drop above dp_dirty, or fan effort high for the airflow"
+    description: "Filter pressure drop or fan effort too high"
     required_roles: []
     optional_roles: [filter_dp, fan_power, zone_flow, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours, covered_hours, active_hours, fault_pct, assessment, filter_path]

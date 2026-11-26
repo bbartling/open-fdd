@@ -8776,7 +8776,7 @@
     {
       "confirm_seconds": 900,
       "delete_python_candidate": false,
-      "description": "Filter pressure drop above dp_dirty, or fan effort high for the airflow",
+      "description": "Filter pressure drop or fan effort too high",
       "equipment_kinds": [
         "ahu"
       ],

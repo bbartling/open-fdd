@@ -459,6 +459,50 @@ def test_turtle_reader_builds_a_bindable_model():
     assert "ahu" in b.kinds and b.best()["sat"].uuid == "uuid-1"
 
 
+@pytest.mark.parametrize("markers,kind", [
+    ("equip,boiler", "boiler"), ("equip,hotWaterPlant", "boiler"), ("equip,hot,water,heat,plant,hot-water-plant", "boiler"),
+    ("equip,hot,water,plant", "boiler"), ("equip,hot-water-plant", "boiler"), ("equip,steam,plant,steam-plant", "boiler"),
+    ("equip,chilledWaterPlant", "chwPlant"), ("equip,chilled,water,plant,chilled-water-plant", "chwPlant"),
+    ("equip,condenser,water,plant,condenser-water-plant", "cooling_tower"),
+    ("equip,hot,water,pump", None), ("equip,plant", None),
+    ("equip,hot,chilled,water,plant", "chwPlant,boiler"),  # a combined plant has both kinds
+])
+def test_haystack4_plant_conjuncts_get_the_camelcase_kind(markers, kind):
+    """#1777: a Haystack 4 conjunct matches the literal tag or every part; the same kinds as static/fdd.js equipKinds."""
+    from open_fdd import plot_spec as ps
+    from open_fdd.nf.model import equip_kinds
+    cat = load_catalog()
+    e = {"attrs": {"id": "P", "siteRef": "s", "markers": markers}}
+    want = (kind.split(",") if kind else []) + ["general"]
+    assert equip_kinds(e, cat) == want
+    assert ps._equip_kinds(e, cat) == want
+
+
+TTL_HW_PLANT = """@prefix ph: <https://project-haystack.org/def/ph/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phScience: <https://project-haystack.org/def/phScience/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ref: <https://brickschema.org/schema/Brick/ref#> .
+@prefix local: <urn:test:> .
+local:s1 a phIoT:site ; rdfs:label "S1" ; ph:hasTag phIoT:site .
+local:HWP a phIoT:equip ; rdfs:label "HWP" ; ph:hasTag {tags} ; phIoT:siteRef local:s1 .
+local:p1 a phIoT:point ; rdfs:label "HW supply" ; ph:hasTag phIoT:point, phIoT:his, phIoT:hot, phScience:water, local:leaving, phScience:temp, phIoT:sensor ;
+    phIoT:siteRef local:s1 ; phIoT:equipRef local:HWP ; ph:unit "\\u00b0F" ; ph:kind "Number" ;
+    ref:hasExternalReference [ a ref:TimeseriesReference ; ref:hasTimeseriesId "uuid-hws" ] .
+"""
+
+
+def test_turtle_haystack4_hot_water_plant_binds_like_a_boiler():
+    """#1777: the exported phIoT:hot-water-plant tag reads back and binds the boiler rules' roles."""
+    pytest.importorskip("rdflib")
+    h4 = "phIoT:equip, phIoT:hot, phScience:water, phIoT:heat, phIoT:plant, phIoT:hot-water-plant"
+    b4 = bind_equipment(read_turtle(TTL_HW_PLANT.replace("{tags}", h4)))[0]
+    bb = bind_equipment(read_turtle(TTL_HW_PLANT.replace("{tags}", "phIoT:equip, phIoT:boiler")))[0]
+    assert b4.kinds == bb.kinds == ["boiler", "general"]
+    assert set(b4.roles) == set(bb.roles) and "hw_supply_t" in b4.roles
+    assert b4.best()["hw_supply_t"].uuid == bb.best()["hw_supply_t"].uuid == "uuid-hws"
+
+
 # ---------------------------------------------------------------------------- reporting + ECM hooks
 def test_report_source_and_bindings(client, model, window, tmp_path):
     from open_fdd.reporting.report_template import HISTORY_SOURCES, NfSource

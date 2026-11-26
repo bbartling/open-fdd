@@ -145,10 +145,16 @@ def site_name(model: Model, site_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------- binding
+def has_kind_marker(markers: set[str], m: str) -> bool:
+    """A catalog kind marker on an equip. A Haystack 4 conjunct (``hot-water-plant``) matches the literal tag or every
+    part (``hot``, ``water``, ``plant``); twin of static/fdd.js ``hasKindMarker``."""
+    return m in markers or ("-" in m and all(x in markers for x in m.split("-")))
+
+
 def equip_kinds(equip: Mapping[str, Any], catalog: Mapping | None = None) -> list[str]:
     cat = catalog or load_catalog()
     ms = set(markers_of(equip))
-    return [k for k, marks in cat["equipment_kinds"].items() if any(m in ms for m in marks)]
+    return [k for k, marks in cat["equipment_kinds"].items() if any(has_kind_marker(ms, m) for m in marks)]
 
 
 def _is_web(role: str) -> bool:

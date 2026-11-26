@@ -23,13 +23,20 @@
   ],
   "chwPlant": [
    "chilledWaterPlant",
-   "chilledWater"
+   "chilledWater",
+   "chilled-water-plant"
   ],
   "cooling_tower": [
-   "coolingTower"
+   "coolingTower",
+   "condenserWaterPlant",
+   "condenser-water-plant"
   ],
   "boiler": [
-   "boiler"
+   "boiler",
+   "hotWaterPlant",
+   "hot-water-plant",
+   "steamPlant",
+   "steam-plant"
   ],
   "heatpump": [
    "heatPump"
@@ -3420,7 +3427,7 @@
   },
   {
    "id": "FILTER-LOAD",
-   "description": "Filter pressure drop above dp_dirty, or fan effort high for the airflow",
+   "description": "Filter pressure drop or fan effort too high",
    "sql_file": "filter_load.sql",
    "priority": "P2",
    "equipment_kinds": [

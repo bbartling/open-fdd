@@ -28,6 +28,13 @@ CASES = [
                                           "discharge-air-temp": {"spike_delta": 8.3333333, "flat_tol": 0.1}, "duct-static-pressure": {"lo": -50.0, "hi": 1500.123456789}}}},
     {"name": "equipment only, default-equal tolerance", "site": None,
      "equipment": {"version": 1, "roles": {"mixed-air-temp": {"flat_tol": 0.055556, "rate_per_h": 3.333333}, "chw-flow": {"hi": 63.0902}}}},
+    # #1763: per-sensor values (two points of one role, one with its own limits; a site sensor field under an equipment one)
+    {"name": "sensor overrides", "site": {"version": 1, "roles": {"zone-air-temp": {"hi": 30.0}},
+                                          "sensors": {"zat-2": {"role": "zone-air-temp", "lo": 15.0, "flat_tol": 0.2}}},
+     "equipment": {"version": 1, "roles": {},
+                   "sensors": {"zat-2": {"role": "zone-air-temp", "hi": 26.0, "rate_per_h": 4.0},
+                               "rh-9": {"role": "zone-air-humidity", "flat_tol": 0.5},
+                               "dat-1": {"role": "discharge-air-temp", "spike_delta": 5.0}}}},
 ]
 
 

@@ -46,7 +46,8 @@
 //   fault rule   = pack output_columns contain fault_pct or fault_hours. Published value = fault_pct (unit %) else
 //                  fault_hours (unit h). covered_hours null/0 -> fddStatus "not-assessed", NO numeric value written.
 //                  Otherwise fddStatus "ok" (0) or "fault" (> 0) and fddCoverageHours. Always keeps the fault marker.
-//   metric rule  = every other rule. Publishes its first declared output column (0 is a valid value), unit "".
+//   metric rule  = every other rule. Publishes its first declared output column (0 is a valid value), markers
+//                  point,his,metric,fdd, unit = the column's SI unit (static/fdd.js FDD_METRIC_UNITS; #1775).
 //   stale        = a previously published result point whose rule could not be refreshed this run (no history,
 //                  roles missing, rule error): its record gets fddStatus "stale" + fddReason, no new value.
 //   Every model record also carries fddLastRun (ISO). Any rule error makes the hook throw at the very end, after
@@ -367,6 +368,17 @@ const OFDD_RESULT_ATTRS = Object.freeze([
 
 const FAULT_COLS = ['fault_pct', 'fault_hours'];
 
+/** SI unit of a metric output column ('' when not declared), from static/fdd.js (shared with the UI). */
+let metricUnits = null;
+function metricUnit(column) {
+  if (!metricUnits) {
+    const ctx = vm.createContext({});
+    vm.runInContext(fs.readFileSync(path.join(STATIC, 'fdd.js'), 'utf8'), ctx, { filename: 'fdd.js' });
+    metricUnits = vm.runInContext('FDD_METRIC_UNITS', ctx);
+  }
+  return metricUnits[column] || '';
+}
+
 
 /**
  * What one rule run publishes.
@@ -394,7 +406,7 @@ function resultValue(packRule, row) {
     return { ...base, value, coverage, status: value > 0 ? 'fault' : 'ok', reason: '' };
   }
   const column = cols.find((c) => c !== 'equipment_id') || '';
-  const base = { kind: 'metric', unit: '', fault: false, column, value: null, coverage: null };
+  const base = { kind: 'metric', unit: metricUnit(column), fault: false, column, value: null, coverage: null };
   if (!row) return { ...base, status: 'not-assessed', reason: 'rule returned no row (no usable input)' };
   const value = num(row[column]);
   if (value == null) return { ...base, status: 'not-assessed', reason: `${column} is null` };
