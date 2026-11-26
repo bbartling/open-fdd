@@ -216,14 +216,14 @@ Damper, valve and fan-speed roles stay `PERCENT` (0-100). Flow stays `L-PER-SEC`
 
 **FC1 fan speed.** `FC1` compares `fan_cmd` with `eps_vfd_spd`. Bind it to `supply_fan_speed_command` (`PERCENT`,
 Haystack `vfd`, `speed`, `cmd`). When that role is unbound, report the rule as not applicable rather than reading the
-start/stop command. Then set `rule_input: true` and `consumers.open-fdd: read` on that role in a minor roles release.
+start/stop command. Set `rule_input: true` and `consumers.open-fdd: read` on that role in a minor roles release after `1.1.0`. Roles `1.1.0` leaves `rule_input` false, so the acceptance count stays 76.
 
 ## Haystack binding changes
 
 Bindings in `nf-app/rules/role_overrides.json` (and so `fdd-catalog.json`) change for these 40 keys. The roles file is
 the source; the catalog builder reads it. Also copy `equip_forbid`: `discharge_air_temperature` forbids parent
 `airTerminalUnit` (that point binds `terminal_unit_discharge_air_temperature`); the supply-fan roles forbid parent
-`coolingTower`; `electric_power` forbids parent `chiller` and the point marker `fan`.
+`coolingTower`, and `supply_fan_operating_status` also forbids parent `boiler`; `electric_power` forbids parent `chiller` and the point marker `fan`.
 
 <details><summary>40 binding changes</summary>
 
@@ -313,7 +313,7 @@ the source; the catalog builder reads it. Also copy `equip_forbid`: `discharge_a
 - [ ] Every catalog binding (`classes`, `markers`, `forbid`, `equip_markers`) equals the roles file. A test shows that
       a `max` airflow point never binds `discharge_air_volume_flow_rate_setpoint`, and that a `damper-cmd` point never
       binds `damper_position`.
-- [ ] `FC1` reads `supply_fan_speed_command`. Without it, `FC1` reports not applicable.
+- [ ] `FC1` reads `supply_fan_speed_command`. Without it, `FC1` reports not applicable. The role's `rule_input` flag stays false in roles `1.1.0` and turns on in the next minor roles release, so this step does not add a 77th rule input to `1.1.0`.
 - [ ] The upgrade migrates `fdd.point.role` and saved fraction tunings exactly once (a test runs it twice).
 - [ ] The bundle ships the roles file with its sha256. `input_names_223p.json` is gone.
 - [ ] `LICENSE` is the full MIT text below. `pyproject.toml` still declares MIT.

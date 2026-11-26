@@ -4211,11 +4211,12 @@
      "pump"
     ],
     "equip_forbid": [
-     "coolingTower"
+     "coolingTower",
+     "boiler"
     ],
     "binding_scope": "own",
     "conformance": "standard",
-    "note": "Haystack 4 has no supply marker; the supply fan is the discharge fan."
+    "note": "Haystack 4 has no supply marker; the supply fan is the discharge fan. A boiler run sensor is boiler_operating_status."
    },
    "rule_input": true,
    "consumers": {

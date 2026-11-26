@@ -100,6 +100,30 @@ class RealFile(unittest.TestCase):
         self.assertIn("s223:FanCoilUnit", generic["s223"]["applies_to"])
         self.assertFalse(v.parent_constraints_overlap(generic["haystack"], terminal["haystack"]))
 
+    def test_boiler_run_sensor_does_not_bind_the_supply_fan(self):
+        """Class run-sensor plus boiler,run,sensor on a boiler parent is only the boiler role."""
+        fan = role(DOC, "supply_fan_operating_status")["haystack"]
+        boiler = role(DOC, "boiler_operating_status")["haystack"]
+
+        def binds(hs, nf_class, markers, parent):
+            if parent & set(hs.get("equip_forbid") or []):
+                return False
+            if hs.get("equip_markers") and not set(hs["equip_markers"]) <= parent:
+                return False
+            if set(hs.get("forbid") or []) & markers:
+                return False
+            if nf_class in hs["classes"]:
+                return True
+            return set(hs["markers"]) <= markers
+
+        point = ("run-sensor", {"boiler", "run", "sensor"}, {"boiler"})
+        self.assertTrue(binds(boiler, *point))
+        self.assertFalse(binds(fan, *point))
+        ahu = ("run-sensor", {"fan", "run", "sensor"}, {"ahu"})
+        self.assertTrue(binds(fan, *ahu))
+        self.assertFalse(binds(boiler, *ahu))
+        self.assertIn("discharge-run-sensor", fan["classes"])
+
     def test_command_and_occupancy_values_are_boolean(self):
         for name in ("maximum_cooling_operating_mode_command", "purge_operating_mode_command", "occupancy_status"):
             entry = role(DOC, name)
