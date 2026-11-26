@@ -417,7 +417,7 @@ async function createTimescale(pack, opts = {}) {
  *
  * Offline and disk-free by construction (DUCKDB_SAFETY): extension autoinstall and autoload are OFF, so DuckDB never
  * downloads anything (an edge box may have no internet); everything the pack needs (core functions, ICU time zones,
- * Parquet, JSON) is statically linked in the 2.0.0 build. TimeZone is set with SET GLOBAL after creation: passing it as
+ * Parquet, JSON) is statically linked in the 2.0.1 build. TimeZone is set with SET GLOBAL after creation: passing it as
  * a create option makes DuckDB try to autoinstall ICU from the network first. temp_directory is '' (DuckDB's default for
  * an in-memory database is '.tmp' with up to 90 % of the free disk), so nothing is ever spilled to the SD card.
  *
@@ -557,7 +557,7 @@ async function createDuckDb(pack, opts = {}) {
         const o = {}; for (const [k, v] of Object.entries(r)) o[k] = duckValue(v); return o;
       })[0];
     },
-    /** DuckDB version string of the warm instance (e.g. "v2.0.0"). */
+    /** DuckDB version string of the warm instance (e.g. "v2.0.1"). */
     async version() { return (await conn.runAndReadAll("SELECT version() AS v")).getRowObjectsJS()[0].v; },
     async load(input) {
       const cols = tableColumns(pack, input);

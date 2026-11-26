@@ -89,9 +89,9 @@ after(async () => {
   await releaseDuckDb();
 });
 
-test("duckdb: the pinned package reports DuckDB 2.0.0 and Node 22+ loads it", opts, async () => {
-  assert.match(PINNED, /^2\.0\.0-r\.\d+$/, "pin an exact 2.0.0 revision");
-  assert.equal(await duck.version(), "v2.0.0");
+test("duckdb: the pinned package reports DuckDB 2.0.1 and Node 22+ loads it", opts, async () => {
+  assert.match(PINNED, /^2\.0\.1-r\.\d+$/, "pin an exact 2.0.1 revision");
+  assert.equal(await duck.version(), "v2.0.1");
   assert.ok(Number(process.versions.node.split(".")[0]) >= 22);
 });
 

@@ -26,7 +26,7 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | `static/energy.js` | Demand, monthly energy, degree-day baseline, M&V, EUI / peers | browser |
 | `static/app-core.js`, `charts.js`, `theme.js`, `base.css`, `style.css`, `vendor/` | The shared dashboard shell (top bar, tab router, Overview, Charts, Points, BACnet Server, Model & RDF), chart catalog, light/dark themes, CSS base + Full's own rules, vendored ECharts 6.1.0 (ESM). `app.js` adds the Full-only tabs (FDD, RCx, Export) | browser |
 | `hooks/fdd.js` | Hourly FDD: bind roles, read NF history (5-min grid), run the SQL pack, write result points, optional BACnet AVs | NF Node runtime |
-| `hooks/lib/engines.js` | SQL engines: `sqlite` (sql.js, vendored in `hooks/vendor/`), `pglite` and opt-in `duckdb` (native DuckDB 2.0.0, #1645) | FDD hook |
+| `hooks/lib/engines.js` | SQL engines: `sqlite` (sql.js, vendored in `hooks/vendor/`), `pglite` and opt-in `duckdb` (native DuckDB 2.0.1, #1645) | FDD hook |
 | `hooks/weather.js` | **Shared with Lite** (one source). Open-Meteo outdoor air every 20 min → global variables (site lat/lon from NF) | NF Node runtime |
 | `rules/` | `pack-postgres.json` / `pack-sqlite.json` (built from `sql/fdd`), role overrides, NF class list | build scripts |
 | `rcx-parity.json` | Where every chart of the old central UI lives now (CI-enforced) | `tests/parity.test.mjs` |
@@ -124,7 +124,7 @@ The Lite edition and the `sqlite` / `pglite` / `duckdb` engines create no persis
 
 ## DuckDB engine (opt-in trial, #1645)
 
-`engine: "duckdb"` runs the Postgres pack in native DuckDB (`@duckdb/node-api` `2.0.0-r.1`, DuckDB 2.0.0, an
+`engine: "duckdb"` runs the Postgres pack in native DuckDB (`@duckdb/node-api` `2.0.1-r.1`, DuckDB 2.0.1, an
 `optionalDependencies` entry). The `fdd.*` helpers are DuckDB macros (`sql/fdd/duckdb/duckdb_helpers.sql`, shipped in
 `pack-postgres.json` as `duckdb_helpers_sql`). `auto` never picks it. When the package has no native build for the box
 (linux x64/arm64 glibc or musl, win32, darwin; no 32-bit ARM), the run falls back to the `auto` engine and `engine_note`
@@ -138,7 +138,7 @@ against PGlite and sql.js, with and without saved tuning.
 | `duckdbThreads` | `2` | DuckDB worker threads |
 
 The engine never downloads anything: extension autoinstall and autoload are off, and what the pack needs (ICU time zones,
-Parquet, JSON) is built into the 2.0.0 binary. The time zone is set to UTC after start-up, because the `TimeZone` create
+Parquet, JSON) is built into the 2.0.1 binary. The time zone is set to UTC after start-up, because the `TimeZone` create
 option makes DuckDB fetch ICU from the network. `duckdb-engine.test.mjs` runs it against an unreachable extension
 repository and checks that nothing is downloaded or spilled. If the instance cannot start, the run fails (no engine swap).
 

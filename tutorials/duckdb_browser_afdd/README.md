@@ -135,7 +135,7 @@ Restore `16` when finished. Older assessments retain their earlier values.
 | `schema.sql` | Define the tables and joining view |
 | `fault_rule.sql` | Read, evaluate, and save one assessment per AHU |
 | `week_history.csv` | The initial seven days of fake readings |
-| `pyproject.toml` | Python requirements, including DuckDB 2.0.0 |
+| `pyproject.toml` | Python requirements, including DuckDB 2.0.1 |
 
 Use one script at a time. If the browser does not open automatically, visit
 http://localhost:4213 while `main.py` is running. To reset, close both scripts,

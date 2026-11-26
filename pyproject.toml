@@ -94,7 +94,7 @@ rdf = [
 ]
 # Offline SQL parity replay (borrowing sql/fdd on DuckDB); also the in-process DuckDB engine of the SQL analytics.
 duckdb = [
-    "duckdb>=2.0.0",
+    "duckdb>=2.0.1",
 ]
 # Standalone PostgreSQL parity driver.
 postgres = [
@@ -137,7 +137,7 @@ test = [
     "open-fdd[anomaly]",
     "open-fdd[ml]",
     "open-fdd[ontology-shacl]",
-    "duckdb>=2.0.0",
+    "duckdb>=2.0.1",
 ]
 dev = [
     "pytest>=9.2.0",
