@@ -1,0 +1,45 @@
+﻿# Point-role vocabulary checks (roles/): schema, 223P-derived names, units, Haystack marker sets.
+name: Roles vocabulary
+
+on:
+  push:
+    branches:
+      - master
+      - "release/**"
+    paths:
+      - "roles/**"
+      - ".github/workflows/roles.yml"
+  pull_request:
+    paths:
+      - "roles/**"
+      - ".github/workflows/roles.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  roles:
+    name: Role vocabulary tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install schema validator
+        run: python -m pip install jsonschema
+
+      - name: Validate roles/openfdd-roles.json
+        run: python roles/validate_roles.py
+
+      - name: Role tests
+        run: python -m unittest roles/test_validate_roles.py -v
