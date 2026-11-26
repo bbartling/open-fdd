@@ -57,8 +57,8 @@ What the suite checks:
 | Meta | Contract major version equals the spec's; capability flags present. |
 | Auth | 401 and `WWW-Authenticate` without or with a bad token; `invalid_credentials`; refresh token only in an `HttpOnly; Secure; SameSite=Strict; Path=/api/auth` cookie, never in the body; refresh rotates; reuse of a rotated token revokes the login's newest token; logout clears and revokes; `no-store`. With `auth` off, `/api/auth/*` answer 404. |
 | Writes | 401 without a token; 403 `capability_disabled` when `rules_write` is off; 403 `forbidden` for a viewer; 404, 409 `not_tunable`, 400 on bad values; round trip. |
-| Vocabulary | `SiUnit` equals the roles file's unit symbols plus `h` and `""`, same spelling; every role the spec names and every role the host returns (points, rule inputs) is a roles-file role with its unit and value type; with `--manifest`, every rule input of a rules bundle manifest too. |
-| Data | SI units only (`SiUnit`), freshness equals the last sample, half-open `[from, to)`, ascending samples, result status semantics and `fault_pct` arithmetic, filters, pagination and bad `limit` / `cursor`; 405 with `Allow`. |
+| Vocabulary | `Unit` equals the roles file's QUDT local names (`DEG_C`, `PERCENT`, ...) plus `HR` and null, same spelling, and its table matches each unit's Haystack display symbol; every role the spec names and every role the host returns (points, rule inputs) is a roles-file role with its unit, `unit_display` and value type; with `--manifest`, every rule input of a rules bundle manifest too. |
+| Data | SI units only (`Unit`), freshness equals the last sample, half-open `[from, to)`, ascending samples, result status semantics and `fault_pct` arithmetic, filters, pagination and bad `limit` / `cursor`; 405 with `Allow`. |
 
 ## Versioning
 

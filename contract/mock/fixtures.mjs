@@ -14,8 +14,10 @@ const readJson = (rel) => JSON.parse(fs.readFileSync(path.join(ROOT, rel), "utf8
 const ROLES = readJson("roles/openfdd-roles.json");
 const CATALOG = readJson("nf-app/static/fdd-catalog.json");
 
-/** role name -> {unit (wire symbol), value_type} */
-export const ROLE = new Map(ROLES.roles.map((r) => [r.role, { unit: r.haystack.unit ?? "", value_type: r.value_type }]));
+/** role name -> {unit (QUDT local name or null), unit_display (Haystack symbol or null), value_type} */
+export const ROLE = new Map(ROLES.roles.map((r) => [r.role, {
+  unit: r.unit ? r.unit.replace(/^unit:/, "") : null, unit_display: r.haystack.unit ?? null, value_type: r.value_type,
+}]));
 const BY_LEGACY = new Map(ROLES.roles.flatMap((r) => r.legacy_keys.map((k) => [k, r.role])));
 
 function role(name) {
@@ -70,7 +72,7 @@ for (const eq of EQUIPMENT) {
       defs.push({ id: `${eq.id}.${input}`, name: `${eq.name} ${input}`, equipment_id: eq.id, input, ...role(input) });
     }
     if (eq.id === "ahu-1") {
-      defs.push({ id: "ahu-1.filter_pressure_drop", name: "AHU-1 filter pressure drop", equipment_id: "ahu-1", input: null, unit: "Pa", value_type: "number" });
+      defs.push({ id: "ahu-1.filter_pressure_drop", name: "AHU-1 filter pressure drop", equipment_id: "ahu-1", input: null, unit: "PA", unit_display: "Pa", value_type: "number" });
     }
   } else {
     defs.push({ id: `${eq.id}.zone_air_temperature`, name: `${eq.name} zone_air_temperature`, equipment_id: eq.id, input: "zone_air_temperature", ...role("zone_air_temperature") });
@@ -140,7 +142,7 @@ function ruleFrom(ruleId, kind, title) {
   const add = (key, required) => {
     const name = BY_LEGACY.get(key);
     if (!name) throw new Error(`${ruleId}: catalog role ${key} has no role in roles/openfdd-roles.json`);
-    if (!inputs.some((x) => x.name === name)) inputs.push({ name, required, unit: role(name).unit });
+    if (!inputs.some((x) => x.name === name)) inputs.push({ name, required, unit: role(name).unit, unit_display: role(name).unit_display });
   };
   c.required_roles.forEach((k) => add(k, true));
   c.optional_roles.forEach((k) => add(k, false));
@@ -151,6 +153,8 @@ function ruleFrom(ruleId, kind, title) {
 export const RULES = [
   ruleFrom("AVG-ZONE-TEMP", "metric", "Average zone air temperature"),
   ruleFrom("FAN-RUNTIME-HOURS", "metric", "Supply fan running hours"),
+  // FC1 gains supply_fan_speed_command (PERCENT) when the roles file flips its rule_input flag (roles 1.1.x);
+  // the inputs here follow the catalog and roles file as they are.
   ruleFrom("FC1", "fault", "Duct static pressure below setpoint at full fan"),
   ruleFrom("FC8", "fault", "Discharge air vs mixed air while economizing"),
 ];
@@ -174,12 +178,12 @@ for (let day = 0; day < DAYS; day++) {
   RESULTS.push(result("ahu-1", "FC8", day, assessed(0)));
   RESULTS.push(result("ahu-2", "FC8", day, notAssessed("unbound_input:cooling_valve_position_command")));
   for (const ahu of ["ahu-1", "ahu-2"]) {
-    RESULTS.push(result(ahu, "FAN-RUNTIME-HOURS", day, { status: "METRIC", metrics: { runtime_hours: { value: 12, unit: "h" } } }));
+    RESULTS.push(result(ahu, "FAN-RUNTIME-HOURS", day, { status: "METRIC", metrics: { runtime_hours: { value: 12, unit: "HR", unit_display: "h" } } }));
   }
   for (const vav of ["vav-1-01", "vav-1-02", "vav-2-01"]) {
     const stale = vav === "vav-2-01" && day === DAYS - 1;
     RESULTS.push(result(vav, "AVG-ZONE-TEMP", day, stale
       ? notAssessed("stale_data")
-      : { status: "METRIC", metrics: { mean_zone_air_temperature: { value: 20.5, unit: "°C" } } }));
+      : { status: "METRIC", metrics: { mean_zone_air_temperature: { value: 20.5, unit: "DEG_C", unit_display: "°C" } } }));
   }
 }

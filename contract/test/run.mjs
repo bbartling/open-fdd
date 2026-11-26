@@ -41,16 +41,18 @@ const MANIFEST_PATH = arg("manifest", process.env.OFDD_CONTRACT_MANIFEST || "");
 
 // ---- vocabulary: roles/openfdd-roles.json is the only source of role names and unit spellings ----------------
 const rolesFile = JSON.parse(fs.readFileSync(ROLES_PATH, "utf8"));
-/** role -> {unit: wire symbol ("" when the role has none), value_type} */
-const VOCAB = new Map(rolesFile.roles.map((r) => [r.role, { unit: r.haystack.unit ?? "", value_type: r.value_type }]));
-const unitLabel = (u) => (u === "" ? '""' : u);
+/** The wire unit of a roles-file QUDT unit: its local name (`unit:DEG_C` -> `DEG_C`), or null for none. */
+const qudtName = (u) => (u ? u.replace(/^unit:/, "") : null);
+/** role -> {unit: QUDT local name or null, unit_display: Haystack symbol or null, value_type} */
+const VOCAB = new Map(rolesFile.roles.map((r) => [r.role, { unit: qudtName(r.unit), unit_display: r.haystack.unit ?? null, value_type: r.value_type }]));
 
-/** Fail unless `name` is a role of the roles file and `unit` (and `valueType`, when given) match it. */
-function assertRole(name, unit, valueType, where) {
+/** Fail unless `name` is a role of the roles file and `unit` (and `valueType`, `display` when given) match it. */
+function assertRole(name, unit, valueType, where, display) {
   const r = VOCAB.get(name);
   assert.ok(r, `${where}: ${name} is not a role in ${path.basename(ROLES_PATH)}`);
-  assert.equal(unit, r.unit, `${where}: ${name} unit ${unitLabel(unit)} != roles file ${unitLabel(r.unit)}`);
+  assert.equal(unit, r.unit, `${where}: ${name} unit ${unit} != roles file ${r.unit}`);
   if (valueType !== undefined) assert.equal(valueType, r.value_type, `${where}: ${name} value_type`);
+  if (display !== undefined) assert.equal(display, r.unit_display, `${where}: ${name} unit_display`);
 }
 
 // ---- schema ---------------------------------------------------------------------------------------------------
@@ -319,12 +321,12 @@ test("equipment: valid tree (parent ids exist), stable pagination", async () => 
 });
 
 test("points: SI unit, 223P input names, freshness, equipment filter", async () => {
-  for (const p of points) if (p.input !== null) assertRole(p.input, p.unit, p.value_type, `point ${p.id}`);
+  for (const p of points) if (p.input !== null) assertRole(p.input, p.unit, p.value_type, `point ${p.id}`, p.unit_display);
   assert.ok(points.length > 0, "the host lists at least one point");
   const equipment = new Set((await all("/api/equipment", { token: viewerToken })).map((e) => e.id));
   for (const p of points) {
     assert.ok(equipment.has(p.equipment_id), `${p.id}: equipment ${p.equipment_id} exists`);
-    if (p.value_type === "boolean") assert.equal(p.unit, "", `${p.id}: boolean points are dimensionless`);
+    if (p.value_type !== "number") assert.equal(p.unit, null, `${p.id}: ${p.value_type} points have no unit`);
     if (p.last_sample_time === null) assert.equal(p.last_value, null, `${p.id}: no value without a sample`);
   }
   const eq = points[0].equipment_id;
@@ -384,7 +386,7 @@ test("rules: inputs by 223P name with SI units; confirm_min null exactly when no
   const rules = await all("/api/rules", { token: viewerToken });
   assert.ok(rules.length > 0, "the host lists at least one rule");
   for (const r of rules) {
-    for (const x of r.inputs) assertRole(x.name, x.unit, undefined, `rule ${r.rule_id}`);
+    for (const x of r.inputs) assertRole(x.name, x.unit, undefined, `rule ${r.rule_id}`, x.unit_display);
     assert.equal(r.confirm_min === null, r.confirm_min_default === null, `${r.rule_id}: confirm_min and its default are both null or both set`);
     const names = r.inputs.map((x) => x.name);
     assert.equal(new Set(names).size, names.length, `${r.rule_id}: input names unique`);
@@ -478,30 +480,34 @@ test("spec: every component schema compiles and its example validates", () => {
   }
 });
 
-test("vocabulary: SiUnit is the roles file's unit symbols plus h and the empty string, same spelling", () => {
-  const fromRoles = new Set(rolesFile.roles.map((r) => r.haystack.unit ?? ""));
-  const want = [...new Set([...fromRoles, "h", ""])].sort();
-  assert.deepEqual([...spec.components.schemas.SiUnit.enum].sort(), want, "SiUnit enum vs roles/openfdd-roles.json");
-  // The mapping table: every QUDT unit row names the roles file's symbol.
-  const rows = [...spec.components.schemas.SiUnit.description.matchAll(/^\| `(unit:[^`]+)`[^|]*\| `([^`]*)`/gm)];
-  assert.ok(rows.length > 0, "SiUnit description has a unit table");
-  for (const [, qudt, wire] of rows) {
+test("vocabulary: Unit is the roles file's QUDT local names plus HR and null, same spelling", () => {
+  const U = spec.components.schemas.Unit;
+  for (const [k, u] of Object.entries(rolesFile.units)) assert.equal(u.wire, qudtName(k), `roles file units.${k}.wire`);
+  const fromRoles = new Set(rolesFile.roles.map((r) => qudtName(r.unit)).filter(Boolean));
+  const want = [...new Set([...fromRoles, "HR"])].sort();
+  assert.deepEqual(U.enum.filter((x) => x !== null).sort(), want, "Unit enum vs roles/openfdd-roles.json");
+  assert.ok(U.enum.includes(null), "Unit allows null for roles without a unit");
+  // The mapping table: every QUDT unit row names the roles file's wire name and Haystack symbol.
+  const rows = [...U.description.matchAll(/^\| `(unit:[^`]+)` \| `([^`]+)` \| (`[^`]*`|null) \|/gm)];
+  assert.ok(rows.length > 0, "Unit description has a unit table");
+  for (const [, qudt, wire, disp] of rows) {
     const u = rolesFile.units[qudt];
-    assert.ok(u, `SiUnit table: ${qudt} is not in the roles file`);
-    assert.equal(wire === '""' ? "" : wire, u.haystack ?? "", `SiUnit table: ${qudt}`);
+    assert.ok(u, `Unit table: ${qudt} is not in the roles file`);
+    assert.equal(wire, u.wire, `Unit table: ${qudt} wire`);
+    assert.equal(disp === "null" ? null : disp.slice(1, -1), u.haystack ?? null, `Unit table: ${qudt} display`);
   }
   for (const qudt of new Set(rolesFile.roles.map((r) => r.unit).filter(Boolean))) {
-    assert.ok(rows.some(([, q]) => q === qudt), `SiUnit table lacks ${qudt}`);
+    assert.ok(rows.some(([, q]) => q === qudt), `Unit table lacks ${qudt}`);
   }
 });
 
 test("vocabulary: every role the spec names (InputName table, examples) is a roles-file role with its unit", () => {
-  const rows = [...spec.components.schemas.InputName.description.matchAll(/^\| `([a-z0-9_]+)` \| `([^`]*)` \|/gm)];
+  const rows = [...spec.components.schemas.InputName.description.matchAll(/^\| `([a-z0-9_]+)` \| (`[^`]*`|null) \|/gm)];
   assert.ok(rows.length > 0, "InputName description has a role table");
-  for (const [, name, unit] of rows) assertRole(name, unit === '""' ? "" : unit, undefined, "InputName table");
-  assertRole(spec.components.schemas.InputName.example, VOCAB.get(spec.components.schemas.InputName.example)?.unit, undefined, "InputName example");
+  for (const [, name, unit] of rows) assertRole(name, unit === "null" ? null : unit.slice(1, -1), undefined, "InputName table");
+  assert.ok(VOCAB.has(spec.components.schemas.InputName.example), "InputName example is a role");
   const pt = spec.components.schemas.Point.example;
-  assertRole(pt.input, pt.unit, pt.value_type, "Point example");
+  assertRole(pt.input, pt.unit, pt.value_type, "Point example", pt.unit_display);
 });
 
 test("vocabulary: the rules bundle manifest uses the same role names and units (--manifest)", (t) => {
@@ -513,7 +519,7 @@ test("vocabulary: the rules bundle manifest uses the same role names and units (
       const name = x.name ?? x.name_223p ?? x.role;
       const v = VOCAB.get(name);
       if (!v) problems.push(`${r.rule_id}: ${name} is not a role`);
-      else if ((x.unit ?? "") !== v.unit) problems.push(`${r.rule_id}: ${name} unit ${unitLabel(x.unit ?? "")} != ${unitLabel(v.unit)}`);
+      else if ((x.unit ?? null) !== v.unit) problems.push(`${r.rule_id}: ${name} unit ${x.unit ?? null} != ${v.unit}`);
     }
   }
   const uniq = [...new Set(problems)];

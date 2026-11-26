@@ -170,7 +170,7 @@ export function createApp({ writes = false, auth = true } = {}) {
       const p = points.find((x) => x.id === id);
       if (!p) throw new ApiError(404, "not_found", "unknown point", { parameter: "point" });
       const items = p.series.filter((s) => s.t >= from && s.t < to).map((s) => ({ t: iso(s.t), v: s.v }));
-      return [200, { point_id: p.id, unit: p.unit, ...page(items, q, "samples") }];
+      return [200, { point_id: p.id, unit: p.unit, unit_display: p.unit_display, ...page(items, q, "samples") }];
     },
     "GET /api/results": (req, q) => {
       caller(req);
