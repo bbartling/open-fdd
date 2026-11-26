@@ -4,12 +4,21 @@
 // marker of the role. Nothing site-specific: equipment kinds come from equip markers.
 // Needs model.js (has, markersOf, idOf). The FDD hook uses the same rules (slice 3).
 
+/**
+ * True when an equip's markers carry catalog marker `m`. A Haystack 4 conjunct (`hot-water-plant`) matches the literal
+ * tag or every part (`hot`, `water`, `plant`). Twins: plot-spec.js, open_fdd/nf/model.py, open_fdd/plot_spec.py.
+ * @param {Set<string>} markers @param {string} m @returns {boolean}
+ */
+function hasKindMarker(markers, m) {
+  return markers.has(m) || (m.includes("-") && m.split("-").every((x) => markers.has(x)));
+}
+
 /** Equipment kinds (ahu, vav, chiller, …) an equip record has, from its Haystack markers. */
 /** @param {NfRecord} equipRec @param {FddCatalog} catalog @returns {string[]} */
 function equipKinds(equipRec, catalog) {
   const markers = new Set(markersOf(equipRec));
   return Object.entries(catalog.equipment_kinds)
-    .filter(([, ms]) => ms.some((m) => markers.has(m)))
+    .filter(([, ms]) => ms.some((m) => hasKindMarker(markers, m)))
     .map(([kind]) => kind);
 }
 

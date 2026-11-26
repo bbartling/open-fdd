@@ -22,7 +22,10 @@ A rule asks for named roles, for example supply-air temperature or fan command. 
 of the role's classes, or when it carries every marker of the role. Class wins because it is more specific.
 
 - Markers are one comma-separated string in NF. Setting a class does not add markers.
-- Equipment kinds come from the equipment markers. Weather points fill weather roles only.
+- Equipment kinds come from the equipment markers. Haystack 4 plant conjuncts work like the camelCase tags: a
+  `hot-water-plant` or `steam-plant` (or `hot`+`water`+`plant`) is a boiler, a `chilled-water-plant` a chilled-water plant,
+  a `condenser-water-plant` a cooling tower. A combined plant (`hot`+`chilled`+`water`+`plant`) has both kinds: both rule
+  families apply, each to the points it finds. Weather points fill weather roles only.
 - The role-to-class and marker map is `nf-app/static/fdd-catalog.json`. The [rule catalog](rules/) and
   [cookbooks](rules/sql-cookbook.html) list each rule's roles.
 - **Run proof** is the one role no point fills by class: it is resolved from the model. An equipment proves itself by its own fan,

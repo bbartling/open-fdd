@@ -72,6 +72,7 @@ const TAG_LIB = {
     "discharge", "outside", "zone", "return", "mixed", "exhaust", "inlet", "economizer",
     "damper", "fan", "run", "heat", "cool", "stage", "valve", "enable", "occ", "unocc",
     "ahu", "fcu", "vav", "weather", "weatherStation", "elec", "meter", "chilled", "hot",
+    "plant", "boiler", "chiller", "hot-water-plant", "chilled-water-plant", "steam-plant",
   ],
 };
 const TAG_NS = Object.fromEntries(Object.entries(TAG_LIB).flatMap(([ns, tags]) => tags.map((t) => [t, ns])));
