@@ -133,7 +133,7 @@ def prose_words(body: str) -> int:
     text = re.sub(r"!?\[([^\]\n]*)\]\([^)\n]*\)", r"\1", text)            # links and images count their text only
     text = re.sub(r"`[^`\n]*`", " ", text)                                   # inline code
     text = re.sub(r"<(?:https?|mailto):[^\s<>]*>", " ", text)               # autolinks
-    text = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>\n]*)?/?>", " ", text)  # real tags only: "rise < 1.7" is prose
+    text = re.sub(r"</?[A-Za-z][A-Za-z0-9-]*(?:[ \t][^<>\n]*)?/?>", " ", text)  # real tags only: "rise < 1.7" is prose
     text = re.sub(r"&(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#[xX][0-9A-Fa-f]+);", " ", text)  # entities (&lt; is not a word)
     return len(re.findall(r"[A-Za-z][A-Za-z'-]*", text))
 

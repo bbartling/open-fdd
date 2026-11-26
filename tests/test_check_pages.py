@@ -38,6 +38,13 @@ def test_one_equation_cannot_hide_the_next_rule():
     assert words(page) == words(page.replace("<", " ").replace(">", " "))
 
 
+def test_tag_like_text_cannot_swallow_the_next_line():
+    # "<tag" then a newline: the next line's words stay prose (review on #1792)
+    assert words("alpha <tag\nwords here > omega") == 5   # alpha tag words here omega
+    assert words("alpha <tag\n\twords here > omega") == 5
+    assert words("a <b c=\"d\">x</b> y") == 3          # a one-line real tag is still stripped: a x y
+
+
 def test_real_tags_and_comments_are_not_prose():
     assert words('<a id="fc1"></a>Duct static') == 2
     assert words("one<br/>two <span class=\"x\">three</span>") == 3

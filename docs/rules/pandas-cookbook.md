@@ -20,7 +20,8 @@ without a twin are marked **SQL only**.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours` (h), and the `raw_fault` and `confirmed_fault` boolean masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]`.
 - The runner applies the [run-proof gate](sql-cookbook.html#run-proof) (the rules it does not gate are listed there) and the
-  confirm delay (`confirm_min`, minutes, in each Parameters table). Parameter keys match the SQL catalog.
+  confirm delay (`confirm_min`, minutes, in each Parameters table). Pass the keys in each entry's
+  Parameters table to `params=`; they can differ from the SQL entry's keys.
 
 ```python
 import pandas as pd
