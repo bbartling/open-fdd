@@ -8,7 +8,7 @@ remote access (Normal Online) and config backups. Open-FDD adds a UI and hooks. 
 | Piece | Where | Runs in |
 |---|---|---|
 | Static UI | `nf-app/static/` (served by NF at `/api/v1/apps/static/open-fdd/`) | the browser; plain JavaScript, strict CSP, vendored ECharts. Not React or Plotly |
-| `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node 22 runtime. Engines: Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) or Timescale |
+| `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node 22 runtime. Engines: Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) or Timescale. sqlite and pglite were removed |
 | `weather` hook | `nf-app/hooks/weather.js`, every 20 min | NF Node runtime; Open-Meteo to global variables |
 | `sparql` hook | `nf-app/hooks/sparql.js`, on request | NF Node runtime; Oxigraph over the model's Turtle |
 | `analytics` hook | `nf-app/hooks/analytics.js`, on request (`args.tool`) | NF Node runtime; read-only. Runs `sql/analytics/*.sql` in-process (`hooks/lib/sql-analytics.js`). Pandas twins are `open_fdd/analytics/sql_*.py`. CLI `open-fdd-nf analyze` |
