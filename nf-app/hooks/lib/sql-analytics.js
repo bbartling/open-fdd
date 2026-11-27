@@ -11,7 +11,9 @@ const fs = require("fs");
 const path = require("path");
 
 const TEMPLATE_DIR = path.join(__dirname, "..", "..", "rules", "analytics");
-const TS_MS = { sqlite: "s.ts", postgres: "CAST(EXTRACT(EPOCH FROM s.ts) * 1000 AS BIGINT)" };
+const TS_MS = { sqlite: "s.ts", postgres: "CAST(EXTRACT(EPOCH FROM s.ts) * 1000 AS BIGINT)", duckdb: "CAST(EXTRACT(EPOCH FROM s.ts) * 1000 AS BIGINT)" };
+/** pglite is the Postgres test engine. duckdb runs the same SQL text. */
+const dialectOf = (engine) => (engine === "pglite" || engine === "duckdb" ? "postgres" : engine);
 /** open_fdd.analytics.si_thresholds.MECH_OAT_BIN_EDGES_C and MECH_OAT_BIN_LABELS. */
 const MECH_OAT_BIN_EDGES_C = [10.0, 15.555555555555556, 21.11111111111111, 26.666666666666668, 32.22222222222222];
 const MECH_OAT_BIN_LABELS = ["<10", "10-16", "16-21", "21-27", "27-32", ">=32"];
@@ -196,8 +198,47 @@ function renderBasWebTemplate(name, engine, pairs, { siteId = "local", bandC = B
  * An in-process database with fdd.point + fdd.input_sample (a view over fdd.sample_store). samples: [[pointKey, tsMs,
  * value]] (SI, UTC ms). Returns { engine, query(sql) -> rows, close() }. SQLite stores integer ms; PGlite timestamptz.
  */
+async function openDuckCore(points, samples, siteId) {
+  let api;
+  try { api = await import("@duckdb/node-api"); }
+  catch (e) {
+    const err = new Error(`DuckDB engine failed to load: ${e && e.message ? e.message : e}. Reinstall the DuckDB build or switch to the Timescale build.`);
+    /** @type {any} */ (err).code = "OPENFDD_DUCKDB_UNAVAILABLE";
+    throw err;
+  }
+  const instance = await api.DuckDBInstance.create(":memory:", {
+    autoinstall_known_extensions: "false", autoload_known_extensions: "false", temp_directory: "",
+  });
+  const conn = await instance.connect();
+  const num = (v) => (typeof v === "bigint" ? Number(v) : typeof v === "object" && v && typeof v.toDouble === "function" ? v.toDouble() : v);
+  await conn.run("SET TimeZone = 'UTC'");
+  await conn.run("SET threads = 1");   // one thread: AVG stays the same number on every run
+  await conn.run("CREATE SCHEMA fdd");
+  await conn.run("CREATE TABLE fdd.point (site_id VARCHAR NOT NULL, point_key VARCHAR NOT NULL, equipment_id VARCHAR, role VARCHAR, PRIMARY KEY (site_id, point_key))");
+  await conn.run("CREATE TABLE fdd.sample_store (site_id VARCHAR NOT NULL, point_key VARCHAR NOT NULL, ts TIMESTAMPTZ NOT NULL, value DOUBLE)");
+  await conn.run("CREATE VIEW fdd.input_sample AS SELECT site_id, point_key, ts, value FROM fdd.sample_store WHERE value IS NOT NULL");
+  for (let i = 0; i < points.length; i += 200) {
+    const vals = points.slice(i, i + 200).map((p) => `(${quote(siteId)}, ${quote(p.point_key)}, ${p.equipment_id == null ? "NULL" : quote(p.equipment_id)}, ${p.role ? quote(p.role) : "NULL"})`);
+    await conn.run(`INSERT INTO fdd.point VALUES ${vals.join(", ")}`);
+  }
+  for (let i = 0; i < samples.length; i += 500) {
+    const vals = samples.slice(i, i + 500).map(([k, t, v]) =>
+      `(${quote(siteId)}, ${quote(k)}, to_timestamp(${Math.trunc(t)} / 1000.0), ${v == null ? "NULL" : pyRepr(v)})`);
+    await conn.run(`INSERT INTO fdd.sample_store VALUES ${vals.join(", ")}`);
+  }
+  return {
+    engine: "duckdb",
+    async query(sql) {
+      const rows = (await conn.runAndReadAll(sql)).getRowObjectsJS();
+      return rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, num(v)])));
+    },
+    close() { conn.closeSync(); instance.closeSync(); },
+  };
+}
+
 async function openCore(engine, points, samples, { siteId = "local" } = {}) {
-  checkEngine(engine === "pglite" ? "postgres" : engine);
+  checkEngine(dialectOf(engine));
+  if (engine === "duckdb") return openDuckCore(points, samples, siteId);
   if (engine === "sqlite") {
     const { loadSqlJs } = require("./engines.js");
     const SQL = await loadSqlJs();
@@ -284,7 +325,7 @@ async function runtimeFromGrid(engine, g, specs) {
   const anyOcc = specs.some((s) => s.occupied);
   const db = await openCore(engine, points, samples);
   try {
-    const rows = await db.query(renderRuntime(engine === "pglite" ? "postgres" : engine,
+    const rows = await db.query(renderRuntime(dialectOf(engine),
       { oats, weeks, occupied: anyOcc ? occupied : null }));
     const out = new Map(specs.map((s) => [s.key, new Map()]));
     for (const r of rows) {
@@ -320,7 +361,7 @@ async function mechFromGrid(engine, g, specs) {
   });
   const db = await openCore(engine, points, samples);
   try {
-    const rows = await db.query(renderMechBins(engine === "pglite" ? "postgres" : engine, plan));
+    const rows = await db.query(renderMechBins(dialectOf(engine), plan));
     const out = new Map(specs.map((s) => [s.key, MECH_OAT_BIN_LABELS.map(() => 0)]));
     for (const r of rows) out.get(specs[Number(String(r.equipment_id).slice(1))].key)[Number(r.bin)] = Number(r.on_ms) / 3600000;
     return out;
@@ -347,7 +388,7 @@ async function econFromGrid(engine, g) {
   if (!roles.some((r) => r[1] === "fan") || !roles.some((r) => r[1] === "oat") || !roles.some((r) => r[1] === "rat")) {
     return { rows: [], summary: { n: 0, nIdent: 0, medianResid: null, maeResid: null } };
   }
-  const eng = engine === "pglite" ? "postgres" : engine;
+  const eng = dialectOf(engine);
   const db = await openCore(engine, points, samples);
   try {
     const sat = new Map((g.cols.sat || []).map((v, j) => [t[j], v]));
@@ -396,7 +437,7 @@ async function basFromGrid(engine, g, { bandC = BAS_WEB_BAND_C, maxAgeMs = null 
     for (let j = 0; j < t.length; j++) if (v[j] != null && Number.isFinite(Number(v[j]))) samples.push([key, t[j], Number(v[j])]);
   }
   if (!samples.some((s) => s[0] === "bas") || !samples.some((s) => s[0] === "web")) return empty;
-  const eng = engine === "pglite" ? "postgres" : engine;
+  const eng = dialectOf(engine);
   const pairs = [["E", "bas", "web", Math.floor(maxAgeMs == null ? webMaxAgeMs(t, bas, web) : maxAgeMs)]];
   const db = await openCore(engine, [{ point_key: "bas", equipment_id: "E", role: "oa_t" },
     { point_key: "web", equipment_id: null, role: "web_oa_t" }], samples);

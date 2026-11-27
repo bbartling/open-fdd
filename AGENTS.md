@@ -43,6 +43,10 @@ find the skills through thin pointers in `.claude/skills/` and `.agents/skills/`
    app as "self-only" or "no CDN at runtime", and do not add any other remote script. Bump the Clerk pin only to a
    release at least two weeks old, in both `nf-app/static/nf.js` and `lite/static/nf.js`.
 5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs; the SQLite pack must match Postgres.
+   The NF app runs two engines: Node DuckDB (`@duckdb/node-api` 2.0.1-r.1) for a single site, and Timescale for Full.
+   `auto` picks DuckDB unless Timescale is configured. `sqlite` and `pglite` are parity-test engines only; a saved
+   option with either name fails and names `duckdb`. If `@duckdb/node-api` does not load, the DuckDB build stops and
+   does not switch engines. The badge in the plugin header is `DuckDB build` or `Timescale build`.
 6. **Small PR slices** (one concern each, easy for a small model to review). Update the docs page that describes
    what you changed; `docs/rules/*.md` is generated. See Docs style below.
 

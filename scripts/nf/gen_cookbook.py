@@ -48,11 +48,12 @@ def engines_section(d: dict) -> str:
     ver = d["contract"].roles_version
     return f"""## Engines, pins and roles {{#engines}}
 
-The same rule text runs on SQLite, PostgreSQL, DuckDB and Timescale. SQLite is `nf-app/rules/pack-sqlite.json` (sql.js).
-PostgreSQL is `pack-postgres.json`, on in-process PGlite or on a server. Timescale uses that pack and only supplies history.
-DuckDB is in-process and opt-in: the app loads `@duckdb/node-api` 2.0.1-r.1 when the engine option is `duckdb`, never from
-`auto`, and falls back when the package does not load. The Python extra is `duckdb>=2.0.1`. Its macros are
-`sql/fdd/duckdb/duckdb_helpers.sql`.
+The NF app runs two engines. The DuckDB build (`@duckdb/node-api` 2.0.1-r.1, server-side, no WASM) is the single-site
+engine. The Timescale build runs the same Postgres pack in Timescale. `auto` selects DuckDB unless Timescale is
+configured. `sqlite` and `pglite` are not runtime engines: an old value fails and names `duckdb`. If the DuckDB package
+does not load, the run stops and does not switch engines. SQLite (`pack-sqlite.json`) and in-process Postgres (PGlite)
+remain parity-test engines, with the Python extra `duckdb>=2.0.1` used the same way. DuckDB macros are
+`sql/fdd/duckdb/duckdb_helpers.sql`. The PyPI fault tools use pandas.
 
 | Piece | What is checked |
 |---|---|

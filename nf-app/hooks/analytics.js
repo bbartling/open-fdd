@@ -20,7 +20,7 @@
 // id or name). A single-equip tool whose equip matches several sites is an ERROR listing the candidates, never a guess;
 // the list tools simply return every matching equip, each under its own equipUuid.
 //
-// The numbers are the SQL analytics (#1649: sql/analytics/*.sql, run in-process by hooks/lib/sql-analytics.js on sql.js).
+// The numbers are the SQL analytics (#1649: sql/analytics/*.sql, run in-process by hooks/lib/sql-analytics.js on DuckDB).
 // The dashboard's grid building (static/rcx.js + rcx-overview.js + schedule.js, fdd.js, model.js) runs unchanged in a
 // vm sandbox, the same way hooks/fdd.js shares model.js / fdd.js (browser fetchSeries -> sdk.http GET /api/v1/point/data),
 // with ctx.sqlAnalytics bound to the in-process SQL. Hours integrate on the fine grid (ctx.alignedFine), never on the
@@ -112,12 +112,12 @@ function loadSandbox(http, nowMs, tzSources) {
   const ctx = vm.createContext({
     console, URLSearchParams, TextDecoder, atob, btoa, Intl, Date: PinnedDate,
     localStorage: { getItem: () => 'si' },                  // calculations are SI whatever the display system
-    // #1649: the analytics are SQL (sql/analytics/*.sql) run in-process on SQLite, never JS math
+    // #1649: the analytics are SQL (sql/analytics/*.sql) run in-process on DuckDB, never JS math
     ofddSqlAnalytics: {
-      runtime: (g, specs) => require('./lib/sql-analytics.js').runtimeFromGrid('sqlite', g, specs),
-      mech: (g, specs) => require('./lib/sql-analytics.js').mechFromGrid('sqlite', g, specs),
-      econ: (g) => require('./lib/sql-analytics.js').econFromGrid('sqlite', g),
-      bas: (g) => require('./lib/sql-analytics.js').basFromGrid('sqlite', g),
+      runtime: (g, specs) => require('./lib/sql-analytics.js').runtimeFromGrid('duckdb', g, specs),
+      mech: (g, specs) => require('./lib/sql-analytics.js').mechFromGrid('duckdb', g, specs),
+      econ: (g) => require('./lib/sql-analytics.js').econFromGrid('duckdb', g),
+      bas: (g) => require('./lib/sql-analytics.js').basFromGrid('duckdb', g),
     },
     api: async (p) => (await http.get(p)).data,
   });
@@ -413,8 +413,8 @@ async function sqlGrid(args) {
   const asTool = (f) => { try { return f(); } catch (e) { throw e instanceof ToolError ? e : new ToolError(errText(e)); } };
   const g = asTool(() => wire.decodeGrid(parse('grid')));
   const specs = kind === 'runtime' || kind === 'mech' ? asTool(() => wire.checkSpecs(parse('specs'))) : null;
-  const run = { runtime: () => SA.runtimeFromGrid('sqlite', g, specs), mech: () => SA.mechFromGrid('sqlite', g, specs),
-    econ: () => SA.econFromGrid('sqlite', g), bas: () => SA.basFromGrid('sqlite', g) }[kind];
+  const run = { runtime: () => SA.runtimeFromGrid('duckdb', g, specs), mech: () => SA.mechFromGrid('duckdb', g, specs),
+    econ: () => SA.econFromGrid('duckdb', g), bas: () => SA.basFromGrid('duckdb', g) }[kind];
   return { kind, result: wire.encodeResult(kind, await run()) };
 }
 
