@@ -6,8 +6,6 @@ nav_order: 6
 
 # Testing and parity
 
-SQL, the pandas reference and the SPARQL client are one FDD check. rdflib and the Node SPARQL hook are the RDF check. Versions below are the pins in this repo.
-
 ## FDD rules
 
 | What | Where |
