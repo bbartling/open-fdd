@@ -2688,7 +2688,7 @@ Too many starts per hour, or short on-times
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| — | `boiler_status` | `boiler-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `boiler_operating_status` | `boiler_status` | `boiler-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `chiller_electric_current` | `chiller_amps` | `chiller-amps` | `A` | Current | A | none (declare A) | - | optional |
