@@ -34,6 +34,20 @@ of the role's classes, or when it carries every marker of the role. Class wins b
   need proof are skipped with `no_run_proof`. See the [run proof gate](rules/sql-cookbook.html#run-proof).
 - The FDD and RCx pages show missing required roles. Fix the class or markers in NF, check the point has history and a unit, reload.
 
+## ASHRAE 223P
+
+223P is the role contract. Haystack tags are an optional overlay for binding and display.
+
+[`roles/openfdd-roles.json`](https://github.com/bbartling/open-fdd/blob/master/roles/openfdd-roles.json) (`openfdd-roles` 1.0.0-draft.1, 86 roles) is one 223P property pattern per role, named `role`, with a QUDT local name. Seventeen roles use an `ext:` term. The rules still read `legacy_keys` in `sql/fdd/input_contract.json`. A point binds by NF class, else by the role's markers. `ofddRole` (Turtle `local:ofddRole`) or a SPARQL `?role` overrides that. The RDF export and the SPARQL hooks share that Turtle graph ([RDF and SPARQL](#rdf-and-sparql)).
+
+| Piece | Where it lives |
+|---|---|
+| Role name | `role` in `roles/openfdd-roles.json` |
+| QUDT unit | `unit` local name |
+| Haystack overlay | `haystack` classes and markers |
+| Rule column today | `legacy_keys`, then `input_contract.json` |
+| Model export | Turtle, subject `urn:nf:<uuid>`; SPARQL over that graph |
+
 ## Units are SI-first
 
 The engineer declares each point's unit in NF. Ingest converts supported units to SI; rules and stored results stay SI. Imperial
