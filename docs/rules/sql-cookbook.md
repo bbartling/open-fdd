@@ -12,13 +12,11 @@ nav_order: 1
 with their units, the parity status and a link to the SQL file. Python twins are in the [pandas cookbook](pandas-cookbook.html).
 To run a rule on your own database see [Using SQL rules outside Open-FDD](borrowing-sql.html).
 
-How a rule runs: the FDD hook passes one scoped, SI, wide `history` table (one column per role, one row per equipment and
-timestamp) and reads one row per equipment back. A fault must hold for its confirm time. A gap longer than one hour is
-unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More in [sql/fdd/README.md](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/README.md).
+One scoped SI `history` table in, one row per equipment out. See [sql/fdd/README.md](https://github.com/bbartling/open-fdd/blob/master/sql/fdd/README.md).
 
 ## Engines, pins and roles {#engines}
 
-One rule text runs on SQLite (`nf-app/rules/pack-sqlite.json`, sql.js), PostgreSQL (`pack-postgres.json`, in-process PGlite or a server) and Timescale (that pack supplies history only). DuckDB is opt-in (`@duckdb/node-api` 2.0.1-r.1 when the engine is `duckdb`, never from `auto`; Python `duckdb>=2.0.1`, macros in `sql/fdd/duckdb/duckdb_helpers.sql`).
+SQLite, PostgreSQL and Timescale run one rule text. DuckDB is opt-in (`@duckdb/node-api` 2.0.1-r.1, engine `duckdb` only; Python `duckdb>=2.0.1`, `sql/fdd/duckdb/duckdb_helpers.sql`).
 
 | Piece | What is checked |
 |---|---|
@@ -29,9 +27,9 @@ One rule text runs on SQLite (`nf-app/rules/pack-sqlite.json`, sql.js), PostgreS
 
 `sql/fdd/port_manifest.json` stores a `source_sha256` per rule file. CI does not compare those hashes.
 
-**Role** is the name in [`roles/openfdd-roles.json`](https://github.com/bbartling/open-fdd/blob/master/roles/openfdd-roles.json) (`openfdd-roles` 1.1.0-draft.1). **QUDT** is that role's unit local name. The SQL column is `legacy_keys`. Haystack is the pandas column and the optional NF binding. Damper and valve roles are `PERCENT` (0-100); this SQL still compares a 0-1 fraction. Thresholds are the SI values in the parameter table.
+**Role** and **QUDT** come from [`roles/openfdd-roles.json`](https://github.com/bbartling/open-fdd/blob/master/roles/openfdd-roles.json) (`openfdd-roles` 1.1.0-draft.1). The SQL column is `legacy_keys`; Haystack is the pandas column. Damper and valve roles are `PERCENT` (0-100); this SQL still compares a 0-1 fraction. Parameter thresholds are SI.
 
-5.0.20 adds **COIL-PERF**. In 5.0.22, SV-RANGE, SV-SPIKE, SV-FLATLINE and SV-RATE give a sensor its own saved-limit SQL arm (`series_id`). `clg_full_min` defaults to 0.9, matching FC13-SAT-HIGH.
+In 5.0.22 a sensor with its own saved limit uses a separate `series_id` arm. `clg_full_min` is 0.9.
 
 
 ## Run proof gate {#run-proof}
