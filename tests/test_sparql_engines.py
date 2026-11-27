@@ -1,6 +1,6 @@
 """pyoxigraph is the SPARQL engine. rdflib 7.6.0 disagrees on three of six edge cases.
 
-The Full hook (vendored Oxigraph 0.5.13) and the local path (pyoxigraph 0.5.13) return
+The Full hook (oxigraph npm package 0.5.13) and the local path (pyoxigraph 0.5.13) return
 the same rows. The three disagreements are locked so a later rdflib release cannot
 silently become the answer.
 """

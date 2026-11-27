@@ -1,10 +1,12 @@
 // Same evaluation path as nf-app/hooks/sparql.js: sparqlCheckQuery, sparqlLoadStore, store.query JSON.
+// Oxigraph is the npm package in nf-app, the same module the hook loads.
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
+const requireApp = createRequire(new URL("../../../nf-app/package.json", import.meta.url));
 const lib = require("../../../nf-app/static/sparql.js");
-const ox = require("../../../nf-app/static/vendor/oxigraph/node.js");
+const ox = requireApp("oxigraph");
 
 const spec = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const turtle = readFileSync(spec.turtle, "utf8");
