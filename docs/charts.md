@@ -6,7 +6,7 @@ nav_order: 1
 
 # Charts and export
 
-Open-FDD has five chart and data surfaces. **Overview** opens on plant run hours, plant temperatures and every zone temperature (any equipment that carries `zone_t`), plus one equipment's modeled I/O points. **Analytics** holds the scatter plots, air-handler timeseries, VAV plots and energy views, and loads their history only after that tab is opened. **Charts** plots one selected point history at a time, and **FDD** plots rule results, sensor history, and inline Tuners.
+Screens, chart types and the UI API contract are in the [UI guide](ui-guide.html). Open-FDD has five chart and data surfaces. **Overview** opens on plant run hours, plant temperatures and every zone temperature (any equipment that carries `zone_t`), plus one equipment's modeled I/O points. **Analytics** holds the scatter plots, air-handler timeseries, VAV plots and energy views, and loads their history only after that tab is opened. **Charts** plots one selected point history at a time, and **FDD** plots rule results, sensor history, and inline Tuners.
 
 When no saved selection exists for a site, **Overview** picks a landing equipment item from fresh, model-bound outside-air temperature (local BAS OAT first, then site weather OAT): below 12 °C opens a boiler or heating-water plant, 12–24 °C opens an RTU, and 24 °C or above opens a chiller or chilled-water plant, falling back deterministically if absent. A local BAS OAT that differs from site weather OAT by more than 10 K (18 °F) is treated as mis-tagged or indoors: site weather is used and the reason says so. The bands stay in SI; the reason text uses the active display units (imperial on Lite). Manual equipment choices save per exact site ID and stay pinned across live weather refreshes.
 
