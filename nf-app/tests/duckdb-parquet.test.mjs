@@ -67,6 +67,33 @@ test("parquet history survives a new connection and does not duplicate a row", o
   }
 });
 
+test("a numeric text role is stored as text so the rule can read it", opts, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "openfdd-parquet-"));
+  try {
+    const eng = await createEngine({ kind: "duckdb", pack, config: { parquetDir: dir, retentionDays: 0 } });
+    const n = await eng.load({
+      historyColumns: [{ name: "occ_mode", type: "text" }, { name: "zone_t", type: "double" }],
+      history: [{ equipment_id: "VAV-9", ts: FROM, occ_mode: 0, zone_t: 25 }],
+      weather: [],
+      sensorHistory: [],
+      sweepSeries: [],
+      pointIds: { zone_t: "22222222-2222-2222-2222-222222222222" },
+      siteId: "site-1",
+      equipId: "VAV-9",
+      window: { from: FROM, to: TO },
+    });
+    assert.equal(n, 1);
+    const wide = await eng.windowHistory("VAV-9");
+    assert.equal(wide.length, 1);
+    assert.equal(String(wide[0].occ_mode), "0");
+    assert.equal(wide[0].zone_t, 25);
+    await eng.close();
+  } finally {
+    await releaseDuckDb();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("retention deletes a date partition older than the window", opts, async () => {
   const dir = mkdtempSync(join(tmpdir(), "openfdd-parquet-"));
   const old = join(dir, "samples", "point_id=old-point", "date=2000-01-01");

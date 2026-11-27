@@ -155,11 +155,13 @@ function samplesFromInput(input) {
   const out = [];
   const ids = input.pointIds || {};
   const site = input.siteId || "";
+  const textCols = new Set((input.historyColumns || []).filter((c) => c.type === "text").map((c) => c.name));
+  const asStored = (role, raw) => (textCols.has(role) && raw != null && typeof raw !== "string" ? String(raw) : raw);
   for (const row of input.history || []) {
     const equipmentId = row.equipment_id || input.equipId || "";
     for (const [role, raw] of Object.entries(row)) {
       if (role === "equipment_id" || role === "ts" || role === "timestamp_utc") continue;
-      pushSample(out, ids[role] || `${equipmentId}~${role}`, row.ts, raw, site, equipmentId, role, "history", "");
+      pushSample(out, ids[role] || `${equipmentId}~${role}`, row.ts, asStored(role, raw), site, equipmentId, role, "history", "");
     }
   }
   for (const row of input.weather || []) {

@@ -1,6 +1,6 @@
 // node --test nf-app/tests/fault-timeline.test.mjs
 // 5.0.3: the fault lane is a per-timestamp confirmed-fault TIMELINE (1 confirmed / 0 ok / gap = not assessed), not the
-// rolling fault_pct. Two-site fixture (tests/fixtures/two_site.mjs): the real FDD hook (sqlite engine, real pack) runs on
+// rolling fault_pct. Two-site fixture (tests/fixtures/two_site.mjs): the real FDD hook (DuckDB engine, real pack) runs on
 // fake NF HTTP, rcx.js reads what it wrote, VAV-1 gets a synthesized occ_mode from the site schedule.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";

@@ -78,6 +78,7 @@
 //   bacnet        { enabled: true, firstInstance: 1000 } → fault count per equip as an AV on
 //                 NF's BACnet server (off by default; see exportToBacnet)
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
@@ -954,6 +955,9 @@ function duckdbPin() {
 function parquetDirOf(config) {
   if (config.parquetDir) return String(config.parquetDir);
   if (process.env.OPENFDD_PARQUET_DIR) return process.env.OPENFDD_PARQUET_DIR;
+  // node --test runs files in parallel (NODE_TEST_CONTEXT=child-v8; execArgv is empty in that child).
+  // A shared directory makes one run's coverage hide the next run's history.
+  if (process.env.NODE_TEST_CONTEXT) return fs.mkdtempSync(path.join(os.tmpdir(), 'openfdd-parquet-'));
   return path.join(process.cwd(), 'openfdd-parquet');
 }
 
