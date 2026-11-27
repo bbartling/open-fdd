@@ -1,52 +1,41 @@
 {
-  "note": "These files are not in git. ensure_223p_cache downloads each one, checks sha256, and refuses HTML. A cached file whose hash already matches is not downloaded again. OntoEnv then resolves owl:imports with the network off.",
+  "note": "These files are vendored under data/223p. CI checks each sha256 and does not download them. 223p.ttl is the file at https://open223.info/223p.ttl. OntoEnv resolves owl:imports from the vendored closure with the network off.",
   "root_iri": "http://data.ashrae.org/standard223/1.0/model/all",
   "files": [
     {
       "filename": "223p.ttl",
       "sha256": "08f80bd6e15052f28cdfd354bdf46ff96e5e1afdba36a4dbed5186fc1ea51c41",
       "iri": "http://data.ashrae.org/standard223/1.0/model/all",
-      "version": "open223 models.open223.info@3a47c5eb980eb6d87728eb10cefb38ad6bc83f13",
-      "urls": [
-        "https://raw.githubusercontent.com/open223/models.open223.info/3a47c5eb980eb6d87728eb10cefb38ad6bc83f13/ontologies/223p.ttl"
-      ]
+      "version": "https://open223.info/223p.ttl",
+      "source": "https://open223.info/223p.ttl"
     },
     {
       "filename": "closure/shacl.ttl",
       "sha256": "0e5d8aea0eab98a072d4a02faaee1ee914ec99eab2ca473429726faed4a13f69",
       "iri": "http://www.w3.org/ns/shacl#",
       "version": "W3C SHACL",
-      "urls": [
-        "https://www.w3.org/ns/shacl.ttl"
-      ]
+      "source": "https://www.w3.org/ns/shacl.ttl"
     },
     {
       "filename": "closure/qudt-3.4.0-shacl-all.ttl",
       "sha256": "fc7ab1041a382e18fccdda7a99bd2c2a5a3d27e2aaa407561d68c3cf089b562c",
       "iri": "http://qudt.org/3.4.0/shacl/qudt-all",
       "version": "QUDT 3.4.0",
-      "urls": [
-        "https://qudt.org/3.4.0/shacl/qudt-all"
-      ]
+      "source": "https://qudt.org/3.4.0/shacl/qudt-all"
     },
     {
       "filename": "closure/skos.rdf",
       "sha256": "e79633b8d0564816cee8a99f5c9acf9a0e6fc7257c7209acd684ecad53a89dd6",
       "iri": "http://www.w3.org/2004/02/skos/core",
       "version": "SKOS",
-      "urls": [
-        "https://www.w3.org/2009/08/skos-reference/skos.rdf"
-      ]
+      "source": "https://www.w3.org/2009/08/skos-reference/skos.rdf"
     },
     {
       "filename": "closure/vaem.ttl",
       "sha256": "c20ef803616277ff6683edb5fb70aa8931e9e867e864d2f06bb4acfe3238774f",
       "iri": "http://www.linkedmodel.org/schema/vaem",
       "version": "VAEM",
-      "urls": [
-        "https://www.linkedmodel.org/schema/vaem.ttl",
-        "https://raw.githubusercontent.com/bbartling/open-hvac-edge/15c0e0a877b0bbaa7ae09a185647f6fc27c29a9b/bask_223p/ontologies/223p/closure/vaem.ttl"
-      ]
+      "source": "https://www.linkedmodel.org/schema/vaem.ttl"
     }
   ]
 }

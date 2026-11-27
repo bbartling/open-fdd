@@ -1,4 +1,4 @@
-# rdflib vs the Node SPARQL hook on fixed fixtures, plus the pinned OntoEnv closure.
+# rdflib vs the Node SPARQL hook on fixed fixtures, plus the vendored OntoEnv closure.
 # The hook does not run SHACL. Shifty on a small fixture is the reference verdict.
 # Called from parity-stress.yml and on pull requests into master or release/*.
 
@@ -36,12 +36,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-
-      - name: Cache the pinned 223P closure
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/open-fdd/223p
-          key: 223p-closure-${{ hashFiles('open_fdd/ontology_audit/data/223p-closure.json') }}
 
       - name: Pin rdflib, OntoEnv and Shifty
         run: |

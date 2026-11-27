@@ -1,4 +1,4 @@
-"""223P check used by CI: cached sha256 closure, Shifty, fail on any Violation.
+"""223P check used by CI: vendored closure, Shifty, fail on any Violation.
 
     python -m open_fdd.ontology_audit.align --report ./shacl-report
 """
@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -27,26 +26,20 @@ def default_models() -> list[Path]:
 
 
 def validate_model(path: Path, *, cross_check: bool = False) -> dict:
-    """Shifty on ``path`` with the pinned 223P closure loaded.
+    """Shifty on ``path`` with the vendored 223P closure. No download.
 
-    The closure comes from the sha256 cache. A missing file is downloaded once;
-    OntoEnv itself stays offline.
+    ``conforms`` is Shifty's. A pySHACL cross-check is stored beside it.
     """
-    from open_fdd.ontology_audit.closure import (
-        cached_223p_ttl, cached_closure_dir, copy_223p_closure, unknown_model_imports,
-    )
-    from open_fdd.ontology_audit.shacl import validate_shacl, violation_count
+    from open_fdd.ontology_audit.closure import unknown_model_imports
+    from open_fdd.ontology_audit.shacl import validate_223p
     from open_fdd.ontology_audit.sources import parse_rdf
 
     model = parse_rdf(path)
     unknown = unknown_model_imports(model)
     if unknown:
         raise ValueError("model owl:imports is not the pinned 223P root: " + ", ".join(unknown))
-    closure, names = copy_223p_closure(cached_223p_ttl(), cached_closure_dir())
-    report = validate_shacl(model, engine="shifty", closure=closure, cross_check=cross_check)
+    report = validate_223p(path, cross_check="pyshacl" if cross_check else None)
     report["model"] = str(path)
-    report["closure"] = names
-    report["violation_count"] = violation_count(report)
     report.pop("report_text", None)
     cross = report.get("cross_check")
     if isinstance(cross, dict):
@@ -68,11 +61,7 @@ def validate_export(path: Path, *, cross_check: bool = False) -> dict:
 
 
 def run(models: list[Path], export: Path | None, report_dir: Path, *, cross_check: bool = False) -> int:
-    from open_fdd.ontology_audit.closure import materialize_223p_closure
-
     report_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="ofdd-223p-") as tmp:
-        names = materialize_223p_closure(Path(tmp))
     reports = []
     failed = False
     for path in models:
@@ -80,13 +69,14 @@ def run(models: list[Path], export: Path | None, report_dir: Path, *, cross_chec
             raise FileNotFoundError(path)
         info = validate_model(path, cross_check=cross_check)
         reports.append(info)
-        if not info.get("available") or info.get("violation_count"):
+        if info.get("conforms") is not True or info.get("violation_count"):
             failed = True
     if export is not None:
         info = validate_export(export, cross_check=cross_check)
         reports.append(info)
         if not info.get("available") or info.get("violation_count"):
             failed = True
+    names = next((info.get("closure") for info in reports if info.get("closure")), [])
     summary = {"closure_iris": names, "models": reports, "conforms": not failed}
     text = json.dumps(summary, indent=2) + "\n"
     (report_dir / "shacl-report.json").write_text(text, encoding="utf-8")

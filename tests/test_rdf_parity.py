@@ -4,8 +4,8 @@ Panel queries are the ones ``static/sparql.js`` serves. Role queries read the
 shipped role file, the same Turtle in both engines. Rows are sorted. IRIs stay
 IRIs. A plain literal and ``xsd:string`` are the same term. The hook does not
 resolve ``owl:imports`` and does not run SHACL. ``OPENFDD_RDF_CLOSURE=1`` checks
-the pinned OntoEnv closure on its own. The shipped role Turtle and binding must
-be the bytes the Python alignment job validates.
+the vendored OntoEnv closure and does not download it. The shipped role Turtle
+and binding must be the bytes the Python alignment job validates.
 """
 from __future__ import annotations
 

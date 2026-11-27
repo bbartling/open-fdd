@@ -169,7 +169,7 @@ include = ["open_fdd*"]
 
 [tool.setuptools.package-data]
 "open_fdd" = ["data/*.json", "data/*.sql"]
-"open_fdd.ontology_audit" = ["data/*.json", "data/*.csv", "data/*.ttl"]
+"open_fdd.ontology_audit" = ["data/*.json", "data/*.csv", "data/*.ttl", "data/223p/*.ttl", "data/223p/closure/*"]
 "open_fdd.rca" = ["data/*.ttl", "data/*.json"]
 "open_fdd.scorecard" = ["*.sql"]
 "open_fdd.ecm_engineering" = [

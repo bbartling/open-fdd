@@ -37,7 +37,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--app", choices=["full", "lite"], default="full")
     p.add_argument("--shacl", nargs="?", const="default", help="validate the graph with SHACL (default shapes or a file)")
     p.add_argument("--closure", action="store_true",
-                   help="resolve owl:imports from the sha256-pinned 223P cache (downloaded once) and validate against it")
+                   help="resolve owl:imports from the vendored 223P closure (offline, no download) and validate against it")
     p.add_argument("--engine", choices=("shifty", "pyshacl"), default="shifty",
                    help="SHACL engine (default shifty). pyshacl is the cross-check, not a fallback")
     p.add_argument("--cross-check", action="store_true",

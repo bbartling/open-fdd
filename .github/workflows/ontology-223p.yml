@@ -1,4 +1,4 @@
-# 223P alignment: sha256-pinned closure cached on the runner, then OntoEnv offline and Shifty.
+# 223P alignment: vendored closure, OntoEnv offline, Shifty. No ontology download.
 # A Violation fails the job and the report is uploaded.
 
 name: 223P alignment
@@ -36,12 +36,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Cache the pinned 223P closure
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/open-fdd/223p
-          key: 223p-closure-${{ hashFiles('open_fdd/ontology_audit/data/223p-closure.json') }}
-
       - name: Pin rdflib, pyoxigraph, OntoEnv, Shifty and pySHACL
         run: |
           python -m pip install --upgrade pip
@@ -57,8 +51,6 @@ jobs:
         run: python3 scripts/nf/gen_roles_223p.py --check
 
       - name: Closure, role file, import fixture and export shapes
-        env:
-          OPENFDD_FETCH_223P: "1"
         run: |
           set -o pipefail
           python -m pytest tests/test_223p_closure.py tests/test_sparql_engines.py -q -rs 2>&1 | tee "$RUNNER_TEMP/align.log"

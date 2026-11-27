@@ -1,5 +1,5 @@
 # Fixture: a model whose only 223P content is owl:imports. CI checks that this
-# import is the pinned 223P root, then validates the model against that cached
+# import is the pinned 223P root, then validates the model against the vendored
 # closure passed in as the shapes graph. The closure is not chosen by reading
 # this statement. The model declares no equipment.
 @prefix owl: <http://www.w3.org/2002/07/owl#> .

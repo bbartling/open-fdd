@@ -30,7 +30,7 @@ nav_order: 6
 
 | What | Where |
 |---|---|
-| OntoEnv closure and Shifty | `ontology-223p.yml` on push to `master` and `release/**`, on every pull request, and on `workflow_dispatch`. It downloads the sha256 pins in `223p-closure.json` (223P, QUDT 3.4.0, SHACL, SKOS, VAEM), resolves `owl:imports` offline, and fails on a Shifty Violation. |
+| OntoEnv closure and Shifty | `ontology-223p.yml` on push to `master` and `release/**`, on every pull request, and on `workflow_dispatch`. The closure is vendored (`223p.ttl` sha256 `08f80bd6…`, the file at `https://open223.info/223p.ttl`, plus QUDT 3.4.0, SHACL, SKOS and VAEM). The job does not download it. OntoEnv 0.6.4 resolves `owl:imports` offline. Shifty 0.6.0 `minimum_severity` `Violation` is the verdict. |
 | Query parity | `rdf-parity.yml` on pull requests into `master` or `release/**`, on `workflow_dispatch`, and as a job of `parity-stress.yml`. |
 | Fixtures | `example_building.ttl`, the same graph plus a point with no `siteRef`, and `sql/fdd/roles-223p.ttl`. Queries are the panel set in `nf-app/static/sparql.js` plus role count, unit and `g36:ChilledWaterValve` binding queries. |
 | Engines | rdflib evaluates those queries. Node uses `nf-app/static/sparql.js` through the vendored Oxigraph build, the same load and `store.query` path as `nf-app/hooks/sparql.js`. Sorted bindings, IRIs, and literal datatypes must match. A plain literal and `xsd:string` count as one term. |
@@ -43,4 +43,4 @@ nav_order: 6
 | `pyoxigraph` / vendored `oxigraph` | `0.5.13` |
 | `ontoenv` | `0.6.4` |
 | `pyshifty` | `0.6.0` (`minimum_severity` `Violation`; the library default is `info`) |
-| `pyshacl` | `0.40.2` (optional cross-check, `advanced=True`, `inference` `none`) |
+| `pyshacl` | `0.40.2` (opt-in cross-check, `advanced=True`, `inference` `none`; it does not set `conforms`) |

@@ -1,18 +1,17 @@
-"""SHACL validation of a building graph or a 223P role file.
+"""SHACL validation of a building graph or a 223P model.
 
-The default engine is Shifty (``pyshifty==0.6.0``). ``infer=True``,
-``graph_mode="union"`` and ``on_unsupported="error"`` are that library's
-defaults. ``minimum_severity="Violation"`` is this project's CI threshold:
-Shifty 0.6.0 itself defaults to ``"info"``, which would fail a Warning-only report.
+:func:`validate_223p` is the 223P check. It matches the edge validator:
+OntoEnv 0.6.4 loads the vendored closure offline, and Shifty 0.6.0 is called
+with ``minimum_severity="Violation"`` only (the other arguments stay the
+library defaults: ``infer=True``, ``graph_mode="union"``,
+``on_unsupported="error"``). The library default severity is ``"info"``.
+``conforms`` is that Shifty result. A pySHACL cross-check is recorded only
+when asked and does not replace it. This function is Python CI tooling. The
+NF plugin does not import it.
 
-pySHACL (``pyshacl==0.40.2``) is the optional cross-check and the engine for the
-Haystack export shapes when ``engine="pyshacl"``. ``advanced=True`` is SHACL-AF;
-``inference="none"`` keeps OWL/RDFS entailment off. A cross-check is reported
-and does not change the Shifty verdict.
-
-Pass ``closure`` (the OntoEnv graph from :func:`copy_223p_closure`) when the
-model ``owl:imports`` 223P. Export-shape checks pass the local shapes file; that
-file does not import a remote ontology.
+:func:`validate_shacl` checks a Haystack export against the local shapes file.
+pySHACL (``pyshacl==0.40.2``) is that file's optional engine. ``advanced=True``
+is SHACL-AF; ``inference="none"`` keeps OWL/RDFS entailment off.
 """
 from __future__ import annotations
 
@@ -176,3 +175,108 @@ def validate_shacl(graph, shapes=None, *, engine: str = "shifty", closure=None,
 def violation_count(report: dict[str, Any]) -> int:
     """Results whose severity is Violation (Shifty's failing severity)."""
     return sum(1 for row in report.get("violations") or [] if str(row.get("severity", "")).lower() == "violation")
+
+
+def _223p_result_rows(report) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    from rdflib import RDF
+    from rdflib.namespace import SH
+
+    violations: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+    for result in report.subjects(RDF.type, SH.ValidationResult):
+        severity = str(report.value(result, SH.resultSeverity) or "")
+        row = {
+            "severity": severity.rsplit("#", 1)[-1],
+            "focus": str(report.value(result, SH.focusNode) or ""),
+            "path": str(report.value(result, SH.resultPath) or ""),
+            "message": str(report.value(result, SH.resultMessage) or ""),
+            "shape": str(report.value(result, SH.sourceShape) or ""),
+        }
+        if severity.endswith("Warning"):
+            warnings.append(row)
+        elif severity.endswith("Info"):
+            continue
+        else:
+            violations.append(row)
+    return violations, warnings
+
+
+def validate_223p(model_path, *, shapes_path=None, ontology_dir=None, cross_check=None) -> dict[str, Any]:
+    """OntoEnv 0.6.4 closure plus Shifty 0.6.0, same call as the edge validator.
+
+    ``conforms`` is Shifty's result at ``minimum_severity="Violation"``.
+    ``cross_check="pyshacl"`` records a second result and does not set ``conforms``.
+    """
+    from pathlib import Path
+
+    from open_fdd.ontology_audit.closure import (
+        PINNED_223P_SHA256,
+        S223_ROOT,
+        _add_local_ontology,
+        _ontology_files,
+        _read_pinned_rdf,
+        vendored_223p_ttl,
+        vendored_closure_dir,
+    )
+
+    model_path = Path(model_path)
+    if not model_path.is_file():
+        raise FileNotFoundError(model_path)
+    shapes_path = Path(shapes_path) if shapes_path else vendored_223p_ttl()
+    _read_pinned_rdf(shapes_path, PINNED_223P_SHA256)
+    if cross_check not in {None, "pyshacl"}:
+        raise ValueError("cross_check must be 'pyshacl' or omitted")
+    try:
+        from ontoenv import OntoEnv
+    except ImportError as exc:
+        raise ValueError('OntoEnv needed: pip install "open-fdd[ontology-align]"') from exc
+    try:
+        import shifty
+    except ImportError as exc:
+        raise ValueError('Shifty needed: pip install "open-fdd[ontology-align]"') from exc
+
+    extra = vendored_closure_dir() if ontology_dir is None else Path(ontology_dir)
+    with OntoEnv(temporary=True, offline=True, strict=True) as env:
+        for path in [shapes_path, *_ontology_files(extra)]:
+            _add_local_ontology(env, str(path))
+        missing = [str(item) for item in env.missing_imports(S223_ROOT)]
+        if missing:
+            raise ValueError("Unresolved owl:imports: " + ", ".join(missing))
+        closure, names = env.copy_closure(S223_ROOT)
+    if not len(closure):
+        raise ValueError(f"Empty dependency closure for {S223_ROOT}")
+
+    from rdflib import Graph
+
+    data = Graph().parse(str(model_path))
+    conforms, report, text = shifty.validate(data, closure, minimum_severity="Violation")
+    violations, warnings = _223p_result_rows(report)
+    info = {
+        "conforms": bool(conforms),
+        "engine": "shifty",
+        "shapes": str(shapes_path),
+        "closure": [str(name) for name in names],
+        "violations": violations,
+        "warnings": warnings,
+        "violation_count": len(violations),
+        "warning_count": len(warnings),
+        "report_text": str(text)[:20000],
+        "minimum_severity": "Violation",
+    }
+    if cross_check == "pyshacl":
+        from pyshacl import validate as pyshacl_validate
+
+        cross_conforms, _cross_report, cross_text = pyshacl_validate(
+            data_graph=data,
+            shacl_graph=closure,
+            advanced=True,
+            inference="none",
+            abort_on_first=False,
+        )
+        info["cross_check"] = {
+            "engine": "pyshacl",
+            "advanced": True,
+            "conforms": bool(cross_conforms),
+            "report_text": str(cross_text)[:4000],
+        }
+    return info

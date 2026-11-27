@@ -74,7 +74,7 @@ Sensor-validation rules also require the sensor's declared unit to match its SI 
 | Export | Turtle with stable subjects. References resolve inside the site. Each point links to its NF time-series id. Dangling references and non-standard tags are flagged. |
 | Subject | `urn:nf:<NF uuid>` (base `urn:nf:`). Adding a site rewrites no subject. The tab, the `rdf`, `sparql` and `sparql-data` hooks and the Python client use the same IRIs. The hooks take `base` to override it. An older `urn:nf:<host>:<uuid>` or `urn:nf:site:<site>:<uuid>` point IRI still names that point. |
 | 223P and Haystack | `roles/openfdd-roles.json` 1.1.0-draft.1 is the rule-input contract. Haystack defs 4.0.0 are the export overlay (`…/def/phIoT/4.0.0#`). |
-| Closure and SHACL | The app does not resolve `owl:imports` or run SHACL. CI caches the sha256 pins; OntoEnv resolves them offline; Shifty validates the role file. Engines and workflows: [Testing and parity](testing-parity.html). |
+| Closure and SHACL | The app does not resolve `owl:imports` or run SHACL. The Python check uses the vendored closure offline. Engines and workflows: [Testing and parity](testing-parity.html). |
 | SPARQL engine | Oxigraph 0.5.13 answers. rdflib 7.6.0 parses. The fixture comparison is on the testing page. |
 | Check a Turtle file | `pip install rdflib==7.6.0 pyoxigraph==0.5.13`, then `python tools/rdf-check/check_ttl.py model.ttl` |
 | Build Turtle from a fixture | `node tools/rdf-check/gen_ttl.js fixture.json fixture.ttl` (fixture has a `records` array) |

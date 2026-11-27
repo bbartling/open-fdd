@@ -5,8 +5,9 @@
   ``VERIFIED_TERM`` only means the URI is declared in that snapshot, never that its meaning was endorsed.
 * ``doctor``: classifies every class / predicate / tag a building graph uses as standard, Open-FDD or site-specific,
   flags undefined ones and checks point identity and history links. Read-only.
-* ``validate_shacl``: Shifty by default (``--engine shifty``), with the cached 223P closure when
-  ``--closure`` is set. pySHACL is the optional cross-check (``advanced=True``, ``inference="none"``).
+* ``validate_223p``: OntoEnv 0.6.4 over the vendored closure and Shifty 0.6.0 at
+  ``minimum_severity="Violation"``. pySHACL is an opt-in cross-check and does not set ``conforms``.
+* ``validate_shacl``: local export shapes. ``--closure`` loads the same vendored 223P files.
 * ``nf_adapter``: optional Turtle snapshot from an NF box (``open-fdd[nf]``); nothing here imports it otherwise.
 
 Nothing here assigns or changes fault rules, sensor bindings or NF tags.
