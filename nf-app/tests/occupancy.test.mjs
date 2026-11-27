@@ -31,7 +31,7 @@ test("hours: default Mon-Fri 06:00-18:00 = 60; all unoccupied = 0; end <= start 
 test("document: missing days / fields take the defaults; bad times, days and zones are errors", () => {
   const c = O.normalizeCalendar({ timezone: "Europe/Berlin", days: { sat: { occupied: true, start: "8:00", end: "12:00" } } });
   assert.equal(c.timezone, "Europe/Berlin");
-  assert.deepEqual(c.days.discharge_air_temperature, { occupied: true, start: "08:00", end: "12:00" });
+  assert.deepEqual(c.days.sat, { occupied: true, start: "08:00", end: "12:00" });
   assert.deepEqual(c.days.mon, { occupied: true, start: "06:00", end: "18:00" });
   assert.deepEqual(c.days.sun, { occupied: false, start: "06:00", end: "18:00" });
   assert.throws(() => O.normalizeCalendar({ days: { mon: { start: "24:00" } } }), /mon\.start must be HH:MM/);
