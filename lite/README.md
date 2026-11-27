@@ -2,7 +2,7 @@
 
 The small-box edition of Open-FDD for Normal Framework (NF). A tag-driven dashboard, charts,
 a view of NF's BACnet server, RDF export and an Open-Meteo weather hook mirrored to NF's BACnet
-server. **No FDD engine, no npm dependencies.** Built for 1 GB machines such as a Raspberry Pi 3.
+server. **No FDD engine.** The SPARQL panel uses the `oxigraph` npm package in the Node process (same hook as Full). Built for 1 GB machines such as a Raspberry Pi 3.
 
 NF app id `open-fdd-lite` (NF derives the id from the name "Open-FDD Lite": lower case,
 non-alphanumerics become "-"). It was previously the "Bench Viz" bench app.
@@ -75,7 +75,7 @@ they are harmless. The BACnet scope names are the ones from the NF scope list; c
 | App id | `open-fdd-lite` | `open-fdd` |
 | Target | 1 GB boxes (Raspberry Pi 3) | machines with real resources |
 | FDD hook and rule engines | no | yes (SQL engines, RCx library, rule packs) |
-| Hook dependencies | none (Node built-ins) | `@duckdb/node-api` and `pg` (`package.json`) |
+| Hook dependencies | `oxigraph` (`package.json`) | `@duckdb/node-api`, `oxigraph` and `pg` (`package.json`) |
 | Pages | dashboard, charts, points, BACnet server, model + RDF, tree | the same, plus FDD, RCx, energy, fault plots |
 | Weather hook | variables + BACnet mirror (av.N configurable) | the same (one shared hook) |
 | ECharts | UMD build, classic scripts, 6.1.0 | ES module build |

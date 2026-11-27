@@ -1,0 +1,9 @@
+{
+  "name": "open-fdd-lite",
+  "private": true,
+  "description": "Open-FDD Lite: the sparql hook runs the oxigraph package in the NF Node process.",
+  "license": "MIT",
+  "dependencies": {
+    "oxigraph": "0.5.13"
+  }
+}

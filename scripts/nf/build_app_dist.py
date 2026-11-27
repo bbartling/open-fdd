@@ -34,7 +34,10 @@ FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 RECIPES = ("duckdb", "timescale")
 BADGES = {"duckdb": "DuckDB build", "timescale": "Timescale build"}
 PINS = {"duckdb": ("@duckdb/node-api", "2.0.1-r.1"), "timescale": ("pg", "8.23.1")}
-RECIPE_DEPS = {"duckdb": {"@duckdb/node-api": "2.0.1-r.1"}, "timescale": {"pg": "8.23.1"}}
+RECIPE_DEPS = {
+    "duckdb": {"@duckdb/node-api": "2.0.1-r.1", "oxigraph": "0.5.13"},
+    "timescale": {"oxigraph": "0.5.13", "pg": "8.23.1"},
+}
 HTML_BADGES = ("static/index.html", "static/chart.html", "static/tree.html")
 
 
@@ -221,13 +224,12 @@ def problems(edition: str, tree: Path, files: list[str], recipe: str | None = No
             bad.append(f"package.json dependencies {deps} are not the {recipe} recipe")
         if any(name in deps for name in ("sql.js", "@electric-sql/pglite")):
             bad.append("sqlite or pglite is still an install dependency")
-        mapped = json.loads((tree / "app.json").read_text(encoding="utf-8")).get("files") or {}
-        for path in mapped:
-            if "pack-sqlite" in path or "/hooks/vendor/sql.js/" in path:
-                bad.append(f"app bundle still ships {path}")
         version = json.loads((tree / "static" / "version.json").read_text(encoding="utf-8"))
         if version.get("engineLabel") != label or version.get("engineLibraryVersion") != PINS[recipe][1]:
             bad.append(f"version.json engine fields are { {k: version.get(k) for k in ('engineLabel', 'engineLibraryVersion')} }")
+    for path in files:
+        if "pack-sqlite" in path or "sql.js" in path or path.endswith(".wasm") or "vendor/oxigraph/" in path:
+            bad.append(f"app bundle still ships {path}")
     return bad
 
 

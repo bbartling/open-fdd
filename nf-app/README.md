@@ -102,7 +102,7 @@ The whole "API" of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hoo
 |---|---|---|---|---|
 | `fdd` | Full | scheduled hourly (+ run-now) | dashboard (run-now, runs), installer, `export.js`, `rcx.js` | reads NF points + history; writes result points (and `openfdd.fdd_results` with the Timescale engine) |
 | `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; both editions also export them through the `exporters` list (default `bacnet-av`, only when NF's BACnet server is present; app option `bacnetMirror: false` removes it). App option `weather: false` = off: no outbound request, `{skipped, reason: "weather disabled"}`, rules fall back to the local OA sensor ([install reference](../docs/install.md)) |
-| `sparql` | Full | on request | agents and docs (the browser runs the same engine in `static/sparql.js`) | read-only |
+| `sparql` | both | on request | the Model & RDF tab and agents (`static/sparql.js` fetches this route) | read-only; `oxigraph` in the Node process |
 | `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
 | `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
 | `history` | Full | on request | `doctor` and agents (charts read `/api/v1/point/data` directly); agent-only API | read-only; server-side bucketed history from Timescale |
@@ -128,8 +128,9 @@ The DuckDB build is the single-site engine. `engine: "auto"` and `engine: "duckd
 DuckDB (`@duckdb/node-api` `2.0.1-r.1`). The `fdd.*` helpers are DuckDB macros (`sql/fdd/duckdb/duckdb_helpers.sql`,
 shipped in `pack-postgres.json` as `duckdb_helpers_sql`). If the package does not load, the run stops with
 `DuckDB engine failed to load: …` and does not switch to another engine. The Timescale build is the other runtime.
-A saved option named `sqlite` or `pglite` fails and names `duckdb`. There is no SQLite or PGlite package and no WASM
-SQL engine. Parity compares pandas with this Node DuckDB engine and, when a server is configured, Timescale.
+A saved option named `sqlite` or `pglite` fails and names `duckdb`. There is no SQLite or PGlite package and no SQL
+WASM file in the app bundle. SPARQL uses the `oxigraph` npm package in the Node process (both editions). Parity
+compares pandas with this Node DuckDB engine and, when a server is configured, Timescale.
 
 | App option | Default | Meaning |
 |---|---|---|

@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const dir = new URL("../static/", import.meta.url);
 const hook = require("../hooks/sparql.js");
 const lib = require("../static/sparql.js");
-const ox = require("../static/vendor/oxigraph/node.js");
+const ox = require("oxigraph");
 
 test("SPARQL hook StartHook args coerce maxTriples but preserve string fields", () => {
   const nfArgs = hook.argsOf({ args: { query: "SELECT * WHERE {}", format: "json", maxTriples: "1200" } });
@@ -319,15 +319,24 @@ test("worker client: worker errors reject; a worker that cannot start is flagged
   await assert.rejects(throwing.run("t", "ASK {}", 1), (e) => e.workerUnavailable === true);
 });
 
-test("worker side: loaded as a classic worker script it answers messages (engine load failure -> unavailable)", async () => {
-  const posted = [];
-  const ctx = vm.createContext({ console, URL, location: { href: "http://h/api/v1/apps/static/open-fdd/sparql.js?v=abc" }, postMessage: (m) => posted.push(m) });
-  vm.runInContext("globalThis.WorkerGlobalScope = class {}; Object.setPrototypeOf(globalThis, WorkerGlobalScope.prototype);", ctx);
-  vm.runInContext(readFileSync(new URL("sparql.js", dir), "utf8"), ctx, { filename: "sparql.js" });
-  assert.equal(typeof vm.runInContext("onmessage", ctx), "function");
-  await vm.runInContext("onmessage", ctx)({ data: { id: 7, query: "ASK {}", turtle: "", cap: 5 } });
-  assert.equal(posted.length, 1);
-  assert.equal(posted[0].id, 7);
-  assert.equal(posted[0].ok, false);
-  assert.equal(posted[0].unavailable, true);          // dynamic import() is not available here -> page falls back
+test("the page does not ship an Oxigraph WASM build", () => {
+  const src = readFileSync(new URL("../static/sparql.js", import.meta.url), "utf8");
+  assert.ok(!/web_bg\.wasm|vendor\/oxigraph|wasm-unsafe-eval/.test(src));
+  assert.match(src, /sparqlFetch/);
+  assert.match(src, /application\/sparql-results\+json/);
+});
+
+test("SPARQL endpoint answers a SELECT on the loaded 223P model", () => {
+  const ttl = readFileSync(new URL("./fixtures/223p-6fdc11c.ttl", import.meta.url), "utf8");
+  const query = `PREFIX s223: <http://data.ashrae.org/standard223#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?label WHERE { s223:TemperatureSensor rdfs:label ?label }`;
+  const res = hook.sparqlEndpoint({ method: "POST", contentType: "application/sparql-query", body: query }, ttl);
+  assert.equal(res.status, 200);
+  assert.equal(res.contentType, "application/sparql-results+json");
+  const doc = JSON.parse(res.body);
+  assert.deepEqual(doc.head.vars, ["label"]);
+  assert.equal(doc.results.bindings[0].label.value, "Temperature sensor");
+  const refused = hook.sparqlEndpoint({ method: "POST", contentType: "text/plain", body: query }, ttl);
+  assert.equal(refused.status, 415);
 });

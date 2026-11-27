@@ -15,8 +15,8 @@ model in NF ([data model](modeling.html)); they differ in whether a rule engine 
 | Source | [`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite) | [`nf-app/`](https://github.com/bbartling/open-fdd/tree/master/nf-app) |
 | Host | 1 GB, Raspberry Pi class | 2 GB or more |
 | FDD engine | none | DuckDB build (single site) or Timescale build |
-| Includes | dashboard, charts, points, NF BACnet server view, CSV export, RDF export, weather hook, `rdf` hook | Lite plus the FDD tab and the Overview RCx dashboard, fault points, SQL rules, SPARQL and `sparql-data` hooks |
-| Scheduled hooks | `weather` every 20 min, `rdf` on request | `fdd` hourly, `weather` every 20 min, `sparql`, `sparql-data`, `rdf` on request |
+| Includes | dashboard, charts, points, NF BACnet server view, CSV export, RDF export, weather hook, `rdf` and `sparql` hooks | Lite plus the FDD tab and the Overview RCx dashboard, fault points, SQL rules and the `sparql-data` hook |
+| Scheduled hooks | `weather` every 20 min; `rdf` and `sparql` on request | `fdd` hourly, `weather` every 20 min; `sparql`, `sparql-data` and `rdf` on request |
 | History it sees | NF's own, about 7 days | NF's, or long-range history from Timescale |
 | Weather BACnet mirror | on by default | off by default |
 

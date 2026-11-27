@@ -23,8 +23,8 @@ cannot disagree about binding or units. NF caches static files for 5 minutes.
 - **Full** (`nf-app/`, app id `open-fdd`): UI tabs Overview, Charts, FDD, RCx, Points, Export, BACnet Server, Model and RDF
   (with SPARQL). Scheduled hooks: `fdd`, `weather`. On request: `sparql`, `sparql-data`, `analytics`, `schema`,
   `tuning`, `history`, `rdf`. Two builds: DuckDB (single site, `engine: "auto"`) or Timescale.
-- **Lite** (`lite/`, app id `open-fdd-lite`): no FDD engine and no npm dependencies; Overview, Charts, Points, BACnet
-  Server, Model and RDF; `weather` hook with an optional BACnet mirror. For 1 GB boxes.
+- **Lite** (`lite/`, app id `open-fdd-lite`): no FDD engine; Overview, Charts, Points, BACnet
+  Server, Model and RDF; `weather` hook with an optional BACnet mirror; `sparql` hook (same route as Full, `oxigraph` npm package). For 1 GB boxes.
 
 ## Data flow
 
@@ -41,10 +41,11 @@ as a 0/1 lane at the bottom of each plot.
 ## RDF and SPARQL
 
 `modelToTurtle()` (`static/model.js`) turns the model into Turtle: sites, equips, devices, points, markers, refs and
-one Brick `ref:TimeseriesReference` per point (`ref:hasTimeseriesId` = NF point uuid). The UI SPARQL panel loads it into
-Oxigraph (WASM, vendored, `wasm-unsafe-eval` in the CSP). The `sparql` hook does the same server-side:
-`POST /api/v1/apps/open-fdd/hooks/sparql` with `args.query` and `args.format` (`json`, `csv`, `turtle`); read the
-answer from `.../hooks/sparql/runs?include_results=true`. `tools/rdf-check` validates the export with Oxigraph and rdflib.
+one Brick `ref:TimeseriesReference` per point (`ref:hasTimeseriesId` = NF point uuid). The UI SPARQL panel posts the
+query to the `sparql` hook. Oxigraph is the `oxigraph` npm package inside the NF Node process (no WASM in the page).
+`POST /api/v1/apps/<id>/hooks/sparql` with `query` and `format` (`json`, `csv`, `turtle`); the hook runs that text as
+`Content-Type: application/sparql-query` and returns SPARQL JSON results for SELECT and ASK. Read the answer from
+`.../hooks/sparql/runs?include_results=true`. Lite and Full use the same route. `tools/rdf-check` validates the export with Oxigraph and rdflib.
 
 ## Hooks and data surface
 
@@ -54,7 +55,7 @@ The whole API of the app is these NF hooks (`POST /api/v1/apps/<id>/hooks/<hook>
 |---|---|---|---|---|
 | `fdd` | Full | scheduled hourly (+ run-now) | dashboard (run-now, runs), installer, `export.js`, `rcx.js` | reads NF points + history; writes result points (and `openfdd.fdd_results` with the Timescale engine) |
 | `weather` (Full) / `open-meteo-weather` (Lite) | both | scheduled every 20 min | writes the `*_web` global variables the pages and rules read | one shared source (`shared/hooks/open_meteo_weather.js`); writes 3 global variables; both editions mirror them to 3 BACnet AVs by default (`bacnetMirror:false` turns it off) |
-| `sparql` | Full | on request | agents and docs (the browser runs the same engine in `static/sparql.js`) | read-only |
+| `sparql` | both | on request | the Model & RDF tab (`static/sparql.js` fetches this route) and agents | read-only; Oxigraph (`oxigraph` npm package) in the Node process |
 | `analytics` | Full | on request | agents (`rcx-overview.js` exposes the entry points) | read-only; 6 tools via `args.tool`: `analyze_ahu_weekly_runtime`, `analyze_mechanical_cooling`, `analyze_economizer`, `get_fdd_fault_timeline`, `resolve_equipment_roles`, `explain_missing_rcx_view` |
 | `schema` | Full | on request | installer / `doctor` | read-only (`BEGIN TRANSACTION READ ONLY`); reports the Timescale `schema_version` |
 | `history` | Full | on request | `doctor` and agents (charts read `/api/v1/point/data` directly); agent-only API | read-only; server-side bucketed history from Timescale |
