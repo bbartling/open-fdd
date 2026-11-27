@@ -47,7 +47,6 @@
     "/rules/analytics/mech_cooling_oat_bins.sql": "rules/analytics/mech_cooling_oat_bins.sql",
     "/rules/analytics/motor_weekly_runtime.sql": "rules/analytics/motor_weekly_runtime.sql",
     "/rules/pack-postgres.json": "rules/pack-postgres.json",
-    "/rules/pack-sqlite.json": "rules/pack-sqlite.json",
     "/static/app-core.js": "static/app-core.js",
     "/static/app.js": "static/app.js",
     "/static/lazy-cards.js": "static/lazy-cards.js",

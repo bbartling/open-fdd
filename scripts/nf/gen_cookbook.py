@@ -58,7 +58,7 @@ server is configured, Timescale. DuckDB macros are
 | Piece | What is checked |
 |---|---|
 | Core schema | `core_sql_sha256` in `sql/fdd/schema/core.catalog.json` is the sha256 of `sql/fdd/schema/core.sql`. `scripts/nf/build_core_schema.py --check` requires the NF and wheel copies to match that file. |
-| Rule packs | `scripts/nf/build_sql_pack.py --check` requires both packs to match the rendered templates. |
+| Rule pack | `scripts/nf/build_sql_pack.py --check` requires `pack-postgres.json` to match the rendered templates. |
 | Z-score SQL | `open_fdd/data/anomaly_zscore.sql` must equal `sql/analytics/anomaly_zscore.sql`. The other analytics queries are tested against their pandas twins on SQLite, DuckDB and PostgreSQL. |
 | Parity | `tests/parity/baseline.json` pins the pandas == SQL verdict. An unlisted difference fails. |
 

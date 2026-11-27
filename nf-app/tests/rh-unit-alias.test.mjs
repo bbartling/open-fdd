@@ -8,7 +8,6 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine, HELPERS } = require("../hooks/lib/engines.js");
 const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
-const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
 const START = Date.UTC(2026, 0, 1);
 
 // Six hours, five-minute samples. Two humidity series on one AHU: oa_h in percent_0_100 reads 120 %RH for the

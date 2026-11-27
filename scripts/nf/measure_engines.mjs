@@ -1,5 +1,5 @@
 // Peak memory + time of one SQL engine running every rule: 1 equipment x 7 days x 5 min.
-//   node scripts/nf/measure_engines.mjs [sqlite|pglite|duckdb] [equipments] [days]
+//   node scripts/nf/measure_engines.mjs [duckdb|timescale] [equipments] [days]
 // Run one engine per process (RSS is per process). Baseline = RSS right after startup, before the engine loads.
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
@@ -9,7 +9,7 @@ const kind = process.argv[2] || "duckdb";
 const equipments = Number(process.argv[3] || 1);
 const days = Number(process.argv[4] || 7);
 const mb = (b) => (b / 1048576).toFixed(1);
-const packFile = kind === "sqlite" ? "pack-sqlite.json" : "pack-postgres.json";   // pglite and duckdb run the Postgres pack
+const packFile = "pack-postgres.json";
 const pack = JSON.parse(readFileSync(new URL(`../../nf-app/rules/${packFile}`, import.meta.url), "utf8"));
 const { createEngine } = require("../../nf-app/hooks/lib/engines.js");
 const { buildDataset } = require("../../nf-app/tests/fixtures/synthetic_dataset.js");

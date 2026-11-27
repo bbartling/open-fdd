@@ -221,6 +221,10 @@ def problems(edition: str, tree: Path, files: list[str], recipe: str | None = No
             bad.append(f"package.json dependencies {deps} are not the {recipe} recipe")
         if any(name in deps for name in ("sql.js", "@electric-sql/pglite")):
             bad.append("sqlite or pglite is still an install dependency")
+        mapped = json.loads((tree / "app.json").read_text(encoding="utf-8")).get("files") or {}
+        for path in mapped:
+            if "pack-sqlite" in path or "/hooks/vendor/sql.js/" in path:
+                bad.append(f"app bundle still ships {path}")
         version = json.loads((tree / "static" / "version.json").read_text(encoding="utf-8"))
         if version.get("engineLabel") != label or version.get("engineLibraryVersion") != PINS[recipe][1]:
             bad.append(f"version.json engine fields are { {k: version.get(k) for k in ('engineLabel', 'engineLibraryVersion')} }")

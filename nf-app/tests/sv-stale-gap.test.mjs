@@ -8,7 +8,6 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
-const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
 const START = Date.UTC(2026, 0, 1);
 const MIN = 60_000;
 const near = (a, b) => a != null && Math.abs(a - b) <= 1e-6;

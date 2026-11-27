@@ -1,6 +1,6 @@
 // node --test nf-app/tests/duckdb-engine.test.mjs
 // #1645 slice 1: the native DuckDB engine (kind "duckdb") runs the Postgres pack with its fdd.* macros and must give
-// the same rows as PGlite (exact Postgres) and sql.js (today's small-box engine) for every rule and timeline.
+// the same rows as the Postgres pack on Node DuckDB for every rule and timeline.
 // Skipped, with the reason, when @duckdb/node-api (a dependency of the DuckDB build) has no native build for this platform.
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +21,6 @@ const fdd = require("../hooks/fdd.js");
 const rulesDir = new URL("../rules/", import.meta.url);
 const readPack = (name) => JSON.parse(readFileSync(new URL(name, rulesDir), "utf8"));
 const pgPack = readPack("pack-postgres.json");
-const litePack = readPack("pack-sqlite.json");
 const PINNED = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).dependencies["@duckdb/node-api"];
 
 let unavailable = "";
@@ -107,15 +106,6 @@ test("duckdb == PGlite, rule by rule (rows, columns, numerics within 1e-6 relati
   }
   console.log(`# duckdb parity: ${matched}/${Object.keys(pgPack.rules).length} rules match PGlite; ${nonZero} with fault_hours > 0`);
   assert.ok(nonZero >= 30, `only ${nonZero} rules had fault time: the dataset does not exercise the pack`);
-});
-
-test("duckdb == sql.js (today's small-box engine), rule by rule", opts, async (t) => {
-  for (const rid of Object.keys(litePack.rules)) {
-    await t.test(rid, () => {
-      const d = diffRows(res.duck[rid], res.lite[rid], ["duckdb", "sqlite"]);
-      assert.deepEqual(d, [], `${rid}: ${d.slice(0, 5).join("; ")}`);
-    });
-  }
 });
 
 test("duckdb timelines == PGlite timelines (timestamps, confirmed, held seconds)", opts, async (t) => {

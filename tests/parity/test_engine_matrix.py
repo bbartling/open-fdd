@@ -16,7 +16,6 @@ from open_fdd.parity import Policy, compare, generate, reference
 from stress import BASELINE, engines_disagree
 
 ROOT = Path(__file__).resolve().parents[2]
-PACK_SQLITE = ROOT / "nf-app" / "rules" / "pack-sqlite.json"
 _BASE = json.loads(BASELINE.read_text(encoding="utf-8"))["datasets"]
 PINNED_4X3 = next(d for d in _BASE if (d["equips"], d["days"], d["profile"]) == (4, 3, "basic"))
 
@@ -304,58 +303,6 @@ def _register_sqlite_udfs(db: sqlite3.Connection) -> None:
         datetime.fromtimestamp(float(ts), tz=timezone.utc).strftime("%Y-%m")
         if fmt == "YYYY-MM" and ts is not None else None
     ))
-
-
-def test_python_sqlite3_udf_registration_smoke(pglite_basic_4x3):
-    """Downstream Python users running pack-sqlite.json in stdlib sqlite3 match PGlite row-for-row."""
-    pack = json.loads(PACK_SQLITE.read_text(encoding="utf-8"))
-    ds = generate(0, 4, 3, "basic")
-    db = sqlite3.connect(":memory:")
-    _register_sqlite_udfs(db)
-    try:
-        cols = [dict(c) for c in pack["contract"]["history"]]
-        have = {c["name"] for c in cols}
-        for c in ds.history_columns:
-            if c["name"] not in have:
-                cols.append({"name": c["name"], "type": "text" if c["type"] == "text" else "double"})
-                have.add(c["name"])
-        sq_type = {"double": "REAL", "text": "TEXT", "timestamp": "REAL"}
-        input_map = {
-            "history": (cols, ds.history),
-            "weather": (pack["contract"]["weather"], ds.weather),
-            "sensor_history": (pack["contract"]["sensor_history"], ds.sensor_history),
-            "utility_interval": (pack["contract"]["utility_interval"], ds.utility_interval),
-            "utility_monthly": (pack["contract"]["utility_monthly"], ds.utility_monthly),
-            "sweep_series": (pack["contract"]["sweep_series"], []),   # optional (#1673): empty = observed series
-        }
-        for table, (spec, rows) in input_map.items():
-            ddl = ", ".join(f'"{c["name"]}" {sq_type[c["type"]]}' for c in spec)
-            db.execute(f"CREATE TABLE {table} ({ddl})")
-            if rows:
-                names = ", ".join(f'"{c["name"]}"' for c in spec)
-                q = ", ".join(["?"] * len(spec))
-                tuples = [
-                    tuple(
-                        (float(row["ts"]) / 1000.0 if row.get("ts") is not None else None)
-                        if c["type"] == "timestamp"
-                        else row.get(c["name"])
-                        for c in spec
-                    )
-                    for row in rows
-                ]
-                db.executemany(f"INSERT INTO {table} ({names}) VALUES ({q})", tuples)
-
-        subset = ("FC1", "FC4", "SV-RANGE", "SV-SPIKE", "SV-FLATLINE", "SV-STALE", "SV-RATE", "UTIL-MONTHLY")
-        got = {}
-        for rid in subset:
-            cur = db.execute(pack["rules"][rid]["sql"])
-            col_names = [d[0] for d in cur.description]
-            got[rid] = [dict(zip(col_names, r)) for r in cur.fetchall()]
-    finally:
-        db.close()
-
-    pg_subset = {rid: pglite_basic_4x3[rid] for rid in subset}
-    assert engines_disagree({"duckdb": pg_subset, "sqlite_py": got}, "sqlite_py", ref_engine="duckdb") == []
 
 
 def test_negative_parity_gates_fail_loudly(pglite_basic_4x3):

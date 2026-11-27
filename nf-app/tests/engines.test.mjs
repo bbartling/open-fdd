@@ -14,7 +14,6 @@ const { buildDataset } = require("./fixtures/synthetic_dataset.js");
 const rulesDir = new URL("../rules/", import.meta.url);
 const readPack = (name) => JSON.parse(readFileSync(new URL(name, rulesDir), "utf8"));
 const pgPack = readPack("pack-postgres.json");
-const litePack = readPack("pack-sqlite.json");
 
 // Documented, accepted differences between the engines: rule_id -> reason. Keep empty unless justified.
 const KNOWN_DIVERGENCE = {};
@@ -74,17 +73,10 @@ test("every rule runs without error on both engines", () => {
   assert.deepEqual(results.errors, {});
 });
 
-test("sqlite pack: every rule translated or skipped with a reason", () => {
-  const all = Object.keys(pgPack.rules);
-  for (const rid of all) assert.ok(litePack.rules[rid] || litePack.skipped[rid], `${rid} neither translated nor skipped`);
-  for (const [rid, why] of Object.entries(litePack.skipped)) assert.ok(why.length > 10, `${rid} skipped without a reason`);
-});
-
 test("engines match rule by rule (rows by equipment_id, numerics within 1e-6 relative)", async (t) => {
   let matched = 0, skipped = 0, nonZero = 0, diverged = 0;
   const lines = [];
   for (const rid of Object.keys(pgPack.rules)) {
-    if (!litePack.rules[rid]) { skipped++; lines.push(`skip  ${rid}: ${litePack.skipped[rid]}`); continue; }
     await t.test(rid, () => {
       const d = diffRows(results.pg[rid] || [], results.lite[rid] || []);
       if (KNOWN_DIVERGENCE[rid]) { if (d.length) diverged++; return; }
@@ -105,16 +97,14 @@ test("engines match rule by rule (rows by equipment_id, numerics within 1e-6 rel
 const NO_TIMELINE = ["AVG-ZONE-TEMP", "FAN-RUNTIME-HOURS", "FAULT-ELAPSED-HOURS", "FCU-DEADBAND", "FCU-MODE-CYCLE", "FCU-SENSOR-NULL",
   "UTIL-INTERVAL", "UTIL-MONTHLY", "ZONE-COMFORT-PCT"];
 
-test("timeline_sql: the same rules have one on both packs; the rest say why they have none", () => {
-  const withTl = (pack) => Object.entries(pack.rules).filter(([, r]) => r.timeline_sql).map(([k]) => k);
-  assert.deepEqual(withTl(pgPack), withTl(litePack));
-  assert.equal(withTl(pgPack).length, Object.keys(pgPack.rules).length - NO_TIMELINE.length);
+test("timeline_sql: every rule except the known list has one, and the rest say why they have none", () => {
+  const withTl = Object.entries(pgPack.rules).filter(([, r]) => r.timeline_sql).map(([k]) => k);
+  assert.equal(withTl.length, Object.keys(pgPack.rules).length - NO_TIMELINE.length);
   for (const rid of NO_TIMELINE) {
     assert.equal(pgPack.rules[rid].timeline_sql, null, rid);
-    assert.equal(litePack.rules[rid].timeline_sql, null, rid);
     assert.ok(pgPack.rules[rid].timeline_reason, `${rid} has no timeline_reason`);
   }
-  for (const rid of withTl(pgPack)) assert.equal(pgPack.rules[rid].timeline_reason, "", rid);
+  for (const rid of withTl) assert.equal(pgPack.rules[rid].timeline_reason, "", rid);
 });
 
 test("timeline_sql: PGlite == SQLite for every rule (rows, timestamps, confirmed, held seconds)", async (t) => {
@@ -146,11 +136,11 @@ test("timeline_sql: PGlite == SQLite for every rule (rows, timestamps, confirmed
 
 test("timeline_sql: confirmed seconds add up to the rule's fault_hours (the lane and the number are the same fact)", () => {
   let checked = 0, nonZero = 0;
-  for (const rid of Object.keys(litePack.rules)) {
-    if (!litePack.rules[rid].timeline_sql) continue;
-    for (const row of results.lite[rid] || []) {
+  for (const rid of Object.keys(pgPack.rules)) {
+    if (!pgPack.rules[rid].timeline_sql) continue;
+    for (const row of results.pg[rid] || []) {
       if (row.fault_hours == null) continue;
-      const mine = results.tlLite[rid].filter((r) => r.equipment_id === row.equipment_id &&
+      const mine = results.tlPg[rid].filter((r) => r.equipment_id === row.equipment_id &&
         (row.series_id == null || r.series_id === row.series_id) && (row.sensor_role == null || r.sensor_role === row.sensor_role));
       const hours = mine.reduce((a, r) => a + (Number(r.confirmed) === 1 ? Number(r.held_seconds) : 0), 0) / 3600;
       assert.ok(close(hours, Number(row.fault_hours)), `${rid} ${row.equipment_id}${row.series_id ? `/${row.series_id}` : row.sensor_role ? `/${row.sensor_role}` : ""}: timeline ${hours} h vs fault_hours ${row.fault_hours}`);
@@ -162,8 +152,8 @@ test("timeline_sql: confirmed seconds add up to the rule's fault_hours (the lane
 });
 
 test("output columns match the pack's declared output_columns", () => {
-  for (const [rid, rule] of Object.entries(litePack.rules)) {
-    const rows = results.lite[rid] || [];
+  for (const [rid, rule] of Object.entries(pgPack.rules)) {
+    const rows = results.pg[rid] || [];
     if (rows.length) assert.deepEqual(Object.keys(rows[0]).sort(), [...rule.output_columns].sort(), rid);
   }
 });

@@ -9,7 +9,6 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { createEngine } = require("../hooks/lib/engines.js");
 const pgPack = JSON.parse(readFileSync(new URL("../rules/pack-postgres.json", import.meta.url), "utf8"));
-const litePack = JSON.parse(readFileSync(new URL("../rules/pack-sqlite.json", import.meta.url), "utf8"));
 const fixture = JSON.parse(readFileSync(new URL("../../tests/fixtures/sched247_cases.json", import.meta.url), "utf8"));
 const TOL = fixture.tolerance_hours;
 

@@ -16,7 +16,7 @@ for (const f of ["units.js", "paging.js", "nf.js", "model.js", "fdd.js", "rcx.js
   vm.runInContext(readFileSync(new URL(f, dir), "utf8"), ctx, { filename: f });
 }
 const get = (n) => vm.runInContext(n, ctx);
-const packs = ["pack-sqlite.json", "pack-postgres.json"].map((f) => JSON.parse(readFileSync(new URL(`../rules/${f}`, import.meta.url), "utf8")));
+const packs = ["pack-postgres.json"].map((f) => JSON.parse(readFileSync(new URL(`../rules/${f}`, import.meta.url), "utf8")));
 const METRIC_IDS = ["AVG-ZONE-TEMP", "FAN-RUNTIME-HOURS", "ZONE-COMFORT-PCT"];
 
 const site = "site-a";
