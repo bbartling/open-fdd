@@ -34,8 +34,8 @@ def test_the_docs_example_runs_and_a_missing_fan_status_is_skipped():
         exec(re.findall(r"```python\n(.*?)```", page, re.S)[0], ns)
         r = ns["r"]
         assert (r.status, r.fault_hours) == ("FAULT", 1.83)
-        missing = run_rule("CUSTOM-SAT-HIGH", ns["df"].drop(columns="fan-status"), params={"confirm_min": 10},
+        missing = run_rule("CUSTOM-SAT-HIGH", ns["df"].drop(columns="supply_fan_operating_status"), params={"confirm_min": 10},
                            equipment_type="AHU")
-        assert str(missing.status).startswith("SKIPPED") and "fan-status" in (missing.notes or "")
+        assert str(missing.status).startswith("SKIPPED") and "supply_fan_operating_status" in (missing.notes or "")
     finally:
         del CUSTOM_RULES[before:]

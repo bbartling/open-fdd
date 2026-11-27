@@ -63,7 +63,7 @@ const unitDeclaresQuantity = (unit, quantity) => {
   }
   if (quantity === "volume_flow") return ["ls", "lpersec", "lsec"].includes(n) ? 1 : 0;
   if (quantity === "power") return n === "kw" ? 1 : 0;
-  if (quantity === "energy") return n === "electric_energy" ? 1 : 0;
+  if (quantity === "energy") return n === "kwh" ? 1 : 0;
   if (quantity === "electric_current") return n === "a" ? 1 : 0;
   if (quantity === "concentration") return n === "ppm" ? 1 : 0;
   if (quantity === "count") return n === "count" ? 1 : 0;

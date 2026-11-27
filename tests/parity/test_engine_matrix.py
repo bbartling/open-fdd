@@ -266,7 +266,7 @@ def _register_sqlite_udfs(db: sqlite3.Connection) -> None:
         if qty == "power":
             return 1 if nu == "kw" else 0
         if qty == "energy":
-            return 1 if nu == "electric_energy" else 0
+            return 1 if nu == "kwh" else 0
         if qty == "electric_current":
             return 1 if nu == "a" else 0
         if qty == "concentration":

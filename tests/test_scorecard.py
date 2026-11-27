@@ -340,7 +340,7 @@ def test_export_keys_equipment_by_site_and_normalizes_snake_roles(tmp_path):
     assert stats["equipment"] == 2 and stats["renamed_roles"] == ["zone_air_temp"]
     hist_rows = list(csv.DictReader((bdir / "history_long.csv").read_text().splitlines()))
     # only SITE-A faulted: its history (21.0) is exported, SITE-B's (30.0) is not
-    assert {r["value"] for r in hist_rows} == {"21.0"} and {r["role"] for r in hist_rows} == {"zone-air-temp"}
+    assert {r["value"] for r in hist_rows} == {"21.0"} and {r["role"] for r in hist_rows} == {"zone_air_temperature"}
     blob = "".join(p.read_text() for p in bdir.iterdir())
     assert "SITE-A" not in blob and "SITE-B" not in blob and "AHU_1" not in blob and "\x1f" not in blob
     assert bundle.check(bdir)["ok"]
