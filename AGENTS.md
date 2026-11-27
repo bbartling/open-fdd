@@ -16,9 +16,9 @@ rule ids those files name.
 |---|---|
 | `nf-app/` | The full app: `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
 | `lite/` | Open-FDD Lite: the no-FDD edition for 1 GB boxes (Raspberry Pi) |
-| `sql/fdd/` | The FDD math (78 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The same SQL runs on SQLite (sql.js), Postgres / PGlite, DuckDB (`duckdb>=2.0.1`, npm `@duckdb/node-api` `2.0.1-r.1`) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json` |
+| `sql/fdd/` | The FDD math (80 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The same SQL runs on SQLite (sql.js), Postgres / PGlite, DuckDB (`duckdb>=2.0.1`, npm `@duckdb/node-api` `2.0.1-r.1`) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json` |
 | `sql/analytics/` | Read-only analytics SQL. Pandas twins: `open_fdd/analytics/sql_*.py` |
-| `roles/` | Point-role contract `roles/openfdd-roles.json` (`1.0.0-draft.1`). 223P names are the core; Haystack is the binding overlay. QUDT local names (`DEG_C`, `PA`, …) are the wire units |
+| `roles/` | Point-role contract `roles/openfdd-roles.json` (`1.1.0-draft.1`). 223P names are the core; Haystack is the binding overlay. QUDT local names (`DEG_C`, `PA`, …) are the wire units |
 | `openapi/`, `contract/` | UI API contract `openapi/open-fdd-ui-api.yaml` (`1.0.0`) and the Node 22 mock |
 | `scripts/nf/` | `scripts/nf/build_rule_catalog.py`, `scripts/nf/build_sql_pack.py`, `scripts/nf/gen_rule_docs.py`, `scripts/nf/gen_cookbook.py`, `scripts/nf/build_app_dist.py`, `scripts/nf/hooks/nf_app_sync.py` (deploy), `scripts/nf/tools/` (read-only NF checks: LAN vs portal, history, BACnet wire validation) |
 | `deploy/nf-caddy/` | Optional Caddy front door |
@@ -35,7 +35,7 @@ rule ids those files name.
 1. **SI math only.** FDD and analytics run in SI. Thresholds are SI and the unit is shown. Imperial is display-only,
    through `nf-app/static/units.js` (`ofddUnits`). Never convert inside a rule or a threshold. Roles whose
    `sql/fdd/input_contract.json` scale is `fraction` are already 0–1 in the scratch tables.
-2. **223P roles, Haystack overlay.** Role names come from `roles/openfdd-roles.json` (`1.0.0-draft.1`). Haystack
+2. **223P roles, Haystack overlay.** Role names come from `roles/openfdd-roles.json` (`1.1.0-draft.1`). Haystack
    markers and NF classes only bind a point to that role. The SQL catalog still uses legacy keys (`legacy_keys` in
    the roles file). To support a site, tag it in NF. No site names, equipment names, point names, uuids or IPs in code.
 3. **Faults are the bottom lane.** Show faults only with `rcxWithFaultLane(option, lanes)` (`static/rcx.js`):

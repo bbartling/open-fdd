@@ -35,7 +35,7 @@ Value: fault % of covered time over the window (fault rules) or the rule's first
 
 ## Roles (223P) and units on the wire
 
-Canonical file: `roles/openfdd-roles.json`, version `1.0.0-draft.1` (`roles/README.md`). A role name is derived from an
+Canonical file: `roles/openfdd-roles.json`, version `1.1.0-draft.1` (`roles/README.md`). A role name is derived from an
 ASHRAE 223P property pattern. Haystack 4 is the binding overlay only (NF `class` and markers). Do not invent role names.
 
 On the wire the unit token is the QUDT local name (`unit:DEG_C`, `unit:PA`, `unit:L-PER-SEC`, `unit:PERCENT`,
