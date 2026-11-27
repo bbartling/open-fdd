@@ -20,7 +20,7 @@ The audit found these defects:
 - **Fan speed.** `FC1` reads `fan_cmd` (a start/stop command) as a VFD speed.
 - **LICENSE.** The MIT `LICENSE` is truncated: it has no holder, no conditions and no warranty disclaimer.
 
-`roles/openfdd-roles.json` (86 roles, 69 pure 223P and 17 extensions; see `roles/README.md`) replaces all three.
+`roles/openfdd-roles.json` (89 roles, 72 pure 223P and 17 extensions; see `roles/README.md`) replaces all three.
 
 ## Gate
 
@@ -85,7 +85,7 @@ Every `input_contract.json` key, the name #1808 gave it, and the canonical role.
 | `oa_damper_pct` | `outside_air_damper_position` | `outdoor_air_intake_damper_position_command` | **`fraction` -> `PERCENT` (x100)** |
 | `oa_h` | `outside_air_relative_humidity` | `outdoor_air_intake_relative_humidity` | `PERCENT_RH` |
 | `oa_t` | `outside_air_temperature` | `outdoor_air_intake_temperature` | `DEG_C` |
-| `occ_mode` | `occupancy_mode` | `occupancy_status` | `enumeration` |
+| `occ_mode` | `occupancy_mode` | `occupancy_status` | `boolean` |
 | `preheat_leave_t` | `preheat_leaving_air_temperature` | `preheat_heating_coil_outlet_air_temperature` | `DEG_C` |
 | `pump_status` | `pump_run_status` | `pump_operating_status` | `boolean` |
 | `ra_h` | `return_air_relative_humidity` | `return_air_relative_humidity` | `PERCENT_RH` |
@@ -127,7 +127,7 @@ Every `input_contract.json` key, the name #1808 gave it, and the canonical role.
 |---|---|---|
 | `fraction` -> `PERCENT` (x100) | `clg_valve_pct`, `htg_valve_pct`, `oa_damper_pct`, `reheat_valve_pct`, `damper_cmd`, `damper_pct` | ingest x100 from 0-1 sources; rules compare in 0-100 |
 | `fraction` -> `boolean` | `fan_cmd`, `return_fan`, `chiller_cmd`, `chw_pump_cmd`, `cw_pump_cmd`, `tower_fan_cmd` | start/stop commands are `Binary-OnOff`; a speed belongs to `supply_fan_speed_command` (`PERCENT`) |
-| scale tokens -> QUDT | all | `si:degC` -> `DEG_C`, `si:Pa` -> `PA`, `si:L/s` -> `L-PER-SEC`, `si:kW` -> `KiloW`, `si:kWh` -> `KiloW-HR`, `si:A` -> `A`, `si:ppm` -> `PPM`, `si:count` -> `NUM`, `percent_rh` -> `PERCENT_RH`, `text` -> `enumeration` |
+| scale tokens -> QUDT | all | `si:degC` -> `DEG_C`, `si:Pa` -> `PA`, `si:L/s` -> `L-PER-SEC`, `si:kW` -> `KiloW`, `si:kWh` -> `KiloW-HR`, `si:A` -> `A`, `si:ppm` -> `PPM`, `si:count` -> `NUM`, `percent_rh` -> `PERCENT_RH`, `text` -> `boolean` for occupancy |
 | threshold units -> QUDT | `tuning_catalog.json` | `frac` -> `PERCENT`, `pct`/`%` -> `PERCENT`, `degC` differences and `degC_delta` -> `K`, `degC_delta_per_h` -> `K-PER-HR`, `L_per_s` -> `L-PER-SEC`, `min` -> `MIN`, `h` -> `HR` |
 
 The 74 `kind: fraction` parameters below change to percent: multiply `default`, `min`, `max` and `step` by 100 and
@@ -169,7 +169,7 @@ boolean, replace the threshold with the boolean test and retire the parameter th
 - [ ] `FCU-DAMPER-POS` (`fcu_damper_pos.sql`): `command_min`, `position_error`
 - [ ] `FCU-HTG-COIL` (`fcu_htg_coil.sql`): `valve_open`
 - [ ] `FCU-MODE-CYCLE` (`fcu_mode_cycle.sql`): `mode_valve_min`
-- [ ] `FCU-SENSOR-NULL` (`fcu_sensor_null.sql`): `null_fraction`
+- [ ] `FCU-SENSOR-NULL` (`fcu_sensor_null.sql`): `null_fraction` (scale the comparison with the threshold; see below)
 - [ ] `OA-1` (`oa1_low_oa_frac.sql`): `min_oa_frac`
 - [ ] `RESET-1` (`reset1_sat_oa_reset.sql`): `reset_slope`
 - [ ] `SCHED-247` (`sched247_always_on.sql`): `always_on_pct`
@@ -184,16 +184,46 @@ boolean, replace the threshold with the boolean test and retire the parameter th
 These 63 rules read a fraction-scaled input. Check each SQL file under `sql/fdd/postgres/` for hard-coded 0-1
 constants (for example `FAN-RUNTIME-HOURS` tests `fan_cmd > 0.05`) and convert them:
 
-`AHU-DUCTHI` (`fan_cmd`); `AHU-SATDEV` (`fan_cmd`); `AHU-SIMUL` (`clg_valve_pct`, `fan_cmd`, `htg_valve_pct`); `CHW-1` (`chw_pump_cmd`); `CHW-2` (`chw_pump_cmd`); `CHW-3` (`chw_pump_cmd`); `CHW-4` (`chw_pump_cmd`); `CHW-NOLOAD-1` (`chiller_cmd`, `chw_pump_cmd`); `CMD-1` (`fan_cmd`); `COIL-PERF` (`clg_valve_pct`, `fan_cmd`, `htg_valve_pct`, `reheat_valve_pct`); `CW-APR-1` (`chw_pump_cmd`, `tower_fan_cmd`); `CW-FAN-1` (`chw_pump_cmd`, `tower_fan_cmd`); `CW-OPT-1` (`chw_pump_cmd`); `DMP-1` (`fan_cmd`, `oa_damper_pct`); `ECON-1` (`fan_cmd`, `oa_damper_pct`); `ECON-2` (`fan_cmd`, `oa_damper_pct`); `ECON-3` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `ECON-4` (`fan_cmd`); `ECON-5` (`fan_cmd`, `htg_valve_pct`); `ECON-6` (`fan_cmd`, `oa_damper_pct`); `ECON-7` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FAN-RUNTIME-HOURS` (`fan_cmd`); `FC1` (`fan_cmd`); `FC10` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC11` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC12` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC13-SAT-HIGH` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC14` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC15` (`clg_valve_pct`, `fan_cmd`, `htg_valve_pct`); `FC2` (`fan_cmd`); `FC3` (`fan_cmd`); `FC4` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC5` (`fan_cmd`, `htg_valve_pct`); `FC6` (`fan_cmd`); `FC7` (`fan_cmd`, `htg_valve_pct`); `FC8` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC9` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FCU-CLG-COIL` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-CO2-DAMPER` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-DAMPER-POS` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-HTG-COIL` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-MODE-CYCLE` (`clg_valve_pct`, `htg_valve_pct`); `FCU-VALVE-PASS-CLG` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-VALVE-PASS-HTG` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `HP-1` (`fan_cmd`); `OA-1` (`fan_cmd`); `PID-HUNT-1` (`clg_valve_pct`, `damper_pct`, `fan_cmd`, `htg_valve_pct`, `oa_damper_pct`); `RESET-1` (`fan_cmd`); `SCHED-247` (`fan_cmd`); `SV-FLATLINE` (`chw_pump_cmd`, `fan_cmd`); `SV-RANGE` (`chw_pump_cmd`, `fan_cmd`); `SV-SPIKE` (`chw_pump_cmd`, `fan_cmd`); `TRIM-1` (`fan_cmd`); `TRIM-3` (`chw_pump_cmd`); `TRIM-4` (`chw_pump_cmd`); `VAV-3` (`fan_cmd`, `reheat_valve_pct`); `VAV-4` (`damper_pct`, `fan_cmd`); `VAV-5` (`damper_pct`, `fan_cmd`); `VAV-6` (`reheat_valve_pct`); `VAV-7` (`fan_cmd`); `VAV-AHU-LEAVE` (`fan_cmd`); `VAV-REHEAT` (`fan_cmd`, `reheat_valve_pct`); `VLV-1` (`clg_valve_pct`, `fan_cmd`)
+`AHU-DUCTHI` (`fan_cmd`); `AHU-SATDEV` (`fan_cmd`); `AHU-SIMUL` (`clg_valve_pct`, `fan_cmd`, `htg_valve_pct`); `CHW-1` (`chw_pump_cmd`); `CHW-2` (`chw_pump_cmd`); `CHW-3` (`chw_pump_cmd`); `CHW-4` (`chw_pump_cmd`); `CHW-NOLOAD-1` (`chiller_cmd`, `chw_pump_cmd`); `CMD-1` (`fan_cmd`); `COIL-PERF` (`clg_valve_pct`, `fan_cmd`, `htg_valve_pct`, `reheat_valve_pct`); `CW-APR-1` (`chw_pump_cmd`, `tower_fan_cmd`); `CW-FAN-1` (`chw_pump_cmd`, `tower_fan_cmd`); `CW-OPT-1` (`chw_pump_cmd`); `DMP-1` (`fan_cmd`, `oa_damper_pct`); `ECON-1` (`fan_cmd`, `oa_damper_pct`); `ECON-2` (`fan_cmd`, `oa_damper_pct`); `ECON-3` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `ECON-4` (`fan_cmd`); `ECON-5` (`fan_cmd`, `htg_valve_pct`); `ECON-6` (`fan_cmd`, `oa_damper_pct`); `ECON-7` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FAN-RUNTIME-HOURS` (`fan_cmd`); `FC1` (`fan_cmd`); `FC10` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC11` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC12` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC13-SAT-HIGH` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC14` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC15` (`clg_valve_pct`, `fan_cmd`, `htg_valve_pct`); `FC2` (`fan_cmd`); `FC3` (`fan_cmd`); `FC4` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC5` (`fan_cmd`, `htg_valve_pct`); `FC6` (`fan_cmd`); `FC7` (`fan_cmd`, `htg_valve_pct`); `FC8` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FC9` (`clg_valve_pct`, `fan_cmd`, `oa_damper_pct`); `FCU-CLG-COIL` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-CO2-DAMPER` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-DAMPER-POS` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-HTG-COIL` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-MODE-CYCLE` (`clg_valve_pct`, `htg_valve_pct`); `FCU-VALVE-PASS-CLG` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `FCU-VALVE-PASS-HTG` (`clg_valve_pct`, `damper_cmd`, `damper_pct`, `fan_cmd`, `htg_valve_pct`); `HP-1` (`fan_cmd`); `OA-1` (`fan_cmd`); `PID-HUNT-1` (`clg_valve_pct`, `damper_pct`, `fan_cmd`, `htg_valve_pct`, `oa_damper_pct`); `RESET-1` (`fan_cmd`); `SCHED-247` (`fan_cmd`); `SV-FLATLINE` (`chw_pump_cmd`, `fan_cmd`); `SV-RANGE` (`chw_pump_cmd`, `fan_cmd`); `SV-SPIKE` (`chw_pump_cmd`, `fan_cmd`); `TRIM-1` (`fan_cmd`); `TRIM-3` (`chw_pump_cmd`); `TRIM-4` (`chw_pump_cmd`); `VAV-3` (`fan_cmd`, `reheat_valve_pct`); `VAV-4` (`damper_pct`, `fan_cmd`); `VAV-5` (`damper_pct`, `fan_cmd`); `VAV-6` (`reheat_valve_pct`); `VAV-7` (`fan_cmd`); `VAV-AHU-LEAVE` (`fan_cmd`); `VAV-REHEAT` (`fan_cmd`, `reheat_valve_pct`); `VLV-1` (`clg_valve_pct`, `fan_cmd`); `FCU-SENSOR-NULL` (`null_fraction`)
+
+**FCU-SENSOR-NULL.** `null_fraction` is one of the 74 parameters, so its default, min, max and step become percent
+(default 90). `fcu_sensor_null.sql` compares `null_seconds / eligible_seconds` (a ratio in [0, 1]) with
+`{{NULL_FRACTION}}` for both fault hours and `fault_pct`. The pandas twin in `open_fdd/rules/cookbook_catalog.py`
+compares that same ratio with the threshold. Scale the comparison in the same change. Do not multiply the threshold
+alone.
+
+- SQL: both predicates use `100.0 * null_seconds / eligible_seconds >= {{NULL_FRACTION}}`. `fault_pct` already
+  multiplies by 100 when it reports the percent; the predicate must use that percent ratio too.
+- Pandas: compare `100.0 * null_fraction` with the percent threshold.
+- The converted fixture is part of the pandas == SQL parity checks.
+
+`occ_mode` is text today and `occupancy_status` is boolean. Map `occupied`, `true` and `1` to true, and `unoccupied`,
+`false` and `0` to false. Any other string is not this role.
+
+## Roles added for rules not yet on master
+
+These three roles are not in the 75-key contract. Open rule work already uses the legacy keys. Keep those keys in
+`legacy_keys` and bind the canonical role.
+
+| Legacy key | Canonical role | Unit | Haystack markers |
+|---|---|---|---|
+| `boiler_status` | `boiler_operating_status` | boolean | `boiler`, `run`, `sensor` |
+| `filter_dp` | `filter_air_pressure_delta` | `PA` | `filter`, `air`, `delta`, `pressure`, `sensor` |
+| `fan_power` | `supply_fan_electric_power` | `KiloW` | `fan`, `elec`, `power`, `sensor` |
+
+Damper, valve and fan-speed roles stay `PERCENT` (0-100). Flow stays `L-PER-SEC`. Power stays `KiloW` and energy
+`KiloW-HR`.
 
 **FC1 fan speed.** `FC1` compares `fan_cmd` with `eps_vfd_spd`. Bind it to `supply_fan_speed_command` (`PERCENT`,
 Haystack `vfd`, `speed`, `cmd`). When that role is unbound, report the rule as not applicable rather than reading the
-start/stop command. Then set `rule_input: true` and `consumers.open-fdd: read` on that role in a minor roles release.
+start/stop command. Set `rule_input: true` and `consumers.open-fdd: read` on that role in a minor roles release after `1.1.0`. Roles `1.1.0` leaves `rule_input` false, so the acceptance count stays 76.
 
 ## Haystack binding changes
 
 Bindings in `nf-app/rules/role_overrides.json` (and so `fdd-catalog.json`) change for these 40 keys. The roles file is
-the source; the catalog builder reads it.
+the source; the catalog builder reads it. Also copy `equip_forbid`: `discharge_air_temperature` forbids parent
+`airTerminalUnit` (that point binds `terminal_unit_discharge_air_temperature`); the supply-fan roles forbid parent
+`coolingTower`, and `supply_fan_operating_status` also forbids parent `boiler`; `electric_power` forbids parent `chiller` and the point marker `fan`.
 
 <details><summary>40 binding changes</summary>
 
@@ -211,7 +241,7 @@ the source; the catalog builder reads it.
 | `damper_cmd` | damper-cmd / cmd, damper | damper-cmd, discharge-damper-cmd / cmd, damper / outside, return, exhaust, economizer, bypass |
 | `damper_pct` | damper-cmd, damper-sensor / damper, sensor | damper-sensor, discharge-damper-sensor / damper, sensor / outside, return, exhaust, economizer, bypass |
 | `duct_static_sp` | discharge-air-pressure-sp / air, discharge, pressure, sp | discharge-air-pressure-sp / air, discharge, pressure, sp / max, min |
-| `electric_kw` | total-active-ac-elec-power-sensor / elec, power, sensor | total-active-ac-elec-power-sensor / elec, power, sensor / chiller |
+| `electric_kw` | total-active-ac-elec-power-sensor / elec, power, sensor | total-active-ac-elec-power-sensor / elec, power, sensor / chiller, fan |
 | `electric_kwh` | - / elec, energy, sensor | total-net-ac-elec-active-energy-sensor / elec, energy, sensor / - |
 | `fan_cmd` | discharge-run-cmd, run-cmd / cmd, fan, run | discharge-run-cmd, run-cmd / cmd, fan, run / return, exhaust, pump |
 | `fan_status` | discharge-run-sensor, run-sensor / fan, run, sensor | discharge-run-sensor, run-sensor / fan, run, sensor / return, exhaust, pump |
@@ -249,7 +279,8 @@ the source; the catalog builder reads it.
   label. `SCALE_UNIT` goes away.
 - OpenAPI: generate `InputName` as an `enum` of the canonical `rule_input` roles from the roles file, and drop the
   hand-written table. `SiUnit` becomes the QUDT local names (role units plus the threshold units above). Add
-  `enumeration` to `value_type` (occupancy). The UI shows `units[u].haystack` symbols.
+  `enumeration` to `value_type` for site-defined mode commands. Occupancy is `boolean`. The UI shows
+  `units[u].haystack` symbols.
 
 ## What can't be patched now
 
@@ -276,13 +307,13 @@ the source; the catalog builder reads it.
 ## Acceptance criteria
 
 - [ ] Every rule input in `fdd-catalog.json`, both SQL packs, the bundle manifest and the OpenAPI `InputName` enum is a
-      canonical role. The four sets are equal, with 73 rule inputs in roles `1.0.0`.
+      canonical role. The four sets are equal, with 76 rule inputs in roles `1.1.0`.
 - [ ] No `fraction` scale and no `frac` unit remain. All 74 parameters are in percent, and the converted fixtures pass
-      the pandas == SQL parity tests.
+      the pandas == SQL parity tests, including `FCU-SENSOR-NULL` with its ratio scaled to percent in SQL and pandas.
 - [ ] Every catalog binding (`classes`, `markers`, `forbid`, `equip_markers`) equals the roles file. A test shows that
       a `max` airflow point never binds `discharge_air_volume_flow_rate_setpoint`, and that a `damper-cmd` point never
       binds `damper_position`.
-- [ ] `FC1` reads `supply_fan_speed_command`. Without it, `FC1` reports not applicable.
+- [ ] `FC1` reads `supply_fan_speed_command`. Without it, `FC1` reports not applicable. The role's `rule_input` flag stays false in roles `1.1.0` and turns on in the next minor roles release, so this step does not add a 77th rule input to `1.1.0`.
 - [ ] The upgrade migrates `fdd.point.role` and saved fraction tunings exactly once (a test runs it twice).
 - [ ] The bundle ships the roles file with its sha256. `input_names_223p.json` is gone.
 - [ ] `LICENSE` is the full MIT text below. `pyproject.toml` still declares MIT.
