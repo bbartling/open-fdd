@@ -462,6 +462,14 @@ def run_cookbook_rule(
         d = df
     else:
         d = merge_weather(df, weather)
+        if rule.id == "HW-OAT-1" and weather is not None and not weather.empty and "web-outside-air-temp" in df.columns:
+            # #1782: per sample, the equipment's web OAT else the sidecar as-of (hw_oat_1.sql COALESCE), also when the
+            # equipment column exists but is empty
+            wx = _weather_asof(weather, d.index)
+            if "web-outside-air-temp" in wx.columns:
+                d = d.copy()
+                d["web-outside-air-temp"] = pd.to_numeric(d["web-outside-air-temp"], errors="coerce").fillna(
+                    pd.to_numeric(wx["web-outside-air-temp"], errors="coerce"))
         # OAT-METEO needs both real sources — never inject web into oa_t for the compare.
         if rule.id != "OAT-METEO":
             d = inject_oa_t_for_physics(d)

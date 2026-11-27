@@ -12,6 +12,8 @@
     {"id": "cold_morning_warm_afternoon", "row": {"web_oa_t": 5.0, "pump_status": 1}, "after": {"at": 24, "row": {"web_oa_t": 25.0}}, "expect": 1.833333},
     {"id": "warm_shorter_than_confirm", "row": {"web_oa_t": 5.0, "pump_status": 1}, "after": {"at": 46, "row": {"web_oa_t": 25.0}}, "expect": 0.0},
     {"id": "weather_sidecar_oat", "row": {"pump_status": 1}, "weather": 25.0, "expect": 3.833333},
+    {"id": "empty_equipment_oat_uses_sidecar", "row": {"web_oa_t": null, "pump_status": 1}, "weather": 25.0, "expect": 3.833333},
+    {"id": "equipment_oat_gaps_filled_by_sidecar", "row": {"web_oa_t": 5.0, "pump_status": 1}, "after": {"at": 24, "row": {"web_oa_t": null}}, "weather": 25.0, "expect": 1.833333},
     {"id": "proof_unknown_half_the_time", "row": {"web_oa_t": 25.0, "pump_status": 1}, "after": {"at": 24, "row": {"pump_status": null}}, "expect": 1.833333, "covered": 2.0},
     {"id": "no_proof", "row": {"web_oa_t": 25.0}, "expect": "no_proof"},
     {"id": "no_outdoor_air", "row": {"pump_status": 1, "hw_supply_t": 60.0}, "expect": "no_outdoor_air"}
