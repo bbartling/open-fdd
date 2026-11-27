@@ -59,6 +59,19 @@ _MULTIPLY: dict[str, dict[str, float]] = {
     "power": {"kW": 1.0, "ton": _FACTORS["kw_per_ton"]["value"]},
 }
 TEMPERATURE_UNITS = ("degC", "degF")
+_ALIAS = {
+    "l/s": "L/s", "l/sec": "L/s", "lpersec": "L/s", "l-per-sec": "L/s",
+    "cfm": "cfm", "ft3/min": "cfm", "ft3permin": "cfm", "ft3-per-min": "cfm",
+    "inh2o": "inH2O", "inh20": "inH2O", "in h2o": "inH2O", "in h20": "inH2O",
+    "%rh": "%RH", "percentrh": "%RH", "percent_rh": "%RH",
+    "pa": "Pa", "psi": "psi", "gpm": "gpm",
+}
+
+
+def _canon_unit(unit: str) -> str:
+    fold = str(unit or "").strip().lower().replace("₂", "2").replace("₀", "0").replace("³", "3")
+    squashed = fold.replace(" ", "").replace("_", "").replace("-", "")
+    return _ALIAS.get(fold) or _ALIAS.get(squashed) or unit
 
 
 def display_units(quantity: str) -> tuple[str, ...]:
@@ -80,9 +93,10 @@ def to_si(value: float, unit: str, quantity: str, field: str) -> float:
             raise ValueError(f"{field}: unit {unit!r} is not a temperature unit (degC, degF)")
         return (value - 32.0) * 5.0 / 9.0 if kind == "absolute" else value * 5.0 / 9.0
     factors = _MULTIPLY.get(quantity) or {}
-    if unit not in factors:
+    named = _canon_unit(unit)
+    if named not in factors:
         raise ValueError(f"{field}: unit {unit!r} not accepted for {quantity} ({', '.join(factors)})")
-    return value * factors[unit]
+    return value * factors[named]
 
 
 def from_si(value: float, unit: str, quantity: str, field: str) -> float:
@@ -92,7 +106,7 @@ def from_si(value: float, unit: str, quantity: str, field: str) -> float:
         if unit == "degC":
             return float(value)
         return value * 9.0 / 5.0 + 32.0 if kind == "absolute" else value * 9.0 / 5.0
-    return value / _MULTIPLY[quantity][unit]
+    return value / _MULTIPLY[quantity][_canon_unit(unit)]
 
 
 def equipment_scope(equipment_id: str) -> str:

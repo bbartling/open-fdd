@@ -40,6 +40,18 @@
 
   const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
   const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const UNIT_ALIAS = {
+    'l/s': 'L/s', 'l/sec': 'L/s', lpersec: 'L/s', 'l-per-sec': 'L/s',
+    cfm: 'cfm', 'ft3/min': 'cfm', ft3permin: 'cfm', 'ft3-per-min': 'cfm',
+    inh2o: 'inH2O', inh20: 'inH2O', 'in h2o': 'inH2O', 'in h20': 'inH2O',
+    '%rh': '%RH', percentrh: '%RH', percent_rh: '%RH',
+    pa: 'Pa', psi: 'psi', gpm: 'gpm',
+  };
+  function canonUnit(unit) {
+    const fold = String(unit || '').trim().toLowerCase().replaceAll('₂', '2').replaceAll('₀', '0').replaceAll('³', '3');
+    const squashed = fold.replace(/[\s_-]/g, '');
+    return UNIT_ALIAS[fold] || UNIT_ALIAS[squashed] || unit;
+  }
 
   // ---- units -------------------------------------------------------------------------------------------------
   function displayUnits(quantity) {
@@ -55,7 +67,8 @@
       if (unit !== 'degF') throw new Error(`${field}: unit ${unit} is not a temperature unit (degC, degF)`);
       return kind === 'absolute' ? (value - 32) * 5 / 9 : value * 5 / 9;
     }
-    const f = (MULTIPLY[quantity] || {})[unit];
+    const named = canonUnit(unit);
+    const f = (MULTIPLY[quantity] || {})[named];
     if (f === undefined) throw new Error(`${field}: unit ${unit} not accepted for ${quantity} (${displayUnits(quantity).join(', ')})`);
     return value * f;
   }
@@ -66,7 +79,7 @@
       if (unit === 'degC') return value;
       return kind === 'absolute' ? value * 9 / 5 + 32 : value * 9 / 5;
     }
-    return value / MULTIPLY[quantity][unit];
+    return value / MULTIPLY[quantity][canonUnit(unit)];
   }
 
   // ---- validation (twin of sensor_sweep_catalog.validate_role_limits) --------------------------------------------

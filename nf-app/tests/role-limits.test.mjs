@@ -60,6 +60,11 @@ test("display units -> SI: absolute temperature, difference and rate are separat
   assert.ok(Math.abs(RL.toSi(1.8, "degF", q, "rate_per_h") - 1) < 1e-12);
   assert.equal(RL.toSi(1, "inH2O", "air_pressure", "hi"), 249.0889);
   assert.equal(RL.toSi(1, "cfm", "volume_flow", "hi"), 0.4719474);
+  assert.equal(RL.toSi(1, "L/sec", "volume_flow", "hi"), 1);
+  assert.equal(RL.toSi(1, "L-PER-SEC", "volume_flow", "hi"), 1);
+  assert.equal(RL.toSi(1, "FT3-PER-MIN", "volume_flow", "hi"), 0.4719474);
+  assert.equal(RL.toSi(1, "in h₂0", "air_pressure", "hi"), 249.0889);
+  assert.equal(RL.toSi(1, "PERCENT_RH", "relative_humidity", "hi"), 1);
   assert.equal(RL.toSi(1, "gpm", "volume_flow", "hi"), 0.0630902);
   for (const [qq, unit] of [["absolute_temperature", "degF"], ["air_pressure", "inH2O"], ["volume_flow", "cfm"], ["volume_flow", "gpm"]]) {
     for (const f of Object.keys(RL.FIELD_KIND)) for (const v of [-40, 0, 55.5, 1234.5]) {

@@ -1,8 +1,8 @@
 -- PostgreSQL adaptation. Render numeric template parameters with render_rule.py.
 -- Inputs must be scoped to one tenant/site and cadence; see README.md.
 -- fc15_hw_coil_dt_inactive.sql — HW coil ΔT when inactive (GL36 M)
--- Prefer dedicated HW coil temps; fall back to MAT/SAT. Inactive gate uses
--- cooling-valve (pandas) when heating-valve is absent.
+-- HW coil temps only. Mixed air and discharge air are not substitutes: a gas
+-- burner with no hot-water coil is not applicable (required coil roles).
 WITH rp AS (
   -- Run proof (#1608): the input role run_proof is resolved from the model (own status, own command, feeding equipment).
   -- With the gate on and no proof bound at all, the equipment is SKIPPED: fault_hours NULL, covered_hours 0.
@@ -18,8 +18,8 @@ h AS (
     run_proof,
     equipment_id,
     timestamp_utc,
-    COALESCE(heating_coil_entering_temp, mat) AS enter_t,
-    COALESCE(heating_coil_leaving_temp, sat) AS leave_t,
+    heating_coil_entering_temp AS enter_t,
+    heating_coil_leaving_temp AS leave_t,
     COALESCE(htg_valve_pct, 0.0) AS htg,
     COALESCE(clg_valve_pct, 0.0) AS clg,
     COALESCE(fan_cmd, 0.0) AS fan,

@@ -51,8 +51,8 @@ def test_assessable_sensor_roles_are_shared_by_sql_pandas_and_hook():
     from open_fdd.rules.sensor_sweep_catalog import ASSESSABLE_ROLES_BY_SWEEP
 
     assert {rule: list(roles) for rule, roles in ASSESSABLE_ROLES_BY_SWEEP.items()} == source
-    assert all("zone-airflow" not in roles for roles in source.values())
-    assert {rule for rule, roles in source.items() if "duct-static-pressure" in roles} == {"SV-RANGE", "SV-SPIKE"}
+    assert {rule for rule, roles in source.items() if "zone-airflow" in roles} == {"SV-RANGE", "SV-STALE"}
+    assert {rule for rule, roles in source.items() if "duct-static-pressure" in roles} == {"SV-RANGE", "SV-SPIKE", "SV-STALE"}
 
     pack = json.loads((root / "nf-app/rules/pack-postgres.json").read_text(encoding="utf-8"))
     for rule in ("SV-RANGE", "SV-FLATLINE", "SV-SPIKE", "SV-STALE", "SV-RATE"):

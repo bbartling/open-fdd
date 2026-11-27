@@ -299,7 +299,7 @@ Coil valve open but the air temperature changes less than min_dt
 | `terminal_unit_inlet_air_temperature` | `vav_inlet_t` | `vav-inlet-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
 | `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
 | `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
@@ -937,12 +937,11 @@ HW coil ΔT when inactive (GL36 M)
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `heating_coil_inlet_air_temperature` | `heating_coil_entering_temp` | `heating-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `heating_coil_outlet_air_temperature` | `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
+| `heating_coil_inlet_air_temperature` | `heating_coil_entering_temp` | `heating-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `heating_coil_outlet_air_temperature` | `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
@@ -1670,7 +1669,7 @@ Excessive reheat during warm weather
 |---|---|---|---|---|---|---|---:|---|
 | `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 | `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
@@ -1709,7 +1708,7 @@ Damper stuck at full open
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
 | `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
@@ -1746,7 +1745,7 @@ Airflow sensor bias
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
 | `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
@@ -1821,7 +1820,7 @@ Min airflow / fixed high flow
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
 | `discharge_air_volume_flow_rate_minimum` | `min_flow_sp` | `min-flow-sp` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
@@ -1863,7 +1862,7 @@ VAV leave vs parent AHU SAT (fedBy)
 |---|---|---|---|---|---|---|---:|---|
 | `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 | `air_handling_unit_discharge_air_temperature` | `ahu_sat` | `ahu-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
@@ -1903,7 +1902,7 @@ Reheat valve stuck / no temp rise
 | `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 | `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 | `terminal_unit_inlet_air_temperature` | `vav_inlet_t` | `vav-inlet-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
@@ -2937,7 +2936,7 @@ Sensor flatline (stuck)
 | `pump_operating_status` | `pump_status` | `pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
@@ -2991,7 +2990,7 @@ Sensor out of hard range
 | `pump_operating_status` | `pump_status` | `pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
 | `electric_energy` | `kwh` | `kwh` | `KiloW-HR` | Energy | kWh | Wh, MWh, kBtu, MMBtu, therm | - | optional |
 | `electric_power` | `electric_kw` | `electric-kw` | `KiloW` | Power | kW | W, MW, Btu/h, ton, hp | - | optional |
 | `electric_energy` | `electric_kwh` | `electric-kwh` | `KiloW-HR` | Energy | kWh | Wh, MWh, kBtu, MMBtu, therm | - | optional |
@@ -3085,7 +3084,7 @@ Sensor rate-of-change spike
 | `pump_operating_status` | `pump_status` | `pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
@@ -3138,6 +3137,8 @@ Stale data (no fresh samples for longer than the stale threshold)
 | `zone_air_relative_humidity` | `zone_rh` | `zone-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `mixed_air_relative_humidity` | `ma_h` | `mixed-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `discharge_air_relative_humidity` | `sa_h` | `supply-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
+| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
 
 **Parameters**
 
@@ -3170,7 +3171,7 @@ Sensor value piled up at a round transmitter full scale (clipped)
 |---|---|---|---|---|---|---|---:|---|
 | `zone_air_co2` | `zone_co2` | `zone-co2` | `PPM` | Concentration | ppm | none | - | optional |
 | `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
 | `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 | `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 | `operating_status` | `run_proof` | `run-proof` | — | Status | 0/1 | bool | 0 or 1 | optional |
