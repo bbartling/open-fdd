@@ -15,7 +15,7 @@ without a twin are marked **SQL only**.
 
 **Conventions**
 
-- Input is a `DataFrame` with a UTC `DatetimeIndex` and one column per signal, all in SI (table below). The frame still uses the Haystack column name. The Role and QUDT columns are the names in `roles/openfdd-roles.json` (`openfdd-roles` 1.0.0-draft.1). Engines, sha256 pins and the 5.0.22 rule changes are in the [SQL cookbook](sql-cookbook.html#engines).
+- Input is a `DataFrame` with a UTC `DatetimeIndex` and one column per signal, all in SI (table below). The frame still uses the Haystack column name. The Role and QUDT columns are the names in `roles/openfdd-roles.json` (`openfdd-roles` 1.1.0-draft.1). Engines, sha256 pins and the 5.0.22 rule changes are in the [SQL cookbook](sql-cookbook.html#engines).
   The rules never convert units or guess a scale.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours` (h), and the `raw_fault` and `confirmed_fault` boolean masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]`.
