@@ -234,11 +234,11 @@ def _score_candidate(
 
     if fault is not None:
         base_fault = 0.45 if hop.hop > 0 else 0.25
-        conf_factor = 0.70
-        if fault.p_real is not None and fault.p_false_positive is not None:
-            conf_factor = max(0.05, fault.p_real * (1.0 - 0.7 * fault.p_false_positive))
-        elif fault.p_real is not None:
-            conf_factor = max(0.05, fault.p_real)
+        real = fault.p_real if fault.p_real is not None else 0.70
+        conf_factor = real
+        if fault.p_false_positive is not None:
+            conf_factor = real * (1.0 - 0.7 * fault.p_false_positive)
+        conf_factor = max(0.05, conf_factor)
 
         if fault.confidence_label == "likely_false_positive":
             conf_factor = min(conf_factor, 0.15)

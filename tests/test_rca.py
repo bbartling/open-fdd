@@ -98,8 +98,18 @@ def test_example_plant_ahu_ranks_root_cause_for_two_unhappy_zones():
     assert ahu is not None
     assert "discharge_air_temperature" in ahu.property_roles
     assert "discharge_air_temperature_setpoint" in ahu.property_roles
+    zone_walk = graph.traverse_upstream("zone-1")
+    walked = [hop.node.node_id for hop in zone_walk.ancestors]
+    assert "vav-1" in walked and "space-1" not in walked
+    assert not any(
+        edge.predicate == "s223:hasDomainSpace"
+        for edge_list in graph.upstream_edges.values()
+        for edge in edge_list
+    )
     plant = EXAMPLE_PLANT_TTL.read_text(encoding="utf-8")
     assert "owl:imports <http://data.ashrae.org/standard223/1.0/model/all>" in plant
+    assert "s223:DomainSpace" in plant
+    assert "s223:hasDomainSpace" in plant
     assert "https://project-haystack.org/def/phIoT/>" not in plant
     assert "https://project-haystack.org/def/ph/>" not in plant
     assert "/4.0.0#" in plant
@@ -1780,3 +1790,307 @@ def test_pyoxigraph_and_rdflib_versions_are_pinned():
     assert rdflib.__version__ == "7.6.0"
     assert version("pyoxigraph") == "0.5.13"
     assert pyoxigraph.Store is not None
+
+
+def test_roles_vocabulary_ships_inside_the_package(monkeypatch):
+    monkeypatch.delenv("OPENFDD_ROLES_JSON", raising=False)
+    from open_fdd.rca.role_index import (
+        load_role_index,
+        roles_json_path,
+        setpoint_role_for,
+    )
+
+    load_role_index.cache_clear()
+    path = roles_json_path()
+    assert path is not None
+    assert path.name == "openfdd-roles.json"
+    assert "rca" in path.parts and "data" in path.parts
+    assert load_role_index()["by_role"]
+    assert setpoint_role_for("discharge_air_temperature") == "discharge_air_temperature_setpoint"
+
+
+def test_confidence_window_bounds_apply_to_episode_and_quality_flag():
+    from open_fdd.rca.evidence import DataFrameEvidenceCollector
+
+    collector = DataFrameEvidenceCollector.from_confidence_episodes(
+        [
+            {
+                "equipment_id": "ahu-1",
+                "rule_id": "SAT-HIGH",
+                "window_start": "2026-01-15T00:00:00Z",
+                "window_end": "2026-01-15T01:00:00Z",
+                "evidence": {"poor_data_quality": True},
+            }
+        ]
+    )
+    fault = collector.all_faults()[0]
+    assert fault.start == parse_utc("2026-01-15T00:00:00Z")
+    assert fault.end == parse_utc("2026-01-15T01:00:00Z")
+    flags = collector.all_data_quality()
+    assert flags[0].start == fault.start
+    assert flags[0].end == fault.end
+
+
+def test_explicit_quality_warning_keeps_bounds():
+    from open_fdd.rca.evidence import _parse_dq_rows
+
+    flags = _parse_dq_rows(
+        [
+            {
+                "equipment_id": "ahu-1",
+                "flag": "stale",
+                "start": "2026-01-15T00:00:00Z",
+                "end": "2026-01-15T01:00:00Z",
+            }
+        ]
+    )
+    assert flags[0].start == parse_utc("2026-01-15T00:00:00Z")
+    assert flags[0].end == parse_utc("2026-01-15T01:00:00Z")
+    undated = _parse_dq_rows([{"equipment_id": "ahu-1", "flag": "stale"}])
+    assert undated[0].start is None and undated[0].end is None
+
+
+def test_sql_flags_layout_accepts_numeric_one(monkeypatch):
+    from open_fdd.rca import evidence as evmod
+
+    monkeypatch.setattr(evmod, "confidence_sql_module", lambda: None)
+    conn = sqlite3.connect(":memory:")
+    conn.execute(
+        "CREATE TABLE flags (timestamp TEXT, equipment_id TEXT, rule_id TEXT, flag INT, site_id TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO flags VALUES ('2026-11-24T10:00:00Z', 'ahu-1', 'SAT-HIGH', 1, 'site-a')"
+    )
+    faults = evmod.SqlEvidenceCollector(conn, table="flags", layout="flags").load(site_id="site-a").all_faults()
+    conn.close()
+    assert len(faults) == 1
+    assert faults[0].equipment_id == "ahu-1"
+
+
+def test_history_uses_episode_site_and_setpoint_in_effect():
+    from datetime import datetime, timedelta
+
+    from open_fdd.rca.evidence import FaultEvidence, SqlEvidenceCollector
+
+    calls: list[list] = []
+
+    class _FakeCsql:
+        def paramstyle(self, conn):
+            return "?"
+
+        def history_sql(self, hm, ph, by_site=False):
+            return "by-site" if by_site else "open"
+
+        def fetch(self, conn, sql, params):
+            calls.append([sql, *params])
+            cols = ["ts", "point_id", "value"]
+            if params[-1] == "site-b":
+                rows = [
+                    ("2026-03-01T10:00:00Z", "sat", 290.0),
+                    ("2026-03-01T10:00:00Z", "sat-sp", 290.0),
+                    ("2026-03-01T10:05:00Z", "sat-sp", 295.0),
+                ]
+            else:
+                rows = [("2026-03-01T10:00:00Z", "sat", 280.0), ("2026-03-01T10:00:00Z", "sat-sp", 280.0)]
+            return cols, rows
+
+    class _FakeHist:
+        def col(self, name):
+            return "site_id" if name == "site_id" else None
+
+    start = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    faults = [
+        FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=start, end=start + timedelta(hours=1), site_id="site-a"),
+        FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=start, end=start + timedelta(hours=1), site_id="site-b"),
+    ]
+    devs = SqlEvidenceCollector(sqlite3.connect(":memory:"))._load_history_deviations(
+        _FakeCsql(), _FakeHist(), faults, site_id="site-a"
+    )
+    assert [call[0] for call in calls] == ["by-site", "by-site"]
+    assert calls[0][-1] == "site-a"
+    assert calls[1][-1] == "site-b"
+    by_site = {d.site_id: d for d in devs}
+    assert by_site["site-b"].value_si == 290.0
+    assert by_site["site-b"].setpoint_si == 290.0
+    assert by_site["site-a"].setpoint_si == 280.0
+
+
+def test_conflicting_owner_sites_leave_a_point_unscoped():
+    ttl = """
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix ex: <urn:test:sites:> .
+    ex:site-a a phIoT:site ; rdfs:label "site-a" .
+    ex:site-b a phIoT:site ; rdfs:label "site-b" .
+    ex:ahu-a a phIoT:ahu ; phIoT:siteRef ex:site-a .
+    ex:ahu-b a phIoT:ahu ; phIoT:siteRef ex:site-b .
+    ex:sat a phIoT:point ; phIoT:equipRef ex:ahu-a, ex:ahu-b .
+    """
+    graph = load_graph(ttl)
+    point = graph.resolve_node("sat")
+    assert point is not None
+    assert graph._site_tokens(point) == set()
+
+
+def test_sparql_store_is_reused():
+    graph = load_graph(EXAMPLE_PLANT_TTL)
+    zone = graph.resolve_node("zone-1")
+    assert zone is not None
+    graph.sparql_upstream(zone.iri)
+    first = graph._sparql_store
+    graph.sparql_upstream(zone.iri)
+    assert graph._sparql_store is first
+    assert first is not None
+
+
+def test_setpoint_aspect_is_not_a_topology_signal():
+    from open_fdd.rca.graph import S223, GraphNode
+    from open_fdd.rca.infer import _classify_point
+
+    setpoint = GraphNode(
+        iri="urn:test:sp",
+        node_id="opaque-sp",
+        label="SAT",
+        is_point=True,
+        aspects=(S223 + "Aspect-Setpoint",),
+    )
+    measured = GraphNode(
+        iri="urn:test:dat",
+        node_id="opaque-dat",
+        label="opaque-dat",
+        is_point=True,
+        property_roles=("discharge_air_temperature",),
+    )
+    assert _classify_point(setpoint) == ("ignore", "")
+    assert _classify_point(measured) == ("temp_air_out", "air")
+
+
+def test_inferred_connection_iris_do_not_collide():
+    import rdflib
+
+    from open_fdd.rca.infer import InferredEdge, suggested_links_to_ttl
+
+    def edge(up, down):
+        return InferredEdge(
+            upstream_iri=up,
+            downstream_iri=down,
+            upstream_id=up,
+            downstream_id=down,
+            upstream_label=up,
+            downstream_label=down,
+            confidence=0.5,
+        )
+
+    first = suggested_links_to_ttl([edge("urn:ex:a", "urn:ex:b")])
+    second = suggested_links_to_ttl([edge("urn:ex:c", "urn:ex:d")])
+    assert "connection:1" not in first
+    assert first.split(" a s223:Connection", 1)[0].split("<")[-1] != second.split(" a s223:Connection", 1)[0].split("<")[-1]
+    merged = rdflib.Graph()
+    merged.parse(data=first, format="turtle")
+    merged.parse(data=second, format="turtle")
+    pairs = {
+        (str(src), str(dst))
+        for conn in merged.subjects(rdflib.RDF.type, rdflib.URIRef("http://data.ashrae.org/standard223#Connection"))
+        for src in merged.objects(conn, rdflib.URIRef("http://data.ashrae.org/standard223#connectsFrom"))
+        for dst in merged.objects(conn, rdflib.URIRef("http://data.ashrae.org/standard223#connectsTo"))
+    }
+    assert pairs == {("urn:ex:a", "urn:ex:b"), ("urn:ex:c", "urn:ex:d")}
+
+
+def test_inferred_node_short_id_resolves():
+    from open_fdd.rca.infer import InferredEdge
+
+    graph = load_graph(EXAMPLE_PLANT_TTL).with_inferred_edges(
+        [
+            InferredEdge(
+                upstream_iri="urn:openfdd:inferred:new-ahu",
+                downstream_iri="urn:openfdd:example:plant:vav-1",
+                upstream_id="new-ahu",
+                downstream_id="vav-1",
+                upstream_label="new-ahu",
+                downstream_label="vav-1",
+                confidence=0.6,
+            )
+        ]
+    )
+    node = graph.resolve_node("new-ahu")
+    assert node is not None
+    assert node.iri == "urn:openfdd:inferred:new-ahu"
+
+
+def test_false_positive_penalty_applies_without_p_real():
+    from open_fdd.rca.graph import GraphNode, UpstreamHop
+    from open_fdd.rca.rank import _score_candidate
+
+    hop = UpstreamHop(
+        node=GraphNode(iri="urn:x:ahu", node_id="ahu", label="ahu"),
+        hop=1,
+        path=("ahu", "zone"),
+        relations=("s223:connectedTo",),
+    )
+    symptom = FaultEvidence(equipment_id="zone", rule_id="ZNT-HIGH")
+    high = _score_candidate(
+        symptom,
+        hop,
+        FaultEvidence(equipment_id="ahu", rule_id="SAT-HIGH", p_false_positive=0.99),
+        [],
+        [],
+        1,
+    )
+    low = _score_candidate(
+        symptom,
+        hop,
+        FaultEvidence(equipment_id="ahu", rule_id="SAT-HIGH", p_false_positive=0.01),
+        [],
+        [],
+        1,
+    )
+    assert high.confidence < low.confidence
+
+
+def test_json_report_rejects_non_finite_numbers():
+    from open_fdd.rca.rank import CauseTrace, RCAReport
+    from open_fdd.rca.report import report_to_json
+
+    report = RCAReport(
+        traces=[
+            CauseTrace(
+                symptom_equipment="zone-1",
+                symptom_rule="ZNT-HIGH",
+                symptom_site="site-a",
+                symptom_start="2026-01-15T00:00:00Z",
+                symptom_end="2026-01-15T01:00:00Z",
+                upstream_status="unknown_upstream",
+                unknown_upstream=True,
+                unknown_upstream_at=["zone-1"],
+                candidates=[],
+            )
+        ],
+        common_causes=[],
+        totals={"symptoms_analyzed": float("inf")},
+    )
+    text = report_to_json(report)
+    payload = json.loads(text)
+    assert payload["totals"]["symptoms_analyzed"] is None
+    assert "Infinity" not in text
+
+
+def test_markdown_trace_names_site_and_window():
+    graph = load_graph(EXAMPLE_PLANT_TTL)
+    report = analyze_rca(
+        graph,
+        InMemoryEvidenceCollector(
+            faults=[
+                FaultEvidence(
+                    equipment_id="zone-1",
+                    rule_id="ZNT-HIGH",
+                    site_id="Example Building",
+                    start=parse_utc("2026-11-24T10:00:00Z"),
+                    end=parse_utc("2026-11-24T12:00:00Z"),
+                )
+            ]
+        ),
+    )
+    md = report_to_markdown(report)
+    assert "site=Example Building" in md
+    assert "window=2026-11-24T10:00:00Z..2026-11-24T12:00:00Z" in md

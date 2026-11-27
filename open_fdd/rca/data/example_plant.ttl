@@ -85,21 +85,27 @@ ex:vav-1-out a s223:OutletConnectionPoint ;
     s223:hasMedium s223:Fluid-Air ;
     s223:cnx ex:cnx-vav1-zone1 .
 
+# The zone groups a DomainSpace. The space is the connectable that owns the inlet.
 ex:cnx-vav1-zone1 a s223:Connection ;
     s223:hasMedium s223:Fluid-Air ;
     s223:connectsFrom ex:vav-1 ;
-    s223:connectsTo ex:zone-1 ;
-    s223:cnx ex:vav-1-out, ex:zone-1-in .
+    s223:connectsTo ex:space-1 ;
+    s223:cnx ex:vav-1-out, ex:space-1-in .
+
+ex:space-1 a s223:DomainSpace ;
+    rdfs:label "space-1" ;
+    phIoT:siteRef ex:site-1 ;
+    s223:hasConnectionPoint ex:space-1-in .
+
+ex:space-1-in a s223:InletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-vav1-zone1 .
 
 ex:zone-1 a s223:Zone ;
     rdfs:label "zone-1" ;
     phIoT:siteRef ex:site-1 ;
     ph:hasTag phIoT:zone ;
-    s223:hasConnectionPoint ex:zone-1-in .
-
-ex:zone-1-in a s223:InletConnectionPoint ;
-    s223:hasMedium s223:Fluid-Air ;
-    s223:cnx ex:cnx-vav1-zone1 .
+    s223:hasDomainSpace ex:space-1 .
 
 ex:vav-2 a s223:TerminalUnit ;
     rdfs:label "vav-2" ;
@@ -124,18 +130,23 @@ ex:vav-2-out a s223:OutletConnectionPoint ;
 ex:cnx-vav2-zone2 a s223:Connection ;
     s223:hasMedium s223:Fluid-Air ;
     s223:connectsFrom ex:vav-2 ;
-    s223:connectsTo ex:zone-2 ;
-    s223:cnx ex:vav-2-out, ex:zone-2-in .
+    s223:connectsTo ex:space-2 ;
+    s223:cnx ex:vav-2-out, ex:space-2-in .
+
+ex:space-2 a s223:DomainSpace ;
+    rdfs:label "space-2" ;
+    phIoT:siteRef ex:site-1 ;
+    s223:hasConnectionPoint ex:space-2-in .
+
+ex:space-2-in a s223:InletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-vav2-zone2 .
 
 ex:zone-2 a s223:Zone ;
     rdfs:label "zone-2" ;
     phIoT:siteRef ex:site-1 ;
     ph:hasTag phIoT:zone ;
-    s223:hasConnectionPoint ex:zone-2-in .
-
-ex:zone-2-in a s223:InletConnectionPoint ;
-    s223:hasMedium s223:Fluid-Air ;
-    s223:cnx ex:cnx-vav2-zone2 .
+    s223:hasDomainSpace ex:space-2 .
 
 # No connection into this zone: traversal must report unknown_upstream.
 ex:zone-unlinked a s223:Zone ;

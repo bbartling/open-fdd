@@ -3,12 +3,25 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict
 from typing import Any
 
-from open_fdd.rca.rank import RCAReport
+from open_fdd.rca.rank import CauseTrace, RCAReport
 
 REPORT_VERSION = 1
+
+
+def _symptom_context(tr: CauseTrace) -> str:
+    """Site and window suffix so two similar traces stay distinguishable."""
+    parts: list[str] = []
+    if tr.symptom_site:
+        parts.append(f"site={tr.symptom_site}")
+    if tr.symptom_start or tr.symptom_end:
+        parts.append(f"window={tr.symptom_start or '?'}..{tr.symptom_end or '?'}")
+    if not parts:
+        return ""
+    return " (" + ", ".join(parts) + ")"
 
 
 def next_checks(report: RCAReport) -> list[str]:
@@ -25,10 +38,11 @@ def next_checks(report: RCAReport) -> list[str]:
             f"common upstream cause for {cc.downstream_symptom_count} symptoms ({affected})."
         )
     for tr in report.traces:
+        ctx = _symptom_context(tr)
         if tr.candidates and tr.candidates[0].hop_distance == 0:
             lead = tr.candidates[0]
             checks.append(
-                f"Inspect {tr.symptom_equipment} locally ({lead.rule_id}, confidence={lead.confidence:.2f}); "
+                f"Inspect {tr.symptom_equipment} locally ({lead.rule_id}, confidence={lead.confidence:.2f}){ctx}; "
                 f"no stronger upstream cause found."
             )
         elif tr.candidates and tr.candidates[0].hop_distance > 0:
@@ -36,12 +50,12 @@ def next_checks(report: RCAReport) -> list[str]:
             if lead.inferred:
                 checks.append(
                     f"Verify inferred upstream {lead.equipment_id} -> {tr.symptom_equipment} "
-                    f"({lead.rule_id}, confidence={lead.confidence:.2f}; {lead.topology_source})."
+                    f"({lead.rule_id}, confidence={lead.confidence:.2f}; {lead.topology_source}){ctx}."
                 )
             else:
                 checks.append(
                     f"Inspect upstream {lead.equipment_id} ({lead.rule_id}, confidence={lead.confidence:.2f}) "
-                    f"for {tr.symptom_equipment}."
+                    f"for {tr.symptom_equipment}{ctx}."
                 )
         if tr.unknown_upstream and tr.upstream_status != "traced_inferred":
             at = ", ".join(tr.unknown_upstream_at) or tr.symptom_equipment
@@ -95,9 +109,21 @@ def report_to_dict(report: RCAReport, *, source: dict[str, Any] | None = None) -
     }
 
 
+def _finite_json(value: Any) -> Any:
+    """Replace non-finite floats so the report is strict JSON."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _finite_json(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_finite_json(item) for item in value]
+    return value
+
+
 def report_to_json(report: RCAReport, *, source: dict[str, Any] | None = None, indent: int = 2) -> str:
     """Serialize an ``RCAReport`` as formatted JSON."""
-    return json.dumps(report_to_dict(report, source=source), indent=indent)
+    payload = _finite_json(report_to_dict(report, source=source))
+    return json.dumps(payload, indent=indent, allow_nan=False)
 
 
 def report_to_markdown(report: RCAReport) -> str:
@@ -144,7 +170,7 @@ def report_to_markdown(report: RCAReport) -> str:
             lines.extend(
                 [
                     "",
-                    f"### {tr.symptom_equipment} — {tr.symptom_rule} (`{tr.upstream_status}`)",
+                    f"### {tr.symptom_equipment} — {tr.symptom_rule}{_symptom_context(tr)} (`{tr.upstream_status}`)",
                 ]
             )
             for note in tr.notes:

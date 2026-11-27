@@ -18,6 +18,7 @@ Suggested links can be exported to CSV or Turtle for human review.
 from __future__ import annotations
 
 import csv
+import hashlib
 import itertools
 import math
 import re
@@ -259,6 +260,23 @@ def _classify_equipment(node: GraphNode, pts: Sequence[GraphNode]) -> tuple[str,
 
 def _classify_point(point: GraphNode) -> tuple[str, str]:
     """Return ``(signal_role, medium)`` or ``('ignore', '')`` for setpoints/non-causal channels."""
+    from open_fdd.ontology_audit.terms import split_iri
+    from open_fdd.rca.role_index import is_setpoint_role
+
+    if any(split_iri(aspect)[1] == "Aspect-Setpoint" for aspect in point.aspects) or any(
+        is_setpoint_role(role) for role in point.property_roles
+    ):
+        return "ignore", ""
+    for role in point.property_roles:
+        low = role.lower()
+        if "temp" not in low:
+            continue
+        if any(token in low for token in ("discharge", "supply", "leaving")):
+            return "temp_air_out", "air"
+        if any(token in low for token in ("zone", "room", "return", "mixed", "entering")):
+            return "temp_air_in", "air"
+        return "temp_air_generic", "air"
+
     toks = _tag_tokens((*point.equip_types, *point.tags))
     lbl = _word_tokens(point.label) | _word_tokens(point.node_id)
     all_t = toks | lbl
@@ -948,14 +966,15 @@ def suggested_links_to_ttl(edges: Sequence[InferredEdge]) -> str:
         "# Review and remove unwanted statements before merging into a site model.",
         "",
     ]
-    for index, edge in enumerate(edges, start=1):
+    for edge in edges:
         ev = "; ".join(edge.evidence)
         comment = (
             f"# {edge.upstream_label} -> {edge.downstream_label} | confidence={edge.confidence:.3f} | {ev}"
         )
         comment = " ".join(comment.splitlines())
         lines.append(comment)
-        conn = f"urn:openfdd:inferred:connection:{index}"
+        digest = hashlib.sha256(f"{edge.upstream_iri}\n{edge.downstream_iri}".encode()).hexdigest()[:16]
+        conn = f"urn:openfdd:inferred:connection:{digest}"
         lines.append(f"<{conn}> a s223:Connection ;")
         lines.append(f"    s223:connectsFrom <{edge.upstream_iri}> ;")
         lines.append(f"    s223:connectsTo <{edge.downstream_iri}> .")

@@ -17,12 +17,15 @@ _SETPOINT_ASPECT = "s223:Aspect-Setpoint"
 
 
 def roles_json_path() -> Path | None:
-    """Locate the vocabulary file in the repo checkout (or ``OPENFDD_ROLES_JSON``)."""
+    """Locate the vocabulary shipped in the package, the checkout, or ``OPENFDD_ROLES_JSON``."""
     override = os.environ.get("OPENFDD_ROLES_JSON")
     if override:
         path = Path(override)
         if path.is_file():
             return path
+    packaged = Path(__file__).resolve().parent / "data" / "openfdd-roles.json"
+    if packaged.is_file():
+        return packaged
     here = Path(__file__).resolve()
     for parent in here.parents:
         candidate = parent / "roles" / "openfdd-roles.json"

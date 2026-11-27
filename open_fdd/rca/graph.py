@@ -4,8 +4,10 @@ The feeder graph is ASHRAE 223P: equipment and other connectables, connection po
 and ``s223:Connection`` (the connection between connectables). Direction follows
 outlet connection point → connection → inlet connection point, plus
 ``s223:connectedTo`` / ``s223:connectedFrom`` and ``s223:connectsFrom`` /
-``s223:connectsTo``. Properties on equipment are matched to
-``roles/openfdd-roles.json``.
+``s223:connectsTo``. A zone is not itself the connectable: traversal follows
+``s223:hasDomainSpace`` to member spaces and nested zones, then their physical
+feeders. Membership is not stored as a feeder edge. Properties on equipment are
+matched to ``roles/openfdd-roles.json``.
 
 Haystack tags are an optional overlay for labels, site membership and point
 ownership. They are stored as Haystack defs 4.0.0 IRIs
@@ -129,6 +131,7 @@ class GraphNode:
     aliases: tuple[str, ...] = ()
     site_ids: tuple[str, ...] = ()
     property_roles: tuple[str, ...] = ()
+    aspects: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -235,15 +238,19 @@ class TopologyGraph:
         *,
         rdflib_graph: Any = None,
         sparql_triples: list[tuple[str, str, str]] | None = None,
+        members: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         self.nodes = nodes
         self.upstream_edges = upstream_edges
         self.rdflib_graph = rdflib_graph
         self.sparql_triples = list(sparql_triples or [])
+        self.members = {k: tuple(v) for k, v in (members or {}).items()}
+        self._sparql_store: Any = None
+        self._sparql_import_failed = False
         self._alias_exact: dict[str, list[str]] = {}
         self._alias_ci: dict[str, list[str]] = {}
         for iri, node in nodes.items():
-            for key in (node.iri, *node.aliases):
+            for key in (node.iri, node.node_id, node.label, *node.aliases):
                 self._index_alias(key, iri)
 
     def _index_alias(self, key: str, iri: str) -> None:
@@ -263,15 +270,20 @@ class TopologyGraph:
         if out:
             return out
         seen = set(_seen or ())
+        if node.iri in seen:
+            return set()
         seen.add(node.iri)
+        owner_sets: list[set[str]] = []
         for edge in self.upstream_edges.get(node.iri, ()):
             parent = self.nodes.get(edge.upstream_iri)
             if parent is None or parent.iri in seen:
                 continue
-            out |= self._site_tokens(parent, _seen=frozenset(seen))
-            if out:
-                return out
-        return out
+            parent_tokens = self._site_tokens(parent, _seen=frozenset(seen))
+            if parent_tokens:
+                owner_sets.append(parent_tokens)
+        if not owner_sets:
+            return set()
+        return set.intersection(*owner_sets)
 
     def _filter_iris_by_site(self, iris: list[str], site_id: str | None) -> list[str]:
         if not site_id:
@@ -338,6 +350,7 @@ class TopologyGraph:
             upstream_edges=edges,
             rdflib_graph=self.rdflib_graph,
             sparql_triples=self.sparql_triples,
+            members=self.members,
         )
 
     @classmethod
@@ -376,6 +389,7 @@ class TopologyGraph:
         connected_to = URIRef(S223 + "connectedTo")
         connected_from = URIRef(S223 + "connectedFrom")
         has_property = URIRef(S223 + "hasProperty")
+        has_domain = URIRef(S223 + "hasDomainSpace")
         of_medium = URIRef(S223 + "ofMedium")
         has_medium = URIRef(S223 + "hasMedium")
         has_aspect = URIRef(S223 + "hasAspect")
@@ -494,6 +508,7 @@ class TopologyGraph:
                 add_edge(str(equip), str(point), "phIoT:equipRef")
 
         roles_by_equip: dict[str, list[str]] = {}
+        roles_by_node: dict[str, list[str]] = {}
         for equip, _, prop in list(g.triples((None, has_property, None))):
             if not (isinstance(equip, URIRef) and isinstance(prop, URIRef)):
                 continue
@@ -507,6 +522,17 @@ class TopologyGraph:
             )
             if role and role not in roles_by_equip.setdefault(str(equip), []):
                 roles_by_equip[str(equip)].append(role)
+            if role and role not in roles_by_node.setdefault(prop_s, []):
+                roles_by_node[prop_s].append(role)
+
+        members: dict[str, list[str]] = {}
+        for zone, _, space in g.triples((None, has_domain, None)):
+            if isinstance(zone, URIRef) and isinstance(space, URIRef):
+                entities.add(str(zone))
+                entities.add(str(space))
+                bucket = members.setdefault(str(zone), [])
+                if str(space) not in bucket:
+                    bucket.append(str(space))
 
         edge_iris: set[str] = set()
         for edge_list in edges.values():
@@ -557,10 +583,17 @@ class TopologyGraph:
                 is_point=_is_point(eq_types, tags),
                 aliases=aliases,
                 site_ids=tuple(site_id_tokens),
-                property_roles=tuple(roles_by_equip.get(iri, ())),
+                property_roles=tuple(roles_by_equip.get(iri) or roles_by_node.get(iri) or ()),
+                aspects=tuple(sorted(aspects_by_s.get(iri, ()))),
             )
 
-        return cls(nodes=nodes, upstream_edges=edges, rdflib_graph=g, sparql_triples=sparql_triples)
+        return cls(
+            nodes=nodes,
+            upstream_edges=edges,
+            rdflib_graph=g,
+            sparql_triples=sparql_triples,
+            members={k: tuple(v) for k, v in members.items()},
+        )
 
     def _closed_cycle_frontiers(self, visited: set[str]) -> list[str]:
         """Node ids in a visited component that has incoming links but no escape to an unvisited feeder."""
@@ -627,13 +660,9 @@ class TopologyGraph:
             return sorted({r["upstream"] for r in rows if r.get("upstream") and r["upstream"] != target_iri})
         if not self.sparql_triples:
             return []
-        try:
-            import pyoxigraph
-        except ImportError:
+        store = self._oxigraph_store()
+        if store is None:
             return []
-        store = pyoxigraph.Store()
-        for subj, pred, obj in self.sparql_triples:
-            store.add(pyoxigraph.Quad(pyoxigraph.NamedNode(subj), pyoxigraph.NamedNode(pred), pyoxigraph.NamedNode(obj)))
         hits: set[str] = set()
         for solution in store.query(query):
             term = solution["upstream"]
@@ -641,6 +670,21 @@ class TopologyGraph:
             if value and value != target_iri:
                 hits.add(value)
         return sorted(hits)
+
+    def _oxigraph_store(self) -> Any:
+        """Build the pyoxigraph store once for this immutable triple snapshot."""
+        if self._sparql_store is not None or self._sparql_import_failed:
+            return self._sparql_store
+        try:
+            import pyoxigraph
+        except ImportError:
+            self._sparql_import_failed = True
+            return None
+        store = pyoxigraph.Store()
+        for subj, pred, obj in self.sparql_triples:
+            store.add(pyoxigraph.Quad(pyoxigraph.NamedNode(subj), pyoxigraph.NamedNode(pred), pyoxigraph.NamedNode(obj)))
+        self._sparql_store = store
+        return store
 
     def traverse_upstream(
         self,
@@ -689,7 +733,9 @@ class TopologyGraph:
                 ],
                 key=lambda e: (e.inferred, -(e.confidence or 0.0), e.predicate, e.upstream_iri),
             )
-            if not incoming:
+            # Zone membership expands traversal without counting as a physical feeder.
+            member_iris = [m for m in self.members.get(cur_iri, ()) if m not in visited and m != cur_iri]
+            if not incoming and not member_iris:
                 if cur_node is not None and not cur_node.is_source_root:
                     frontier_missing.append(cur_node.node_id)
                 continue
@@ -698,6 +744,9 @@ class TopologyGraph:
                 if cur_node is not None and not cur_node.is_source_root:
                     frontier_missing.append(cur_node.node_id)
                 continue
+            for member in member_iris:
+                visited.add(member)
+                queue.append((member, hop, path_ids, rels, inf_flags, confs))
             for edge in incoming:
                 up_iri = edge.upstream_iri
                 if up_iri in visited:

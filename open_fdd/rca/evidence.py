@@ -12,7 +12,7 @@ from __future__ import annotations
 import csv
 import json
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -46,6 +46,22 @@ def _opt_float(value: Any) -> float | None:
     if not math.isfinite(f):
         return None
     return f
+
+
+def _probability(value: Any) -> float | None:
+    """Return a finite probability in ``[0, 1]``, or ``None`` when the value is unusable."""
+    f = _opt_float(value)
+    if f is None or f < 0.0 or f > 1.0:
+        return None
+    return f
+
+
+def _record_bounds(rec: Mapping[str, Any]) -> tuple[datetime | None, datetime | None]:
+    """Prefer ``start`` / ``end``, then ``window_start`` / ``window_end``."""
+    return (
+        parse_utc(rec.get("start") or rec.get("window_start")),
+        parse_utc(rec.get("end") or rec.get("window_end")),
+    )
 
 
 def _opt_bool(value: Any) -> bool:
@@ -262,10 +278,10 @@ class DataFrameEvidenceCollector(InMemoryEvidenceCollector):
                     equipment_id=str(r["equipment_id"]),
                     rule_id=str(r["rule_id"]),
                     status=status,
-                    start=parse_utc(r.get("window_start") or r.get("start")),
-                    end=parse_utc(r.get("window_end") or r.get("end")),
-                    p_real=_opt_float(r.get("p_real")),
-                    p_false_positive=_opt_float(r.get("p_false_positive")),
+                    start=parse_utc(r.get("start") or r.get("window_start")),
+                    end=parse_utc(r.get("end") or r.get("window_end")),
+                    p_real=_probability(r.get("p_real")),
+                    p_false_positive=_probability(r.get("p_false_positive")),
                     p_tuning=_opt_float(r.get("p_tuning")),
                     confidence_label=r.get("label") or r.get("confidence_label") or None,
                     is_data_quality=_opt_bool(r.get("data_quality_rule") or r.get("is_data_quality")),
@@ -323,15 +339,16 @@ class DataFrameEvidenceCollector(InMemoryEvidenceCollector):
             eq = str(rec.get("equipment_id", ""))
             rule_id = str(rec.get("rule_id", ""))
             is_dq = _opt_bool(rec.get("data_quality_rule") or ev.get("data_quality_rule"))
+            start, end = _record_bounds(rec)
             faults.append(
                 FaultEvidence(
                     equipment_id=eq,
                     rule_id=rule_id,
                     status="FAULT",
-                    start=parse_utc(rec.get("start")),
-                    end=parse_utc(rec.get("end")),
-                    p_real=_opt_float(rec.get("p_real")),
-                    p_false_positive=_opt_float(rec.get("p_false_positive")),
+                    start=start,
+                    end=end,
+                    p_real=_probability(rec.get("p_real")),
+                    p_false_positive=_probability(rec.get("p_false_positive")),
                     p_tuning=_opt_float(rec.get("p_tuning")),
                     confidence_label=rec.get("label") or None,
                     is_data_quality=is_dq,
@@ -348,8 +365,8 @@ class DataFrameEvidenceCollector(InMemoryEvidenceCollector):
                         flag="poor_data_quality",
                         detail=f"Confidence evidence flagged poor input data on {rule_id}",
                         site_id=str(rec.get("site_id") or ev.get("site_id") or ""),
-                        start=parse_utc(rec.get("start")),
-                        end=parse_utc(rec.get("end")),
+                        start=start,
+                        end=end,
                     )
                 )
 
@@ -425,6 +442,8 @@ def _parse_dq_rows(data_quality: Any) -> list[DataQualityEvidence]:
             point_id=str(r.get("point_id") or ""),
             detail=str(r.get("detail") or ""),
             site_id=str(r.get("site_id") or ""),
+            start=parse_utc(r.get("start") or r.get("window_start")),
+            end=parse_utc(r.get("end") or r.get("window_end")),
         )
         for r in rows
     ]
@@ -514,7 +533,7 @@ class SqlEvidenceCollector:
         sensitivity_frac: float = 0.10,
         source: Any = None,
         history: Any = None,
-        fault_status: tuple[str, ...] = ("FAULT",),
+        fault_status: tuple[str, ...] = ("FAULT", "1", "TRUE"),
         pass_status: tuple[str, ...] = ("PASS",),
     ) -> None:
         self.conn = conn
@@ -628,7 +647,7 @@ class SqlEvidenceCollector:
         t1 = self._ident(self.columns.get("window_end", "window_end"))
         st = self._ident(self.columns.get("status", "status"))
         site_expr, site_col = self._site_select()
-        statuses = [s.upper() for s in (self.fault_status or ("FAULT",))]
+        statuses = [s.upper() for s in (self.fault_status or ("FAULT", "1", "TRUE"))]
         ph = sql_placeholder(self.conn)
         placeholders = ", ".join(ph for _ in statuses)
         sql = (
@@ -656,55 +675,89 @@ class SqlEvidenceCollector:
     ) -> list[PointDeviation]:
         """Last SI sample per (equipment, point) in each episode window, plus setpoint deviations when paired."""
         ph = csql.paramstyle(self.conn)
-        by_site = bool(site_id and hm.col("site_id"))
-        sql = csql.history_sql(hm, ph, by_site=by_site)
+        has_site_col = bool(hm.col("site_id"))
+        sql_by_site: dict[bool, str] = {}
         samples: list[PointDeviation] = []
         seen: set[tuple[str, str, object, object]] = set()
         for fault in faults:
             if fault.start is None or fault.end is None:
                 continue
-            key = (fault.site_id or site_id or "", fault.equipment_id, fault.start, fault.end)
+            episode_site = fault.site_id or ""
+            if has_site_col and (episode_site or site_id):
+                by_site = True
+                site_param = episode_site or site_id or ""
+            else:
+                by_site = False
+                site_param = ""
+            key = (site_param, fault.equipment_id, fault.start, fault.end)
             if key in seen:
                 continue
             seen.add(key)
+            if by_site not in sql_by_site:
+                sql_by_site[by_site] = csql.history_sql(hm, ph, by_site=by_site)
             params: list[Any] = [fault.equipment_id, fault.start.strftime("%Y-%m-%dT%H:%M:%SZ"), fault.end.strftime("%Y-%m-%dT%H:%M:%SZ")]
             if by_site:
-                params.append(site_id or fault.site_id)
-            cols, rows = csql.fetch(self.conn, sql, params)
-            by_point: dict[str, tuple[Any, float]] = {}
-            for row in rows:
-                rec = dict(zip(cols, row))
-                val = _opt_float(rec.get("value"))
-                ts = rec.get("ts")
-                pid = str(rec.get("point_id") or "")
-                if val is None or not pid:
-                    continue
-                prev = by_point.get(pid)
-                if prev is None or (ts is not None and prev[0] is not None and ts >= prev[0]) or prev[0] is None:
-                    by_point[pid] = (ts, val)
-            # Pair each observable role with its Aspect-Setpoint partner from roles/openfdd-roles.json.
-            for pid, (ts, val) in by_point.items():
-                if is_setpoint_role(pid):
-                    continue
-                partner = setpoint_role_for(pid)
-                sp = None
-                if partner is not None:
-                    for other, (_ots, oval) in by_point.items():
-                        if canonical_role(other) == partner:
-                            sp = oval
-                            break
-                samples.append(
-                    PointDeviation(
-                        equipment_id=fault.equipment_id,
-                        role=canonical_role(pid) or pid,
-                        value_si=val,
-                        setpoint_si=sp,
-                        unit="",
-                        timestamp=parse_utc(ts),
-                        site_id=fault.site_id or (site_id or ""),
-                    )
-                )
+                params.append(site_param)
+            cols, rows = csql.fetch(self.conn, sql_by_site[by_site], params)
+            if has_site_col:
+                sample_site = site_param
+            else:
+                sample_site = episode_site or (site_id or "")
+            samples.extend(
+                _deviations_from_history_rows(rows, cols, equipment_id=fault.equipment_id, site_id=sample_site)
+            )
         return samples
+
+
+def _deviations_from_history_rows(
+    rows: Iterable[Any],
+    cols: Sequence[str],
+    *,
+    equipment_id: str,
+    site_id: str,
+) -> list[PointDeviation]:
+    """Last SI sample per point, paired with the setpoint in effect at that timestamp."""
+    measurements: dict[str, tuple[datetime | None, float]] = {}
+    setpoints: dict[str, list[tuple[datetime | None, float]]] = {}
+    for row in rows:
+        rec = dict(zip(cols, row))
+        val = _opt_float(rec.get("value"))
+        pid = str(rec.get("point_id") or "")
+        if val is None or not pid:
+            continue
+        ts = parse_utc(rec.get("ts"))
+        if is_setpoint_role(pid):
+            setpoints.setdefault(pid, []).append((ts, val))
+            continue
+        prev = measurements.get(pid)
+        if prev is None or (ts is not None and (prev[0] is None or ts >= prev[0])):
+            measurements[pid] = (ts, val)
+    samples: list[PointDeviation] = []
+    for pid, (ts, val) in measurements.items():
+        partner = setpoint_role_for(pid)
+        sp: float | None = None
+        if partner is not None and ts is not None:
+            applicable = [
+                (ots, oval)
+                for other, pts in setpoints.items()
+                if canonical_role(other) == partner
+                for ots, oval in pts
+                if ots is not None and ots <= ts
+            ]
+            if applicable:
+                sp = max(applicable)[1]
+        samples.append(
+            PointDeviation(
+                equipment_id=equipment_id,
+                role=canonical_role(pid) or pid,
+                value_si=val,
+                setpoint_si=sp,
+                unit="",
+                timestamp=ts,
+                site_id=site_id,
+            )
+        )
+    return samples
 
 
 def _fault_from_episode_row(row: Mapping[str, Any]) -> FaultEvidence:
@@ -716,8 +769,8 @@ def _fault_from_episode_row(row: Mapping[str, Any]) -> FaultEvidence:
         status="FAULT",
         start=start,
         end=end,
-        p_real=_opt_float(row.get("p_real")),
-        p_false_positive=_opt_float(row.get("p_false_positive")),
+        p_real=_probability(row.get("p_real")),
+        p_false_positive=_probability(row.get("p_false_positive")),
         p_tuning=_opt_float(row.get("p_tuning")),
         confidence_label=row.get("label") or row.get("confidence_label") or None,
         is_data_quality=_opt_bool(row.get("data_quality_rule") or row.get("is_data_quality")),
