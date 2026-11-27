@@ -8,7 +8,7 @@ remote access (Normal Online) and config backups. Open-FDD adds a UI and hooks. 
 | Piece | Where | Runs in |
 |---|---|---|
 | Static UI | `nf-app/static/` (served by NF at `/api/v1/apps/static/open-fdd/`) | the browser; plain JavaScript, strict CSP, vendored ECharts. Not React or Plotly |
-| `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node 22 runtime. Engines: `sqlite` (sql.js), `pglite`, opt-in `duckdb` (`@duckdb/node-api` `2.0.1-r.1`), optional `timescale` |
+| `fdd` hook | `nf-app/hooks/fdd.js`, hourly | NF Node 22 runtime. Server-side DuckDB (`@duckdb/node-api` `2.0.1-r.1`) over Parquet, or `timescale`. `sqlite` and `pglite` are not runtime engines |
 | `weather` hook | `nf-app/hooks/weather.js`, every 20 min | NF Node runtime; Open-Meteo to global variables |
 | `sparql` hook | `nf-app/hooks/sparql.js`, on request | NF Node runtime; Oxigraph over the model's Turtle |
 | `analytics` hook | `nf-app/hooks/analytics.js`, on request (`args.tool`) | NF Node runtime; read-only. Runs `sql/analytics/*.sql` in-process (`hooks/lib/sql-analytics.js`). Pandas twins are `open_fdd/analytics/sql_*.py`. CLI `open-fdd-nf analyze` |
@@ -22,8 +22,10 @@ cannot disagree about binding or units. NF caches static files for 5 minutes.
 
 - **Full** (`nf-app/`, app id `open-fdd`): UI tabs Overview, Charts, FDD, RCx, Points, Export, BACnet Server, Model and RDF
   (with SPARQL). Scheduled hooks: `fdd`, `weather`. On request: `sparql`, `sparql-data`, `analytics`, `schema`,
-  `tuning`, `history`, `rdf`. `engine: "auto"` uses Timescale when that option is set, otherwise PGlite when NF
-  reports at least 3.5 GiB, otherwise SQLite. `duckdb` is opt-in and is never chosen by `auto`.
+  `tuning`, `history`, `rdf`. The runtime database is server-side Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`,
+  Parquet on disk) or Timescale. There is no DuckDB-WASM and no Python DuckDB runtime. `engine: "auto"` uses
+  Timescale on the Timescale build or when that option is set, otherwise DuckDB. If `@duckdb/node-api` cannot load,
+  the run fails. A config that names `sqlite` or `pglite` fails.
 - **Lite** (`lite/`, app id `open-fdd-lite`): no FDD engine and no npm dependencies; Overview, Charts, Points, BACnet
   Server, Model and RDF; `weather` hook with an optional BACnet mirror. For 1 GB boxes.
 
@@ -74,7 +76,10 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 | `openfdd.nf_samples` | view | n/a | NF's samples in native units (`history_buckets`, newest-sample lookup) |
 | `fdd.input_sample` | view | n/a | SI samples of the bound points (`value * si_scale + si_offset`); the loader reads it (`adapter_nf.sql`) |
 
-The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
+The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Node DuckDB keeps history as Parquet
+on disk and builds the same per-run relations as views over the window. Each run's scratch relations come from the SQL
+input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`,
+`utility_monthly`.
 
 `sql/fdd/schema/core.sql` is the shared core schema (`fdd.point`, `fdd.rule_result`, `fdd.rule_config`): the NF app installs it, and downstream applications vendor it byte for byte (it ships in the wheel as `open_fdd/data/core.sql`). Schema version 4 (5.0.16) replaced `openfdd.fdd_results` and `openfdd.retention_log` with it; see [`docs/upgrade-5x.md`](../docs/upgrade-5x.md).
 

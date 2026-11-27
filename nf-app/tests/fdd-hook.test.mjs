@@ -96,8 +96,8 @@ test("fdd hook: binds, reads the 5-min grid, runs runnable pack rules, writes re
   const http = fakeHttp();
   const seen = { queries: [] };
   const logs = [];
-  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, pack: PACK, createEngine: stubEngine(seen), now: NOW });
-  assert.equal(summary.engine, "sqlite", "1 GiB box → sqlite");
+  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(m) }, pack: PACK, createEngine: stubEngine(seen), now: NOW, hasDuckdb: () => false });
+  assert.equal(summary.engine, "sqlite", "1 GiB box and no DuckDB package → deprecated sqlite");
   assert.deepEqual(seen.queries.sort(), ["CMD-1", "FAN-RUNTIME-HOURS"], "only rules in the pack that are runnable");
   assert.equal(seen.input.history.length, 288, "24 h on the 5-min grid");
   // only the roles the runnable rules use are read (OAT is bound but no rule here needs it)

@@ -14,7 +14,7 @@ model in NF ([data model](modeling.html)); they differ in whether a rule engine 
 | NF app id | `open-fdd-lite` | `open-fdd` |
 | Source | [`lite/`](https://github.com/bbartling/open-fdd/tree/master/lite) | [`nf-app/`](https://github.com/bbartling/open-fdd/tree/master/nf-app) |
 | Host | 1 GB, Raspberry Pi class | 2 GB or more; 4 GB or more is comfortable |
-| FDD engine | none | SQLite (about 2 GB), PGlite (4 GB or more), opt-in DuckDB, or TimescaleDB |
+| FDD engine | none | Node DuckDB (`@duckdb/node-api` 2.0.1-r.1) with Parquet on disk, or TimescaleDB |
 | Includes | dashboard, charts, points, NF BACnet server view, CSV export, RDF export, weather hook, `rdf` hook | Lite plus the FDD tab and the Overview RCx dashboard, fault points, SQL rules, SPARQL and `sparql-data` hooks |
 | Scheduled hooks | `weather` every 20 min, `rdf` on request | `fdd` hourly, `weather` every 20 min, `sparql`, `sparql-data`, `rdf` on request |
 | History it sees | NF's own, about 7 days | NF's, or long-range history from Timescale |
@@ -31,8 +31,10 @@ Both write only their own result points and weather variables. Neither writes to
 ## Use Full when
 
 - the host has 2 GB or more and you want faults, RCx charts and fault points in NF;
-- you need history longer than NF's week: enable NF's TimescaleDB connector and set the app option `timescale`. Rules then run in the database.
+- you need history longer than the local Parquet window: enable NF's TimescaleDB connector and set the app option `timescale`. Rules then run in that database.
   See [`nf-app/timescale`](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
+
+`engine: "auto"` uses Timescale on the Timescale build or when that option is set, and otherwise server-side DuckDB 2.0.1 (`@duckdb/node-api` `2.0.1-r.1`). History for that engine is Parquet on disk. The browser calls the NF API for charts. There is no DuckDB-WASM and no Python DuckDB runtime in the plugin. If `@duckdb/node-api` cannot load, the run fails. A config that names `sqlite` or `pglite` fails. Python `duckdb>=2.0.1` is only a test and parity dependency. PyPI fault tooling uses pandas.
 
 ## Rules of thumb
 

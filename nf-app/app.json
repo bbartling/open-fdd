@@ -22,6 +22,7 @@
     "/hooks/analytics.js": "hooks/analytics.js",
     "/hooks/fdd.js": "hooks/fdd.js",
     "/hooks/history.js": "hooks/history.js",
+    "/hooks/lib/duckdb-parquet.js": "hooks/lib/duckdb-parquet.js",
     "/hooks/lib/engines.js": "hooks/lib/engines.js",
     "/hooks/lib/paging.js": "hooks/lib/paging.js",
     "/hooks/lib/role-limits.js": "hooks/lib/role-limits.js",

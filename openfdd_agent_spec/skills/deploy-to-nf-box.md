@@ -7,8 +7,10 @@ description: Deploy the Open-FDD full app or Lite to an NF box with nf_app_sync.
 Need NF 3.10 or newer and a console login. Keep the env file outside git (`NF_CONSOLE_URL`, `CONSOLE_USERNAME`, `CONSOLE_PASSWORD`).
 
 1. Run the tests first: `node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs`.
-2. Choose the edition. **1 GB boxes (Raspberry Pi 3) get Lite only** (`lite/app.json`). Full (`nf-app/app.json`):
-   `auto` uses Timescale when configured, else PGlite from 3.5 GiB, else SQLite. DuckDB (`duckdb>=2.0.1`) is opt-in.
+2. Choose the edition. **1 GB boxes (Raspberry Pi 3) get Lite only** (`lite/app.json`). Full (`nf-app/app.json`) runs
+   server-side Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`, Parquet on disk) or Timescale. `auto` uses Timescale on
+   the Timescale build or when that option is set, otherwise DuckDB. If `@duckdb/node-api` cannot load, the run fails.
+   `duckdb>=2.0.1` is the Python parity pin only.
 3. `python3 scripts/nf/hooks/nf_app_sync.py --env <env file> diff nf-app/app.json` then
    `... push nf-app/app.json` (`--skip-hooks` for UI only, `--hook fdd` for one hook; `run ... --hook fdd` runs it now).
    Alternative: NF MCP `manage_app` (create, `write_file`, `restart`) and `deploy_hook`; run a hook with its uuid.

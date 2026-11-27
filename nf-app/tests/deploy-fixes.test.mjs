@@ -110,17 +110,24 @@ test("history: no config.timescale but args that ask for a query still fails", a
 
 const bigBox = { async get() { return { data: { resources: [{ memory: { totalBytes: String(16 * 1024 ** 3) } }] } }; } };
 
-test("engine auto: pglite on a big box when installed, sqlite fallback (with a note) when not", async () => {
-  assert.deepEqual(await fdd.pickEngine(bigBox, "auto", undefined, () => true), { kind: "pglite", note: "" });
-  const fb = await fdd.pickEngine(bigBox, undefined, undefined, () => false);
-  assert.equal(fb.kind, "sqlite");
-  assert.match(fb.note, /pglite is not installed/);
+test("engine auto: DuckDB when it loads, even on a big box; 3.5 GiB PGlite only if it cannot", async () => {
+  assert.equal((await fdd.pickEngine(bigBox, "auto", undefined, () => true, () => true)).kind, "duckdb");
+  const fb = await fdd.pickEngine(bigBox, "auto", undefined, () => true, () => false);
+  assert.equal(fb.kind, "pglite");
+  assert.match(fb.note, /3\.5 GiB/);
+  const noPglite = await fdd.pickEngine(bigBox, undefined, undefined, () => false, () => false);
+  assert.equal(noPglite.kind, "sqlite");
+  assert.match(noPglite.note, /@duckdb\/node-api is not loadable/);
 });
 
-test("engine: an explicitly configured engine is never swapped", async () => {
-  assert.deepEqual(await fdd.pickEngine(bigBox, "pglite", undefined, () => false), { kind: "pglite", note: "" });
-  assert.deepEqual(await fdd.pickEngine(bigBox, "sqlite", undefined, () => true), { kind: "sqlite", note: "" });
-  assert.equal((await fdd.pickEngine(bigBox, "auto", { host: "h" }, () => false)).kind, "timescale");
+test("engine: an explicitly configured engine is never swapped for DuckDB", async () => {
+  const pglite = await fdd.pickEngine(bigBox, "pglite", undefined, () => false, () => true);
+  assert.equal(pglite.kind, "pglite");
+  assert.match(pglite.note, /deprecated/);
+  const sqlite = await fdd.pickEngine(bigBox, "sqlite", undefined, () => true, () => true);
+  assert.equal(sqlite.kind, "sqlite");
+  assert.match(sqlite.note, /deprecated/);
+  assert.equal((await fdd.pickEngine(bigBox, "auto", { host: "h" }, () => false, () => true)).kind, "timescale");
 });
 
 test("history: normalizeArgs coerces StartHook string-map uuids and windowHours", async () => {

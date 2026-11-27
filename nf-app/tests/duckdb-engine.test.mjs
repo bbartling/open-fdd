@@ -213,6 +213,10 @@ test("duckdb options: memory limit and threads are validated; defaults suit a 1 
     assert.equal("TimeZone" in duckDbOptions({}), false, "TimeZone as a create option autoinstalls ICU over the network");
     assert.throws(() => duckDbOptions({ extraSettings: { temp_directory: "/tmp" } }), /not allowed/);
     assert.equal(duckDbOptions({ extraSettings: { custom_extension_repository: "http://x" } }).temp_directory, "", "safety always wins");
+    const spill = duckDbOptions({ tempDirectory: "/tmp/openfdd-spill", maxTempDirectory: "1GB" });
+    assert.equal(spill.temp_directory, "/tmp/openfdd-spill");
+    assert.equal(spill.max_temp_directory_size, "1GB");
+    assert.equal(spill.autoinstall_known_extensions, "false");
   });
   withDuckEnv({ OPENFDD_DUCKDB_MEMORY_LIMIT: "512MB", OPENFDD_DUCKDB_THREADS: "4" }, () => {
     assert.equal(duckDbOptions({}).memory_limit, "512MB", "env override");
@@ -225,13 +229,14 @@ test("duckdb options: memory limit and threads are validated; defaults suit a 1 
   assert.throws(() => duckDbOptions({ threads: 1.5 }), /threads/);
 });
 
-test("pickEngine: duckdb only when configured; auto never picks it; a missing package falls back with a note", async () => {
+test("pickEngine: auto uses duckdb on any RAM; a missing package falls back, and 3.5 GiB applies only then", async () => {
   const http = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 8 * 1024 ** 3 } }] } }) };
   assert.deepEqual(await fdd.pickEngine(http, "duckdb", undefined, () => true, () => true), { kind: "duckdb", note: "" });
-  assert.equal((await fdd.pickEngine(http, "auto", undefined, () => true, () => true)).kind, "pglite");
+  assert.equal((await fdd.pickEngine(http, "auto", undefined, () => true, () => true)).kind, "duckdb");
   const fb = await fdd.pickEngine(http, "duckdb", undefined, () => true, () => false);
   assert.equal(fb.kind, "pglite");
-  assert.match(fb.note, /duckdb.*not installed.*using pglite/);
+  assert.match(fb.note, /@duckdb\/node-api is not loadable/);
+  assert.match(fb.note, /3\.5 GiB/);
   const small = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 1024 ** 3 } }] } }) };
   assert.equal((await fdd.pickEngine(small, "duckdb", undefined, () => true, () => false)).kind, "sqlite");
 });
