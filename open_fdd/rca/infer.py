@@ -271,6 +271,8 @@ def _classify_point(point: GraphNode) -> tuple[str, str]:
         low = role.lower()
         if "temp" not in low:
             continue
+        if any(token in low for token in ("outdoor", "outside")):
+            return "temp_outside", "air"
         if any(token in low for token in ("discharge", "supply", "leaving")):
             return "temp_air_out", "air"
         if any(token in low for token in ("zone", "room", "return", "mixed", "entering")):

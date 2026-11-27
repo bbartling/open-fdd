@@ -1961,8 +1961,46 @@ def test_setpoint_aspect_is_not_a_topology_signal():
         is_point=True,
         property_roles=("discharge_air_temperature",),
     )
+    outdoor = GraphNode(
+        iri="urn:test:oat",
+        node_id="opaque-oat",
+        label="opaque-oat",
+        is_point=True,
+        property_roles=("outdoor_air_intake_temperature",),
+    )
     assert _classify_point(setpoint) == ("ignore", "")
     assert _classify_point(measured) == ("temp_air_out", "air")
+    assert _classify_point(outdoor) == ("temp_outside", "air")
+
+
+def test_shared_domain_space_is_not_a_second_missing_feeder():
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix ex: <urn:test:share:> .
+    ex:chiller a s223:Chiller ; s223:connectedTo ex:space .
+    ex:space a s223:DomainSpace .
+    ex:inner a s223:Zone ; s223:hasDomainSpace ex:space .
+    ex:outer a s223:Zone ; s223:hasDomainSpace ex:inner, ex:space .
+    """
+    tr = load_graph(ttl).traverse_upstream("outer")
+    assert tr.upstream_status == "traced"
+    assert "inner" not in tr.unknown_upstream_at
+    assert "chiller" in [hop.node.node_id for hop in tr.ancestors]
+
+
+def test_membership_keeps_the_shorter_physical_hop():
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix ex: <urn:test:short:> .
+    ex:ahu a s223:AirHandlingUnit ; s223:connectedTo ex:vav, ex:space .
+    ex:vav a s223:TerminalUnit ; s223:connectedTo ex:zone .
+    ex:space a s223:DomainSpace .
+    ex:zone a s223:Zone ; s223:hasDomainSpace ex:space .
+    """
+    tr = load_graph(ttl).traverse_upstream("zone")
+    ahu = next(hop for hop in tr.ancestors if hop.node.node_id == "ahu")
+    assert ahu.hop == 1
+    assert ahu.path == ("ahu", "zone")
 
 
 def test_inferred_connection_iris_do_not_collide():

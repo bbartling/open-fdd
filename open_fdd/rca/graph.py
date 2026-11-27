@@ -713,17 +713,21 @@ class TopologyGraph:
             # TODO(5.0.22): surface remote SPARQL endpoint errors as warnings rather than silent fallback.
             sparql_hits = []
 
-        # Python BFS from target upstream, avoiding cycles and preferring modeled edges first
-        visited: set[str] = {node.iri}
+        # 0-1 BFS: zone membership costs 0 hops, a physical feeder costs 1.
+        # A shorter physical route replaces a longer one. Membership is not a feeder edge.
+        best_hop: dict[str, int] = {node.iri: 0}
         ancestors: list[UpstreamHop] = []
+        ancestor_at: dict[str, int] = {}
         frontier_missing: list[str] = []
-        used_inferred_edges: set[tuple[str, str]] = set()
+        arrival_inferred: dict[str, tuple[str, str] | None] = {}
         queue: deque[
             tuple[str, int, tuple[str, ...], tuple[str, ...], tuple[bool, ...], tuple[float, ...]]
         ] = deque([(node.iri, 0, (node.node_id,), (), (), ())])
 
         while queue:
             cur_iri, hop, path_ids, rels, inf_flags, confs = queue.popleft()
+            if hop != best_hop.get(cur_iri):
+                continue
             cur_node = self.nodes.get(cur_iri)
             incoming = sorted(
                 [
@@ -733,8 +737,7 @@ class TopologyGraph:
                 ],
                 key=lambda e: (e.inferred, -(e.confidence or 0.0), e.predicate, e.upstream_iri),
             )
-            # Zone membership expands traversal without counting as a physical feeder.
-            member_iris = [m for m in self.members.get(cur_iri, ()) if m not in visited and m != cur_iri]
+            member_iris = [m for m in self.members.get(cur_iri, ()) if m != cur_iri]
             if not incoming and not member_iris:
                 if cur_node is not None and not cur_node.is_source_root:
                     frontier_missing.append(cur_node.node_id)
@@ -745,13 +748,16 @@ class TopologyGraph:
                     frontier_missing.append(cur_node.node_id)
                 continue
             for member in member_iris:
-                visited.add(member)
-                queue.append((member, hop, path_ids, rels, inf_flags, confs))
+                if hop >= best_hop.get(member, max_hops + 1):
+                    continue
+                best_hop[member] = hop
+                queue.appendleft((member, hop, path_ids, rels, inf_flags, confs))
             for edge in incoming:
                 up_iri = edge.upstream_iri
-                if up_iri in visited:
+                new_hop_n = hop + 1
+                if new_hop_n >= best_hop.get(up_iri, max_hops + 1):
                     continue
-                visited.add(up_iri)
+                best_hop[up_iri] = new_hop_n
                 up_node = self.nodes.get(
                     up_iri,
                     GraphNode(iri=up_iri, node_id=_local_id(up_iri), label=_local_id(up_iri)),
@@ -764,8 +770,7 @@ class TopologyGraph:
                     if edge.inferred
                     else confs
                 )
-                if edge.inferred:
-                    used_inferred_edges.add((up_iri, cur_iri))
+                arrival_inferred[up_iri] = (up_iri, cur_iri) if edge.inferred else None
                 hop_inf = any(new_inf)
                 if not hop_inf:
                     hop_src = "modeled"
@@ -773,25 +778,28 @@ class TopologyGraph:
                     hop_src = "inferred, not modeled"
                 else:
                     hop_src = "mixed (modeled + inferred, not modeled)"
-                ancestors.append(
-                    UpstreamHop(
-                        node=up_node,
-                        hop=hop + 1,
-                        path=new_path,
-                        relations=new_rels,
-                        inferred=hop_inf,
-                        edge_confidences=new_confs,
-                        topology_source=hop_src,
-                    )
+                recorded = UpstreamHop(
+                    node=up_node,
+                    hop=new_hop_n,
+                    path=new_path,
+                    relations=new_rels,
+                    inferred=hop_inf,
+                    edge_confidences=new_confs,
+                    topology_source=hop_src,
                 )
-                queue.append((up_iri, hop + 1, new_path, new_rels, new_inf, new_confs))
+                if up_iri in ancestor_at:
+                    ancestors[ancestor_at[up_iri]] = recorded
+                else:
+                    ancestor_at[up_iri] = len(ancestors)
+                    ancestors.append(recorded)
+                queue.append((up_iri, new_hop_n, new_path, new_rels, new_inf, new_confs))
 
         # Keep unverified SPARQL-only hits in sparql_ancestors (never synthesize unverified paths).
 
         frontier_unique = sorted(set(frontier_missing))
         reached_source = bool(node.is_source_root or any(h.node.is_source_root for h in ancestors))
         if not reached_source and not frontier_unique:
-            cycle_front = self._closed_cycle_frontiers(visited)
+            cycle_front = self._closed_cycle_frontiers(set(best_hop))
             if cycle_front:
                 frontier_unique = cycle_front
         any_inf = any(h.inferred for h in ancestors)
@@ -828,7 +836,7 @@ class TopologyGraph:
             unknown_upstream_at=frontier_unique,
             sparql_ancestors=sparql_hits,
             topology_source=trav_source,
-            inferred_edges_used=len(used_inferred_edges),
+            inferred_edges_used=sum(1 for edge in arrival_inferred.values() if edge),
         )
 
 
