@@ -132,8 +132,8 @@ The anomaly and ML tools need no NF box or database: they read a device folder (
 `column_map.json`). Rule inputs are the ASHRAE 223P role names in `roles/openfdd-roles.json` (1.1.0-draft.1),
 for example `discharge_air_temperature`. `open_fdd.point_roles` loads that file. Legacy keys (`sat`) still resolve.
 The pandas reference also accepts the older hyphenated columns (`discharge-air-temp`).
-`open-fdd-anomaly screen --engine sql --sql-engine duckdb` runs the z-score on DuckDB (`duckdb>=2.0.1`);
-SQLite, PostgreSQL and Timescale stay available on the SQL helpers. The package (4.x) is versioned separately from the NF app (5.x).
+`open-fdd-anomaly screen --engine sql --sql-engine duckdb` runs the z-score on DuckDB (`duckdb>=2.0.1`).
+Timescale uses the same PostgreSQL statements on a connection that already has the core tables. The package (4.x) is versioned separately from the NF app (5.x).
 
 ## Support
 

@@ -95,8 +95,7 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 ```
 
 `--engine sql` runs `sql/analytics/anomaly_zscore.sql`, a portable query over `fdd.point` and `fdd.input_sample`
-(PostgreSQL / Timescale, DuckDB, SQLite). `--sql-engine sqlite` (default) or `--sql-engine duckdb` picks the
-in-process database. Its flags equal
+(DuckDB and Timescale). `--sql-engine duckdb` is the in-process database. Its flags equal
 `open_fdd.analytics.anomaly.detectors.rolling_zscore_flags` on each point's non-missing samples
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.

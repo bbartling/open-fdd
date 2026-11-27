@@ -2,8 +2,8 @@
 
 Dataset:  ``open_fdd.parity.generate`` (a bit-exact port of nf-app/tests/fixtures/synthetic_dataset.js; see
           test_generator_equivalence.py).
-SQL side: ``adapters.NodeEngineAdapter`` runs the pack (nf-app/rules/pack-*.json) on PGlite (real Postgres), sql.js
-          (SQLite) and the opt-in native DuckDB engine through ``sql_run.mjs`` (``engines="pglite,sqlite,duckdb"``).
+SQL side: ``adapters.NodeEngineAdapter`` runs the pack (nf-app/rules/pack-*.json) through ``sql_run.mjs``,
+          including the native DuckDB engine (``engines`` includes ``duckdb``).
 pandas:   ``open_fdd.parity.pandas_ref`` runs ``open_fdd.rules``; ``open_fdd.parity.compare`` applies the policy.
 Nothing here converts units: every value is SI. ``data`` dicts returned by ``run_sql`` carry the ``Dataset`` as
 ``data["dataset"]``.

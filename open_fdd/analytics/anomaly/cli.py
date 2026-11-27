@@ -99,12 +99,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     screen.add_argument(
         "--sql-engine",
-        choices=("sqlite", "duckdb"),
-        default="sqlite",
+        choices=("duckdb",),
+        default="duckdb",
         help=(
-            "With --engine sql, the in-process database (default sqlite). duckdb needs the duckdb extra "
-            "(duckdb>=2.0.1). PostgreSQL and Timescale use "
-            "open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine='postgres'|'timescale') on a connection "
+            "With --engine sql, the in-process database (duckdb>=2.0.1). Timescale uses "
+            "open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine='timescale') on a connection "
             "that already has fdd.point and fdd.input_sample"
         ),
     )

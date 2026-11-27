@@ -2,7 +2,7 @@
 // engines that need no server (PGlite = real Postgres, sql.js = translated SQLite) and writes everything the
 // pandas side needs to a JSON file.
 //
-//   node tests/parity/sql_run.mjs --equips 4 --days 3 --out out.json [--engines pglite,sqlite,duckdb] [--rules FC1,FC2]
+//   node tests/parity/sql_run.mjs --equips 4 --days 3 --out out.json [--engines duckdb] [--rules FC1,FC2]
 //   node tests/parity/sql_run.mjs --dataset ds.json --out out.json ...   (ds.json = open_fdd.parity Dataset.to_loader_json())
 //
 // Output: { meta, columns, history: {equip: {ts: [...], <col>: [...]}}, weather: [...], units: {role: unit},

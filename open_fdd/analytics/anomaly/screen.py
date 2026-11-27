@@ -64,10 +64,10 @@ def default_methods() -> tuple[list[str], dict[str, str]]:
             skipped[name] = f"{module} is not installed: pip install \"{extra}\""
     return run, skipped
 #: ``pandas`` (default) or ``sql``: where the z-score runs. ``sql`` runs ``sql/analytics/anomaly_zscore.sql`` on an
-#: in-process SQLite or DuckDB core (``sql_engine``); PostgreSQL / Timescale use ``run_zscore_sql`` on a connection.
+#: in-process DuckDB core (``sql_engine``); Timescale uses ``run_zscore_sql`` on a connection.
 #: The other methods always run in Python.
 VALID_ENGINES = ("pandas", "sql")
-SQL_ENGINES = ("sqlite", "duckdb")
+SQL_ENGINES = ("duckdb",)
 SCOREBOARD_COLUMNS = [
     "point",
     "role",
@@ -432,7 +432,7 @@ def screen_folder(
     methods: list[str] | tuple[str, ...] | None = None,
     command: str | None = None,
     engine: str = "pandas",
-    sql_engine: str = "sqlite",
+    sql_engine: str = "duckdb",
     activity_policy: str = DEFAULT_POLICY,
     iforest_contamination: float = IFOREST_CONTAMINATION,
     plots: bool = True,
@@ -443,7 +443,7 @@ def screen_folder(
     Support plots cover every non-skipped point. Day zooms cover the top
     ``top_n`` points and at most ``max_days`` UTC days each. ``engine="sql"``
     computes the z-score with the portable SQL query instead of pandas.
-    ``sql_engine`` is ``sqlite`` (default) or ``duckdb``.
+    ``sql_engine`` is ``duckdb``.
 
     ``activity_policy="proof"`` (default) screens equipment points only on rows the shared activity
     policy (:mod:`open_fdd.analytics.anomaly.activity`, also used by ``open-fdd-ml detect``) marks ``on``;

@@ -1,7 +1,6 @@
 """In-repo engine adapters (implement open_fdd.parity.EngineAdapter).
 
-``NodeEngineAdapter("pglite" | "sqlite")`` runs the SQL pack through ``sql_run.mjs`` (nf-app engines: PGlite = real
-Postgres, sql.js = translated SQLite) on a Python-generated dataset.
+``NodeEngineAdapter`` runs the SQL pack through ``sql_run.mjs`` on a Python-generated dataset.
 
 ``DuckDBAdapter`` runs the rendered PostgreSQL pack in DuckDB (UTC). It installs ``duckdb_helpers_sql``
 from ``pack-postgres.json`` (the macros in ``sql/fdd/duckdb/duckdb_helpers.sql``), the same text the native

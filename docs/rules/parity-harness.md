@@ -43,12 +43,9 @@ assert verdict.ok
 ## Profiles
 
 - `basic`: the dataset the in-repo suite has always used (a healthy unit, a sick unit with fault windows, a 5-minute
-  grid, Monday 2026-01-05 00:00 UTC). It is a bit-exact port of `nf-app/tests/fixtures/synthetic_dataset.js`; the repo test
-  `tests/parity/test_generator_equivalence.py` runs both generators and asserts identical rows, which keeps the
-  known-difference list valid. Seed 0 is that data. Other seeds salt the column hash and shift the start by whole weeks.
+  grid, Monday 2026-01-05 00:00 UTC).
 - `edge`: `basic` plus, deterministically from the seed: null runs, a 3 hour gap on every even unit, timestamp jitter of
-  +-60 s, duplicate rows, out-of-order rows, a DST-transition week (America/Chicago, timestamps stay UTC; occupancy
-  follows local time; starts Friday 2026-03-06 so a run of 3 or more days crosses the 2026-03-08 change), and planted
+  +-60 s, duplicate rows, out-of-order rows, a DST-transition week, and planted
   faults (a `sat` flatline and a `zone_t` out-of-range block per unit) whose nominal windows are in `dataset.faults`.
 
 The `edge` profile exposes six input-handling differences between the SQL pack and the pandas reference that the
