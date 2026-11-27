@@ -2,8 +2,8 @@
 
 Dataset:  ``open_fdd.parity.generate`` (a bit-exact port of nf-app/tests/fixtures/synthetic_dataset.js; see
           test_generator_equivalence.py).
-SQL side: ``adapters.NodeEngineAdapter`` runs the pack (nf-app/rules/pack-*.json) through ``sql_run.mjs``,
-          including the native DuckDB engine (``engines`` includes ``duckdb``).
+SQL side: ``adapters.NodeEngineAdapter`` runs the pack (nf-app/rules/pack-postgres.json) on Node DuckDB through
+          ``sql_run.mjs``. Timescale is the other SQL engine when a server is configured.
 pandas:   ``open_fdd.parity.pandas_ref`` runs ``open_fdd.rules``; ``open_fdd.parity.compare`` applies the policy.
 Nothing here converts units: every value is SI. ``data`` dicts returned by ``run_sql`` carry the ``Dataset`` as
 ``data["dataset"]``.
@@ -43,7 +43,7 @@ HS_TO_SQL = {v: k for k, v in SQL_TO_HS.items()}
 ABS_TOL_H = Policy().abs_tol_h
 
 
-def run_sql(equips: int, days: int, out: Path, engines: str = "pglite,sqlite", rules: str = "",
+def run_sql(equips: int, days: int, out: Path, engines: str = "duckdb", rules: str = "",
             duplicate_role: bool = False, rule_sql: dict | None = None, plant_sensors: bool = False,
             profile: str = "basic", seed: int = 0) -> dict:
     """Run the SQL pack on the engines over ``generate(seed, equips, days, profile)``.
@@ -59,7 +59,7 @@ def run_sql(equips: int, days: int, out: Path, engines: str = "pglite,sqlite", r
         ad = NodeEngineAdapter(kind)
         ad.load(ds)
         try:
-            results[kind] = ad.run(rule_ids, rule_sql=rule_sql if kind == "pglite" else None)
+            results[kind] = ad.run(rule_ids, rule_sql=rule_sql if kind == "duckdb" else None)
             raw = ad.raw
         finally:
             ad.close()
@@ -105,10 +105,10 @@ def pandas_fault_hours(rule_id: str, df: pd.DataFrame, weather) -> tuple[float |
 
 
 def compare(data: dict, only: set[str] | None = None, policy: Policy | None = None) -> dict:
-    """Compare pandas fault hours with SQL fault hours for every rule that has both (pglite results)."""
+    """Compare pandas fault hours with SQL fault hours for every rule that has both (Node DuckDB results)."""
     twins, no_twin = _reference_mod.twin_rule_ids()
     ref = reference(data["dataset"], rules=only)
-    verdict = _compare(data["results"]["pglite"], ref, policy or Policy())
+    verdict = _compare(data["results"]["duckdb"], ref, policy or Policy())
     return {"compared": verdict.per_rule, "no_twin": no_twin, "twins": twins, "verdict": verdict, "reference": ref}
 
 

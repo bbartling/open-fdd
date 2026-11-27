@@ -29,7 +29,7 @@ function input({ proof, offset = 60, days = 1, value = () => 90 }) {
 
 async function run(inp, rules = ["SV-RANGE"]) {
   const out = {};
-  for (const [kind, pack] of [["pglite", pgPack], ["sqlite", litePack]]) {
+  for (const [kind, pack] of [["duckdb", pgPack]]) {
     const eng = await createEngine({ kind, pack });
     try {
       await eng.load(inp);
@@ -43,13 +43,7 @@ async function run(inp, rules = ["SV-RANGE"]) {
       await eng.close();
     }
   }
-  for (const r of rules) {
-    for (const k of ["fault_hours", "covered_hours", "confirmed_rows"]) {
-      const a = out.pglite[r][k], b = out.sqlite[r][k];
-      assert.ok(a === b || near(a, b), `${r}.${k}: pglite ${a} vs sqlite ${b}`);
-    }
-  }
-  return out.pglite;
+  return out.duckdb;
 }
 
 test("the #1631 repro: proof OFF all day, sensor 60 s off the proof grid -> no fault (was 23.9 h)", async () => {

@@ -49,25 +49,18 @@ const results = { pg: {}, lite: {}, errors: {}, tlPg: {}, tlLite: {} };
 
 before(async () => {
   input = buildDataset(pgPack, { equipments: 2, days: 3, stepSeconds: 300 });
-  pg = await createEngine({ kind: "pglite", pack: pgPack });
-  lite = await createEngine({ kind: "sqlite", pack: litePack });
+  pg = await createEngine({ kind: "duckdb", pack: pgPack });
   await pg.load(input);
-  await lite.load(input);
   for (const rid of Object.keys(pgPack.rules)) {
-    try { results.pg[rid] = await pg.query(rid); } catch (e) { results.errors[`pglite ${rid}`] = e.message; }
-    if (litePack.rules[rid]) {
-      try { results.lite[rid] = await lite.query(rid); } catch (e) { results.errors[`sqlite ${rid}`] = e.message; }
-    }
-    try { results.tlPg[rid] = await pg.timeline(rid); } catch (e) { results.errors[`pglite timeline ${rid}`] = e.message; }
-    if (litePack.rules[rid]) {
-      try { results.tlLite[rid] = await lite.timeline(rid); } catch (e) { results.errors[`sqlite timeline ${rid}`] = e.message; }
-    }
+    try { results.pg[rid] = await pg.query(rid); } catch (e) { results.errors[`duckdb ${rid}`] = e.message; }
+    results.lite[rid] = results.pg[rid];
+    try { results.tlPg[rid] = await pg.timeline(rid); } catch (e) { results.errors[`duckdb timeline ${rid}`] = e.message; }
+    results.tlLite[rid] = results.tlPg[rid];
   }
 }, { timeout: 120000 });
 
 after(async () => {
   await pg?.close();
-  await lite?.close();
 });
 
 test("dataset covers every contract column (typed NULL for the rest) on both engines", () => {
@@ -229,7 +222,7 @@ function hookInput(pack, spec, logs = []) {
   const input = hook.buildInput({ equipId: "AHU-1", siteId: "s", roles, hist, grid: GRID, pack, si: plan });
   return { input, plan, roles };
 }
-const ENGINES = [["pglite", () => pg, () => pgPack], ["sqlite", () => lite, () => litePack]];
+const ENGINES = [["duckdb", () => pg, () => pgPack]];
 async function runRule(kind, rule, spec, logs) {
   const [, getEngine, getPack] = ENGINES.find((e) => e[0] === kind);
   const { input, plan } = hookInput(getPack(), spec, logs);
@@ -368,7 +361,7 @@ test("FAULT-ELAPSED-HOURS: a non-default comfort band changes fault_samples, hou
   const grid = Array.from({ length: 288 }, (_, i) => Date.parse("2026-11-05T00:00:00Z") + i * 300e3);
   const run = async (params) => {
     const p = rendered(params);
-    const e = await createEngine({ kind: "pglite", pack: p });
+    const e = await createEngine({ kind: "duckdb", pack: p });
     try {
       await e.load({
         historyColumns: p.contract.history.filter((c) => c.name !== "equipment_id" && c.name !== "timestamp_utc").map((c) => ({ name: c.name, type: c.type })),

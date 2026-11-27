@@ -25,8 +25,8 @@ def main() -> int:
     ap.add_argument("--days", type=int, default=3)
     ap.add_argument("--out", type=Path)
     a = ap.parse_args()
-    data = h.run_sql(a.equips, a.days, Path(tempfile.mkdtemp()) / "sql.json", engines="pglite", rules=a.rule)
-    sql = h.sql_rows(data, "pglite", a.rule).get(a.equip)
+    data = h.run_sql(a.equips, a.days, Path(tempfile.mkdtemp()) / "sql.json", engines="duckdb", rules=a.rule)
+    sql = h.sql_rows(data, "duckdb", a.rule).get(a.equip)
     hours, status = h.pandas_fault_hours(a.rule, h.equip_frame(data, a.equip), h.weather_frame(data))
     out = {"rule": a.rule, "equipment": a.equip, "sql": sql, "pandas_fault_hours": hours, "pandas_status": status}
     print(json.dumps(out, indent=2))

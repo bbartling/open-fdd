@@ -38,7 +38,7 @@ test("helper: percent_0_100 declares relative humidity; fraction does not", () =
   }
 });
 
-for (const [kind, pack] of [["pglite", pgPack], ["sqlite", litePack]]) {
+for (const [kind, pack] of [["duckdb", pgPack]]) {
   test(`${kind}: SV-RANGE assesses a percent_0_100 humidity series from long-form history`, async () => {
     const eng = await createEngine({ kind, pack });
     try {

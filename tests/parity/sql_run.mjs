@@ -1,12 +1,11 @@
-// Runs the Open-FDD SQL pack (nf-app/rules/pack-*.json) over a deterministic SI dataset on BOTH Postgres-capable
-// engines that need no server (PGlite = real Postgres, sql.js = translated SQLite) and writes everything the
-// pandas side needs to a JSON file.
+// Runs the Open-FDD SQL pack (nf-app/rules/pack-postgres.json) over a deterministic SI dataset on Node DuckDB
+// and writes everything the pandas side needs to a JSON file.
 //
 //   node tests/parity/sql_run.mjs --equips 4 --days 3 --out out.json [--engines duckdb] [--rules FC1,FC2]
 //   node tests/parity/sql_run.mjs --dataset ds.json --out out.json ...   (ds.json = open_fdd.parity Dataset.to_loader_json())
 //
 // Output: { meta, columns, history: {equip: {ts: [...], <col>: [...]}}, weather: [...], units: {role: unit},
-//           results: {pglite: {rule: [rows]}, sqlite: {...}}, errors, timing: {...}, memory: {...} }
+//           results: {duckdb: {rule: [rows]}}, errors, timing: {...}, memory: {...} }
 // Timing is wall-clock per engine (load + all rules); memory is process RSS peak sampled after each stage (MB).
 import { createRequire } from "node:module";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -25,7 +24,7 @@ const arg = (name, dflt) => {
 const equips = Number(arg("equips", 4));
 const days = Number(arg("days", 3));
 const out = arg("out", "parity_sql.json");
-const engines = arg("engines", "pglite,sqlite").split(",");
+const engines = arg("engines", "duckdb").split(",");
 const only = arg("rules", "") ? new Set(arg("rules").split(",")) : null;
 const noGaps = !process.argv.includes("--gaps");
 const duplicateRole = arg("duplicate-role", "false") === "true";
@@ -49,19 +48,18 @@ function loadDataset(file) {
 }
 
 const readPack = (n) => JSON.parse(readFileSync(path.join(root, "nf-app/rules", n), "utf8"));
-const postgresPack = readPack("pack-postgres.json");
 // duckdb runs the Postgres pack; engines.js installs pack.duckdb_helpers_sql (#1797).
-const PACK = { pglite: postgresPack, sqlite: readPack("pack-sqlite.json"), duckdb: postgresPack };
-// --rule-sql file.json: {rule_id: sql} replaces that rule's PGlite SQL (e.g. a render with overridden role limits)
+const PACK = { duckdb: readPack("pack-postgres.json") };
+// --rule-sql file.json: {rule_id: sql} replaces that rule's DuckDB SQL (e.g. a render with overridden role limits)
 if (arg("rule-sql", "")) {
-  for (const [rid, sql] of Object.entries(JSON.parse(readFileSync(arg("rule-sql"), "utf8")))) PACK.pglite.rules[rid].sql = sql;
+  for (const [rid, sql] of Object.entries(JSON.parse(readFileSync(arg("rule-sql"), "utf8")))) PACK.duckdb.rules[rid].sql = sql;
 }
 const mb = () => Math.round(process.memoryUsage().rss / 1048576);
 let peak = mb();
 const sample = () => { peak = Math.max(peak, mb()); };
 
 const t0 = Date.now();
-const input = datasetFile ? loadDataset(datasetFile) : buildDataset(PACK.pglite, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole, plantSensors });
+const input = datasetFile ? loadDataset(datasetFile) : buildDataset(PACK.duckdb, { equipments: equips, days, stepSeconds: 300, gaps: !noGaps, duplicateRole, plantSensors });
 const tGen = Date.now() - t0;
 sample();
 

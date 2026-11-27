@@ -1,6 +1,6 @@
 # Open-FDD on NF's TimescaleDB (FULL edition)
 
-The Lite edition (Pi) reads NF's REST history and runs the rule pack in SQLite/PGlite. The FULL edition
+The Lite edition (Pi) reads NF's REST history and does not run the rule pack. The DuckDB build runs it in Node DuckDB. The FULL edition
 reads the history NF's **Timescale/Postgres northbound connector** already writes
 (docs.normal.dev/timescale: tables `instances`, `points`, `data`, one view per layer), runs the 77 Postgres
 rules **inside the database**, and keeps results and long-range history there with a size-based retention cap

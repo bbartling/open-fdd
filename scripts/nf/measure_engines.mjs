@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
-const kind = process.argv[2] || "sqlite";
+const kind = process.argv[2] || "duckdb";
 const equipments = Number(process.argv[3] || 1);
 const days = Number(process.argv[4] || 7);
 const mb = (b) => (b / 1048576).toFixed(1);

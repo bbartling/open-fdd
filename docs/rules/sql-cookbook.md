@@ -20,9 +20,9 @@ unknown, not fault and not ok. `fault_hours` counts confirmed fault time. More i
 
 The NF app runs two engines. The DuckDB build (`@duckdb/node-api` 2.0.1-r.1, server-side, no WASM) is the single-site
 engine. The Timescale build runs the same Postgres pack in Timescale. `auto` selects DuckDB unless Timescale is
-configured. `sqlite` and `pglite` are not runtime engines: an old value fails and names `duckdb`. If the DuckDB package
-does not load, the run stops and does not switch engines. SQLite (`pack-sqlite.json`) and in-process Postgres (PGlite)
-remain parity-test engines, with the Python extra `duckdb>=2.0.1` used the same way. DuckDB macros are
+configured. `sqlite` and `pglite` are not engines: an old value fails and names `duckdb`. If the DuckDB package
+does not load, the run stops and does not switch engines. Parity compares pandas with Node DuckDB and, when a
+server is configured, Timescale. DuckDB macros are
 `sql/fdd/duckdb/duckdb_helpers.sql`. The PyPI fault tools use pandas.
 
 | Piece | What is checked |

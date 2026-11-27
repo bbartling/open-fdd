@@ -50,17 +50,12 @@ def motor_dataset(variant: str):
 @pytest.fixture(scope="module", params=["off_only", "on_and_off", "cmd_only", "always_off"])
 def legs(request):
     ds = motor_dataset(request.param)
-    rows = {}
-    for engine in ("pglite", "sqlite"):
-        ad = ADAPTERS[engine]()
-        ad.load(ds)
-        try:
-            rows[engine] = [r for r in ad.run([RULE])[RULE] if r["equipment_id"] == "AHU-1"][0]
-        finally:
-            ad.close()
-    a, b = rows["pglite"], rows["sqlite"]
-    assert float(a["fault_hours"]) == pytest.approx(float(b["fault_hours"]), abs=1e-9), rows
-    row = a
+    ad = ADAPTERS["duckdb"]()
+    ad.load(ds)
+    try:
+        row = [r for r in ad.run([RULE])[RULE] if r["equipment_id"] == "AHU-1"][0]
+    finally:
+        ad.close()
     oracle = reference(ds, [RULE])[RULE]["AHU-1"]
     sparql = leg.sparql_reference(ds, [RULE])[0][RULE]["AHU-1"]
     return request.param, row, oracle, sparql

@@ -33,7 +33,7 @@ def ds_edge_4x3():
 
 @pytest.fixture(scope="module")
 def pglite_basic_4x3(ds_basic_4x3):
-    ad = NodeEngineAdapter("pglite")
+    ad = NodeEngineAdapter("duckdb")
     ad.load(ds_basic_4x3)
     try:
         return ad.run()
@@ -43,7 +43,7 @@ def pglite_basic_4x3(ds_basic_4x3):
 
 @pytest.fixture(scope="module")
 def pglite_edge_4x3(ds_edge_4x3):
-    ad = NodeEngineAdapter("pglite")
+    ad = NodeEngineAdapter("duckdb")
     ad.load(ds_edge_4x3)
     try:
         return ad.run()
@@ -60,7 +60,7 @@ def test_duckdb_4x3_basic_parity_matches_pglite_and_pandas(ds_basic_4x3, pglite_
     finally:
         duck.close()
     assert duck.stats["errors"] == {}
-    bad = engines_disagree({"pglite": pglite_basic_4x3, "duckdb": duck_rows}, "duckdb", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": pglite_basic_4x3, "duckdb-py": duck_rows}, "duckdb-py", ref_engine="duckdb")
     assert bad == [], bad
     verdict = compare(duck_rows, reference(ds_basic_4x3), Policy.default("basic", stress=True))
     assert {k: verdict.to_dict()[k] for k in PINNED_4X3["verdict"]} == PINNED_4X3["verdict"], verdict.summary()
@@ -76,7 +76,7 @@ def test_duckdb_4x3_edge_parity_matches_pglite_and_pandas(ds_edge_4x3, pglite_ed
     finally:
         duck.close()
     assert duck.stats["errors"] == {}
-    bad = engines_disagree({"pglite": pglite_edge_4x3, "duckdb": duck_rows}, "duckdb", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": pglite_edge_4x3, "duckdb-py": duck_rows}, "duckdb-py", ref_engine="duckdb")
     assert bad == [], bad
     verdict = compare(duck_rows, reference(ds_edge_4x3), Policy.default("edge", stress=True, dataset="edge/0/4/3"))
     assert verdict.ok, verdict.summary()
@@ -95,7 +95,7 @@ def test_parquet_through_duckdb_matches_pglite(profile, ds_basic_4x3, ds_edge_4x
     finally:
         duck.close()
     assert duck.stats["errors"] == {}
-    bad = engines_disagree({"pglite": ref, "duckdb-parquet": rows}, "duckdb-parquet", ref_engine="pglite")
+    bad = engines_disagree({"duckdb": ref, "duckdb-parquet": rows}, "duckdb-parquet", ref_engine="duckdb")
     assert bad == [], bad
 
 
@@ -109,7 +109,7 @@ def test_postgres_4x3_basic_and_edge_parity(ds_basic_4x3, ds_edge_4x3, pglite_ba
         finally:
             pg.close()
         assert pg.stats["errors"] == {}, pg.stats["errors"]
-        bad = engines_disagree({"pglite": pg_rows, "postgres": rows}, "postgres", ref_engine="pglite")
+        bad = engines_disagree({"duckdb": pg_rows, "postgres": rows}, "postgres", ref_engine="duckdb")
         assert bad == [], f"{profile}: {bad}"
         verdict = compare(
             rows,
@@ -355,7 +355,7 @@ def test_python_sqlite3_udf_registration_smoke(pglite_basic_4x3):
         db.close()
 
     pg_subset = {rid: pglite_basic_4x3[rid] for rid in subset}
-    assert engines_disagree({"pglite": pg_subset, "sqlite_py": got}, "sqlite_py", ref_engine="pglite") == []
+    assert engines_disagree({"duckdb": pg_subset, "sqlite_py": got}, "sqlite_py", ref_engine="duckdb") == []
 
 
 def test_negative_parity_gates_fail_loudly(pglite_basic_4x3):
@@ -369,21 +369,21 @@ def test_negative_parity_gates_fail_loudly(pglite_basic_4x3):
     assessed = lambda rows: next(r for r in rows if r["fault_hours"] is not None)  # noqa: E731
     mutated = copy.deepcopy(pglite_basic_4x3)
     assessed(mutated["FC1"])["fault_hours"] = float(assessed(mutated["FC1"])["fault_hours"]) + 5.0
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": mutated}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": mutated}, "bad")
     v_bad = compare(mutated, ref, policy)
     assert not v_bad.ok and "FC1" in v_bad.unexpected_rules
 
     # 2. Missing sensor row fails engines_disagree
     dropped = copy.deepcopy(pglite_basic_4x3)
     dropped["SV-RANGE"] = dropped["SV-RANGE"][1:]
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": dropped}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": dropped}, "bad")
 
     # 3. Nonfinite value fails engines_disagree
     nan_rows = copy.deepcopy(pglite_basic_4x3)
     assessed(nan_rows["FC1"])["fault_hours"] = float("nan")
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": nan_rows}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": nan_rows}, "bad")
 
     # 4. Duplicate key fails engines_disagree
     dup_rows = copy.deepcopy(pglite_basic_4x3)
     dup_rows["FC1"].append(dict(assessed(dup_rows["FC1"])))
-    assert engines_disagree({"pglite": pglite_basic_4x3, "bad": dup_rows}, "bad")
+    assert engines_disagree({"duckdb": pglite_basic_4x3, "bad": dup_rows}, "bad")

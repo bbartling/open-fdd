@@ -97,22 +97,14 @@ const withRunProof = (input) => ({ ...input, history: input.history.map((row) =>
 
 async function queryBoth(input, ruleIds) {
   input = withRunProof(input);
-  const pg = await createEngine({ kind: "pglite", pack: pgPack });
-  const lite = await createEngine({ kind: "sqlite", pack: litePack });
+  const pg = await createEngine({ kind: "duckdb", pack: pgPack });
   try {
     await pg.load(input);
-    await lite.load(input);
     const out = {};
-    for (const id of ruleIds) {
-      const [a, b] = await Promise.all([pg.query(id), lite.query(id)]);
-      const sort = (rows) => [...rows].sort((x, y) => String(x.series_id).localeCompare(String(y.series_id)));
-      assert.deepEqual(sort(a), sort(b), `${id}: Postgres and SQLite differ`);
-      out[id] = a;
-    }
+    for (const id of ruleIds) out[id] = await pg.query(id);
     return out;
   } finally {
     await pg.close();
-    await lite.close();
   }
 }
 
@@ -185,14 +177,11 @@ test("all five sweeps return separate rows and timelines for same-role sensors",
     }));
   }
   const input = withRunProof({ history, sensorHistory, equipment: [{ building_id: "site-1", equipment_id: "eq-1" }] });
-  const pg = await createEngine({ kind: "pglite", pack: pgPack });
-  const lite = await createEngine({ kind: "sqlite", pack: litePack });
+  const pg = await createEngine({ kind: "duckdb", pack: pgPack });
   try {
     await pg.load(input);
-    await lite.load(input);
     for (const rule of ALL_SWEEPS) {
-      const a = await pg.query(rule), b = await lite.query(rule);
-      assert.deepEqual(a.sort((x, y) => x.series_id.localeCompare(y.series_id)), b.sort((x, y) => x.series_id.localeCompare(y.series_id)), rule);
+      const a = await pg.query(rule);
       assert.equal(a.length, 2, `${rule} returns both series`);
       assert.deepEqual(new Set(a.map((row) => row.sensor_role)), new Set(["sat"]), `${rule} keeps role descriptive`);
       assert.ok(a.every((row) => Number(row.covered_hours) > 0), `${rule} reports per-series coverage`);
@@ -206,7 +195,6 @@ test("all five sweeps return separate rows and timelines for same-role sensors",
     }
   } finally {
     await pg.close();
-    await lite.close();
   }
 });
 

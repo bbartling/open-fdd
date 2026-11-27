@@ -3,14 +3,13 @@
  * SQL engines for the Open-FDD rule pack (CommonJS, NF hook runtime).
  *
  *   const { createEngine } = require("./lib/engines");
- *   const eng = await createEngine({ kind: "sqlite" | "pglite", pack });  // pack = parsed pack-<dialect>.json
+ *   const eng = await createEngine({ kind: "duckdb" | "timescale", pack });  // pack = parsed pack-postgres.json
  *   await eng.load(input);
  *   const rows = await eng.query("FC1");   // [{ equipment_id, fault_hours, ... }]
  *   await eng.close();
  *
- * kind "pglite": @electric-sql/pglite (exact Postgres, ~300 MB RSS) runs rules/pack-postgres.json.
- * kind "sqlite": sql.js (SQLite WASM, a few MB) runs rules/pack-sqlite.json; the fdd.* helper functions are
- *                JS functions registered with create_function; timestamps are REAL epoch seconds.
+ * kind "duckdb": @duckdb/node-api (native, no WASM) runs rules/pack-postgres.json.
+ * kind "timescale": the same pack in Timescale. There is no SQLite and no PGlite.
  *
  * input = {
  *   historyColumns: [{ name, type: "double" | "text" }],      // columns present in `history` rows
@@ -27,9 +26,6 @@
  * confirmed flag (pack rule.timeline_sql; [] when the rule has none). held_seconds 0 = not assessed (last sample /
  * gap longer than MAX_GAP_HOURS).
  */
-const fs = require("fs");
-const path = require("path");
-
 // ---------------------------------------------------------------- fdd.* helpers (twins of sql/fdd/postgres/postgres_helpers.sql; SI units only)
 
 const normUnit = (v) => (v == null ? "" : String(v).replace(/[^a-zA-Z0-9]/g, "").toLowerCase());
@@ -140,12 +136,10 @@ const cellValue = (row, col) => {
   return Number.isNaN(x) && typeof raw !== "number" ? null : x;
 };
 
-const numberOrNull = (v) => (typeof v === "bigint" ? Number(v) : typeof v === "number" ? (Number.isFinite(v) ? v : v) : v);
-
 // ---------------------------------------------------------------- saved tuning (fdd.rule_config in the app's Timescale store)
 
 /**
- * Reader for fdd.rule_config, shared by sqlite, pglite and duckdb when the box has a saved-tuning store.
+ * Reader for fdd.rule_config on DuckDB when the box has a saved-tuning store.
  * opts.tuningClient = an open pg client (tests). opts.config.timescale, or opts.config itself when it is a
  * connection ({ host } or { connectionString }), is connected for the read and closed after. No store = {}.
  */
@@ -166,181 +160,13 @@ function savedTuning(opts = {}) {
   };
 }
 
-// ---------------------------------------------------------------- sqlite (sql.js)
-
-let sqlJsPromise = null;
-const loadSqlJs = () => {
-  if (!sqlJsPromise) {
-    // Prefer the copy vendored next to the hook (hooks/vendor/sql.js, same files as the pinned
-    // npm version) so small edges need no `npm install`; fall back to node_modules.
-    const vendored = path.join(__dirname, "..", "vendor", "sql.js");
-    const dir = fs.existsSync(path.join(vendored, "sql-wasm.wasm")) ? vendored : path.dirname(require.resolve("sql.js"));
-    const initSqlJs = require(path.join(dir, "sql-wasm.js"));
-    const wasmBinary = fs.readFileSync(path.join(dir, "sql-wasm.wasm"));
-    sqlJsPromise = initSqlJs({ wasmBinary });
-  }
-  return sqlJsPromise;
-};
-
 const quoteId = (s) => '"' + String(s).replace(/"/g, '""') + '"';
 
-const rowsOf = (res) => {
-  if (!res.length) return [];
-  const { columns, values } = res[0];
-  return values.map((v) => {
-    const o = {};
-    columns.forEach((c, i) => { o[c] = v[i]; });
-    return o;
-  });
-};
-
-async function createSqlite(pack, opts = {}) {
-  const SQL = await loadSqlJs();
-  const db = new SQL.Database();
-  for (const name of pack.helper_functions || Object.keys(HELPERS)) {
-    const fn = HELPERS[name];
-    if (!fn) throw new Error(`pack needs helper ${name}, engines.js does not implement it`);
-    // sql.js derives the SQL arity from the JS function's .length, so wrap with a fixed arity.
-    const nul = (r) => (r === undefined ? null : r);
-    const wrapped = [() => nul(fn()), (a) => nul(fn(a)), (a, b) => nul(fn(a, b)), (a, b, c) => nul(fn(a, b, c))][fn.length];
-    db.create_function(name, wrapped);
-  }
-  let loaded = false;
-  return {
-    kind: "sqlite",
-    ...savedTuning(opts),
-    async load(input) {
-      const cols = tableColumns(pack, input);
-      db.run("BEGIN");
-      try {
-        for (const [table, spec] of Object.entries(cols)) {
-          db.run(`DROP TABLE IF EXISTS ${table}`);
-          db.run(`CREATE TABLE ${table} (${spec.map((c) => `${quoteId(c.name)} ${c.type === "text" ? "TEXT" : "REAL"}`).join(", ")})`);
-          const rows = input[TABLE_INPUT_KEY[table]] || [];
-          if (!rows.length) continue;
-          const stmt = db.prepare(`INSERT INTO ${table} VALUES (${spec.map(() => "?").join(",")})`);
-          try {
-            for (const row of rows) {
-              stmt.run(spec.map((c) => {
-                const v = cellValue(row, c);
-                if (v === null) return null;
-                if (c.type === "timestamp") return Number(v) / 1000;
-                return typeof v === "number" && Number.isNaN(v) ? null : v; // SQLite stores NaN as NULL anyway
-              }));
-            }
-          } finally { stmt.free(); }
-        }
-        db.run("CREATE INDEX IF NOT EXISTS history_eq_ts ON history(equipment_id, timestamp_utc)");
-        db.run("COMMIT");
-      } catch (e) { db.run("ROLLBACK"); throw e; }
-      loaded = true;
-    },
-    /** sql: optional { sql, timeline_sql } re-rendered with saved tuning; default the pack's. */
-    async query(ruleId, sql) {
-      if (!loaded) throw new Error("engine: call load(input) before query()");
-      const rule = pack.rules[ruleId];
-      if (!rule) {
-        const why = pack.skipped && pack.skipped[ruleId];
-        throw new Error(why ? `rule ${ruleId} is skipped on sqlite: ${why}` : `unknown rule ${ruleId}`);
-      }
-      return rowsOf(db.exec((sql && sql.sql) || rule.sql));
-    },
-    /** Per-timestamp confirmed flags. Sensor sweeps also return sensor_role. Empty when the rule has no timeline. */
-    async timeline(ruleId, sql) {
-      if (!loaded) throw new Error("engine: call load(input) before timeline()");
-      const rule = pack.rules[ruleId];
-      const text = (sql && sql.timeline_sql) || (rule && rule.timeline_sql);
-      if (!text) return [];
-      return rowsOf(db.exec(text));
-    },
-    // Also drop the cached sql.js module so its WASM memory can be collected between hourly
-    // runs: on a 1 GB edge the runtime otherwise keeps ~40 MB resident for nothing.
-    async close() { db.close(); sqlJsPromise = null; },
-  };
-}
-
-// ---------------------------------------------------------------- pglite
-
-const PG_TYPE = { double: "DOUBLE PRECISION", text: "VARCHAR", timestamp: "timestamptz" };
 const NUMERIC_OIDS = new Set([20, 21, 23, 700, 701, 1700]);
-
-const pgLiteral = (c, v) => {
-  if (v === null) return "NULL";
-  if (c.type === "timestamp") return `'${new Date(v).toISOString()}'`;
-  if (c.type === "text") return `'${String(v).replace(/'/g, "''")}'`;
-  if (Number.isNaN(v)) return "'NaN'::float8";
-  if (!Number.isFinite(v)) return v > 0 ? "'Infinity'::float8" : "'-Infinity'::float8";
-  return String(v);
-};
-
-const pgRows = (res) => {
-  const numeric = new Set(res.fields.filter((f) => NUMERIC_OIDS.has(f.dataTypeID)).map((f) => f.name));
-  return res.rows.map((r) => {
-    const o = {};
-    for (const [k, v] of Object.entries(r)) {
-      o[k] = numeric.has(k) && v !== null && v !== undefined ? numberOrNull(typeof v === "string" ? Number(v) : v) : v;
-    }
-    return o;
-  });
-};
-
-async function createPglite(pack, opts = {}) {
-  let PGlite;
-  try {
-    ({ PGlite } = await import("@electric-sql/pglite"));
-  } catch (e) {
-    if (e && (e.code === "ERR_MODULE_NOT_FOUND" || /Cannot find (package|module)/.test(String(e.message)))) {
-      throw new Error("pglite is not installed. It is a parity-test engine only (nf-app devDependency), not a runtime engine. Use duckdb or timescale.");
-    }
-    throw e;
-  }
-  const db = new PGlite();
-  await db.waitReady;
-  await db.exec(pack.helpers_sql);
-  let loaded = false;
-  return {
-    kind: "pglite",
-    ...savedTuning(opts),
-    async load(input) {
-      const cols = tableColumns(pack, input);
-      for (const [table, spec] of Object.entries(cols)) {
-        await db.exec(`DROP TABLE IF EXISTS ${table}`);
-        await db.exec(`CREATE TABLE ${table} (${spec.map((c) => `${quoteId(c.name)} ${PG_TYPE[c.type]}`).join(", ")})`);
-        const rows = input[TABLE_INPUT_KEY[table]] || [];
-        const names = spec.map((c) => quoteId(c.name)).join(", ");
-        for (let i = 0; i < rows.length; i += 200) {
-          const values = rows.slice(i, i + 200)
-            .map((row) => "(" + spec.map((c) => pgLiteral(c, cellValue(row, c))).join(", ") + ")").join(",\n");
-          await db.exec(`INSERT INTO ${table} (${names}) VALUES\n${values}`);
-        }
-      }
-      await db.exec("CREATE INDEX history_eq_ts ON history(equipment_id, timestamp_utc)");
-      // Planner statistics for the window / as-of joins (#1631): without them PGlite guesses row counts and the sweep
-      // rules' joins degrade to nested loops (seconds -> tens of seconds on a week of 5-min data).
-      for (const table of Object.keys(cols)) await db.exec(`ANALYZE ${table}`);
-      loaded = true;
-    },
-    /** sql: optional { sql, timeline_sql } re-rendered with saved tuning; default the pack's. */
-    async query(ruleId, sql) {
-      if (!loaded) throw new Error("engine: call load(input) before query()");
-      const rule = pack.rules[ruleId];
-      if (!rule) throw new Error(`unknown rule ${ruleId}`);
-      return pgRows(await db.query((sql && sql.sql) || rule.sql));
-    },
-    async timeline(ruleId, sql) {
-      if (!loaded) throw new Error("engine: call load(input) before timeline()");
-      const rule = pack.rules[ruleId];
-      const text = (sql && sql.timeline_sql) || (rule && rule.timeline_sql);
-      if (!text) return [];
-      return pgRows(await db.query(text));
-    },
-    async close() { await db.close(); },
-  };
-}
 
 /** sha256 (hex) of a rule's SQL text: the rule_hash provenance of fdd.rule_result rows. */
 const ruleHashes = new WeakMap();
-/** #1707: a statistic rule outputs no fault_hours (AVG-ZONE-TEMP, ZONE-COMFORT-PCT, FAN-RUNTIME-HOURS); it is written as METRIC. */
+/** A statistic rule outputs no fault_hours; it is written as METRIC. */
 function isMetricRule(pack, ruleId) {
   const r = pack && pack.rules && pack.rules[ruleId];
   return !!(r && Array.isArray(r.output_columns) && !r.output_columns.includes("fault_hours"));
@@ -617,11 +443,9 @@ async function createDuckDb(pack, opts = {}) {
 
 async function createEngine({ kind, pack, ...opts }) {
   if (!pack || !pack.rules || !pack.contract) throw new Error("createEngine: pack (parsed pack-*.json) is required");
-  if (kind === "sqlite") return createSqlite(pack, opts);
-  if (kind === "pglite") return createPglite(pack, opts);
   if (kind === "timescale") return createTimescale(pack, opts);
   if (kind === "duckdb") return createDuckDb(pack, opts);
-  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (runtime engines are "duckdb" and "timescale"; "sqlite" and "pglite" are parity-test engines)`);
+  throw new Error(`unknown engine kind ${JSON.stringify(kind)} (runtime engines are "duckdb" and "timescale")`);
 }
 
-module.exports = { createEngine, HELPERS, loadSqlJs, releaseDuckDb, duckDbOptions, DUCKDB_DEFAULTS, DUCKDB_SAFETY };
+module.exports = { createEngine, HELPERS, releaseDuckDb, duckDbOptions, DUCKDB_DEFAULTS, DUCKDB_SAFETY };

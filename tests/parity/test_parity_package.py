@@ -233,7 +233,7 @@ def test_adapter_conformance_checker():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node required")
-@pytest.mark.parametrize("kind", ["pglite", "sqlite"])
+@pytest.mark.parametrize("kind", ["duckdb"])
 def test_in_repo_engines_conform(kind):
     sys.path.insert(0, str(HERE))
     from adapters import NodeEngineAdapter
@@ -256,7 +256,7 @@ def test_stress_cli_runs_on_both_profiles(profile, tmp_path):
                            "--out", str(out)], capture_output=True, text=True, encoding="utf-8", cwd=ROOT)
     rep = json.loads(out.read_text(encoding="utf-8"))
     assert rep["profile"] == profile and rep["dataset_hash"] == published_hashes()[f"{profile}/0/2/3"]
-    assert not rep["sql_errors"] and not rep["pglite_vs_sqlite_mismatches"], rep
+    assert not rep["sql_errors"] and not rep.get("engine_mismatches"), rep
     assert "verdict" in rep and rep["verdict"]["compared"] > 0
     if profile == "basic":
         assert proc.returncode == 0, proc.stdout[-800:]

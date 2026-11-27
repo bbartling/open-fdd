@@ -1,5 +1,5 @@
 // SQL analytics for the NF app (#1649): the portable queries in sql/analytics (copied to nf-app/rules/analytics by
-// scripts/nf/sync_shared.py) rendered and run in-process on SQLite (the vendored sql.js) or PGlite.
+// scripts/nf/sync_shared.py) rendered and run in-process on DuckDB. There is no SQLite and no PGlite.
 //
 // The renderers mirror the Python ones byte for byte (open_fdd/analytics/sql_runtime.py, sql_mech_cooling.py,
 // sql_economizer.py, sql_bas_web.py): comment lines dropped, {placeholders} replaced by checked literals (quoted strings,
@@ -12,7 +12,7 @@ const path = require("path");
 
 const TEMPLATE_DIR = path.join(__dirname, "..", "..", "rules", "analytics");
 const TS_MS = { sqlite: "s.ts", postgres: "CAST(EXTRACT(EPOCH FROM s.ts) * 1000 AS BIGINT)", duckdb: "CAST(EXTRACT(EPOCH FROM s.ts) * 1000 AS BIGINT)" };
-/** pglite is the Postgres test engine. duckdb runs the same SQL text. */
+/** DuckDB runs the Postgres SQL text. */
 const dialectOf = (engine) => (engine === "pglite" || engine === "duckdb" ? "postgres" : engine);
 /** open_fdd.analytics.si_thresholds.MECH_OAT_BIN_EDGES_C and MECH_OAT_BIN_LABELS. */
 const MECH_OAT_BIN_EDGES_C = [10.0, 15.555555555555556, 21.11111111111111, 26.666666666666668, 32.22222222222222];
@@ -237,61 +237,10 @@ async function openDuckCore(points, samples, siteId) {
 }
 
 async function openCore(engine, points, samples, { siteId = "local" } = {}) {
-  checkEngine(dialectOf(engine));
-  if (engine === "duckdb") return openDuckCore(points, samples, siteId);
-  if (engine === "sqlite") {
-    const { loadSqlJs } = require("./engines.js");
-    const SQL = await loadSqlJs();
-    const db = new SQL.Database();
-    db.run("ATTACH DATABASE ':memory:' AS fdd");
-    db.run("CREATE TABLE fdd.point (site_id TEXT NOT NULL, point_key TEXT NOT NULL, equipment_id TEXT, role TEXT, PRIMARY KEY (site_id, point_key))");
-    db.run("CREATE TABLE fdd.sample_store (site_id TEXT NOT NULL, point_key TEXT NOT NULL, ts INTEGER NOT NULL, value REAL)");
-    db.run("CREATE VIEW fdd.input_sample AS SELECT site_id, point_key, ts, value FROM sample_store WHERE value IS NOT NULL");
-    db.run("BEGIN");
-    const ps = db.prepare("INSERT INTO fdd.point VALUES (?, ?, ?, ?)");
-    for (const p of points) ps.run([siteId, p.point_key, p.equipment_id == null ? null : String(p.equipment_id), p.role || null]);
-    ps.free();
-    const ss = db.prepare("INSERT INTO fdd.sample_store VALUES (?, ?, ?, ?)");
-    for (const [k, t, v] of samples) ss.run([siteId, k, Math.trunc(t), v]);
-    ss.free();
-    db.run("COMMIT");
-    return {
-      engine: "sqlite",
-      query(sql) {
-        const res = db.exec(sql);
-        if (!res.length) return [];
-        const { columns, values } = res[0];
-        return values.map((v) => Object.fromEntries(columns.map((c, i) => [c, v[i]])));
-      },
-      close() { db.close(); },
-    };
+  if (engine !== "duckdb") {
+    throw new Error(`analytics SQL runs on DuckDB (got ${JSON.stringify(engine)}). There is no SQLite and no PGlite.`);
   }
-  const { PGlite } = await import("@electric-sql/pglite");
-  const db = new PGlite();
-  await db.waitReady;
-  await db.exec("SET TIME ZONE 'UTC'; CREATE SCHEMA fdd;"
-    + " CREATE TABLE fdd.point (site_id text NOT NULL, point_key text NOT NULL, equipment_id text, role text, PRIMARY KEY (site_id, point_key));"
-    + " CREATE TABLE fdd.sample_store (site_id text NOT NULL, point_key text NOT NULL, ts timestamptz NOT NULL, value double precision);"
-    + " CREATE VIEW fdd.input_sample AS SELECT site_id, point_key, ts, value FROM fdd.sample_store WHERE value IS NOT NULL;");
-  for (let i = 0; i < points.length; i += 200) {
-    const vals = points.slice(i, i + 200).map((p) => `(${quote(siteId)}, ${quote(p.point_key)}, ${p.equipment_id == null ? "NULL" : quote(p.equipment_id)}, ${p.role ? quote(p.role) : "NULL"})`);
-    await db.exec(`INSERT INTO fdd.point VALUES ${vals.join(", ")}`);
-  }
-  for (let i = 0; i < samples.length; i += 500) {
-    const vals = samples.slice(i, i + 500).map(([k, t, v]) =>
-      `(${quote(siteId)}, ${quote(k)}, to_timestamp(${Math.trunc(t)} / 1000.0), ${v == null ? "NULL" : pyRepr(v)})`);
-    await db.exec(`INSERT INTO fdd.sample_store VALUES ${vals.join(", ")}`);
-  }
-  await db.exec("ANALYZE fdd.sample_store; ANALYZE fdd.point;");
-  return {
-    engine: "postgres",
-    async query(sql) {
-      const res = await db.query(sql);
-      return res.rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, typeof v === "bigint" ? Number(v)
-        : typeof v === "string" && /^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(v) && k !== "equipment_id" && k !== "signal" && k !== "motor_family" ? Number(v) : v])));
-    },
-    async close() { await db.close(); },
-  };
+  return openDuckCore(points, samples, siteId);
 }
 
 // ---------------------------------------------------------------- grid adapters (the RCx data entry points)

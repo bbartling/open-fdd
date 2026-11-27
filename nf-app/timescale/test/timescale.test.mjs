@@ -392,7 +392,7 @@ test("FC1 on declared-% fan commands: Timescale == PGlite for 1 %, 2 % and 99 %"
       row.run_proof = row.fan_cmd;            // the hook binds the fan command as this AHU's run proof (#1608)
       hist.push(row);
     }
-    const eng = await createEngine({ kind: "pglite", pack });
+    const eng = await createEngine({ kind: "duckdb", pack });
     let liteFc1;
     try {
       await eng.load({ historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })), history: hist, weather: [] });
@@ -437,7 +437,7 @@ test("valve (VAV-3) and unitless command: Timescale == PGlite, unitless role is 
     assert.equal(n.rows, 288);
     const tsRes = (await ts.runRules(db, pack, ["VAV-3"])).results["VAV-3"];
     const hist = (await db.query("SELECT * FROM pg_temp.history ORDER BY timestamp_utc")).rows.map(({ timestamp_utc, ...x }) => ({ ...x, ts: timestamp_utc.getTime() }));
-    const eng = await createEngine({ kind: "pglite", pack });
+    const eng = await createEngine({ kind: "duckdb", pack });
     let liteRes;
     try {
       await eng.load({ historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })), history: hist, weather: [] });
@@ -480,7 +480,7 @@ test("rules in Timescale == the pglite engine on the same history", { skip, time
     historyColumns: pack.contract.history.map((c) => ({ name: c.name, type: c.type })),
     history: hist, weather, sensorHistory, sweepSeries,
   };
-  const eng = await createEngine({ kind: "pglite", pack });
+  const eng = await createEngine({ kind: "duckdb", pack });
   let matched = 0, bothError = 0, withFault = 0, timelines = 0;
   const problems = [];
   try {

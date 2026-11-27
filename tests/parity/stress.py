@@ -55,7 +55,7 @@ def _index_rows(rows: list[dict], engine: str, rule: str, bad: list[str]) -> dic
     return indexed
 
 
-def engines_disagree(results: dict, other: str = "sqlite", ref_engine: str = "pglite") -> list[str]:
+def engines_disagree(results: dict, other: str = "timescale", ref_engine: str = "duckdb") -> list[str]:
     """Row-level differences between ``ref_engine`` and ``other``; empty list means exact SI agreement."""
     bad: list[str] = []
     left_rules = results.get(ref_engine, {})
@@ -104,7 +104,7 @@ def main() -> int:
     ap.add_argument("--days", type=int, default=3)
     ap.add_argument("--profile", default="basic", choices=("basic", "edge"))
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--engines", default="pglite,sqlite")
+    ap.add_argument("--engines", default="duckdb")
     ap.add_argument("--no-pandas", action="store_true", help="SQL engines only (fast; for large --equips/--days)")
     ap.add_argument("--out", type=Path, default=None, help="write the JSON report here")
     ap.add_argument("--sparql", action="store_true",
@@ -118,9 +118,6 @@ def main() -> int:
         ap.error(f"unknown engine(s) {unknown}; expected subset of {sorted(ADAPTERS)}")
     if not engine_list:
         ap.error("--engines cannot be empty")
-    if not args.no_pandas and "pglite" not in engine_list and len(engine_list) == 1:
-        pass
-
     policy = Policy.default(args.profile, stress=True, dataset=f"{args.profile}/{args.seed}/{args.equips}/{args.days}")
     ds = generate(args.seed, args.equips, args.days, args.profile)
 
@@ -151,7 +148,7 @@ def main() -> int:
     }
     ok = not errors
 
-    ref_sql_engine = "pglite" if "pglite" in results else engine_list[0]
+    ref_sql_engine = "duckdb" if "duckdb" in results else engine_list[0]
     engine_mismatches = {}
     for kind in engine_list:
         if kind == ref_sql_engine:
@@ -162,37 +159,28 @@ def main() -> int:
         engine_mismatches[f"{ref_sql_engine}_vs_{kind}"] = bad
         ok = ok and not bad
     rep["engine_mismatches"] = engine_mismatches
-    if {"pglite", "sqlite"} <= set(results):
-        rep["pglite_vs_sqlite_mismatches"] = engine_mismatches.get("pglite_vs_sqlite", [])
-
     if ts_raw is not None:
         ingest_mode = ts_raw.get("ingest", "native")
         if ingest_mode == "si":
-            # A DuckDB + Timescale run has no PGlite result. Those two engines are already compared above.
-            if "pglite" in results:
-                ts_vs_pg = engine_mismatches.get("pglite_vs_timescale", [])
-            elif "duckdb" in results:
-                ts_vs_pg = engine_mismatches.get("duckdb_vs_timescale", [])
-            else:
-                ts_vs_pg = ["no duckdb run to compare"]
+            ts_vs_pg = engine_mismatches.get("duckdb_vs_timescale", []) if "duckdb" in results else ["no duckdb run to compare"]
             tie_only = []
         else:
             pg_same = None
-            if "pglite" in results:
-                same = NodeEngineAdapter("pglite")
+            if "duckdb" in results:
+                same = NodeEngineAdapter("duckdb")
                 same.load(ts_ad.loaded_dataset(ds))
                 try:
                     pg_same = same.run()
                 finally:
                     same.close()
             ts_vs_pg = (
-                engines_disagree({"pglite": pg_same, "timescale": results["timescale"]}, "timescale", ref_engine="pglite")
-                if pg_same is not None else ["no pglite run to compare"]
+                engines_disagree({"duckdb": pg_same, "timescale": results["timescale"]}, "timescale", ref_engine="duckdb")
+                if pg_same is not None else ["no duckdb run to compare"]
             )
-            tie_only = engines_disagree(results, "timescale", ref_engine="pglite") if "pglite" in results else []
+            tie_only = engines_disagree(results, "timescale", ref_engine="duckdb") if "duckdb" in results else []
         checks = {
             "ingest": ingest_mode,
-            "timescale_vs_pglite_mismatches": ts_vs_pg,
+            "timescale_vs_duckdb_mismatches": ts_vs_pg,
             "threshold_ties_vs_si_dataset": tie_only,
             "history_cell_mismatches": ts_raw["history_mismatches"],
             "native_unit_factor_mismatches": ts_raw["factor"]["factor_mismatches"],
@@ -201,7 +189,7 @@ def main() -> int:
             "schema_version": ts_raw["schema_version"],
         }
         rep["timescale"] = checks
-        clean = not (checks["timescale_vs_pglite_mismatches"] or checks["history_cell_mismatches"]
+        clean = not (checks["timescale_vs_duckdb_mismatches"] or checks["history_cell_mismatches"]
                      or checks["native_unit_factor_mismatches"] or checks["rerun_added_rows"])
         ok = ok and clean and checks["input_sample_signature_ok"] is True and checks["loader_uses_index"] is True
 

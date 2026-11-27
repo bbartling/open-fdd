@@ -75,7 +75,7 @@ they are harmless. The BACnet scope names are the ones from the NF scope list; c
 | App id | `open-fdd-lite` | `open-fdd` |
 | Target | 1 GB boxes (Raspberry Pi 3) | machines with real resources |
 | FDD hook and rule engines | no | yes (SQL engines, RCx library, rule packs) |
-| Hook dependencies | none (Node built-ins) | sql.js, PGlite (`package.json`) |
+| Hook dependencies | none (Node built-ins) | `@duckdb/node-api` and `pg` (`package.json`) |
 | Pages | dashboard, charts, points, BACnet server, model + RDF, tree | the same, plus FDD, RCx, energy, fault plots |
 | Weather hook | variables + BACnet mirror (av.N configurable) | the same (one shared hook) |
 | ECharts | UMD build, classic scripts, 6.1.0 | ES module build |

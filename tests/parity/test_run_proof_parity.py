@@ -32,7 +32,7 @@ def ds():
 
 def _sql(ds, rules, **overrides):
     rule_sql = {r: render_rule.render(r, ds.step_seconds, overrides) for r in rules} if overrides else None
-    ad = NodeEngineAdapter("pglite")
+    ad = NodeEngineAdapter("duckdb")
     ad.load(ds)
     try:
         return ad.run(list(rules), rule_sql=rule_sql)

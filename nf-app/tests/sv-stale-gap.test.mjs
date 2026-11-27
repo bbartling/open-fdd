@@ -16,7 +16,7 @@ const SWEEPS = ["SV-STALE", "SV-FLATLINE", "SV-RANGE", "SV-SPIKE"];
 
 async function both(input, rules = SWEEPS) {
   const out = {};
-  for (const [kind, pack] of [["pglite", pgPack], ["sqlite", litePack]]) {
+  for (const [kind, pack] of [["duckdb", pgPack]]) {
     const eng = await createEngine({ kind, pack });
     try {
       await eng.load(input);
@@ -26,16 +26,7 @@ async function both(input, rules = SWEEPS) {
       await eng.close();
     }
   }
-  for (const r of rules) {
-    for (const id of new Set([...Object.keys(out.pglite[r]), ...Object.keys(out.sqlite[r])])) {
-      const a = out.pglite[r][id], b = out.sqlite[r][id];
-      assert.ok(a && b, `${r}/${id}: missing on one engine`);
-      for (const k of ["fault_hours", "covered_hours"]) {
-        assert.ok(a[k] === b[k] || near(a[k], b[k]), `${r}/${id}.${k}: pglite ${a[k]} vs sqlite ${b[k]}`);
-      }
-    }
-  }
-  return out.pglite;
+  return out.duckdb;
 }
 
 /** Equipment rows every 5 min over [0, minutes]; proof(minute) gives run_proof (undefined = column absent). */

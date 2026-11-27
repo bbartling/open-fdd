@@ -48,7 +48,7 @@ Haystack model and point history directly, and works on the local network or thr
 
 | | Open-FDD (`nf-app/`) | Open-FDD Lite (`lite/`) |
 |---|---|---|
-| Hardware | 2 GB+ (4 GB+ for PGlite, TimescaleDB on larger hosts) | 1 GB, e.g. Raspberry Pi 3 |
+| Hardware | 2 GB+ (TimescaleDB on larger hosts) | 1 GB, e.g. Raspberry Pi 3 |
 | Includes | FDD engine, RCx charts, CSV export, SPARQL | Dashboard, charts, weather, BACnet mirror |
 | Deploy | `python3 scripts/nf/hooks/nf_app_sync.py --env <env> push nf-app/app.json` | `... push lite/app.json` |
 

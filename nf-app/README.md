@@ -81,7 +81,7 @@ checks it). Static files are cached 5 minutes; `nf_app_sync.py` stamps js/css UR
 | @duckdb/node-api | 2.0.1-r.1 | npm dependency (DuckDB build) | `package.json` |
 | pg | 8.23.1 | npm dependency (Timescale build) | `package.json` |
 
-Supply-chain rule: never take a release younger than two weeks (sql.js 1.16+ and pglite 0.5.16+ were too new on 2026-11-19).
+Supply-chain rule: never take a release younger than two weeks.
 Caddy front door: `caddy:2.11.9-alpine`, pinned in `deploy/nf-caddy/docker-compose.yml`.
 
 ## TimescaleDB full edition (optional)
@@ -128,8 +128,8 @@ The DuckDB build is the single-site engine. `engine: "auto"` and `engine: "duckd
 DuckDB (`@duckdb/node-api` `2.0.1-r.1`). The `fdd.*` helpers are DuckDB macros (`sql/fdd/duckdb/duckdb_helpers.sql`,
 shipped in `pack-postgres.json` as `duckdb_helpers_sql`). If the package does not load, the run stops with
 `DuckDB engine failed to load: …` and does not switch to another engine. The Timescale build is the other runtime.
-`sqlite` and `pglite` are parity-test engines only; a saved option with either name fails and names `duckdb`.
-`tests/duckdb-engine.test.mjs` checks every rule and timeline against PGlite and sql.js, with and without saved tuning.
+A saved option named `sqlite` or `pglite` fails and names `duckdb`. There is no SQLite or PGlite package and no WASM
+SQL engine. Parity compares pandas with this Node DuckDB engine and, when a server is configured, Timescale.
 
 | App option | Default | Meaning |
 |---|---|---|

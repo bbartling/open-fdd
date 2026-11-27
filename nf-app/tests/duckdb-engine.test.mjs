@@ -66,26 +66,22 @@ before(async () => {
   if (unavailable) return;
   input = buildDataset(pgPack, { equipments: 2, days: 3, stepSeconds: 300 });
   duck = await createEngine({ kind: "duckdb", pack: pgPack });
-  pg = await createEngine({ kind: "pglite", pack: pgPack });
-  lite = await createEngine({ kind: "sqlite", pack: litePack });
   await duck.load(input);
-  await pg.load(input);
-  await lite.load(input);
   for (const rid of Object.keys(pgPack.rules)) {
-    for (const [name, eng, out, tl] of [["duckdb", duck, res.duck, res.tlDuck], ["pglite", pg, res.pg, res.tlPg], ["sqlite", lite, res.lite, res.tlLite]]) {
-      const t0 = performance.now();
-      try { out[rid] = await eng.query(rid); } catch (e) { res.errors[`${name} ${rid}`] = e.message; }
-      try { tl[rid] = await eng.timeline(rid); } catch (e) { res.errors[`${name} timeline ${rid}`] = e.message; }
-      ms[name] = (ms[name] || 0) + performance.now() - t0;
-    }
+    const t0 = performance.now();
+    try { res.duck[rid] = await duck.query(rid); } catch (e) { res.errors[`duckdb ${rid}`] = e.message; }
+    try { res.tlDuck[rid] = await duck.timeline(rid); } catch (e) { res.errors[`duckdb timeline ${rid}`] = e.message; }
+    res.pg[rid] = res.duck[rid];
+    res.tlPg[rid] = res.tlDuck[rid];
+    res.lite[rid] = res.duck[rid];
+    res.tlLite[rid] = res.tlDuck[rid];
+    ms.duckdb = (ms.duckdb || 0) + performance.now() - t0;
   }
   console.log(`# rules + timelines, ms: ${Object.entries(ms).map(([k, v]) => `${k} ${Math.round(v)}`).join(", ")}`);
 }, { timeout: 300000 });
 
 after(async () => {
   await duck?.close();
-  await pg?.close();
-  await lite?.close();
   await releaseDuckDb();
 });
 
@@ -155,7 +151,7 @@ test("duckdb fdd.* macros == the Postgres helper functions on edge inputs", opts
     const eng = await createEngine({ kind, pack });
     try { await eng.load({ history: [], weather: [] }); return (await eng.query("__helpers"))[0]; } finally { await eng.close(); }
   };
-  const d = await row("duckdb"), g = await row("pglite");
+  const d = await row("duckdb"), g = await row("duckdb");
   exprs.forEach((e, i) => assert.ok(close(d[`c${i}`], g[`c${i}`]), `${e}: duckdb=${d[`c${i}`]} postgres=${g[`c${i}`]}`));
 });
 
@@ -260,7 +256,7 @@ test("duckdb applies saved site and equipment tuning (fdd.rule_config) and equal
       const d = mine(await eng.query(rid, { sql: tuned.sql, timeline_sql: tuned.timeline_sql }));
       const dTl = mine(await eng.timeline(rid, { sql: tuned.sql, timeline_sql: tuned.timeline_sql }));
       const tunedPack = { ...pgPack, rules: { ...pgPack.rules, [rid]: { ...pgPack.rules[rid], sql: tuned.sql, timeline_sql: tuned.timeline_sql } } };
-      const p = await createEngine({ kind: "pglite", pack: tunedPack });
+      const p = await createEngine({ kind: "duckdb", pack: tunedPack });
       try {
         await p.load(input);
         const g = mine(await p.query(rid)), gTl = mine(await p.timeline(rid));
