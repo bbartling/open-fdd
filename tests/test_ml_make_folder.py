@@ -68,7 +68,7 @@ def test_make_folder_from_lbnl_and_example(tmp_path, capsys):
     capsys.readouterr()
     assert main(["make-folder", "--list-roles"]) == 0
     roles = capsys.readouterr().out
-    assert "sat" in roles and "discharge-air-temp" in roles
+    assert "sat" in roles and "discharge_air_temperature" in roles
 
 
 def test_help_describes_the_folder_format(capsys):

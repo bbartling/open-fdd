@@ -41,10 +41,10 @@ CREATE OR REPLACE MACRO fdd.unit_declares_quantity(unit, quantity) AS
     WHEN unit IS NULL OR trim(unit) = '' THEN false
     WHEN quantity = 'absolute_temperature' THEN fdd.norm_unit(unit) IN ('c', 'degc', 'celsius')
     WHEN quantity = 'relative_humidity' THEN
-      fdd.norm_unit(unit) IN ('pct', 'percent', 'percent0100', 'rh', 'percentrelativehumidity')
+      fdd.norm_unit(unit) IN ('pct', 'percent', 'percent0100', 'rh', 'percentrelativehumidity', 'percentrh')
       OR position('%' IN unit) > 0
     WHEN quantity = 'air_pressure' THEN fdd.norm_unit(unit) IN ('pa', 'pascal')
-    WHEN quantity = 'volume_flow' THEN fdd.norm_unit(unit) = 'ls'
+    WHEN quantity = 'volume_flow' THEN fdd.norm_unit(unit) IN ('ls', 'lpersec', 'lsec')
     WHEN quantity = 'power' THEN fdd.norm_unit(unit) = 'kw'
     WHEN quantity = 'energy' THEN fdd.norm_unit(unit) = 'kwh'
     WHEN quantity = 'electric_current' THEN fdd.norm_unit(unit) = 'a'

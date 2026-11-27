@@ -192,6 +192,17 @@
       "source": "Open-FDD 5.0.12 effective default (imperial-derived band; moved unchanged)"
     },
     {
+      "role": "zone-airflow",
+      "quantity": "volume_flow",
+      "lo": -1.0,
+      "hi": 5000.0,
+      "spike_delta": null,
+      "flat_tol": null,
+      "stale_tol": null,
+      "rate_per_h": null,
+      "source": "Gross-fault band for terminal discharge airflow, litres per second (NF L/sec and ft3/min convert before this check)"
+    },
+    {
       "role": "chw-flow",
       "quantity": "volume_flow",
       "lo": -1.0,

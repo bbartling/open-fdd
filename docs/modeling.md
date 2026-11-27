@@ -79,7 +79,7 @@ client give the same IRIs; the hooks take `base` to override it. A point IRI fro
 
 | Use | How |
 |---|---|
-| Check a Turtle file | `pip install rdflib pyoxigraph`, then `python tools/rdf-check/check_ttl.py model.ttl` |
+| Check a Turtle file | `pip install "rdflib>=7.6.0" "pyoxigraph>=0.5.13"`, then `python tools/rdf-check/check_ttl.py model.ttl` |
 | Build Turtle from a fixture | `node tools/rdf-check/gen_ttl.js fixture.json fixture.ttl` (fixture has a `records` array) |
 | Query in the browser | SELECT, ASK, CONSTRUCT or DESCRIBE over the loaded model; results are capped and download as CSV |
 | Query from code (Full) | `POST /api/v1/apps/{app-id}/hooks/sparql`, then read `GET /api/v1/apps/{app-id}/hooks/sparql/runs?include_results=true` |

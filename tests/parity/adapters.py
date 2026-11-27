@@ -1,9 +1,10 @@
 """In-repo engine adapters (implement open_fdd.parity.EngineAdapter).
 
-``NodeEngineAdapter("pglite" | "sqlite")`` runs the SQL pack through ``sql_run.mjs`` (nf-app engines: PGlite = real
-Postgres, sql.js = translated SQLite) on a Python-generated dataset.
+``NodeEngineAdapter`` runs the SQL pack through ``sql_run.mjs`` on a Python-generated dataset.
 
-``DuckDBAdapter`` runs the rendered PostgreSQL pack in DuckDB (UTC, narrowly scoped ``fdd.*`` scalar macros).
+``DuckDBAdapter`` runs the rendered PostgreSQL pack in DuckDB (UTC). It installs ``duckdb_helpers_sql``
+from ``pack-postgres.json`` (the macros in ``sql/fdd/duckdb/duckdb_helpers.sql``), the same text the native
+DuckDB engine installs. ``NodeEngineAdapter("duckdb")`` runs that engine through ``sql_run.mjs``.
 
 ``PostgresAdapter`` runs the same pack and canonical ``sql/fdd/postgres/postgres_helpers.sql`` on a standalone plain
 PostgreSQL server without Timescale (``POSTGRES_TEST_URL`` + ``OPENFDD_PG_TEST_DISPOSABLE=1``; creates and drops its own
@@ -34,6 +35,9 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 PACK_PG_PATH = ROOT / "nf-app" / "rules" / "pack-postgres.json"
 PG_HELPERS_PATH = ROOT / "sql" / "fdd" / "postgres" / "postgres_helpers.sql"
+DUCKDB_HELPERS_PATH = ROOT / "sql" / "fdd" / "duckdb" / "duckdb_helpers.sql"
+# The macros the DuckDB parity tests execute. The pack copies this file; DuckDBAdapter installs the pack copy.
+DUCKDB_HELPERS_SQL = DUCKDB_HELPERS_PATH.read_text(encoding="utf-8")
 
 
 def node() -> str:
@@ -97,7 +101,7 @@ class NodeEngineAdapter:
     """load(dataset) writes the loader JSON; run(rule_ids) spawns ``sql_run.mjs`` for this engine only."""
 
     def __init__(self, kind: str):
-        if kind not in ("pglite", "sqlite"):
+        if kind not in ("pglite", "sqlite", "duckdb"):
             raise ValueError(kind)
         self.kind = kind
         self.name = kind
@@ -138,12 +142,8 @@ class NodeEngineAdapter:
             self._dir = self._ds_file = None
 
 
-DUCKDB_HELPERS_PATH = ROOT / "sql" / "fdd" / "duckdb" / "duckdb_helpers.sql"
-DUCKDB_HELPERS_SQL = DUCKDB_HELPERS_PATH.read_text(encoding="utf-8")
-
-
 class DuckDBAdapter:
-    """Runs the rendered PostgreSQL rule pack in DuckDB with UTC and narrowly scoped ``fdd.*`` macros."""
+    """Runs the PostgreSQL rule pack in DuckDB (UTC) with ``pack['duckdb_helpers_sql']``."""
 
     name = "duckdb"
 
@@ -167,7 +167,10 @@ class DuckDBAdapter:
         self._pack = json.loads(PACK_PG_PATH.read_text(encoding="utf-8"))
         self._conn = duckdb.connect(":memory:")
         self._conn.execute("SET TimeZone = 'UTC'")
-        self._conn.execute(DUCKDB_HELPERS_SQL)
+        helpers = self._pack.get("duckdb_helpers_sql") or ""
+        if not str(helpers).strip():
+            raise RuntimeError("pack-postgres.json has no duckdb_helpers_sql (rebuild scripts/nf/build_sql_pack.py)")
+        self._conn.execute(helpers)
 
         t0 = time.time()
         cols = _table_columns(self._pack, dataset)

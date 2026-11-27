@@ -6,9 +6,11 @@ description: Use the PyPI package open-fdd (open-fdd-nf, pandas rules, reports) 
 
 Full guide: `docs/python-tools.md`. The package is 4.x; the NF app is 5.x (`open-fdd-version --pretty` shows both).
 
-1. **Connect** with env vars, never in code: `NF_URL` (or `NF_LAN_URL` / `NFURL` for the portal), `NF_CLIENT_ID` +
-   `NF_CLIENT_SECRET` (API key) or `NF_CONSOLE_USER` + `NF_CONSOLE_PASSWORD`, `NF_CA_FILE` for a self-signed LAN cert.
-   A secrets file goes in `--env FILE` and is never committed. The tools only read.
+1. **Connect** with env vars, never in code: `NF_URL` (or `NF_LAN_URL` / `NFURL` for the portal, or `NF_CONSOLE_URL`),
+   `NF_CLIENT_ID` + `NF_CLIENT_SECRET` (API key) or `NF_CONSOLE_USER` + `NF_CONSOLE_PASSWORD`. The same file
+   `nf_app_sync.py` reads (`NF_CONSOLE_URL`, `CONSOLE_USERNAME`, `CONSOLE_PASSWORD`) works. `NF_CA_FILE` or
+   `--pin-server-cert` for a self-signed LAN cert. A secrets file goes in `--env FILE` and is never committed.
+   The tools only read. `open-fdd-nf rules` uses the hook's single-AHU run proof and the 50 h/week occupancy default.
 2. **Look first**: `open-fdd-nf info`, then `open-fdd-nf model --json` to see which point fills each role.
    An equip with few roles is a modeling problem: fix tags/classes/units in NF (MCP), not in the script.
 3. **Run**: `open-fdd-nf rules --days 7 --json`. `not-assessed` is not healthy; read `missing_roles` and

@@ -34,15 +34,15 @@
   add(["K", "kelvin"], "temperature", "°C", (x) => x - 273.15);
   add(["Pa", "pascal", "pascals"], "pressure", "Pa", id);
   add(["kPa", "kilopascals"], "pressure", "Pa", (x) => x * 1000);
-  add(["inH2O", "inH20", "inWC", "in wc", "in. w.c.", "inH₂O", "\"wc", "in_h2o",
+  add(["inH2O", "inH20", "inWC", "in wc", "in. w.c.", "inH₂O", "\"wc", "in_h2o", "IN_H2O",
     "inches of water", "inches-of-water", "iwc"], "pressure", "Pa", (x) => x * F.pa_per_in_wc);
   add(["psi", "psig", "psid"], "pressure", "Pa", (x) => x * F.pa_per_psi);
   add(["bar"], "pressure", "Pa", (x) => x * 1e5);
-  add(["L/s", "lps", "L/sec", "liters/second", "litres/second", "liters per second", "litres per second",
+  add(["L/s", "lps", "L/sec", "L-PER-SEC", "l-per-sec", "liters/second", "litres/second", "liters per second", "litres per second",
     "liters-per-second"], "flow", "L/s", id);
   add(["m³/s", "m3/s"], "flow", "L/s", (x) => x * 1000);
   add(["m³/h", "m3/h", "cmh"], "flow", "L/s", (x) => x / 3.6);
-  add(["cfm", "ft³/min", "ft3/min", "cubic-feet-per-minute"], "flow", "L/s", (x) => x * F.lps_per_cfm);
+  add(["cfm", "ft³/min", "ft3/min", "FT3-PER-MIN", "ft3-per-min", "cubic-feet-per-minute"], "flow", "L/s", (x) => x * F.lps_per_cfm);
   add(["gpm", "gal/min"], "flow", "L/s", (x) => x * F.lps_per_gpm);
   add(["kW"], "power", "kW", id);
   add(["W"], "power", "kW", (x) => x / 1000);
@@ -56,7 +56,7 @@
   add(["kBtu"], "energy", "kWh", (x) => x * F.kwh_per_kbtu);
   add(["MMBtu"], "energy", "kWh", (x) => x * F.kwh_per_mmbtu);
   add(["therm", "therms"], "energy", "kWh", (x) => x * F.kwh_per_therm);
-  add(["%", "%RH", "percent", "pct", "percent-relative-humidity", "percent_0_100"], "percent", "%", id);
+  add(["%", "%RH", "percent", "pct", "PERCENT_RH", "percent_rh", "percent-relative-humidity", "percent_0_100"], "percent", "%", id);
   add(["ppm"], "concentration", "ppm", id);
 
   /** Value in canonical SI, or null when the unit is unknown/empty (caller keeps it as-is). */

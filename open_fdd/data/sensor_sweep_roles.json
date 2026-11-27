@@ -16,6 +16,7 @@
     "supply-air-humidity",
     "duct-static-pressure",
     "chw-flow",
+    "zone-airflow",
     "chw-diff-pressure",
     "condenser-water-supply-temp",
     "condenser-water-return-temp",
@@ -66,7 +67,9 @@
     "return-air-humidity",
     "zone-air-humidity",
     "mixed-air-humidity",
-    "supply-air-humidity"
+    "supply-air-humidity",
+    "duct-static-pressure",
+    "zone-airflow"
   ],
   "SV-RATE": [
     "outside-air-temp",

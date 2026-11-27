@@ -1397,6 +1397,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           if (attrs.sensorRef) {
             summary.sensor_results.total++;
             summary.sensor_results.stale++;
+            const bucket = why.replace(/\s*\(.*$/s, '').slice(0, 60);
+            summary.stale_reasons[bucket] = (summary.stale_reasons[bucket] || 0) + 1;
             const timeline = model.timelines.get(timelineUuid(key, ruleId, attrs.sensorRef));
             if (timeline) stale.push(staleRecord(timeline, why, runIso));
           } else {
@@ -1433,6 +1435,10 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
     }
   }
   const st = summary.status;
+  const sensorStale = summary.sensor_results.stale || 0;
+  const reportedStale = st.stale + sensorStale;
+  summary.reported_stale = reportedStale;
+  const reportedNa = st['not-assessed'] + (summary.sensor_results['not-assessed'] || 0);
   const skippedRoles = Object.entries(summary.roles_skipped_by_unit).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
   const skippedRoleCount = skippedRoles.reduce((n, [, count]) => n + count, 0);
   const unitSkipText = `roles skipped by unit: ${skippedRoleCount} (${skippedRoles.length ? skippedRoles.map(([role, count]) => `${role} ${count}`).join(', ') : 'none'})`;
@@ -1454,7 +1460,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   for (const line of runReport(summary, windowHours)) log(line);
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h); `
-    + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
+    + `ok ${st.ok}, fault ${st.fault}, not-assessed ${reportedNa}, stale ${reportedStale} (equipment ${st.stale}, sensor ${sensorStale}); `
     + `requests: ${summary.requests.metadata} metadata, ${summary.requests.data} data; ${unitSkipText}`);
   return summary;
 }
@@ -1493,7 +1499,7 @@ function runReport(s, windowHours) {
     `open-fdd run: engine ${s.engine}, data window ${s.window.from} .. ${s.window.to} (${windowHours} h); `
     + `newest input sample in the ${s.engine} source ${fr.newest_sample || 'not read'}${age(fr.age_minutes)}, `
     + `NF latest value ${fr.nf_latest || 'none'}${age(fr.nf_latest_age_minutes)}`,
-    `open-fdd counts: eligible ${s.eligible}, evaluated ${s.equips}, written ${s.written}, skipped ${s.skipped.length}, stale ${s.status.stale}; `
+    `open-fdd counts: eligible ${s.eligible}, evaluated ${s.equips}, written ${s.written}, skipped ${s.skipped.length}, stale ${s.reported_stale ?? s.status.stale} (equipment ${s.status.stale}, sensor ${s.sensor_results.stale || 0}); `
     + `skipped by reason: ${tally(s.skipped, (x) => x.kind)}; stale by reason: ${Object.entries(s.stale_reasons).map(([k, n]) => `${k} x${n}`).join('; ') || 'none'}`,
   ];
   if (s.assumed_feeders) lines.push(`open-fdd run proof: ${s.assumed_feeders} VAVs use the site's only AHU (no airRef)`);
@@ -1591,7 +1597,7 @@ async function hook({ sdk, config, ...rest }) {
     const skipped = Object.entries(summary.skipped.reduce((a, x) => ({ ...a, [x.kind]: (a[x.kind] || 0) + 1 }), {})).map(([k, n]) => `${k} x${n}`).join('; ');
     const err = new Error((summary.errors ? `open-fdd: ${summary.errors} error${summary.errors === 1 ? '' : 's'} during the run (see the log); ` : 'open-fdd: ')
       + (summary.failure ? `${summary.failure}; ` : '')
-      + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
+      + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed'] + (summary.sensor_results['not-assessed'] || 0)}, stale ${st.stale + (summary.sensor_results.stale || 0)} (equipment ${st.stale}, sensor ${summary.sensor_results.stale || 0}); `
       + `eligible ${summary.eligible}, evaluated ${summary.equips}, written ${summary.written}, skipped ${summary.skipped.length}${skipped ? ` (${skipped})` : ''}`
       + `${why ? `; stale reasons: ${why}` : ''}; engine ${summary.engine}, window ${summary.window.from} .. ${summary.window.to}; `
       + `newest input sample ${fr.newest_sample || 'not read'}, NF latest value ${fr.nf_latest || 'none'}`);

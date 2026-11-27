@@ -17,11 +17,14 @@ exactly once: if its response is lost, look at the runs instead of firing a seco
 
 from __future__ import annotations
 
+import atexit
 import base64
 import json
 import os
 import re
+import socket
 import ssl
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -191,6 +194,34 @@ def hook_answer(run: Mapping[str, Any]) -> dict | None:
     return None
 
 
+def pin_server_certificate(base_url: str, timeout: float = 10.0, fetch=ssl.get_server_certificate) -> ssl.SSLContext:
+    """Trust only the leaf certificate ``base_url`` presents, and require its SAN to name the host.
+
+    Same check as ``nf_app_sync.py --pin-server-cert``. The PEM is a temp file removed at process exit.
+    """
+    parsed = urllib.parse.urlparse(base_url)
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise NFError("--pin-server-cert needs an https:// URL")
+    host, port = parsed.hostname, parsed.port or 443
+    try:
+        pem = fetch((host, port), timeout=timeout)
+    except OSError as exc:
+        raise NFError(f"could not fetch the server certificate from {host}:{port}: {exc}") from None
+    fd, name = tempfile.mkstemp(suffix=".pem", prefix="nf-pin-")
+    with os.fdopen(fd, "w") as handle:
+        handle.write(pem)
+    atexit.register(lambda: Path(name).unlink(missing_ok=True))
+    ctx = ssl.create_default_context(cafile=name)
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as sock, ctx.wrap_socket(sock, server_hostname=host):
+            pass
+    except ssl.SSLCertVerificationError as exc:
+        raise NFError(f"the certificate {host}:{port} presents does not match the host ({exc.verify_message})") from None
+    except OSError as exc:
+        raise NFError(f"could not verify the pinned certificate at {host}:{port}: {exc}") from None
+    return ctx
+
+
 def _load_env_file(path: str | os.PathLike[str]) -> dict[str, str]:
     file = Path(path).expanduser()
     if not file.is_file():
@@ -215,6 +246,7 @@ class NFClient:
         timeout: float = 60.0,
         ca_file: str | os.PathLike[str] | None = None,
         *,
+        pin: bool = False,
         retries: int = 4,
         backoff: float = 1.0,
         sleep: Callable[[float], None] | None = None,
@@ -230,7 +262,9 @@ class NFClient:
         self.backoff = backoff
         self._sleep = sleep
         self._ctx: ssl.SSLContext | None = None
-        if self.base_url.lower().startswith("https"):
+        if pin:
+            self._ctx = pin_server_certificate(self.base_url, timeout=timeout)
+        elif self.base_url.lower().startswith("https"):
             self._ctx = ssl.create_default_context()
             if ca_file:
                 self._ctx.load_verify_locations(cafile=str(Path(ca_file).expanduser()))
@@ -249,9 +283,11 @@ class NFClient:
         """Build a client from the environment (and optionally a KEY=VALUE file; real env wins).
 
         ``via="lan"`` prefers ``NF_LAN_URL``; ``via="portal"`` prefers ``NFURL``; with no ``via``
-        the order is ``NF_URL``, ``NFURL``, ``NF_LAN_URL``. Credentials: ``NF_CLIENT_ID`` +
-        ``NF_CLIENT_SECRET`` (API key, token flow) else ``NF_CONSOLE_USER`` + ``NF_CONSOLE_PASSWORD``
-        (basic). ``NF_CA_FILE`` adds a self-signed LAN certificate.
+        the order is ``NF_URL``, ``NFURL``, ``NF_LAN_URL``, then ``NF_CONSOLE_URL`` (the name
+        ``nf_app_sync.py`` uses). Credentials: ``NF_CLIENT_ID`` + ``NF_CLIENT_SECRET`` (API key,
+        token flow) else ``NF_CONSOLE_USER`` + ``NF_CONSOLE_PASSWORD``, or the sync names
+        ``CONSOLE_USERNAME`` + ``CONSOLE_PASSWORD``. ``NF_CA_FILE`` adds a self-signed LAN
+        certificate. ``pin=True`` trusts only the certificate the host presents.
         """
         merged: dict[str, str] = {}
         path = env_file or os.environ.get("NF_ENV_FILE")
@@ -261,18 +297,20 @@ class NFClient:
         if via not in (None, "lan", "portal"):
             raise NFError('via must be "lan" or "portal"')
         order = {
-            "lan": ("NF_LAN_URL", "NF_URL", "NFURL"),
-            "portal": ("NFURL", "NF_URL", "NF_LAN_URL"),
-            None: ("NF_URL", "NFURL", "NF_LAN_URL"),
+            "lan": ("NF_LAN_URL", "NF_URL", "NFURL", "NF_CONSOLE_URL"),
+            "portal": ("NFURL", "NF_URL", "NF_LAN_URL", "NF_CONSOLE_URL"),
+            None: ("NF_URL", "NFURL", "NF_LAN_URL", "NF_CONSOLE_URL"),
         }[via]
         url = next((merged[k] for k in order if merged.get(k)), "")
         if not url:
             raise NFError("set " + " or ".join(order) + " (environment or --env FILE)")
         auth: tuple | None = None
+        user = merged.get("NF_CONSOLE_USER") or merged.get("CONSOLE_USERNAME")
+        password = merged.get("NF_CONSOLE_PASSWORD") or merged.get("CONSOLE_PASSWORD")
         if merged.get("NF_CLIENT_ID") and merged.get("NF_CLIENT_SECRET"):
             auth = ("portal", merged["NF_CLIENT_ID"], merged["NF_CLIENT_SECRET"])
-        elif merged.get("NF_CONSOLE_USER") and merged.get("NF_CONSOLE_PASSWORD"):
-            auth = ("basic", merged["NF_CONSOLE_USER"], merged["NF_CONSOLE_PASSWORD"])
+        elif user and password:
+            auth = ("basic", user, password)
         kw.setdefault("ca_file", merged.get("NF_CA_FILE") or None)
         return cls(url, auth=auth, **kw)
 

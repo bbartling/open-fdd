@@ -117,7 +117,7 @@ jobs:
 
       - name: RDF export check (slice 6, Oxigraph + rdflib)
         run: |
-          python3 -m pip install --quiet pyoxigraph rdflib
+          python3 -m pip install --quiet "pyoxigraph>=0.5.13" "rdflib>=7.6.0"
           node tools/rdf-check/gen_ttl.js tools/rdf-check/fixtures/model.json "$RUNNER_TEMP/model.ttl"
           python3 tools/rdf-check/check_ttl.py "$RUNNER_TEMP/model.ttl"
 
@@ -174,9 +174,10 @@ jobs:
           PGURL: postgres://postgres:example@localhost:5432/postgres
         run: |
           set -o pipefail
+          # ubuntu-latest (26.04) has no lxml wheel pip will use; python-docx builds it from source.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev
           python -m pip install --quiet -e ".[oracle,test]"
           python -m pytest tests/parity/test_timescale_parity.py -q -rs 2>&1 | tee "$RUNNER_TEMP/parity.log"
           if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/parity.log"; then echo "parity tests skipped: failing the lane"; exit 1; fi
-          python tests/parity/stress.py --equips 8 --days 7 --engines pglite,sqlite,timescale
+          python tests/parity/stress.py --equips 8 --days 7 --engines duckdb,timescale

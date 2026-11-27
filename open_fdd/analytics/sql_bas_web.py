@@ -10,7 +10,7 @@ import math
 from importlib import resources
 from typing import Any, Iterable
 
-from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote
+from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote, normalize_engine
 from open_fdd.analytics.sql_runtime import TS_MS, _inline
 from open_fdd.analytics.weather_resolver import BAS_WEB_BAND_C
 
@@ -75,7 +75,7 @@ def run_bas_web_sql(conn: Any, engine: str, pairs: Iterable[tuple[str, str, str,
     if not rows_in:
         return []
     sql = render_bas_web_sql(engine, rows_in, **kwargs)
-    if engine == "postgres":
+    if normalize_engine(engine) == "postgres":
         with conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()
@@ -104,7 +104,7 @@ def run_bas_web_points_sql(conn: Any, engine: str, pairs: Iterable[tuple[str, st
     if not rows_in:
         return []
     sql = render_bas_web_points_sql(engine, rows_in, **kwargs)
-    if engine == "postgres":
+    if normalize_engine(engine) == "postgres":
         with conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()
