@@ -16,7 +16,7 @@ rule ids those files name.
 |---|---|
 | `nf-app/` | The full app: `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
 | `lite/` | Open-FDD Lite: the no-FDD edition for 1 GB boxes (Raspberry Pi) |
-| `sql/fdd/` | The FDD math (78 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The shipped runtimes are Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json`. `duckdb>=2.0.1` is a test and parity dependency only |
+| `sql/fdd/` | The FDD math (80 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The shipped runtimes are Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json`. `duckdb>=2.0.1` is a test and parity dependency only |
 | `sql/analytics/` | Read-only analytics SQL. Pandas twins: `open_fdd/analytics/sql_*.py` |
 | `roles/` | Point-role contract `roles/openfdd-roles.json` (`1.0.0-draft.1`). 223P names are the core; Haystack is the binding overlay. QUDT local names (`DEG_C`, `PA`, …) are the wire units |
 | `openapi/`, `contract/` | UI API contract `openapi/open-fdd-ui-api.yaml` (`1.0.0`) and the Node 22 mock |

@@ -20,8 +20,6 @@ model in NF ([data model](modeling.html)); they differ in whether a rule engine 
 | History it sees | NF's own, about 7 days | NF's, or long-range history from Timescale |
 | Weather BACnet mirror | on by default | off by default |
 
-Both write only their own result points and weather variables. Neither writes to field devices or adds a second historian.
-
 ## Use Lite when
 
 - the host has about 1 GB of RAM (NF alone uses most of it);
@@ -30,16 +28,10 @@ Both write only their own result points and weather variables. Neither writes to
 
 ## Use Full when
 
-- the host has 2 GB or more and you want faults, RCx charts and fault points in NF. A single site uses the DuckDB build. Longer history uses the Timescale build: set the app option `timescale`.
+- the host has 2 GB or more. Set `timescale` for the Timescale build.
   See [`nf-app/timescale`](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
 
-`engine: "auto"` uses Timescale on the Timescale build or when that option is set, otherwise DuckDB (`@duckdb/node-api` `2.0.1-r.1`). If `@duckdb/node-api` cannot load, or names `sqlite` or `pglite`, the run fails.
-
-## Rules of thumb
-
-- Build, test and install from a PC, never on the small box. See [Normal Framework](normal-framework.html).
-- Do not run both editions on one NF. Both ship a weather hook that writes the same variables.
-- A small host that gets heavier work later is a reason to replace the host, not to squeeze Full onto it.
+`auto` runs DuckDB unless this is the Timescale build or `timescale` is set. A missing package, or `sqlite` or `pglite`, fails the run.
 
 ## Charts and export
 

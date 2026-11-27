@@ -64,7 +64,7 @@ reads and is not a deployment route.
 
 ## Timescale option and schema preflight
 
-Full ships two builds. The DuckDB build is server-side Node `@duckdb/node-api` 2.0.1-r.1 with Parquet on disk. The Timescale build runs the rules in TimescaleDB. `auto` selects DuckDB unless this is the Timescale build or the `timescale` option is set. `sqlite` and `pglite` are rejected. For Timescale, configure the app option
+The DuckDB build is Node `@duckdb/node-api` 2.0.1-r.1. Timescale is the other build. `sqlite` and `pglite` are rejected. For Timescale, configure the app option
 `timescale` as a JSON string or PostgreSQL URL, then apply `core.sql`, `adapter_nf.sql` and `install.sql` (in that
 order, `psql -v ON_ERROR_STOP=1 -1`) using a database installer role. Give the hooks a separate least-privilege runtime role. See the
 [`nf-app/timescale` guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
@@ -83,7 +83,7 @@ or the `pg` package is missing), the installer stops and names both remedies: fo
 (set `NF_TIMESCALE_PREFLIGHT_DSN` in the protected environment to a reachable endpoint for the same database and install
 a PostgreSQL client; a `localhost`, `127.0.0.1` or `::1` option names the NF host, so it is never used from the
 workstation), or fix the probe by installing the app dependencies. Keep credentials out of the command line.
-Lite and a DuckDB build with no Timescale connection skip this preflight and never bootstrap the probe. An option that still says `sqlite` or `pglite` fails the install and names `duckdb`.
+Lite and a DuckDB build with no Timescale connection skip this preflight.
 
 ## Weather hook: on, off, exporters
 
