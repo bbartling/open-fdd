@@ -44,9 +44,8 @@ assert verdict.ok
 
 - `basic`: the dataset the in-repo suite has always used (a healthy unit, a sick unit with fault windows, a 5-minute
   grid, Monday 2026-01-05 00:00 UTC).
-- `edge`: `basic` plus, deterministically from the seed: null runs, a 3 hour gap on every even unit, timestamp jitter of
-  +-60 s, duplicate rows, out-of-order rows, a DST-transition week, and planted
-  faults (a `sat` flatline and a `zone_t` out-of-range block per unit) whose nominal windows are in `dataset.faults`.
+- `edge`: `basic` plus null runs, a 3 hour gap on every even unit, timestamp jitter of +-60 s, duplicate rows,
+  out-of-order rows, a DST-transition week, and planted faults whose nominal windows are in `dataset.faults`.
 
 The `edge` profile exposes six input-handling differences between the SQL pack and the pandas reference that the
 `basic` data never reaches (series that starts with the fan running, NULL runs, out-of-range values, a long gap,
