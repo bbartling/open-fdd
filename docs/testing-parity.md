@@ -21,12 +21,12 @@ SQL, the pandas reference and the SPARQL client are one FDD check. rdflib and th
 
 | Library | Pin in the repo | Used for |
 |---|---|---|
-| `@electric-sql/pglite` | `0.5.15` (`nf-app/package.json`) | Postgres SQL in the Full app and in CI |
-| `sql.js` | `1.15.2` | SQLite WASM in the app (`hooks/lib/engines.js`) |
-| `pg` | `8.23.1` | Node client for Timescale and standalone Postgres |
+| `@electric-sql/pglite` | `0.5.15` (dependency) | Postgres SQL in the app and in CI |
+| `sql.js` | `1.15.2` (dependency) | SQLite WASM in the app (`hooks/lib/engines.js`) |
+| `pg` | `8.23.1` (dependency) | Node client for Timescale and standalone Postgres |
+| `@duckdb/node-api` | `2.0.1-r.1` (optionalDependency) | Native DuckDB engine kind in `hooks/lib/engines.js`. Kinds are `sqlite`, `pglite`, `duckdb` and `timescale`. |
 | `pandas` | `>=3.1.1` (`oracle` extra) | Reference rules |
 | `duckdb` (Python) | `>=2.0.0` (`duckdb` extra) | Test and stress engines. The browser tutorial pins `duckdb==2.0.0`. |
-| Node DuckDB | not a dependency | `nf-app/package.json` has no `@duckdb/node-api`. The app engines are PGlite and sql.js. |
 
 ## RDF
 

@@ -77,14 +77,11 @@ on the sites, so adding a site rewrites no subject. The tab, the `rdf`, `sparql`
 client give the same IRIs; the hooks take `base` to override it. A point IRI from an older `urn:nf:<host>:<uuid>` or
 `urn:nf:site:<site>:<uuid>` export still names its point in `sparql-data` and `open_fdd.nf.sparql_data`.
 
-ASHRAE 223P is the rule-input contract (`roles/openfdd-roles.json`, 1.1.0-draft.1). Haystack defs 4.0.0 are only the
-overlay this export writes, and those IRIs are versioned (`…/def/phIoT/4.0.0#`). The app does not resolve `owl:imports`
-or run SHACL. CI downloads the sha256-pinned closure (223P, QUDT 3.4.0, SHACL, SKOS and VAEM) into a cache, then
-OntoEnv resolves those imports with the network off and Shifty validates the role file.
-SPARQL answers use Oxigraph 0.5.13. rdflib 7.6.0 parses Turtle and does not evaluate those queries.
-
 | Use | How |
 |---|---|
+| 223P and Haystack | `roles/openfdd-roles.json` 1.1.0-draft.1 is the rule-input contract. Haystack defs 4.0.0 are the export overlay (`…/def/phIoT/4.0.0#`). |
+| Closure and SHACL | The app does not resolve `owl:imports` or run SHACL. CI caches the sha256 pins; OntoEnv resolves them offline; Shifty validates the role file. Engines and workflows: [Testing and parity](testing-parity.html). |
+| SPARQL engine | Oxigraph 0.5.13 answers. rdflib 7.6.0 parses. The fixture comparison is on the testing page. |
 | Check a Turtle file | `pip install rdflib==7.6.0 pyoxigraph==0.5.13`, then `python tools/rdf-check/check_ttl.py model.ttl` |
 | Build Turtle from a fixture | `node tools/rdf-check/gen_ttl.js fixture.json fixture.ttl` (fixture has a `records` array) |
 | Query in the browser | SELECT, ASK, CONSTRUCT or DESCRIBE over the loaded model; results are capped and download as CSV |
