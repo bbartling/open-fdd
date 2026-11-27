@@ -48,7 +48,7 @@ rule ids those files name.
    at runtime, the page CSP keeps `script-src 'self' https:` (and `connect-src 'self' https:`). Do not describe the
    app as "self-only" or "no CDN at runtime", and do not add any other remote script. Bump the Clerk pin only to a
    release at least two weeks old, in both `nf-app/static/nf.js` and `lite/static/nf.js`.
-5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs (80 SQL rules). The NF app runs two engines:
+5. **One FDD math.** Change rules in `sql/fdd`, then rebuild the catalog and packs (83 SQL rules). The NF app runs two engines:
    Node DuckDB (`@duckdb/node-api` 2.0.1-r.1) for a single site, and Timescale for Full. `auto` picks DuckDB unless
    Timescale is configured. A saved option named `sqlite` or `pglite` fails and names `duckdb`. Parity compares pandas
    with Node DuckDB and, when a server is configured, Timescale. If `@duckdb/node-api` does not load, the DuckDB build
