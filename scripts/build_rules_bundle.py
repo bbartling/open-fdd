@@ -20,6 +20,7 @@ Bundle layout (every text file LF, UTF-8):
     schema/core.duckdb.sql     the same tables for DuckDB (jsonb -> JSON, no identity, no partial index)
     schema/input_sample.sql    fdd.input_sample reference table (the column signature of input_contract.json "sources")
     schema/inputs.sql          the tables the rules read: history, weather, sensor_history, ... (input_contract.sql)
+    roles/openfdd-roles.json   the canonical role vocabulary the input names and units come from (unchanged bytes)
     templates/...              the unrendered templates and their renderer at their repo paths, for hosts that
                                re-render with other parameters: python templates/sql/fdd/render_rule.py FC1 --params '{}'
 
@@ -235,6 +236,8 @@ def build_manifest(version: str) -> tuple[dict, dict[str, str]]:
     files["schema/inputs.sql"] = _text(CONTRACT_SQL)
     for rel in TEMPLATE_FILES + sorted(p.relative_to(ROOT).as_posix() for p in ROOT.glob(TEMPLATE_GLOB)):
         files[f"templates/{rel}"] = _text(ROOT / rel)
+    # The canonical role vocabulary itself, byte for byte (its sha256 is in "files" like every other entry).
+    files["roles/openfdd-roles.json"] = ROLES.read_bytes().decode("utf-8")
     for r in rules:
         if r["template"] not in files:
             raise SystemExit(f"{r['rule_id']}: template {r['template']} is not in the bundle")

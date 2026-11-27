@@ -76,6 +76,15 @@ def test_per_file_sha256_matches_every_entry(manifest, unpacked):
         assert (hashlib.sha256(data).hexdigest(), len(data)) == (meta["sha256"], meta["bytes"]), name
 
 
+def test_roles_file_ships_unchanged_with_the_recorded_version(manifest, unpacked):
+    shipped = unpacked / "roles" / "openfdd-roles.json"
+    repo = (ROOT / "roles" / "openfdd-roles.json").read_bytes()
+    assert manifest["roles_vocabulary"]["file"] == "roles/openfdd-roles.json"
+    assert shipped.read_bytes() == repo
+    assert manifest["files"]["roles/openfdd-roles.json"]["sha256"] == hashlib.sha256(repo).hexdigest()
+    assert json.loads(repo.decode("utf-8"))["version"] == manifest["roles_vocabulary"]["version"]
+
+
 def test_templates_rerender_to_the_shipped_sql(manifest, unpacked):
     spec_r = importlib.util.spec_from_file_location("bundle_render_rule", unpacked / "templates" / "sql" / "fdd" / "render_rule.py")
     rr = importlib.util.module_from_spec(spec_r)
