@@ -69,17 +69,14 @@ Sensor-validation rules also require the sensor's declared unit to match its SI 
 
 ## RDF and SPARQL
 
-The Model and RDF tab exports the Haystack model as Turtle with stable subjects. References resolve within their site and each point
-links to its NF time-series id. The tab flags dangling references and non-standard tags.
-
-Subjects are `urn:nf:<NF uuid>` (base `urn:nf:`). They depend neither on the host the page or hook was reached through nor
-on the sites, so adding a site rewrites no subject. The tab, the `rdf`, `sparql` and `sparql-data` hooks and the Python
-client give the same IRIs; the hooks take `base` to override it. A point IRI from an older `urn:nf:<host>:<uuid>` or
-`urn:nf:site:<site>:<uuid>` export still names its point in `sparql-data` and `open_fdd.nf.sparql_data`.
-
 | Use | How |
 |---|---|
-| Check a Turtle file | `pip install "rdflib>=7.6.0" "pyoxigraph>=0.5.13"`, then `python tools/rdf-check/check_ttl.py model.ttl` |
+| Export | Turtle with stable subjects. References resolve inside the site. Each point links to its NF time-series id. Dangling references and non-standard tags are flagged. |
+| Subject | `urn:nf:<NF uuid>` (base `urn:nf:`). Adding a site rewrites no subject. The tab, the `rdf`, `sparql` and `sparql-data` hooks and the Python client use the same IRIs. The hooks take `base` to override it. An older `urn:nf:<host>:<uuid>` or `urn:nf:site:<site>:<uuid>` point IRI still names that point. |
+| 223P and Haystack | `roles/openfdd-roles.json` 1.1.0-draft.1 is the rule-input contract. Haystack defs 4.0.0 are the export overlay (`…/def/phIoT/4.0.0#`). |
+| Closure and SHACL | The app does not resolve `owl:imports` or run SHACL. The Python check uses the vendored closure offline. Engines and workflows: [Testing and parity](testing-parity.html). |
+| SPARQL engine | Oxigraph 0.5.13 answers. rdflib 7.6.0 parses. The fixture comparison is on the testing page. |
+| Check a Turtle file | `pip install rdflib==7.6.0 pyoxigraph==0.5.13`, then `python tools/rdf-check/check_ttl.py model.ttl` |
 | Build Turtle from a fixture | `node tools/rdf-check/gen_ttl.js fixture.json fixture.ttl` (fixture has a `records` array) |
 | Query in the browser | SELECT, ASK, CONSTRUCT or DESCRIBE over the loaded model; results are capped and download as CSV |
 | Query from code (Full) | `POST /api/v1/apps/{app-id}/hooks/sparql`, then read `GET /api/v1/apps/{app-id}/hooks/sparql/runs?include_results=true` |
@@ -94,7 +91,7 @@ pandas reference rules on its own machine:
 | Edition | Path |
 |---|---|
 | Full | `sparql-data` hook: SELECT / ASK only, the matched points' history from NF `point/data` (raw or resampled) or Timescale (`source=timescale`), at most 200 points a page (`pointOffset`), at most 190 000 UTF-8 bytes an answer (cut on a timestamp, continue from `next_from`), every page pinned to one model `snapshot` |
-| Lite | `rdf` hook hands over the model Turtle in pages; the client runs the query with rdflib (same SELECT / ASK policy) and reads history through NF `point/data` |
+| Lite | `rdf` hook hands over the model Turtle in pages; the client runs the query with pyoxigraph (same SELECT / ASK policy and the same answers as the Full hook) and reads history through NF `point/data` |
 
 ```bash
 open-fdd-nf sparql examples/sparql_data/ahu_points.rq --days 7 --rules FC1,FC3

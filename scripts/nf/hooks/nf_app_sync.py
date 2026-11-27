@@ -410,7 +410,7 @@ ASSET_REF = re.compile(r'(?<![\w-])(src|href)="(?![a-z][a-z0-9+.-]*:|/|#)([^"?#]
 STAMP = re.compile(r'(\.(?:js|mjs|css))\?v=[0-9a-f]{10}"')
 
 
-TEXT_SUFFIXES = (".js", ".mjs", ".json", ".css", ".html", ".sql", ".md", ".txt", ".svg")
+TEXT_SUFFIXES = (".js", ".mjs", ".json", ".css", ".html", ".sql", ".md", ".txt", ".svg", ".ttl")
 
 
 def lf_bytes(rel: str, data: bytes) -> bytes:

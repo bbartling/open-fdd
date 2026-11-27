@@ -110,7 +110,7 @@ test("rdf hook: args.base still overrides", async () => {
 
 test("sparql hook: same base and subjects as the UI whatever baseURL", async () => {
   const want = uiTurtle("nf-app", "192.168.1.50:8090").base;
-  const q = "SELECT ?p WHERE { ?p a <https://project-haystack.org/def/phIoT/point> } ORDER BY ?p";
+  const q = "SELECT ?p WHERE { ?p a <https://project-haystack.org/def/phIoT/4.0.0#point> } ORDER BY ?p";
   const seen = [];
   for (const h of HOSTS) {
     const r = await sparqlHook.handle({ sdk: sdkOn(h), args: { query: q, format: "json" } });

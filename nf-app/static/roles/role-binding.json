@@ -1,0 +1,2507 @@
+{
+  "vocabulary": "openfdd-roles",
+  "version": "1.1.0-draft.1",
+  "source": "roles/openfdd-roles.json",
+  "note": "223P patterns are in roles-223p.ttl. This file is the Haystack overlay: NF class, markers, SI unit, required.",
+  "roles": [
+    {
+      "iri": "urn:openfdd:role#air_handling_unit_discharge_air_temperature",
+      "name": "air_handling_unit_discharge_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-temp-sensor"
+        ],
+        "markers": [
+          "discharge",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [
+          "ahu"
+        ],
+        "equip_forbid": [],
+        "binding_scope": "fed_by_air_handling_unit"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#air_handling_unit_load_satisfied_status",
+      "name": "air_handling_unit_load_satisfied_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "ahu",
+          "load",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "satisfied"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "derived"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#air_smoke_alarm_status",
+      "name": "air_smoke_alarm_status",
+      "required": false,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "alarm",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "smoke"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#air_temperature_low_limit_alarm_status",
+      "name": "air_temperature_low_limit_alarm_status",
+      "required": false,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "freezeStat-sensor"
+        ],
+        "markers": [
+          "freezeStat",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#boiler_operating_status",
+      "name": "boiler_operating_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "boiler",
+          "run",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chilled_water_pressure_delta",
+      "name": "chilled_water_pressure_delta",
+      "required": true,
+      "unit": "PA",
+      "si": "Pa",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "chilled-water-delta-pressure"
+        ],
+        "markers": [
+          "chilled",
+          "water",
+          "delta",
+          "pressure",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chilled_water_pressure_delta_setpoint",
+      "name": "chilled_water_pressure_delta_setpoint",
+      "required": true,
+      "unit": "PA",
+      "si": "Pa",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chilled",
+          "water",
+          "delta",
+          "pressure",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chilled_water_pump_command",
+      "name": "chilled_water_pump_command",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chilled",
+          "water",
+          "pump",
+          "run",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chilled_water_pump_operating_status",
+      "name": "chilled_water_pump_operating_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chilled",
+          "water",
+          "pump",
+          "run",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chilled_water_reset_request_count",
+      "name": "chilled_water_reset_request_count",
+      "required": true,
+      "unit": "NUM",
+      "si": null,
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chilled",
+          "water",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "request"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "derived"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chilled_water_volume_flow_rate",
+      "name": "chilled_water_volume_flow_rate",
+      "required": true,
+      "unit": "L-PER-SEC",
+      "si": "L/s",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "chilled-water-delta-flow-sensor"
+        ],
+        "markers": [
+          "chilled",
+          "water",
+          "flow",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chiller_command",
+      "name": "chiller_command",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chiller",
+          "run",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chiller_electric_current",
+      "name": "chiller_electric_current",
+      "required": true,
+      "unit": "A",
+      "si": "A",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "avg-ac-elec-current-magnitude-sensor"
+        ],
+        "markers": [
+          "elec",
+          "current",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chiller_electric_power",
+      "name": "chiller_electric_power",
+      "required": true,
+      "unit": "KiloW",
+      "si": "kW",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "total-active-ac-elec-power-sensor"
+        ],
+        "markers": [
+          "elec",
+          "power",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [
+          "chiller"
+        ],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#chiller_operating_status",
+      "name": "chiller_operating_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chiller",
+          "run",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#compressor_operating_status",
+      "name": "compressor_operating_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "compressor",
+          "run",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#condenser_water_pump_command",
+      "name": "condenser_water_pump_command",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "condenser",
+          "water",
+          "pump",
+          "run",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#cooling_coil_inlet_air_temperature",
+      "name": "cooling_coil_inlet_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "cool",
+          "entering",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "preheat",
+          "water"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#cooling_coil_outlet_air_temperature",
+      "name": "cooling_coil_outlet_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "cool",
+          "leaving",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "preheat",
+          "water"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#cooling_operating_mode_status",
+      "name": "cooling_operating_mode_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "cool",
+          "enable",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#cooling_tower_fan_command",
+      "name": "cooling_tower_fan_command",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "fan",
+          "run",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [
+          "coolingTower"
+        ],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#cooling_valve_position",
+      "name": "cooling_valve_position",
+      "required": false,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "cool",
+          "valve",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#cooling_valve_position_command",
+      "name": "cooling_valve_position_command",
+      "required": true,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "model",
+      "nf": {
+        "classes": [
+          "chilled-water-cool-valve-cmd",
+          "discharge-chilled-water-cool-valve-cmd"
+        ],
+        "markers": [
+          "cool",
+          "valve",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#damper_position",
+      "name": "damper_position",
+      "required": true,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "damper-sensor",
+          "discharge-damper-sensor"
+        ],
+        "markers": [
+          "damper",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "outside",
+          "return",
+          "exhaust",
+          "economizer",
+          "bypass"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#damper_position_command",
+      "name": "damper_position_command",
+      "required": true,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "damper-cmd",
+          "discharge-damper-cmd"
+        ],
+        "markers": [
+          "damper",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "outside",
+          "return",
+          "exhaust",
+          "economizer",
+          "bypass"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_relative_humidity",
+      "name": "discharge_air_relative_humidity",
+      "required": true,
+      "unit": "PERCENT_RH",
+      "si": "%RH",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-humidity-sensor"
+        ],
+        "markers": [
+          "discharge",
+          "air",
+          "humidity",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_static_pressure",
+      "name": "discharge_air_static_pressure",
+      "required": true,
+      "unit": "PA",
+      "si": "Pa",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-pressure-sensor"
+        ],
+        "markers": [
+          "discharge",
+          "air",
+          "pressure",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_static_pressure_reset_request_count",
+      "name": "discharge_air_static_pressure_reset_request_count",
+      "required": true,
+      "unit": "NUM",
+      "si": null,
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "pressure",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "request"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "derived"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_static_pressure_setpoint",
+      "name": "discharge_air_static_pressure_setpoint",
+      "required": true,
+      "unit": "PA",
+      "si": "Pa",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-pressure-sp"
+        ],
+        "markers": [
+          "discharge",
+          "air",
+          "pressure",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_temperature",
+      "name": "discharge_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-temp-sensor"
+        ],
+        "markers": [
+          "discharge",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [
+          "airTerminalUnit"
+        ],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_temperature_setpoint",
+      "name": "discharge_air_temperature_setpoint",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-temp-sp"
+        ],
+        "markers": [
+          "discharge",
+          "air",
+          "temp",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_volume_flow_rate",
+      "name": "discharge_air_volume_flow_rate",
+      "required": true,
+      "unit": "L-PER-SEC",
+      "si": "L/s",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-flow-sensor",
+          "air-flow-sensor"
+        ],
+        "markers": [
+          "air",
+          "flow",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge"
+        ],
+        "forbid": [
+          "max",
+          "min",
+          "total"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_volume_flow_rate_maximum",
+      "name": "discharge_air_volume_flow_rate_maximum",
+      "required": false,
+      "unit": "L-PER-SEC",
+      "si": "L/s",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "max",
+          "air",
+          "flow",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge"
+        ],
+        "forbid": [
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_volume_flow_rate_minimum",
+      "name": "discharge_air_volume_flow_rate_minimum",
+      "required": true,
+      "unit": "L-PER-SEC",
+      "si": "L/s",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "min",
+          "air",
+          "flow",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge"
+        ],
+        "forbid": [
+          "max"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#discharge_air_volume_flow_rate_setpoint",
+      "name": "discharge_air_volume_flow_rate_setpoint",
+      "required": true,
+      "unit": "L-PER-SEC",
+      "si": "L/s",
+      "value_type": "number",
+      "writable": "model",
+      "nf": {
+        "classes": [
+          "discharge-air-flow-sp",
+          "air-flow-sp"
+        ],
+        "markers": [
+          "air",
+          "flow",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge"
+        ],
+        "forbid": [
+          "max",
+          "min",
+          "total"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#electric_energy",
+      "name": "electric_energy",
+      "required": true,
+      "unit": "KiloW-HR",
+      "si": "kWh",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "total-net-ac-elec-active-energy-sensor"
+        ],
+        "markers": [
+          "elec",
+          "energy",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#electric_power",
+      "name": "electric_power",
+      "required": true,
+      "unit": "KiloW",
+      "si": "kW",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "total-active-ac-elec-power-sensor"
+        ],
+        "markers": [
+          "elec",
+          "power",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "chiller",
+          "fan"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [
+          "chiller"
+        ],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#filter_air_pressure_delta",
+      "name": "filter_air_pressure_delta",
+      "required": true,
+      "unit": "PA",
+      "si": "Pa",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "filter",
+          "air",
+          "delta",
+          "pressure",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "water"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#heating_coil_inlet_air_temperature",
+      "name": "heating_coil_inlet_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "heat",
+          "entering",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "preheat",
+          "water"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#heating_coil_outlet_air_temperature",
+      "name": "heating_coil_outlet_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "heat",
+          "leaving",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "preheat",
+          "water"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#heating_valve_position",
+      "name": "heating_valve_position",
+      "required": false,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "heat",
+          "valve",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "reheat"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#heating_valve_position_command",
+      "name": "heating_valve_position_command",
+      "required": true,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "model",
+      "nf": {
+        "classes": [
+          "hot-water-heat-valve-cmd",
+          "discharge-hot-water-heat-valve-cmd",
+          "discharge-steam-heat-valve-cmd"
+        ],
+        "markers": [
+          "heat",
+          "valve",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "reheat"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#hot_water_reset_request_count",
+      "name": "hot_water_reset_request_count",
+      "required": true,
+      "unit": "NUM",
+      "si": null,
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "hot",
+          "water",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "request"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "derived"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#maximum_cooling_operating_mode_command",
+      "name": "maximum_cooling_operating_mode_command",
+      "required": false,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "model",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "max",
+          "cool",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "mode"
+        ],
+        "optional": [],
+        "forbid": [
+          "sp",
+          "air",
+          "flow"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#mixed_air_relative_humidity",
+      "name": "mixed_air_relative_humidity",
+      "required": true,
+      "unit": "PERCENT_RH",
+      "si": "%RH",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "mixed-air-humidity-sensor"
+        ],
+        "markers": [
+          "mixed",
+          "air",
+          "humidity",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#mixed_air_temperature",
+      "name": "mixed_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "mixed-air-temp-sensor"
+        ],
+        "markers": [
+          "mixed",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#occupancy_status",
+      "name": "occupancy_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "occupied-sensor"
+        ],
+        "markers": [
+          "occupied"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "sensor"
+        ],
+        "forbid": [
+          "sp",
+          "cmd"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#operating_mode_command",
+      "name": "operating_mode_command",
+      "required": false,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "enable-cmd"
+        ],
+        "markers": [
+          "enable",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "cool",
+          "heat"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#operating_mode_status",
+      "name": "operating_mode_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "enable-sensor"
+        ],
+        "markers": [
+          "enable",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "cool",
+          "heat"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#operating_status",
+      "name": "operating_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "derived"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#outdoor_air_intake_damper_position",
+      "name": "outdoor_air_intake_damper_position",
+      "required": false,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "outside-damper-sensor"
+        ],
+        "markers": [
+          "outside",
+          "damper",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "air"
+        ],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#outdoor_air_intake_damper_position_command",
+      "name": "outdoor_air_intake_damper_position_command",
+      "required": true,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "model",
+      "nf": {
+        "classes": [
+          "outside-damper-cmd"
+        ],
+        "markers": [
+          "outside",
+          "damper",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "air"
+        ],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#outdoor_air_intake_relative_humidity",
+      "name": "outdoor_air_intake_relative_humidity",
+      "required": true,
+      "unit": "PERCENT_RH",
+      "si": "%RH",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "outside-air-humidity-sensor"
+        ],
+        "markers": [
+          "outside",
+          "air",
+          "humidity",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "weather"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#outdoor_air_intake_temperature",
+      "name": "outdoor_air_intake_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "outside-air-temp-sensor"
+        ],
+        "markers": [
+          "outside",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "weather"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#preheat_heating_coil_outlet_air_temperature",
+      "name": "preheat_heating_coil_outlet_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "leaving",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "preheat"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#pump_operating_status",
+      "name": "pump_operating_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "pump",
+          "run",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#purge_operating_mode_command",
+      "name": "purge_operating_mode_command",
+      "required": false,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "model",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "purge",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "water"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_air_relative_humidity",
+      "name": "return_air_relative_humidity",
+      "required": true,
+      "unit": "PERCENT_RH",
+      "si": "%RH",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "return-air-humidity-sensor"
+        ],
+        "markers": [
+          "return",
+          "air",
+          "humidity",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_air_temperature",
+      "name": "return_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "return-air-temp-sensor"
+        ],
+        "markers": [
+          "return",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_chilled_water_temperature",
+      "name": "return_chilled_water_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chilled",
+          "water",
+          "entering",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_condenser_water_temperature",
+      "name": "return_condenser_water_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "condenser",
+          "water",
+          "entering",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_damper_position",
+      "name": "return_damper_position",
+      "required": false,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "return-damper-sensor"
+        ],
+        "markers": [
+          "return",
+          "damper",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "air"
+        ],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_damper_position_command",
+      "name": "return_damper_position_command",
+      "required": false,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "model",
+      "nf": {
+        "classes": [
+          "return-damper-cmd"
+        ],
+        "markers": [
+          "return",
+          "damper",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "air"
+        ],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_fan_command",
+      "name": "return_fan_command",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "return-run-cmd"
+        ],
+        "markers": [
+          "return",
+          "fan",
+          "run",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#return_hot_water_temperature",
+      "name": "return_hot_water_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "hot",
+          "water",
+          "entering",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_chilled_water_temperature",
+      "name": "supply_chilled_water_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chilled",
+          "water",
+          "leaving",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_chilled_water_temperature_setpoint",
+      "name": "supply_chilled_water_temperature_setpoint",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "chilled",
+          "water",
+          "leaving",
+          "temp",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_condenser_water_temperature",
+      "name": "supply_condenser_water_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "condenser",
+          "water",
+          "leaving",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_fan_command",
+      "name": "supply_fan_command",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-run-cmd",
+          "run-cmd"
+        ],
+        "markers": [
+          "fan",
+          "run",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge"
+        ],
+        "forbid": [
+          "return",
+          "exhaust",
+          "pump"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [
+          "coolingTower"
+        ],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_fan_electric_power",
+      "name": "supply_fan_electric_power",
+      "required": true,
+      "unit": "KiloW",
+      "si": "kW",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "fan",
+          "elec",
+          "power",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge"
+        ],
+        "forbid": [
+          "return",
+          "exhaust",
+          "pump",
+          "chiller"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [
+          "chiller",
+          "coolingTower"
+        ],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_fan_operating_status",
+      "name": "supply_fan_operating_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-run-sensor",
+          "run-sensor"
+        ],
+        "markers": [
+          "fan",
+          "run",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge"
+        ],
+        "forbid": [
+          "return",
+          "exhaust",
+          "pump"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [
+          "coolingTower",
+          "boiler",
+          "chiller"
+        ],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_fan_speed_command",
+      "name": "supply_fan_speed_command",
+      "required": false,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-vfd-speed-cmd",
+          "vfd-speed-cmd"
+        ],
+        "markers": [
+          "vfd",
+          "speed",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "discharge",
+          "fan"
+        ],
+        "forbid": [
+          "return",
+          "exhaust",
+          "pump"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [
+          "coolingTower"
+        ],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#supply_hot_water_temperature",
+      "name": "supply_hot_water_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "hot",
+          "water",
+          "leaving",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#terminal_unit_discharge_air_temperature",
+      "name": "terminal_unit_discharge_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "discharge-air-temp-sensor"
+        ],
+        "markers": [
+          "discharge",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [
+          "airTerminalUnit"
+        ],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#terminal_unit_discharge_air_total_volume_flow_rate",
+      "name": "terminal_unit_discharge_air_total_volume_flow_rate",
+      "required": true,
+      "unit": "L-PER-SEC",
+      "si": "L/s",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "total",
+          "air",
+          "flow",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "aggregate"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#terminal_unit_heating_valve_position_command",
+      "name": "terminal_unit_heating_valve_position_command",
+      "required": true,
+      "unit": "PERCENT",
+      "si": "%",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "reheat-cmd"
+        ],
+        "markers": [
+          "reheat",
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [
+          "airTerminalUnit"
+        ],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#terminal_unit_inlet_air_temperature",
+      "name": "terminal_unit_inlet_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "inlet-air-temp-sensor"
+        ],
+        "markers": [
+          "inlet",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [
+          [
+            "entering",
+            "air",
+            "temp",
+            "sensor"
+          ]
+        ],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [
+          "airTerminalUnit"
+        ],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#test_operating_mode_command",
+      "name": "test_operating_mode_command",
+      "required": false,
+      "unit": null,
+      "si": null,
+      "value_type": "enumeration",
+      "writable": "model",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "cmd"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "test",
+          "mode"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#weather_service_air_dew_point_temperature",
+      "name": "weather_service_air_dew_point_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "weather",
+          "outside",
+          "air",
+          "dewPoint",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "weather"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#weather_service_air_relative_humidity",
+      "name": "weather_service_air_relative_humidity",
+      "required": true,
+      "unit": "PERCENT_RH",
+      "si": "%RH",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "weather",
+          "outside",
+          "air",
+          "humidity",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "weather"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#weather_service_air_temperature",
+      "name": "weather_service_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "weather",
+          "outside",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "weather"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#weather_service_air_wet_bulb_temperature",
+      "name": "weather_service_air_wet_bulb_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "weather",
+          "outside",
+          "air",
+          "wetBulb",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "weather"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#zone_air_co2",
+      "name": "zone_air_co2",
+      "required": true,
+      "unit": "PPM",
+      "si": "ppm",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "air-co2-concentration-sensor"
+        ],
+        "markers": [
+          "zone",
+          "air",
+          "co2",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "concentration"
+        ],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#zone_air_relative_humidity",
+      "name": "zone_air_relative_humidity",
+      "required": true,
+      "unit": "PERCENT_RH",
+      "si": "%RH",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "zone-air-humidity-sensor"
+        ],
+        "markers": [
+          "zone",
+          "air",
+          "humidity",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#zone_air_temperature",
+      "name": "zone_air_temperature",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "zone-air-temp-sensor"
+        ],
+        "markers": [
+          "zone",
+          "air",
+          "temp",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#zone_air_temperature_setpoint",
+      "name": "zone_air_temperature_setpoint",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "zone-air-temp-effective-sp"
+        ],
+        "markers": [
+          "zone",
+          "air",
+          "temp",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "effective"
+        ],
+        "forbid": [
+          "cooling",
+          "heating",
+          "occ",
+          "unocc",
+          "standby",
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#zone_cooling_air_temperature_setpoint",
+      "name": "zone_cooling_air_temperature_setpoint",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "zone-air-temp-occ-cooling-sp"
+        ],
+        "markers": [
+          "zone",
+          "air",
+          "temp",
+          "cooling",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "occ"
+        ],
+        "forbid": [
+          "heating",
+          "unocc",
+          "standby",
+          "effective",
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#zone_heating_air_temperature_setpoint",
+      "name": "zone_heating_air_temperature_setpoint",
+      "required": true,
+      "unit": "DEG_C",
+      "si": "\u00b0C",
+      "value_type": "number",
+      "writable": "never",
+      "nf": {
+        "classes": [
+          "zone-air-temp-occ-heating-sp"
+        ],
+        "markers": [
+          "zone",
+          "air",
+          "temp",
+          "heating",
+          "sp"
+        ],
+        "alt_markers": [],
+        "custom_markers": [],
+        "optional": [
+          "occ"
+        ],
+        "forbid": [
+          "cooling",
+          "unocc",
+          "standby",
+          "effective",
+          "max",
+          "min"
+        ],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "own"
+      }
+    },
+    {
+      "iri": "urn:openfdd:role#zone_load_satisfied_status",
+      "name": "zone_load_satisfied_status",
+      "required": true,
+      "unit": null,
+      "si": null,
+      "value_type": "boolean",
+      "writable": "never",
+      "nf": {
+        "classes": [],
+        "markers": [
+          "zone",
+          "load",
+          "sensor"
+        ],
+        "alt_markers": [],
+        "custom_markers": [
+          "satisfied"
+        ],
+        "optional": [],
+        "forbid": [],
+        "equip_markers": [],
+        "equip_forbid": [],
+        "binding_scope": "derived"
+      }
+    }
+  ]
+}

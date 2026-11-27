@@ -44,7 +44,7 @@ brick:Mixed_Air_Temperature_Sensor a owl:Class ; rdfs:label "Mixed Air Temperatu
 brick:feeds a owl:ObjectProperty ; rdfs:label "Feeds" .
 ref:hasExternalReference a owl:ObjectProperty ; rdfs:label "hasExternalReference" .
 """
-# Haystack defs use versioned IRIs; the NF export uses unversioned ones.
+# Haystack defs and the NF export use versioned 4.0.0 IRIs. canonical_iri also accepts the old form.
 MINI_HAYSTACK = """@prefix owl: <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
@@ -107,7 +107,7 @@ def test_statuses_with_local_vocabularies(tmp_path):
     assert aircon.status == "VERIFIED_TERM" and aircon.term_kind == "class" and aircon.evidence == "Test definition."
     assert aircon.sha256 == hashlib.sha256(MINI_BRICK.encode()).hexdigest()
     hay = rows["Air handling unit (Haystack)"]
-    assert hay.status == "VERIFIED_TERM" and hay.graph_uses == 1  # unversioned export IRI == versioned defs IRI
+    assert hay.status == "VERIFIED_TERM" and hay.graph_uses == 1  # export IRI and defs IRI share the 4.0.0 form
     assert rows["Supply air temperature sensr"].status == "MAPPING_REVIEW"
     mixed = rows["Mixed air temperature sensor"]
     assert mixed.status == "CANDIDATE_REVIEW"
@@ -171,8 +171,10 @@ def test_relative_iris_resolve_against_the_file(tmp_path):
 
 
 def test_canonical_haystack_iris():
+    versioned = "https://project-haystack.org/def/phIoT/4.0.0#ahu"
     assert canonical_iri("https://project-haystack.org/def/phIoT/4.0.0#ahu") == \
-        canonical_iri("https://project-haystack.org/def/phIoT/ahu") == "https://project-haystack.org/def/phIoT/ahu"
+        canonical_iri("https://project-haystack.org/def/phIoT/ahu") == versioned
+    assert canonical_iri("https://project-haystack.org/def/phIoT/3.9.13#ahu") == versioned
     assert canonical_iri("https://brickschema.org/schema/Brick#AHU") == "https://brickschema.org/schema/Brick#AHU"
 
 
@@ -273,7 +275,7 @@ def test_doctor_flags_undefined_standard_terms_against_a_loaded_vocabulary(tmp_p
     rep = doctor(_example_graph(), srcs)
     states = {t["name"]: t["defined"] for t in rep.terms if "project-haystack" in t["iri"] and t["used_as"] == "tag"}
     assert states["ahu"] == "defined" and states["sensor"] == "undefined"
-    assert any("undefined standard tag" in p and p.endswith("phIoT/sensor") for p in rep.problems)
+    assert any("undefined standard tag" in p and p.endswith("4.0.0#sensor") for p in rep.problems)
 
 
 def test_doctor_catches_broken_identity_and_history_links():
@@ -287,7 +289,7 @@ def test_doctor_catches_broken_identity_and_history_links():
         g.set((ref, tsid, rdflib.Literal("22222222-0000-4000-8000-000000000010")))  # SAT-2 points at SAT-1 history
     mat = URIRef(U + "12")
     g.remove((mat, ext, None))
-    g.add((mat, URIRef("https://project-haystack.org/def/phIoT/equipRef"), URIRef("urn:test:missing")))
+    g.add((mat, URIRef("https://project-haystack.org/def/phIoT/4.0.0#equipRef"), URIRef("urn:test:missing")))
     problems = doctor(g).problems
     assert any("shared by 2 points" in p for p in problems)
     assert any(p.startswith("point without a history reference") and p.endswith("12") for p in problems)
@@ -307,10 +309,10 @@ def test_shacl_shapes_pass_the_example_and_catch_a_missing_site_ref():
 
     from open_fdd.ontology_audit.shacl import validate_shacl
 
-    assert validate_shacl(_example_graph())["conforms"] is True
+    assert validate_shacl(_example_graph(), engine="pyshacl")["conforms"] is True
     g = _example_graph()
-    g.remove((URIRef(U + "12"), URIRef("https://project-haystack.org/def/phIoT/siteRef"), None))
-    res = validate_shacl(g)
+    g.remove((URIRef(U + "12"), URIRef(canonical_iri("https://project-haystack.org/def/phIoT/siteRef")), None))
+    res = validate_shacl(g, engine="pyshacl")
     assert res["conforms"] is False and any("siteRef" in v["message"] for v in res["violations"])
 
 
@@ -321,14 +323,22 @@ def test_shacl_validation_failure_is_a_clean_error(monkeypatch):
 
     monkeypatch.setattr(pyshacl, "validate", lambda *a, **k: (False, Exception("VALUES not supported"), ""))
     with pytest.raises(ValueError, match="failed to run"):
-        validate_shacl(_example_graph())
+        validate_shacl(_example_graph(), engine="pyshacl")
 
 
 def test_shacl_without_pyshacl_reports_unavailable(monkeypatch):
     from open_fdd.ontology_audit import shacl
 
     monkeypatch.setattr(shacl, "pyshacl_available", lambda: False)
-    assert shacl.validate_shacl(_example_graph())["available"] is False
+    assert shacl.validate_shacl(_example_graph(), engine="pyshacl")["available"] is False
+
+
+def test_shacl_without_shifty_does_not_fall_back(monkeypatch):
+    from open_fdd.ontology_audit import shacl
+
+    monkeypatch.setattr(shacl, "shifty_available", lambda: False)
+    report = shacl.validate_shacl(_example_graph(), engine="shifty")
+    assert report["available"] is False and report["engine"] == "shifty"
 
 
 # ---- the real JS exporter -------------------------------------------------------------------------------------
@@ -347,7 +357,7 @@ def test_example_graph_matches_the_js_exporter_and_the_neutral_fixture(tmp_path)
         assert rec["uuid"] in {str(o) for _, _, o in g.triples((None, tsid, None))}
         if "equipRef" in rec["attrs"]:
             eq = URIRef("urn:test:" + equips[rec["attrs"]["equipRef"]])
-            assert (subject, URIRef("https://project-haystack.org/def/phIoT/equipRef"), eq) in g
+            assert (subject, URIRef(canonical_iri("https://project-haystack.org/def/phIoT/equipRef")), eq) in g
     node = shutil.which("node")
     gen = ROOT / "tools" / "rdf-check" / "gen_ttl.js"
     if node is None or not gen.is_file():

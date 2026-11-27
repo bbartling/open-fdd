@@ -1,0 +1,26 @@
+# A small 223P model in the edge style: a bacnet:// reference and a QUDT unit.
+# Generic equipment names only. Checked by validate_223p against the vendored closure.
+@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
+@prefix qudt: <http://qudt.org/schema/qudt/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix s223: <http://data.ashrae.org/standard223#> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+
+<urn:openfdd:fixture/edge-style> a owl:Ontology ;
+    rdfs:label "edge-style 223P fixture" ;
+    owl:imports <http://data.ashrae.org/standard223/1.0/model/all> .
+
+<urn:openfdd:fixture/supply-air-temperature> a s223:QuantifiableObservableProperty ;
+    rdfs:label "supply air temperature" ;
+    qudt:hasUnit unit:DEG_C ;
+    qudt:hasQuantityKind quantitykind:Temperature ;
+    s223:hasExternalReference <bacnet://4000/analog-input,1> .
+
+<bacnet://4000/analog-input,1> a s223:BACnetExternalReference ;
+    rdfs:label "supply air temperature reference" ;
+    bacnet:device-identifier "device,4000" ;
+    bacnet:object-identifier "analog-input,1" ;
+    bacnet:object-name "SAT" ;
+    bacnet:property-identifier "present-value" .

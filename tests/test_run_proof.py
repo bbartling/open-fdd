@@ -98,7 +98,7 @@ def test_rdf_carries_airref_and_brick_feeds_and_isfedby():
 def test_sparql_finds_the_feeding_equipment():
     g = _graph()
     q = """
-    PREFIX phIoT: <https://project-haystack.org/def/phIoT/>
+    PREFIX phIoT: <https://project-haystack.org/def/phIoT/4.0.0#>
     PREFIX brick: <https://brickschema.org/schema/Brick#>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT ?consumer ?feeder WHERE {

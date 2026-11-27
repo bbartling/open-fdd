@@ -13,6 +13,7 @@ modeled equipment, points and history, runs SQL fault rules in SI units, and wri
 | Section | What is in it |
 |---|---|
 | [Rules](rules/) | SQL and pandas rule cookbooks with units per rule, using the SQL rules outside Open-FDD, parity |
+| [Testing and parity](testing-parity.html) | FDD three-way engines and workflows; RDF closure, Shifty and the rdflib / Node SPARQL check |
 | [Data model](modeling.html) | 223P roles, the Haystack overlay, SI units, RDF and SPARQL |
 | [Lite vs Full](editions.html) | The two NF app editions, charts, the [UI guide](ui-guide.html) and CSV export |
 | [Normal Framework](normal-framework.html) | Install, upgrade, security and the API, linking to the NF docs |

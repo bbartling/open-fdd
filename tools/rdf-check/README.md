@@ -4,7 +4,7 @@ The Model & RDF tab builds Turtle in the browser with `modelToTurtle()` in `nf-a
 These scripts run that exact code in Node on a generic fixture (no live NF) and validate the result:
 
 ```bash
-pip install "rdflib>=7.6.0" "pyoxigraph>=0.5.13"
+pip install "rdflib==7.6.0" "pyoxigraph==0.5.13"
 node tools/rdf-check/gen_ttl.js tools/rdf-check/fixtures/model.json out.ttl
 python tools/rdf-check/check_ttl.py out.ttl      # exit 1 on any problem
 ```

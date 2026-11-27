@@ -168,7 +168,6 @@ def read_turtle(source: str | Path) -> Model:
     else:
         g.parse(data=str(source), format="turtle")
     REF = Namespace("https://brickschema.org/schema/Brick/ref#")
-    PH = Namespace("https://project-haystack.org/def/ph/")
     local = next((str(ns) for p, ns in g.namespaces() if p == "local"), "")
 
     def lname(node: Any) -> str:
@@ -188,7 +187,9 @@ def read_turtle(source: str | Path) -> Model:
             kinds[k].append(s)
 
     def tags(s: Any) -> list[str]:
-        return sorted(lname(o) for o in g.objects(s, PH.hasTag))
+        # Versioned (4.0.0#) and older unversioned Haystack hasTag IRIs.
+        return sorted(lname(o) for p, o in g.predicate_objects(s)
+                      if str(p).endswith("hasTag") and "project-haystack.org/def/" in str(p))
 
     def entity(s: Any, extra: dict[str, str] | None = None) -> dict:
         attrs = {"id": lname(s), "dis": str(g.value(s, RDFS.label) or lname(s)),
