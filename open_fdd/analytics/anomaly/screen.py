@@ -64,8 +64,10 @@ def default_methods() -> tuple[list[str], dict[str, str]]:
             skipped[name] = f"{module} is not installed: pip install \"{extra}\""
     return run, skipped
 #: ``pandas`` (default) or ``sql``: where the z-score runs. ``sql`` runs ``sql/analytics/anomaly_zscore.sql`` on an
-#: in-process SQLite core (``open_fdd.analytics.sql_anomaly``); the other methods always run in Python.
+#: in-process DuckDB core (``sql_engine``); Timescale uses ``run_zscore_sql`` on a connection.
+#: The other methods always run in Python.
 VALID_ENGINES = ("pandas", "sql")
+SQL_ENGINES = ("duckdb",)
 SCOREBOARD_COLUMNS = [
     "point",
     "role",
@@ -430,6 +432,7 @@ def screen_folder(
     methods: list[str] | tuple[str, ...] | None = None,
     command: str | None = None,
     engine: str = "pandas",
+    sql_engine: str = "duckdb",
     activity_policy: str = DEFAULT_POLICY,
     iforest_contamination: float = IFOREST_CONTAMINATION,
     plots: bool = True,
@@ -440,6 +443,7 @@ def screen_folder(
     Support plots cover every non-skipped point. Day zooms cover the top
     ``top_n`` points and at most ``max_days`` UTC days each. ``engine="sql"``
     computes the z-score with the portable SQL query instead of pandas.
+    ``sql_engine`` is ``duckdb``.
 
     ``activity_policy="proof"`` (default) screens equipment points only on rows the shared activity
     policy (:mod:`open_fdd.analytics.anomaly.activity`, also used by ``open-fdd-ml detect``) marks ``on``;
@@ -455,6 +459,8 @@ def screen_folder(
         raise ValueError("iforest contamination must be in (0, 0.5]")
     if engine not in VALID_ENGINES:
         raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(VALID_ENGINES)}")
+    if sql_engine not in SQL_ENGINES:
+        raise ValueError(f"unknown sql engine {sql_engine!r}; choose from {', '.join(SQL_ENGINES)}")
     if activity_policy not in ACTIVITY_POLICIES:
         raise ValueError(
             f"unknown activity policy {activity_policy!r}; choose from {', '.join(ACTIVITY_POLICIES)}"
@@ -495,7 +501,7 @@ def screen_folder(
         numeric = device.frame[columns].apply(pd.to_numeric, errors="coerce")
         for role, column in device.points:
             numeric[column] = numeric[column].where(_gate(role)[1].to_numpy())
-        sql_zscore = zscore_flags_sql(numeric, window=window, threshold=ZSCORE_THRESHOLD, engine="sqlite")
+        sql_zscore = zscore_flags_sql(numeric, window=window, threshold=ZSCORE_THRESHOLD, engine=sql_engine)
 
     rows: list[dict[str, object]] = []
     flags_by_point: dict[str, dict[str, pd.Series]] = {}

@@ -14,7 +14,7 @@ from importlib import resources
 from typing import Any, Iterable
 
 from open_fdd.analytics.point_stats import ANOMALY_ROLES, DIURNAL_ROLES, METER_ROLES, MV_ROLES, setpoint_roles
-from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote
+from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote, normalize_engine
 from open_fdd.analytics.sql_runtime import TS_MS
 
 STATS_COLUMNS = ("point_key", "equipment_id", "role", "n", "min_val", "max_val", "avg_val", "var_val", "first_ms",
@@ -81,7 +81,7 @@ def render_setpoints_sql(engine: str, *, site_id: str = DEFAULT_SITE, point_keys
 
 
 def _fetch(conn: Any, engine: str, sql: str) -> list[tuple]:
-    if engine == "postgres":
+    if normalize_engine(engine) == "postgres":
         with conn.cursor() as cur:
             cur.execute(sql)
             return cur.fetchall()

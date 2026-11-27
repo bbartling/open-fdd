@@ -10,7 +10,7 @@ from __future__ import annotations
 from importlib import resources
 from typing import Any, Iterable
 
-from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote
+from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _quote, normalize_engine
 from open_fdd.analytics.sql_runtime import TS_MS, _inline
 
 COLUMNS = ("scatter_id", "equipment_id", "t", "x", "y")
@@ -54,7 +54,7 @@ def run_reset_scatter_sql(conn: Any, engine: str, pairs: Iterable[tuple[str, str
     if not rows_in:
         return []
     sql = render_reset_scatter_sql(engine, rows_in, **kwargs)
-    if engine == "postgres":
+    if normalize_engine(engine) == "postgres":
         with conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()

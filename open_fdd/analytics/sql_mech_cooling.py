@@ -19,7 +19,7 @@ from typing import Any, Iterable, Mapping
 
 from open_fdd.analytics.runtime_intervals import ELAPSED_MAX_GAP_SECONDS
 from open_fdd.analytics.si_thresholds import MECH_OAT_BIN_EDGES_C, MECH_OAT_BIN_LABELS
-from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _connect, _quote, create_core, load_core
+from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _connect, _quote, create_core, load_core, normalize_engine
 from open_fdd.analytics.sql_runtime import OAT_ROLES, TS_MS, _inline
 
 CHILLER_AMPS_MIN = 5.0
@@ -164,7 +164,7 @@ def run_mech_bins_sql(conn: Any, engine: str, plan: Plan, **kwargs: Any) -> list
     if not plan.candidates:
         return []
     sql = render_mech_bins_sql(engine, plan, **kwargs)
-    if engine == "postgres":
+    if normalize_engine(engine) == "postgres":
         with conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()

@@ -56,7 +56,8 @@ engine is SQL. See [parity](rules/parity.html).
 A frame built outside the package, or one without `df.attrs`, needs its equipment context. Pass it explicitly, as
 in `run_all(df, equipment_type="AHU", equipment_id="AHU-1")`; `run_rule` takes the same keywords. Explicit keywords
 win over `df.attrs['equipment_type' | 'equipment_id' | 'site_id' | 'building_id']`, and `df` is not modified.
-Columns must use the Haystack role names (`discharge-air-temp`, not `sat`). An unstamped frame has type `UNKNOWN`,
+Columns may use the 223P role names (`discharge_air_temperature`; see `roles/openfdd-roles.json`) or the Haystack
+columns the reference rules read (`discharge-air-temp`). A legacy key such as `sat` still resolves. An unstamped frame has type `UNKNOWN`,
 so every rule is `NOT_APPLICABLE_EQUIPMENT_TYPE`. `summarize(results)` (also from `open_fdd.rules`) groups the
 statuses and lists the most-needed missing roles. When nothing was assessed it adds one `explanation` line, for
 example `no rule was assessed: no equipment type: pass equipment_type= ...`.
@@ -70,12 +71,13 @@ options. Source and installation extras are in the repository's pyproject.toml.
 
 - `history_wide.csv`: a `timestamp_utc` column (ISO 8601, UTC) and one column per point, in SI. That means degC,
   Pa, fractions 0-1 for commands and positions (0-100 % also works for commands), and 0/1 for status.
-- `column_map.json`: `{"equipType": "AHU", "points": {"discharge-air-temp": "SAT", "fan-status": "SF_S"}}`. A role
-  is a Haystack-style name or its short alias; `open-fdd-ml make-folder --list-roles` prints them.
+- `column_map.json`: `{"equipType": "AHU", "points": {"discharge_air_temperature": "SAT", "supply_fan_operating_status": "SF_S"}}`.
+  A role is a 223P name. A legacy key (`sat`) or a hyphenated column (`discharge-air-temp`) still maps.
+  `open-fdd-ml make-folder --list-roles` prints the role names.
 
 ```bash
 open-fdd-ml make-folder trend.csv --out AHU_1 --time-col Time --tz America/Chicago \
-    --map discharge-air-temp=SAT --map outside-air-temp=OAT --map fan-status=SF_S   # naive stamps read in --tz
+    --map discharge_air_temperature=SAT --map outdoor_air_intake_temperature=OAT --map supply_fan_operating_status=SF_S   # naive stamps read in --tz
 open-fdd-ml make-folder --from-lbnl ~/.cache/open-fdd/lbnl/AHU_annual.csv --from 2018-06-01 --to 2018-06-30 --out AHU_1
 open-fdd-ml make-folder --example --out demo_AHU                                     # two synthetic days
 ```
@@ -93,7 +95,7 @@ open-fdd-anomaly screen ./AHU_1 --out ./anomaly_sql --methods zscore --engine sq
 ```
 
 `--engine sql` runs `sql/analytics/anomaly_zscore.sql`, a portable query over `fdd.point` and `fdd.input_sample`
-(PostgreSQL / Timescale, DuckDB, SQLite), on an in-process SQLite copy. Its flags equal
+(DuckDB and Timescale). `--sql-engine duckdb` is the in-process database. Its flags equal
 `open_fdd.analytics.anomaly.detectors.rolling_zscore_flags` on each point's non-missing samples
 (`tests/test_sql_anomaly_zscore.py`, including PostgreSQL in CI). On a database that already has the core tables use
 `open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine, window=..., threshold=...)`.

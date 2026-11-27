@@ -31,12 +31,13 @@ DETECT_METHODS = ("pca", "grey_box", "ocsvm", "copod", "zscore", "mad")
 FOLDER_EPILOG = """device folder format (read by open-fdd-ml detect and open-fdd-anomaly screen/report):
   history_wide.csv   timestamp_utc (ISO 8601, UTC) + one column per point, SI values:
                      degC, Pa, fractions 0-1 (commands may be 0-100 %), status 0/1
-  column_map.json    {"equipType": "AHU", "points": {"discharge-air-temp": "SAT", "fan-status": "SF_S"}}
-                     roles are Haystack-style names or their short aliases (--list-roles)
+  column_map.json    {"equipType": "AHU", "points": {"discharge_air_temperature": "SAT", "supply_fan_operating_status": "SF_S"}}
+                     roles are 223P names (roles/openfdd-roles.json). Legacy keys (sat) and the older
+                     hyphenated columns (discharge-air-temp) still map. --list-roles prints the role names
 
 examples:
   open-fdd-ml make-folder trend.csv --out AHU_1 --time-col Time --tz America/Chicago \\
-      --map discharge-air-temp=SAT --map mixed-air-temp=MAT --map outside-air-temp=OAT --map fan-status=SF_S
+      --map discharge_air_temperature=SAT --map mixed_air_temperature=MAT --map outdoor_air_intake_temperature=OAT --map supply_fan_operating_status=SF_S
   open-fdd-ml make-folder --from-lbnl ~/.cache/open-fdd/lbnl/AHU_annual.csv --from 2018-06-01 --to 2018-06-30 --out AHU_1
   open-fdd-ml make-folder --example --out demo_AHU
 """
@@ -94,7 +95,7 @@ def build_parser() -> argparse.ArgumentParser:
     mk.add_argument("csv", type=Path, nargs="?", default=None, help="Wide CSV with a time column and one column per point")
     mk.add_argument("--out", type=Path, default=None, help="Folder to write")
     mk.add_argument("--map", action="append", default=[], metavar="ROLE=COLUMN",
-                    help="Role for a CSV column, repeatable (e.g. --map discharge-air-temp=SAT --map fan-status=SF_S)")
+                    help="Role for a CSV column, repeatable (e.g. --map discharge_air_temperature=SAT --map supply_fan_operating_status=SF_S)")
     mk.add_argument("--time-col", default="timestamp_utc", help="Time column of CSV (default timestamp_utc)")
     mk.add_argument("--tz", default="UTC", help="Zone of naive time stamps in CSV (default UTC), e.g. America/Chicago")
     mk.add_argument("--equip-type", default="AHU", help="equipType for column_map.json (default AHU)")
@@ -103,7 +104,8 @@ def build_parser() -> argparse.ArgumentParser:
     mk.add_argument("--from", dest="start", default=None, help="First UTC date to keep (YYYY-MM-DD)")
     mk.add_argument("--to", dest="end", default=None, help="Last UTC date to keep (YYYY-MM-DD, inclusive)")
     mk.add_argument("--example", action="store_true", help="Write a small synthetic two-day AHU folder")
-    mk.add_argument("--list-roles", action="store_true", help="Print the role names (short alias -> role) and exit")
+    mk.add_argument("--list-roles", action="store_true",
+                    help="Print rule-input role names (legacy key -> 223P role) and exit")
 
     det = sub.add_parser("detect", help="Fit a detector on known-good rows of a device folder and flag the rest",
                          description="Learning methods (pca, grey_box, ocsvm, copod) need exactly one training source: "

@@ -129,6 +129,34 @@ def _split(v: Any) -> tuple[str, ...]:
     return tuple(_ref_id(x) for x in str(v or "").split(",") if _ref_id(x))
 
 
+def feeder_proof_points(model, catalog: Mapping | None = None, *, assume_single_feeder: bool = True) -> dict[tuple[str, str], tuple[Any, str, str]]:
+    """``{(site, equip): (point, role, via)}`` for equipment whose proof is a feeder, not its own point.
+
+    Includes a VAV with no ``airRef`` when the site has exactly one AHU (``via`` ``assumedSingleAhu``).
+    The point is the feeder's bound status or command. Callers fetch that history and stamp ``run-proof``.
+    """
+    from open_fdd.nf.model import bind_roles, equip_pool, id_of, load_catalog
+
+    cat = catalog or load_catalog()
+    c = spec(cat)
+    nodes = nodes_from_model(model, cat)
+    wanted = [r for g in c["own"].values() for r in g]
+    bound_of: dict[tuple[str, str], dict] = {}
+    for e in model.equips:
+        a = e.get("attrs") or {}
+        bound = bind_roles(wanted, equip_pool(e, model), cat)
+        bound_of[(a.get("siteRef", ""), id_of(e))] = {r: pts[0] for r, pts in bound.items() if pts}
+    out: dict[tuple[str, str], tuple[Any, str, str]] = {}
+    for node in nodes:
+        proof = resolve_run_proof(node, nodes, c, assume_single_feeder=assume_single_feeder)
+        if not proof.found or proof.tier != "feeder":
+            continue
+        point = bound_of.get((node.site, proof.equip), {}).get(proof.role)
+        if point is not None:
+            out[(node.site, node.id)] = (point, proof.role, proof.via)
+    return out
+
+
 def nodes_from_model(model, catalog: Mapping | None = None) -> list[ProofNode]:
     """:class:`ProofNode` per equipment of an ``open_fdd.nf.model.Model`` (roles bound exactly like the rules bind them)."""
     from open_fdd.nf.model import bind_roles, equip_kinds, equip_pool, id_of, load_catalog
