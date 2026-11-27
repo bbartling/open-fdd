@@ -6,13 +6,13 @@ Open-FDD NF app itself (#1618):
     from open_fdd.nf import NFClient
     from open_fdd.nf.sparql_data import fetch_auto, frames, run_rules
     client = NFClient.from_env()
-    answer = fetch_auto(client, open("ahu_points.rq").read(), start, end)     # Full: sparql-data hook; Lite: rdf + rdflib
+    answer = fetch_auto(client, open("ahu_points.rq").read(), start, end)     # Full: sparql-data hook; Lite: rdf + pyoxigraph
     print(run_rules(frames(answer)))                                           # the same open_fdd.rules functions
 
 * Full edition: the ``sparql-data`` hook runs the query (SELECT / ASK, read-only) and returns the matched points'
   history (NF point/data or Timescale), paged over points (200 a page) and time (``next_from``) on one model
   ``snapshot``.
-* Lite (or ``mode="local"``): the ``rdf`` hook hands over the model Turtle in pages; the query runs here with rdflib
+* Lite (or ``mode="local"``): the ``rdf`` hook hands over the model Turtle in pages; the query runs here with pyoxigraph
   (SELECT / ASK only, no SERVICE) and history comes from NF ``/api/v1/point/data`` through the read-only client.
 
 ``frames`` builds one SI DataFrame per equipment exactly like ``open_fdd.nf.model.equipment_frames`` (same SI plan,
@@ -396,22 +396,20 @@ def fetch_local(client: NFClient, query: str, start: datetime | str, end: dateti
                 app_id: str = APP_LITE, turtle: str | None = None, base: str | None = None, uuid_var: str = "",
                 transport: Transport | None = None) -> dict:
     """Same answer as ``fetch`` without a SPARQL engine on the box: Turtle from the ``rdf`` hook (or given), the query
-    here (rdflib), history through ``NFClient.point_data`` (``window_sec=0`` = raw). Read-only throughout."""
-    import rdflib
-
+    here (pyoxigraph, same 0.5.13 answers as the Full hook), history through ``NFClient.point_data``
+    (``window_sec=0`` = raw). Read-only throughout. rdflib only parses the query for the SELECT / ASK policy."""
     from open_fdd.nf.model import load_model
+    from open_fdd.sparql_eval import query_turtle
 
     if turtle is None:
         turtle, base = rdf_turtle(transport or hook_transport(client, app_id))
     q = with_prefixes(query, turtle)
     form = check_query(q)
-    g = rdflib.Graph()
-    g.parse(data=turtle, format="turtle")
-    res = g.query(q)
+    res = query_turtle(turtle, q)
     if form == "ASK":
-        return {**_empty("raw" if not window_sec else f"{window_sec} s"), "kind": "ask", "value": bool(res.askAnswer)}
-    vars_ = [str(v) for v in res.vars]
-    rows = [{v: (None if r[i] is None else str(r[i])) for i, v in enumerate(vars_)} for r in res]
+        return {**_empty("raw" if not window_sec else f"{window_sec} s"), "kind": "ask", "value": bool(res.value)}
+    vars_ = list(res.variables)
+    rows = [{v: row.get(v) for v in vars_} for row in res.rows]
     if len(rows) > 5000:
         raise NFError("SPARQL result exceeds 5000 rows; narrow the query or add LIMIT")
     model = load_model(client)

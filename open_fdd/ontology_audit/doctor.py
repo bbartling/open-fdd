@@ -8,8 +8,8 @@ Every class (``rdf:type`` object), predicate and Haystack tag (``ph:hasTag`` obj
 * ``site-specific``: everything else (for example a site's own marker tags).
 
 A standard term is ``defined`` / ``undefined`` against the loaded snapshot of its vocabulary, else ``unchecked``.
-Haystack IRIs are compared in one form, so the NF export's unversioned ``.../def/phIoT/ahu`` matches the defs file's
-``.../def/phIoT/4.0.0#ahu``.
+Haystack IRIs are compared in the published 4.0.0 form, so an older unversioned ``.../def/phIoT/ahu`` matches the
+defs file's ``.../def/phIoT/4.0.0#ahu``. SPARQL runs on pyoxigraph (the same engine as the Full app).
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import Any
 
-from open_fdd.ontology_audit.terms import TermIndex, canonical_iri, split_iri
+from open_fdd.ontology_audit.terms import TermIndex, canonical_iri, canonical_namespace, haystack_iri, split_iri
 
 BUILTIN_NAMESPACES = (
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#", "http://www.w3.org/2000/01/rdf-schema#",
@@ -34,11 +34,14 @@ OPENFDD_NAMESPACES = ("urn:openfdd:ns#", "https://open-fdd.dev/model#")
 OPENFDD_LOCAL_TERMS = {"nfClass", "ruleRef", "ofddRole", "store_nf", "store_timescaledb"}
 
 H = "https://project-haystack.org/def/"
+_PH = haystack_iri("ph")
+_IOT = haystack_iri("phIoT")
+_SCI = haystack_iri("phScience")
 REF = "https://brickschema.org/schema/Brick/ref#"
 COMPETENCY_QUERIES: dict[str, str] = {
     "equipment_points": f"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX phIoT: <{H}phIoT/>
+PREFIX phIoT: <{_IOT}>
 PREFIX ref: <{REF}>
 SELECT ?equip ?equipLabel ?point ?pointLabel ?historyId WHERE {{
   ?point phIoT:equipRef ?equip .
@@ -47,9 +50,9 @@ SELECT ?equip ?equipLabel ?point ?pointLabel ?historyId WHERE {{
   OPTIONAL {{ ?point ref:hasExternalReference/ref:hasTimeseriesId ?historyId }}
 }} ORDER BY ?equipLabel ?pointLabel ?point""",
     "ahu_discharge_air_temp_sensors": f"""
-PREFIX ph: <{H}ph/>
-PREFIX phIoT: <{H}phIoT/>
-PREFIX phScience: <{H}phScience/>
+PREFIX ph: <{_PH}>
+PREFIX phIoT: <{_IOT}>
+PREFIX phScience: <{_SCI}>
 PREFIX ref: <{REF}>
 SELECT ?equip ?point ?historyId WHERE {{
   ?equip ph:hasTag phIoT:ahu .
@@ -58,7 +61,7 @@ SELECT ?equip ?point ?historyId WHERE {{
 }} ORDER BY ?equip ?point""",
     "fault_results": f"""
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-PREFIX phIoT: <{H}phIoT/>
+PREFIX phIoT: <{_IOT}>
 PREFIX ref: <{REF}>
 SELECT ?point ?rule ?equip ?historyId WHERE {{
   ?point ?ruleProp ?rule .
@@ -67,7 +70,7 @@ SELECT ?point ?rule ?equip ?historyId WHERE {{
   OPTIONAL {{ ?point ref:hasExternalReference/ref:hasTimeseriesId ?historyId }}
 }} ORDER BY ?rule ?point""",
     "non_haystack_tags": f"""
-PREFIX ph: <{H}ph/>
+PREFIX ph: <{_PH}>
 SELECT ?tag (COUNT(?entity) AS ?uses) WHERE {{
   ?entity ph:hasTag ?tag .
   FILTER(!STRSTARTS(STR(?tag), "{H}"))
@@ -84,19 +87,24 @@ def normalize_graph(graph):
 
     out = Graph()
     for prefix, ns in graph.namespaces():
-        out.bind(prefix, canonical_iri(str(ns)) if "project-haystack.org" in str(ns) else ns, override=True,
-                 replace=True)
+        text = str(ns)
+        bound = canonical_namespace(text) if "project-haystack.org" in text else text
+        out.bind(prefix, bound, override=True, replace=True)
     for s, p, o in graph:
         out.add((fix(s), fix(p), fix(o)))
     return out
 
 
 def run_query(graph, name_or_sparql: str) -> list[dict[str, str]]:
-    """Run a named competency query (or any SPARQL SELECT) on the normalized graph; rows of strings."""
+    """Run a named competency query (or any SPARQL SELECT) on the normalized graph; rows of strings.
+
+    Evaluation is pyoxigraph. rdflib only serializes the normalized graph.
+    """
+    from open_fdd.sparql_eval import query_graph
+
     query = COMPETENCY_QUERIES.get(name_or_sparql, name_or_sparql)
-    result = normalize_graph(graph).query(query)
-    names = [str(v) for v in result.vars]
-    return [{n: ("" if row[i] is None else str(row[i])) for i, n in enumerate(names)} for row in result]
+    answer = query_graph(normalize_graph(graph), query)
+    return [{n: ("" if row.get(n) is None else str(row[n])) for n in answer.variables} for row in answer.rows]
 
 
 def _openfdd_vocab_terms() -> set[str]:
@@ -146,7 +154,7 @@ def doctor(graph, sources: list | None = None, *, local_ns: str | None = None) -
     index = TermIndex.build(sources)
     g = normalize_graph(graph)
     local = _local_namespace(graph, local_ns)
-    has_tag = URIRef(H + "ph/hasTag")
+    has_tag = URIRef(haystack_iri("ph", "hasTag"))
     typed = {s for s in g.subjects(RDF.type, None) if not isinstance(s, BNode)}
     ofdd_vocab = _openfdd_vocab_terms()
 
@@ -187,7 +195,7 @@ def doctor(graph, sources: list | None = None, *, local_ns: str | None = None) -
 
     # identity and history links
     ts_owner: dict[str, list[str]] = defaultdict(list)
-    point_cls = URIRef(H + "phIoT/point")
+    point_cls = URIRef(haystack_iri("phIoT", "point"))
     points = sorted({s for s in g.subjects(RDF.type, point_cls)}, key=str)
     report.points = len(points)
     ext, tsid = URIRef(REF + "hasExternalReference"), URIRef(REF + "hasTimeseriesId")
@@ -209,7 +217,7 @@ def doctor(graph, sources: list | None = None, *, local_ns: str | None = None) -
     if role_prop is not None:
         by_role: dict[tuple[str, str], list[str]] = defaultdict(list)
         for pt, role in g.subject_objects(role_prop):
-            equip = next(iter(g.objects(pt, URIRef(H + "phIoT/equipRef"))), None)
+            equip = next(iter(g.objects(pt, URIRef(haystack_iri("phIoT", "equipRef")))), None)
             by_role[(str(equip or ""), str(role))].append(str(pt))
         report.role_bindings = [{"equip": e, "role": r, "points": sorted(p)} for (e, r), p in sorted(by_role.items())]
 

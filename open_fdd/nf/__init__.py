@@ -7,7 +7,8 @@
     print(run_rules(frames))
 
 ``client`` is standard library only; ``model`` / ``rules`` / ``export`` need pandas
-(``pip install 'open-fdd[nf]'``); reading Turtle needs rdflib (``'open-fdd[rdf]'``).
+(``pip install 'open-fdd[nf]'``); reading Turtle needs rdflib and querying it needs pyoxigraph
+(``'open-fdd[rdf]'``, both pinned).
 """
 
 from open_fdd.nf.client import NFClient, NFError

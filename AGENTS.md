@@ -16,7 +16,7 @@ rule ids those files name.
 |---|---|
 | `nf-app/` | The full app: `app.json`, `static/` UI, `hooks/` (`fdd`, `weather`, `sparql`), `rules/` (SQL packs), `rcx-parity.json`, `dev/mock-nf.mjs`, `tests/` |
 | `lite/` | Open-FDD Lite: the no-FDD edition for 1 GB boxes (Raspberry Pi) |
-| `sql/fdd/` | The FDD math (83 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The same SQL runs on DuckDB (`duckdb>=2.0.1`, npm `@duckdb/node-api` `2.0.1-r.1`) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json` |
+| `sql/fdd/` | The FDD math (83 SQL rules in `nf-app/static/fdd-catalog.json`, registry, role map). Packs in `nf-app/rules/` are generated from it. The runtime engines are server-side Node DuckDB (`duckdb>=2.0.1`, npm `@duckdb/node-api` `2.0.1-r.1`) and Timescale. pandas must match SQL except `open_fdd/data/parity_known_differences.json` |
 | `sql/analytics/` | Read-only analytics SQL. Pandas twins: `open_fdd/analytics/sql_*.py` |
 | `roles/` | Point-role contract `roles/openfdd-roles.json` (`1.1.0-draft.1`). 223P names are the core; Haystack is the binding overlay. QUDT local names (`DEG_C`, `PA`, …) are the wire units |
 | `openapi/`, `contract/` | UI API contract `openapi/open-fdd-ui-api.yaml` (`1.0.0`) and the Node 22 mock |
@@ -60,7 +60,7 @@ The GitHub Pages site is five short sections, rules first. `scripts/check_pages.
 
 | # | Section | Holds |
 |---|---|---|
-| 1 | **Rules** | SQL and pandas cookbooks, using SQL rules outside Open-FDD, parity and the parity harness, writing SQL rules |
+| 1 | **Rules** | SQL and pandas cookbooks, using SQL rules outside Open-FDD, parity and the parity harness, [testing and parity](docs/testing-parity.md), writing SQL rules |
 | 2 | **Data model** | Haystack roles bind points to rule inputs; SI units; RDF and SPARQL |
 | 3 | **Lite vs Full** | The two NF app editions, charts and export |
 | 4 | **Normal Framework** | Short install and usage notes that link to the official NF docs; API reference |
@@ -83,6 +83,8 @@ The GitHub Pages site is five short sections, rules first. `scripts/check_pages.
 ## Tests to run before a PR
 
 CI and the hook typecheck use Node 22. Do not move the app to another major.
+
+FDD parity is SQL == pandas == the SPARQL client (`parity.yml`, nightly `parity-stress.yml`). RDF parity is rdflib against `nf-app/hooks/sparql.js` (`rdf-parity.yml`). OntoEnv and Shifty run in Python CI (`ontology-223p.yml`); the plugin does not resolve `owl:imports` or run SHACL. Pins and schedules: [docs/testing-parity.md](docs/testing-parity.md).
 
 ```bash
 node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs

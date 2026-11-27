@@ -5,7 +5,13 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-HAYSTACK_RE = re.compile(r"^https?://(?:www\.)?project-haystack\.org/def/([A-Za-z0-9]+)/(?:[0-9][0-9.]*#)?(.+)$")
+# Published Project Haystack defs. The canonical IRI is versioned; an unversioned export IRI maps to it.
+HAYSTACK_VERSION = "4.0.0"
+# Local name starts with a letter so a namespace ending in ``4.0.0#`` is not read as a term.
+HAYSTACK_RE = re.compile(
+    r"^https?://(?:www\.)?project-haystack\.org/def/([A-Za-z0-9]+)/(?:[0-9][0-9.]*#)?([A-Za-z][A-Za-z0-9_-]*)$")
+HAYSTACK_NS_RE = re.compile(
+    r"^(https?://(?:www\.)?project-haystack\.org/def/[A-Za-z0-9]+/)(?:[0-9][0-9.]*#)?$")
 
 # Well-known prefixes for CURIEs in a requirements sheet (``brick:Supply_Air_Temperature_Sensor``).
 PREFIXES = {
@@ -13,10 +19,10 @@ PREFIXES = {
     "ref": "https://brickschema.org/schema/Brick/ref#",
     "tag": "https://brickschema.org/schema/BrickTag#",
     "s223": "http://data.ashrae.org/standard223#",
-    "ph": "https://project-haystack.org/def/ph/",
-    "phIoT": "https://project-haystack.org/def/phIoT/",
-    "phScience": "https://project-haystack.org/def/phScience/",
-    "phIct": "https://project-haystack.org/def/phIct/",
+    "ph": f"https://project-haystack.org/def/ph/{HAYSTACK_VERSION}#",
+    "phIoT": f"https://project-haystack.org/def/phIoT/{HAYSTACK_VERSION}#",
+    "phScience": f"https://project-haystack.org/def/phScience/{HAYSTACK_VERSION}#",
+    "phIct": f"https://project-haystack.org/def/phIct/{HAYSTACK_VERSION}#",
     "qudt": "http://qudt.org/schema/qudt/",
     "unit": "http://qudt.org/vocab/unit/",
     "quantitykind": "http://qudt.org/vocab/quantitykind/",
@@ -45,10 +51,27 @@ STOPWORDS = {"a", "an", "and", "the", "of", "for", "to", "in", "on", "or", "by",
              "as", "at", "be", "each", "that", "this", "which", "it", "one", "two"}
 
 
+def haystack_iri(library: str, local: str = "") -> str:
+    """Versioned Haystack def IRI: ``https://project-haystack.org/def/<library>/4.0.0#<local>``."""
+    return f"https://project-haystack.org/def/{library}/{HAYSTACK_VERSION}#{local}"
+
+
 def canonical_iri(iri: str) -> str:
-    """Haystack def IRIs in one form (``.../def/phIoT/ahu``), whether versioned (``/4.0.0#ahu``) or not."""
+    """Haystack def IRIs in the published 4.0.0 form (``.../def/phIoT/4.0.0#ahu``).
+
+    An unversioned IRI (``.../def/phIoT/ahu``) and any other defs version map to that form.
+    """
     m = HAYSTACK_RE.match(iri)
-    return f"https://project-haystack.org/def/{m.group(1)}/{m.group(2)}" if m else iri
+    return haystack_iri(m.group(1), m.group(2)) if m else iri
+
+
+def canonical_namespace(ns: str) -> str:
+    """A Haystack prefix namespace in the same versioned form, or ``ns`` unchanged."""
+    m = HAYSTACK_NS_RE.match(ns)
+    if m:
+        library = m.group(1).rstrip("/").rsplit("/", 1)[-1]
+        return haystack_iri(library)
+    return canonical_iri(ns) if HAYSTACK_RE.match(ns) else ns
 
 
 def split_iri(iri: str) -> tuple[str, str]:

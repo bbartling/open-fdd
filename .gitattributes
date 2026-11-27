@@ -1,3 +1,8 @@
+open_fdd/ontology_audit/data/223p/** linguist-vendored
+sql/fdd/roles-223p.ttl text eol=lf
+sql/fdd/input_names_223p.json text eol=lf
+nf-app/static/roles/* text eol=lf
+lite/static/roles/* text eol=lf
 sql/fdd/schema/core.sql text eol=lf
 nf-app/timescale/core.sql text eol=lf
 open_fdd/data/core.sql text eol=lf

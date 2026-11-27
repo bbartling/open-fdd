@@ -1,0 +1,51 @@
+# rdflib vs the Node SPARQL hook on fixed fixtures, plus the vendored OntoEnv closure.
+# The hook does not run SHACL. Shifty on a small fixture is the reference verdict.
+# Called from parity-stress.yml and on pull requests into master or release/*.
+
+name: RDF parity
+
+on:
+  pull_request:
+    branches:
+      - master
+      - "release/**"
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' && !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  rdf:
+    name: rdflib == Node SPARQL hook
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Pin rdflib, OntoEnv and Shifty
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest "rdflib==7.6.0" "ontoenv==0.6.4" "pyshifty==0.6.0"
+
+      - name: Fixture queries, closure and shipped role bytes (fail on skip)
+        env:
+          OPENFDD_RDF_CLOSURE: "1"
+        run: |
+          set -o pipefail
+          python -m pytest tests/test_rdf_parity.py -q --tb=short -rs 2>&1 | tee "$RUNNER_TEMP/rdf-parity.log"
+          if grep -Eq "SKIPPED|skipped" "$RUNNER_TEMP/rdf-parity.log"; then echo "RDF parity skipped"; exit 1; fi

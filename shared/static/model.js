@@ -52,13 +52,16 @@ async function loadPoints(model) {
 }
 
 // ---- RDF (Turtle) export ----------------------------------------------------------
-// Haystack 4 splits its defs over ph / phScience / phIoT / phIct. Markers outside the
-// lists below are written under the local namespace and reported as non-standard.
+// Haystack 4.0.0 is the overlay. 223P is the rule-input contract (roles/openfdd-roles.json);
+// this export does not embed 223P. Def IRIs are the published versioned form
+// (https://project-haystack.org/def/<lib>/4.0.0#<name>). Markers outside the lists below
+// are written under the local namespace and reported as non-standard.
+const HAYSTACK_DEFS = "4.0.0";
 const HS_NS = {
-  ph: "https://project-haystack.org/def/ph/",
-  phScience: "https://project-haystack.org/def/phScience/",
-  phIoT: "https://project-haystack.org/def/phIoT/",
-  phIct: "https://project-haystack.org/def/phIct/",
+  ph: `https://project-haystack.org/def/ph/${HAYSTACK_DEFS}#`,
+  phScience: `https://project-haystack.org/def/phScience/${HAYSTACK_DEFS}#`,
+  phIoT: `https://project-haystack.org/def/phIoT/${HAYSTACK_DEFS}#`,
+  phIct: `https://project-haystack.org/def/phIct/${HAYSTACK_DEFS}#`,
   ref: "https://brickschema.org/schema/Brick/ref#",
   brick: "https://brickschema.org/schema/Brick#",
   schema: "https://schema.org/",
