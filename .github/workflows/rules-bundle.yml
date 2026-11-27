@@ -12,6 +12,8 @@ on:
       - "nf-app/rules/pack-*.json"
       - "nf-app/static/fdd-catalog.json"
       - "open_fdd/parity/**"
+      - "contract/**"
+      - "openapi/**"
       - ".github/workflows/rules-bundle.yml"
   push:
     tags:
@@ -43,6 +45,13 @@ jobs:
         run: |
           export RULES_BUNDLE_ZIP="$(ls dist/open-fdd-rules-*.zip)"
           python -m pytest tests/test_rules_bundle.py -q
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Manifest names and units match the UI API contract (roles/openfdd-roles.json)
+        run: |
+          mkdir -p "$RUNNER_TEMP/m" && unzip -o -q dist/open-fdd-rules-*.zip rules-manifest.json -d "$RUNNER_TEMP/m"
+          cd contract && npm ci && OFDD_CONTRACT_MANIFEST="$RUNNER_TEMP/m/rules-manifest.json" npm test
       - uses: actions/upload-artifact@v7
         with:
           name: rules-bundle
