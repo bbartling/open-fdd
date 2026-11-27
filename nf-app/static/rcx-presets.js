@@ -641,7 +641,7 @@
   // Zones. Fleet analytics (pies, rankings, the all-zones band) draw only in the all-devices view.
   rcxView({
     id: "zone_comfort_rank", group: "Zones", title: "Zones — comfort ranking (% time in band)",
-    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, fleet: true, headline: true,
+    kinds: [], scope: "site", minEquips: 1, hours: 168, fleet: true, headline: true,
     roles: { required: ["zone_t"], optional: ["zone_air_temp_sp", "cooling_sp", "heating_sp"] },
     render: async (el, ctx) => {
       const want = ctx.equips.map((eq) => ({ eq, t: ctx.first(eq, "zone_t"), sp: ctx.first(eq, "zone_air_temp_sp"), c: ctx.first(eq, "cooling_sp"), h: ctx.first(eq, "heating_sp") }));
@@ -671,7 +671,7 @@
   // below p10 are drawn in their own colours, every other zone is muted. One zone (single-device view): just its line.
   rcxView({
     id: "zone_temps", group: "Zones", title: "Zones — all space temps (10th–90th percentile band)",
-    kinds: ZONES, scope: "site", minEquips: 1, hours: 168, headline: true, wide: true,
+    kinds: [], scope: "site", minEquips: 1, hours: 168, headline: true, wide: true,
     roles: { required: ["zone_t"], optional: [] },
     render: async (el, ctx) => {
       const want = ctx.equips.map((eq) => ({ eq, y: ctx.first(eq, "zone_t") }));

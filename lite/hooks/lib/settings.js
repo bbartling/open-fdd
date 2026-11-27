@@ -19,6 +19,8 @@
  *   exporters    string  weather: where the values go besides the hook variables: "bacnet-av" (default when NF's BACnet
  *                        server is present), a comma list or a JSON array, "none" = variables only
  *   timezone     string  IANA zone for the site when the model site has none (fdd occupancy schedule, charts; #1587)
+ *   assumeSingleFeeder  bool  default on: a VAV with no airRef uses the site's only AHU as run proof (same as RCx).
+ *                        false: that VAV is no_run_proof until it has airRef
  *
  * Options cannot hold nested objects, so `timescale` arrives as a STRING; this module turns the scalar form into
  * the object form the code wants. An object (a test, or a future NF that does store hook config) passes through.
@@ -28,7 +30,7 @@
 /** Options whose value is an object/array in the code but arrives as a JSON string in NF options. */
 const JSON_OPTIONS = ['timescale', 'history', 'bacnet', 'equips'];
 const NUMBER_OPTIONS = ['windowHours', 'latitude', 'longitude', 'writeRetryMs'];
-const BOOLEAN_OPTIONS = ['dryRun', 'bacnetMirror', 'bacnet_mirror', 'weather', 'weatherEnabled'];
+const BOOLEAN_OPTIONS = ['dryRun', 'bacnetMirror', 'bacnet_mirror', 'weather', 'weatherEnabled', 'assumeSingleFeeder'];
 
 /** NF typed values, e.g. { string: "x" } / { signed: 24 } / { boolean: true } (as GetApplications shows an option). */
 const TYPED_KEYS = ['string', 'signed', 'unsigned', 'double', 'real', 'boolean'];
@@ -138,6 +140,18 @@ function weatherEnabled(config) {
 }
 
 /**
+ * Assume the site's only AHU feeds VAVs that have no airRef? Default yes, so FDD and RCx agree.
+ * Set the app option assumeSingleFeeder to false to require an explicit airRef.
+ * @param {any} config
+ * @returns {boolean}
+ */
+function assumeSingleFeeder(config) {
+  const c = config || {};
+  if (!Object.prototype.hasOwnProperty.call(c, 'assumeSingleFeeder')) return true;
+  return toBool(c.assumeSingleFeeder) !== false;
+}
+
+/**
  * `text` with the connection's secrets removed (password, password inside a URL), for logs and error messages.
  * @param {any} text
  * @param {any} [conn] the timescale settings object, when known
@@ -165,4 +179,4 @@ function redact(text, conn) {
   return s;
 }
 
-module.exports = { weatherEnabled, normalizeConfig, parseTimescale, requireTimescale, redact, unwrapTyped, TIMESCALE_WHERE };
+module.exports = { weatherEnabled, assumeSingleFeeder, normalizeConfig, parseTimescale, requireTimescale, redact, unwrapTyped, TIMESCALE_WHERE };

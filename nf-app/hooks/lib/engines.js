@@ -142,6 +142,30 @@ const cellValue = (row, col) => {
 
 const numberOrNull = (v) => (typeof v === "bigint" ? Number(v) : typeof v === "number" ? (Number.isFinite(v) ? v : v) : v);
 
+// ---------------------------------------------------------------- saved tuning (fdd.rule_config in the app's Timescale store)
+
+/**
+ * Reader for fdd.rule_config, shared by sqlite, pglite and duckdb when the box has a saved-tuning store.
+ * opts.tuningClient = an open pg client (tests). opts.config.timescale, or opts.config itself when it is a
+ * connection ({ host } or { connectionString }), is connected for the read and closed after. No store = {}.
+ */
+function savedTuning(opts = {}) {
+  const client = opts.tuningClient || null;
+  const cfg = opts.config && typeof opts.config === "object" ? opts.config : null;
+  const nested = cfg && cfg.timescale && typeof cfg.timescale === "object" ? cfg.timescale : null;
+  const direct = !nested && cfg && (cfg.host || cfg.connectionString) ? cfg : null;
+  const config = nested || direct;
+  if (!client && !config) return {};
+  return {
+    async ruleConfigOverrides() {
+      const ts = require("./timescale");
+      if (client) return ts.activeRuleConfigs(client);
+      const c = await ts.connect(config);
+      try { return await ts.activeRuleConfigs(c); } finally { await c.end(); }
+    },
+  };
+}
+
 // ---------------------------------------------------------------- sqlite (sql.js)
 
 let sqlJsPromise = null;
@@ -170,7 +194,7 @@ const rowsOf = (res) => {
   });
 };
 
-async function createSqlite(pack) {
+async function createSqlite(pack, opts = {}) {
   const SQL = await loadSqlJs();
   const db = new SQL.Database();
   for (const name of pack.helper_functions || Object.keys(HELPERS)) {
@@ -184,6 +208,7 @@ async function createSqlite(pack) {
   let loaded = false;
   return {
     kind: "sqlite",
+    ...savedTuning(opts),
     async load(input) {
       const cols = tableColumns(pack, input);
       db.run("BEGIN");
@@ -210,21 +235,23 @@ async function createSqlite(pack) {
       } catch (e) { db.run("ROLLBACK"); throw e; }
       loaded = true;
     },
-    async query(ruleId) {
+    /** sql: optional { sql, timeline_sql } re-rendered with saved tuning; default the pack's. */
+    async query(ruleId, sql) {
       if (!loaded) throw new Error("engine: call load(input) before query()");
       const rule = pack.rules[ruleId];
       if (!rule) {
         const why = pack.skipped && pack.skipped[ruleId];
         throw new Error(why ? `rule ${ruleId} is skipped on sqlite: ${why}` : `unknown rule ${ruleId}`);
       }
-      return rowsOf(db.exec(rule.sql));
+      return rowsOf(db.exec((sql && sql.sql) || rule.sql));
     },
     /** Per-timestamp confirmed flags. Sensor sweeps also return sensor_role. Empty when the rule has no timeline. */
-    async timeline(ruleId) {
+    async timeline(ruleId, sql) {
       if (!loaded) throw new Error("engine: call load(input) before timeline()");
       const rule = pack.rules[ruleId];
-      if (!rule || !rule.timeline_sql) return [];
-      return rowsOf(db.exec(rule.timeline_sql));
+      const text = (sql && sql.timeline_sql) || (rule && rule.timeline_sql);
+      if (!text) return [];
+      return rowsOf(db.exec(text));
     },
     // Also drop the cached sql.js module so its WASM memory can be collected between hourly
     // runs: on a 1 GB edge the runtime otherwise keeps ~40 MB resident for nothing.
@@ -257,7 +284,7 @@ const pgRows = (res) => {
   });
 };
 
-async function createPglite(pack) {
+async function createPglite(pack, opts = {}) {
   let PGlite;
   try {
     ({ PGlite } = await import("@electric-sql/pglite"));
@@ -273,6 +300,7 @@ async function createPglite(pack) {
   let loaded = false;
   return {
     kind: "pglite",
+    ...savedTuning(opts),
     async load(input) {
       const cols = tableColumns(pack, input);
       for (const [table, spec] of Object.entries(cols)) {
@@ -292,17 +320,19 @@ async function createPglite(pack) {
       for (const table of Object.keys(cols)) await db.exec(`ANALYZE ${table}`);
       loaded = true;
     },
-    async query(ruleId) {
+    /** sql: optional { sql, timeline_sql } re-rendered with saved tuning; default the pack's. */
+    async query(ruleId, sql) {
       if (!loaded) throw new Error("engine: call load(input) before query()");
       const rule = pack.rules[ruleId];
       if (!rule) throw new Error(`unknown rule ${ruleId}`);
-      return pgRows(await db.query(rule.sql));
+      return pgRows(await db.query((sql && sql.sql) || rule.sql));
     },
-    async timeline(ruleId) {
+    async timeline(ruleId, sql) {
       if (!loaded) throw new Error("engine: call load(input) before timeline()");
       const rule = pack.rules[ruleId];
-      if (!rule || !rule.timeline_sql) return [];
-      return pgRows(await db.query(rule.timeline_sql));
+      const text = (sql && sql.timeline_sql) || (rule && rule.timeline_sql);
+      if (!text) return [];
+      return pgRows(await db.query(text));
     },
     async close() { await db.close(); },
   };
@@ -534,21 +564,10 @@ async function createDuckDb(pack, opts = {}) {
     if (!rule) throw new Error(`unknown rule ${ruleId}`);
     return sql ? { ...rule, ...sql } : rule;
   };
-  // Saved tuning (#1589/#1636): the store is fdd.rule_config in the app's Timescale database. When the app has one
-  // (option timescale, or opts.tuningClient in tests), this engine reads the same active revisions as the timescale
-  // engine, and the hook renders the tuned Postgres SQL (DuckDB runs it as is) into query(ruleId, sql) / timeline().
-  const tuningSource = opts.tuningClient || (opts.config && opts.config.timescale) || null;
-  const tuning = tuningSource ? {
-    async ruleConfigOverrides() {
-      const ts = require("./timescale");
-      if (opts.tuningClient) return ts.activeRuleConfigs(opts.tuningClient);
-      const client = await ts.connect(opts.config.timescale);
-      try { return await ts.activeRuleConfigs(client); } finally { await client.end(); }
-    },
-  } : {};
+  // Saved tuning (#1589/#1636, #1798): same reader as sqlite and pglite. The hook passes rendered SQL into query().
   return {
     kind: "duckdb",
-    ...tuning,
+    ...savedTuning(opts),
     /** The settings that keep the engine offline and off the disk, as this connection sees them (doctor, tests). */
     async settings() {
       return (await conn.runAndReadAll(`SELECT current_setting('TimeZone') AS time_zone, current_setting('temp_directory') AS temp_directory,
@@ -598,8 +617,8 @@ async function createDuckDb(pack, opts = {}) {
 
 async function createEngine({ kind, pack, ...opts }) {
   if (!pack || !pack.rules || !pack.contract) throw new Error("createEngine: pack (parsed pack-*.json) is required");
-  if (kind === "sqlite") return createSqlite(pack);
-  if (kind === "pglite") return createPglite(pack);
+  if (kind === "sqlite") return createSqlite(pack, opts);
+  if (kind === "pglite") return createPglite(pack, opts);
   if (kind === "timescale") return createTimescale(pack, opts);
   if (kind === "duckdb") return createDuckDb(pack, opts);
   throw new Error(`unknown engine kind ${JSON.stringify(kind)} (use "sqlite", "pglite", "duckdb" or "timescale")`);

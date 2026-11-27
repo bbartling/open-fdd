@@ -1,6 +1,6 @@
 // CSV export for the Open-FDD app (Export tab): single-equipment joined I/O + published FDD results,
-// stored units and source history types, exact source timestamp join with 10k-sample cap detection,
-// aligned bucketed fallback, and Full Timescale long-range fallback.
+// display units (canonical labels; values converted from the point's own unit), exact source timestamp
+// join with 10k-sample cap detection, aligned bucketed fallback, and Full Timescale long-range fallback.
 //
 // Pure functions are at the top and run in Node too (tests/export.test.mjs); DOM wiring is at the bottom.
 (function (root) {
@@ -70,8 +70,14 @@
   }
 
   // ---- columns --------------------------------------------------------------------------
+  /** `<equip> · <point> [unit]`. A point name that already starts with the equipment name is not repeated. */
   function columnName(equip, dis, unit) {
-    return [equip, dis].filter(Boolean).join(" ") + (unit ? ` [${unit}]` : "");
+    const who = String(equip || "").trim();
+    let point = String(dis || "").trim();
+    if (who && point && point.toLowerCase().startsWith(who.toLowerCase())) {
+      point = point.slice(who.length).replace(/^[\s·\-:]+/, "").trim();
+    }
+    return [who, point].filter(Boolean).join(" · ") + (unit ? ` [${unit}]` : "");
   }
 
   function uniqueHeaders(names) {
@@ -543,13 +549,15 @@
     if (includeEmptyBuckets && windowSec > 0 && Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
       const step = windowSec * 1000;
       const set = new Set();
-      const firstBucket = Math.floor(startMs / step) * step;
-      for (let b = firstBucket; b < endMs; b += step) {
-        if (b + step > startMs) set.add(b);
-      }
+      // First row is the first bucket boundary at or after the range start. A start that falls
+      // inside a bucket does not emit that partial bucket (it would show as an empty unaligned row).
+      const q = startMs / step;
+      const nearest = Math.round(q);
+      const firstBucket = (Math.abs(q - nearest) < 1e-6 ? nearest : Math.ceil(q)) * step;
+      for (let b = firstBucket; b < endMs; b += step) set.add(b);
       for (const m of filteredByCol) {
         for (const t of m.keys()) {
-          if (t < endMs && (t >= startMs || t + step > startMs)) set.add(t);
+          if (t >= firstBucket && t < endMs) set.add(t);
         }
       }
       actualTimes = [...set].sort((a, b) => a - b);
@@ -581,11 +589,14 @@
     return { csv, rows: rows.length, bytes };
   }
 
-  function toJoinedCsv({ columns, data, startMs, endMs, timezone = null, windowSec = 0, mode = "raw" }) {
+  function toJoinedCsv({ columns, data, startMs, endMs, timezone = null, windowSec = 0, mode = "raw", system = null }) {
+    const u = units();
+    const sys = system || (u && u.displaySystem ? u.displaySystem() : "imperial");
     return toCsv({
       columns,
       data,
-      mode: "stored",
+      mode: "display",
+      system: sys,
       startMs,
       endMs,
       timezone,

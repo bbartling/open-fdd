@@ -20,44 +20,46 @@ function load() {
   return ctx;
 }
 /** The dashboard's panels (view ids) for a model, the way renderViewTab("rcx") plans them: every device, fleet views on. */
-function panels(plant) {
+function panels(plant, place) {
   const ctx = load(), { records, points } = dashboardModel({ plant });
   const model = { sites: records.filter((r) => r.pointType === "SITE"), equips: records.filter((r) => r.pointType === "EQUIPMENT"), devices: [], points: points.map(ctx.toPoint) };
-  const { ready } = ctx.rcxPlan(model.equips, model, catalog, { tab: "rcx", single: false });
+  const { ready } = ctx.rcxPlan(model.equips, model, catalog, { tab: "rcx", single: false, ...(place ? { place } : {}) });
   return new Map(Array.from(ready, (x) => [x.view.id, Array.from(x.equips, (e) => e.name)]));
 }
 
 const PLANT_PANELS = {
   "mech-cooling-hours": "DX / compressor / chiller cooling hours binned by outdoor air (#1598)",
-  hw_reset_scatter: "hot-water reset scatter", chw_reset_scatter: "chilled-water reset scatter",
   zone_temps: "zone temperatures", zone_comfort_rank: "zone comfort ranking", "weekly-chiller": "chiller weekly run hours",
+  chw_temps_ts: "chilled-water temperatures",
 };
 
-test("AHU-only model: AHU run hours and air-side panels show; chiller, hot-water, DX cooling and zone panels are hidden", () => {
-  const p = panels("ahu");
-  for (const id of ["weekly-fan", "ahu_dats", "economizer-delta"]) assert.ok(p.has(id), `${id} shows`);
+test("AHU-only model: run hours show on Overview; scatter and air-side timeseries wait for Analytics", () => {
+  const p = panels("ahu", "overview");
+  assert.ok(p.has("weekly-fan"), "weekly-fan shows");
+  for (const id of ["ahu_dats", "economizer-delta"]) assert.ok(!p.has(id), `${id} is not on the default Overview`);
+  const more = panels("ahu", "more");
+  for (const id of ["ahu_dats", "economizer-delta"]) assert.ok(more.has(id), `${id} is on Analytics`);
   for (const [id, what] of Object.entries(PLANT_PANELS)) assert.ok(!p.has(id), `${what} (${id}) is hidden without that equipment`);
 });
 
-test("full model: every plant panel shows, each with ALL its devices on one panel (no picker)", () => {
-  const p = panels("full");
+test("full model: Overview is plant and zone temps; scatter waits for Analytics", () => {
+  const p = panels("full", "overview");
   for (const [id, what] of Object.entries(PLANT_PANELS)) assert.ok(p.has(id), `${what} (${id}) shows`);
   assert.deepEqual(p.get("weekly-fan").sort(), ["AHU-1", "AHU-2"], "both AHUs' run hours together");
   assert.deepEqual(p.get("mech-cooling-hours").sort(), ["AHU-2", "CH-1"], "DX unit and chiller binned together; AHU-1 has no cooling proof");
   assert.deepEqual(p.get("zone_temps").sort(), ["VAV-1", "VAV-2", "VAV-3"], "all zones together");
-  for (const id of p.keys()) {
-    const v = load().get("RCX_VIEWS").find((x) => x.id === id);
-    assert.equal(v.tab || "rcx", "rcx");
-  }
+  for (const id of ["hw_reset_scatter", "chw_reset_scatter", "ahu_dats", "vav_positions"]) assert.ok(!p.has(id), `${id} is not fetched on Overview`);
+  const more = panels("full", "more");
+  for (const id of ["hw_reset_scatter", "chw_reset_scatter", "ahu_dats"]) assert.ok(more.has(id), `${id} is on Analytics`);
 });
 
 test("Overview hides the dashboard until a panel draws, and drops empty cards and groups", () => {
   const app = readFileSync(new URL("app.js", dir), "utf8");
-  assert.match(app, /if \(fleet && \$\("overviewRcx"\)\) \$\("overviewRcx"\)\.hidden = !cards\.length/);
+  assert.match(app, /if \(tab === "rcx" && \$\("overviewRcx"\)\) \$\("overviewRcx"\)\.hidden = !cards\.length/);
   assert.match(app, /an empty group goes too/);
   assert.match(app, /ofddTabs\.overview = async \(\) => \{/);
   assert.match(app, /ofddOccupancyEditor\.render/);
-  assert.match(app, /const fleet = tab === "rcx"; +\/\/ the RCx dashboard: every device, never one picked/);
+  assert.match(app, /const fleet = tab === "rcx" \|\| tab === "analytics";/);
 });
 
 test("FDD plot shading: fault spans and equipment-off spans become mark areas on every signal grid", () => {

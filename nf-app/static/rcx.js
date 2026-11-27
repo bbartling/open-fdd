@@ -10,6 +10,20 @@
 // equipPool, equipKinds, loadCatalog). Loaded before the rcx-*.js view modules and app.js.
 
 const RCX_VIEWS = [];
+// Overview (#1643) draws plant run hours, plant temperatures and zone temperatures. Scatter, metering, energy,
+// VAV position/health and the per-AHU timeseries live on the Analytics tab and are not fetched with Overview.
+const RCX_MORE_GROUPS = new Set(["Scatter plots", "Metering", "Energy", "VAV"]);
+const RCX_MORE_IDS = new Set([
+  "economizer-delta", "economizer-mat-residual", "economizer-temps",
+  "ahu_dats", "ahu_mats", "ahu_rats", "ahu_dampers", "fan_speeds", "duct_static_ts", "duct_static_box",
+]);
+/** @param {RcxViewDef} view @returns {"overview" | "more"} */
+function viewPlace(view) {
+  if (view.place) return view.place;
+  if (view.tab && view.tab !== "rcx") return "overview";
+  if (RCX_MORE_GROUPS.has(view.group) || RCX_MORE_IDS.has(view.id)) return "more";
+  return "overview";
+}
 
 /** RCx tab state (the device filter is the shell's per-tab equip picker): ahuOn = the "AHU on" filter (null = automatic: on when the feeding AHU is known). */
 const rcxUi = { ahuOn: null };
@@ -296,11 +310,17 @@ const rcxRefId = (v) => String(v ?? "").trim().replace(/^@/, "");
 /**
  * Which AHU feeds each VAV: Map(vav id -> { ahu: OfddEquip-like { rec, id, name }, assumed }).
  *   1. the VAV's Haystack `airRef` names an AHU of the same site (by id, name or NF uuid): assumed = false;
- *   2. no airRef at all and the site has exactly ONE AHU: that AHU, assumed = true (the UI says "assumed");
+ *   2. no airRef at all and the site has exactly ONE AHU, and assumeSingleFeeder is on (the default): that AHU, assumed = true;
  *   3. otherwise no entry (an airRef that points nowhere is not guessed around).
  * `equips` = NF equip records of the site, `kindsOf(rec)` = equipment kinds of a record (fdd.js equipKinds).
+ * The same rule is `singleAhuRecord` / `resolveRunProof` in run-proof.js (FDD and sparql-data).
  */
-function rcxAirFeedMap(equips, kindsOf) {
+function rcxAssumeSingle() {
+  if (typeof siteAssumeSingleFeeder === "function") return siteAssumeSingleFeeder() !== false;
+  return true;
+}
+function rcxAirFeedMap(equips, kindsOf, opts = {}) {
+  const assume = opts.assumeSingle !== undefined ? opts.assumeSingle !== false : rcxAssumeSingle();
   const ahus = equips.filter((e) => kindsOf(e).includes("ahu"));
   const out = new Map();
   for (const e of equips) {
@@ -310,7 +330,7 @@ function rcxAirFeedMap(equips, kindsOf) {
     if (ref) {
       const hit = ahus.find((a) => [idOf(a), a.name, a.uuid, (a.attrs || {}).dis].some((x) => x && rcxRefId(x) === ref));
       if (hit) out.set(idOf(e), mk(hit, false));
-    } else if (ahus.length === 1) out.set(idOf(e), mk(ahus[0], true));
+    } else if (assume && ahus.length === 1) out.set(idOf(e), mk(ahus[0], true));
   }
   return out;
 }
@@ -356,6 +376,7 @@ function rcxPlan(equips, model, catalog, opts = {}) {
   for (const view of RCX_VIEWS) {
     if (opts.tab && view.tab !== opts.tab) continue;
     if (opts.tab && view.tabHidden) continue;
+    if (opts.place && viewPlace(view) !== opts.place) continue;
     if (opts.single && view.fleet) continue;
     const bound = rcxBind(view, equips, model, catalog);
     if (bound.length >= (view.scope === "site" ? view.minEquips : 1)) ready.push({ view, equips: bound });
