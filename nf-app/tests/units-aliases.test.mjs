@@ -19,5 +19,9 @@ test("unit aliases convert only the declared NF and BACnet spellings", () => {
   assert.equal(toSI(20, "degrees-celsius").value, 20);
   assert.equal(toSI(50, "percent").value, 50);
   assert.equal(toSI(50, "percent-relative-humidity").value, 50);
+  assert.deepEqual(toSI(1, "L-PER-SEC"), { value: 1, unit: "L/s", quantity: "flow" });
+  assert.equal(toSI(1, "FT3-PER-MIN").value, 0.4719474);
+  assert.deepEqual(toSI(1, "IN_H2O"), { value: 249.0889, unit: "Pa", quantity: "pressure" });
+  assert.deepEqual(toSI(40, "PERCENT_RH"), { value: 40, unit: "%", quantity: "percent" });
   for (const unit of ["h20", "unrecognized-unit", "constructor"]) assert.equal(toSI(1, unit), null);
 });

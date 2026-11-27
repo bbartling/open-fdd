@@ -235,6 +235,8 @@ SWEEP_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-RANGE"])
 # Pressure points (e.g. duct static) legitimately rest at ~0 when equipment is off,
 # so they would false-positive as "stuck" — exclude them from stuck-sensor sweeps.
 FLATLINE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-FLATLINE"])
+# Stale is missing data, so it follows the SV-STALE allowlist (pressure and zone airflow included).
+STALE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-STALE"])
 
 SPIKE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-SPIKE"])
 
@@ -881,7 +883,7 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     else:
         start, end = 0.0, max(0, len(d.index) - 1) * max(float(poll), 1.0)
     anchor = d.index.min() if isinstance(d.index, pd.DatetimeIndex) else d.index[0]
-    for role in FLATLINE_SENSOR_ROLES:
+    for role in STALE_SENSOR_ROLES:
         if role not in d.columns or not sweep_assessable_role(role, None, units_map, rule_id="SV-STALE", limits=limits):
             continue
         valid, epochs = _valid_series_times(pd.to_numeric(d[role], errors="coerce"), poll)

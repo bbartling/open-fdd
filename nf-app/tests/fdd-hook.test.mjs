@@ -285,13 +285,16 @@ test("stale cleanup only matches results derived from the current site's equipme
     attrs: { ...siteBResult.attrs, siteRef: "site-a", sensorRef: "fixture-retired" } };
   // The foreign result is present in the model layer, but the current run resolves only site-a equipment.
   const http = fakeHttp([], {}, { model: [...MODEL, siteBResult, retiredSensor] });
-  const summary = await hook.runFdd({ sdk: { http }, pack: statusPack, createEngine: stubEngine({ queries: [] }), now: NOW });
+  const logs = [];
+  const summary = await hook.runFdd({ sdk: { http, logEvent: (m) => logs.push(String(m)) }, pack: statusPack, createEngine: stubEngine({ queries: [] }), now: NOW });
   assert.equal(http.writes.points.some((point) => point.uuid === siteBResult.uuid), false,
     "matching equipRef alone must not stale another site's result");
   assert.equal(http.writes.data.some((point) => point.uuid === siteBResult.uuid), false);
   assert.equal(http.writes.points.find((point) => point.uuid === retiredSensor.uuid)?.attrs.fddStatus, "stale");
   assert.equal(summary.sensor_results.stale, 1);
   assert.equal(summary.status.stale, 0, "sensor results do not count as equipment summaries");
+  assert.equal(summary.reported_stale, 1);
+  assert.ok(logs.some((l) => /stale 1 \(equipment 0, sensor 1\)/.test(l)), logs.join("\n"));
 });
 
 test("fdd status: covered fault rule is ok at 0 and fault above 0, with coverage hours", async () => {
