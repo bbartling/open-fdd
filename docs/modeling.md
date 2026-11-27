@@ -38,7 +38,7 @@ of the role's classes, or when it carries every marker of the role. Class wins b
 
 223P is the role contract. Haystack tags are an optional overlay for binding and display.
 
-[`roles/openfdd-roles.json`](https://github.com/bbartling/open-fdd/blob/master/roles/openfdd-roles.json) (`openfdd-roles` 1.0.0-draft.1, 86 roles) is one 223P property pattern per role, named `role`, with a QUDT local name. Seventeen roles use an `ext:` term. The rules still read `legacy_keys` in `sql/fdd/input_contract.json`. A point binds by NF class, else by the role's markers. `ofddRole` (Turtle `local:ofddRole`) or a SPARQL `?role` overrides that. The RDF export and the SPARQL hooks share that Turtle graph ([RDF and SPARQL](#rdf-and-sparql)).
+[`roles/openfdd-roles.json`](https://github.com/bbartling/open-fdd/blob/master/roles/openfdd-roles.json) (`openfdd-roles` 1.1.0-draft.1, 89 roles) is one 223P property pattern per role, named `role`, with a QUDT local name. Seventeen roles use an `ext:` term. The rules still read `legacy_keys` in `sql/fdd/input_contract.json`. A point binds by NF class, else by the role's markers. `ofddRole` (Turtle `local:ofddRole`) or a SPARQL `?role` overrides that. The RDF export and the SPARQL hooks share that Turtle graph ([RDF and SPARQL](#rdf-and-sparql)).
 
 | Piece | Where it lives |
 |---|---|

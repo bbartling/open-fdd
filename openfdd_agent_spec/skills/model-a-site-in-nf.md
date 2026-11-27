@@ -5,7 +5,7 @@ description: Tag a site in Normal Framework so Open-FDD binds its rules and char
 # Model a site in NF
 
 The app has no site configuration. The NF model is the configuration: 223P role names from
-`roles/openfdd-roles.json` (`1.0.0-draft.1`), bound by NF class, else Haystack markers. Haystack does not name the role.
+`roles/openfdd-roles.json` (`1.1.0-draft.1`), bound by NF class, else Haystack markers. Haystack does not name the role.
 Never fork or edit the app per site. Do not map or poll every point on a live system; tag the points the equipment uses.
 Issue #1740 (`fdd.feeds`, extra zone and pump roles) is not in this tree. Do not invent those roles.
 
