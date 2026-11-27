@@ -17,6 +17,7 @@ This standalone adaptation contains all 77 registry SQL files from the local Ope
 - `registry.yaml`: original metadata, including source parity status.
 - `render_rule.py`: standalone Python standard-library parameter renderer.
 - `postgres/postgres_helpers.sql`: the `fdd.*` helpers (safe numeric conversion for occupancy rules; SI-only sensor-sweep unit gate).
+- `duckdb/duckdb_helpers.sql`: the same helpers as DuckDB macros, so the DuckDB engine runs the Postgres rules unchanged (#1645).
 - `input_contract.json`: canonical engine-independent scratch contract for role scales, relation columns and SI types.
 - `input_contract.sql`: generated standalone scratch DDL for every relation used by the rendered rules, including sensor-validation metadata. Build views over your warehouse instead of copying this into production blindly.
 - `schema/core.sql`: the **shared core schema**: `fdd.point` (bound points with their SI scale), `fdd.rule_result` (one row per site, equipment, rule, subject and window) and `fdd.rule_config` (tuning revisions). The NF Timescale app installs it; downstream applications vendor it byte for byte (also shipped as `open_fdd/data/core.sql`) and expose their samples as the view `fdd.input_sample` declared under `sources` in `input_contract.json` (version 3). `schema/core.catalog.json` is the generated catalog Postgres reports for it; `scripts/nf/build_core_schema.py --check` guards the copies. `tuning_storage.sql` is now only a pointer to it.
