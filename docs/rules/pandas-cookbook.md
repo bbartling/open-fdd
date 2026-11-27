@@ -15,7 +15,7 @@ without a twin are marked **SQL only**.
 
 **Conventions**
 
-- Input is a `DataFrame` with a UTC `DatetimeIndex` and one Haystack-role column per signal, all in SI (table below).
+- Input is a `DataFrame` with a UTC `DatetimeIndex` and one column per signal, all in SI (table below). The frame still uses the Haystack column name. The Role and QUDT columns are the names in `roles/openfdd-roles.json` (`openfdd-roles` 1.0.0-draft.1). Engines, sha256 pins and the 5.0.22 rule changes are in the [SQL cookbook](sql-cookbook.html#engines).
   The rules never convert units or guess a scale.
 - `run_rule(rule_id, df, params=..., poll_seconds=300)` returns `status` (`PASS`, `FAULT`, `SKIPPED_MISSING_ROLES`, ...),
   `fault_hours` (h), and the `raw_fault` and `confirmed_fault` boolean masks. Set `df.attrs["equipment_id"]` and `df.attrs["equipment_type"]`.
@@ -95,10 +95,10 @@ Duct static &gt; static SP + margin. Evaluates when fan is proven on OR duct sta
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `duct_static` | `duct-static-pressure` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
-| `duct_static_sp` | `duct-static-pressure-sp` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
+| `discharge_air_static_pressure_setpoint` | `duct_static_sp` | `duct-static-pressure-sp` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
 
 **Parameters**
 
@@ -128,10 +128,10 @@ Duct static &gt; static SP + margin. Evaluates when fan is proven on OR duct sta
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -161,10 +161,10 @@ Heating valve &gt; 10% AND cooling valve &gt; 10% at once.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -194,10 +194,10 @@ Fan command and proven status disagree.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -225,23 +225,23 @@ Coil valve open, opposite valve shut, air temperature change below min_dt.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `reheat_valve_pct` | `reheat-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `heating_coil_entering_temp` | `heating-coil-entering-temp` | Temperature | °C | °F, K | - | optional |
-| `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | Temperature | °C | °F, K | - | optional |
-| `cooling_coil_entering_temp` | `cooling-coil-entering-temp` | Temperature | °C | °F, K | - | optional |
-| `cooling_coil_leaving_temp` | `cooling-coil-leaving-temp` | Temperature | °C | °F, K | - | optional |
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
-| `vav_inlet_t` | `vav-inlet-air-temp` | Temperature | °C | °F, K | - | optional |
-| `vav_discharge_t` | `vav-discharge-air-temp` | Temperature | °C | °F, K | - | optional |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
-| `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `heating_coil_inlet_air_temperature` | `heating_coil_entering_temp` | `heating-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `heating_coil_outlet_air_temperature` | `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `cooling_coil_inlet_air_temperature` | `cooling_coil_entering_temp` | `cooling-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `cooling_coil_outlet_air_temperature` | `cooling_coil_leaving_temp` | `cooling-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
+| `terminal_unit_inlet_air_temperature` | `vav_inlet_t` | `vav-inlet-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | optional |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -274,11 +274,11 @@ Damper ≤ 5% but MAT tracks OAT within 1.1 Δ°C — leaking OA damper.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -308,11 +308,11 @@ Fan on, OA damper &lt; 5%, OAT &gt; 12.8 °C (should be economizing).
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 
 **Parameters**
 
@@ -342,10 +342,10 @@ OAT &gt; 17.2 °C AND OA damper &gt; 42% (should be at minimum).
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -376,13 +376,13 @@ Web free-cooling opportunity: 15.6 °C ≤ dry-bulb &lt; 22.2 °C AND dewpoint &
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | optional |
-| `web_oa_dp` | `web-outside-air-dewpoint` | Temperature | °C | °F, K | - | optional |
-| `web_oa_h` | `web-outside-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `weather_service_air_dew_point_temperature` | `web_oa_dp` | `web-outside-air-dewpoint` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `weather_service_air_relative_humidity` | `web_oa_h` | `web-outside-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 
 **Parameters**
 
@@ -415,12 +415,12 @@ Fan on, \|RAT−OAT\| &gt; 1.2 Δ°C, estimated OA fraction &lt; 21%.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -450,12 +450,12 @@ Preheat leaving air &gt; 1.2°C above target while preheat active.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `preheat_leave_t` | `preheat-leaving-temp` | Temperature | °C | °F, K | - | required |
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `preheat_heating_coil_outlet_air_temperature` | `preheat_leave_t` | `preheat-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -485,10 +485,10 @@ Web dry-bulb &lt; −3.9°C AND OA damper above winter min-OA ceiling (default 2
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
 
 **Parameters**
 
@@ -519,15 +519,15 @@ Economizer-OK web weather: dew point &lt; 15.6°C AND dry-bulb &lt; 22.2°C (abo
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | optional |
-| `web_oa_dp` | `web-outside-air-dewpoint` | Temperature | °C | °F, K | - | optional |
-| `web_oa_h` | `web-outside-air-humidity` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| - | `dx-cool-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `weather_service_air_dew_point_temperature` | `web_oa_dp` | `web-outside-air-dewpoint` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `weather_service_air_relative_humidity` | `web_oa_h` | `web-outside-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | — | `dx-cool-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
 
 **Parameters**
 
@@ -560,11 +560,11 @@ DSP &lt; DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `duct_static` | `duct-static-pressure` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
-| `duct_static_sp` | `duct-static-pressure-sp` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
+| `discharge_air_static_pressure_setpoint` | `duct_static_sp` | `duct-static-pressure-sp` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -598,12 +598,12 @@ DSP &lt; DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -638,12 +638,12 @@ OATavg + εOAT &lt; SATSP − ΔTSF − εSAT in OS#3.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -679,12 +679,12 @@ SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -722,12 +722,12 @@ SATavg &gt; SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -762,12 +762,12 @@ Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inact
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `cooling_coil_entering_temp` | `cooling-coil-entering-temp` | Temperature | °C | °F, K | - | required |
-| `cooling_coil_leaving_temp` | `cooling-coil-leaving-temp` | Temperature | °C | °F, K | - | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `cooling_coil_inlet_air_temperature` | `cooling_coil_entering_temp` | `cooling-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `cooling_coil_outlet_air_temperature` | `cooling_coil_leaving_temp` | `cooling-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -804,12 +804,12 @@ Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inact
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `heating_coil_entering_temp` | `heating-coil-entering-temp` | Temperature | °C | °F, K | - | required |
-| `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | Temperature | °C | °F, K | - | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `heating_coil_inlet_air_temperature` | `heating_coil_entering_temp` | `heating-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `heating_coil_outlet_air_temperature` | `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -847,12 +847,12 @@ MATavg + εMAT &lt; min(RATavg − εRAT, OATavg − εOAT).
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -887,12 +887,12 @@ MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -927,11 +927,11 @@ MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -962,12 +962,12 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1003,12 +1003,12 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `vav_total_flow` | `vav-total-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `terminal_unit_discharge_air_total_volume_flow_rate` | `vav_total_flow` | `vav-total-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 
 **Parameters**
 
@@ -1044,12 +1044,12 @@ SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1083,12 +1083,12 @@ SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1125,12 +1125,12 @@ OATavg − εOAT &gt; SATSP − ΔTSF + εSAT in OS#2.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `oa_damper_pct` | `outside-air-damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1166,13 +1166,13 @@ Proven DX/chiller mechanical cooling while web dry-bulb &lt; 15.6 °C. Uses comp
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | optional |
-| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `chw_pump_status` | `chw-pump-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| - | `dx-cool-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `chilled_water_pump_operating_status` | `chw_pump_status` | `chw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | — | `dx-cool-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
 
 **Parameters**
 
@@ -1201,12 +1201,12 @@ Estimated OA fraction &lt; 15% with adequate OAT/RAT split.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `rat` | `return-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -1237,12 +1237,12 @@ Fan on AND \|SAT SP − (11.1 + 0.25×(OAT−18.3))\| &gt; 1.7 Δ°C.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -1275,11 +1275,11 @@ Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `occ_mode` | `occupied` | Text | text | none | - | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | required |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | required |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
 
 **Parameters**
 
@@ -1309,21 +1309,21 @@ Ranked proof (status/current &gt; command) is on for ≥ always_on_pct of the wi
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `pump_status` | `pump-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `chw_pump_status` | `chw-pump-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| - | `hw-pump-status` | Status | 0/1 | bool | 0 or 1 | optional (pandas only) |
-| `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `tower_fan_cmd` | `tower-fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `tower_fan_cmd` | `tower-fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| - | `hw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
-| `duct_static` | `duct-static-pressure` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
-| `chw_dp` | `chw-diff-pressure` | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `pump_operating_status` | `pump_status` | `pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `chilled_water_pump_operating_status` | `chw_pump_status` | `chw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | — | `hw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional (pandas only) |
+| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | — | `hw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
+| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
+| `chilled_water_pressure_delta` | `chw_dp` | `chw-diff-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | optional |
 
 **Parameters**
 
@@ -1358,10 +1358,10 @@ Duct static high (&gt; 336 Pa) while VAV pressure requests are low.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `duct_static` | `duct-static-pressure` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
-| `static_reset_request` | `vav-pressure-request-sum` | Count | count | none | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
+| `discharge_air_static_pressure_reset_request_count` | `static_reset_request` | `vav-pressure-request-sum` | `NUM` | Count | count | none | - | required |
 
 **Parameters**
 
@@ -1392,14 +1392,14 @@ Cooling valve ≤ 5% AND (SAT &lt; sat_sp − sat_err OR SAT &lt; MAT − mat_le
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `sat_sp` | `discharge-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `mat` | `mixed-air-temp` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -1433,11 +1433,11 @@ Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied ho
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `occ_mode` | `occupied` | Text | text | none | - | optional |
-| `occ_mode` | `occupied` | Text | text | none | - | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | optional |
+| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | optional |
 
 **Parameters**
 
@@ -1468,11 +1468,11 @@ Unoccupied AND zone temp &gt; setback_hi (default 20 °C) — heating setback no
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `occ_mode` | `occupied` | Text | text | none | - | required |
-| `occ_mode` | `occupied` | Text | text | none | - | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | required |
+| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | optional |
 
 **Parameters**
 
@@ -1501,10 +1501,10 @@ Air flowing AND OAT &gt; 25.6 °C AND reheat valve &gt; 52%.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `reheat_valve_pct` | `reheat-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1536,9 +1536,9 @@ Air flowing AND damper &gt; 97.5% sustained across the window.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `damper_pct` | `damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1570,10 +1570,10 @@ Airflow &gt; ~24 L/s while damper &lt; 10% (implausible flow).
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
-| `damper_pct` | `damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1602,11 +1602,11 @@ OAT &lt; 18.3 °C AND reheat valve &gt; 25% (optional cooling-available must be 
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `reheat_valve_pct` | `reheat-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_available` | `cooling-available` | Status | 0/1 | bool | 0 or 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_operating_mode_status` | `clg_available` | `cooling-available` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1637,9 +1637,9 @@ Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a hi
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `zone_flow` | `zone-airflow` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 
 **Parameters**
 
@@ -1672,10 +1672,10 @@ Air flowing AND \|VAV discharge − parent AHU SAT\| &gt; band. Needs package to
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `vav_discharge_t` | `vav-discharge-air-temp` | Temperature | °C | °F, K | - | required |
-| `ahu_sat` | `ahu-discharge-air-temp` | Temperature | °C | °F, K | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `air_handling_unit_discharge_air_temperature` | `ahu_sat` | `ahu-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -1706,11 +1706,11 @@ Air flowing AND reheat valve &gt; 30% AND box discharge temp rises &lt; 1.7 °C 
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `reheat_valve_pct` | `reheat-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `vav_discharge_t` | `vav-discharge-air-temp` | Temperature | °C | °F, K | - | required |
-| `vav_inlet_t` | `vav-inlet-air-temp` | Temperature | °C | °F, K | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `terminal_unit_inlet_air_temperature` | `vav_inlet_t` | `vav-inlet-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -1745,14 +1745,14 @@ Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below z
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -1781,12 +1781,12 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `zone_co2` | `zone-co2` | Concentration | ppm | none | - | required |
-| `damper_cmd` | `damper-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `zone_air_co2` | `zone_co2` | `zone-co2` | `PPM` | Concentration | ppm | none | - | required |
+| `damper_position_command` | `damper_cmd` | `damper-cmd` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -1816,12 +1816,12 @@ Fan on and damper command ≥15%, but feedback is more than 15 percentage points
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `damper_cmd` | `damper-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `damper_pct` | `damper` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `damper_position_command` | `damper_cmd` | `damper-cmd` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -1851,10 +1851,10 @@ Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `cooling_sp` | `cooling-sp` | Temperature | °C | °F, K | - | required |
-| `heating_sp` | `heating-sp` | Temperature | °C | °F, K | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `zone_cooling_air_temperature_setpoint` | `cooling_sp` | `cooling-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `zone_heating_air_temperature_setpoint` | `heating_sp` | `heating-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -1883,13 +1883,13 @@ Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zo
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -1919,10 +1919,10 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -1952,10 +1952,10 @@ Own zone setpoint is present while zone temperature is null for at least 90% of 
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `zone_air_temp_sp` | `zone-air-temp-sp` | Temperature | °C | °F, K | - | required |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `zone_air_temperature_setpoint` | `zone_air_temp_sp` | `zone-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
 
 **Parameters**
 
@@ -1984,14 +1984,14 @@ Fan on and both valves shut, but zone temperature exceeds discharge air by more 
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -2020,14 +2020,14 @@ Fan on and both valves shut, but discharge air exceeds zone temperature by more 
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `htg_valve_pct` | `heating-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `clg_valve_pct` | `cooling-valve` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `fan_status` | `fan-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
 
 **Parameters**
 
@@ -2059,10 +2059,10 @@ Pump on AND (CHWR − CHWS) &lt; 2.2 Δ°C.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `chw_supply_t` | `chilled-water-supply-temp` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
-| `chw_return_t` | `chilled-water-return-temp` | Temperature | °C | °F, K | -1.11 to 32.22 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_chilled_water_temperature` | `chw_supply_t` | `chilled-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
+| `return_chilled_water_temperature` | `chw_return_t` | `chilled-water-return-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 32.22 | required |
 
 **Parameters**
 
@@ -2092,11 +2092,11 @@ Pump ≥ 87% AND CHW DP &lt; DP SP − 2.2.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `chw_dp` | `chw-diff-pressure` | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | required |
-| `chw_dp_sp` | `chw-diff-pressure-sp` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
-| `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `chilled_water_pressure_delta` | `chw_dp` | `chw-diff-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | required |
+| `chilled_water_pressure_delta_setpoint` | `chw_dp_sp` | `chw-diff-pressure-sp` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
+| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -2127,11 +2127,11 @@ Pump on AND \|CHWS − CHWS SP\| &gt; 1.2 Δ°C.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `chw_supply_t` | `chilled-water-supply-temp` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
-| `chw_supply_sp` | `chilled-water-supply-temp-sp` | Temperature | °C | °F, K | - | required |
-| `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_chilled_water_temperature` | `chw_supply_t` | `chilled-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
+| `supply_chilled_water_temperature_setpoint` | `chw_supply_sp` | `chilled-water-supply-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -2161,10 +2161,10 @@ Pump ≥ 87% AND CHW flow &gt; 69.4 L/s.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `chw_flow` | `chw-flow` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | required |
-| `chw_pump_cmd` | `chw-pump-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `chilled_water_volume_flow_rate` | `chw_flow` | `chw-flow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | required |
+| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -2195,13 +2195,13 @@ Chiller/plant proven running while building load is satisfied: all mapped zones 
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `chw_pump_status` | `chw-pump-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `building_zone_load_satisfied` | `building-zone-load-satisfied` | Status | 0/1 | bool | 0 or 1 | optional |
-| `building_ahu_load_satisfied` | `building-ahu-load-satisfied` | Status | 0/1 | bool | 0 or 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `chilled_water_pump_operating_status` | `chw_pump_status` | `chw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `zone_load_satisfied_status` | `building_zone_load_satisfied` | `building-zone-load-satisfied` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `air_handling_unit_load_satisfied_status` | `building_ahu_load_satisfied` | `building-ahu-load-satisfied` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2233,13 +2233,13 @@ At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (defau
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `cw_supply_t` | `condenser-water-supply-temp` | Temperature | °C | °F, K | 0 to 50 | required |
-| `tower_fan_cmd` | `tower-fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `tower_fan_cmd` | `tower-fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `web_wb_t` | `web-outside-air-wetbulb` | Temperature | °C | °F, K | - | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_condenser_water_temperature` | `cw_supply_t` | `condenser-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 0 to 50 | required |
+| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `weather_service_air_wet_bulb_temperature` | `web_wb_t` | `web-outside-air-wetbulb` | `DEG_C` | Temperature | °C | °F, K | - | optional |
 
 **Parameters**
 
@@ -2270,13 +2270,13 @@ Tower fans at full speed while leaving CW is well above web wet-bulb + design ap
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `cw_supply_t` | `condenser-water-supply-temp` | Temperature | °C | °F, K | 0 to 50 | required |
-| `tower_fan_cmd` | `tower-fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `tower_fan_cmd` | `tower-fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `web_wb_t` | `web-outside-air-wetbulb` | Temperature | °C | °F, K | - | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_condenser_water_temperature` | `cw_supply_t` | `condenser-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 0 to 50 | required |
+| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| `weather_service_air_wet_bulb_temperature` | `web_wb_t` | `web-outside-air-wetbulb` | `DEG_C` | Temperature | °C | °F, K | - | optional |
 
 **Parameters**
 
@@ -2308,9 +2308,9 @@ CW supply significantly colder than web wet-bulb + design approach (Stull WB) �
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `cw_supply_t` | `condenser-water-supply-temp` | Temperature | °C | °F, K | 0 to 50 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_condenser_water_temperature` | `cw_supply_t` | `condenser-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 0 to 50 | required |
 
 **Parameters**
 
@@ -2341,10 +2341,10 @@ CHW supply &lt; 7.2 °C while the reset request sum is at or below request_lo.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `chw_supply_t` | `chilled-water-supply-temp` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
-| `chw_reset_request_sum` | `chilled-water-reset-request-sum` | Count | count | none | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_chilled_water_temperature` | `chw_supply_t` | `chilled-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
+| `chilled_water_reset_request_count` | `chw_reset_request_sum` | `chilled-water-reset-request-sum` | `NUM` | Count | count | none | - | required |
 
 **Parameters**
 
@@ -2378,13 +2378,13 @@ Too many starts per hour, or short on-times.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `boiler_status` | `boiler-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `compressor_status` | `compressor-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `chiller_status` | `chiller-status` | Status | 0/1 | bool | 0 or 1 | optional |
-| `chiller_amps` | `chiller-amps` | Current | A | none (declare A) | - | optional |
-| `chiller_power` | `chiller-power` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| — | `boiler_status` | `boiler-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| `chiller_electric_current` | `chiller_amps` | `chiller-amps` | `A` | Current | A | none (declare A) | - | optional |
+| `chiller_electric_power` | `chiller_power` | `chiller-power` | `KiloW` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
 
 **Parameters**
 
@@ -2416,10 +2416,10 @@ HW supply &gt; 71.1 °C while the reset request sum is at or below request_lo.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `hw_supply_t` | `hot-water-supply-temp` | Temperature | °C | °F, K | 4.44 to 104.44 | required |
-| `hw_reset_request_sum` | `hot-water-reset-request-sum` | Count | count | none | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `supply_hot_water_temperature` | `hw_supply_t` | `hot-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 104.44 | required |
+| `hot_water_reset_request_count` | `hw_reset_request_sum` | `hot-water-reset-request-sum` | `NUM` | Count | count | none | - | required |
 
 **Parameters**
 
@@ -2453,11 +2453,11 @@ Fan on, zone &lt; 20.6 °C, discharge SAT &lt; 29.4 °C.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `sat` | `discharge-air-temp` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_t` | `zone-air-temp` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `fan_cmd` | `fan-cmd` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
 
 **Parameters**
 
@@ -2504,9 +2504,9 @@ Rolling 1h total variation of any 0–100% control output (dampers, valves, fan 
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `loop_enabled` | `loop-enabled` | Status | 0/1 | bool | 0 or 1 | optional |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `operating_mode_status` | `loop_enabled` | `loop-enabled` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2541,8 +2541,8 @@ Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck /
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
 
 **Parameters**
 
@@ -2575,8 +2575,8 @@ Any modeled sensor reads outside its physical hard range (e.g. OAT −51–54 °
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
 
 **Parameters**
 
@@ -2609,8 +2609,8 @@ Implausible sustained rate-of-change for mapped sensors. Thresholds depend on qu
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
 
 **Parameters**
 
@@ -2644,8 +2644,8 @@ Sample-to-sample jump exceeds the physical spike limit for the sensor type.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
 
 **Parameters**
 
@@ -2681,8 +2681,8 @@ A sensor sent no valid sample for longer than the stale threshold (gap or missin
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
 
 **Parameters**
 
@@ -2715,10 +2715,10 @@ BAS OAT sensor differs from Open-Meteo dry bulb by more than 2.8 Δ°C.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `web_oa_t` | `web-outside-air-temp` | Temperature | °C | °F, K | - | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -2749,9 +2749,9 @@ OAT sample-to-sample jump &gt; 8.9 Δ°C.
 
 **Inputs**
 
-| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
-|---|---|---|---|---|---:|---|
-| `oa_t` | `outside-air-temp` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
+|---|---|---|---|---|---|---|---:|---|
+| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 
 **Parameters**
 

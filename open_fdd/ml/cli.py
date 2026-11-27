@@ -51,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
+    from open_fdd.ml import confidence as _confidence
+
+    conf = sub.add_parser("confidence", help="Score rule fault episodes as likely real, false positive or tuning (advisory)",
+                          description=_confidence.DESCRIPTION)
+    _confidence.add_arguments(conf)
+
     dl = sub.add_parser("download", help="Fetch the 8-file LBNL single-duct AHU subset (about 1.1 GB of CSV on disk) into the cache",
                         description="Fetch the LBNL single-duct AHU (SDAHU) benchmark files from fdddata.lbl.gov "
                                     "(DOI 10.25984/1881324, CC BY 4.0). Only the needed zip members are read with HTTP "
@@ -469,6 +475,12 @@ def _cmd_methods(args) -> int:
     return 0
 
 
+def _cmd_confidence(args: argparse.Namespace) -> int:
+    from open_fdd.ml.confidence import run_cli
+
+    return run_cli(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -476,7 +488,8 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else 0
     handlers = {"download": _cmd_download, "export": _cmd_export, "benchmark": _cmd_benchmark, "detect": _cmd_detect,
-                "methods": _cmd_methods, "make-folder": _cmd_make_folder}
+                "methods": _cmd_methods, "make-folder": _cmd_make_folder,
+                "confidence": _cmd_confidence}
     if args.command not in handlers:
         parser.print_help()
         return 2
