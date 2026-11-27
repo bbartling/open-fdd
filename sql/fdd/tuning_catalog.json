@@ -5147,6 +5147,90 @@
       "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
     },
     {
+      "confirm_seconds": 900,
+      "controls_without_sql_effect": [],
+      "delete_python_candidate": false,
+      "description": "Hot-water plant proven on above 18.3 °C web OAT",
+      "equipment_kinds": [
+        "boiler"
+      ],
+      "optional_roles": [
+        "pump_status",
+        "hw_supply_t"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "fault_pct",
+        "assessment"
+      ],
+      "pandas_function": "hw_oat1_compute",
+      "parameters": {
+        "confirm_min": {
+          "control": "slider",
+          "default": 15.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "key": "confirm_min",
+          "kind": "duration_minutes",
+          "label": "Fault confirm delay",
+          "max": 60.0,
+          "min": 0.0,
+          "sql_placeholder": "CONFIRM_SECONDS",
+          "step": 5.0,
+          "unit": "min"
+        },
+        "hw_oat_min": {
+          "control": "slider",
+          "default": 18.333333,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "hw_oat_min",
+          "kind": "absolute_temperature",
+          "label": "HW lockout OAT",
+          "max": 23.888889,
+          "min": 12.777778,
+          "sql_placeholder": "HW_OAT_MIN",
+          "step": 0.555556,
+          "unit": "degC"
+        },
+        "hw_on_min": {
+          "control": "slider",
+          "default": 43.333333,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "hw_on_min",
+          "kind": "absolute_temperature",
+          "label": "HW supply running cut",
+          "max": 60.0,
+          "min": 32.222222,
+          "sql_placeholder": "HW_ON_MIN",
+          "step": 0.555556,
+          "unit": "degC"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "CONFIRM_SECONDS",
+        "HW_OAT_MIN",
+        "HW_ON_MIN",
+        "MAX_GAP_HOURS",
+        "WEB_ASOF_BOUND_SECONDS"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P1",
+      "required_roles": [
+        "web_oa_t"
+      ],
+      "rule_id": "HW-OAT-1",
+      "sql_file": "hw_oat_1.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
+    },
+    {
       "confirm_seconds": 600,
       "controls_without_sql_effect": [],
       "delete_python_candidate": false,
@@ -8772,6 +8856,100 @@
       "rule_id": "COIL-PERF",
       "sql_file": "coil_perf.sql",
       "run_proof": "gated"
+    },
+    {
+      "confirm_seconds": 0,
+      "delete_python_candidate": false,
+      "description": "Too many starts per hour, or short on-times",
+      "equipment_kinds": [
+        "boiler",
+        "chiller",
+        "heatpump",
+        "ahu"
+      ],
+      "optional_roles": [
+        "boiler_status",
+        "compressor_status",
+        "chiller_status",
+        "chiller_amps",
+        "chiller_power"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "fault_pct",
+        "assessment"
+      ],
+      "pandas_function": "short_cycle",
+      "parameters": {
+        "max_starts_per_hour": {
+          "control": "slider",
+          "default": 6.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "max_starts_per_hour",
+          "kind": "count",
+          "label": "Max starts per hour",
+          "max": 20.0,
+          "min": 2.0,
+          "sql_placeholder": "MAX_STARTS_PER_HOUR",
+          "step": 1.0,
+          "unit": "count"
+        },
+        "min_on_seconds": {
+          "control": "slider",
+          "default": 600.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "min_on_seconds",
+          "kind": "duration_seconds",
+          "label": "Minimum on-time",
+          "max": 1800.0,
+          "min": 60.0,
+          "sql_placeholder": "MIN_ON_SECONDS",
+          "step": 60.0,
+          "unit": "sec"
+        },
+        "min_short_cycles": {
+          "control": "slider",
+          "default": 3.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "min_short_cycles",
+          "kind": "count",
+          "label": "Short cycles per hour",
+          "max": 10.0,
+          "min": 1.0,
+          "sql_placeholder": "MIN_SHORT_CYCLES",
+          "step": 1.0,
+          "unit": "count"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "MAX_GAP_HOURS",
+        "MAX_INTERVAL_SECONDS",
+        "MAX_STARTS_PER_HOUR",
+        "MECH_AMPS_MIN",
+        "MECH_POWER_KW_MIN",
+        "MIN_ON_SECONDS",
+        "MIN_SHORT_CYCLES"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P1",
+      "required_roles": [],
+      "rule_id": "SHORT-CYCLE",
+      "sql_file": "short_cycle.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "the run status is the signal: starts and on-times are counted from it",
+      "internal_constants": {
+        "CONFIRM_SECONDS": 0.0,
+        "MAX_INTERVAL_SECONDS": 900.0
+      }
     }
   ]
 }

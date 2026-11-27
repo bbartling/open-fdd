@@ -3,6 +3,12 @@
 Two version lines: the NF app (`VERSION`, `nf-app/package.json`, tags `vX.Y.Z`) and the PyPI package
 `open-fdd` (`pyproject.toml`, tags `open-fdd-vX.Y.Z`, which publish to PyPI).
 
+## 5.0.22 (unreleased)
+
+- **Parity dataset generator version 5 (#1781).** `open_fdd.parity.generate()` adds the new `boiler_status` history
+  column (a 0/1 status, like the other status roles) for the SHORT-CYCLE rule, so every dataset's content hash changed:
+  `open_fdd/data/parity_hashes.json` is republished for generator 5. Other columns' values are unchanged.
+
 ## open-fdd 4.5.11 - 2026-11-16 (PyPI only; app stays 5.0.20)
 
 PyPI package only. App unchanged (5.0.20).

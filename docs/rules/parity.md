@@ -14,9 +14,9 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 
 | | Rules |
 |---|---:|
-| SQL rules | **78** |
-| With a pandas twin | **72** |
-| Match on the synthetic suite | **59** |
+| SQL rules | **80** |
+| With a pandas twin | **74** |
+| Match on the synthetic suite | **61** |
 | Known divergence | **13** |
 | SQL only (no twin) | **6** |
 
@@ -85,6 +85,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fcu-valve-pass-clg"></a>[FCU-VALVE-PASS-CLG](sql-cookbook.html#fcu-valve-pass-clg) | match | match; differs only on edge data: Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults. |
 | <a id="fcu-valve-pass-htg"></a>[FCU-VALVE-PASS-HTG](sql-cookbook.html#fcu-valve-pass-htg) | match |  |
 | <a id="hp-1"></a>[HP-1](sql-cookbook.html#hp-1) | known divergence | Small residual left after #1642; not yet attributed. |
+| <a id="hw-oat-1"></a>[HW-OAT-1](sql-cookbook.html#hw-oat-1) | match |  |
 | <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | match |  |
 | <a id="oa-1"></a>[OA-1](sql-cookbook.html#oa-1) | known divergence | pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646). |
 | <a id="oat-meteo"></a>[OAT-METEO](sql-cookbook.html#oat-meteo) | known divergence | weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns |
@@ -92,6 +93,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="reset-1"></a>[RESET-1](sql-cookbook.html#reset-1) | match |  |
 | <a id="sched-1"></a>[SCHED-1](sql-cookbook.html#sched-1) | match |  |
 | <a id="sched-247"></a>[SCHED-247](sql-cookbook.html#sched-247) | match |  |
+| <a id="short-cycle"></a>[SHORT-CYCLE](sql-cookbook.html#short-cycle) | match |  |
 | <a id="sv-flatline"></a>[SV-FLATLINE](sql-cookbook.html#sv-flatline) | match |  |
 | <a id="sv-range"></a>[SV-RANGE](sql-cookbook.html#sv-range) | match |  |
 | <a id="sv-rate"></a>[SV-RATE](sql-cookbook.html#sv-rate) | known divergence | documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances |
