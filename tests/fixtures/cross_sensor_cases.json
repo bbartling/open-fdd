@@ -1,32 +1,408 @@
 {
   "_doc": "#1780 cross-sensor cases (XS-MIX, XS-COPY, XS-CLIP), shared by tests/test_cross_sensor.py (pandas, SQLite, DuckDB and, when configured, PostgreSQL). Each case: 8 h at 5 min (97 samples, index i = 0..96) of `row` (SQL role names, SI). A value is a constant, {ramp: [a, b]} = a + b*i, {cycle: [...]} = values[i mod len], {copy: role, plus: x} = that role + x, or {before: v, from: k, value: w} = v for i < k else w; `set` = {role: {i: value}} overrides. `expect` = fault hours (the last sample holds no time; XS-MIX confirms after 15 min, XS-COPY after 2 h, XS-CLIP at once), or the SQL assessment of an equipment that is not assessed.",
   "cases": [
-    {"id": "mix_above_envelope", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_status": 1, "oa_t": 30.0, "rat": 22.0, "mat": 33.0}, "expect": 7.833333},
-    {"id": "mix_below_envelope", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_status": 1, "oa_t": 0.0, "rat": 22.0, "mat": -3.0}, "expect": 7.833333},
-    {"id": "mix_acceptance_3k_outside", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_cmd": 0.6, "oa_t": 5.0, "rat": 22.0, "mat": 25.0}, "expect": 7.833333},
-    {"id": "mix_inside", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_status": 1, "oa_t": 5.0, "rat": 22.0, "mat": 12.0}, "expect": 0.0},
-    {"id": "mix_inside_band", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_status": 1, "oa_t": 30.0, "rat": 22.0, "mat": 31.0}, "expect": 0.0},
-    {"id": "mix_fan_off", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_status": 0, "oa_t": 30.0, "rat": 22.0, "mat": 33.0}, "expect": 0.0},
-    {"id": "mix_proof_off", "rule": "XS-MIX", "row": {"run_proof": 0, "oa_t": 30.0, "rat": 22.0, "mat": 33.0}, "expect": 0.0},
-    {"id": "mix_shorter_than_confirm", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_status": 1, "oa_t": 30.0, "rat": 22.0, "mat": {"before": 33.0, "from": 2, "value": 25.0}}, "expect": 0.0},
-    {"id": "mix_no_run_proof", "rule": "XS-MIX", "row": {"fan_status": 1, "oa_t": 30.0, "rat": 22.0, "mat": 33.0}, "expect": "no_run_proof"},
-    {"id": "mix_no_rat", "rule": "XS-MIX", "row": {"run_proof": 1, "fan_status": 1, "oa_t": 30.0, "mat": 33.0}, "expect": "no_temperatures"},
-    {"id": "copy_rat_from_sat", "rule": "XS-COPY", "row": {"oa_t": {"ramp": [5.0, 0.02]}, "sat": {"ramp": [12.0, 0.1]}, "rat": {"copy": "sat", "plus": 0.005}}, "expect": 6.083333},
-    {"id": "copy_mat_from_rat", "rule": "XS-COPY", "row": {"sat": 13.0, "rat": {"ramp": [20.0, -0.05]}, "mat": {"copy": "rat", "plus": 0.0}}, "expect": 6.083333},
-    {"id": "copy_zone_vav_discharge", "rule": "XS-COPY", "row": {"zone_t": {"ramp": [20.0, 0.03]}, "vav_discharge_t": {"copy": "zone_t", "plus": -0.01}}, "expect": 6.083333},
-    {"id": "copy_flat_pair_is_flatline", "rule": "XS-COPY", "row": {"sat": 13.0, "rat": 13.0}, "expect": 0.0},
-    {"id": "copy_just_outside_tol", "rule": "XS-COPY", "row": {"sat": {"ramp": [12.0, 0.1]}, "rat": {"copy": "sat", "plus": 0.03}}, "expect": 0.0},
-    {"id": "copy_independent", "rule": "XS-COPY", "row": {"sat": {"ramp": [12.0, 0.1]}, "rat": {"ramp": [22.0, -0.02]}}, "expect": 0.0},
-    {"id": "copy_shorter_than_confirm", "rule": "XS-COPY", "row": {"sat": {"ramp": [12.0, 0.1]}, "rat": {"before": {"copy": "sat", "plus": 0.0}, "from": 20, "value": {"copy": "sat", "plus": 2.0}}}, "expect": 0.0},
-    {"id": "copy_no_pair", "rule": "XS-COPY", "row": {"sat": {"ramp": [12.0, 0.1]}, "oa_t": 10.0}, "expect": "no_pair"},
-    {"id": "clip_co2_2000", "rule": "XS-CLIP", "row": {"zone_co2": {"cycle": [800.0, 1200.0, 2000.0, 2000.0, 1500.0]}}, "expect": 3.166667},
-    {"id": "clip_co2_not_round", "rule": "XS-CLIP", "row": {"zone_co2": {"cycle": [800.0, 1200.0, 1987.0, 1987.0, 1500.0]}}, "expect": 0.0},
-    {"id": "clip_co2_reached_once", "rule": "XS-CLIP", "row": {"zone_co2": {"cycle": [800.0, 1200.0, 1500.0]}}, "set": {"zone_co2": {"40": 2000.0}}, "expect": 0.0},
-    {"id": "clip_co2_flat", "rule": "XS-CLIP", "row": {"zone_co2": 2000.0}, "expect": 0.0},
-    {"id": "clip_static_only_fan_off", "rule": "XS-CLIP", "row": {"fan_status": {"cycle": [1, 1, 0, 0]}, "duct_static": {"cycle": [212.3, 287.6, 500.0, 500.0]}}, "expect": 0.0},
-    {"id": "clip_static_fan_on", "rule": "XS-CLIP", "row": {"fan_status": 1, "duct_static": {"cycle": [212.3, 287.6, 500.0, 500.0]}}, "expect": 4.0},
-    {"id": "clip_airflow_design_max_once", "rule": "XS-CLIP", "row": {"run_proof": 1, "zone_flow": {"cycle": [120.0, 180.0, 210.0]}}, "set": {"zone_flow": {"10": 471.9}}, "expect": 0.0},
-    {"id": "clip_airflow_round", "rule": "XS-CLIP", "row": {"zone_flow": {"cycle": [120.0, 250.0, 250.0, 180.0]}}, "expect": 4.0},
-    {"id": "clip_no_role", "rule": "XS-CLIP", "row": {"zone_t": 21.0}, "expect": "no_clip_role"}
+    {
+      "id": "mix_above_envelope",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_operating_status": 1,
+        "outdoor_air_intake_temperature": 30.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": 33.0
+      },
+      "expect": 7.833333
+    },
+    {
+      "id": "mix_below_envelope",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_operating_status": 1,
+        "outdoor_air_intake_temperature": 0.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": -3.0
+      },
+      "expect": 7.833333
+    },
+    {
+      "id": "mix_acceptance_3k_outside",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_command": 0.6,
+        "outdoor_air_intake_temperature": 5.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": 25.0
+      },
+      "expect": 7.833333
+    },
+    {
+      "id": "mix_inside",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_operating_status": 1,
+        "outdoor_air_intake_temperature": 5.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": 12.0
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "mix_inside_band",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_operating_status": 1,
+        "outdoor_air_intake_temperature": 30.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": 31.0
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "mix_fan_off",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_operating_status": 0,
+        "outdoor_air_intake_temperature": 30.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": 33.0
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "mix_proof_off",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 0,
+        "outdoor_air_intake_temperature": 30.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": 33.0
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "mix_shorter_than_confirm",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_operating_status": 1,
+        "outdoor_air_intake_temperature": 30.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": {
+          "before": 33.0,
+          "from": 2,
+          "value": 25.0
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "mix_no_run_proof",
+      "rule": "XS-MIX",
+      "row": {
+        "supply_fan_operating_status": 1,
+        "outdoor_air_intake_temperature": 30.0,
+        "return_air_temperature": 22.0,
+        "mixed_air_temperature": 33.0
+      },
+      "expect": "no_run_proof"
+    },
+    {
+      "id": "mix_no_rat",
+      "rule": "XS-MIX",
+      "row": {
+        "operating_status": 1,
+        "supply_fan_operating_status": 1,
+        "outdoor_air_intake_temperature": 30.0,
+        "mixed_air_temperature": 33.0
+      },
+      "expect": "no_temperatures"
+    },
+    {
+      "id": "copy_rat_from_sat",
+      "rule": "XS-COPY",
+      "row": {
+        "outdoor_air_intake_temperature": {
+          "ramp": [
+            5.0,
+            0.02
+          ]
+        },
+        "discharge_air_temperature": {
+          "ramp": [
+            12.0,
+            0.1
+          ]
+        },
+        "return_air_temperature": {
+          "copy": "discharge_air_temperature",
+          "plus": 0.005
+        }
+      },
+      "expect": 6.083333
+    },
+    {
+      "id": "copy_mat_from_rat",
+      "rule": "XS-COPY",
+      "row": {
+        "discharge_air_temperature": 13.0,
+        "return_air_temperature": {
+          "ramp": [
+            20.0,
+            -0.05
+          ]
+        },
+        "mixed_air_temperature": {
+          "copy": "return_air_temperature",
+          "plus": 0.0
+        }
+      },
+      "expect": 6.083333
+    },
+    {
+      "id": "copy_zone_vav_discharge",
+      "rule": "XS-COPY",
+      "row": {
+        "zone_air_temperature": {
+          "ramp": [
+            20.0,
+            0.03
+          ]
+        },
+        "terminal_unit_discharge_air_temperature": {
+          "copy": "zone_air_temperature",
+          "plus": -0.01
+        }
+      },
+      "expect": 6.083333
+    },
+    {
+      "id": "copy_flat_pair_is_flatline",
+      "rule": "XS-COPY",
+      "row": {
+        "discharge_air_temperature": 13.0,
+        "return_air_temperature": 13.0
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "copy_just_outside_tol",
+      "rule": "XS-COPY",
+      "row": {
+        "discharge_air_temperature": {
+          "ramp": [
+            12.0,
+            0.1
+          ]
+        },
+        "return_air_temperature": {
+          "copy": "discharge_air_temperature",
+          "plus": 0.03
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "copy_independent",
+      "rule": "XS-COPY",
+      "row": {
+        "discharge_air_temperature": {
+          "ramp": [
+            12.0,
+            0.1
+          ]
+        },
+        "return_air_temperature": {
+          "ramp": [
+            22.0,
+            -0.02
+          ]
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "copy_shorter_than_confirm",
+      "rule": "XS-COPY",
+      "row": {
+        "discharge_air_temperature": {
+          "ramp": [
+            12.0,
+            0.1
+          ]
+        },
+        "return_air_temperature": {
+          "before": {
+            "copy": "discharge_air_temperature",
+            "plus": 0.0
+          },
+          "from": 20,
+          "value": {
+            "copy": "discharge_air_temperature",
+            "plus": 2.0
+          }
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "copy_no_pair",
+      "rule": "XS-COPY",
+      "row": {
+        "discharge_air_temperature": {
+          "ramp": [
+            12.0,
+            0.1
+          ]
+        },
+        "outdoor_air_intake_temperature": 10.0
+      },
+      "expect": "no_pair"
+    },
+    {
+      "id": "clip_co2_2000",
+      "rule": "XS-CLIP",
+      "row": {
+        "zone_air_co2": {
+          "cycle": [
+            800.0,
+            1200.0,
+            2000.0,
+            2000.0,
+            1500.0
+          ]
+        }
+      },
+      "expect": 3.166667
+    },
+    {
+      "id": "clip_co2_not_round",
+      "rule": "XS-CLIP",
+      "row": {
+        "zone_air_co2": {
+          "cycle": [
+            800.0,
+            1200.0,
+            1987.0,
+            1987.0,
+            1500.0
+          ]
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "clip_co2_reached_once",
+      "rule": "XS-CLIP",
+      "row": {
+        "zone_air_co2": {
+          "cycle": [
+            800.0,
+            1200.0,
+            1500.0
+          ]
+        }
+      },
+      "set": {
+        "zone_air_co2": {
+          "40": 2000.0
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "clip_co2_flat",
+      "rule": "XS-CLIP",
+      "row": {
+        "zone_air_co2": 2000.0
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "clip_static_only_fan_off",
+      "rule": "XS-CLIP",
+      "row": {
+        "supply_fan_operating_status": {
+          "cycle": [
+            1,
+            1,
+            0,
+            0
+          ]
+        },
+        "discharge_air_static_pressure": {
+          "cycle": [
+            212.3,
+            287.6,
+            500.0,
+            500.0
+          ]
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "clip_static_fan_on",
+      "rule": "XS-CLIP",
+      "row": {
+        "supply_fan_operating_status": 1,
+        "discharge_air_static_pressure": {
+          "cycle": [
+            212.3,
+            287.6,
+            500.0,
+            500.0
+          ]
+        }
+      },
+      "expect": 4.0
+    },
+    {
+      "id": "clip_airflow_design_max_once",
+      "rule": "XS-CLIP",
+      "row": {
+        "operating_status": 1,
+        "discharge_air_volume_flow_rate": {
+          "cycle": [
+            120.0,
+            180.0,
+            210.0
+          ]
+        }
+      },
+      "set": {
+        "discharge_air_volume_flow_rate": {
+          "10": 471.9
+        }
+      },
+      "expect": 0.0
+    },
+    {
+      "id": "clip_airflow_round",
+      "rule": "XS-CLIP",
+      "row": {
+        "discharge_air_volume_flow_rate": {
+          "cycle": [
+            120.0,
+            250.0,
+            250.0,
+            180.0
+          ]
+        }
+      },
+      "expect": 4.0
+    },
+    {
+      "id": "clip_no_role",
+      "rule": "XS-CLIP",
+      "row": {
+        "zone_air_temperature": 21.0
+      },
+      "expect": "no_clip_role"
+    }
   ]
 }

@@ -170,6 +170,9 @@ def role_score(p: Point, role: str, definition: Mapping) -> int:
     """How well ``p`` fills ``role`` (0 = not at all): class match 2, all markers 1."""
     if _is_web(role) != p.has("weather"):
         return 0
+    forbid = definition.get("forbid") or []
+    if forbid and any(tag in p.tags for tag in forbid):
+        return 0
     if p.cls and p.cls in definition["classes"]:
         return 2
     marks = definition["markers"]

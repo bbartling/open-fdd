@@ -41,8 +41,8 @@ each input, parameter and output.
 | [**CHW-NOLOAD-1**](sql-cookbook.html#chw-noload-1) | Chiller running with no building load | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#chw-noload-1) | known divergence |
 | [**CMD-1**](sql-cookbook.html#cmd-1) | Fan cmd/status mismatch | ahu | 10 min | [pandas](pandas-cookbook.html#cmd-1) | match |
 | [**COIL-PERF**](sql-cookbook.html#coil-perf) | Coil valve open but the air temperature changes less than min_dt | ahu | 15 min | [pandas](pandas-cookbook.html#coil-perf) | match |
-| [**CW-APR-1**](sql-cookbook.html#cw-apr-1) | High CW approach at full tower fan | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-apr-1) | match |
-| [**CW-FAN-1**](sql-cookbook.html#cw-fan-1) | Excess tower fan energy vs wet-bulb limit | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-fan-1) | match |
+| [**CW-APR-1**](sql-cookbook.html#cw-apr-1) | High CW approach at full tower fan | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-apr-1) | known divergence |
+| [**CW-FAN-1**](sql-cookbook.html#cw-fan-1) | Excess tower fan energy vs wet-bulb limit | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-fan-1) | known divergence |
 | [**CW-OPT-1**](sql-cookbook.html#cw-opt-1) | Condenser water not optimized vs wet-bulb | chiller, cooling_tower, chwPlant | 15 min | [pandas](pandas-cookbook.html#cw-opt-1) | match |
 | [**DMP-1**](sql-cookbook.html#dmp-1) | OA damper leakage | ahu | 15 min | [pandas](pandas-cookbook.html#dmp-1) | match |
 | [**ECON-1**](sql-cookbook.html#econ-1) | Economizer stuck closed when OAT favorable | ahu | 10 min | [pandas](pandas-cookbook.html#econ-1) | match |
@@ -95,7 +95,7 @@ each input, parameter and output.
 | [**SV-STALE**](sql-cookbook.html#sv-stale) | Stale data (no fresh samples for longer than the stale threshold) | ahu, vav, chiller, boiler, weather, zone_other, heatpump | immediate | [pandas](pandas-cookbook.html#sv-stale) | match |
 | [**TRIM-1**](sql-cookbook.html#trim-1) | Duct static trim advisory | ahu | 30 min | [pandas](pandas-cookbook.html#trim-1) | known divergence |
 | [**TRIM-3**](sql-cookbook.html#trim-3) | HWST trim advisory | boiler | 30 min | [pandas](pandas-cookbook.html#trim-3) | match |
-| [**TRIM-4**](sql-cookbook.html#trim-4) | CHW plant reset advisory | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#trim-4) | match |
+| [**TRIM-4**](sql-cookbook.html#trim-4) | CHW plant reset advisory | chiller, chwPlant | 30 min | [pandas](pandas-cookbook.html#trim-4) | known divergence |
 | [**UTIL-INTERVAL**](sql-cookbook.html#util-interval) | BAS 15m vs utility interval (MAE threshold) | meter, ahu, heatpump | immediate | SQL only | SQL only |
 | [**UTIL-MONTHLY**](sql-cookbook.html#util-monthly) | BAS monthly kWh vs utility monthly bills (% deviation) | meter, ahu, heatpump | immediate | SQL only | SQL only |
 | [**VAV-1**](sql-cookbook.html#vav-1) | Zone comfort band during occupied hours when occupancy is set; unoccupied setback is VAV-2; no occupancy model or schedule → NOT_ASSESSED_NO_OCCUPANCY | vav, zone_other, heatpump, baseboard | 15 min | [pandas](pandas-cookbook.html#vav-1) | match |

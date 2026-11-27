@@ -20,16 +20,16 @@ nav_order: 2
 import pandas as pd
 from open_fdd.rules import run_rule
 
-# one day on a 5-minute grid, UTC timestamps, every value SI (°C, Pa, L/s, kW; commands 0-1)
+# one day on a 5-minute grid, UTC timestamps, every value SI (°C, Pa, L/s, kW; positions PERCENT 0-100; start/stop 0/1)
 idx = pd.date_range("2026-01-05", periods=288, freq="5min", tz="UTC", name="timestamp_utc")
-df = pd.DataFrame({"duct-static-pressure": 150.0, "duct-static-pressure-sp": 250.0, "fan-cmd": 1.0}, index=idx)
+df = pd.DataFrame({"discharge_air_static_pressure": 150.0, "discharge_air_static_pressure_setpoint": 250.0, "supply_fan_command": 1.0, "supply_fan_speed_command": 100.0}, index=idx)
 df.attrs.update(equipment_id="equip-1", equipment_type="AHU")
 
 result = run_rule("FC1", df, params={"confirm_min": 5})
 print(result.status, result.fault_hours)
 ```
 
-Duct static (Pa) sits 100 Pa under its setpoint while the fan runs: low static at full fan.
+Duct static (Pa) sits 100 Pa under its setpoint while the fan runs at full speed (PERCENT).
 
 ## Units convention
 
@@ -48,7 +48,8 @@ The same SI rules as the [SQL cookbook](sql-cookbook.html#units-convention):
 | Energy | kWh | kWh | Wh, MWh, kBtu, MMBtu, therm |
 | Relative humidity | % | % | % (the SI unit only) |
 | Concentration | ppm | ppm | none |
-| Command or position | fraction, 0-1 | % | `%`, ratio |
+| Damper, valve, fan speed | PERCENT, 0-100 | % | `%` |
+| Start/stop command | boolean, 0 or 1 | 0/1 | bool, `%` (divided by 100) |
 | Status | 0/1 | 0/1 | `bool` |
 
 ## Rules by equipment
@@ -82,7 +83,7 @@ The same SI rules as the [SQL cookbook](sql-cookbook.html#units-convention):
 
 ### AHU-DUCTHI {#ahu-ducthi}
 
-**Duct static pressure high** · `ahu` · [`ahu_duct_high`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1255) · [SQL](sql-cookbook.html#ahu-ducthi)
+**Duct static pressure high** · `ahu` · [`ahu_duct_high`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1269) · [SQL](sql-cookbook.html#ahu-ducthi)
 
 Duct static &gt; static SP + margin. Evaluates when fan is proven on OR duct static itself exceeds pressure_on_min (catches high static with fan-status off).
 
@@ -90,8 +91,8 @@ Duct static &gt; static SP + margin. Evaluates when fan is proven on OR duct sta
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
-| `discharge_air_static_pressure_setpoint` | `duct_static_sp` | `duct-static-pressure-sp` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
+| — | `discharge_air_static_pressure` | `discharge_air_static_pressure` | — | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
+| — | `discharge_air_static_pressure_setpoint` | `discharge_air_static_pressure_setpoint` | — | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
 
 **Parameters**
 
@@ -115,7 +116,7 @@ Duct static &gt; static SP + margin. Evaluates when fan is proven on OR duct sta
 
 ### AHU-SATDEV {#ahu-satdev}
 
-**SAT deviation from setpoint** · `ahu` · [`ahu_sat_dev`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1250) · [SQL](sql-cookbook.html#ahu-satdev)
+**SAT deviation from setpoint** · `ahu` · [`ahu_sat_dev`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1264) · [SQL](sql-cookbook.html#ahu-satdev)
 
 \|SAT − SAT SP\| &gt; 2.8 Δ°C.
 
@@ -123,8 +124,8 @@ Duct static &gt; static SP + margin. Evaluates when fan is proven on OR duct sta
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -148,7 +149,7 @@ Duct static &gt; static SP + margin. Evaluates when fan is proven on OR duct sta
 
 ### AHU-SIMUL {#ahu-simul}
 
-**Heating and cooling simultaneous** · `ahu` · [`ahu_simul_heat_cool`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1266) · [SQL](sql-cookbook.html#ahu-simul)
+**Heating and cooling simultaneous** · `ahu` · [`ahu_simul_heat_cool`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1280) · [SQL](sql-cookbook.html#ahu-simul)
 
 Heating valve &gt; 10% AND cooling valve &gt; 10% at once.
 
@@ -156,15 +157,15 @@ Heating valve &gt; 10% AND cooling valve &gt; 10% at once.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `valve_open_pct` | Valve open threshold | 0.1 | 0.05 | 0.5 | fraction (0-1) |
+| `valve_open_pct` | Valve open threshold | 10 | 5 | 50 | % |
 
 **Outputs**
 
@@ -181,7 +182,7 @@ Heating valve &gt; 10% AND cooling valve &gt; 10% at once.
 
 ### CMD-1 {#cmd-1}
 
-**Fan cmd/status mismatch** · `ahu` · [`cmd1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1922) · [SQL](sql-cookbook.html#cmd-1)
+**Fan cmd/status mismatch** · `ahu` · [`cmd1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1936) · [SQL](sql-cookbook.html#cmd-1)
 
 Fan command and proven status disagree.
 
@@ -189,8 +190,8 @@ Fan command and proven status disagree.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -212,7 +213,7 @@ Fan command and proven status disagree.
 
 ### COIL-PERF {#coil-perf}
 
-**Coil performance (heating and cooling)** · `ahu` · [`coil_perf`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1538) · [SQL](sql-cookbook.html#coil-perf)
+**Coil performance (heating and cooling)** · `ahu` · [`coil_perf`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1552) · [SQL](sql-cookbook.html#coil-perf)
 
 Coil valve open, opposite valve shut, air temperature change below min_dt.
 
@@ -220,21 +221,21 @@ Coil valve open, opposite valve shut, air temperature change below min_dt.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `heating_coil_inlet_air_temperature` | `heating_coil_entering_temp` | `heating-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `heating_coil_outlet_air_temperature` | `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `cooling_coil_inlet_air_temperature` | `cooling_coil_entering_temp` | `cooling-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `cooling_coil_outlet_air_temperature` | `cooling_coil_leaving_temp` | `cooling-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
-| `terminal_unit_inlet_air_temperature` | `vav_inlet_t` | `vav-inlet-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | optional |
+| — | `terminal_unit_heating_valve_position_command` | `terminal_unit_heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | optional |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | optional |
+| — | `heating_coil_inlet_air_temperature` | `heating_coil_inlet_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `heating_coil_outlet_air_temperature` | `heating_coil_outlet_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `cooling_coil_inlet_air_temperature` | `cooling_coil_inlet_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `cooling_coil_outlet_air_temperature` | `cooling_coil_outlet_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
+| — | `terminal_unit_inlet_air_temperature` | `terminal_unit_inlet_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `terminal_unit_discharge_air_temperature` | `terminal_unit_discharge_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| — | `discharge_air_volume_flow_rate` | `discharge_air_volume_flow_rate` | — | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -242,8 +243,8 @@ Coil valve open, opposite valve shut, air temperature change below min_dt.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `min_dt` | Minimum coil temperature change | 3 | 0.555556 | 11.1111 | °C |
-| `valve_open` | Valve open threshold | 0.8 | 0.5 | 1 | fraction (0-1) |
-| `valve_shut` | Opposite valve shut | 0.05 | 0 | 0.2 | fraction (0-1) |
+| `valve_open` | Valve open threshold | 80 | 50 | 100 | % |
+| `valve_shut` | Opposite valve shut | 5 | 0 | 20 | % |
 
 **Outputs**
 
@@ -261,7 +262,7 @@ Coil valve open, opposite valve shut, air temperature change below min_dt.
 
 ### DMP-1 {#dmp-1}
 
-**OA damper leakage** · `ahu` · [`dmp1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1938) · [SQL](sql-cookbook.html#dmp-1)
+**OA damper leakage** · `ahu` · [`dmp1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1952) · [SQL](sql-cookbook.html#dmp-1)
 
 Damper ≤ 5% but MAT tracks OAT within 1.1 Δ°C — leaking OA damper.
 
@@ -269,9 +270,9 @@ Damper ≤ 5% but MAT tracks OAT within 1.1 Δ°C — leaking OA damper.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -295,7 +296,7 @@ Damper ≤ 5% but MAT tracks OAT within 1.1 Δ°C — leaking OA damper.
 
 ### ECON-1 {#econ-1}
 
-**Economizer stuck closed** · `ahu` · [`econ1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1278) · [SQL](sql-cookbook.html#econ-1)
+**Economizer stuck closed** · `ahu` · [`econ1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1292) · [SQL](sql-cookbook.html#econ-1)
 
 Fan on, OA damper &lt; 5%, OAT &gt; 12.8 °C (should be economizing).
 
@@ -303,9 +304,9 @@ Fan on, OA damper &lt; 5%, OAT &gt; 12.8 °C (should be economizing).
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 
 **Parameters**
 
@@ -329,7 +330,7 @@ Fan on, OA damper &lt; 5%, OAT &gt; 12.8 °C (should be economizing).
 
 ### ECON-2 {#econ-2}
 
-**Economizing when outdoor unfavorable** · `ahu` · [`econ2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1285) · [SQL](sql-cookbook.html#econ-2)
+**Economizing when outdoor unfavorable** · `ahu` · [`econ2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1299) · [SQL](sql-cookbook.html#econ-2)
 
 OAT &gt; 17.2 °C AND OA damper &gt; 42% (should be at minimum).
 
@@ -337,15 +338,15 @@ OAT &gt; 17.2 °C AND OA damper &gt; 42% (should be at minimum).
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `econ2_damper` | Damper open frac | 0.42 | 0.2 | 0.9 | fraction (0-1) |
+| `econ2_damper` | Damper open frac | 42 | 20 | 90 | % |
 | `econ2_oat_hi` | OAT high cutoff | 17.2222 | 12.7778 | 26.6667 | °C |
 
 **Outputs**
@@ -363,7 +364,7 @@ OAT &gt; 17.2 °C AND OA damper &gt; 42% (should be at minimum).
 
 ### ECON-3 {#econ-3}
 
-**Mech cooling without integrated economizer** · `ahu` · [`econ2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1285) · [SQL](sql-cookbook.html#econ-3)
+**Mech cooling without integrated economizer** · `ahu` · [`econ2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1299) · [SQL](sql-cookbook.html#econ-3)
 
 Web free-cooling opportunity: 15.6 °C ≤ dry-bulb &lt; 22.2 °C AND dewpoint &lt; 15.6 °C (dewpoint from web sensor or calculated from web DB+RH). Fault when cooling valve is open while OA damper is below the integrated-economizer threshold (default 90%). No BAS OAT fallback. Screenable engineering defaults — not code limits.
 
@@ -371,18 +372,18 @@ Web free-cooling opportunity: 15.6 °C ≤ dry-bulb &lt; 22.2 °C AND dewpoint &
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `weather_service_air_dew_point_temperature` | `web_oa_dp` | `web-outside-air-dewpoint` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `weather_service_air_relative_humidity` | `web_oa_h` | `web-outside-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `weather_service_air_temperature` | `weather_service_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `weather_service_air_dew_point_temperature` | `weather_service_air_dew_point_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `weather_service_air_relative_humidity` | `weather_service_air_relative_humidity` | — | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
-| `econ3_damper_hi` | Integrated economizer damper | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `econ3_damper_hi` | Integrated economizer damper | 90 | 50 | 100 | % |
 | `econ3_db_max` | Free-cool OA dry-bulb max | 22.2222 | 18.3333 | 26.6667 | °C |
 | `econ3_db_min` | Free-cool OA dry-bulb min | 15.5556 | 10 | 20 | °C |
 | `econ3_dp_max` | Free-cool OA dew point max | 15.5556 | 7.22222 | 20 | °C |
@@ -402,7 +403,7 @@ Web free-cooling opportunity: 15.6 °C ≤ dry-bulb &lt; 22.2 °C AND dewpoint &
 
 ### ECON-4 {#econ-4}
 
-**Low estimated OA fraction** · `ahu` · [`econ4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1292) · [SQL](sql-cookbook.html#econ-4)
+**Low estimated OA fraction** · `ahu` · [`econ4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1306) · [SQL](sql-cookbook.html#econ-4)
 
 Fan on, \|RAT−OAT\| &gt; 1.2 Δ°C, estimated OA fraction &lt; 21%.
 
@@ -410,17 +411,17 @@ Fan on, \|RAT−OAT\| &gt; 1.2 Δ°C, estimated OA fraction &lt; 21%.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `return_air_temperature` | `return_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `oa_min_pct` | Min OA fraction | 21 | 5 | 40 | % |
+| `oa_min_pct` | Min OA fraction | 2100 | 500 | 4000 | % |
 
 **Outputs**
 
@@ -437,7 +438,7 @@ Fan on, \|RAT−OAT\| &gt; 1.2 Δ°C, estimated OA fraction &lt; 21%.
 
 ### ECON-5 {#econ-5}
 
-**Preheat over-conditioning** · `ahu` · [`econ5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1303) · [SQL](sql-cookbook.html#econ-5)
+**Preheat over-conditioning** · `ahu` · [`econ5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1317) · [SQL](sql-cookbook.html#econ-5)
 
 Preheat leaving air &gt; 1.2°C above target while preheat active.
 
@@ -445,10 +446,10 @@ Preheat leaving air &gt; 1.2°C above target while preheat active.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `preheat_heating_coil_outlet_air_temperature` | `preheat_leave_t` | `preheat-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `preheat_heating_coil_outlet_air_temperature` | `preheat_heating_coil_outlet_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -480,15 +481,15 @@ Web dry-bulb &lt; −3.9°C AND OA damper above winter min-OA ceiling (default 2
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `weather_service_air_temperature` | `weather_service_air_temperature` | — | Temperature | °C | °F, K | - | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `econ6_damper_max` | Winter min-OA damper | 0.25 | 0.05 | 0.5 | fraction (0-1) |
+| `econ6_damper_max` | Winter min-OA damper | 25 | 5 | 50 | % |
 | `econ6_oat_max` | Winter OAT ceiling | -3.88889 | -9.44444 | 4.44444 | °C |
 
 **Outputs**
@@ -514,20 +515,19 @@ Economizer-OK web weather: dew point &lt; 15.6°C AND dry-bulb &lt; 22.2°C (abo
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `weather_service_air_dew_point_temperature` | `web_oa_dp` | `web-outside-air-dewpoint` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `weather_service_air_relative_humidity` | `web_oa_h` | `web-outside-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| — | — | `dx-cool-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `weather_service_air_temperature` | `weather_service_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `weather_service_air_dew_point_temperature` | `weather_service_air_dew_point_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `weather_service_air_relative_humidity` | `weather_service_air_relative_humidity` | — | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | optional |
+| — | `compressor_operating_status` | `compressor_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `econ7_damper_min` | Economizing damper threshold | 0.5 | 0.2 | 0.9 | fraction (0-1) |
+| `econ7_damper_min` | Economizing damper threshold | 50 | 20 | 90 | % |
 | `econ7_db_max` | Econ-OK dry-bulb max | 22.2222 | 18.3333 | 26.6667 | °C |
 | `econ7_db_min` | Econ-OK dry-bulb floor (freeze guard) | 1.66667 | -6.66667 | 10 | °C |
 | `econ7_dp_max` | Econ-OK dew point max | 15.5556 | 7.22222 | 20 | °C |
@@ -547,17 +547,17 @@ Economizer-OK web weather: dew point &lt; 15.6°C AND dry-bulb &lt; 22.2°C (abo
 
 ### FC1 {#fc1}
 
-**Duct static below SP at full fan (GL36 A)** · `ahu` · [`fc1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L977) · [SQL](sql-cookbook.html#fc1)
+**Duct static below SP at full fan (GL36 A)** · `ahu` · [`fc1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L987) · [SQL](sql-cookbook.html#fc1)
 
-DSP &lt; DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
+DSP &lt; DSPSP − εDSP AND supply_fan_speed_command ≥ 100% − εVFDSPD.
 
 **Inputs**
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
-| `discharge_air_static_pressure_setpoint` | `duct_static_sp` | `duct-static-pressure-sp` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_static_pressure` | `discharge_air_static_pressure` | — | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
+| — | `discharge_air_static_pressure_setpoint` | `discharge_air_static_pressure_setpoint` | — | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
+| — | `supply_fan_speed_command` | `supply_fan_speed_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -566,8 +566,8 @@ DSP &lt; DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `duct_static_err` | Legacy duct-static error (sets εDSP) | 29.8608 | 0 | 124.42 | Pa |
 | `eps_dsp` | Duct-static error εDSP | 29.8608 | 0 | 124.42 | Pa |
-| `eps_vfd_spd` | VFD speed error εVFDSPD (fraction; G36-2018 lists 0.05) | 0.13 | 0 | 0.5 | fraction (0-1) |
-| `fan_hi` | Legacy fan-high threshold (sets εVFDSPD) | 0.87 | 0.5 | 1 | fraction (0-1) |
+| `eps_vfd_spd` | VFD speed error εVFDSPD (fraction; G36-2018 lists 0.05) | 13 | 0 | 50 | % |
+| `fan_hi` | Legacy fan-high threshold (sets εVFDSPD) | 87 | 50 | 100 | % |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
 **Outputs**
@@ -585,7 +585,7 @@ DSP &lt; DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 
 ### FC10 {#fc10}
 
-**OAT/MAT mismatch + mech cooling (GL36 H)** · `ahu` · [`fc10`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1149) · [SQL](sql-cookbook.html#fc10)
+**OAT/MAT mismatch + mech cooling (GL36 H)** · `ahu` · [`fc10`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1163) · [SQL](sql-cookbook.html#fc10)
 
 \|MATavg − OATavg\| &gt; √(εMAT² + εOAT²) in OS#3.
 
@@ -593,18 +593,18 @@ DSP &lt; DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_on_min` | Cooling-command ON threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `clg_on_min` | Cooling-command ON threshold | 1 | 0 | 25 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `econ_full_open` | Economizer full-open threshold | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `econ_full_open` | Economizer full-open threshold | 90 | 50 | 100 | % |
 | `eps_mat` | MAT sensor error εMAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_oat` | OAT sensor error εOAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
@@ -625,7 +625,7 @@ DSP &lt; DSPSP − εDSP AND VFDSPD ≥ 100% − εVFDSPD.
 
 ### FC11 {#fc11}
 
-**OAT/MAT mismatch economizer-only (GL36 I)** · `ahu` · [`fc11`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1162) · [SQL](sql-cookbook.html#fc11)
+**OAT/MAT mismatch economizer-only (GL36 I)** · `ahu` · [`fc11`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1176) · [SQL](sql-cookbook.html#fc11)
 
 OATavg + εOAT &lt; SATSP − ΔTSF − εSAT in OS#3.
 
@@ -633,19 +633,19 @@ OATavg + εOAT &lt; SATSP − ΔTSF − εSAT in OS#3.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_on_min` | Cooling-command ON threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `clg_on_min` | Cooling-command ON threshold | 1 | 0 | 25 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `delta_supply_fan` | Supply-fan heat rise ΔTSF | 0.305556 | 0 | 2.77778 | Δ°C |
-| `econ_full_open` | Economizer full-open threshold | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `econ_full_open` | Economizer full-open threshold | 90 | 50 | 100 | % |
 | `eps_oat` | OAT sensor error εOAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
@@ -666,7 +666,7 @@ OATavg + εOAT &lt; SATSP − ΔTSF − εSAT in OS#3.
 
 ### FC12 {#fc12}
 
-**SAT above blend in cooling (GL36 J)** · `ahu` · [`fc12`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1177) · [SQL](sql-cookbook.html#fc12)
+**SAT above blend in cooling (GL36 J)** · `ahu` · [`fc12`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1191) · [SQL](sql-cookbook.html#fc12)
 
 SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 
@@ -674,20 +674,20 @@ SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_on_min` | Cooling-command ON threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `clg_on_min` | Cooling-command ON threshold | 1 | 0 | 25 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `delta_supply_fan` | Supply-fan heat rise ΔTSF | 0.305556 | 0 | 2.77778 | Δ°C |
-| `econ_full_open` | Economizer full-open threshold | 0.9 | 0.5 | 1 | fraction (0-1) |
-| `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
+| `econ_full_open` | Economizer full-open threshold | 90 | 50 | 100 | % |
+| `econ_min_pos` | Economizer minimum-position threshold | 5 | 0 | 50 | % |
 | `eps_mat` | MAT sensor error εMAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
@@ -709,7 +709,7 @@ SATavg − εSAT − ΔTSF ≥ MATavg + εMAT in OS#3/OS#4.
 
 ### FC13-SAT-HIGH {#fc13-sat-high}
 
-**SAT above SP at full cooling (GL36 K)** · `ahu` · [`fc13`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1195) · [SQL](sql-cookbook.html#fc13-sat-high)
+**SAT above SP at full cooling (GL36 K)** · `ahu` · [`fc13`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1209) · [SQL](sql-cookbook.html#fc13-sat-high)
 
 SATavg &gt; SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
@@ -717,19 +717,19 @@ SATavg &gt; SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_full_min` | Full-cooling threshold (fraction) | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `clg_full_min` | Full-cooling threshold (fraction) | 90 | 50 | 100 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
-| `econ_full_open` | Economizer full-open threshold | 0.9 | 0.5 | 1 | fraction (0-1) |
-| `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
+| `econ_full_open` | Economizer full-open threshold | 90 | 50 | 100 | % |
+| `econ_min_pos` | Economizer minimum-position threshold | 5 | 0 | 50 | % |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `sat_err` | Legacy SAT error (sets εSAT) | 0.555556 | 0 | 5.55556 | Δ°C |
@@ -749,7 +749,7 @@ SATavg &gt; SATSP + εSAT AND CC ≥ full-cooling threshold in OS#3/OS#4.
 
 ### FC14 {#fc14}
 
-**CHW coil ΔT when inactive (GL36 L)** · `ahu` · [`fc14`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1209) · [SQL](sql-cookbook.html#fc14)
+**CHW coil ΔT when inactive (GL36 L)** · `ahu` · [`fc14`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1223) · [SQL](sql-cookbook.html#fc14)
 
 Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inactive.
 
@@ -757,22 +757,22 @@ Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inact
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `cooling_coil_inlet_air_temperature` | `cooling_coil_entering_temp` | `cooling-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `cooling_coil_outlet_air_temperature` | `cooling_coil_leaving_temp` | `cooling-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `cooling_coil_inlet_air_temperature` | `cooling_coil_inlet_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `cooling_coil_outlet_air_temperature` | `cooling_coil_outlet_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_inactive_max` | Cooling-command inactive ceiling | 0.1 | 0 | 0.5 | fraction (0-1) |
+| `clg_inactive_max` | Cooling-command inactive ceiling | 10 | 0 | 50 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `delta_supply_fan` | Supply-fan heat rise ΔTSF | 0.305556 | 0 | 2.77778 | Δ°C |
-| `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
+| `econ_min_pos` | Economizer minimum-position threshold | 5 | 0 | 50 | % |
 | `eps_ccet` | Cooling-coil entering sensor error εCCET | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_cclt` | Cooling-coil leaving sensor error εCCLT | 0.638889 | 0 | 5.55556 | Δ°C |
-| `htg_on_min` | Heating-command ON threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `htg_on_min` | Heating-command ON threshold | 1 | 0 | 25 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
@@ -791,7 +791,7 @@ Cooling-coil ΔT ≥ √(εCCET² + εCCLT²) + ΔTSF while coil should be inact
 
 ### FC15 {#fc15}
 
-**HW coil ΔT when inactive (GL36 M)** · `ahu` · [`fc15`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1230) · [SQL](sql-cookbook.html#fc15)
+**HW coil ΔT when inactive (GL36 M)** · `ahu` · [`fc15`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1244) · [SQL](sql-cookbook.html#fc15)
 
 Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inactive.
 
@@ -799,21 +799,21 @@ Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inact
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `heating_coil_inlet_air_temperature` | `heating_coil_entering_temp` | `heating-coil-entering-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `heating_coil_outlet_air_temperature` | `heating_coil_leaving_temp` | `heating-coil-leaving-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `heating_coil_inlet_air_temperature` | `heating_coil_inlet_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `heating_coil_outlet_air_temperature` | `heating_coil_outlet_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_inactive_max` | Cooling-command inactive ceiling | 0.1 | 0 | 0.5 | fraction (0-1) |
-| `clg_on_min` | Cooling-command ON threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `clg_inactive_max` | Cooling-command inactive ceiling | 10 | 0 | 50 | % |
+| `clg_on_min` | Cooling-command ON threshold | 1 | 0 | 25 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `delta_supply_fan` | Supply-fan heat rise ΔTSF | 0.305556 | 0 | 2.77778 | Δ°C |
-| `econ_full_open` | Economizer full-open threshold | 0.9 | 0.5 | 1 | fraction (0-1) |
-| `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
+| `econ_full_open` | Economizer full-open threshold | 90 | 50 | 100 | % |
+| `econ_min_pos` | Economizer minimum-position threshold | 5 | 0 | 50 | % |
 | `eps_hcet` | Heating-coil entering sensor error εHCET | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_hclt` | Heating-coil leaving sensor error εHCLT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
@@ -834,7 +834,7 @@ Heating-coil ΔT ≥ √(εHCET² + εHCLT²) + ΔTSF while coil should be inact
 
 ### FC2 {#fc2}
 
-**MAT below OAT/RAT envelope (GL36 B)** · `ahu` · [`fc2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L996) · [SQL](sql-cookbook.html#fc2)
+**MAT below OAT/RAT envelope (GL36 B)** · `ahu` · [`fc2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1010) · [SQL](sql-cookbook.html#fc2)
 
 MATavg + εMAT &lt; min(RATavg − εRAT, OATavg − εOAT).
 
@@ -842,10 +842,10 @@ MATavg + εMAT &lt; min(RATavg − εRAT, OATavg − εOAT).
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `return_air_temperature` | `return_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -855,7 +855,7 @@ MATavg + εMAT &lt; min(RATavg − εRAT, OATavg − εOAT).
 | `eps_mat` | MAT sensor error εMAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_oat` | OAT sensor error εOAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_rat` | RAT sensor error εRAT | 0.638889 | 0 | 5.55556 | Δ°C |
-| `fan_on_min` | Fan-on command threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `fan_on_min` | Fan-on command threshold | 1 | 0 | 25 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
@@ -874,7 +874,7 @@ MATavg + εMAT &lt; min(RATavg − εRAT, OATavg − εOAT).
 
 ### FC3 {#fc3}
 
-**MAT above OAT/RAT envelope (GL36 C)** · `ahu` · [`fc3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1016) · [SQL](sql-cookbook.html#fc3)
+**MAT above OAT/RAT envelope (GL36 C)** · `ahu` · [`fc3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1030) · [SQL](sql-cookbook.html#fc3)
 
 MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 
@@ -882,10 +882,10 @@ MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `return_air_temperature` | `return_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -895,7 +895,7 @@ MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 | `eps_mat` | MAT sensor error εMAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_oat` | OAT sensor error εOAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_rat` | RAT sensor error εRAT | 0.638889 | 0 | 5.55556 | Δ°C |
-| `fan_on_min` | Fan-on command threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `fan_on_min` | Fan-on command threshold | 1 | 0 | 25 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
@@ -914,7 +914,7 @@ MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 
 ### FC4 {#fc4}
 
-**PID hunting (operating-state oscillation)** · `ahu` · [`fc4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1030) · [SQL](sql-cookbook.html#fc4)
+**PID hunting (operating-state oscillation)** · `ahu` · [`fc4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1044) · [SQL](sql-cookbook.html#fc4)
 
 ΔOS &gt; ΔOSmax during the prior 60-minute moving window.
 
@@ -922,9 +922,9 @@ MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -949,7 +949,7 @@ MATavg − εMAT &gt; max(RATavg + εRAT, OATavg + εOAT).
 
 ### FC5 {#fc5}
 
-**SAT cold when heating commanded (GL36 D)** · `ahu` · [`fc5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1069) · [SQL](sql-cookbook.html#fc5)
+**SAT cold when heating commanded (GL36 D)** · `ahu` · [`fc5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1083) · [SQL](sql-cookbook.html#fc5)
 
 SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
@@ -957,10 +957,10 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -970,8 +970,8 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 | `delta_supply_fan` | Supply-fan heat rise ΔTSF | 0.305556 | 0 | 2.77778 | Δ°C |
 | `eps_mat` | MAT sensor error εMAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
-| `fan_on_min` | Fan-on command threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
-| `htg_on_min` | Heating-command ON threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `fan_on_min` | Fan-on command threshold | 1 | 0 | 25 | % |
+| `htg_on_min` | Heating-command ON threshold | 1 | 0 | 25 | % |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 
@@ -990,7 +990,7 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 ### FC6 {#fc6}
 
-**Estimated OA fraction mismatch** · `ahu` · [`fc6`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1086) · [SQL](sql-cookbook.html#fc6)
+**Estimated OA fraction mismatch** · `ahu` · [`fc6`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1100) · [SQL](sql-cookbook.html#fc6)
 
 \|RATavg−OATavg\| ≥ ΔTmin AND \|estimated OA% − design min OA%\| &gt; εF.
 
@@ -998,20 +998,20 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `terminal_unit_discharge_air_total_volume_flow_rate` | `vav_total_flow` | `vav-total-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `return_air_temperature` | `return_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `terminal_unit_discharge_air_total_volume_flow_rate` | `terminal_unit_discharge_air_total_volume_flow_rate` | — | Flow | L/s | m³/s, m³/h, cfm, gpm | - | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `airflow_err` | Legacy OA-fraction error (sets εF) | 0.15 | 0.05 | 1 | fraction (0-1) |
+| `airflow_err` | Legacy OA-fraction error (sets εF) | 15 | 5 | 100 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `delta_t_min` | Minimum \|OAT−RAT\| ΔTmin | 2.77778 | 0 | 16.6667 | Δ°C |
-| `eps_airflow` | Airflow error εF (GL36 default 30%) | 0.15 | 0.05 | 1 | fraction (0-1) |
-| `fan_on_min` | Fan-on command threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
+| `eps_airflow` | Airflow error εF (GL36 default 30%) | 15 | 5 | 100 | % |
+| `fan_on_min` | Fan-on command threshold | 1 | 0 | 25 | % |
 | `min_flow_design` | Design minimum outdoor airflow | 2359.74 | 0 | 94389.4 | L/s |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `oat_rat_delta_min` | Legacy OAT/RAT guard (sets ΔTmin) | 2.77778 | 0 | 16.6667 | °C |
@@ -1031,7 +1031,7 @@ SATavg + εSAT ≤ MATavg − εMAT + ΔTSF while heating is commanded.
 
 ### FC7 {#fc7}
 
-**SAT low with full heating (GL36 E)** · `ahu` · [`fc7`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1103) · [SQL](sql-cookbook.html#fc7)
+**SAT low with full heating (GL36 E)** · `ahu` · [`fc7`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1117) · [SQL](sql-cookbook.html#fc7)
 
 SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 
@@ -1039,10 +1039,10 @@ SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -1050,8 +1050,8 @@ SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
-| `fan_on_min` | Fan-on command threshold | 0.01 | 0 | 0.25 | fraction (0-1) |
-| `htg_full_min` | Full-heating threshold (fraction) | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `fan_on_min` | Fan-on command threshold | 1 | 0 | 25 | % |
+| `htg_full_min` | Full-heating threshold (fraction) | 90 | 50 | 100 | % |
 | `mode_delay_min` | Mode-change suspension (product default) | 10 | 0 | 60 | min |
 | `sat_err` | Legacy SAT error (sets εSAT) | 0.555556 | 0 | 5.55556 | Δ°C |
 
@@ -1070,7 +1070,7 @@ SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 
 ### FC8 {#fc8}
 
-**SAT/MAT mismatch in economizer (GL36)** · `ahu` · [`fc8`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1116) · [SQL](sql-cookbook.html#fc8)
+**SAT/MAT mismatch in economizer (GL36)** · `ahu` · [`fc8`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1130) · [SQL](sql-cookbook.html#fc8)
 
 \|SATavg − ΔTSF − MATavg\| &gt; √(εSAT² + εMAT²) in OS#2.
 
@@ -1078,19 +1078,19 @@ SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_inactive_max` | Cooling-command inactive ceiling | 0.1 | 0 | 0.5 | fraction (0-1) |
+| `clg_inactive_max` | Cooling-command inactive ceiling | 10 | 0 | 50 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `delta_supply_fan` | Supply-fan heat rise ΔTSF | 0.305556 | 0 | 2.77778 | Δ°C |
-| `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
+| `econ_min_pos` | Economizer minimum-position threshold | 5 | 0 | 50 | % |
 | `eps_mat` | MAT sensor error εMAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
@@ -1112,7 +1112,7 @@ SATavg &lt; SATSP − εSAT AND HC ≥ full-heating threshold.
 
 ### FC9 {#fc9}
 
-**OAT too warm for free cooling (GL36 G)** · `ahu` · [`fc9`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1133) · [SQL](sql-cookbook.html#fc9)
+**OAT too warm for free cooling (GL36 G)** · `ahu` · [`fc9`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1147) · [SQL](sql-cookbook.html#fc9)
 
 OATavg − εOAT &gt; SATSP − ΔTSF + εSAT in OS#2.
 
@@ -1120,19 +1120,19 @@ OATavg − εOAT &gt; SATSP − ΔTSF + εSAT in OS#2.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `outdoor_air_intake_damper_position_command` | `oa_damper_pct` | `outside-air-damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_damper_position_command` | `outdoor_air_intake_damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clg_inactive_max` | Cooling-command inactive ceiling | 0.1 | 0 | 0.5 | fraction (0-1) |
+| `clg_inactive_max` | Cooling-command inactive ceiling | 10 | 0 | 50 | % |
 | `confirm_min` | Fault confirm delay | 10 | 0 | 60 | min |
 | `delta_supply_fan` | Supply-fan heat rise ΔTSF | 0.305556 | 0 | 2.77778 | Δ°C |
-| `econ_min_pos` | Economizer minimum-position threshold | 0.05 | 0 | 0.5 | fraction (0-1) |
+| `econ_min_pos` | Economizer minimum-position threshold | 5 | 0 | 50 | % |
 | `eps_oat` | OAT sensor error εOAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `eps_sat` | SAT sensor error εSAT | 0.638889 | 0 | 5.55556 | Δ°C |
 | `mix_tol` | Legacy master sensor tolerance (sets all ε values) | 0.638889 | 0 | 5.55556 | Δ°C |
@@ -1161,11 +1161,10 @@ Proven DX/chiller mechanical cooling while web dry-bulb &lt; 15.6 °C. Uses comp
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
-| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `chilled_water_pump_operating_status` | `chw_pump_status` | `chw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| — | — | `dx-cool-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
+| — | `weather_service_air_temperature` | `weather_service_air_temperature` | — | Temperature | °C | °F, K | - | optional |
+| — | `compressor_operating_status` | `compressor_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chiller_operating_status` | `chiller_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chilled_water_pump_operating_status` | `chilled_water_pump_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1188,7 +1187,7 @@ Proven DX/chiller mechanical cooling while web dry-bulb &lt; 15.6 °C. Uses comp
 
 ### OA-1 {#oa-1}
 
-**Low OA fraction** · `ahu` · [`oa1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1927) · [SQL](sql-cookbook.html#oa-1)
+**Low OA fraction** · `ahu` · [`oa1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1941) · [SQL](sql-cookbook.html#oa-1)
 
 Estimated OA fraction &lt; 15% with adequate OAT/RAT split.
 
@@ -1196,17 +1195,17 @@ Estimated OA fraction &lt; 15% with adequate OAT/RAT split.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `return_air_temperature` | `return_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `min_oa_frac` | Min OA fraction | 0.15 | 0.05 | 0.4 | fraction (0-1) |
+| `min_oa_frac` | Min OA fraction | 15 | 5 | 40 | % |
 | `oat_rat_guard` | Min \|RAT−OAT\| guard | 1.22222 | 0.277778 | 3.33333 | Δ°C |
 
 **Outputs**
@@ -1224,7 +1223,7 @@ Estimated OA fraction &lt; 15% with adequate OAT/RAT split.
 
 ### RESET-1 {#reset-1}
 
-**SAT reset not tracking outdoor air** · `ahu` · [`reset1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1878) · [SQL](sql-cookbook.html#reset-1)
+**SAT reset not tracking outdoor air** · `ahu` · [`reset1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1892) · [SQL](sql-cookbook.html#reset-1)
 
 Fan on AND \|SAT SP − (11.1 + 0.25×(OAT−18.3))\| &gt; 1.7 Δ°C.
 
@@ -1232,10 +1231,10 @@ Fan on AND \|SAT SP − (11.1 + 0.25×(OAT−18.3))\| &gt; 1.7 Δ°C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1262,17 +1261,17 @@ Fan on AND \|SAT SP − (11.1 + 0.25×(OAT−18.3))\| &gt; 1.7 Δ°C.
 
 ### SCHED-1 {#sched-1}
 
-**Unoccupied runtime** · `ahu` · [`sched1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1895) · [SQL](sql-cookbook.html#sched-1)
+**Unoccupied runtime** · `ahu` · [`sched1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1909) · [SQL](sql-cookbook.html#sched-1)
 
-Fan running while occupancy is unoccupied (Overview calendar → occ_mode). When zone_t is mapped, also require zone inside comfort_low…comfort_high (defaults 21.1–23.9 °C; synced from Overview zone band).
+Fan running while occupancy is unoccupied (Overview calendar → occupancy_status). When zone_air_temperature is mapped, also require zone inside comfort_low…comfort_high (defaults 21.1–23.9 °C; synced from Overview zone band).
 
 **Inputs**
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | required |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| — | `occupancy_status` | `occupancy_status` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | required |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
 
 **Parameters**
 
@@ -1304,25 +1303,22 @@ Ranked proof (status/current &gt; command) is on for ≥ always_on_pct of the wi
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `pump_operating_status` | `pump_status` | `pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `chilled_water_pump_operating_status` | `chw_pump_status` | `chw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| — | — | `hw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional (pandas only) |
-| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| — | — | `hw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional (pandas only) |
-| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
-| `chilled_water_pressure_delta` | `chw_dp` | `chw-diff-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | optional |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `pump_operating_status` | `pump_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chilled_water_pump_operating_status` | `chilled_water_pump_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chiller_operating_status` | `chiller_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `compressor_operating_status` | `compressor_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `cooling_tower_fan_command` | `cooling_tower_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chilled_water_pump_command` | `chilled_water_pump_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `discharge_air_static_pressure` | `discharge_air_static_pressure` | — | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
+| — | `chilled_water_pressure_delta` | `chilled_water_pressure_delta` | — | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `always_on_pct` | Always-on fraction | 0.95 | 0.8 | 1 | fraction (0-1) |
+| `always_on_pct` | Always-on fraction | 95 | 80 | 100 | % |
 | `confirm_min` | Fault confirm delay | 60 | 0 | 60 | min |
 | `pressure_on_min` | Pressure-on evidence | 49.768 | 12.442 | 497.68 | Pa |
 
@@ -1345,7 +1341,7 @@ Ranked proof (status/current &gt; command) is on for ≥ always_on_pct of the wi
 
 ### TRIM-1 {#trim-1}
 
-**Duct static trim advisory** · `ahu` · [`trim1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1846) · [SQL](sql-cookbook.html#trim-1)
+**Duct static trim advisory** · `ahu` · [`trim1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1860) · [SQL](sql-cookbook.html#trim-1)
 
 Duct static high (&gt; 336 Pa) while VAV pressure requests are low.
 
@@ -1353,8 +1349,8 @@ Duct static high (&gt; 336 Pa) while VAV pressure requests are low.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
-| `discharge_air_static_pressure_reset_request_count` | `static_reset_request` | `vav-pressure-request-sum` | `NUM` | Count | count | none | - | required |
+| — | `discharge_air_static_pressure` | `discharge_air_static_pressure` | — | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | required |
+| — | `discharge_air_static_pressure_reset_request_count` | `discharge_air_static_pressure_reset_request_count` | — | Count | count | none | - | required |
 
 **Parameters**
 
@@ -1379,20 +1375,20 @@ Duct static high (&gt; 336 Pa) while VAV pressure requests are low.
 
 ### VLV-1 {#vlv-1}
 
-**Cooling valve leakage** · `ahu` · [`vlv1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1944) · [SQL](sql-cookbook.html#vlv-1)
+**Cooling valve leakage** · `ahu` · [`vlv1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1958) · [SQL](sql-cookbook.html#vlv-1)
 
-Cooling valve ≤ 5% AND (SAT &lt; sat_sp − sat_err OR SAT &lt; MAT − mat_leak_delta). Fan proven on when fan_status/fan_cmd present (operational gate).
+Cooling valve ≤ 5% AND (SAT &lt; discharge_air_temperature_setpoint − sat_err OR SAT &lt; MAT − mat_leak_delta). Fan proven on when supply_fan_operating_status/supply_fan_command present (operational gate).
 
 **Inputs**
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `discharge_air_temperature_setpoint` | `sat_sp` | `discharge-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `discharge_air_temperature_setpoint` | `discharge_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1417,7 +1413,7 @@ Cooling valve ≤ 5% AND (SAT &lt; sat_sp − sat_err OR SAT &lt; MAT − mat_le
 
 ### XS-CLIP {#xs-clip}
 
-**Clipped sensor** · `ahu`, `vav`, `zone_other` · [`xs_clip`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L75) · [SQL](sql-cookbook.html#xs-clip)
+**Clipped sensor** · `ahu`, `vav`, `zone_other` · [`xs_clip`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L76) · [SQL](sql-cookbook.html#xs-clip)
 
 Round maximum held for at least clip_share percent of samples.
 
@@ -1425,17 +1421,17 @@ Round maximum held for at least clip_share percent of samples.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `zone_air_co2` | `zone_co2` | `zone-co2` | `PPM` | Concentration | ppm | none | - | optional |
-| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `zone_air_co2` | `zone_air_co2` | — | Concentration | ppm | none | - | optional |
+| — | `discharge_air_static_pressure` | `discharge_air_static_pressure` | — | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
+| — | `discharge_air_volume_flow_rate` | `discharge_air_volume_flow_rate` | — | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `clip_share` | Share of samples at the limit | 5 | 1 | 50 | % |
+| `clip_share` | Share of samples at the limit | 500 | 100 | 5000 | % |
 | `co2_round` | CO₂ full-scale step | 100 | 50 | 1000 | ppm |
 | `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
 | `flow_round` | Airflow full-scale step | 50 | 5 | 500 | L/s |
@@ -1456,7 +1452,7 @@ Round maximum held for at least clip_share percent of samples.
 
 ### XS-COPY {#xs-copy}
 
-**Copied signal** · `ahu`, `vav`, `zone_other` · [`xs_copy`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L57) · [SQL](sql-cookbook.html#xs-copy)
+**Copied signal** · `ahu`, `vav`, `zone_other` · [`xs_copy`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L58) · [SQL](sql-cookbook.html#xs-copy)
 
 Pair within copy_tol while moving.
 
@@ -1464,11 +1460,11 @@ Pair within copy_tol while moving.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
-| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| — | `return_air_temperature` | `return_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | optional |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | optional |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| — | `terminal_unit_discharge_air_temperature` | `terminal_unit_discharge_air_temperature` | — | Temperature | °C | °F, K | - | optional |
 
 **Parameters**
 
@@ -1493,7 +1489,7 @@ Pair within copy_tol while moving.
 
 ### XS-MIX {#xs-mix}
 
-**Mixing envelope breach** · `ahu` · [`xs_mix`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L46) · [SQL](sql-cookbook.html#xs-mix)
+**Mixing envelope breach** · `ahu` · [`xs_mix`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cross_sensor.py#L47) · [SQL](sql-cookbook.html#xs-mix)
 
 MAT outside OAT/RAT ± band, fan on.
 
@@ -1501,11 +1497,11 @@ MAT outside OAT/RAT ± band, fan on.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `mixed_air_temperature` | `mat` | `mixed-air-temp` | `DEG_C` | Temperature | °C | °F, K | -28.89 to 43.33 | required |
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `return_air_temperature` | `rat` | `return-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `mixed_air_temperature` | `mixed_air_temperature` | — | Temperature | °C | °F, K | -28.89 to 43.33 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `return_air_temperature` | `return_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1533,7 +1529,7 @@ MAT outside OAT/RAT ± band, fan on.
 
 ### VAV-1 {#vav-1}
 
-**Zone comfort band** · `vav`, `zone_other`, `heatpump`, `baseboard` · [`vav1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1376) · [SQL](sql-cookbook.html#vav-1)
+**Zone comfort band** · `vav`, `zone_other`, `heatpump`, `baseboard` · [`vav1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1390) · [SQL](sql-cookbook.html#vav-1)
 
 Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied hours when an occupancy column or Overview calendar is set (require_occupied, default on). Unoccupied setback stays on VAV-2.
 
@@ -1541,9 +1537,8 @@ Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied ho
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | optional |
-| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | optional |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `occupancy_status` | `occupancy_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1568,7 +1563,7 @@ Zone temp outside zone_lo–zone_hi (default 21.1–23.9 °C) during occupied ho
 
 ### VAV-2 {#vav-2}
 
-**Night setback miss** · `vav`, `zone_other`, `heatpump`, `baseboard` · [`vav2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1385) · [SQL](sql-cookbook.html#vav-2)
+**Night setback miss** · `vav`, `zone_other`, `heatpump`, `baseboard` · [`vav2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1399) · [SQL](sql-cookbook.html#vav-2)
 
 Unoccupied AND zone temp &gt; setback_hi (default 20 °C) — heating setback not taken.
 
@@ -1576,9 +1571,8 @@ Unoccupied AND zone temp &gt; setback_hi (default 20 °C) — heating setback no
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | required |
-| `occupancy_status` | `occ_mode` | `occupied` | — | Text | text | none | - | optional |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `occupancy_status` | `occupancy_status` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -1601,7 +1595,7 @@ Unoccupied AND zone temp &gt; setback_hi (default 20 °C) — heating setback no
 
 ### VAV-3 {#vav-3}
 
-**Excessive reheat during warm weather** · `vav` · [`vav3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1392) · [SQL](sql-cookbook.html#vav-3)
+**Excessive reheat during warm weather** · `vav` · [`vav3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1406) · [SQL](sql-cookbook.html#vav-3)
 
 Air flowing AND OAT &gt; 25.6 °C AND reheat valve &gt; 52%.
 
@@ -1609,8 +1603,8 @@ Air flowing AND OAT &gt; 25.6 °C AND reheat valve &gt; 52%.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `terminal_unit_heating_valve_position_command` | `terminal_unit_heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -1619,7 +1613,7 @@ Air flowing AND OAT &gt; 25.6 °C AND reheat valve &gt; 52%.
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `reheat_oat` | Warm OAT | 25.5556 | 18.3333 | 32.2222 | °C |
-| `reheat_pct` | Reheat frac | 0.52 | 0.1 | 1 | fraction (0-1) |
+| `reheat_pct` | Reheat frac | 52 | 10 | 100 | % |
 
 **Outputs**
 
@@ -1636,7 +1630,7 @@ Air flowing AND OAT &gt; 25.6 °C AND reheat valve &gt; 52%.
 
 ### VAV-4 {#vav-4}
 
-**Damper stuck at full open** · `vav` · [`vav4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1400) · [SQL](sql-cookbook.html#vav-4)
+**Damper stuck at full open** · `vav` · [`vav4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1414) · [SQL](sql-cookbook.html#vav-4)
 
 Air flowing AND damper &gt; 97.5% sustained across the window.
 
@@ -1644,7 +1638,7 @@ Air flowing AND damper &gt; 97.5% sustained across the window.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `damper_position` | `damper_position` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -1652,7 +1646,7 @@ Air flowing AND damper &gt; 97.5% sustained across the window.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
-| `full_open_pct` | Full open frac | 0.975 | 0.8 | 1 | fraction (0-1) |
+| `full_open_pct` | Full open frac | 97.5 | 80 | 100 | % |
 | `sustain_hours` | Sustain window | 1.5 | 0.5 | 6 | h |
 
 **Outputs**
@@ -1670,7 +1664,7 @@ Air flowing AND damper &gt; 97.5% sustained across the window.
 
 ### VAV-5 {#vav-5}
 
-**Airflow sensor bias** · `vav` · [`vav5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1412) · [SQL](sql-cookbook.html#vav-5)
+**Airflow sensor bias** · `vav` · [`vav5`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1426) · [SQL](sql-cookbook.html#vav-5)
 
 Airflow &gt; ~24 L/s while damper &lt; 10% (implausible flow).
 
@@ -1678,8 +1672,8 @@ Airflow &gt; ~24 L/s while damper &lt; 10% (implausible flow).
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
-| `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_volume_flow_rate` | `discharge_air_volume_flow_rate` | — | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
+| — | `damper_position` | `damper_position` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -1702,7 +1696,7 @@ Airflow &gt; ~24 L/s while damper &lt; 10% (implausible flow).
 
 ### VAV-6 {#vav-6}
 
-**Reheat when cooling available** · `vav` · [`vav6`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1418) · [SQL](sql-cookbook.html#vav-6)
+**Reheat when cooling available** · `vav` · [`vav6`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1432) · [SQL](sql-cookbook.html#vav-6)
 
 OAT &lt; 18.3 °C AND reheat valve &gt; 25% (optional cooling-available must be true when mapped).
 
@@ -1710,9 +1704,9 @@ OAT &lt; 18.3 °C AND reheat valve &gt; 25% (optional cooling-available must be 
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_operating_mode_status` | `clg_available` | `cooling-available` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `terminal_unit_heating_valve_position_command` | `terminal_unit_heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_operating_mode_status` | `cooling_operating_mode_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1720,7 +1714,7 @@ OAT &lt; 18.3 °C AND reheat valve &gt; 25% (optional cooling-available must be 
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `free_cool_oat` | Free-cool OAT | 18.3333 | 7.22222 | 23.8889 | °C |
-| `reheat_pct` | Reheat frac | 0.25 | 0.05 | 1 | fraction (0-1) |
+| `reheat_pct` | Reheat frac | 25 | 5 | 100 | % |
 
 **Outputs**
 
@@ -1737,15 +1731,15 @@ OAT &lt; 18.3 °C AND reheat valve &gt; 25% (optional cooling-available must be 
 
 ### VAV-7 {#vav-7}
 
-**Min airflow / fixed high flow** · `vav` · [`vav7`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1430) · [SQL](sql-cookbook.html#vav-7)
+**Min airflow / fixed high flow** · `vav` · [`vav7`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1444) · [SQL](sql-cookbook.html#vav-7)
 
-Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR min_flow_sp itself is excessively high.
+Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a high mean while air is on (mins too high / box never modulates), OR discharge_air_volume_flow_rate_minimum itself is excessively high.
 
 **Inputs**
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
+| — | `discharge_air_volume_flow_rate` | `discharge_air_volume_flow_rate` | — | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | required |
 
 **Parameters**
 
@@ -1772,16 +1766,16 @@ Flow below min SP (when mapped), OR airflow stays flat (low rolling std) at a hi
 
 ### VAV-AHU-LEAVE {#vav-ahu-leave}
 
-**VAV leave vs parent AHU SAT (fedBy)** · `vav` · [`vav_vs_ahu_leave`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1481) · [SQL](sql-cookbook.html#vav-ahu-leave)
+**VAV leave vs parent AHU SAT (fedBy)** · `vav` · [`vav_vs_ahu_leave`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1495) · [SQL](sql-cookbook.html#vav-ahu-leave)
 
-Air flowing AND \|VAV discharge − parent AHU SAT\| &gt; band. Needs package topology (vav_to_ahu) so ahu_sat is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.
+Air flowing AND \|VAV discharge − parent AHU SAT\| &gt; band. Needs package topology (vav_to_ahu) so air_handling_unit_discharge_air_temperature is enriched from the fedBy AHU; otherwise SKIPPED_MISSING_ROLES. Flags broken reheat, bad sensors, or rogue zones.
 
 **Inputs**
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `air_handling_unit_discharge_air_temperature` | `ahu_sat` | `ahu-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| — | `terminal_unit_discharge_air_temperature` | `terminal_unit_discharge_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `air_handling_unit_discharge_air_temperature` | `air_handling_unit_discharge_air_temperature` | — | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -1806,7 +1800,7 @@ Air flowing AND \|VAV discharge − parent AHU SAT\| &gt; band. Needs package to
 
 ### VAV-REHEAT {#vav-reheat}
 
-**Reheat valve stuck / no temp rise** · `vav` · [`vav_reheat_stuck`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1460) · [SQL](sql-cookbook.html#vav-reheat)
+**Reheat valve stuck / no temp rise** · `vav` · [`vav_reheat_stuck`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1474) · [SQL](sql-cookbook.html#vav-reheat)
 
 Air flowing AND reheat valve &gt; 30% AND box discharge temp rises &lt; 1.7 °C above duct inlet (air from AHU) — stuck or failed reheat valve/coil.
 
@@ -1814,9 +1808,9 @@ Air flowing AND reheat valve &gt; 30% AND box discharge temp rises &lt; 1.7 °C 
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `terminal_unit_heating_valve_position_command` | `reheat_valve_pct` | `reheat-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `terminal_unit_discharge_air_temperature` | `vav_discharge_t` | `vav-discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `terminal_unit_inlet_air_temperature` | `vav_inlet_t` | `vav-inlet-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| — | `terminal_unit_heating_valve_position_command` | `terminal_unit_heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `terminal_unit_discharge_air_temperature` | `terminal_unit_discharge_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `terminal_unit_inlet_air_temperature` | `terminal_unit_inlet_air_temperature` | — | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -1825,7 +1819,7 @@ Air flowing AND reheat valve &gt; 30% AND box discharge temp rises &lt; 1.7 °C 
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `flow_on_min` | Airflow-on min | 11.7987 | 0 | 94.3894 | L/s |
 | `min_rise` | Min temp rise | 1.66667 | 0.277778 | 8.33333 | °C |
-| `reheat_cmd` | Reheat open frac | 0.3 | 0.1 | 1 | fraction (0-1) |
+| `reheat_cmd` | Reheat open frac | 30 | 10 | 100 | % |
 
 **Outputs**
 
@@ -1845,7 +1839,7 @@ Air flowing AND reheat valve &gt; 30% AND box discharge temp rises &lt; 1.7 °C 
 
 ### FCU-CLG-COIL {#fcu-clg-coil}
 
-**FCU cooling coil under-delivery** · `zone_other`, `general`, `ahu` · [`fcu_clg_coil`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1589) · [SQL](sql-cookbook.html#fcu-clg-coil)
+**FCU cooling coil under-delivery** · `zone_other`, `general`, `ahu` · [`fcu_clg_coil`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1604) · [SQL](sql-cookbook.html#fcu-clg-coil)
 
 Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.
 
@@ -1853,19 +1847,19 @@ Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below z
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `valve_open` | Valve open threshold | 0.8 | 0.5 | 1 | fraction (0-1) |
+| `valve_open` | Valve open threshold | 80 | 50 | 100 | % |
 
 **Outputs**
 
@@ -1881,7 +1875,7 @@ Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below z
 
 ### FCU-CO2-DAMPER {#fcu-co2-damper}
 
-**FCU high CO2 with low outdoor-air command** · `zone_other`, `general`, `ahu` · [`fcu_co2_damper`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1628) · [SQL](sql-cookbook.html#fcu-co2-damper)
+**FCU high CO2 with low outdoor-air command** · `zone_other`, `general`, `ahu` · [`fcu_co2_damper`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1643) · [SQL](sql-cookbook.html#fcu-co2-damper)
 
 Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 
@@ -1889,10 +1883,10 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `zone_air_co2` | `zone_co2` | `zone-co2` | `PPM` | Concentration | ppm | none | - | required |
-| `damper_position_command` | `damper_cmd` | `damper-cmd` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `zone_air_co2` | `zone_air_co2` | — | Concentration | ppm | none | - | required |
+| — | `damper_position_command` | `damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -1900,7 +1894,7 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 |---|---|---:|---:|---:|---|
 | `co2_high_ppm` | High CO₂ | 1000 | 600 | 2000 | ppm |
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `damper_low` | Low damper command | 0.1 | 0 | 0.5 | fraction (0-1) |
+| `damper_low` | Low damper command | 10 | 0 | 50 | % |
 
 **Outputs**
 
@@ -1916,7 +1910,7 @@ Fan on and valid CO₂ exceeds 1000 ppm while damper command remains below 10%.
 
 ### FCU-DAMPER-POS {#fcu-damper-pos}
 
-**FCU damper command/position mismatch** · `zone_other`, `general`, `ahu` · [`fcu_damper_pos`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1622) · [SQL](sql-cookbook.html#fcu-damper-pos)
+**FCU damper command/position mismatch** · `zone_other`, `general`, `ahu` · [`fcu_damper_pos`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1637) · [SQL](sql-cookbook.html#fcu-damper-pos)
 
 Fan on and damper command ≥15%, but feedback is more than 15 percentage points below command.
 
@@ -1924,18 +1918,18 @@ Fan on and damper command ≥15%, but feedback is more than 15 percentage points
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `damper_position_command` | `damper_cmd` | `damper-cmd` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `damper_position` | `damper_pct` | `damper` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `damper_position_command` | `damper_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `damper_position` | `damper_position` | — | Command or position | % | % | 0 to 100 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
-| `command_min` | Minimum damper command | 0.15 | 0 | 1 | fraction (0-1) |
+| `command_min` | Minimum damper command | 15 | 0 | 100 | % |
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `position_error` | Position error | 0.15 | 0.05 | 0.5 | fraction (0-1) |
+| `position_error` | Position error | 15 | 5 | 50 | % |
 
 **Outputs**
 
@@ -1951,7 +1945,7 @@ Fan on and damper command ≥15%, but feedback is more than 15 percentage points
 
 ### FCU-DEADBAND {#fcu-deadband}
 
-**FCU heat/cool deadband collapse** · `zone_other`, `general`, `ahu` · [`fcu_deadband`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1634) · [SQL](sql-cookbook.html#fcu-deadband)
+**FCU heat/cool deadband collapse** · `zone_other`, `general`, `ahu` · [`fcu_deadband`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1649) · [SQL](sql-cookbook.html#fcu-deadband)
 
 Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 
@@ -1959,8 +1953,8 @@ Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `zone_cooling_air_temperature_setpoint` | `cooling_sp` | `cooling-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `zone_heating_air_temperature_setpoint` | `heating_sp` | `heating-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| — | `zone_cooling_air_temperature_setpoint` | `zone_cooling_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `zone_heating_air_temperature_setpoint` | `zone_heating_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -1983,7 +1977,7 @@ Pass-through cooling setpoint minus heating setpoint is less than 1°C.
 
 ### FCU-HTG-COIL {#fcu-htg-coil}
 
-**FCU heating coil under-delivery** · `zone_other`, `general`, `ahu` · [`fcu_htg_coil`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1527) · [SQL](sql-cookbook.html#fcu-htg-coil)
+**FCU heating coil under-delivery** · `zone_other`, `general`, `ahu` · [`fcu_htg_coil`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1541) · [SQL](sql-cookbook.html#fcu-htg-coil)
 
 Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zone temperature.
 
@@ -1991,11 +1985,11 @@ Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zo
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2003,7 +1997,7 @@ Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zo
 |---|---|---:|---:|---:|---|
 | `coil_delta` | Minimum heating rise | 3 | 0.555556 | 11.1111 | °C |
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `valve_open` | Valve open threshold | 0.8 | 0.5 | 1 | fraction (0-1) |
+| `valve_open` | Valve open threshold | 80 | 50 | 100 | % |
 
 **Outputs**
 
@@ -2019,7 +2013,7 @@ Fan on and heating valve ≥80%, but discharge air is less than 3 Δ°C above zo
 
 ### FCU-MODE-CYCLE {#fcu-mode-cycle}
 
-**FCU heating/cooling mode cycling** · `zone_other`, `general`, `ahu` · [`fcu_mode_cycle`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1641) · [SQL](sql-cookbook.html#fcu-mode-cycle)
+**FCU heating/cooling mode cycling** · `zone_other`, `general`, `ahu` · [`fcu_mode_cycle`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1656) · [SQL](sql-cookbook.html#fcu-mode-cycle)
 
 At least four heating/cooling valve mode changes occur in the analysis window.
 
@@ -2027,8 +2021,8 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
 
 **Parameters**
 
@@ -2036,7 +2030,7 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
 | `mode_changes` | Mode changes | 4 | 1 | 20 | count |
-| `mode_valve_min` | Active valve threshold | 0.1 | 0 | 0.5 | fraction (0-1) |
+| `mode_valve_min` | Active valve threshold | 10 | 0 | 50 | % |
 
 **Outputs**
 
@@ -2052,7 +2046,7 @@ At least four heating/cooling valve mode changes occur in the analysis window.
 
 ### FCU-SENSOR-NULL {#fcu-sensor-null}
 
-**Missing FCU zone sensor** · `zone_other`, `general`, `ahu` · [`fcu_sensor_null`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1517) · [SQL](sql-cookbook.html#fcu-sensor-null)
+**Missing FCU zone sensor** · `zone_other`, `general`, `ahu` · [`fcu_sensor_null`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1531) · [SQL](sql-cookbook.html#fcu-sensor-null)
 
 Own zone setpoint is present while zone temperature is null for at least 90% of the window.
 
@@ -2060,15 +2054,15 @@ Own zone setpoint is present while zone temperature is null for at least 90% of 
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `zone_air_temperature_setpoint` | `zone_air_temp_sp` | `zone-air-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
+| — | `zone_air_temperature_setpoint` | `zone_air_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | optional |
 
 **Parameters**
 
 | Parameter | Label | Default | Min | Max | SI unit |
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
-| `null_fraction` | Null fraction | 0.9 | 0.5 | 1 | fraction (0-1) |
+| `null_fraction` | Null fraction | 90 | 50 | 100 | % |
 
 **Outputs**
 
@@ -2084,7 +2078,7 @@ Own zone setpoint is present while zone temperature is null for at least 90% of 
 
 ### FCU-VALVE-PASS-CLG {#fcu-valve-pass-clg}
 
-**FCU cooling valve passing** · `zone_other`, `general`, `ahu` · [`fcu_valve_pass_clg`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1610) · [SQL](sql-cookbook.html#fcu-valve-pass-clg)
+**FCU cooling valve passing** · `zone_other`, `general`, `ahu` · [`fcu_valve_pass_clg`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1625) · [SQL](sql-cookbook.html#fcu-valve-pass-clg)
 
 Fan on and both valves shut, but zone temperature exceeds discharge air by more than 3 Δ°C.
 
@@ -2092,12 +2086,12 @@ Fan on and both valves shut, but zone temperature exceeds discharge air by more 
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2120,7 +2114,7 @@ Fan on and both valves shut, but zone temperature exceeds discharge air by more 
 
 ### FCU-VALVE-PASS-HTG {#fcu-valve-pass-htg}
 
-**FCU heating valve passing** · `zone_other`, `general`, `ahu` · [`fcu_valve_pass_htg`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1598) · [SQL](sql-cookbook.html#fcu-valve-pass-htg)
+**FCU heating valve passing** · `zone_other`, `general`, `ahu` · [`fcu_valve_pass_htg`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1613) · [SQL](sql-cookbook.html#fcu-valve-pass-htg)
 
 Fan on and both valves shut, but discharge air exceeds zone temperature by more than 3 Δ°C.
 
@@ -2128,12 +2122,12 @@ Fan on and both valves shut, but discharge air exceeds zone temperature by more 
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `heating_valve_position_command` | `htg_valve_pct` | `heating-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `cooling_valve_position_command` | `clg_valve_pct` | `cooling-valve` | `PERCENT` | Command or position | 0-1 | %, ratio | 0 to 1 | required |
-| `supply_fan_operating_status` | `fan_status` | `fan-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `heating_valve_position_command` | `heating_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `cooling_valve_position_command` | `cooling_valve_position_command` | — | Command or position | % | % | 0 to 100 | required |
+| — | `supply_fan_operating_status` | `supply_fan_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2159,7 +2153,7 @@ Fan on and both valves shut, but discharge air exceeds zone temperature by more 
 
 ### CHW-1 {#chw-1}
 
-**Low chilled-water ΔT** · `chiller` · [`chw1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1666) · [SQL](sql-cookbook.html#chw-1)
+**Low chilled-water ΔT** · `chiller` · [`chw1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1681) · [SQL](sql-cookbook.html#chw-1)
 
 Pump on AND (CHWR − CHWS) &lt; 2.2 Δ°C.
 
@@ -2167,8 +2161,8 @@ Pump on AND (CHWR − CHWS) &lt; 2.2 Δ°C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_chilled_water_temperature` | `chw_supply_t` | `chilled-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
-| `return_chilled_water_temperature` | `chw_return_t` | `chilled-water-return-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 32.22 | required |
+| — | `supply_chilled_water_temperature` | `supply_chilled_water_temperature` | — | Temperature | °C | °F, K | -1.11 to 26.67 | required |
+| — | `return_chilled_water_temperature` | `return_chilled_water_temperature` | — | Temperature | °C | °F, K | -1.11 to 32.22 | required |
 
 **Parameters**
 
@@ -2192,7 +2186,7 @@ Pump on AND (CHWR − CHWS) &lt; 2.2 Δ°C.
 
 ### CHW-2 {#chw-2}
 
-**DP below SP at max pump speed** · `chiller` · [`chw2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1676) · [SQL](sql-cookbook.html#chw-2)
+**DP below SP at max pump speed** · `chiller` · [`chw2`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1691) · [SQL](sql-cookbook.html#chw-2)
 
 Pump ≥ 87% AND CHW DP &lt; DP SP − 2.2.
 
@@ -2200,9 +2194,9 @@ Pump ≥ 87% AND CHW DP &lt; DP SP − 2.2.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `chilled_water_pressure_delta` | `chw_dp` | `chw-diff-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | required |
-| `chilled_water_pressure_delta_setpoint` | `chw_dp_sp` | `chw-diff-pressure-sp` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
-| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `chilled_water_pressure_delta` | `chilled_water_pressure_delta` | — | Pressure | Pa | kPa, inH2O, psi, bar | -6894.76 to 689476 | required |
+| — | `chilled_water_pressure_delta_setpoint` | `chilled_water_pressure_delta_setpoint` | — | Pressure | Pa | kPa, inH2O, psi, bar | - | required |
+| — | `chilled_water_pump_command` | `chilled_water_pump_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -2210,7 +2204,7 @@ Pump ≥ 87% AND CHW DP &lt; DP SP − 2.2.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `dp_margin` | DP margin | 15168.5 | 3447.38 | 41368.5 | Pa |
-| `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
+| `pump_hi` | Pump high-speed threshold | 87 | 50 | 100 | % |
 
 **Outputs**
 
@@ -2227,7 +2221,7 @@ Pump ≥ 87% AND CHW DP &lt; DP SP − 2.2.
 
 ### CHW-3 {#chw-3}
 
-**Plant supply temp outside deadband** · `chiller` · [`chw3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1686) · [SQL](sql-cookbook.html#chw-3)
+**Plant supply temp outside deadband** · `chiller` · [`chw3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1701) · [SQL](sql-cookbook.html#chw-3)
 
 Pump on AND \|CHWS − CHWS SP\| &gt; 1.2 Δ°C.
 
@@ -2235,9 +2229,9 @@ Pump on AND \|CHWS − CHWS SP\| &gt; 1.2 Δ°C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_chilled_water_temperature` | `chw_supply_t` | `chilled-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
-| `supply_chilled_water_temperature_setpoint` | `chw_supply_sp` | `chilled-water-supply-temp-sp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `supply_chilled_water_temperature` | `supply_chilled_water_temperature` | — | Temperature | °C | °F, K | -1.11 to 26.67 | required |
+| — | `supply_chilled_water_temperature_setpoint` | `supply_chilled_water_temperature_setpoint` | — | Temperature | °C | °F, K | - | required |
+| — | `chilled_water_pump_command` | `chilled_water_pump_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -2261,7 +2255,7 @@ Pump on AND \|CHWS − CHWS SP\| &gt; 1.2 Δ°C.
 
 ### CHW-4 {#chw-4}
 
-**Flow high at max pump** · `chiller` · [`chw4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1695) · [SQL](sql-cookbook.html#chw-4)
+**Flow high at max pump** · `chiller` · [`chw4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1710) · [SQL](sql-cookbook.html#chw-4)
 
 Pump ≥ 87% AND CHW flow &gt; 69.4 L/s.
 
@@ -2269,8 +2263,8 @@ Pump ≥ 87% AND CHW flow &gt; 69.4 L/s.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `chilled_water_volume_flow_rate` | `chw_flow` | `chw-flow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | required |
-| `chilled_water_pump_command` | `chw_pump_cmd` | `chw-pump-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `chilled_water_volume_flow_rate` | `chilled_water_volume_flow_rate` | — | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 1500 | required |
+| — | `chilled_water_pump_command` | `chilled_water_pump_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -2278,7 +2272,7 @@ Pump ≥ 87% AND CHW flow &gt; 69.4 L/s.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `flow_hi` | Flow high | 69.3992 | 12.618 | 189.271 | L/s |
-| `pump_hi` | Pump high-speed threshold | 0.87 | 0.5 | 1 | fraction (0-1) |
+| `pump_hi` | Pump high-speed threshold | 87 | 50 | 100 | % |
 
 **Outputs**
 
@@ -2303,11 +2297,11 @@ Chiller/plant proven running while building load is satisfied: all mapped zones 
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `chilled_water_pump_operating_status` | `chw_pump_status` | `chw-pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `zone_load_satisfied_status` | `building_zone_load_satisfied` | `building-zone-load-satisfied` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `air_handling_unit_load_satisfied_status` | `building_ahu_load_satisfied` | `building-ahu-load-satisfied` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chiller_operating_status` | `chiller_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chilled_water_pump_operating_status` | `chilled_water_pump_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `compressor_operating_status` | `compressor_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `zone_load_satisfied_status` | `zone_load_satisfied_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `air_handling_unit_load_satisfied_status` | `air_handling_unit_load_satisfied_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2333,7 +2327,7 @@ Chiller/plant proven running while building load is satisfied: all mapped zones 
 
 ### CW-APR-1 {#cw-apr-1}
 
-**High CW approach at full tower fan** · `chiller`, `cooling_tower` · [`cw_apr`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1771) · [SQL](sql-cookbook.html#cw-apr-1)
+**High CW approach at full tower fan** · `chiller`, `cooling_tower` · [`cw_apr`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1785) · [SQL](sql-cookbook.html#cw-apr-1)
 
 At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (default 4.44°C, typically 2.8–5.6°C). Suspect OA→wet-bulb / CW sensor mismatch or cooling-tower performance degradation.
 
@@ -2341,11 +2335,10 @@ At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (defau
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_condenser_water_temperature` | `cw_supply_t` | `condenser-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 0 to 50 | required |
-| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `weather_service_air_wet_bulb_temperature` | `web_wb_t` | `web-outside-air-wetbulb` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| — | `supply_condenser_water_temperature` | `supply_condenser_water_temperature` | — | Temperature | °C | °F, K | 0 to 50 | required |
+| — | `cooling_tower_fan_command` | `cooling_tower_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `weather_service_air_wet_bulb_temperature` | `weather_service_air_wet_bulb_temperature` | — | Temperature | °C | °F, K | - | optional |
 
 **Parameters**
 
@@ -2353,7 +2346,7 @@ At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (defau
 |---|---|---:|---:|---:|---|
 | `approach_max` | Max approach at full fan | 4.44444 | 2.77778 | 8.33333 | °C |
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
-| `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
+| `tower_fan_hi` | Tower fan full-speed threshold | 95 | 80 | 100 | % |
 
 **Outputs**
 
@@ -2365,12 +2358,12 @@ At full tower fan speed, leaving CW − web wet-bulb exceeds approach_max (defau
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#cw-apr-1)
+**Parity** [known divergence](parity.html#cw-apr-1)
 
 
 ### CW-FAN-1 {#cw-fan-1}
 
-**Excess tower fan energy vs wet-bulb limit** · `chiller`, `cooling_tower` · [`cw_fan_excess`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1789) · [SQL](sql-cookbook.html#cw-fan-1)
+**Excess tower fan energy vs wet-bulb limit** · `chiller`, `cooling_tower` · [`cw_fan_excess`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1803) · [SQL](sql-cookbook.html#cw-fan-1)
 
 Tower fans at full speed while leaving CW is well above web wet-bulb + design approach (approach + excess_beyond). Fans are chasing a CW temp that is theoretically hard/impossible — excess fan energy.
 
@@ -2378,11 +2371,10 @@ Tower fans at full speed while leaving CW is well above web wet-bulb + design ap
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_condenser_water_temperature` | `cw_supply_t` | `condenser-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 0 to 50 | required |
-| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `cooling_tower_fan_command` | `tower_fan_cmd` | `tower-fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | optional |
-| `weather_service_air_wet_bulb_temperature` | `web_wb_t` | `web-outside-air-wetbulb` | `DEG_C` | Temperature | °C | °F, K | - | optional |
+| — | `supply_condenser_water_temperature` | `supply_condenser_water_temperature` | — | Temperature | °C | °F, K | 0 to 50 | required |
+| — | `cooling_tower_fan_command` | `cooling_tower_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `weather_service_air_wet_bulb_temperature` | `weather_service_air_wet_bulb_temperature` | — | Temperature | °C | °F, K | - | optional |
 
 **Parameters**
 
@@ -2391,7 +2383,7 @@ Tower fans at full speed while leaving CW is well above web wet-bulb + design ap
 | `confirm_min` | Fault confirm delay | 15 | 0 | 60 | min |
 | `cw_approach` | Design approach | 3.88889 | 1.66667 | 8.33333 | °C |
 | `excess_beyond_approach` | Excess beyond approach | 2.77778 | 1.11111 | 11.1111 | °C |
-| `tower_fan_hi` | Tower fan full-speed threshold | 0.95 | 0.8 | 1 | fraction (0-1) |
+| `tower_fan_hi` | Tower fan full-speed threshold | 95 | 80 | 100 | % |
 
 **Outputs**
 
@@ -2403,12 +2395,12 @@ Tower fans at full speed while leaving CW is well above web wet-bulb + design ap
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#cw-fan-1)
+**Parity** [known divergence](parity.html#cw-fan-1)
 
 
 ### CW-OPT-1 {#cw-opt-1}
 
-**Condenser water not optimized vs wet-bulb** · `chiller`, `cooling_tower` · [`cw_opt`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1738) · [SQL](sql-cookbook.html#cw-opt-1)
+**Condenser water not optimized vs wet-bulb** · `chiller`, `cooling_tower` · [`cw_opt`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1753) · [SQL](sql-cookbook.html#cw-opt-1)
 
 CW supply significantly colder than web wet-bulb + design approach (Stull WB) — tower over-cooling / not optimized.
 
@@ -2416,7 +2408,7 @@ CW supply significantly colder than web wet-bulb + design approach (Stull WB) �
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_condenser_water_temperature` | `cw_supply_t` | `condenser-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 0 to 50 | required |
+| — | `supply_condenser_water_temperature` | `supply_condenser_water_temperature` | — | Temperature | °C | °F, K | 0 to 50 | required |
 
 **Parameters**
 
@@ -2441,7 +2433,7 @@ CW supply significantly colder than web wet-bulb + design approach (Stull WB) �
 
 ### TRIM-4 {#trim-4}
 
-**CHW plant reset advisory** · `chiller` · [`trim4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1864) · [SQL](sql-cookbook.html#trim-4)
+**CHW plant reset advisory** · `chiller` · [`trim4`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1878) · [SQL](sql-cookbook.html#trim-4)
 
 CHW supply &lt; 7.2 °C while the reset request sum is at or below request_lo.
 
@@ -2449,8 +2441,8 @@ CHW supply &lt; 7.2 °C while the reset request sum is at or below request_lo.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_chilled_water_temperature` | `chw_supply_t` | `chilled-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 26.67 | required |
-| `chilled_water_reset_request_count` | `chw_reset_request_sum` | `chilled-water-reset-request-sum` | `NUM` | Count | count | none | - | required |
+| — | `supply_chilled_water_temperature` | `supply_chilled_water_temperature` | — | Temperature | °C | °F, K | -1.11 to 26.67 | required |
+| — | `chilled_water_reset_request_count` | `chilled_water_reset_request_count` | — | Count | count | none | - | required |
 
 **Parameters**
 
@@ -2470,7 +2462,7 @@ CHW supply &lt; 7.2 °C while the reset request sum is at or below request_lo.
 | `active_hours` | h | covered time while the run proof was on (the fault_pct denominator of gated rules, #1631) |
 | `fault_pct` | % | fault_hours as a share of active_hours (proven-on time) on run-proof gated rules, else of covered_hours |
 
-**Parity** [match](parity.html#trim-4), except on stress-only data
+**Parity** [known divergence](parity.html#trim-4)
 
 
 ## Boilers {#group-boiler}
@@ -2486,9 +2478,9 @@ Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
-| `pump_operating_status` | `pump_status` | `pump-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `supply_hot_water_temperature` | `hw_supply_t` | `hot-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 104.44 | optional |
+| — | `weather_service_air_temperature` | `weather_service_air_temperature` | — | Temperature | °C | °F, K | - | required |
+| — | `pump_operating_status` | `pump_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `supply_hot_water_temperature` | `supply_hot_water_temperature` | — | Temperature | °C | °F, K | 4.44 to 104.44 | optional |
 
 **Parameters**
 
@@ -2513,7 +2505,7 @@ Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.
 
 ### SHORT-CYCLE {#short-cycle}
 
-**Short cycling** · `boiler`, `chiller`, `heatpump`, `ahu` · [`short_cycle`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1654) · [SQL](sql-cookbook.html#short-cycle)
+**Short cycling** · `boiler`, `chiller`, `heatpump`, `ahu` · [`short_cycle`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1669) · [SQL](sql-cookbook.html#short-cycle)
 
 Too many starts per hour, or short on-times.
 
@@ -2521,11 +2513,11 @@ Too many starts per hour, or short on-times.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `boiler_operating_status` | `boiler_status` | `boiler-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `compressor_operating_status` | `compressor_status` | `compressor-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `chiller_operating_status` | `chiller_status` | `chiller-status` | — | Status | 0/1 | bool | 0 or 1 | optional |
-| `chiller_electric_current` | `chiller_amps` | `chiller-amps` | `A` | Current | A | none (declare A) | - | optional |
-| `chiller_electric_power` | `chiller_power` | `chiller-power` | `KiloW` | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
+| — | `boiler_operating_status` | `boiler_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `compressor_operating_status` | `compressor_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chiller_operating_status` | `chiller_operating_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `chiller_electric_current` | `chiller_electric_current` | — | Current | A | none (declare A) | - | optional |
+| — | `chiller_electric_power` | `chiller_electric_power` | — | Power | kW | W, MW, Btu/h, ton, hp | -1 to 10000 | optional |
 
 **Parameters**
 
@@ -2551,7 +2543,7 @@ Too many starts per hour, or short on-times.
 
 ### TRIM-3 {#trim-3}
 
-**HWST trim advisory** · `boiler` · [`trim3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1855) · [SQL](sql-cookbook.html#trim-3)
+**HWST trim advisory** · `boiler` · [`trim3`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1869) · [SQL](sql-cookbook.html#trim-3)
 
 HW supply &gt; 71.1 °C while the reset request sum is at or below request_lo.
 
@@ -2559,8 +2551,8 @@ HW supply &gt; 71.1 °C while the reset request sum is at or below request_lo.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `supply_hot_water_temperature` | `hw_supply_t` | `hot-water-supply-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 104.44 | required |
-| `hot_water_reset_request_count` | `hw_reset_request_sum` | `hot-water-reset-request-sum` | `NUM` | Count | count | none | - | required |
+| — | `supply_hot_water_temperature` | `supply_hot_water_temperature` | — | Temperature | °C | °F, K | 4.44 to 104.44 | required |
+| — | `hot_water_reset_request_count` | `hot_water_reset_request_count` | — | Count | count | none | - | required |
 
 **Parameters**
 
@@ -2588,7 +2580,7 @@ HW supply &gt; 71.1 °C while the reset request sum is at or below request_lo.
 
 ### HP-1 {#hp-1}
 
-**Discharge cold when heating** · `heatpump` · [`hp1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1707) · [SQL](sql-cookbook.html#hp-1)
+**Discharge cold when heating** · `heatpump` · [`hp1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1722) · [SQL](sql-cookbook.html#hp-1)
 
 Fan on, zone &lt; 20.6 °C, discharge SAT &lt; 29.4 °C.
 
@@ -2596,9 +2588,9 @@ Fan on, zone &lt; 20.6 °C, discharge SAT &lt; 29.4 °C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `discharge_air_temperature` | `sat` | `discharge-air-temp` | `DEG_C` | Temperature | °C | °F, K | -1.11 to 65.56 | required |
-| `zone_air_temperature` | `zone_t` | `zone-air-temp` | `DEG_C` | Temperature | °C | °F, K | 4.44 to 37.78 | required |
-| `supply_fan_command` | `fan_cmd` | `fan-cmd` | — | Command or position | 0-1 | %, ratio | 0 to 1 | required |
+| — | `discharge_air_temperature` | `discharge_air_temperature` | — | Temperature | °C | °F, K | -1.11 to 65.56 | required |
+| — | `zone_air_temperature` | `zone_air_temperature` | — | Temperature | °C | °F, K | 4.44 to 37.78 | required |
+| — | `supply_fan_command` | `supply_fan_command` | — | Status | 0/1 | bool | 0 or 1 | required |
 
 **Parameters**
 
@@ -2639,7 +2631,7 @@ Fan on, zone &lt; 20.6 °C, discharge SAT &lt; 29.4 °C.
 
 ### PID-HUNT-1 {#pid-hunt-1}
 
-**Suspected control-output hunting** · `ahu`, `vav`, `chiller`, `boiler`, `heatpump` · [`_pid_hunt_1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L903) · [SQL](sql-cookbook.html#pid-hunt-1)
+**Suspected control-output hunting** · `ahu`, `vav`, `chiller`, `boiler`, `heatpump` · [`_pid_hunt_1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L913) · [SQL](sql-cookbook.html#pid-hunt-1)
 
 Rolling 1h total variation of any 0–100% control output (dampers, valves, fan speeds, heat/cool cmds) with span ≥20%, TV ≥500 %·pts, ≥2.5 equivalent cycles, ≥4 reversals — suspected loop hunting (not proof of bad PID alone).
 
@@ -2647,7 +2639,7 @@ Rolling 1h total variation of any 0–100% control output (dampers, valves, fan 
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `operating_mode_status` | `loop_enabled` | `loop-enabled` | — | Status | 0/1 | bool | 0 or 1 | optional |
+| — | `operating_mode_status` | `operating_mode_status` | — | Status | 0/1 | bool | 0 or 1 | optional |
 
 **Parameters**
 
@@ -2655,7 +2647,7 @@ Rolling 1h total variation of any 0–100% control output (dampers, valves, fan 
 |---|---|---:|---:|---:|---|
 | `change_deadband_pct` | Ignore changes below | 1 | 0 | 10 | % out |
 | `confirm_min` | Fault confirm delay | 0 | 0 | 60 | min |
-| `minimum_coverage_pct` | Minimum data coverage | 80 | 25 | 100 | % |
+| `minimum_coverage_pct` | Minimum data coverage | 8000 | 2500 | 10000 | % |
 | `minimum_equivalent_cycles` | Min equivalent cycles | 2.5 | 0.5 | 20 | cyc/h |
 | `minimum_reversals` | Min direction reversals | 4 | 1 | 40 | count |
 | `minimum_span_pct` | Minimum observed span | 20 | 5 | 100 | % out |
@@ -2676,7 +2668,7 @@ Rolling 1h total variation of any 0–100% control output (dampers, valves, fan 
 
 ### SV-FLATLINE {#sv-flatline}
 
-**Sensor flatline (stuck)** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_flatline`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L786) · [SQL](sql-cookbook.html#sv-flatline)
+**Sensor flatline (stuck)** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_flatline`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L796) · [SQL](sql-cookbook.html#sv-flatline)
 
 Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck / frozen sensor.
 
@@ -2710,7 +2702,7 @@ Sensor value unchanged (Δ ≤ tolerance) across the flatline window — stuck /
 
 ### SV-RANGE {#sv-range}
 
-**Sensor out of hard range** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_range`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L756) · [SQL](sql-cookbook.html#sv-range)
+**Sensor out of hard range** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_range`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L766) · [SQL](sql-cookbook.html#sv-range)
 
 Any modeled sensor reads outside its physical hard range (e.g. OAT −51–54 °C, SAT −1–66 °C, CHWS −1–27 °C).
 
@@ -2744,7 +2736,7 @@ Any modeled sensor reads outside its physical hard range (e.g. OAT −51–54 °
 
 ### SV-RATE {#sv-rate}
 
-**Context-aware sensor rate of change** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sv_rate_compute`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L72) · [SQL](sql-cookbook.html#sv-rate)
+**Context-aware sensor rate of change** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sv_rate_compute`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L71) · [SQL](sql-cookbook.html#sv-rate)
 
 Implausible sustained rate-of-change for mapped sensors. Thresholds depend on quantity, location, and operating state (steady vs startup/shutdown transient). Engineering screening defaults — tune per site. Alias: SV-SLEW. Distinct from SV-SPIKE (one-sample jump), SV-RANGE, SV-FLATLINE, and PID-HUNT-1.
 
@@ -2779,7 +2771,7 @@ Implausible sustained rate-of-change for mapped sensors. Thresholds depend on qu
 
 ### SV-SPIKE {#sv-spike}
 
-**Sensor rate-of-change spike** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_spike`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L823) · [SQL](sql-cookbook.html#sv-spike)
+**Sensor rate-of-change spike** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_spike`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L833) · [SQL](sql-cookbook.html#sv-spike)
 
 Sample-to-sample jump exceeds the physical spike limit for the sensor type.
 
@@ -2794,7 +2786,7 @@ Sample-to-sample jump exceeds the physical spike limit for the sensor type.
 |---|---|---:|---:|---:|---|
 | `confirm_min` | Fault confirm delay | 5 | 0 | 60 | min |
 | `max_silence_hours` | Max sensor silence | 0.5 | 0.25 | 12 | h |
-| `minimum_active_coverage_pct` | Minimum active coverage | 5 | 0 | 100 | % |
+| `minimum_active_coverage_pct` | Minimum active coverage | 500 | 0 | 10000 | % |
 | `require_operational_gate` | Require operational gate | 1 | 0 | 1 | 0/1 |
 | `spike_scale` | Spike limit scale (global) | 1 | 0.25 | 3 | × (scale) |
 | `spike_scale_humidity` | Humidity spike scale | 1 | 0.25 | 3 | × (scale) |
@@ -2816,7 +2808,7 @@ Sample-to-sample jump exceeds the physical spike limit for the sensor type.
 
 ### SV-STALE {#sv-stale}
 
-**Stale data (no fresh samples for longer than the stale threshold)** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_stale`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L865) · [SQL](sql-cookbook.html#sv-stale)
+**Stale data (no fresh samples for longer than the stale threshold)** · `ahu`, `vav`, `chiller`, `boiler`, `weather`, `zone_other`, `heatpump` · [`_sweep_stale`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L875) · [SQL](sql-cookbook.html#sv-stale)
 
 A sensor sent no valid sample for longer than the stale threshold (gap or missing series); not gated by run proof.
 
@@ -2850,7 +2842,7 @@ A sensor sent no valid sample for longer than the stale threshold (gap or missin
 
 ### OAT-METEO {#oat-meteo}
 
-**BAS outdoor-air sensor vs Open-Meteo** · `ahu` · [`oat_vs_meteo`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1808) · [SQL](sql-cookbook.html#oat-meteo)
+**BAS outdoor-air sensor vs Open-Meteo** · `ahu` · [`oat_vs_meteo`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1822) · [SQL](sql-cookbook.html#oat-meteo)
 
 BAS OAT sensor differs from Open-Meteo dry bulb by more than 2.8 Δ°C.
 
@@ -2858,8 +2850,8 @@ BAS OAT sensor differs from Open-Meteo dry bulb by more than 2.8 Δ°C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
-| `weather_service_air_temperature` | `web_oa_t` | `web-outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | - | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `weather_service_air_temperature` | `weather_service_air_temperature` | — | Temperature | °C | °F, K | - | required |
 
 **Parameters**
 
@@ -2884,7 +2876,7 @@ BAS OAT sensor differs from Open-Meteo dry bulb by more than 2.8 Δ°C.
 
 ### WX-1 {#wx-1}
 
-**OA temperature spike** · `weather` · [`wx1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1722) · [SQL](sql-cookbook.html#wx-1)
+**OA temperature spike** · `weather` · [`wx1`](https://github.com/bbartling/open-fdd/blob/master/open_fdd/rules/cookbook_catalog.py#L1737) · [SQL](sql-cookbook.html#wx-1)
 
 OAT sample-to-sample jump &gt; 8.9 Δ°C.
 
@@ -2892,7 +2884,7 @@ OAT sample-to-sample jump &gt; 8.9 Δ°C.
 
 | Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |
 |---|---|---|---|---|---|---|---:|---|
-| `outdoor_air_intake_temperature` | `oa_t` | `outside-air-temp` | `DEG_C` | Temperature | °C | °F, K | -51.11 to 54.44 | required |
+| — | `outdoor_air_intake_temperature` | `outdoor_air_intake_temperature` | — | Temperature | °C | °F, K | -51.11 to 54.44 | required |
 
 **Parameters**
 

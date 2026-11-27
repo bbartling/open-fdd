@@ -15,7 +15,7 @@ from open_fdd.parity.pandas_ref import pandas_rule_result
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads((ROOT / "tests/fixtures/hw_oat1_cases.json").read_text(encoding="utf-8"))
 CASES = FIXTURE["cases"]
-ROLE_MAP = {**json.loads((ROOT / "sql/fdd/role_map.json").read_text(encoding="utf-8")), "web_oa_t": "web-outside-air-temp"}
+ROLE_MAP = json.loads((ROOT / "sql/fdd/role_map.json").read_text(encoding="utf-8"))
 PACK = json.loads((ROOT / "nf-app/rules/pack-postgres.json").read_text(encoding="utf-8"))
 START = int(datetime(2026, 7, 1, tzinfo=timezone.utc).timestamp())
 STEP, N = 300, 49
@@ -63,7 +63,7 @@ def _insert(con, rows, param):
         con.execute(f"INSERT INTO history ({', '.join(names)}) VALUES ({', '.join([param] * len(names))})",
                     [eid, ts, *[None if v is None else float(v) for v in vals.values()]])
     for ts, v in rows.get("weather", []):
-        con.execute(f"INSERT INTO weather (timestamp_utc, web_oa_t) VALUES ({param}, {param})", [ts, float(v)])
+        con.execute(f"INSERT INTO weather (timestamp_utc, weather_service_air_temperature) VALUES ({param}, {param})", [ts, float(v)])
 
 
 def _query(con, rule):
@@ -127,7 +127,7 @@ def _pandas(case):
                       index=idx)
     df.attrs.update({"equipment_id": case["id"], "site_id": "s"})
     wx = _weather(case)
-    weather = (pd.DataFrame({"web-outside-air-temp": [float(v) for _, v in wx]}, index=pd.DatetimeIndex([_utc(t) for t, _ in wx]))
+    weather = (pd.DataFrame({"weather_service_air_temperature": [float(v) for _, v in wx]}, index=pd.DatetimeIndex([_utc(t) for t, _ in wx]))
                if wx else None)
     return pandas_rule_result(RULE, df, weather, float(STEP))
 
@@ -170,12 +170,12 @@ def test_pandas_proof_nulled_by_quality_is_skipped_not_pass():
     from open_fdd.rules import run_rule
 
     idx = pd.date_range("2026-07-01", periods=N, freq="5min", tz="UTC")
-    df = pd.DataFrame({"web-outside-air-temp": [25.0] * N, "hot-water-supply-temp": [-999.0] * N}, index=idx)
+    df = pd.DataFrame({"weather_service_air_temperature": [25.0] * N, "supply_hot_water_temperature": [-999.0] * N}, index=idx)
     df.attrs.update({"equipment_id": "blr-1", "equipment_type": "boiler"})
     res = run_rule(RULE, df)
     assert res.status == "SKIPPED_MISSING_ROLES", (res.status, res.notes)
     assert res.fault_hours is None
     # a real pump-off 0 is still valid proof: assessed, no fault
-    ok = pd.DataFrame({"web-outside-air-temp": [25.0] * N, "pump-status": [0.0] * N}, index=idx)
+    ok = pd.DataFrame({"weather_service_air_temperature": [25.0] * N, "pump_operating_status": [0.0] * N}, index=idx)
     ok.attrs.update({"equipment_id": "blr-1", "equipment_type": "boiler"})
     assert run_rule(RULE, ok).status == "PASS"

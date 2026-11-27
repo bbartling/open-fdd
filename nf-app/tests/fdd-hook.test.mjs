@@ -400,7 +400,7 @@ test("the FDD hook writes stable per-sensor results, timelines identity attrs, a
   const createEngine = async ({ kind }) => ({
     kind,
     async load(input) {
-      if (input.sensorSeries.length === 1 && input.sensorSeries[0].role === "zone_flow") return;
+      if (input.sensorSeries.length === 1 && input.sensorSeries[0].role === "discharge_air_volume_flow_rate") return;
       assert.ok(input.sensorSeries.length >= 5);
       assert.ok(input.sensorHistory.length > 0);
       missingSeries = input.sensorSeries[0].uuid;

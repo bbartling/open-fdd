@@ -20,8 +20,7 @@
     "chilled_water_pressure_delta",
     "supply_condenser_water_temperature",
     "return_condenser_water_temperature",
-    "chiller_electric_power",
-    "discharge_air_volume_flow_rate"
+    "chiller_electric_power"
   ],
   "SV-FLATLINE": [
     "outdoor_air_intake_temperature",
