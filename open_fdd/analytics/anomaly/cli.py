@@ -95,7 +95,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--engine",
         choices=("pandas", "sql"),
         default="pandas",
-        help="Where the z-score runs: pandas (default) or sql (portable SQL on in-process SQLite)",
+        help="Where the z-score runs: pandas (default) or sql (sql/analytics/anomaly_zscore.sql)",
+    )
+    screen.add_argument(
+        "--sql-engine",
+        choices=("sqlite", "duckdb"),
+        default="sqlite",
+        help=(
+            "With --engine sql, the in-process database (default sqlite). duckdb needs the duckdb extra "
+            "(duckdb>=2.0.1). PostgreSQL and Timescale use "
+            "open_fdd.analytics.sql_anomaly.run_zscore_sql(conn, engine='postgres'|'timescale') on a connection "
+            "that already has fdd.point and fdd.input_sample"
+        ),
     )
     screen.add_argument(
         "--activity",
@@ -214,6 +225,7 @@ def main(argv: list[str] | None = None) -> int:
                 methods=methods,
                 command=command,
                 engine=str(args.engine),
+                sql_engine=str(args.sql_engine),
                 activity_policy=str(args.activity),
                 iforest_contamination=float(args.iforest_contamination),
                 plots=not bool(args.no_plots),

@@ -1,0 +1,5140 @@
+{
+ "$schema": "./openfdd-roles.schema.json",
+ "vocabulary": "openfdd-roles",
+ "version": "1.1.0-draft.1",
+ "openfdd_release": "5.0.22",
+ "status": "draft",
+ "description": "Canonical point-role vocabulary shared by Open-FDD, open-hvac-edge and nf-hvac-functional-test. Every role is an ASHRAE 223P property pattern with a QUDT unit and one Haystack 4 binding. See README.md.",
+ "sources": [
+  {
+   "name": "s223",
+   "vocabulary": "ASHRAE 223P",
+   "version": "git:master@6fdc11c 2026-10-06",
+   "url": "https://raw.githubusercontent.com/open223/models.open223.info/3a47c5eb980eb6d87728eb10cefb38ad6bc83f13/ontologies/223p.ttl",
+   "sha256": "08f80bd6e15052f28cdfd354bdf46ff96e5e1afdba36a4dbed5186fc1ea51c41",
+   "file": "223p-6fdc11c.ttl"
+  },
+  {
+   "name": "haystack",
+   "vocabulary": "Project Haystack defs",
+   "version": "4.0.0",
+   "url": "https://www.project-haystack.org/download/defs.ttl",
+   "sha256": "d1d634e9d9d5191f30b9e4a92cc8a555801242665d6b8f79a29ce0bccfb18678",
+   "file": "haystack-defs-4.0.0.ttl"
+  },
+  {
+   "name": "haystack-units",
+   "vocabulary": "Project Haystack units",
+   "version": "4.0.0",
+   "url": "https://project-haystack.org/download/units.txt",
+   "sha256": "2207877845d42fb67263f09b06bb7a403fc7540cdcba3d3593b9bbe79ee35424",
+   "file": "haystack-units-4.0.0.txt"
+  },
+  {
+   "name": "qudt-units",
+   "vocabulary": "QUDT units",
+   "version": "3.4.0 (imported by the 223P snapshot)",
+   "url": "https://github.com/qudt/qudt-public-repo/releases/download/v3.4.0/qudt-public-repo-3.4.0.zip",
+   "archive_path": "vocab/unit/VOCAB_QUDT-UNITS-ALL.ttl",
+   "sha256": "ad9b76adb7e1b106f7a74c699ebeea17c2479c20fc67f6de9363bb2538134ba8",
+   "file": "qudt-units.ttl"
+  },
+  {
+   "name": "qudt-quantitykinds",
+   "vocabulary": "QUDT quantity kinds",
+   "version": "3.4.0 (imported by the 223P snapshot)",
+   "url": "https://github.com/qudt/qudt-public-repo/releases/download/v3.4.0/qudt-public-repo-3.4.0.zip",
+   "archive_path": "vocab/quantitykinds/VOCAB_QUDT-QUANTITY-KINDS-ALL.ttl",
+   "sha256": "b50cdec5596f04dc3ac3ff7cc62f9961869084b4046c7c1ea0a4bfeb3fc6e403",
+   "file": "qudt-quantitykinds.ttl"
+  }
+ ],
+ "derivation": {
+  "rule": "role = '_'.join(tokens), where tokens are the lexicon tokens of the s223 basis fields in slot order, then the suffix; empty tokens are dropped, and a token is dropped when all of its words already occur in the token kept just before it.",
+  "slots": [
+   "scope",
+   "equipment_role",
+   "equipment_medium",
+   "equipment",
+   "roles",
+   "connection_point",
+   "medium",
+   "constituent",
+   "qualifier",
+   "quantity_kind",
+   "enumeration_kind",
+   "aspects"
+  ],
+  "slot_notes": {
+   "scope": "Containing equipment, space or external source the pattern is pinned to (s223:contains / s223:hasProperty on a Zone). Omitted when the pattern applies to the equipment the consumer is assessing.",
+   "equipment_role": "s223:hasRole on the equipment that has the property.",
+   "equipment_medium": "s223:hasMedium of that equipment's connection points, when the pattern constrains it.",
+   "equipment": "The s223 equipment class that has the property (s223:hasProperty), for equipment properties such as status, command and position.",
+   "roles": "s223:Role-* of the connection point where the property is observed, or set on the property with s223:hasAspect; flow roles first, then function roles.",
+   "connection_point": "Used only when roles is empty: the s223 connection point class.",
+   "medium": "s223:ofMedium.",
+   "constituent": "s223:ofConstituent or s223:ofSubstance.",
+   "qualifier": "Extension terms only (ext:*). Empty for pure 223P roles.",
+   "quantity_kind": "qudt:hasQuantityKind. For an enumerated alarm status, the quantity kind of the quantifiable property it is linked to with s223:hasAlarmStatus.",
+   "enumeration_kind": "s223:hasEnumerationKind.",
+   "aspects": "s223:hasAspect values other than roles, in aspect_order."
+  },
+  "aspect_order": [
+   "s223:Binary-Position",
+   "ext:Speed",
+   "s223:Aspect-Delta",
+   "s223:Aspect-Maximum",
+   "s223:Aspect-Minimum",
+   "s223:Aspect-LowLimit",
+   "s223:Aspect-OperatingMode",
+   "s223:Aspect-OperatingStatus",
+   "s223:Aspect-Alarm",
+   "s223:Aspect-Setpoint"
+  ],
+  "suffix": {
+   "s223:QuantifiableObservableProperty": "",
+   "s223:QuantifiableActuatableProperty": "command",
+   "s223:EnumeratedObservableProperty": "status",
+   "s223:EnumeratedActuatableProperty": "command"
+  },
+  "suffix_exception": "A QuantifiableActuatableProperty with s223:Aspect-Setpoint, s223:Aspect-Maximum or s223:Aspect-Minimum takes no suffix: the aspect already says it is a configured value."
+ },
+ "lexicon": {
+  "s223:AirHandlingUnit": {
+   "token": "air_handling_unit"
+  },
+  "s223:TerminalUnit": {
+   "token": "terminal_unit"
+  },
+  "s223:Zone": {
+   "token": "zone"
+  },
+  "s223:CoolingTower": {
+   "token": "cooling_tower"
+  },
+  "s223:Fan": {
+   "token": "fan"
+  },
+  "s223:Boiler": {
+   "token": "boiler"
+  },
+  "s223:Filter": {
+   "token": "filter"
+  },
+  "s223:Pump": {
+   "token": "pump"
+  },
+  "s223:Damper": {
+   "token": "damper"
+  },
+  "s223:Valve": {
+   "token": "valve"
+  },
+  "s223:Chiller": {
+   "token": "chiller"
+  },
+  "s223:Compressor": {
+   "token": "compressor"
+  },
+  "s223:CoolingCoil": {
+   "token": "cooling_coil"
+  },
+  "s223:HeatingCoil": {
+   "token": "heating_coil"
+  },
+  "s223:Role-Discharge": {
+   "token": "discharge"
+  },
+  "s223:Role-Supply": {
+   "token": "supply"
+  },
+  "s223:Role-Return": {
+   "token": "return"
+  },
+  "s223:Role-OutdoorAirIntake": {
+   "token": "outdoor_air_intake"
+  },
+  "s223:Role-Cooling": {
+   "token": "cooling"
+  },
+  "s223:Role-Heating": {
+   "token": "heating"
+  },
+  "s223:Role-Condenser": {
+   "token": "condenser"
+  },
+  "s223:InletConnectionPoint": {
+   "token": "inlet"
+  },
+  "s223:OutletConnectionPoint": {
+   "token": "outlet"
+  },
+  "s223:Fluid-Air": {
+   "token": "air"
+  },
+  "s223:Fluid-Water": {
+   "token": "water"
+  },
+  "s223:Water-ChilledWater": {
+   "token": "chilled_water"
+  },
+  "s223:Water-HotWater": {
+   "token": "hot_water"
+  },
+  "s223:Electricity-AC": {
+   "token": "",
+   "why": "The QUDT quantity kinds ElectricCurrent, ElectricPower and ElectricEnergy already name the medium."
+  },
+  "s223:Constituent-CO2": {
+   "token": "co2"
+  },
+  "s223:Particulate-Smoke": {
+   "token": "smoke"
+  },
+  "quantitykind:Temperature": {
+   "token": "temperature"
+  },
+  "quantitykind:DewPointTemperature": {
+   "token": "dew_point_temperature"
+  },
+  "quantitykind:WetBulbTemperature": {
+   "token": "wet_bulb_temperature"
+  },
+  "quantitykind:Pressure": {
+   "token": "pressure"
+  },
+  "quantitykind:StaticPressure": {
+   "token": "static_pressure"
+  },
+  "quantitykind:VolumeFlowRate": {
+   "token": "volume_flow_rate"
+  },
+  "quantitykind:RelativeHumidity": {
+   "token": "relative_humidity"
+  },
+  "quantitykind:ElectricCurrent": {
+   "token": "electric_current"
+  },
+  "quantitykind:ElectricPower": {
+   "token": "electric_power"
+  },
+  "quantitykind:ElectricEnergy": {
+   "token": "electric_energy"
+  },
+  "quantitykind:Count": {
+   "token": "count"
+  },
+  "quantitykind:DimensionlessRatio": {
+   "token": "",
+   "why": "A dimensionless ratio names no physical quantity; the aspect (Binary-Position) or constituent (CO2) names it."
+  },
+  "s223:Binary-OnOff": {
+   "token": "",
+   "why": "Binary kinds give the value shape (On/Off, Open/Closed, True/False), not the subject."
+  },
+  "s223:Binary-Logical": {
+   "token": "",
+   "why": "Binary kinds give the value shape (On/Off, Open/Closed, True/False), not the subject."
+  },
+  "s223:EnumerationKind-Occupancy": {
+   "token": "occupancy"
+  },
+  "s223:Binary-Position": {
+   "token": "position"
+  },
+  "s223:Aspect-Delta": {
+   "token": "delta"
+  },
+  "s223:Aspect-Maximum": {
+   "token": "maximum"
+  },
+  "s223:Aspect-Minimum": {
+   "token": "minimum"
+  },
+  "s223:Aspect-LowLimit": {
+   "token": "low_limit"
+  },
+  "s223:Aspect-OperatingMode": {
+   "token": "operating_mode"
+  },
+  "s223:Aspect-OperatingStatus": {
+   "token": "operating_status"
+  },
+  "s223:Aspect-Alarm": {
+   "token": "alarm"
+  },
+  "s223:Aspect-Setpoint": {
+   "token": "setpoint"
+  },
+  "ext:Mixed": {
+   "token": "mixed",
+   "extension": true,
+   "closest": "s223:OutletConnectionPoint of the s223:Junction where outdoor-air-intake and return air streams merge",
+   "why": "223P has no role for the mixed-air plenum; Haystack 4 uses the duct section marker mixed."
+  },
+  "ext:Preheat": {
+   "token": "preheat",
+   "extension": true,
+   "closest": "s223:HeatingCoil (first coil in the air stream) with s223:Role-Heating",
+   "why": "223P has no role that orders coils in the air stream; preheat separates the first heating coil from the main one."
+  },
+  "ext:WeatherService": {
+   "token": "weather_service",
+   "extension": true,
+   "closest": "s223:hasExternalReference on a property of s223:Fluid-Air outside the building",
+   "why": "A weather-service value is not a site sensor; 223P has no class for an external weather source."
+  },
+  "ext:Speed": {
+   "token": "speed",
+   "extension": true,
+   "closest": "g36:FanWithVFD speed command (s223:QuantifiableActuatableProperty, quantitykind:DimensionlessRatio)",
+   "why": "The g36 shape defines the speed command without a distinguishing term; the open223 example models use a draft EnumerationKind-Speed aspect that is not in the published ontology."
+  },
+  "ext:ResetRequest": {
+   "token": "reset_request",
+   "extension": true,
+   "closest": "s223:Function hasOutput (quantitykind:Count)",
+   "why": "Guideline 36 reset requests are a control-sequence count; 223P has no term for them."
+  },
+  "ext:StaticPressureResetRequest": {
+   "token": "static_pressure_reset_request",
+   "extension": true,
+   "closest": "s223:Function hasOutput (quantitykind:Count)",
+   "why": "Guideline 36 static-pressure reset requests from terminal units; 223P has no term for them."
+  },
+  "ext:LoadSatisfied": {
+   "token": "load_satisfied",
+   "extension": true,
+   "closest": "s223:Function hasOutput (s223:Binary-Logical)",
+   "why": "A building-level aggregate computed by the rules; 223P has no term for it."
+  },
+  "ext:Total": {
+   "token": "total",
+   "extension": true,
+   "closest": "s223:Function hasOutput summing terminal-unit s223:QuantifiableObservableProperty values",
+   "why": "An aggregate across terminal units; 223P has no aggregation term."
+  },
+  "ext:Mode-Test": {
+   "token": "test",
+   "extension": true,
+   "closest": "s223:Aspect-OperatingMode",
+   "why": "223P has no HVAC operating-mode value set; the functional-test mode values are site-defined."
+  },
+  "ext:Mode-MaximumCooling": {
+   "token": "maximum_cooling",
+   "extension": true,
+   "closest": "s223:Aspect-OperatingMode",
+   "why": "223P has no HVAC operating-mode value set; drives served terminal units to their cooling maximum airflow."
+  },
+  "ext:Mode-Purge": {
+   "token": "purge",
+   "extension": true,
+   "closest": "s223:Aspect-OperatingMode",
+   "why": "223P has no HVAC operating-mode value set; purge (flush) opens terminal units to flush the space. Haystack 4 defines the marker purge."
+  }
+ },
+ "ratio_unit": "unit:PERCENT",
+ "units": {
+  "unit:DEG_C": {
+   "wire": "DEG_C",
+   "haystack": "°C",
+   "quantity_kinds": [
+    "Temperature"
+   ],
+   "range": null
+  },
+  "unit:PA": {
+   "wire": "PA",
+   "haystack": "Pa",
+   "quantity_kinds": [
+    "ForcePerArea",
+    "ModulusOfElasticity"
+   ],
+   "range": null
+  },
+  "unit:L-PER-SEC": {
+   "wire": "L-PER-SEC",
+   "haystack": "L/s",
+   "quantity_kinds": [
+    "VolumeFlowRate",
+    "VolumePerTime"
+   ],
+   "range": [
+    0,
+    null
+   ]
+  },
+  "unit:PERCENT": {
+   "wire": "PERCENT",
+   "haystack": "%",
+   "quantity_kinds": [
+    "DimensionlessRatio",
+    "OpeningRatio",
+    "SpeedRatio"
+   ],
+   "range": [
+    0,
+    100
+   ]
+  },
+  "unit:PERCENT_RH": {
+   "wire": "PERCENT_RH",
+   "haystack": "%RH",
+   "quantity_kinds": [
+    "RelativeHumidity"
+   ],
+   "range": [
+    0,
+    100
+   ]
+  },
+  "unit:PPM": {
+   "wire": "PPM",
+   "haystack": "ppm",
+   "quantity_kinds": [
+    "DimensionlessRatio",
+    "MoleFraction"
+   ],
+   "range": [
+    0,
+    null
+   ]
+  },
+  "unit:KiloW": {
+   "wire": "KiloW",
+   "haystack": "kW",
+   "quantity_kinds": [
+    "ElectricPower",
+    "Power"
+   ],
+   "range": null
+  },
+  "unit:KiloW-HR": {
+   "wire": "KiloW-HR",
+   "haystack": "kWh",
+   "quantity_kinds": [
+    "ElectricEnergy",
+    "Energy"
+   ],
+   "range": [
+    0,
+    null
+   ]
+  },
+  "unit:A": {
+   "wire": "A",
+   "haystack": "A",
+   "quantity_kinds": [
+    "ElectricCurrent"
+   ],
+   "range": [
+    0,
+    null
+   ]
+  },
+  "unit:NUM": {
+   "wire": "NUM",
+   "haystack": null,
+   "quantity_kinds": [
+    "Count"
+   ],
+   "range": [
+    0,
+    null
+   ]
+  }
+ },
+ "quantity_kind_broader": {
+  "Temperature": [],
+  "DewPointTemperature": [
+   "Temperature"
+  ],
+  "WetBulbTemperature": [
+   "Temperature"
+  ],
+  "Pressure": [
+   "ForcePerArea"
+  ],
+  "StaticPressure": [
+   "Pressure",
+   "ForcePerArea"
+  ],
+  "VolumeFlowRate": [
+   "VolumePerTime"
+  ],
+  "RelativeHumidity": [
+   "RelativePartialPressure",
+   "PressureRatio",
+   "DimensionlessRatio",
+   "Dimensionless"
+  ],
+  "DimensionlessRatio": [
+   "Dimensionless"
+  ],
+  "ElectricCurrent": [],
+  "ElectricPower": [
+   "Power"
+  ],
+  "ElectricEnergy": [
+   "Energy"
+  ],
+  "Count": []
+ },
+ "ingest_conversions": [
+  {
+   "from": "°F",
+   "to": "unit:DEG_C",
+   "multiplier": 0.5555555555555556,
+   "offset": -17.77777777777778
+  },
+  {
+   "from": "K",
+   "to": "unit:DEG_C",
+   "multiplier": 1.0,
+   "offset": -273.15
+  },
+  {
+   "from": "inH₂O",
+   "to": "unit:PA",
+   "multiplier": 249.0889,
+   "offset": 0
+  },
+  {
+   "from": "psi",
+   "to": "unit:PA",
+   "multiplier": 6894.757293168,
+   "offset": 0
+  },
+  {
+   "from": "kPa",
+   "to": "unit:PA",
+   "multiplier": 1000.0,
+   "offset": 0
+  },
+  {
+   "from": "cfm",
+   "to": "unit:L-PER-SEC",
+   "multiplier": 0.4719474432,
+   "offset": 0
+  },
+  {
+   "from": "m³/s",
+   "to": "unit:L-PER-SEC",
+   "multiplier": 1000.0,
+   "offset": 0
+  },
+  {
+   "from": "L/min",
+   "to": "unit:L-PER-SEC",
+   "multiplier": 0.016666666666666666,
+   "offset": 0
+  },
+  {
+   "from": "gal/min",
+   "to": "unit:L-PER-SEC",
+   "multiplier": 0.0630901964,
+   "offset": 0
+  },
+  {
+   "from": "W",
+   "to": "unit:KiloW",
+   "multiplier": 0.001,
+   "offset": 0
+  },
+  {
+   "from": "J",
+   "to": "unit:KiloW-HR",
+   "multiplier": 2.7777777777777776e-07,
+   "offset": 0
+  },
+  {
+   "from": "Wh",
+   "to": "unit:KiloW-HR",
+   "multiplier": 0.001,
+   "offset": 0
+  },
+  {
+   "from": "fraction",
+   "to": "unit:PERCENT",
+   "multiplier": 100.0,
+   "offset": 0,
+   "note": "A source that reports a ratio as 0-1 (unit:FRACTION or unit:UNITLESS) is scaled to percent at ingest."
+  }
+ ],
+ "haystack": {
+  "version": "4.0.0",
+  "function_markers": [
+   "sensor",
+   "sp",
+   "cmd"
+  ],
+  "markers": [
+   "ahu",
+   "air",
+   "airTerminalUnit",
+   "alarm",
+   "boiler",
+   "bypass",
+   "chilled",
+   "chiller",
+   "cmd",
+   "co2",
+   "compressor",
+   "concentration",
+   "condenser",
+   "cool",
+   "cooling",
+   "coolingTower",
+   "current",
+   "damper",
+   "delta",
+   "dewPoint",
+   "discharge",
+   "economizer",
+   "effective",
+   "elec",
+   "enable",
+   "energy",
+   "entering",
+   "exhaust",
+   "fan",
+   "filter",
+   "flow",
+   "freezeStat",
+   "heat",
+   "heating",
+   "hot",
+   "humidity",
+   "inlet",
+   "leaving",
+   "load",
+   "max",
+   "min",
+   "mixed",
+   "occ",
+   "occupied",
+   "outside",
+   "power",
+   "pressure",
+   "pump",
+   "purge",
+   "reheat",
+   "return",
+   "run",
+   "sensor",
+   "sp",
+   "speed",
+   "standby",
+   "temp",
+   "total",
+   "unocc",
+   "valve",
+   "vfd",
+   "water",
+   "weather",
+   "wetBulb",
+   "zone"
+  ],
+  "custom_markers": {
+   "smoke": "Haystack 4 has no smoke marker. Required with alarm and sensor on a duct smoke detector point.",
+   "test": "Haystack 4 has no test marker. Marks the operating-mode command that puts an air handler in functional-test mode.",
+   "mode": "Haystack 4 has no generic mode marker (hvacMode is the current HVAC mode, not a command). Marks site mode commands.",
+   "request": "Haystack 4 has no request marker. Marks Guideline 36 reset-request counts.",
+   "satisfied": "Haystack 4 has no satisfied marker. Marks the derived load-satisfied flags.",
+   "preheat": "Haystack 4 has no preheat marker. Marks points of the first heating coil in the air stream."
+  },
+  "binding_rules": [
+   "Read NF's class attr and its markers attr (one comma-separated string); split markers on commas and trim. Also accept a tags array and marker-valued attrs.",
+   "A point carries exactly one function marker: sensor, sp or cmd. A role whose markers include one of them never binds a point that carries another; a role whose markers include none forbids the two it does not accept.",
+   "A point binds a role when its NF class is in haystack.classes, or when it carries every marker in haystack.markers (or every marker of one haystack.alt_markers set) and custom_markers; in both cases it must carry none of haystack.forbid.",
+   "binding_scope says which point is meant: own = a point of the equipment being assessed; fed_by_air_handling_unit = a point of the air handler named by the equipment's airRef; aggregate = a point of the equipment that sums its terminal units; weather = a point of the site weather equipment; derived = computed by the consumer, never bound from tags.",
+   "haystack.equip_markers, when present, must be carried by the parent equipment (equipRef). haystack.equip_forbid, when present, must be absent from that parent. Equipment markers never flow down to points. A shared NF class is a binding collision when those parent constraints can both hold.",
+   "haystack.optional never decides whether a point binds. When several points of one equipment bind the same role, the point carrying the most optional markers wins; a remaining tie leaves the role unbound and reported.",
+   "If a point still matches several roles, the role whose markers are a strict superset wins; any remaining tie leaves the point unbound and reported. List order never decides.",
+   "An unknown label never becomes a role. An unbound required input makes the consumer's rule or step not applicable."
+  ]
+ },
+ "writable_policy": "writable is a ceiling, never a grant. A consumer may write a point only when the role says model, the site model marks the point writable, and the consumer's own runtime confirmation passes. never means no consumer writes it to a field point. Open-FDD writes only its own result points and the weather_service_* points it creates.",
+ "ambiguous_legacy_names": {
+  "outside_air_damper_position": "Older vocabularies used this for the command (rules bundle, UI contract, edge) and for the feedback (functional test). Resolve by the point's function marker: cmd -> outdoor_air_intake_damper_position_command, sensor -> outdoor_air_intake_damper_position.",
+  "cooling_valve_position": "Canonical feedback role. The unreleased rules bundle used it for the command; values stored under it from a cmd point belong to cooling_valve_position_command.",
+  "heating_valve_position": "Canonical feedback role. The unreleased rules bundle used it for the command; values stored under it from a cmd point belong to heating_valve_position_command."
+ },
+ "roles": [
+  {
+   "role": "air_handling_unit_discharge_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "s223:AirHandlingUnit",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "discharge-air-temp-sensor"
+    ],
+    "markers": [
+     "discharge",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "equip_markers": [
+     "ahu"
+    ],
+    "binding_scope": "fed_by_air_handling_unit",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "ahu_sat"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "air_handling_unit_load_satisfied_status",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "scope": "s223:AirHandlingUnit",
+    "qualifier": "ext:LoadSatisfied",
+    "enumeration_kind": "s223:Binary-Logical",
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": true,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "ahu",
+     "load",
+     "sensor"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "satisfied"
+    ],
+    "binding_scope": "derived",
+    "conformance": "custom"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "building_ahu_load_satisfied"
+   ],
+   "aliases": [
+    "building_air_handling_unit_load_satisfied"
+   ]
+  },
+  {
+   "role": "air_smoke_alarm_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "medium": "s223:Fluid-Air",
+    "constituent": "s223:Particulate-Smoke",
+    "enumeration_kind": "s223:Binary-Logical",
+    "aspects": [
+     "s223:Aspect-Alarm"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "alarm",
+     "sensor"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "smoke"
+    ],
+    "binding_scope": "own",
+    "conformance": "custom",
+    "note": "NF class alarm-sensor is generic, so this role binds on markers only."
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "smoke_alarm_status"
+   ]
+  },
+  {
+   "role": "air_temperature_low_limit_alarm_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "enumeration_kind": "s223:Binary-Logical",
+    "aspects": [
+     "s223:Aspect-LowLimit",
+     "s223:Aspect-Alarm"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [
+     "freezeStat-sensor"
+    ],
+    "markers": [
+     "freezeStat",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "freeze_protection_status"
+   ],
+   "note": "Freeze stat: an air-temperature low-limit alarm, linked to the air temperature with s223:hasAlarmStatus."
+  },
+  {
+   "role": "boiler_operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "equipment": "s223:Boiler",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:Boiler"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "boiler",
+     "run",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "boiler_status"
+   ],
+   "aliases": [
+    "boiler_run_status"
+   ]
+  },
+  {
+   "role": "chilled_water_pressure_delta",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "medium": "s223:Water-ChilledWater",
+    "quantity_kind": "quantitykind:Pressure",
+    "aspects": [
+     "s223:Aspect-Delta"
+    ],
+    "applies_to": [
+     "s223:Pump",
+     "s223:Chiller"
+    ]
+   },
+   "unit": "unit:PA",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "Pa",
+    "classes": [
+     "chilled-water-delta-pressure"
+    ],
+    "markers": [
+     "chilled",
+     "water",
+     "delta",
+     "pressure",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_dp"
+   ],
+   "aliases": [
+    "chilled_water_differential_pressure"
+   ]
+  },
+  {
+   "role": "chilled_water_pressure_delta_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "medium": "s223:Water-ChilledWater",
+    "quantity_kind": "quantitykind:Pressure",
+    "aspects": [
+     "s223:Aspect-Delta",
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:Pump"
+    ]
+   },
+   "unit": "unit:PA",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "Pa",
+    "classes": [],
+    "markers": [
+     "chilled",
+     "water",
+     "delta",
+     "pressure",
+     "sp"
+    ],
+    "forbid": [
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_dp_sp"
+   ],
+   "aliases": [
+    "chilled_water_differential_pressure_setpoint"
+   ]
+  },
+  {
+   "role": "chilled_water_pump_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "equipment_medium": "s223:Water-ChilledWater",
+    "equipment": "s223:Pump",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "applies_to": [
+     "s223:Pump"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "chilled",
+     "water",
+     "pump",
+     "run",
+     "cmd"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_pump_cmd"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "chilled_water_pump_operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "equipment_medium": "s223:Water-ChilledWater",
+    "equipment": "s223:Pump",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:Pump"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "chilled",
+     "water",
+     "pump",
+     "run",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_pump_status"
+   ],
+   "aliases": [
+    "chilled_water_pump_run_status"
+   ]
+  },
+  {
+   "role": "chilled_water_reset_request_count",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "medium": "s223:Water-ChilledWater",
+    "qualifier": "ext:ResetRequest",
+    "quantity_kind": "quantitykind:Count",
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": "unit:NUM",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": true,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "chilled",
+     "water",
+     "sensor"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "request"
+    ],
+    "binding_scope": "derived",
+    "conformance": "custom"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_reset_request_sum"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "chilled_water_volume_flow_rate",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "medium": "s223:Water-ChilledWater",
+    "quantity_kind": "quantitykind:VolumeFlowRate",
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": "unit:L-PER-SEC",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "L/s",
+    "classes": [
+     "chilled-water-delta-flow-sensor"
+    ],
+    "markers": [
+     "chilled",
+     "water",
+     "flow",
+     "sensor"
+    ],
+    "forbid": [
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_flow"
+   ],
+   "aliases": [
+    "chilled_water_flow"
+   ]
+  },
+  {
+   "role": "chiller_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "equipment": "s223:Chiller",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "chiller",
+     "run",
+     "cmd"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chiller_cmd"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "chiller_electric_current",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:Chiller",
+    "medium": "s223:Electricity-AC",
+    "quantity_kind": "quantitykind:ElectricCurrent",
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": "unit:A",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "A",
+    "classes": [
+     "avg-ac-elec-current-magnitude-sensor"
+    ],
+    "markers": [
+     "elec",
+     "current",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chiller_amps",
+    "chiller_current"
+   ],
+   "aliases": [
+    "chiller_electric_current_magnitude"
+   ]
+  },
+  {
+   "role": "chiller_electric_power",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:Chiller",
+    "medium": "s223:Electricity-AC",
+    "quantity_kind": "quantitykind:ElectricPower",
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": "unit:KiloW",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "kW",
+    "classes": [
+     "total-active-ac-elec-power-sensor"
+    ],
+    "markers": [
+     "elec",
+     "power",
+     "sensor"
+    ],
+    "forbid": [],
+    "equip_markers": [
+     "chiller"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chiller_power"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "chiller_operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "equipment": "s223:Chiller",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "chiller",
+     "run",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chiller_status"
+   ],
+   "aliases": [
+    "chiller_run_status"
+   ]
+  },
+  {
+   "role": "compressor_operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "equipment": "s223:Compressor",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:Compressor"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "compressor",
+     "run",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "compressor_status"
+   ],
+   "aliases": [
+    "compressor_run_status"
+   ]
+  },
+  {
+   "role": "condenser_water_pump_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "equipment_role": "s223:Role-Condenser",
+    "equipment_medium": "s223:Fluid-Water",
+    "equipment": "s223:Pump",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "applies_to": [
+     "s223:Pump"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "condenser",
+     "water",
+     "pump",
+     "run",
+     "cmd"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "cw_pump_cmd"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "cooling_coil_inlet_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:CoolingCoil",
+    "connection_point": "s223:InletConnectionPoint",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "cool",
+     "entering",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [
+     "preheat",
+     "water"
+    ],
+    "binding_scope": "own",
+    "conformance": "nonstandard",
+    "note": "Haystack 4 defines entering and leaving as pipe sections and has no coil-level air temperature proto; NF sites tag coil air temperatures this way."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "cooling_coil_entering_temp"
+   ],
+   "aliases": [
+    "cooling_coil_entering_temperature"
+   ]
+  },
+  {
+   "role": "cooling_coil_outlet_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:CoolingCoil",
+    "connection_point": "s223:OutletConnectionPoint",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "cool",
+     "leaving",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [
+     "preheat",
+     "water"
+    ],
+    "binding_scope": "own",
+    "conformance": "nonstandard",
+    "note": "Haystack 4 defines entering and leaving as pipe sections and has no coil-level air temperature proto; NF sites tag coil air temperatures this way."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "cooling_coil_leaving_temp"
+   ],
+   "aliases": [
+    "cooling_coil_leaving_temperature"
+   ]
+  },
+  {
+   "role": "cooling_operating_mode_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "roles": [
+     "s223:Role-Cooling"
+    ],
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingMode"
+    ],
+    "applies_to": [
+     "s223:TerminalUnit",
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "cool",
+     "enable",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "clg_available"
+   ],
+   "aliases": [
+    "cooling_available"
+   ]
+  },
+  {
+   "role": "cooling_tower_fan_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "scope": "s223:CoolingTower",
+    "equipment": "s223:Fan",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "applies_to": [
+     "s223:CoolingTower"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "fan",
+     "run",
+     "cmd"
+    ],
+    "forbid": [],
+    "equip_markers": [
+     "coolingTower"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "coolingTower is an equipment marker; it is matched on the parent equipment, not on the point."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "tower_fan_cmd"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "cooling_valve_position",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment_role": "s223:Role-Cooling",
+    "equipment": "s223:Valve",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit",
+     "g36:ChilledWaterValve"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [],
+    "markers": [
+     "cool",
+     "valve",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "NF class valve-sensor carries no cool/heat, so this role binds on markers only."
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [],
+   "aliases": []
+  },
+  {
+   "role": "cooling_valve_position_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "equipment_role": "s223:Role-Cooling",
+    "equipment": "s223:Valve",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit",
+     "g36:ChilledWaterValve"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "chilled-water-cool-valve-cmd",
+     "discharge-chilled-water-cool-valve-cmd"
+    ],
+    "markers": [
+     "cool",
+     "valve",
+     "cmd"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "accepts_fallback": [
+    "cooling_valve_position"
+   ],
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "write"
+   },
+   "legacy_keys": [
+    "clg_valve_pct"
+   ],
+   "aliases": [
+    "cooling_valve_command"
+   ]
+  },
+  {
+   "role": "damper_position",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:Damper",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "damper-sensor",
+     "discharge-damper-sensor"
+    ],
+    "markers": [
+     "damper",
+     "sensor"
+    ],
+    "forbid": [
+     "outside",
+     "return",
+     "exhaust",
+     "economizer",
+     "bypass"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "accepts_fallback": [
+    "damper_position_command"
+   ],
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "damper_pct"
+   ],
+   "aliases": [
+    "discharge_air_damper_position"
+   ]
+  },
+  {
+   "role": "damper_position_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "equipment": "s223:Damper",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "damper-cmd",
+     "discharge-damper-cmd"
+    ],
+    "markers": [
+     "damper",
+     "cmd"
+    ],
+    "forbid": [
+     "outside",
+     "return",
+     "exhaust",
+     "economizer",
+     "bypass"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "damper_cmd"
+   ],
+   "aliases": [
+    "damper_command"
+   ]
+  },
+  {
+   "role": "discharge_air_relative_humidity",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:RelativeHumidity",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT_RH",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%RH",
+    "classes": [
+     "discharge-air-humidity-sensor"
+    ],
+    "markers": [
+     "discharge",
+     "air",
+     "humidity",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "sa_h"
+   ],
+   "aliases": [
+    "supply_air_relative_humidity"
+   ]
+  },
+  {
+   "role": "discharge_air_static_pressure",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:StaticPressure",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PA",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "Pa",
+    "classes": [
+     "discharge-air-pressure-sensor"
+    ],
+    "markers": [
+     "discharge",
+     "air",
+     "pressure",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "Haystack 4 duct static pressure is discharge air pressure; duct, static and ductStatic are not Haystack 4 markers."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "duct_static"
+   ],
+   "aliases": [
+    "duct_static_pressure"
+   ]
+  },
+  {
+   "role": "discharge_air_static_pressure_reset_request_count",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "qualifier": "ext:StaticPressureResetRequest",
+    "quantity_kind": "quantitykind:Count",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:NUM",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": true,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "pressure",
+     "sensor"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "request"
+    ],
+    "binding_scope": "derived",
+    "conformance": "custom"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "static_reset_request"
+   ],
+   "aliases": [
+    "duct_static_pressure_reset_request_count"
+   ]
+  },
+  {
+   "role": "discharge_air_static_pressure_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:StaticPressure",
+    "aspects": [
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PA",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "Pa",
+    "classes": [
+     "discharge-air-pressure-sp"
+    ],
+    "markers": [
+     "discharge",
+     "air",
+     "pressure",
+     "sp"
+    ],
+    "forbid": [
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "duct_static_sp"
+   ],
+   "aliases": [
+    "duct_static_pressure_setpoint"
+   ]
+  },
+  {
+   "role": "discharge_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "discharge-air-temp-sensor"
+    ],
+    "markers": [
+     "discharge",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "equip_forbid": [
+     "airTerminalUnit"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "Terminal-unit discharge air temperature is terminal_unit_discharge_air_temperature. This role binds an air handler or fan coil whose parent is not an air terminal."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "sat"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "discharge_air_temperature_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "aspects": [
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "discharge-air-temp-sp"
+    ],
+    "markers": [
+     "discharge",
+     "air",
+     "temp",
+     "sp"
+    ],
+    "forbid": [
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "sat_sp"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "discharge_air_volume_flow_rate",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:VolumeFlowRate",
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:L-PER-SEC",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "L/s",
+    "classes": [
+     "discharge-air-flow-sensor",
+     "air-flow-sensor"
+    ],
+    "markers": [
+     "air",
+     "flow",
+     "sensor"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "max",
+     "min",
+     "total"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "zone_flow"
+   ],
+   "aliases": [
+    "zone_airflow",
+    "discharge_air_flow",
+    "discharge_air_volumetric_flow",
+    "zone_air_volumetric_flow"
+   ]
+  },
+  {
+   "role": "discharge_air_volume_flow_rate_maximum",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:VolumeFlowRate",
+    "aspects": [
+     "s223:Aspect-Maximum"
+    ],
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:L-PER-SEC",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "L/s",
+    "classes": [],
+    "markers": [
+     "max",
+     "air",
+     "flow",
+     "sp"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "cooling_air_flow_maximum"
+   ],
+   "note": "Read as a limit that caps any airflow write; never written."
+  },
+  {
+   "role": "discharge_air_volume_flow_rate_minimum",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:VolumeFlowRate",
+    "aspects": [
+     "s223:Aspect-Minimum"
+    ],
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:L-PER-SEC",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "L/s",
+    "classes": [],
+    "markers": [
+     "min",
+     "air",
+     "flow",
+     "sp"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "max"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "min_flow_sp"
+   ],
+   "aliases": [
+    "minimum_airflow_setpoint"
+   ]
+  },
+  {
+   "role": "discharge_air_volume_flow_rate_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:VolumeFlowRate",
+    "aspects": [
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:L-PER-SEC",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Number",
+    "unit": "L/s",
+    "classes": [
+     "discharge-air-flow-sp",
+     "air-flow-sp"
+    ],
+    "markers": [
+     "air",
+     "flow",
+     "sp"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "max",
+     "min",
+     "total"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "readwrite"
+   },
+   "legacy_keys": [
+    "zone_airflow_sp"
+   ],
+   "aliases": [
+    "zone_airflow_setpoint",
+    "cooling_air_flow_setpoint"
+   ]
+  },
+  {
+   "role": "electric_energy",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "medium": "s223:Electricity-AC",
+    "quantity_kind": "quantitykind:ElectricEnergy",
+    "applies_to": [
+     "s223:ElectricityMeter"
+    ]
+   },
+   "unit": "unit:KiloW-HR",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "kWh",
+    "classes": [
+     "total-net-ac-elec-active-energy-sensor"
+    ],
+    "markers": [
+     "elec",
+     "energy",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "electric_kwh",
+    "kwh"
+   ],
+   "aliases": [
+    "utility_electric_energy"
+   ]
+  },
+  {
+   "role": "electric_power",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "medium": "s223:Electricity-AC",
+    "quantity_kind": "quantitykind:ElectricPower",
+    "applies_to": [
+     "s223:ElectricityMeter"
+    ]
+   },
+   "unit": "unit:KiloW",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "kW",
+    "classes": [
+     "total-active-ac-elec-power-sensor"
+    ],
+    "markers": [
+     "elec",
+     "power",
+     "sensor"
+    ],
+    "forbid": [
+     "chiller",
+     "fan"
+    ],
+    "equip_forbid": [
+     "chiller"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "electric_kw"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "filter_air_pressure_delta",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:Filter",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Pressure",
+    "aspects": [
+     "s223:Aspect-Delta"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit"
+    ]
+   },
+   "unit": "unit:PA",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "Pa",
+    "classes": [],
+    "markers": [
+     "filter",
+     "air",
+     "delta",
+     "pressure",
+     "sensor"
+    ],
+    "forbid": [
+     "water"
+    ],
+    "binding_scope": "own",
+    "conformance": "nonstandard",
+    "note": "Haystack 4 has the filter, air, delta and pressure markers and no filter differential-pressure point prototype."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "filter_dp"
+   ],
+   "aliases": [
+    "filter_differential_pressure",
+    "filter_diff_pressure"
+   ]
+  },
+  {
+   "role": "heating_coil_inlet_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:HeatingCoil",
+    "connection_point": "s223:InletConnectionPoint",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "heat",
+     "entering",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [
+     "preheat",
+     "water"
+    ],
+    "binding_scope": "own",
+    "conformance": "nonstandard",
+    "note": "Haystack 4 defines entering and leaving as pipe sections and has no coil-level air temperature proto; NF sites tag coil air temperatures this way."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "heating_coil_entering_temp"
+   ],
+   "aliases": [
+    "heating_coil_entering_temperature"
+   ]
+  },
+  {
+   "role": "heating_coil_outlet_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment": "s223:HeatingCoil",
+    "connection_point": "s223:OutletConnectionPoint",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "heat",
+     "leaving",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [
+     "preheat",
+     "water"
+    ],
+    "binding_scope": "own",
+    "conformance": "nonstandard",
+    "note": "Haystack 4 defines entering and leaving as pipe sections and has no coil-level air temperature proto; NF sites tag coil air temperatures this way."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "heating_coil_leaving_temp"
+   ],
+   "aliases": [
+    "heating_coil_leaving_temperature"
+   ]
+  },
+  {
+   "role": "heating_valve_position",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment_role": "s223:Role-Heating",
+    "equipment": "s223:Valve",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit",
+     "g36:HotWaterValve"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [],
+    "markers": [
+     "heat",
+     "valve",
+     "sensor"
+    ],
+    "forbid": [
+     "reheat"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "NF class valve-sensor carries no cool/heat, so this role binds on markers only."
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [],
+   "aliases": []
+  },
+  {
+   "role": "heating_valve_position_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "equipment_role": "s223:Role-Heating",
+    "equipment": "s223:Valve",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit",
+     "g36:HotWaterValve"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "hot-water-heat-valve-cmd",
+     "discharge-hot-water-heat-valve-cmd",
+     "discharge-steam-heat-valve-cmd"
+    ],
+    "markers": [
+     "heat",
+     "valve",
+     "cmd"
+    ],
+    "forbid": [
+     "reheat"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "accepts_fallback": [
+    "heating_valve_position"
+   ],
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "write"
+   },
+   "legacy_keys": [
+    "htg_valve_pct"
+   ],
+   "aliases": [
+    "heating_valve_command"
+   ]
+  },
+  {
+   "role": "hot_water_reset_request_count",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "medium": "s223:Water-HotWater",
+    "qualifier": "ext:ResetRequest",
+    "quantity_kind": "quantitykind:Count",
+    "applies_to": [
+     "s223:Boiler"
+    ]
+   },
+   "unit": "unit:NUM",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": true,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "hot",
+     "water",
+     "sensor"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "request"
+    ],
+    "binding_scope": "derived",
+    "conformance": "custom"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "hw_reset_request_sum"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "maximum_cooling_operating_mode_command",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "enumeration_kind": "ext:Mode-MaximumCooling",
+    "aspects": [
+     "s223:Aspect-OperatingMode"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:TerminalUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "max",
+     "cool",
+     "cmd"
+    ],
+    "forbid": [
+     "sp",
+     "air",
+     "flow"
+    ],
+    "custom_markers": [
+     "mode"
+    ],
+    "binding_scope": "own",
+    "conformance": "custom"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "write"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "vav_max_cooling_mode_command"
+   ],
+   "note": "One controller point that drives every served terminal unit to its cooling maximum airflow. Canonical value is boolean: true enters the mode and false leaves it."
+  },
+  {
+   "role": "mixed_air_relative_humidity",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "ext:Mixed"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:RelativeHumidity",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT_RH",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%RH",
+    "classes": [
+     "mixed-air-humidity-sensor"
+    ],
+    "markers": [
+     "mixed",
+     "air",
+     "humidity",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "ma_h"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "mixed_air_temperature",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "ext:Mixed"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "mixed-air-temp-sensor"
+    ],
+    "markers": [
+     "mixed",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "mat"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "occupancy_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "enumeration_kind": "s223:EnumerationKind-Occupancy",
+    "applies_to": [
+     "s223:Zone",
+     "s223:AirHandlingUnit",
+     "s223:TerminalUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [
+     "occupied-sensor"
+    ],
+    "markers": [
+     "occupied"
+    ],
+    "optional": [
+     "sensor"
+    ],
+    "forbid": [
+     "sp",
+     "cmd"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "occ_mode"
+   ],
+   "aliases": [
+    "occupancy_mode"
+   ],
+   "note": "Canonical value is boolean. A Haystack occupied sensor is true when the zone is occupied and false when it is unoccupied."
+  },
+  {
+   "role": "operating_mode_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingMode"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:TerminalUnit",
+     "s223:Chiller"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [
+     "enable-cmd"
+    ],
+    "markers": [
+     "enable",
+     "cmd"
+    ],
+    "forbid": [
+     "cool",
+     "heat"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {},
+   "legacy_keys": [],
+   "aliases": [],
+   "note": "Fallback for operating_mode_status. Open-FDD binds enable-cmd to the status role today."
+  },
+  {
+   "role": "operating_mode_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingMode"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:TerminalUnit",
+     "s223:Chiller"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [
+     "enable-sensor"
+    ],
+    "markers": [
+     "enable",
+     "sensor"
+    ],
+    "forbid": [
+     "cool",
+     "heat"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "accepts_fallback": [
+    "operating_mode_command"
+   ],
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "loop_enabled"
+   ],
+   "aliases": [
+    "control_loop_enabled"
+   ]
+  },
+  {
+   "role": "operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:TerminalUnit",
+     "s223:Chiller",
+     "s223:Pump"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": true,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [],
+    "forbid": [],
+    "binding_scope": "derived",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "run_proof"
+   ],
+   "aliases": [
+    "equipment_run_proof",
+    "run_status"
+   ],
+   "note": "Run proof: derived from the equipment's own status or command, or the equipment feeding it (sql/fdd/run_proof.json)."
+  },
+  {
+   "role": "outdoor_air_intake_damper_position",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment_role": "s223:Role-OutdoorAirIntake",
+    "equipment": "s223:Damper",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "outside-damper-sensor"
+    ],
+    "markers": [
+     "outside",
+     "damper",
+     "sensor"
+    ],
+    "optional": [
+     "air"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [],
+   "aliases": []
+  },
+  {
+   "role": "outdoor_air_intake_damper_position_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "equipment_role": "s223:Role-OutdoorAirIntake",
+    "equipment": "s223:Damper",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "outside-damper-cmd"
+    ],
+    "markers": [
+     "outside",
+     "damper",
+     "cmd"
+    ],
+    "optional": [
+     "air"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "accepts_fallback": [
+    "outdoor_air_intake_damper_position"
+   ],
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "write"
+   },
+   "legacy_keys": [
+    "oa_damper_pct"
+   ],
+   "aliases": [
+    "outside_air_damper_command"
+   ]
+  },
+  {
+   "role": "outdoor_air_intake_relative_humidity",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-OutdoorAirIntake"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:RelativeHumidity",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT_RH",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%RH",
+    "classes": [
+     "outside-air-humidity-sensor"
+    ],
+    "markers": [
+     "outside",
+     "air",
+     "humidity",
+     "sensor"
+    ],
+    "forbid": [
+     "weather"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "oa_h"
+   ],
+   "aliases": [
+    "outside_air_relative_humidity",
+    "outside_air_humidity"
+   ]
+  },
+  {
+   "role": "outdoor_air_intake_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-OutdoorAirIntake"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "outside-air-temp-sensor"
+    ],
+    "markers": [
+     "outside",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [
+     "weather"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "oa_t"
+   ],
+   "aliases": [
+    "outside_air_temperature"
+   ]
+  },
+  {
+   "role": "preheat_heating_coil_outlet_air_temperature",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment_role": "ext:Preheat",
+    "equipment": "s223:HeatingCoil",
+    "connection_point": "s223:OutletConnectionPoint",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "leaving",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "preheat"
+    ],
+    "binding_scope": "own",
+    "conformance": "custom",
+    "note": "preheat is a custom marker; leaving is a Haystack 4 pipe section used here as NF sites do."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "preheat_leave_t"
+   ],
+   "aliases": [
+    "preheat_leaving_air_temperature"
+   ]
+  },
+  {
+   "role": "pump_operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "equipment": "s223:Pump",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:Pump"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "pump",
+     "run",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "pump_status"
+   ],
+   "aliases": [
+    "pump_run_status"
+   ]
+  },
+  {
+   "role": "purge_operating_mode_command",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "enumeration_kind": "ext:Mode-Purge",
+    "aspects": [
+     "s223:Aspect-OperatingMode"
+    ],
+    "applies_to": [
+     "s223:TerminalUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "purge",
+     "cmd"
+    ],
+    "forbid": [
+     "water"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "write"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "flush_mode_command"
+   ],
+   "note": "Canonical value is boolean: true enters purge and false leaves it."
+  },
+  {
+   "role": "return_air_relative_humidity",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Return"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:RelativeHumidity",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT_RH",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%RH",
+    "classes": [
+     "return-air-humidity-sensor"
+    ],
+    "markers": [
+     "return",
+     "air",
+     "humidity",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "ra_h"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "return_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Return"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "return-air-temp-sensor"
+    ],
+    "markers": [
+     "return",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "rat"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "return_chilled_water_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Return"
+    ],
+    "medium": "s223:Water-ChilledWater",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:Chiller",
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "chilled",
+     "water",
+     "entering",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_return_t"
+   ],
+   "aliases": [
+    "chilled_water_return_temperature"
+   ]
+  },
+  {
+   "role": "return_condenser_water_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Return",
+     "s223:Role-Condenser"
+    ],
+    "medium": "s223:Fluid-Water",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:Chiller",
+     "s223:CoolingTower"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "condenser",
+     "water",
+     "entering",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "cw_return_t"
+   ],
+   "aliases": [
+    "condenser_water_return_temperature"
+   ]
+  },
+  {
+   "role": "return_damper_position",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment_role": "s223:Role-Return",
+    "equipment": "s223:Damper",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "return-damper-sensor"
+    ],
+    "markers": [
+     "return",
+     "damper",
+     "sensor"
+    ],
+    "optional": [
+     "air"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "return_air_damper_position"
+   ]
+  },
+  {
+   "role": "return_damper_position_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "equipment_role": "s223:Role-Return",
+    "equipment": "s223:Damper",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "return-damper-cmd"
+    ],
+    "markers": [
+     "return",
+     "damper",
+     "cmd"
+    ],
+    "optional": [
+     "air"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "write"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "return_air_damper_command"
+   ]
+  },
+  {
+   "role": "return_fan_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "equipment_role": "s223:Role-Return",
+    "equipment": "s223:Fan",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [
+     "return-run-cmd"
+    ],
+    "markers": [
+     "return",
+     "fan",
+     "run",
+     "cmd"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "return_fan"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "return_hot_water_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Return"
+    ],
+    "medium": "s223:Water-HotWater",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:Boiler",
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "hot",
+     "water",
+     "entering",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "hw_return_t"
+   ],
+   "aliases": [
+    "hot_water_return_temperature"
+   ]
+  },
+  {
+   "role": "supply_chilled_water_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Supply"
+    ],
+    "medium": "s223:Water-ChilledWater",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:Chiller",
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "chilled",
+     "water",
+     "leaving",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_supply_t"
+   ],
+   "aliases": [
+    "chilled_water_supply_temperature"
+   ]
+  },
+  {
+   "role": "supply_chilled_water_temperature_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "roles": [
+     "s223:Role-Supply"
+    ],
+    "medium": "s223:Water-ChilledWater",
+    "quantity_kind": "quantitykind:Temperature",
+    "aspects": [
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "chilled",
+     "water",
+     "leaving",
+     "temp",
+     "sp"
+    ],
+    "forbid": [
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "chw_supply_sp"
+   ],
+   "aliases": [
+    "chilled_water_supply_temperature_setpoint"
+   ]
+  },
+  {
+   "role": "supply_condenser_water_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Supply",
+     "s223:Role-Condenser"
+    ],
+    "medium": "s223:Fluid-Water",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:Chiller",
+     "s223:CoolingTower"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "condenser",
+     "water",
+     "leaving",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "cw_supply_t"
+   ],
+   "aliases": [
+    "condenser_water_supply_temperature"
+   ]
+  },
+  {
+   "role": "supply_fan_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "equipment_role": "s223:Role-Supply",
+    "equipment": "s223:Fan",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [
+     "discharge-run-cmd",
+     "run-cmd"
+    ],
+    "markers": [
+     "fan",
+     "run",
+     "cmd"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "return",
+     "exhaust",
+     "pump"
+    ],
+    "equip_forbid": [
+     "coolingTower"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "fan_cmd"
+   ],
+   "aliases": [],
+   "note": "g36:Fan start/stop command. Speed is supply_fan_speed_command."
+  },
+  {
+   "role": "supply_fan_electric_power",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "equipment_role": "s223:Role-Supply",
+    "equipment": "s223:Fan",
+    "medium": "s223:Electricity-AC",
+    "quantity_kind": "quantitykind:ElectricPower",
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit"
+    ]
+   },
+   "unit": "unit:KiloW",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "kW",
+    "classes": [],
+    "markers": [
+     "fan",
+     "elec",
+     "power",
+     "sensor"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "return",
+     "exhaust",
+     "pump",
+     "chiller"
+    ],
+    "equip_forbid": [
+     "chiller",
+     "coolingTower"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "Haystack 4 has no supply marker; the supply fan is the fan that is not return or exhaust."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "fan_power"
+   ],
+   "aliases": [
+    "fan_elec_power",
+    "supply_fan_power"
+   ]
+  },
+  {
+   "role": "supply_fan_operating_status",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "equipment_role": "s223:Role-Supply",
+    "equipment": "s223:Fan",
+    "enumeration_kind": "s223:Binary-OnOff",
+    "aspects": [
+     "s223:Aspect-OperatingStatus"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit",
+     "s223:FanCoilUnit",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [
+     "discharge-run-sensor",
+     "run-sensor"
+    ],
+    "markers": [
+     "fan",
+     "run",
+     "sensor"
+    ],
+    "optional": [
+     "discharge"
+    ],
+    "forbid": [
+     "return",
+     "exhaust",
+     "pump"
+    ],
+    "equip_forbid": [
+     "coolingTower",
+     "boiler"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "Haystack 4 has no supply marker; the supply fan is the discharge fan. A boiler run sensor is boiler_operating_status."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "fan_status"
+   ],
+   "aliases": [
+    "supply_fan_run_status"
+   ]
+  },
+  {
+   "role": "supply_fan_speed_command",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "equipment_role": "s223:Role-Supply",
+    "equipment": "s223:Fan",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "ext:Speed"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "discharge-vfd-speed-cmd",
+     "vfd-speed-cmd"
+    ],
+    "markers": [
+     "vfd",
+     "speed",
+     "cmd"
+    ],
+    "optional": [
+     "discharge",
+     "fan"
+    ],
+    "forbid": [
+     "return",
+     "exhaust",
+     "pump"
+    ],
+    "equip_forbid": [
+     "coolingTower"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": false,
+   "consumers": {},
+   "legacy_keys": [],
+   "aliases": [],
+   "note": "g36:FanWithVFD speed command. Proposed input for rules that test fan speed (FC1 reads the start/stop command today)."
+  },
+  {
+   "role": "supply_hot_water_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "roles": [
+     "s223:Role-Supply"
+    ],
+    "medium": "s223:Water-HotWater",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:Boiler",
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "hot",
+     "water",
+     "leaving",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "hw_supply_t"
+   ],
+   "aliases": [
+    "hot_water_supply_temperature"
+   ]
+  },
+  {
+   "role": "terminal_unit_discharge_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "s223:TerminalUnit",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "discharge-air-temp-sensor"
+    ],
+    "markers": [
+     "discharge",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "equip_markers": [
+     "airTerminalUnit"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "vav_discharge_t"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "terminal_unit_discharge_air_total_volume_flow_rate",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "s223:TerminalUnit",
+    "roles": [
+     "s223:Role-Discharge"
+    ],
+    "medium": "s223:Fluid-Air",
+    "qualifier": "ext:Total",
+    "quantity_kind": "quantitykind:VolumeFlowRate",
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": "unit:L-PER-SEC",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "L/s",
+    "classes": [],
+    "markers": [
+     "total",
+     "air",
+     "flow",
+     "sensor"
+    ],
+    "forbid": [
+     "max",
+     "min"
+    ],
+    "binding_scope": "aggregate",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "vav_total_flow"
+   ],
+   "aliases": [
+    "terminal_units_total_airflow"
+   ]
+  },
+  {
+   "role": "terminal_unit_heating_valve_position_command",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "scope": "s223:TerminalUnit",
+    "equipment_role": "s223:Role-Heating",
+    "equipment": "s223:Valve",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "aspects": [
+     "s223:Binary-Position"
+    ],
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "g36:HotWaterValve"
+    ]
+   },
+   "unit": "unit:PERCENT",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%",
+    "classes": [
+     "reheat-cmd"
+    ],
+    "markers": [
+     "reheat",
+     "cmd"
+    ],
+    "forbid": [],
+    "equip_markers": [
+     "airTerminalUnit"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "reheat_valve_pct"
+   ],
+   "aliases": [
+    "reheat_valve_position",
+    "reheat_valve_command"
+   ]
+  },
+  {
+   "role": "terminal_unit_inlet_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "s223:TerminalUnit",
+    "connection_point": "s223:InletConnectionPoint",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:SingleDuctTerminal",
+     "s223:FanPoweredTerminal"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "inlet-air-temp-sensor"
+    ],
+    "markers": [
+     "inlet",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "alt_markers": [
+     [
+      "entering",
+      "air",
+      "temp",
+      "sensor"
+     ]
+    ],
+    "equip_markers": [
+     "airTerminalUnit"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard",
+    "note": "Haystack 4 names the entering duct section inlet; entering is a pipe section. The alt set keeps sites tagged the older way."
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "vav_inlet_t"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "test_operating_mode_command",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:EnumeratedActuatableProperty",
+    "enumeration_kind": "ext:Mode-Test",
+    "aspects": [
+     "s223:Aspect-OperatingMode"
+    ],
+    "applies_to": [
+     "s223:AirHandlingUnit"
+    ]
+   },
+   "unit": null,
+   "value_type": "enumeration",
+   "range": null,
+   "derived": false,
+   "writable": "model",
+   "haystack": {
+    "kind": "Str",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "cmd"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "test",
+     "mode"
+    ],
+    "binding_scope": "own",
+    "conformance": "custom"
+   },
+   "rule_input": false,
+   "consumers": {
+    "nf-hvac-functional-test": "write"
+   },
+   "legacy_keys": [],
+   "aliases": [
+    "ahu_test_mode_command"
+   ],
+   "note": "Allowed values are site-defined in the functional-test config."
+  },
+  {
+   "role": "weather_service_air_dew_point_temperature",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "ext:WeatherService",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:DewPointTemperature",
+    "applies_to": []
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "weather",
+     "outside",
+     "air",
+     "dewPoint",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "weather",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "web_oa_dp"
+   ],
+   "aliases": [
+    "weather_service_outside_air_dewpoint_temperature"
+   ]
+  },
+  {
+   "role": "weather_service_air_relative_humidity",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "ext:WeatherService",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:RelativeHumidity",
+    "applies_to": []
+   },
+   "unit": "unit:PERCENT_RH",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%RH",
+    "classes": [],
+    "markers": [
+     "weather",
+     "outside",
+     "air",
+     "humidity",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "weather",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "web_oa_h"
+   ],
+   "aliases": [
+    "weather_service_outside_air_relative_humidity"
+   ]
+  },
+  {
+   "role": "weather_service_air_temperature",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "ext:WeatherService",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": []
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "weather",
+     "outside",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "weather",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "web_oa_t"
+   ],
+   "aliases": [
+    "weather_service_outside_air_temperature"
+   ]
+  },
+  {
+   "role": "weather_service_air_wet_bulb_temperature",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "ext:WeatherService",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:WetBulbTemperature",
+    "applies_to": []
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [],
+    "markers": [
+     "weather",
+     "outside",
+     "air",
+     "wetBulb",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "weather",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "web_wb_t"
+   ],
+   "aliases": [
+    "weather_service_outside_air_wetbulb_temperature"
+   ]
+  },
+  {
+   "role": "zone_air_co2",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "s223:Zone",
+    "medium": "s223:Fluid-Air",
+    "constituent": "s223:Constituent-CO2",
+    "quantity_kind": "quantitykind:DimensionlessRatio",
+    "applies_to": [
+     "s223:Zone",
+     "g36:Zone"
+    ]
+   },
+   "unit": "unit:PPM",
+   "value_type": "number",
+   "range": [
+    0,
+    null
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "ppm",
+    "classes": [
+     "air-co2-concentration-sensor"
+    ],
+    "markers": [
+     "zone",
+     "air",
+     "co2",
+     "sensor"
+    ],
+    "optional": [
+     "concentration"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "zone_co2"
+   ],
+   "aliases": [
+    "zone_air_co2_concentration"
+   ],
+   "note": "g36:Zone CO2 shape: quantitykind:DimensionlessRatio with s223:ofConstituent s223:Constituent-CO2. Concentrations use unit:PPM."
+  },
+  {
+   "role": "zone_air_relative_humidity",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "s223:Zone",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:RelativeHumidity",
+    "applies_to": [
+     "s223:Zone"
+    ]
+   },
+   "unit": "unit:PERCENT_RH",
+   "value_type": "number",
+   "range": [
+    0,
+    100
+   ],
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "%RH",
+    "classes": [
+     "zone-air-humidity-sensor"
+    ],
+    "markers": [
+     "zone",
+     "air",
+     "humidity",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "zone_rh"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "zone_air_temperature",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableObservableProperty",
+    "scope": "s223:Zone",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "applies_to": [
+     "s223:Zone",
+     "s223:DomainSpace"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "zone-air-temp-sensor"
+    ],
+    "markers": [
+     "zone",
+     "air",
+     "temp",
+     "sensor"
+    ],
+    "forbid": [],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "zone_t"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "zone_air_temperature_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "scope": "s223:Zone",
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "aspects": [
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:Zone"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "zone-air-temp-effective-sp"
+    ],
+    "markers": [
+     "zone",
+     "air",
+     "temp",
+     "sp"
+    ],
+    "optional": [
+     "effective"
+    ],
+    "forbid": [
+     "cooling",
+     "heating",
+     "occ",
+     "unocc",
+     "standby",
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read",
+    "nf-hvac-functional-test": "read"
+   },
+   "legacy_keys": [
+    "zone_air_temp_sp"
+   ],
+   "aliases": []
+  },
+  {
+   "role": "zone_cooling_air_temperature_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "scope": "s223:Zone",
+    "roles": [
+     "s223:Role-Cooling"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "aspects": [
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:Zone"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "zone-air-temp-occ-cooling-sp"
+    ],
+    "markers": [
+     "zone",
+     "air",
+     "temp",
+     "cooling",
+     "sp"
+    ],
+    "optional": [
+     "occ"
+    ],
+    "forbid": [
+     "heating",
+     "unocc",
+     "standby",
+     "effective",
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "cooling_sp"
+   ],
+   "aliases": [
+    "cooling_temperature_setpoint"
+   ]
+  },
+  {
+   "role": "zone_heating_air_temperature_setpoint",
+   "grounding": "s223",
+   "s223": {
+    "property_class": "s223:QuantifiableActuatableProperty",
+    "scope": "s223:Zone",
+    "roles": [
+     "s223:Role-Heating"
+    ],
+    "medium": "s223:Fluid-Air",
+    "quantity_kind": "quantitykind:Temperature",
+    "aspects": [
+     "s223:Aspect-Setpoint"
+    ],
+    "applies_to": [
+     "s223:Zone"
+    ]
+   },
+   "unit": "unit:DEG_C",
+   "value_type": "number",
+   "range": null,
+   "derived": false,
+   "writable": "never",
+   "haystack": {
+    "kind": "Number",
+    "unit": "°C",
+    "classes": [
+     "zone-air-temp-occ-heating-sp"
+    ],
+    "markers": [
+     "zone",
+     "air",
+     "temp",
+     "heating",
+     "sp"
+    ],
+    "optional": [
+     "occ"
+    ],
+    "forbid": [
+     "cooling",
+     "unocc",
+     "standby",
+     "effective",
+     "max",
+     "min"
+    ],
+    "binding_scope": "own",
+    "conformance": "standard"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "heating_sp"
+   ],
+   "aliases": [
+    "heating_temperature_setpoint"
+   ]
+  },
+  {
+   "role": "zone_load_satisfied_status",
+   "grounding": "extension",
+   "s223": {
+    "property_class": "s223:EnumeratedObservableProperty",
+    "scope": "s223:Zone",
+    "qualifier": "ext:LoadSatisfied",
+    "enumeration_kind": "s223:Binary-Logical",
+    "applies_to": [
+     "s223:Chiller"
+    ]
+   },
+   "unit": null,
+   "value_type": "boolean",
+   "range": [
+    0,
+    1
+   ],
+   "derived": true,
+   "writable": "never",
+   "haystack": {
+    "kind": "Bool",
+    "unit": null,
+    "classes": [],
+    "markers": [
+     "zone",
+     "load",
+     "sensor"
+    ],
+    "forbid": [],
+    "custom_markers": [
+     "satisfied"
+    ],
+    "binding_scope": "derived",
+    "conformance": "custom"
+   },
+   "rule_input": true,
+   "consumers": {
+    "open-fdd": "read",
+    "open-hvac-edge": "read"
+   },
+   "legacy_keys": [
+    "building_zone_load_satisfied"
+   ],
+   "aliases": []
+  }
+ ]
+}

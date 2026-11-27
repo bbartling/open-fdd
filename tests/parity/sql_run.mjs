@@ -2,7 +2,7 @@
 // engines that need no server (PGlite = real Postgres, sql.js = translated SQLite) and writes everything the
 // pandas side needs to a JSON file.
 //
-//   node tests/parity/sql_run.mjs --equips 4 --days 3 --out out.json [--engines pglite,sqlite] [--rules FC1,FC2]
+//   node tests/parity/sql_run.mjs --equips 4 --days 3 --out out.json [--engines pglite,sqlite,duckdb] [--rules FC1,FC2]
 //   node tests/parity/sql_run.mjs --dataset ds.json --out out.json ...   (ds.json = open_fdd.parity Dataset.to_loader_json())
 //
 // Output: { meta, columns, history: {equip: {ts: [...], <col>: [...]}}, weather: [...], units: {role: unit},
@@ -49,7 +49,9 @@ function loadDataset(file) {
 }
 
 const readPack = (n) => JSON.parse(readFileSync(path.join(root, "nf-app/rules", n), "utf8"));
-const PACK = { pglite: readPack("pack-postgres.json"), sqlite: readPack("pack-sqlite.json") };
+const postgresPack = readPack("pack-postgres.json");
+// duckdb runs the Postgres pack; engines.js installs pack.duckdb_helpers_sql (#1797).
+const PACK = { pglite: postgresPack, sqlite: readPack("pack-sqlite.json"), duckdb: postgresPack };
 // --rule-sql file.json: {rule_id: sql} replaces that rule's PGlite SQL (e.g. a render with overridden role limits)
 if (arg("rule-sql", "")) {
   for (const [rid, sql] of Object.entries(JSON.parse(readFileSync(arg("rule-sql"), "utf8")))) PACK.pglite.rules[rid].sql = sql;

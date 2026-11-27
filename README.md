@@ -129,7 +129,11 @@ Commands: `open-fdd-nf`, `open-fdd-anomaly`, `open-fdd-ml`, `open-fdd-report`, `
 Every tool with an example: [PyPI agent tools](https://bbartling.github.io/open-fdd/pypi-agent-tools.html).
 The ML detectors are benchmarked on public LBNL AHU data: [results](https://github.com/bbartling/open-fdd/blob/master/docs/ml/lbnl-ahu-benchmark.md).
 The anomaly and ML tools need no NF box or database: they read a device folder (`history_wide.csv` in SI +
-`column_map.json`). The package (4.x) is versioned separately from the NF app (5.x).
+`column_map.json`). Rule inputs are the ASHRAE 223P role names in `roles/openfdd-roles.json` (1.1.0-draft.1),
+for example `discharge_air_temperature`. `open_fdd.point_roles` loads that file. Legacy keys (`sat`) still resolve.
+The pandas reference also accepts the older hyphenated columns (`discharge-air-temp`).
+`open-fdd-anomaly screen --engine sql --sql-engine duckdb` runs the z-score on DuckDB (`duckdb>=2.0.1`);
+SQLite, PostgreSQL and Timescale stay available on the SQL helpers. The package (4.x) is versioned separately from the NF app (5.x).
 
 ## Support
 

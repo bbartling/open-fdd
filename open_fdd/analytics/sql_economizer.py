@@ -16,7 +16,7 @@ from typing import Any, Iterable
 
 from open_fdd.analytics.runtime_intervals import ELAPSED_MAX_GAP_SECONDS
 from open_fdd.analytics.si_thresholds import ECON_DIAG_DT_MIN_C
-from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _connect, _quote, create_core, load_core
+from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, _connect, _quote, create_core, load_core, normalize_engine
 from open_fdd.analytics.sql_runtime import TS_MS, _inline
 
 ROLES = ("fan", "oat", "rat", "mat", "damper")
@@ -74,7 +74,7 @@ def run_economizer_sql(conn: Any, engine: str, roles: Iterable[tuple[str, str, s
     if not rows_in:
         return []
     sql = render_economizer_sql(engine, rows_in, **kwargs)
-    if engine == "postgres":
+    if normalize_engine(engine) == "postgres":
         with conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()
@@ -239,7 +239,7 @@ def run_economizer_points_sql(conn: Any, engine: str, roles: Iterable[tuple[str,
     if not rows_in:
         return []
     sql = render_economizer_points_sql(engine, rows_in, **kwargs)
-    if engine == "postgres":
+    if normalize_engine(engine) == "postgres":
         with conn.cursor() as cur:
             cur.execute(sql)
             rows = cur.fetchall()

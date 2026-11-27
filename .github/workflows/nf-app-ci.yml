@@ -117,7 +117,7 @@ jobs:
 
       - name: RDF export check (slice 6, Oxigraph + rdflib)
         run: |
-          python3 -m pip install --quiet pyoxigraph rdflib
+          python3 -m pip install --quiet "pyoxigraph>=0.5.13" "rdflib>=7.6.0"
           node tools/rdf-check/gen_ttl.js tools/rdf-check/fixtures/model.json "$RUNNER_TEMP/model.ttl"
           python3 tools/rdf-check/check_ttl.py "$RUNNER_TEMP/model.ttl"
 

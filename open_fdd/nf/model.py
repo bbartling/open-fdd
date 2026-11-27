@@ -60,10 +60,15 @@ def role_columns() -> dict[str, str]:
 
 
 def column_for(role: str) -> str:
-    """Pandas column for a SQL role (web weather roles map to ``web-outside-air-*``; else the role name)."""
-    extra = {"web_oa_t": "web-outside-air-temp", "web_oa_dp": "web-outside-air-dewpoint",
-             "web_wb_t": "web-outside-air-wetbulb", "web_oa_h": "web-outside-air-humidity"}
-    return role_columns().get(role) or extra.get(role) or role
+    """Pandas column for a rule input.
+
+    The column is the hyphenated local name the reference rules read (``discharge-air-temp``).
+    ``role`` may be that column, a SQL key (``sat``) or the 223P role (``discharge_air_temperature``).
+    The rule-input name is :func:`open_fdd.point_roles.resolve`.
+    """
+    from open_fdd.point_roles import pandas_column
+
+    return pandas_column(role)
 
 
 # ---------------------------------------------------------------------------- model
@@ -415,6 +420,12 @@ def default_range(days: float, now: datetime | None = None) -> tuple[datetime, d
     return end - timedelta(days=days), end
 
 
+def _rule_input(role: str) -> str:
+    from open_fdd.point_roles import resolve
+
+    return resolve(role) or role
+
+
 def model_summary(model: Model, bindings: list[EquipBinding] | None = None) -> list[dict]:
     """Plain dicts: one per equip with its kinds and the point bound to each role."""
     out = []
@@ -422,7 +433,8 @@ def model_summary(model: Model, bindings: list[EquipBinding] | None = None) -> l
         best = b.best()
         out.append({
             "site": b.site, "equip": b.equip, "dis": b.dis, "kinds": b.kinds, "type": b.stamp,
-            "roles": {r: {"column": column_for(r), "point": p.dis, "uuid": p.uuid, "unit": p.unit,
-                          "scale": role_scales().get(r, "")} for r, p in best.items()},
+            "roles": {r: {"input": _rule_input(r), "column": column_for(r), "point": p.dis,
+                          "uuid": p.uuid, "unit": p.unit, "scale": role_scales().get(r, "")}
+                      for r, p in best.items()},
         })
     return out
