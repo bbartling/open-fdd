@@ -13,7 +13,7 @@ All paths are under `examples/edge-microdot/`.
 - History stores flow in m3/s, power in W and energy in J (`history_store.py`, `units_si.py`). Only the UI converts
   (`ui_api.py` `_WIRE_UNIT`). Open-FDD rules expect L/s, kW and kWh.
 
-Open-FDD 5.0.22 ships `roles/openfdd-roles.json` (86 roles; see its `README.md`) in the rules bundle. The edge
+Open-FDD 5.0.22 ships `roles/openfdd-roles.json` (89 roles; see its `README.md`) in the rules bundle. The edge
 consumes it and keeps no role table of its own.
 
 ## Renames

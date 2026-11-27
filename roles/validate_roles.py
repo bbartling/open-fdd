@@ -78,9 +78,22 @@ def check_schema(doc: dict, schema_path: Path, errs: list[str]) -> None:
         errs.append(f"schema: {schema_path} is missing")
         return
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    validator = jsonschema.Draft202012Validator(schema)
+    checker = jsonschema.FormatChecker()
+    if "uri" not in checker.checkers:
+        errs.append("schema: uri format checker is not installed (pip install 'jsonschema[format-nongpl]')")
+        return
+    validator = jsonschema.Draft202012Validator(schema, format_checker=checker)
     for e in sorted(validator.iter_errors(doc), key=lambda e: list(e.absolute_path)):
         errs.append(f"schema: {'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message}")
+
+
+def parent_constraints_overlap(ha: dict, hb: dict) -> bool:
+    """True when some parent equipment can satisfy both roles' equip_markers and equip_forbid."""
+    req_a, ban_a = set(ha.get("equip_markers") or []), set(ha.get("equip_forbid") or [])
+    req_b, ban_b = set(hb.get("equip_markers") or []), set(hb.get("equip_forbid") or [])
+    if req_a & ban_a or req_b & ban_b:
+        return False
+    return not (req_a & ban_b or req_b & ban_a)
 
 
 def check(doc: dict, nf_classes: set[str] | None = None) -> list[str]:
@@ -165,7 +178,13 @@ def check(doc: dict, nf_classes: set[str] | None = None) -> list[str]:
         markers, forbid = set(hs["markers"]), set(hs["forbid"])
         custom = set(hs.get("custom_markers", []))
         alts = [set(a) for a in hs.get("alt_markers", [])]
-        used = markers | set(hs.get("optional", [])) | set(hs.get("equip_markers", [])) | set().union(set(), *alts)
+        equip_markers, equip_forbid = set(hs.get("equip_markers", [])), set(hs.get("equip_forbid", []))
+        used = markers | set(hs.get("optional", [])) | equip_markers | equip_forbid | set().union(set(), *alts)
+        if equip_markers & equip_forbid:
+            errs.append(f"{where}: equip_markers overlap equip_forbid: {sorted(equip_markers & equip_forbid)}")
+        kind_for = {"number": "Number", "boolean": "Bool", "enumeration": "Str"}
+        if hs["kind"] != kind_for[r["value_type"]]:
+            errs.append(f"{where}: haystack.kind {hs['kind']!r} does not match value_type {r['value_type']}")
         for m in sorted(used - h4):
             errs.append(f"{where}: marker {m!r} is not in haystack.markers")
         for m in sorted(forbid - h4 - custom_top):
@@ -198,7 +217,7 @@ def check(doc: dict, nf_classes: set[str] | None = None) -> list[str]:
             errs.append(f"{where}: a maximum needs marker max and forbids min")
         if "s223:Aspect-Minimum" in b.get("aspects", []) and ("min" not in markers or "max" not in forbid):
             errs.append(f"{where}: a minimum needs marker min and forbids max")
-        if unit and hs["unit"] != units[unit]["haystack"]:
+        if unit in units and hs["unit"] != units[unit]["haystack"]:
             errs.append(f"{where}: haystack.unit must be {units[unit]['haystack']!r}")
         if nf_classes is not None:
             for c in hs["classes"]:
@@ -220,6 +239,9 @@ def check(doc: dict, nf_classes: set[str] | None = None) -> list[str]:
         for fb in r.get("accepts_fallback", []):
             if fb not in names:
                 errs.append(f"role {r['role']}: fallback {fb!r} is not a role")
+    for conv in doc["ingest_conversions"]:
+        if conv["to"] not in units:
+            errs.append(f"ingest {conv['from']!r}: target {conv['to']} is not in units")
 
     # Binding safety between roles.
     roles = [r for r in doc["roles"] if r["haystack"]["binding_scope"] != "derived"]
@@ -227,16 +249,20 @@ def check(doc: dict, nf_classes: set[str] | None = None) -> list[str]:
         ha = a["haystack"]
         for c in ha["classes"]:
             for b in roles:
-                if b is not a and c in b["haystack"]["classes"] and ha["binding_scope"] == b["haystack"]["binding_scope"] \
-                        and ha.get("equip_markers") == b["haystack"].get("equip_markers"):
-                    errs.append(f"role {a['role']}: class {c!r} also binds {b['role']} in the same scope")
+                if b is a or a["role"] > b["role"]:
+                    continue
+                hb = b["haystack"]
+                if c in hb["classes"] and ha["binding_scope"] == hb["binding_scope"] \
+                        and parent_constraints_overlap(ha, hb):
+                    errs.append(f"role {a['role']}: class {c!r} also binds {b['role']} "
+                                f"where the parent constraints overlap")
         sa = set(ha["markers"]) | set(ha.get("custom_markers", []))
         for b in roles:
             if b is a:
                 continue
             hb = b["haystack"]
             sb = set(hb["markers"]) | set(hb.get("custom_markers", []))
-            same_scope = ha["binding_scope"] == hb["binding_scope"] and ha.get("equip_markers") == hb.get("equip_markers")
+            same_scope = ha["binding_scope"] == hb["binding_scope"] and parent_constraints_overlap(ha, hb)
             if sa == sb and same_scope and a["role"] < b["role"]:
                 errs.append(f"roles {a['role']} and {b['role']}: identical markers in the same scope")
             if a["writable"] == "model" and sa < sb and same_scope and not ((sb - sa) & set(ha["forbid"])):
@@ -248,11 +274,22 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+REQUIRED_SOURCES = ("s223", "haystack", "haystack-units", "qudt-units", "qudt-quantitykinds")
+
+
 def check_ontologies(doc: dict, ontology_dir: Path) -> list[str]:
     """Every s223, QUDT and Haystack term exists in the pinned files; units carry the quantity kinds claimed."""
+    errs: list[str] = []
+    names = [s.get("name") for s in doc.get("sources", [])]
+    for name in REQUIRED_SOURCES:
+        count = names.count(name)
+        if count != 1:
+            errs.append(f"ontology: sources must contain exactly one {name!r} entry (found {count})")
+    if errs:
+        return errs
+
     import rdflib  # type: ignore
 
-    errs: list[str] = []
     files = {s["name"]: ontology_dir / s["file"] for s in doc["sources"]}
     for s in doc["sources"]:
         p = files[s["name"]]
@@ -322,17 +359,26 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("roles", nargs="?", type=Path, default=DEFAULT_ROLES)
     ap.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA)
-    ap.add_argument("--nf-classes", type=Path, default=DEFAULT_NF_CLASSES)
+    ap.add_argument("--nf-classes", type=Path, default=None,
+                    help="NF class catalog (default: nf-app/rules/nf_classes.json when that file exists)")
     ap.add_argument("--ontology-dir", type=Path)
     args = ap.parse_args(argv)
     doc = json.loads(args.roles.read_text(encoding="utf-8"))
     errs: list[str] = []
     check_schema(doc, args.schema, errs)
+    if any(e.startswith("schema:") for e in errs):
+        for e in errs:
+            print(e, file=sys.stderr)
+        print(f"FAIL: {args.roles.name} schema, {len(errs)} problems")
+        return 1
+    nf_path = args.nf_classes if args.nf_classes is not None else DEFAULT_NF_CLASSES
     nf = None
-    if args.nf_classes.exists():
-        raw = json.loads(args.nf_classes.read_text(encoding="utf-8"))
+    if nf_path.exists():
+        raw = json.loads(nf_path.read_text(encoding="utf-8"))
         items = raw["classes"] if isinstance(raw, dict) else raw
         nf = {c["name"] if isinstance(c, dict) else c for c in items}
+    elif args.nf_classes is not None:
+        errs.append(f"nf classes: {nf_path} is missing")
     errs += check(doc, nf)
     if args.ontology_dir:
         errs += check_ontologies(doc, args.ontology_dir)

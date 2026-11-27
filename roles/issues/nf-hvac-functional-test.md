@@ -16,7 +16,7 @@ Paths refer to the open PR stack (scaffold through operator hooks). The role ids
   filters on `cmd`.
 - `schema/rdf-role-map.json` uses local types instead of 223P classes.
 
-Open-FDD 5.0.22 ships `roles/openfdd-roles.json` (86 roles; see its `README.md`) in the rules bundle. This app
+Open-FDD 5.0.22 ships `roles/openfdd-roles.json` (89 roles; see its `README.md`) in the rules bundle. This app
 consumes the 29 roles whose `consumers` include `nf-hvac-functional-test`.
 
 ## Renames, tag sets and units
@@ -46,14 +46,14 @@ Markers in *italics* are custom (declared in `haystack.custom_markers`). After t
 | `ahu_test_mode_command` | `test_operating_mode_command` | ahu, test, mode, cmd | cmd, *test*, *mode* | `enumeration` |
 | `freeze_protection_status` | `air_temperature_low_limit_alarm_status` | freezeStat | freezeStat, sensor | `boolean` |
 | `smoke_alarm_status` | `air_smoke_alarm_status` | smoke, alarm | alarm, sensor, *smoke* | `boolean` |
-| `vav_max_cooling_mode_command` | `maximum_cooling_operating_mode_command` | vav, max, cool, cmd | max, cool, cmd, *mode* / sp, air, flow | `enumeration` |
+| `vav_max_cooling_mode_command` | `maximum_cooling_operating_mode_command` | vav, max, cool, cmd | max, cool, cmd, *mode* / sp, air, flow | `boolean` |
 | `discharge_air_flow` | `discharge_air_volume_flow_rate` | air, flow, sensor / sp, cmd, max, min | air, flow, sensor / max, min, total | `L-PER-SEC` |
 | `cooling_air_flow_setpoint` | `discharge_air_volume_flow_rate_setpoint` | air, flow, sp / max, min | air, flow, sp / max, min, total | `L-PER-SEC` |
 | `cooling_air_flow_maximum` | `discharge_air_volume_flow_rate_maximum` | air, flow, max / sp, cmd, min | max, air, flow, sp / min | `L-PER-SEC` |
 | `discharge_air_damper_position` | `damper_position` | discharge, damper, sensor / cmd, sp | damper, sensor / outside, return, exhaust, economizer, bypass | `PERCENT` |
 | `zone_air_temperature` | unchanged | zone, air, temp, sensor / sp, cmd | zone, air, temp, sensor | `DEG_C` |
 | `zone_air_temperature_setpoint` | unchanged | zone, air, temp, sp / max, min | zone, air, temp, sp (optional effective) / cooling, heating, occ, unocc, standby, max, min | `DEG_C` |
-| `flush_mode_command` | `purge_operating_mode_command` | flush, cmd | purge, cmd / water | `enumeration` |
+| `flush_mode_command` | `purge_operating_mode_command` | flush, cmd | purge, cmd / water | `boolean` |
 
 ## Unit and value changes
 
@@ -61,7 +61,8 @@ Markers in *italics* are custom (declared in `haystack.custom_markers`). After t
 |---|---|---|
 | `discharge_air_volume_flow_rate`, `discharge_air_volume_flow_rate_setpoint`, `discharge_air_volume_flow_rate_maximum` | m3/s | `L-PER-SEC`: L/s passes through, m3/s x1000, cfm x0.4719474432; scale the clamps x1000 |
 | `supply_fan_command` | `bool_or_percent` | `boolean`; a 0-100 speed command binds `supply_fan_speed_command` (read only) |
-| `test_operating_mode_command`, `maximum_cooling_operating_mode_command`, `purge_operating_mode_command` | `enum`, `bool_or_enum` | `enumeration`; the site config lists the allowed values (a boolean point uses true/false) |
+| `test_operating_mode_command` | `enum` | `enumeration`; the site config lists the allowed values |
+| `maximum_cooling_operating_mode_command`, `purge_operating_mode_command` | `bool_or_enum` | `boolean`: true enters the mode and false leaves it |
 | status roles | `bool` | `boolean` |
 | temperatures, pressures, ratios, humidity | `degC`, `Pa`, `%` | `DEG_C`, `PA`, `PERCENT`, `PERCENT_RH` (unit tokens only; values unchanged) |
 
@@ -120,7 +121,9 @@ Vendor `openfdd-roles.json` from the 5.0.22 rules bundle into `schema/`, record 
    - a `cmd` damper point never binds a `*_position` role
    - a fan `run sensor` point never binds `supply_fan_command`
    - a camelCase marker (`freezeStat`) still matches
-3. Add the retired ids (the old names in the table above) to the `npm run scan` denylist, excluding the alias reader.
+3. Add the retired ids from the table above to the `npm run scan` denylist: only old names that are not themselves
+   canonical role ids. Leave unchanged canonical names (for example `discharge_air_temperature`) off the denylist, and
+   exclude the alias reader.
 
 ## Acceptance criteria
 
