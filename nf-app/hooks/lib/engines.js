@@ -390,7 +390,7 @@ async function createDuckDb(pack, opts = {}) {
     if (!rule) throw new Error(`unknown rule ${ruleId}`);
     return sql ? { ...rule, ...sql } : rule;
   };
-  // Saved tuning (#1589/#1636, #1798): same reader as sqlite and pglite. The hook passes rendered SQL into query().
+  // Saved tuning (#1589/#1636, #1798). The hook passes rendered SQL into query().
   return {
     kind: "duckdb",
     ...savedTuning(opts),
