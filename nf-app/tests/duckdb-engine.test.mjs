@@ -229,16 +229,13 @@ test("duckdb options: memory limit and threads are validated; defaults suit a 1 
   assert.throws(() => duckDbOptions({ threads: 1.5 }), /threads/);
 });
 
-test("pickEngine: auto uses duckdb on any RAM; a missing package falls back, and 3.5 GiB applies only then", async () => {
+test("a missing @duckdb/node-api fails the run; it does not use SQLite or PGlite", async () => {
   const http = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 8 * 1024 ** 3 } }] } }) };
   assert.deepEqual(await fdd.pickEngine(http, "duckdb", undefined, () => true, () => true), { kind: "duckdb", note: "" });
   assert.equal((await fdd.pickEngine(http, "auto", undefined, () => true, () => true)).kind, "duckdb");
-  const fb = await fdd.pickEngine(http, "duckdb", undefined, () => true, () => false);
-  assert.equal(fb.kind, "pglite");
-  assert.match(fb.note, /@duckdb\/node-api is not loadable/);
-  assert.match(fb.note, /3\.5 GiB/);
+  await assert.rejects(fdd.pickEngine(http, "duckdb", undefined, () => true, () => false), /does not fall back to SQLite or PGlite/);
   const small = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 1024 ** 3 } }] } }) };
-  assert.equal((await fdd.pickEngine(small, "duckdb", undefined, () => true, () => false)).kind, "sqlite");
+  await assert.rejects(fdd.pickEngine(small, "auto", undefined, () => true, () => false), /@duckdb\/node-api is not loadable/);
 });
 
 // ---- saved tuning (#1589): a duckdb run with a tuning store applies the same overrides as the timescale engine ----
@@ -288,11 +285,9 @@ test("duckdb without a tuning store has no overrides reader (no store, nothing s
   try { assert.equal(typeof withStore.ruleConfigOverrides, "function"); } finally { await withStore.close(); }
 });
 
-test("pickEngine: duckdb falling back on a box with a Timescale store picks timescale (which reads saved tuning)", async () => {
+test("pickEngine: duckdb that cannot load fails even when a Timescale option is set", async () => {
   const http = { get: async () => ({ data: { resources: [{ memory: { totalBytes: 1024 ** 3 } }] } }) };
-  const fb = await fdd.pickEngine(http, "duckdb", { host: "db" }, () => true, () => false);
-  assert.equal(fb.kind, "timescale");
-  assert.match(fb.note, /using timescale/);
+  await assert.rejects(fdd.pickEngine(http, "duckdb", { host: "db" }, () => true, () => false), /does not fall back to SQLite or PGlite/);
 });
 
 // ---- offline and disk-free (#1645 review): no extension download, no spill to the working directory ----

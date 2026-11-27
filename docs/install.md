@@ -64,7 +64,7 @@ reads and is not a deployment route.
 
 ## Timescale option and schema preflight
 
-Full's runtime database is server-side Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`, Parquet on disk). `auto` uses Timescale when the `timescale` option is set, and otherwise DuckDB. The 3.5 GiB PGlite rule applies only when `@duckdb/node-api` cannot load. There is no DuckDB-WASM and no Python DuckDB runtime. Lite does not use Timescale. For Timescale, configure the app option
+Full's runtime database is server-side Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`, Parquet on disk). `auto` uses Timescale when the `timescale` option is set, and otherwise DuckDB. If `@duckdb/node-api` cannot load, the run fails. It does not fall back to SQLite or PGlite. There is no DuckDB-WASM and no Python DuckDB runtime. Lite does not use Timescale. For Timescale, configure the app option
 `timescale` as a JSON string or PostgreSQL URL, then apply `core.sql`, `adapter_nf.sql` and `install.sql` (in that
 order, `psql -v ON_ERROR_STOP=1 -1`) using a database installer role. Give the hooks a separate least-privilege runtime role. See the
 [`nf-app/timescale` guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).

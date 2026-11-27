@@ -34,18 +34,16 @@ test("explicit duckdb with a timescale option still runs duckdb when the package
   assert.equal(picked.note, "");
 });
 
-test("the 3.5 GiB PGlite rule runs only when @duckdb/node-api cannot load", async () => {
-  const below = await fdd.pickEngine(httpWith(PGLITE_MIN - 1), "auto", undefined, () => true, () => false);
-  const at = await fdd.pickEngine(httpWith(PGLITE_MIN), "auto", undefined, () => true, () => false);
-  const aboveNoPkg = await fdd.pickEngine(httpWith(PGLITE_MIN), "auto", undefined, () => false, () => false);
-  assert.equal(below.kind, "sqlite");
-  assert.equal(at.kind, "pglite");
-  assert.equal(aboveNoPkg.kind, "sqlite");
-  for (const picked of [below, at, aboveNoPkg]) {
-    assert.match(picked.note, /@duckdb\/node-api is not loadable/);
-    assert.match(picked.note, /3\.5 GiB/);
-    assert.match(picked.note, /deprecated/);
-  }
+test("a missing @duckdb/node-api fails at 1 GiB and at 16 GiB; RAM does not pick an engine", async () => {
+  await assert.rejects(
+    fdd.pickEngine(httpWith(GIB), "auto", undefined, () => true, () => false),
+    /does not fall back to SQLite or PGlite/);
+  await assert.rejects(
+    fdd.pickEngine(httpWith(16 * GIB), "auto", undefined, () => false, () => false),
+    /@duckdb\/node-api is not loadable/);
+  await assert.rejects(
+    fdd.pickEngine(httpWith(PGLITE_MIN), "duckdb", { host: "db" }, () => true, () => false),
+    /set engine to "timescale"/);
 });
 
 test("explicit sqlite and pglite stay selected and are marked deprecated", async () => {
@@ -57,10 +55,10 @@ test("explicit sqlite and pglite stay selected and are marked deprecated", async
   assert.match(pglite.note, /@duckdb\/node-api/);
 });
 
-test("explicit duckdb that cannot load falls back to timescale when that option is set", async () => {
-  const picked = await fdd.pickEngine(httpWith(GIB), "duckdb", { host: "db" }, () => true, () => false);
-  assert.equal(picked.kind, "timescale");
-  assert.match(picked.note, /using timescale/);
+test("explicit duckdb that cannot load fails even when a timescale option is set", async () => {
+  await assert.rejects(
+    fdd.pickEngine(httpWith(GIB), "duckdb", { host: "db" }, () => true, () => false),
+    /does not fall back to SQLite or PGlite/);
 });
 
 test("an unknown engine name is rejected", async () => {

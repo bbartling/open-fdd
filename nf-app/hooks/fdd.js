@@ -64,8 +64,8 @@
 // see lib/settings.js; a string value such as "24" or a JSON string for timescale is converted):
 //   engine        "auto" | "sqlite" | "pglite" | "duckdb" | "timescale"
 //                 auto: Timescale when that option is set; otherwise server-side DuckDB (@duckdb/node-api) when it loads.
-//                 The old auto rule (PGlite when NF reports ≥ 3.5 GiB, else SQLite) runs only when that package cannot load.
-//                 sqlite and pglite still run when named, and are deprecated for this release.
+//                 If that package cannot load, the run fails. It does not fall back to SQLite or PGlite.
+//                 sqlite and pglite still run when named. Retiring them is a separate 5.0.22 change.
 //                 With the option timescale set, duckdb reads the saved tuning (fdd.rule_config) from it like the timescale engine.
 //   duckdbMemoryLimit  DuckDB memory cap, e.g. "256MB" (default) or "1GB"; duckdbThreads  DuckDB threads (default 2). Engine duckdb only
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
@@ -91,8 +91,6 @@ const { queryPoints } = require('./lib/paging.js');
 const settings = require('./lib/settings.js');
 const roleLimits = require('./lib/role-limits.js');
 const ruleTuning = require('./lib/rule-tuning.js');
-const PGLITE_MIN_BYTES = 3.5 * 1024 ** 3;
-
 // ---- shared code with the UI ------------------------------------------------------
 /** model.js + fdd.js run unchanged in a sandbox: one binding implementation for UI and hook. */
 function loadShared() {
@@ -757,40 +755,27 @@ function duckdbLoadable() {
 
 /**
  * Which engine the NF plugin runs. Timescale wins when it is named, or when auto has a timescale option (Full, unchanged).
- * Otherwise auto is server-side Node DuckDB (@duckdb/node-api) over Parquet. The previous auto rule, PGlite when NF
- * reports at least 3.5 GiB, runs only when that package cannot load. sqlite and pglite still run when named.
+ * Otherwise auto is server-side Node DuckDB (@duckdb/node-api) over Parquet. If that package cannot load, this throws.
+ * It does not fall back to SQLite or PGlite. Those engines still run only when named.
  * Returns {kind, note}.
  * @param {any} http
  * @param {string} [wanted]
  * @param {any} [timescaleConfig]
- * @param {() => boolean} [hasPglite]
+ * @param {() => boolean} [hasPglite] ignored; kept so callers that still pass the old argument do not shift hasDuckdb
  * @param {() => boolean} [hasDuckdb]
  */
 async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInstalled, hasDuckdb = duckdbLoadable) {
+  void http;
+  void hasPglite;
   if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return { kind: 'timescale', note: '' };
   if (wanted === 'sqlite' || wanted === 'pglite') return { kind: wanted, note: DEPRECATED_ENGINE[wanted] };
   if (wanted === 'duckdb' || !wanted || wanted === 'auto') {
     if (hasDuckdb()) return { kind: 'duckdb', note: '' };
-    if (wanted === 'duckdb' && timescaleConfig) {
-      return { kind: 'timescale', note: 'engine duckdb: @duckdb/node-api is not loadable; using timescale' };
-    }
-    const fallback = await deprecatedFallback(http, hasPglite);
-    const why = `engine ${wanted === 'duckdb' ? 'duckdb' : 'auto'}: @duckdb/node-api is not loadable; the 3.5 GiB PGlite rule applies only then; using deprecated ${fallback.kind}`;
-    return { kind: fallback.kind, note: why };
+    const which = wanted === 'duckdb' ? 'duckdb' : 'auto';
+    throw new Error(`engine ${which}: @duckdb/node-api is not loadable. The NF plugin does not fall back to SQLite or PGlite. `
+      + 'Install the app dependencies (@duckdb/node-api 2.0.1-r.1), or set engine to "timescale" and the timescale option.');
   }
   throw new Error(`unknown engine ${JSON.stringify(wanted)} (use "auto", "duckdb", "timescale", "sqlite" or "pglite")`);
-}
-
-async function deprecatedFallback(http, hasPglite) {
-  let kind = 'sqlite';
-  try {
-    const { data } = await http.get('/api/v1/platform/info');
-    const total = Math.max(0, ...((data && data.resources) || []).map((r) => Number((r.memory || {}).totalBytes) || 0));
-    if (total >= PGLITE_MIN_BYTES && hasPglite()) kind = 'pglite';
-  } catch (e) {
-    kind = 'sqlite';
-  }
-  return { kind };
 }
 
 /**

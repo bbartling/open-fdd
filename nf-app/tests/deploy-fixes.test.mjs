@@ -110,14 +110,10 @@ test("history: no config.timescale but args that ask for a query still fails", a
 
 const bigBox = { async get() { return { data: { resources: [{ memory: { totalBytes: String(16 * 1024 ** 3) } }] } }; } };
 
-test("engine auto: DuckDB when it loads, even on a big box; 3.5 GiB PGlite only if it cannot", async () => {
+test("engine auto: DuckDB when it loads; a missing package is an error, not PGlite", async () => {
   assert.equal((await fdd.pickEngine(bigBox, "auto", undefined, () => true, () => true)).kind, "duckdb");
-  const fb = await fdd.pickEngine(bigBox, "auto", undefined, () => true, () => false);
-  assert.equal(fb.kind, "pglite");
-  assert.match(fb.note, /3\.5 GiB/);
-  const noPglite = await fdd.pickEngine(bigBox, undefined, undefined, () => false, () => false);
-  assert.equal(noPglite.kind, "sqlite");
-  assert.match(noPglite.note, /@duckdb\/node-api is not loadable/);
+  await assert.rejects(fdd.pickEngine(bigBox, "auto", undefined, () => true, () => false), /does not fall back to SQLite or PGlite/);
+  await assert.rejects(fdd.pickEngine(bigBox, undefined, undefined, () => false, () => false), /@duckdb\/node-api is not loadable/);
 });
 
 test("engine: an explicitly configured engine is never swapped for DuckDB", async () => {

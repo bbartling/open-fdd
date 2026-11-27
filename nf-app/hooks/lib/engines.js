@@ -452,8 +452,8 @@ async function createTimescale(pack, opts = {}) {
  *
  * Memory (1 GB edges): the instance is capped by DuckDB's memory_limit (default DUCKDB_DEFAULTS.memoryLimit) and
  * threads. With spilling off, a query over the cap fails with an out-of-memory error (the rule is reported as a rule
- * error). If the instance cannot be created at all, createEngine throws and the run fails loudly (no silent engine
- * swap; only a package that does not load falls back, see fdd.js pickEngine). Settings: app options duckdbMemoryLimit
+ * error). If the instance cannot be created, or @duckdb/node-api does not load, the run fails. pickEngine does not
+ * switch to SQLite or PGlite. Settings: app options duckdbMemoryLimit
  * ("256MB") and duckdbThreads (2), passed here as opts.config { memoryLimit, threads }; env OPENFDD_DUCKDB_MEMORY_LIMIT /
  * OPENFDD_DUCKDB_THREADS when unset.
  * The settings of the first engine of a process win until releaseDuckDb().

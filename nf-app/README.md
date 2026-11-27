@@ -133,9 +133,8 @@ DuckDB-WASM and no Python DuckDB process. PyPI fault tooling uses pandas. `duckd
 dependency.
 
 `engine: "auto"` uses Timescale when the `timescale` option is set, otherwise this DuckDB when the package loads.
-The old `auto` rule (PGlite when NF reports at least 3.5 GiB, else SQLite) runs only when `@duckdb/node-api` cannot
-load, and the run says so. Explicit `sqlite` and `pglite` still run for this release and are deprecated. With the
-`timescale` option set, DuckDB still reads saved tuning (`fdd.rule_config`). `tests/engine-select.test.mjs` locks
+If `@duckdb/node-api` cannot load, the run fails. It does not fall back to SQLite or PGlite. Explicit `sqlite` and
+`pglite` still run when named. With the `timescale` option set, DuckDB still reads saved tuning (`fdd.rule_config`). `tests/engine-select.test.mjs` locks
 the selection. `tests/duckdb-engine.test.mjs` checks every rule against PGlite and sql.js. `tests/duckdb-parquet.test.mjs`
 checks that a second run reads the files.
 

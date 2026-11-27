@@ -28,8 +28,8 @@ tagging ([Haystack tagging](haystack-tagging.html)); they differ in whether a ru
 ## Choose full when
 
 - the box has about 2 GB or more and you want faults, RCx charts and fault points in NF. `auto` runs server-side
-  Node DuckDB. Timescale is used when that option is set. The 3.5 GiB PGlite switch is only the fallback when
-  `@duckdb/node-api` cannot load;
+  Node DuckDB. Timescale is used when that option is set. If `@duckdb/node-api` cannot load, the run fails. It does not
+  fall back to SQLite or PGlite.
 - you need history longer than NF's week. Enable NF's **TimescaleDB northbound connector** and set the hook's
   `timescale` config: the rules then run inside the database, results and long-range history stay there, and a
   size cap (default **100 GB**, oldest chunks dropped first) keeps the disk bounded. Details and setup in
