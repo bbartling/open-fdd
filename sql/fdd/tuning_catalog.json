@@ -8950,6 +8950,299 @@
         "CONFIRM_SECONDS": 0.0,
         "MAX_INTERVAL_SECONDS": 900.0
       }
+    },
+    {
+      "confirm_seconds": 900,
+      "controls_without_sql_effect": [],
+      "delete_python_candidate": false,
+      "description": "Mixed-air temperature outside the outdoor / return mixing envelope (sensor or mapping)",
+      "equipment_kinds": [
+        "ahu"
+      ],
+      "optional_roles": [
+        "fan_status",
+        "fan_cmd",
+        "run_proof"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "active_hours",
+        "fault_pct",
+        "assessment"
+      ],
+      "pandas_function": "xs_mix",
+      "parameters": {
+        "confirm_min": {
+          "control": "slider",
+          "default": 15.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "key": "confirm_min",
+          "kind": "duration_minutes",
+          "label": "Fault confirm delay",
+          "max": 60.0,
+          "min": 0.0,
+          "sql_placeholder": "CONFIRM_SECONDS",
+          "step": 5.0,
+          "unit": "min"
+        },
+        "mix_band": {
+          "control": "slider",
+          "default": 1.111111,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "mix_band",
+          "kind": "temperature_difference",
+          "label": "Mixing envelope band",
+          "max": 5.555556,
+          "min": 0.277778,
+          "sql_placeholder": "MIX_BAND",
+          "step": 0.138889,
+          "unit": "degC"
+        },
+        "require_run_proof": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "require_run_proof",
+          "kind": "boolean",
+          "label": "Require motor status",
+          "max": 1.0,
+          "min": 0.0,
+          "sql_placeholder": "REQUIRE_RUN_PROOF",
+          "step": 1.0,
+          "unit": "bool"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "CONFIRM_SECONDS",
+        "FAN_ON_MIN",
+        "MAX_GAP_HOURS",
+        "MIX_BAND",
+        "REQUIRE_RUN_PROOF"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P1",
+      "required_roles": [
+        "mat",
+        "oa_t",
+        "rat"
+      ],
+      "rule_id": "XS-MIX",
+      "sql_file": "xs_mix.sql",
+      "run_proof": "gated"
+    },
+    {
+      "confirm_seconds": 7200,
+      "controls_without_sql_effect": [],
+      "delete_python_candidate": false,
+      "description": "Two temperature roles identical while changing (copied or wrongly bound signal)",
+      "equipment_kinds": [
+        "ahu",
+        "vav",
+        "zone_other"
+      ],
+      "optional_roles": [
+        "rat",
+        "sat",
+        "mat",
+        "zone_t",
+        "vav_discharge_t"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "fault_pct",
+        "assessment"
+      ],
+      "pandas_function": "xs_copy",
+      "parameters": {
+        "confirm_min": {
+          "control": "slider",
+          "default": 120.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "key": "confirm_min",
+          "kind": "duration_minutes",
+          "label": "Fault confirm delay",
+          "max": 720.0,
+          "min": 0.0,
+          "sql_placeholder": "CONFIRM_SECONDS",
+          "step": 30.0,
+          "unit": "min"
+        },
+        "copy_tol": {
+          "control": "slider",
+          "default": 0.02,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "copy_tol",
+          "kind": "temperature_difference",
+          "label": "Copy tolerance",
+          "max": 0.5,
+          "min": 0.0,
+          "sql_placeholder": "COPY_TOL",
+          "step": 0.01,
+          "unit": "degC"
+        },
+        "change_min": {
+          "control": "slider",
+          "default": 1.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "change_min",
+          "kind": "temperature_difference",
+          "label": "Minimum change over the run",
+          "max": 5.555556,
+          "min": 0.277778,
+          "sql_placeholder": "CHANGE_MIN",
+          "step": 0.138889,
+          "unit": "degC"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "CHANGE_MIN",
+        "CONFIRM_SECONDS",
+        "COPY_TOL",
+        "MAX_GAP_HOURS"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P1",
+      "required_roles": [],
+      "rule_id": "XS-COPY",
+      "sql_file": "xs_copy.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "a copied or wrongly bound signal is a mapping fault whether or not the unit runs"
+    },
+    {
+      "confirm_seconds": 0,
+      "controls_without_sql_effect": [],
+      "delete_python_candidate": false,
+      "description": "Sensor value piled up at a round transmitter full scale (clipped)",
+      "equipment_kinds": [
+        "ahu",
+        "vav",
+        "zone_other"
+      ],
+      "optional_roles": [
+        "zone_co2",
+        "duct_static",
+        "zone_flow",
+        "fan_status",
+        "fan_cmd",
+        "run_proof"
+      ],
+      "output_columns": [
+        "equipment_id",
+        "fault_hours",
+        "covered_hours",
+        "fault_pct",
+        "assessment"
+      ],
+      "pandas_function": "xs_clip",
+      "parameters": {
+        "confirm_min": {
+          "control": "slider",
+          "default": 0.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "key": "confirm_min",
+          "kind": "duration_minutes",
+          "label": "Fault confirm delay",
+          "max": 60.0,
+          "min": 0.0,
+          "sql_placeholder": "CONFIRM_SECONDS",
+          "step": 5.0,
+          "unit": "min"
+        },
+        "clip_share": {
+          "control": "slider",
+          "default": 5.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "clip_share",
+          "kind": "percent",
+          "label": "Share of samples at the limit",
+          "max": 50.0,
+          "min": 1.0,
+          "sql_placeholder": "CLIP_SHARE",
+          "step": 1.0,
+          "unit": "pct"
+        },
+        "co2_round": {
+          "control": "slider",
+          "default": 100.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "co2_round",
+          "kind": "dimensionless",
+          "label": "CO2 full-scale step",
+          "max": 1000.0,
+          "min": 50.0,
+          "sql_placeholder": "CO2_ROUND",
+          "step": 50.0,
+          "unit": "ppm"
+        },
+        "static_round": {
+          "control": "slider",
+          "default": 25.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "static_round",
+          "kind": "air_pressure",
+          "label": "Duct static full-scale step",
+          "max": 250.0,
+          "min": 5.0,
+          "sql_placeholder": "STATIC_ROUND",
+          "step": 5.0,
+          "unit": "Pa"
+        },
+        "flow_round": {
+          "control": "slider",
+          "default": 50.0,
+          "effect": "branch_sensitive",
+          "effect_in_sql": true,
+          "frontend_control": "slider",
+          "key": "flow_round",
+          "kind": "volumetric_flow",
+          "label": "Airflow full-scale step",
+          "max": 500.0,
+          "min": 5.0,
+          "sql_placeholder": "FLOW_ROUND",
+          "step": 5.0,
+          "unit": "L_per_s"
+        }
+      },
+      "parity_status": "sql_screening",
+      "placeholders": [
+        "CLIP_SHARE",
+        "CO2_ROUND",
+        "CONFIRM_SECONDS",
+        "FAN_ON_MIN",
+        "FLOW_ROUND",
+        "MAX_GAP_HOURS",
+        "STATIC_ROUND"
+      ],
+      "port_status": "adapted_not_postgresql_execution_qualified",
+      "priority": "P1",
+      "required_roles": [],
+      "rule_id": "XS-CLIP",
+      "sql_file": "xs_clip.sql",
+      "run_proof": "exempt",
+      "run_proof_note": "CO2 is judged on every sample; fan-dependent roles count only their own fan-on samples"
     }
   ]
 }
