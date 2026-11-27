@@ -6,7 +6,7 @@ nav_order: 1
 
 # Charts and export
 
-Open-FDD has four chart and data surfaces. **Overview** opens on a single modeled equipment item and lists all of its modeled I/O points (including current-only and Boolean/Enum/String points). **Charts** plots selected point histories, **RCx** renders equipment and site diagnostics, and **FDD** plots rule results, sensor history, and inline Tuners.
+Screens, chart types and the UI API contract are in the [UI guide](ui-guide.html). Open-FDD has four chart and data surfaces. **Overview** opens on a single modeled equipment item and lists all of its modeled I/O points (including current-only and Boolean/Enum/String points). **Charts** plots selected point histories, **RCx** renders equipment and site diagnostics, and **FDD** plots rule results, sensor history, and inline Tuners.
 
 When no saved selection exists for a site, **Overview** picks a landing equipment item from fresh, model-bound outside-air temperature (local BAS OAT first, then site weather OAT): below 12 °C opens a boiler or heating-water plant, 12–24 °C opens an RTU, and 24 °C or above opens a chiller or chilled-water plant, falling back deterministically if absent. A local BAS OAT that differs from site weather OAT by more than 10 K (18 °F) is treated as mis-tagged or indoors: site weather is used and the reason says so. The bands stay in SI; the reason text uses the active display units (imperial on Lite). Manual equipment choices save per exact site ID and stay pinned across live weather refreshes.
 
