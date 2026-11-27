@@ -12,21 +12,21 @@ SQL, the pandas reference and the SPARQL client are one FDD check. rdflib and th
 
 | What | Where |
 |---|---|
-| Three-way check | `pandas == SQL == SPARQL-client` in `parity.yml`: frames, fault hours and the motor gate agree. Known differences stay in `open_fdd/data/parity_known_differences.json`. |
-| PR engines | `parity.yml`: PGlite, SQLite and DuckDB on 2 equipment × 3 days, `basic` and `edge`, plus standalone PostgreSQL (`postgres:17.12`). |
-| Nightly and pre-release | `parity-stress.yml`: cron `41 7 * * *`, and `workflow_dispatch` with input `ref`. 4×3 seeds 0–4 and 8×7 seed 0, `basic` and `edge`. Engines `pglite`, `sqlite`, `duckdb`, `duckdb-parquet`, and a PostgreSQL job with `pglite`, `postgres`, `duckdb`. |
-| Timescale | `nf-app-ci.yml` job `TimescaleDB integration`: image `timescale/timescaledb:2.32.1-pg17`, then `stress.py` engines `pglite`, `sqlite`, `timescale` at 8×7. |
+| Runtime engines | Server-side Node DuckDB (`@duckdb/node-api` `2.0.1-r.1`) and Timescale. No other runtime engine and no fallback. |
+| Three-way check | `pandas == SQL == SPARQL-client` in `parity.yml`. Known differences stay in `open_fdd/data/parity_known_differences.json`. |
+| PR tier | `parity.yml`: 2 equipment × 3 days, `basic` and `edge`. Standalone PostgreSQL image `postgres:17.12`. |
+| Nightly and pre-release | `parity-stress.yml`: cron `41 7 * * *`, and `workflow_dispatch` with input `ref`. 4×3 seeds 0–4 and 8×7 seed 0, `basic` and `edge`. |
+| Timescale | `nf-app-ci.yml` job `TimescaleDB integration`: image `timescale/timescaledb:2.32.1-pg17`, 8 equipment × 7 days. |
 | Tutorial only | `duckdb-tutorial.yml` runs when the tutorial, the parity package or `pack-postgres.json` changes. It is not the rule-pack stress run. |
 | Who calls the PR tier | `security.yml` calls `parity.yml` on every pull request, on push to `master` and `release/**`, weekly, and on `workflow_dispatch`. |
 
 | Library | Pin in the repo | Used for |
 |---|---|---|
-| `@electric-sql/pglite` | `0.5.15` (dependency) | Postgres SQL in the app and in CI |
-| `sql.js` | `1.15.2` (dependency) | SQLite WASM in the app (`hooks/lib/engines.js`) |
-| `pg` | `8.23.1` (dependency) | Node client for Timescale and standalone Postgres |
-| `@duckdb/node-api` | `2.0.1-r.1` (optionalDependency) | Native DuckDB engine kind in `hooks/lib/engines.js`. Kinds are `sqlite`, `pglite`, `duckdb` and `timescale`. |
+| `@duckdb/node-api` | `2.0.1-r.1` | Server-side Node DuckDB. Not a WASM build. |
+| `pg` | `8.23.1` | Node client for the Timescale build |
+| Timescale image | `timescale/timescaledb:2.32.1-pg17` | The Timescale CI job |
 | `pandas` | `>=3.1.1` (`oracle` extra) | Reference rules |
-| `duckdb` (Python) | `>=2.0.0` (`duckdb` extra) | Test and stress engines. The browser tutorial pins `duckdb==2.0.0`. |
+| `duckdb` (Python) | `>=2.0.0` (`duckdb` extra) | Python test extra. The browser tutorial pins `duckdb==2.0.0`. |
 
 ## RDF
 
