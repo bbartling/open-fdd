@@ -34,10 +34,8 @@ Guide and results: `docs/ml/lbnl-ahu-benchmark.md`. Tool list: `docs/pypi-agent-
    `screen` and `detect` share one activity policy (default `--activity proof`): equipment points are assessed only
    while operating proof is on. Read `activity.json` / `summary.json` `activity` before calling a zero-flag result
    clean: `no_run_proof`, `no_active_rows` or a small `assessed_rows` means unassessed, not healthy.
-6. **Dependencies**: floors only, at the latest stable releases (pandas 3.1.1, numpy 2.5.5, scikit-learn 1.9.1,
-   SciPy 1.18.1, statsmodels 0.15.0, DuckDB 2.0.0, pyod 3.6.8, ...; see `CHANGELOG.md`), with `python_version` markers
-   where a release dropped 3.11 (numpy, SciPy). Python 3.11+ only; keep the 3.11-3.15 matrix green; add a marker,
-   never an `==` pin.
+6. **Dependencies**: floors only, in `pyproject.toml` (pandas `>=3.1.1`, DuckDB `duckdb>=2.0.1`). Python 3.11+;
+   keep the 3.11–3.15 matrix green. Add a `python_version` marker, never an `==` pin.
 7. Tests: `pytest tests/test_ml_fdd.py tests/test_sql_anomaly_zscore.py`. Results tables hold measured numbers only.
 8. **Which methods apply**: run `open-fdd-ml methods FOLDER [--json]` before `detect`. It names the roles each
    method needs and why a method cannot run on that folder. On a furnace, RTU or heat pump (no MAT), gray-box uses
