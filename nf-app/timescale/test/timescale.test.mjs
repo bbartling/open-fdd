@@ -575,7 +575,7 @@ test("writeResults upserts rule results into fdd.rule_result", { skip }, async (
   assert.equal(back.window_start.toISOString(), "2026-09-20T00:00:00.000Z");
   const sweep = (await db.query(`SELECT subject_key, role, fault_hours, covered_hours, metrics
     FROM fdd.rule_result WHERE rule_id = 'SV-STALE' AND created_at = $1 ORDER BY subject_key`, [runTs])).rows;
-  assert.equal(sweep.length, 6, "equipment summary plus five stale-assessable sensors");
+  assert.equal(sweep.length, 7, "equipment summary plus six stale-assessable sensors, including duct static");
   const [summary, ...sensors] = sweep;
   assert.equal(summary.subject_key, "");
   assert.deepEqual(summary.metrics.sensor_fault_hours,

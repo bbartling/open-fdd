@@ -1831,7 +1831,9 @@
     "ra_h",
     "zone_rh",
     "ma_h",
-    "sa_h"
+    "sa_h",
+    "duct_static",
+    "zone_flow"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,

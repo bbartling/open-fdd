@@ -3143,6 +3143,8 @@ Stale data (no fresh samples for longer than the stale threshold)
 | `zone_air_relative_humidity` | `zone_rh` | `zone-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `mixed_air_relative_humidity` | `ma_h` | `mixed-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
 | `discharge_air_relative_humidity` | `sa_h` | `supply-air-humidity` | `PERCENT_RH` | Relative humidity | %RH (0-100) | none | 0 to 100 | optional |
+| `discharge_air_static_pressure` | `duct_static` | `duct-static-pressure` | `PA` | Pressure | Pa | kPa, inH2O, psi, bar | -248.84 to 1990.72 | optional |
+| `discharge_air_volume_flow_rate` | `zone_flow` | `zone-airflow` | `L-PER-SEC` | Flow | L/s | m³/s, m³/h, cfm, gpm | -1 to 5000 | optional |
 
 **Parameters**
 
