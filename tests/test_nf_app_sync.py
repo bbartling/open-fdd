@@ -146,8 +146,9 @@ def _app(engine="auto", timescale=None):
 
 def test_timescale_schema_preflight_engine_selection_and_lite_skip(monkeypatch):
     assert sync.timescale_schema_check({})[0] == "SKIP"  # Lite has no engine/config
-    assert sync.timescale_schema_check(_app("sqlite", "postgresql://db/x"))[0] == "SKIP"
-    assert sync.timescale_schema_check(_app("pglite"), {"NF_TIMESCALE_PREFLIGHT_DSN": "postgresql://db/x"})[0] == "SKIP"
+    for engine in ("sqlite", "pglite"):
+        level, message = sync.timescale_schema_check(_app(engine, "postgresql://db/x"))
+        assert level == "FAIL" and "was removed" in message and "duckdb" in message
     assert sync.timescale_schema_check(_app("auto"))[0] == "SKIP"
     assert sync.timescale_schema_check(_app("timescale"))[0] == "FAIL"
 
