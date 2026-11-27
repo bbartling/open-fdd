@@ -451,6 +451,16 @@
    ],
    "scale": "fraction"
   },
+  "fan_power": {
+   "name": "fan-elec-power",
+   "classes": [],
+   "markers": [
+    "fan",
+    "power",
+    "sensor"
+   ],
+   "scale": "si:kW"
+  },
   "fan_status": {
    "name": "fan-status",
    "classes": [
@@ -463,6 +473,16 @@
     "sensor"
    ],
    "scale": "boolean"
+  },
+  "filter_dp": {
+   "name": "filter-diff-pressure",
+   "classes": [],
+   "markers": [
+    "filter",
+    "pressure",
+    "sensor"
+   ],
+   "scale": "si:Pa"
   },
   "heating_coil_entering_temp": {
    "name": "heating-coil-entering-temp",
@@ -3401,6 +3421,34 @@
     "valve_open": 0.8,
     "valve_shut": 0.05,
     "min_dt": 3.0,
+    "require_run_proof": 1.0
+   },
+   "run_proof": "gated"
+  },
+  {
+   "id": "FILTER-LOAD",
+   "description": "Filter pressure drop or fan effort too high",
+   "sql_file": "filter_load.sql",
+   "priority": "P2",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "filter_dp",
+    "fan_power",
+    "zone_flow",
+    "fan_status",
+    "fan_cmd",
+    "run_proof"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 1200,
+   "parameters": {
+    "confirm_seconds": 1200.0,
+    "dp_dirty": 248.84,
+    "flow_frac": 0.5,
+    "effort_ratio": 1.3,
     "require_run_proof": 1.0
    },
    "run_proof": "gated"

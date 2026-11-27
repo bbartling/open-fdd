@@ -12,6 +12,8 @@
   "fan_cmd": "fan-cmd",
   "return_fan": "return-fan-cmd",
   "fan_status": "fan-status",
+  "filter_dp": "filter-diff-pressure",
+  "fan_power": "fan-elec-power",
   "duct_static": "duct-static-pressure",
   "duct_static_sp": "duct-static-pressure-sp",
   "static_reset_request": "vav-pressure-request-sum",

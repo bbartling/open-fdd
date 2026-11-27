@@ -164,8 +164,16 @@
       "scale": "fraction",
       "type": "double"
     },
+    "fan_power": {
+      "scale": "si:kW",
+      "type": "double"
+    },
     "fan_status": {
       "scale": "boolean",
+      "type": "double"
+    },
+    "filter_dp": {
+      "scale": "si:Pa",
       "type": "double"
     },
     "heating_coil_entering_temp": {
@@ -477,6 +485,14 @@
         "fan_status": {
           "type": "double",
           "role": "fan_status"
+        },
+        "filter_dp": {
+          "type": "double",
+          "role": "filter_dp"
+        },
+        "fan_power": {
+          "type": "double",
+          "role": "fan_power"
         },
         "heating_coil_entering_temp": {
           "type": "double",

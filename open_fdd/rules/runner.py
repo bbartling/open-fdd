@@ -206,6 +206,14 @@ def _missing_roles(rule: cb.CookbookRule, df: pd.DataFrame) -> list[str]:
         if any(r in df.columns and df[r].notna().any() for r in proofs):
             return []
         return ["fan_or_pump_status_or_cmd"]
+    if rule.id == "FILTER-LOAD":
+        # #1783: a filter DP, or fan power and airflow together (SQL assessment 'no_filter_inputs')
+        def has(r):
+            return r in df.columns and df[r].notna().any()
+
+        if has("filter-diff-pressure") or (has("fan-elec-power") and has("zone-airflow")):
+            return []
+        return ["filter-diff-pressure|fan-elec-power+zone-airflow"]
     if rule.sensor_sweep:
         present = [r for r in cb.SWEEP_SENSOR_ROLES if r in df.columns and df[r].notna().any()]
         return [] if present else ["any sensor role from sweep list"]
@@ -725,6 +733,18 @@ def run_cookbook_rule(
             result.fault_pct = None
             result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
             result.metrics["assessment"] = why
+        if rule.id == "FILTER-LOAD":
+            # #1783: which path judged the filter; a thin fan-effort baseline is not assessable, never an assessed zero
+            why = d.attrs.get("filter_load_assessment", "filter_dp")
+            result.metrics["filter_path"] = "fan_effort" if why == "insufficient_baseline" else why
+            result.metrics["assessment"] = why if why == "insufficient_baseline" else "assessed"
+            if why == "insufficient_baseline":
+                result.status = "NOT_ASSESSED_INSUFFICIENT_BASELINE"
+                result.fault_hours = None
+                result.fault_pct = None
+                result.notes = "NOT ASSESSED — under 4 h of fan-effort baseline"
+            elif why == "fan_effort" and result.status == "FAULT":
+                result.notes = f"Advisory (fan effort, no filter DP): {result.notes}"
         if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
             # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
             result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"

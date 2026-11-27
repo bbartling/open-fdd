@@ -671,5 +671,21 @@
   "general": [
    "equip"
   ]
+ },
+ "filter_dp": {
+  "classes": [],
+  "markers": [
+   "filter",
+   "pressure",
+   "sensor"
+  ]
+ },
+ "fan_power": {
+  "classes": [],
+  "markers": [
+   "fan",
+   "power",
+   "sensor"
+  ]
  }
 }
