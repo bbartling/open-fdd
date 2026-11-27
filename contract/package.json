@@ -1,0 +1,18 @@
+{
+  "name": "open-fdd-ui-contract",
+  "private": true,
+  "description": "Open-FDD UI API contract: reference mock backend (Node stdlib only) and a contract test suite any backend can run.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "yaml": "2.9.1"
+  },
+  "scripts": {
+    "mock": "node mock/server.mjs",
+    "test": "node test/selftest.mjs"
+  }
+}

@@ -26,7 +26,7 @@ What it uses from NF and why: [NF_FEATURES.md](../docs/migration/nf-plugin/NF_FE
 | `static/energy.js` | Demand, monthly energy, degree-day baseline, M&V, EUI / peers | browser |
 | `static/app-core.js`, `charts.js`, `theme.js`, `base.css`, `style.css`, `vendor/` | The shared dashboard shell (top bar, tab router, Overview, Charts, Points, BACnet Server, Model & RDF), chart catalog, light/dark themes, CSS base + Full's own rules, vendored ECharts 6.1.0 (ESM). `app.js` adds the Full-only tabs (FDD, RCx, Export) | browser |
 | `hooks/fdd.js` | Hourly FDD: bind roles, read NF history (5-min grid), run the SQL pack, write result points, optional BACnet AVs | NF Node runtime |
-| `hooks/lib/engines.js` | SQL engines: `sqlite` (sql.js, vendored in `hooks/vendor/`) and `pglite` | FDD hook |
+| `hooks/lib/engines.js` | SQL engines: `sqlite` (sql.js, vendored in `hooks/vendor/`), `pglite` and opt-in `duckdb` (native DuckDB 2.0.1, #1645) | FDD hook |
 | `hooks/weather.js` | **Shared with Lite** (one source). Open-Meteo outdoor air every 20 min → global variables (site lat/lon from NF) | NF Node runtime |
 | `rules/` | `pack-postgres.json` / `pack-sqlite.json` (built from `sql/fdd`), role overrides, NF class list | build scripts |
 | `rcx-parity.json` | Where every chart of the old central UI lives now (CI-enforced) | `tests/parity.test.mjs` |
@@ -118,9 +118,33 @@ Tables the **Full** edition creates, only when the optional Timescale engine is 
 | `openfdd.nf_samples` | view | n/a | NF's samples in native units (`history_buckets`, newest-sample lookup) |
 | `fdd.input_sample` | view | n/a | SI samples of the bound points (`value * si_scale + si_offset`); the loader reads it (`adapter_nf.sql`) |
 
-The Lite edition and the `sqlite` / `pglite` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
+The Lite edition and the `sqlite` / `pglite` / `duckdb` engines create no persistent tables. Each run builds 5 per-run scratch (TEMP) relations from the SQL input contract (`sql/fdd/input_contract.json`, version 3): `history`, `weather`, `sensor_history`, `utility_interval`, `utility_monthly`.
 
 `sql/fdd/schema/core.sql` is the shared core schema (`fdd.point`, `fdd.rule_result`, `fdd.rule_config`): the NF app installs it, and downstream applications vendor it byte for byte (it ships in the wheel as `open_fdd/data/core.sql`). Schema version 4 (5.0.16) replaced `openfdd.fdd_results` and `openfdd.retention_log` with it; see [`docs/upgrade-5x.md`](../docs/upgrade-5x.md).
+
+## DuckDB engine (opt-in trial, #1645)
+
+`engine: "duckdb"` runs the Postgres pack in native DuckDB (`@duckdb/node-api` `2.0.1-r.1`, DuckDB 2.0.1, an
+`optionalDependencies` entry). The `fdd.*` helpers are DuckDB macros (`sql/fdd/duckdb/duckdb_helpers.sql`, shipped in
+`pack-postgres.json` as `duckdb_helpers_sql`). `auto` never picks it. When the package has no native build for the box
+(linux x64/arm64 glibc or musl, win32, darwin; no 32-bit ARM), the run falls back to the `auto` engine and `engine_note`
+says so. With the app option `timescale` set, it reads the saved tuning (`fdd.rule_config`) like the `timescale`
+engine, and a fallback on such a box picks `timescale`. `tests/duckdb-engine.test.mjs` checks every rule and timeline
+against PGlite and sql.js, with and without saved tuning.
+
+| App option | Default | Meaning |
+|---|---|---|
+| `duckdbMemoryLimit` | `256MB` | DuckDB `memory_limit`. Spilling is off (`temp_directory` empty; DuckDB's default would spill to `.tmp` up to 90 % of the free disk), so a query over the cap fails as a rule error instead of writing to the SD card. 128MB ran the test pack on 2 equipment x 3 days; 64MB did not |
+| `duckdbThreads` | `2` | DuckDB worker threads |
+
+The engine never downloads anything: extension autoinstall and autoload are off, and what the pack needs (ICU time zones,
+Parquet, JSON) is built into the 2.0.1 binary. The time zone is set to UTC after start-up, because the `TimeZone` create
+option makes DuckDB fetch ICU from the network. `duckdb-engine.test.mjs` runs it against an unreachable extension
+repository and checks that nothing is downloaded or spilled. If the instance cannot start, the run fails (no engine swap).
+
+One DuckDB instance stays warm in the hook process between runs. Each run opens its own connection and loads its window
+into TEMP tables, so overlapping runs do not share rows; closing the connection drops them. Parquet history, incremental
+append and removal of the SQLite/PGlite engines are later slices of #1645.
 
 ## Rules this app follows
 
