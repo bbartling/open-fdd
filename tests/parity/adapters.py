@@ -36,6 +36,9 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 PACK_PG_PATH = ROOT / "nf-app" / "rules" / "pack-postgres.json"
 PG_HELPERS_PATH = ROOT / "sql" / "fdd" / "postgres" / "postgres_helpers.sql"
+DUCKDB_HELPERS_PATH = ROOT / "sql" / "fdd" / "duckdb" / "duckdb_helpers.sql"
+# The macros the DuckDB parity tests execute. The pack copies this file; DuckDBAdapter installs the pack copy.
+DUCKDB_HELPERS_SQL = DUCKDB_HELPERS_PATH.read_text(encoding="utf-8")
 
 
 def node() -> str:
@@ -138,10 +141,6 @@ class NodeEngineAdapter:
         if self._dir is not None:
             shutil.rmtree(self._dir, ignore_errors=True)
             self._dir = self._ds_file = None
-
-
-DUCKDB_HELPERS_PATH = ROOT / "sql" / "fdd" / "duckdb" / "duckdb_helpers.sql"
-DUCKDB_HELPERS_SQL = DUCKDB_HELPERS_PATH.read_text(encoding="utf-8")
 
 
 class DuckDBAdapter:
