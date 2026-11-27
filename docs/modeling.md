@@ -79,7 +79,8 @@ client give the same IRIs; the hooks take `base` to override it. A point IRI fro
 
 ASHRAE 223P is the rule-input contract (`roles/openfdd-roles.json`, 1.1.0-draft.1). Haystack defs 4.0.0 are only the
 overlay this export writes, and those IRIs are versioned (`…/def/phIoT/4.0.0#`). The app does not resolve `owl:imports`
-or run SHACL: CI builds a sha256-pinned 223P closure offline with OntoEnv and validates the role file with Shifty.
+or run SHACL. CI downloads the sha256-pinned closure (223P, QUDT 3.4.0, SHACL, SKOS and VAEM) into a cache, then
+OntoEnv resolves those imports with the network off and Shifty validates the role file.
 SPARQL answers use Oxigraph 0.5.13. rdflib 7.6.0 parses Turtle and does not evaluate those queries.
 
 | Use | How |

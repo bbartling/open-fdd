@@ -1,4 +1,4 @@
-"""Offline 223P check used by CI: vendored closure, Shifty, fail on any Violation.
+"""223P check used by CI: cached sha256 closure, Shifty, fail on any Violation.
 
     python -m open_fdd.ontology_audit.align --report ./shacl-report
 """
@@ -27,12 +27,16 @@ def default_models() -> list[Path]:
 
 
 def validate_model(path: Path, *, cross_check: bool = False) -> dict:
-    """Shifty on ``path`` with the pinned 223P closure loaded. No network."""
-    from open_fdd.ontology_audit.closure import copy_223p_closure, vendored_223p_ttl, vendored_closure_dir
+    """Shifty on ``path`` with the pinned 223P closure loaded.
+
+    The closure comes from the sha256 cache. A missing file is downloaded once;
+    OntoEnv itself stays offline.
+    """
+    from open_fdd.ontology_audit.closure import cached_223p_ttl, cached_closure_dir, copy_223p_closure
     from open_fdd.ontology_audit.shacl import validate_shacl, violation_count
     from open_fdd.ontology_audit.sources import parse_rdf
 
-    closure, names = copy_223p_closure(vendored_223p_ttl(), vendored_closure_dir())
+    closure, names = copy_223p_closure(cached_223p_ttl(), cached_closure_dir())
     report = validate_shacl(parse_rdf(path), engine="shifty", closure=closure, cross_check=cross_check)
     report["model"] = str(path)
     report["closure"] = names
