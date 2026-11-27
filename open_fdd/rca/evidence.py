@@ -2,7 +2,7 @@
 
 Collects three kinds of node-level evidence (all computations in SI):
 1. Rule results / fault episodes (from Open-FDD ``fdd.rule_result``, long-format SQL
-   output, CSV/DataFrame, or ``open-fdd-ml confidence`` episode records).
+   output, CSV/DataFrame, or hand-authored episode records).
 2. Data-quality flags (stale, gap, clipping, ``NOT_ASSESSED`` / untrusted input).
 3. Key SI point deviations (e.g. SAT error in K, zone temp error in K, valve saturation).
 """
@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Protocol
+
+from open_fdd.rca.role_index import canonical_role, is_setpoint_role, setpoint_role_for
 
 
 def parse_utc(value: Any) -> datetime | None:
@@ -230,7 +232,7 @@ class InMemoryEvidenceCollector:
 
 
 class DataFrameEvidenceCollector(InMemoryEvidenceCollector):
-    """Build RCA evidence from Open-FDD DataFrames, CSVs, or ``open-fdd-ml confidence`` outputs."""
+    """Build RCA evidence from Open-FDD DataFrames, CSVs, or hand-authored episode files."""
 
     @classmethod
     def from_rule_results(
@@ -287,7 +289,14 @@ class DataFrameEvidenceCollector(InMemoryEvidenceCollector):
         deviations: Any = None,
         data_quality: Any = None,
     ) -> DataFrameEvidenceCollector:
-        """Ingest ``episodes.jsonl``, ``episodes.csv``, or ``report.json`` from ``open-fdd-ml confidence``."""
+        """Ingest hand-authored ``episodes.jsonl``, ``episodes.csv``, or ``report.json`` records.
+
+        The installed ``open-fdd-ml`` CLI has no ``confidence`` subcommand and does not
+        write these files. Pass an existing or hand-authored file whose rows use
+        ``equipment_id``, ``rule_id``, ``start`` / ``end`` (or ``window_start`` /
+        ``window_end``), and optional ``p_real``, ``p_false_positive``, ``label``.
+        A JSON object may carry the rows under ``likely_real``.
+        """
         records: list[Mapping[str, Any]] = []
         if isinstance(source, (Path, str)):
             path = Path(source)
@@ -673,28 +682,21 @@ class SqlEvidenceCollector:
                 prev = by_point.get(pid)
                 if prev is None or (ts is not None and prev[0] is not None and ts >= prev[0]) or prev[0] is None:
                     by_point[pid] = (ts, val)
-            role_of = {pid: pid for pid in by_point}
-            # Optional role column is not in the portable history_sql projection; point_id is the role key.
-            setpoints = {
-                pid: val
-                for pid, (_ts, val) in by_point.items()
-                if pid.endswith(("-sp", "-setpoint", "Setpoint"))
-            }
+            # Pair each observable role with its Aspect-Setpoint partner from roles/openfdd-roles.json.
             for pid, (ts, val) in by_point.items():
-                if pid in setpoints:
+                if is_setpoint_role(pid):
                     continue
-                sp = next(
-                    (
-                        setpoints[k]
-                        for k in (pid + "-sp", pid + "-setpoint", pid + "Setpoint")
-                        if k in setpoints
-                    ),
-                    None,
-                )
+                partner = setpoint_role_for(pid)
+                sp = None
+                if partner is not None:
+                    for other, (_ots, oval) in by_point.items():
+                        if canonical_role(other) == partner:
+                            sp = oval
+                            break
                 samples.append(
                     PointDeviation(
                         equipment_id=fault.equipment_id,
-                        role=role_of[pid],
+                        role=canonical_role(pid) or pid,
                         value_si=val,
                         setpoint_si=sp,
                         unit="",

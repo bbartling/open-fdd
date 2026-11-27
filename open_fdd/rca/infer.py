@@ -1,6 +1,6 @@
 """Opt-in, read-only topology inference for sparse HVAC RDF graphs.
 
-Proposes candidate ``brick:feeds`` edges when a site model lacks explicit equipment-to-
+Proposes candidate ``s223:connectedTo`` edges when a site model lacks explicit equipment-to-
 equipment feeder links. Combines three signals:
 
 1. Directed HVAC equipment role and fluid/air medium compatibility (Brick/Haystack/223P
@@ -91,7 +91,7 @@ _NAME_STOPWORDS = frozenset(
 
 @dataclass(frozen=True)
 class InferredEdge:
-    """Proposed ``brick:feeds`` edge inferred from telemetry, role tags, and naming hints."""
+    """Proposed ``s223:connectedTo`` edge inferred from telemetry, role tags, and naming hints."""
 
     upstream_iri: str
     downstream_iri: str
@@ -99,7 +99,7 @@ class InferredEdge:
     downstream_id: str
     upstream_label: str
     downstream_label: str
-    predicate: str = "brick:feeds"
+    predicate: str = "s223:connectedTo"
     confidence: float = 0.0
     structural_score: float = 0.0
     telemetry_score: float = 0.0
@@ -140,14 +140,14 @@ def _word_tokens(text: str) -> set[str]:
 
 
 def _equip_points(graph: TopologyGraph) -> dict[str, list[GraphNode]]:
-    """Map equipment IRI -> list of point nodes via ``phIoT:equipRef`` or Brick point links."""
+    """Map equipment IRI -> point nodes via ``s223:hasProperty`` or a Haystack ``equipRef`` overlay."""
     pts: dict[str, list[GraphNode]] = defaultdict(list)
     seen: set[tuple[str, str]] = set()
     for node in graph.nodes.values():
         if not node.is_point:
             continue
         for edge in graph.upstream_edges.get(node.iri, ()):
-            if edge.predicate in ("phIoT:equipRef", "brick:isPointOf"):
+            if edge.predicate in ("phIoT:equipRef", "s223:hasProperty", "brick:isPointOf"):
                 key = (edge.upstream_iri, node.iri)
                 if key not in seen and edge.upstream_iri in graph.nodes:
                     seen.add(key)
@@ -547,7 +547,7 @@ def infer_topology(
     max_feeders_per_domain: int = 4,
     bucket_seconds: int | None = None,
 ) -> list[InferredEdge]:
-    """Propose candidate ``brick:feeds`` edges without modifying ``graph``.
+    """Propose candidate ``s223:connectedTo`` edges without modifying ``graph``.
 
     Requires both directed HVAC role/medium compatibility and telemetry co-movement
     (lagged cross-correlation ``>= min_correlation`` over at least ``min_samples``
@@ -892,7 +892,7 @@ def load_telemetry_sql(
 
 
 def suggested_links_to_csv(edges: Sequence[InferredEdge]) -> str:
-    """Serialize proposed ``brick:feeds`` links as CSV for human review."""
+    """Serialize proposed ``s223:connectedTo`` links as CSV for human review."""
     import io
 
     buf = io.StringIO()
@@ -940,18 +940,24 @@ def suggested_links_to_csv(edges: Sequence[InferredEdge]) -> str:
 
 
 def suggested_links_to_ttl(edges: Sequence[InferredEdge]) -> str:
-    """Serialize proposed ``brick:feeds`` links as an advisory Turtle file for human review."""
+    """Serialize proposed 223P connections as an advisory Turtle file for human review."""
     lines = [
-        "@prefix brick: <https://brickschema.org/schema/Brick#> .",
+        "@prefix s223: <http://data.ashrae.org/standard223#> .",
         "",
-        "# ADVISORY: Proposed brick:feeds links (inferred, not modeled).",
+        "# ADVISORY: Proposed s223:Connection links (inferred, not modeled).",
         "# Review and remove unwanted statements before merging into a site model.",
         "",
     ]
-    for e in edges:
-        ev = "; ".join(e.evidence)
-        comment = f"# {e.upstream_label} -> {e.downstream_label} | confidence={e.confidence:.3f} | {ev}"
+    for index, edge in enumerate(edges, start=1):
+        ev = "; ".join(edge.evidence)
+        comment = (
+            f"# {edge.upstream_label} -> {edge.downstream_label} | confidence={edge.confidence:.3f} | {ev}"
+        )
         comment = " ".join(comment.splitlines())
         lines.append(comment)
-        lines.append(f"<{e.upstream_iri}> brick:feeds <{e.downstream_iri}> .")
+        conn = f"urn:openfdd:inferred:connection:{index}"
+        lines.append(f"<{conn}> a s223:Connection ;")
+        lines.append(f"    s223:connectsFrom <{edge.upstream_iri}> ;")
+        lines.append(f"    s223:connectsTo <{edge.downstream_iri}> .")
+        lines.append(f"<{edge.upstream_iri}> s223:connectedTo <{edge.downstream_iri}> .")
     return "\n".join(lines) + "\n"

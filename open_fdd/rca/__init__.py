@@ -1,4 +1,4 @@
-"""Advisory graph-based HVAC root-cause analysis (RCA) over Brick, 223P, and Haystack RDF."""
+"""Advisory graph-based HVAC root-cause analysis (RCA) over an ASHRAE 223P equipment graph."""
 
 from open_fdd.rca.evidence import (
     DataFrameEvidenceCollector,

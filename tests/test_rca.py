@@ -91,6 +91,18 @@ def test_example_plant_ahu_ranks_root_cause_for_two_unhappy_zones():
         assert tr.candidates[0].downstream_symptoms_explained == 2
         assert tr.candidates[0].cause_chain[0] == "ahu-1"
         assert tr.candidates[0].cause_chain[-1] == z
+        assert tr.candidates[0].relations
+        assert all(rel.startswith("s223:") for rel in tr.candidates[0].relations)
+
+    ahu = graph.resolve_node("ahu-1")
+    assert ahu is not None
+    assert "discharge_air_temperature" in ahu.property_roles
+    assert "discharge_air_temperature_setpoint" in ahu.property_roles
+    plant = EXAMPLE_PLANT_TTL.read_text(encoding="utf-8")
+    assert "owl:imports <http://data.ashrae.org/standard223/1.0/model/all>" in plant
+    assert "https://project-haystack.org/def/phIoT/>" not in plant
+    assert "https://project-haystack.org/def/ph/>" not in plant
+    assert "/4.0.0#" in plant
 
     # False positive on vav-1 is down-weighted well below ahu-1
     vav_cand = next(c for c in traces["zone-1"].candidates if c.equipment_id == "vav-1")
@@ -140,12 +152,13 @@ def test_missing_feeds_link_yields_unknown_upstream():
 
 def test_partial_chain_without_ahu_link_yields_partial_unknown_upstream():
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
 @prefix brick: <https://brickschema.org/schema/Brick#> .
-@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
 @prefix local: <urn:test:partial:> .
 
 local:ahu-1 a brick:Air_Handling_Unit ; phIoT:siteRef local:site-1 .
-local:vav-orphan a brick:VAV ; brick:feeds local:zone-orphan .
+local:vav-orphan a brick:VAV ; s223:connectedTo local:zone-orphan .
 local:zone-orphan a brick:HVAC_Zone .
 """
     graph = load_graph(ttl)
@@ -167,13 +180,13 @@ def test_sparql_property_path_and_multi_vocab_223p_haystack_and_cycles():
     ttl = """
 @prefix brick: <https://brickschema.org/schema/Brick#> .
 @prefix s223: <http://data.ashrae.org/standard223#> .
-@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
 @prefix local: <urn:test:multi:> .
 
-local:boiler-1 a phIoT:boiler .
-local:ahu-a a brick:Air_Handling_Unit ; phIoT:hotWaterRef local:boiler-1 .
-local:vav-a a brick:VAV ; phIoT:airRef local:ahu-a .
-local:zone-a a brick:HVAC_Zone ; brick:isFedBy local:vav-a .
+local:boiler-1 a s223:Boiler, phIoT:boiler ; s223:connectedTo local:ahu-a .
+local:ahu-a a s223:AirHandlingUnit ; s223:connectedTo local:vav-a .
+local:vav-a a s223:TerminalUnit ; s223:connectedTo local:zone-a .
+local:zone-a a s223:Zone .
 
 # 223P Connection + ConnectionPoint path: plant-223 -> ahu-223 -> term-223 -> zone-223
 local:plant-223 a phIoT:chiller ; s223:hasConnectionPoint local:cp-out .
@@ -186,12 +199,12 @@ local:term-223 a brick:VAV ; s223:connectedTo local:zone-223 .
 local:zone-223 a brick:HVAC_Zone .
 
 # Deliberate cycle to confirm traversal terminates
-local:loop-1 a brick:AHU ; brick:feeds local:loop-2 .
-local:loop-2 a brick:AHU ; brick:feeds local:loop-1 .
+local:loop-1 a brick:AHU ; s223:connectedTo local:loop-2 .
+local:loop-2 a brick:AHU ; s223:connectedTo local:loop-1 .
 """
     graph = load_graph(ttl)
 
-    # SPARQL property path on Brick + Haystack chain
+    # SPARQL property path on the 223P connectedTo chain (pyoxigraph)
     sparql_hits = graph.sparql_upstream("urn:test:multi:zone-a")
     assert set(sparql_hits) == {
         "urn:test:multi:vav-a",
@@ -219,12 +232,13 @@ local:loop-2 a brick:AHU ; brick:feeds local:loop-1 .
 
 def test_temporal_precedence_and_data_quality_discount():
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
 @prefix brick: <https://brickschema.org/schema/Brick#> .
-@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
 @prefix local: <urn:test:prec:> .
 
-local:chiller-1 a brick:Chiller ; brick:feeds local:ahu-1 .
-local:ahu-1 a brick:Air_Handling_Unit ; brick:feeds local:zone-1 .
+local:chiller-1 a brick:Chiller ; s223:connectedTo local:ahu-1 .
+local:ahu-1 a brick:Air_Handling_Unit ; s223:connectedTo local:zone-1 .
 local:zone-1 a brick:HVAC_Zone .
 """
     graph = load_graph(ttl)
@@ -266,18 +280,19 @@ local:zone-1 a brick:HVAC_Zone .
 
 def test_confidence_episodes_jsonl_and_sqlite_adapter_and_multisite(tmp_path):
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
 @prefix brick: <https://brickschema.org/schema/Brick#> .
-@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix local: <urn:test:sites:> .
 
 local:site-a a phIoT:site ; rdfs:label "site-a" .
 local:site-b a phIoT:site ; rdfs:label "site-b" .
 
-local:a-ahu-1 a brick:Air_Handling_Unit ; rdfs:label "AHU-1" ; phIoT:siteRef local:site-a ; brick:feeds local:a-zone-1 .
+local:a-ahu-1 a brick:Air_Handling_Unit ; rdfs:label "AHU-1" ; phIoT:siteRef local:site-a ; s223:connectedTo local:a-zone-1 .
 local:a-zone-1 a brick:HVAC_Zone ; rdfs:label "Zone-1" ; phIoT:siteRef local:site-a .
 
-local:b-ahu-1 a brick:Air_Handling_Unit ; rdfs:label "AHU-1" ; phIoT:siteRef local:site-b ; brick:feeds local:b-zone-1 .
+local:b-ahu-1 a brick:Air_Handling_Unit ; rdfs:label "AHU-1" ; phIoT:siteRef local:site-b ; s223:connectedTo local:b-zone-1 .
 local:b-zone-1 a brick:HVAC_Zone ; rdfs:label "Zone-1" ; phIoT:siteRef local:site-b .
 """
     graph = load_graph(ttl)
@@ -413,10 +428,10 @@ def test_sql_collector_merges_episodes_and_reads_si_history_with_confidence_sql(
     conn.execute(
         "CREATE TABLE point (site_id TEXT, point_key TEXT, equipment_id TEXT, kind TEXT)"
     )
-    conn.execute("INSERT INTO point VALUES ('site-a', 'discharge-air-temp', 'ahu-1', 'Number')")
-    conn.execute("INSERT INTO point VALUES ('site-a', 'discharge-air-temp-sp', 'ahu-1', 'Number')")
-    conn.execute("INSERT INTO input_sample VALUES ('site-a', 'discharge-air-temp', '2026-11-24T10:10:00Z', 18.5)")
-    conn.execute("INSERT INTO input_sample VALUES ('site-a', 'discharge-air-temp-sp', '2026-11-24T10:10:00Z', 13.0)")
+    conn.execute("INSERT INTO point VALUES ('site-a', 'discharge_air_temperature', 'ahu-1', 'Number')")
+    conn.execute("INSERT INTO point VALUES ('site-a', 'discharge_air_temperature_setpoint', 'ahu-1', 'Number')")
+    conn.execute("INSERT INTO input_sample VALUES ('site-a', 'discharge_air_temperature', '2026-11-24T10:10:00Z', 18.5)")
+    conn.execute("INSERT INTO input_sample VALUES ('site-a', 'discharge_air_temperature_setpoint', '2026-11-24T10:10:00Z', 13.0)")
     collector = SqlEvidenceCollector(
         conn,
         table="rule_result",
@@ -430,10 +445,10 @@ def test_sql_collector_merges_episodes_and_reads_si_history_with_confidence_sql(
     assert faults[0].start == parse_utc("2026-11-24T10:00:00Z")
     assert faults[0].end == parse_utc("2026-11-24T10:30:00Z")
     devs = {d.role: d for d in collector.all_deviations()}
-    assert "discharge-air-temp" in devs
-    assert devs["discharge-air-temp"].value_si == 18.5
-    assert devs["discharge-air-temp"].setpoint_si == 13.0
-    assert devs["discharge-air-temp"].resolved_deviation_si == 5.5
+    assert "discharge_air_temperature" in devs
+    assert devs["discharge_air_temperature"].value_si == 18.5
+    assert devs["discharge_air_temperature"].setpoint_si == 13.0
+    assert devs["discharge_air_temperature"].resolved_deviation_si == 5.5
     conn.close()
     assert csql.episodes_sql is not None
 
@@ -487,7 +502,7 @@ rec:eq.chiller-1 a phIoT:chiller ;
     rdfs:label "Chiller-1" ;
     phIoT:siteRef rec:site-1 ;
     ex:equipmentId "@p:demo:r:ch-001" ;
-    brick:feeds rec:eq.ahu-1 .
+    s223:connectedTo rec:eq.ahu-1 .
 
 rec:eq.ahu-1 a phIoT:equip ;
     rdfs:label "AHU West" ;
@@ -496,13 +511,13 @@ rec:eq.ahu-1 a phIoT:equip ;
     ex:sourceRef "@p:demo:r:aaa-111" ;
     ex:openfddKey "fin.aaa111" ;
     ex:siteId "plant-a" ;
-    brick:feeds rec:eq.vav-1 .
+    s223:connectedTo rec:eq.vav-1 .
 
 rec:eq.vav-1 a phIoT:equip ;
     rdfs:label "VAV-1" ;
     phIoT:siteRef rec:site-1 ;
     ex:equipmentId "@p:demo:r:bbb-222" ;
-    brick:feeds rec:eq.zone-1 .
+    s223:connectedTo rec:eq.zone-1 .
 
 rec:eq.zone-1 a phIoT:equip ;
     rdfs:label "Zone-1" ;
@@ -605,10 +620,11 @@ def test_closed_feeder_cycle_is_partial_unknown():
     from open_fdd.rca.graph import load_graph
 
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
     @prefix brick: <https://brickschema.org/schema/Brick#> .
     @prefix rec: <urn:example:cycle#> .
-    rec:ahu-a brick:feeds rec:ahu-b .
-    rec:ahu-b brick:feeds rec:ahu-a .
+    rec:ahu-a s223:connectedTo rec:ahu-b .
+    rec:ahu-b s223:connectedTo rec:ahu-a .
     """
     tr = load_graph(ttl).traverse_upstream("ahu-a")
     assert tr.upstream_status == "partial_unknown_upstream"
@@ -624,10 +640,11 @@ def test_sparql_only_hits_are_not_direct_feeder_candidates():
     from open_fdd.rca.report import report_to_markdown
 
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
     @prefix brick: <https://brickschema.org/schema/Brick#> .
     @prefix rec: <urn:example:path#> .
-    rec:chiller-1 brick:feeds rec:ahu-1 .
-    rec:ahu-1 brick:feeds rec:zone-1 .
+    rec:chiller-1 s223:connectedTo rec:ahu-1 .
+    rec:ahu-1 s223:connectedTo rec:zone-1 .
     """
     g = load_graph(ttl)
     chiller = g.resolve_node("chiller-1")
@@ -784,6 +801,8 @@ def test_evidence_merged_across_aliases_and_common_cause_uses_iri():
     lead = ahu_cands[0]
     joined = " ".join(lead.reasons)
     assert "SAT-HIGH" in lead.rule_id or "SAT-HIGH" in joined or lead.rule_id == "SAT-HIGH"
+    assert lead.score_breakdown["deviation"] > 0
+    assert any("SI deviation" in reason for reason in lead.reasons)
 
 
 def test_common_cause_next_checks_includes_site_and_iri():
@@ -795,17 +814,18 @@ def test_common_cause_next_checks_includes_site_and_iri():
     from open_fdd.rca.report import next_checks
 
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
     @prefix brick: <https://brickschema.org/schema/Brick#> .
-    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix s1: <urn:example:site/north#> .
     @prefix s2: <urn:example:site/south#> .
 
-    s1:ahu-shared a brick:AHU ; rdfs:label "AHU-1" ; phIoT:siteRef s1:site-north ; brick:feeds s1:z1, s1:z2 .
+    s1:ahu-shared a brick:AHU ; rdfs:label "AHU-1" ; phIoT:siteRef s1:site-north ; s223:connectedTo s1:z1, s1:z2 .
     s1:z1 a brick:HVAC_Zone ; phIoT:siteRef s1:site-north .
     s1:z2 a brick:HVAC_Zone ; phIoT:siteRef s1:site-north .
 
-    s2:ahu-shared a brick:AHU ; rdfs:label "AHU-1" ; phIoT:siteRef s2:site-south ; brick:feeds s2:z3, s2:z4 .
+    s2:ahu-shared a brick:AHU ; rdfs:label "AHU-1" ; phIoT:siteRef s2:site-south ; s223:connectedTo s2:z3, s2:z4 .
     s2:z3 a brick:HVAC_Zone ; phIoT:siteRef s2:site-south .
     s2:z4 a brick:HVAC_Zone ; phIoT:siteRef s2:site-south .
     """
@@ -844,12 +864,13 @@ def test_shared_label_does_not_leak_evidence_and_preserves_distinct_deviations()
     from open_fdd.rca.rank import _collect_for_node, analyze_rca
 
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
     @prefix brick: <https://brickschema.org/schema/Brick#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix rec: <urn:example:dup#> .
 
-    rec:ahu-1 a brick:AHU ; rdfs:label "Shared AHU" ; brick:feeds rec:zone-1 .
-    rec:ahu-2 a brick:AHU ; rdfs:label "Shared AHU" ; brick:feeds rec:zone-2 .
+    rec:ahu-1 a brick:AHU ; rdfs:label "Shared AHU" ; s223:connectedTo rec:zone-1 .
+    rec:ahu-2 a brick:AHU ; rdfs:label "Shared AHU" ; s223:connectedTo rec:zone-2 .
     rec:zone-1 a brick:HVAC_Zone .
     rec:zone-2 a brick:HVAC_Zone .
     """
@@ -897,22 +918,23 @@ def test_inferred_topology_recovers_hidden_chain_and_discounts_weight(tmp_path):
 
     # Full modeled baseline vs. stripped TTL with ZERO feeds links
     ttl_modeled = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
     @prefix brick: <https://brickschema.org/schema/Brick#> .
-    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix ex: <urn:test:hidden#> .
 
-    ex:chiller-1 a brick:Chiller ; rdfs:label "Chiller-1" ; brick:feeds ex:ahu-1 .
-    ex:ahu-1 a brick:AHU ; rdfs:label "AHU-1" ; brick:feeds ex:vav-1, ex:vav-2 .
-    ex:vav-1 a brick:VAV ; rdfs:label "VAV-1" ; brick:feeds ex:zone-1 .
-    ex:vav-2 a brick:VAV ; rdfs:label "VAV-2" ; brick:feeds ex:zone-2 .
+    ex:chiller-1 a brick:Chiller ; rdfs:label "Chiller-1" ; s223:connectedTo ex:ahu-1 .
+    ex:ahu-1 a brick:AHU ; rdfs:label "AHU-1" ; s223:connectedTo ex:vav-1, ex:vav-2 .
+    ex:vav-1 a brick:VAV ; rdfs:label "VAV-1" ; s223:connectedTo ex:zone-1 .
+    ex:vav-2 a brick:VAV ; rdfs:label "VAV-2" ; s223:connectedTo ex:zone-2 .
     ex:zone-1 a brick:HVAC_Zone ; rdfs:label "Zone-1" .
     ex:zone-2 a brick:HVAC_Zone ; rdfs:label "Zone-2" .
     """
 
     ttl_hidden = """
     @prefix brick: <https://brickschema.org/schema/Brick#> .
-    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix ex: <urn:test:hidden#> .
 
@@ -1030,9 +1052,9 @@ def test_inferred_topology_recovers_hidden_chain_and_discounts_weight(tmp_path):
     csv_out = suggested_links_to_csv(edges)
     parsed_suggestions = rdflib.Graph()
     parsed_suggestions.parse(data=ttl_out, format="turtle")
-    assert len(parsed_suggestions) == len(edges)
+    assert len(parsed_suggestions) == 4 * len(edges)
     assert "inferred, not modeled" in csv_out
-    assert "brick:feeds" in csv_out
+    assert "s223:connectedTo" in csv_out
 
 
 def test_cli_infer_topology_writes_suggested_links(tmp_path):
@@ -1046,7 +1068,7 @@ def test_cli_infer_topology_writes_suggested_links(tmp_path):
     ttl_path.write_text(
         """
 @prefix brick: <https://brickschema.org/schema/Brick#> .
-@prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix ex: <urn:test:cli#> .
 
@@ -1146,9 +1168,9 @@ def test_sql_history_loads_each_window_and_preserves_zero_setpoint():
     jan = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
     march = datetime(2026, 3, 15, 12, 0, tzinfo=UTC)
     faults = [
+        FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=None, end=None, site_id="site-a"),
         FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=jan, end=jan + timedelta(hours=1), site_id="site-a"),
         FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=march, end=march + timedelta(hours=1), site_id="site-a"),
-        FaultEvidence(equipment_id="ahu-1", rule_id="SAT-HIGH", start=None, end=None, site_id="site-a"),
     ]
     collector = SqlEvidenceCollector(sqlite3.connect(":memory:"), history_table="input_sample")
     class _FakeHist:
@@ -1216,7 +1238,7 @@ def test_inferred_negative_correlation_explained_in_evidence(tmp_path):
 
     ttl = """
     @prefix brick: <https://brickschema.org/schema/Brick#> .
-    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix ex: <urn:test:inverse#> .
 
@@ -1260,12 +1282,13 @@ def test_case_distinct_aliases_do_not_leak_evidence():
     from open_fdd.rca.rank import _collect_for_node, analyze_rca
 
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
     @prefix brick: <https://brickschema.org/schema/Brick#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix rec: <urn:example:case#> .
 
-    rec:ahu-west a brick:AHU ; rdfs:label "AHU West" ; brick:feeds rec:zone-1 .
-    rec:ahu-west-b a brick:AHU ; rdfs:label "ahu west" ; brick:feeds rec:zone-2 .
+    rec:ahu-west a brick:AHU ; rdfs:label "AHU West" ; s223:connectedTo rec:zone-1 .
+    rec:ahu-west-b a brick:AHU ; rdfs:label "ahu west" ; s223:connectedTo rec:zone-2 .
     rec:zone-1 a brick:HVAC_Zone .
     rec:zone-2 a brick:HVAC_Zone .
     """
@@ -1323,9 +1346,10 @@ def test_mixed_modeled_and_inferred_path_is_labeled_mixed():
     from open_fdd.rca.infer import InferredEdge
 
     ttl = """
+@prefix s223: <http://data.ashrae.org/standard223#> .
     @prefix brick: <https://brickschema.org/schema/Brick#> .
     @prefix rec: <urn:example:mix#> .
-    rec:ahu-1 brick:feeds rec:zone-1 .
+    rec:ahu-1 s223:connectedTo rec:zone-1 .
     rec:chiller-1 a brick:Chiller .
     rec:ahu-1 a brick:AHU .
     rec:zone-1 a brick:HVAC_Zone .
@@ -1359,7 +1383,7 @@ def test_infer_skips_cross_site_pairs_and_shared_points(tmp_path):
 
     ttl = """
     @prefix brick: <https://brickschema.org/schema/Brick#> .
-    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix s1: <urn:example:site/a#> .
     @prefix s2: <urn:example:site/b#> .
@@ -1407,10 +1431,11 @@ def test_suggested_links_ttl_flattens_multiline_labels():
     ]
     ttl = suggested_links_to_ttl(edges)
     for line in ttl.splitlines():
-        assert line.startswith(("@", "#", "<")) or not line.strip()
+        stripped = line.strip()
+        assert stripped.startswith(("@", "#", "<", "s223:")) or not stripped
     parsed = rdflib.Graph()
     parsed.parse(data=ttl, format="turtle")
-    assert len(parsed) == 1
+    assert len(parsed) == 4
 
 
 def test_load_telemetry_csv_filters_by_site(tmp_path):
@@ -1448,7 +1473,7 @@ def test_infer_keeps_same_site_iri_with_distinct_site_ids(tmp_path):
 
     ttl = """
     @prefix brick: <https://brickschema.org/schema/Brick#> .
-    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix s1: <urn:example:site/a#> .
 
@@ -1554,7 +1579,7 @@ def test_unscoped_telemetry_does_not_correlate_across_sites(tmp_path):
 
     ttl = """
     @prefix brick: <https://brickschema.org/schema/Brick#> .
-    @prefix phIoT: <https://project-haystack.org/def/phIoT/> .
+    @prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
     @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
     @prefix s1: <urn:example:site/a#> .
     @prefix s2: <urn:example:site/b#> .
@@ -1621,3 +1646,137 @@ def test_unscoped_telemetry_does_not_correlate_across_sites(tmp_path):
         assert ("AHU-B", "VAV-B") in pairs
         assert ("AHU-A", "VAV-B") not in pairs
         assert ("AHU-B", "VAV-A") not in pairs
+
+
+def test_hop_limit_records_unresolved_frontier():
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix ex: <urn:test:hops:> .
+    ex:b a s223:Chiller ; s223:connectedTo ex:a .
+    ex:a a s223:AirHandlingUnit ; s223:connectedTo ex:zone .
+    ex:zone a s223:Zone .
+    """
+    tr = load_graph(ttl).traverse_upstream("zone", max_hops=1)
+    assert [h.node.node_id for h in tr.ancestors] == ["a"]
+    assert tr.upstream_status == "partial_unknown_upstream"
+    assert tr.unknown_upstream_at == ["a"]
+    completed = load_graph(ttl).traverse_upstream("zone", max_hops=4)
+    assert completed.upstream_status == "traced"
+    assert [h.node.node_id for h in completed.ancestors] == ["a", "b"]
+
+
+def test_symptom_filter_uses_resolved_iri():
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix ex: <urn:test:alias:> .
+    ex:west a s223:AirHandlingUnit ; rdfs:label "AHU West" ; s223:connectedTo ex:z1 .
+    ex:other a s223:AirHandlingUnit ; rdfs:label "ahu west" ; s223:connectedTo ex:z2 .
+    ex:z1 a s223:Zone ; rdfs:label "z1" .
+    ex:z2 a s223:Zone ; rdfs:label "z2" .
+    """
+    graph = load_graph(ttl)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="AHU West", rule_id="SAT-HIGH"),
+            FaultEvidence(equipment_id="ahu west", rule_id="SAT-HIGH"),
+            FaultEvidence(equipment_id="z1", rule_id="ZNT-HIGH"),
+            FaultEvidence(equipment_id="z2", rule_id="ZNT-HIGH"),
+        ]
+    )
+    report = analyze_rca(graph, collector, symptom_equip="AHU West")
+    assert [t.symptom_equipment for t in report.traces] == ["AHU West"]
+
+
+def test_timestamps_serialize_as_utc():
+    from datetime import datetime, timedelta, timezone
+
+    from open_fdd.rca.rank import _ts_iso
+
+    aware = datetime(2026, 11, 24, 10, 0, 5, tzinfo=timezone(timedelta(hours=2)))
+    assert _ts_iso(aware) == "2026-11-24T08:00:05Z"
+    naive = datetime(2026, 11, 24, 10, 0, 5)
+    assert _ts_iso(naive) == "2026-11-24T10:00:05Z"
+
+
+def test_long_inline_turtle_is_parsed():
+    literal = "N" * 300
+    ttl = (
+        '@prefix s223: <http://data.ashrae.org/standard223#> . '
+        '@prefix ex: <urn:test:long:> . '
+        f'ex:ahu a s223:AirHandlingUnit ; <urn:test:long:note> "{literal}" .'
+    )
+    node = load_graph(ttl).resolve_node("ahu")
+    assert node is not None
+    assert node.label == "ahu"
+
+
+def test_display_label_prefers_rdfs_label_and_keeps_haystack_alias():
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+    @prefix ex: <urn:test:label:> .
+    ex:ahu a s223:AirHandlingUnit ; ph:dis "Haystack name" ; rdfs:label "RDF name" .
+    """
+    node = load_graph(ttl).resolve_node("Haystack name")
+    assert node is not None
+    assert node.label == "RDF name"
+    assert load_graph(ttl).resolve_node("RDF name").iri == node.iri
+
+
+def test_shared_cause_counts_distinct_downstream_nodes():
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    @prefix ex: <urn:test:rollup:> .
+    ex:ahu a s223:AirHandlingUnit ; rdfs:label "ahu" ; s223:connectedTo ex:zone .
+    ex:zone a s223:Zone ; rdfs:label "Zone 1" ; ex:equipmentId "zone-local" .
+    """
+    graph = load_graph(ttl)
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="ahu", rule_id="SAT-HIGH"),
+            FaultEvidence(equipment_id="zone-local", rule_id="ZNT-HIGH"),
+            FaultEvidence(equipment_id="Zone 1", rule_id="ZNT-HIGH"),
+        ]
+    )
+    report = analyze_rca(graph, collector)
+    assert report.common_causes == []
+    assert len(report.traces) == 2
+    assert {t.symptom_equipment for t in report.traces} == {"zone-local", "Zone 1"}
+
+
+def test_upstream_candidate_is_not_reported_as_no_symptoms():
+    ttl = """
+    @prefix s223: <http://data.ashrae.org/standard223#> .
+    @prefix ex: <urn:test:checks:> .
+    ex:ahu a s223:AirHandlingUnit ; s223:connectedTo ex:zone .
+    ex:zone a s223:Zone .
+    """
+    collector = InMemoryEvidenceCollector(
+        faults=[
+            FaultEvidence(equipment_id="ahu", rule_id="SAT-HIGH"),
+            FaultEvidence(equipment_id="zone", rule_id="ZNT-HIGH"),
+        ]
+    )
+    report = analyze_rca(load_graph(ttl), collector)
+    from open_fdd.rca.report import next_checks
+
+    checks = next_checks(report)
+    assert any(line.startswith("Inspect upstream ahu") for line in checks)
+    assert all("No active downstream" not in line for line in checks)
+    scoped = analyze_rca(load_graph(ttl), collector, site_id="site-a")
+    assert scoped.traces
+    assert all(trace.symptom_site == "site-a" for trace in scoped.traces)
+
+
+def test_pyoxigraph_and_rdflib_versions_are_pinned():
+    from importlib.metadata import version
+
+    import pyoxigraph
+    import rdflib
+
+    assert rdflib.__version__ == "7.6.0"
+    assert version("pyoxigraph") == "0.5.13"
+    assert pyoxigraph.Store is not None

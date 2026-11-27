@@ -31,19 +31,27 @@ def next_checks(report: RCAReport) -> list[str]:
                 f"Inspect {tr.symptom_equipment} locally ({lead.rule_id}, confidence={lead.confidence:.2f}); "
                 f"no stronger upstream cause found."
             )
-        elif tr.candidates and tr.candidates[0].inferred:
+        elif tr.candidates and tr.candidates[0].hop_distance > 0:
             lead = tr.candidates[0]
-            checks.append(
-                f"Verify inferred upstream {lead.equipment_id} -> {tr.symptom_equipment} "
-                f"({lead.rule_id}, confidence={lead.confidence:.2f}; {lead.topology_source})."
-            )
+            if lead.inferred:
+                checks.append(
+                    f"Verify inferred upstream {lead.equipment_id} -> {tr.symptom_equipment} "
+                    f"({lead.rule_id}, confidence={lead.confidence:.2f}; {lead.topology_source})."
+                )
+            else:
+                checks.append(
+                    f"Inspect upstream {lead.equipment_id} ({lead.rule_id}, confidence={lead.confidence:.2f}) "
+                    f"for {tr.symptom_equipment}."
+                )
         if tr.unknown_upstream and tr.upstream_status != "traced_inferred":
             at = ", ".join(tr.unknown_upstream_at) or tr.symptom_equipment
             checks.append(
                 f"Verify topology/feeder tags above {at}: graph traversal hit unknown upstream."
             )
-    if not checks:
+    if not report.traces:
         checks.append("No active downstream fault symptoms required upstream root-cause tracing.")
+    elif not checks:
+        checks.append("Symptom traces had no ranked candidates.")
     return checks[:10]
 
 

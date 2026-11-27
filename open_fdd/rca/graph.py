@@ -1,21 +1,27 @@
 """RDF topology loader and upstream traversal for HVAC root-cause analysis (RCA).
 
-Supports Brick (``brick:feeds`` / ``brick:isFedBy``), ASHRAE 223P (``s223:connectedTo`` /
-``s223:connectedFrom`` / ``s223:Connection`` / connection points), and Project Haystack
-(``phIoT:airRef``, ``phIoT:chilledWaterRef``, ``phIoT:hotWaterRef``, ``phIoT:equipRef``,
-``phIoT:weatherStationRef``). Reuses ``open_fdd.ontology_audit`` for safe offline RDF
-parsing and Haystack IRI normalization.
+The feeder graph is ASHRAE 223P: equipment and other connectables, connection points,
+and ``s223:Connection`` (the connection between connectables). Direction follows
+outlet connection point → connection → inlet connection point, plus
+``s223:connectedTo`` / ``s223:connectedFrom`` and ``s223:connectsFrom`` /
+``s223:connectsTo``. Properties on equipment are matched to
+``roles/openfdd-roles.json``.
 
-Sparse / incomplete graphs are expected in real buildings: when a node or chain ends
-without an upstream feeder link on a non-source equipment, traversal reports
-``unknown_upstream`` instead of guessing links. Ontology vocabulary terms bundled in
-a Turtle export are skipped. Nodes also resolve by common alternate identifiers
-(literal local names such as equipmentId, pointId, sourceRef, openfddKey, id, and
-Haystack ids with or without a leading ``@``).
+Haystack tags are an optional overlay for labels, site membership and point
+ownership. They are stored as Haystack defs 4.0.0 IRIs
+(``https://project-haystack.org/def/<vocab>/4.0.0#<name>``). Unversioned Haystack
+IRIs are rewritten to that form on load and are not used as feeder edges.
+
+SPARQL property paths run on pyoxigraph 0.5.13. rdflib 7.6.0 parses Turtle only.
+
+Sparse graphs report ``unknown_upstream`` instead of guessing a missing link.
+A known limit: equipment ownership is not inferred from ``s223:cnx`` alone when
+the model has no ``s223:hasConnectionPoint``.
 """
 
 from __future__ import annotations
 
+import re
 from collections import deque
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -24,12 +30,33 @@ from typing import Any
 
 from open_fdd.ontology_audit.terms import PREFIXES, split_iri
 
-BRICK = PREFIXES["brick"]
 S223 = PREFIXES["s223"]
-PH = PREFIXES["ph"]
-PH_IOT = PREFIXES["phIoT"]
+S223_IMPORT = "http://data.ashrae.org/standard223/1.0/model/all"
+HAYSTACK_VERSION = "4.0.0"
 RDF_NS = PREFIXES["rdf"]
 RDFS_NS = PREFIXES["rdfs"]
+QUDT_NS = PREFIXES["qudt"]
+QK_NS = PREFIXES["quantitykind"]
+
+_HAYSTACK_IRI = re.compile(
+    r"^https?://(?:www\.)?project-haystack\.org/def/([A-Za-z0-9]+)/(?:[0-9][0-9.]*#)?(.+)$"
+)
+
+
+def versioned_haystack_iri(iri: str) -> str:
+    """Rewrite a Haystack def IRI to the pinned 4.0.0 hash form."""
+    match = _HAYSTACK_IRI.match(iri)
+    if not match:
+        return iri
+    return f"https://project-haystack.org/def/{match.group(1)}/{HAYSTACK_VERSION}#{match.group(2)}"
+
+
+def _haystack_ns(vocab: str) -> str:
+    return f"https://project-haystack.org/def/{vocab}/{HAYSTACK_VERSION}#"
+
+
+PH = _haystack_ns("ph")
+PH_IOT = _haystack_ns("phIoT")
 
 SOURCE_ROOT_MARKERS = frozenset(
     {
@@ -78,16 +105,9 @@ ALIAS_PREDICATE_LOCAL_NAMES = frozenset(
 )
 SITE_ID_PREDICATE_LOCAL_NAMES = frozenset({"siteid", "site_id"})
 
-UPSTREAM_PATH_SPARQL_TEMPLATE = """PREFIX brick: <https://brickschema.org/schema/Brick#>
-PREFIX s223: <http://data.ashrae.org/standard223#>
-PREFIX phIoT: <https://project-haystack.org/def/phIoT/>
+UPSTREAM_PATH_SPARQL_TEMPLATE = """PREFIX s223: <http://data.ashrae.org/standard223#>
 SELECT DISTINCT ?upstream WHERE {{
-  ?upstream (
-    brick:feeds | ^brick:isFedBy |
-    s223:connectedTo | ^s223:connectedFrom |
-    ^phIoT:airRef | ^phIoT:chilledWaterRef | ^phIoT:hotWaterRef |
-    ^phIoT:weatherStationRef | ^phIoT:equipRef
-  )+ <{target_iri}> .
+  ?upstream (s223:connectedTo | ^s223:connectedFrom)+ <{target_iri}> .
 }}"""
 
 SparqlRunner = Callable[[str], list[dict[str, str]]]
@@ -108,6 +128,7 @@ class GraphNode:
     is_point: bool = False
     aliases: tuple[str, ...] = ()
     site_ids: tuple[str, ...] = ()
+    property_roles: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -172,8 +193,10 @@ def _is_point(equip_types: Iterable[str], tags: Iterable[str]) -> bool:
     for item in (*equip_types, *tags):
         tok = _norm_token(split_iri(item)[1])
         if tok in POINT_MARKERS or tok.endswith(
-            ("_sensor", "_setpoint", "_command", "_status", "_alarm", "_point", "sensor", "setpoint")
+            ("property", "_sensor", "_setpoint", "_command", "_status", "_alarm", "_point", "sensor", "setpoint")
         ):
+            return True
+        if tok.endswith("connectionpoint"):
             return True
     return False
 
@@ -211,10 +234,12 @@ class TopologyGraph:
         upstream_edges: dict[str, list[UpstreamEdge]],
         *,
         rdflib_graph: Any = None,
+        sparql_triples: list[tuple[str, str, str]] | None = None,
     ) -> None:
         self.nodes = nodes
         self.upstream_edges = upstream_edges
         self.rdflib_graph = rdflib_graph
+        self.sparql_triples = list(sparql_triples or [])
         self._alias_exact: dict[str, list[str]] = {}
         self._alias_ci: dict[str, list[str]] = {}
         for iri, node in nodes.items():
@@ -297,7 +322,7 @@ class TopologyGraph:
                 did = getattr(inf, "downstream_id", "") or _local_id(dn_iri)
                 dlab = getattr(inf, "downstream_label", "") or did
                 nodes[dn_iri] = GraphNode(iri=dn_iri, node_id=did, label=dlab)
-            pred = getattr(inf, "predicate", "brick:feeds") or "brick:feeds"
+            pred = getattr(inf, "predicate", "s223:connectedTo") or "s223:connectedTo"
             edges.setdefault(dn_iri, []).append(
                 UpstreamEdge(
                     upstream_iri=up_iri,
@@ -308,48 +333,94 @@ class TopologyGraph:
                     evidence=tuple(getattr(inf, "evidence", ()) or ()),
                 )
             )
-        return TopologyGraph(nodes=nodes, upstream_edges=edges, rdflib_graph=self.rdflib_graph)
+        return TopologyGraph(
+            nodes=nodes,
+            upstream_edges=edges,
+            rdflib_graph=self.rdflib_graph,
+            sparql_triples=self.sparql_triples,
+        )
 
     @classmethod
     def from_rdflib(cls, graph: Any) -> TopologyGraph:
-        """Build a ``TopologyGraph`` from an ``rdflib.Graph`` (normalizing Haystack IRIs)."""
-        from rdflib import Literal, URIRef
+        """Build a ``TopologyGraph`` from an ``rdflib.Graph``.
 
-        from open_fdd.ontology_audit.doctor import normalize_graph
+        Haystack IRIs are rewritten to defs 4.0.0. Feeder edges come from 223P
+        connections. Haystack ``siteRef``, ``hasTag`` and ``dis`` stay as lookup
+        and display. ``equipRef`` and ``s223:hasProperty`` record point ownership.
+        """
+        from rdflib import Graph, Literal, URIRef
 
-        g = normalize_graph(graph)
+        from open_fdd.rca.role_index import match_property_pattern
+
+        def fix(node: Any) -> Any:
+            if isinstance(node, URIRef):
+                return URIRef(versioned_haystack_iri(str(node)))
+            return node
+
+        g = Graph()
+        for prefix, ns in graph.namespaces():
+            ns_s = str(ns)
+            g.bind(prefix, URIRef(versioned_haystack_iri(ns_s) if "project-haystack.org" in ns_s else ns_s), override=True, replace=True)
+        for s, p, o in graph:
+            g.add((fix(s), fix(p), fix(o) if isinstance(o, URIRef) else o))
 
         rdf_type = URIRef(RDF_NS + "type")
         rdfs_label = URIRef(RDFS_NS + "label")
         has_tag = URIRef(PH + "hasTag")
         site_ref = URIRef(PH_IOT + "siteRef")
         dis_pred = URIRef(PH + "dis")
+        has_cp = URIRef(S223 + "hasConnectionPoint")
+        cnx = URIRef(S223 + "cnx")
+        connects_from = URIRef(S223 + "connectsFrom")
+        connects_to = URIRef(S223 + "connectsTo")
+        connected_to = URIRef(S223 + "connectedTo")
+        connected_from = URIRef(S223 + "connectedFrom")
+        has_property = URIRef(S223 + "hasProperty")
+        of_medium = URIRef(S223 + "ofMedium")
+        has_medium = URIRef(S223 + "hasMedium")
+        has_aspect = URIRef(S223 + "hasAspect")
+        has_qk = URIRef(QUDT_NS + "hasQuantityKind")
+        equip_ref = URIRef(PH_IOT + "equipRef")
+        outlet_cp = URIRef(S223 + "OutletConnectionPoint")
+        inlet_cp = URIRef(S223 + "InletConnectionPoint")
 
-        # Collect all candidate entity IRIs appearing in types, labels, or topology predicates
+        label_preds = (rdfs_label, dis_pred)
         entities: set[str] = set()
         types_by_s: dict[str, list[str]] = {}
         tags_by_s: dict[str, list[str]] = {}
-        labels_by_s: dict[str, str] = {}
+        labels_by_pred: dict[str, dict[str, list[str]]] = {str(pred): {} for pred in label_preds}
         sites_by_s: dict[str, str] = {}
         aliases_by_s: dict[str, list[str]] = {}
         site_ids_literal_by_s: dict[str, list[str]] = {}
+        sparql_triples: list[tuple[str, str, str]] = []
+        aspects_by_s: dict[str, set[str]] = {}
+        mediums_by_s: dict[str, set[str]] = {}
+        qk_by_s: dict[str, set[str]] = {}
 
         for s, p, o in g:
             if not isinstance(s, URIRef):
                 continue
             s_iri = str(s)
+            if isinstance(o, URIRef):
+                sparql_triples.append((s_iri, str(p), str(o)))
             if p == rdf_type and isinstance(o, URIRef):
                 entities.add(s_iri)
                 types_by_s.setdefault(s_iri, []).append(str(o))
             elif p == has_tag and isinstance(o, URIRef):
                 entities.add(s_iri)
                 tags_by_s.setdefault(s_iri, []).append(str(o))
-            elif p in (rdfs_label, dis_pred) and isinstance(o, Literal):
+            elif p in label_preds and isinstance(o, Literal):
                 entities.add(s_iri)
-                labels_by_s.setdefault(s_iri, str(o))
+                labels_by_pred[str(p)].setdefault(s_iri, []).append(str(o))
             elif p == site_ref and isinstance(o, URIRef):
                 entities.add(s_iri)
                 sites_by_s[s_iri] = str(o)
+            elif p == has_aspect and isinstance(o, URIRef):
+                aspects_by_s.setdefault(s_iri, set()).add(str(o))
+            elif p in (of_medium, has_medium) and isinstance(o, URIRef):
+                mediums_by_s.setdefault(s_iri, set()).add(str(o))
+            elif p == has_qk and isinstance(o, URIRef):
+                qk_by_s.setdefault(s_iri, set()).add(str(o))
             elif isinstance(o, Literal):
                 local = _pred_local_name(str(p)).lower()
                 if local in ALIAS_PREDICATE_LOCAL_NAMES:
@@ -361,68 +432,44 @@ class TopologyGraph:
 
         edges: dict[str, list[UpstreamEdge]] = {}
         seen_edges: set[tuple[str, str, str]] = set()
+        derived_connected: set[tuple[str, str]] = set()
 
         def add_edge(upstream: str, downstream: str, label: str) -> None:
-            if upstream == downstream:
+            if not upstream or not downstream or upstream == downstream:
                 return
             entities.add(upstream)
             entities.add(downstream)
             key = (upstream, downstream, label)
-            if key not in seen_edges:
-                seen_edges.add(key)
-                edges.setdefault(downstream, []).append(
-                    UpstreamEdge(upstream_iri=upstream, downstream_iri=downstream, predicate=label)
-                )
+            if key in seen_edges:
+                return
+            seen_edges.add(key)
+            edges.setdefault(downstream, []).append(
+                UpstreamEdge(upstream_iri=upstream, downstream_iri=downstream, predicate=label)
+            )
+            if label.startswith("s223:") and (upstream, downstream) not in derived_connected:
+                derived_connected.add((upstream, downstream))
+                sparql_triples.append((upstream, S223 + "connectedTo", downstream))
 
-        # 1. Direct Brick / 223P / Haystack relationships
-        feeds_p = URIRef(BRICK + "feeds")
-        is_fed_by_p = URIRef(BRICK + "isFedBy")
-        s223_to = URIRef(S223 + "connectedTo")
-        s223_from = URIRef(S223 + "connectedFrom")
-        air_ref = URIRef(PH_IOT + "airRef")
-        chw_ref = URIRef(PH_IOT + "chilledWaterRef")
-        hw_ref = URIRef(PH_IOT + "hotWaterRef")
-        wx_ref = URIRef(PH_IOT + "weatherStationRef")
-        equip_ref = URIRef(PH_IOT + "equipRef")
+        def neighbors(node: URIRef, pred: URIRef) -> list[URIRef]:
+            found = [o for o in g.objects(node, pred) if isinstance(o, URIRef)]
+            found.extend(s for s in g.subjects(pred, node) if isinstance(s, URIRef) and s not in found)
+            return found
 
         for s, p, o in g:
             if not (isinstance(s, URIRef) and isinstance(o, URIRef)):
                 continue
-            if p == feeds_p:
-                add_edge(str(s), str(o), "brick:feeds")
-            elif p == is_fed_by_p:
-                add_edge(str(o), str(s), "brick:isFedBy")
-            elif p == s223_to:
+            if p == connected_to:
                 add_edge(str(s), str(o), "s223:connectedTo")
-            elif p == s223_from:
+            elif p == connected_from:
                 add_edge(str(o), str(s), "s223:connectedFrom")
-            elif p == air_ref:
-                add_edge(str(o), str(s), "phIoT:airRef")
-            elif p == chw_ref:
-                add_edge(str(o), str(s), "phIoT:chilledWaterRef")
-            elif p == hw_ref:
-                add_edge(str(o), str(s), "phIoT:hotWaterRef")
-            elif p == wx_ref:
-                add_edge(str(o), str(s), "phIoT:weatherStationRef")
-            elif p == equip_ref:
-                add_edge(str(o), str(s), "phIoT:equipRef")
-
-        # 2. ASHRAE 223P Connection (conn s223:connectsFrom upstream ; s223:connectsTo downstream)
-        connects_from = URIRef(S223 + "connectsFrom")
-        connects_to = URIRef(S223 + "connectsTo")
-        has_cp = URIRef(S223 + "hasConnectionPoint")
-        cnx = URIRef(S223 + "cnx")
-        outlet_cp = URIRef(S223 + "OutletConnectionPoint")
-        inlet_cp = URIRef(S223 + "InletConnectionPoint")
 
         for conn in set(g.subjects(connects_from, None)) & set(g.subjects(connects_to, None)):
             ups = [str(o) for o in g.objects(conn, connects_from) if isinstance(o, URIRef)]
             dns = [str(o) for o in g.objects(conn, connects_to) if isinstance(o, URIRef)]
-            for u in ups:
-                for d in dns:
-                    add_edge(u, d, "s223:Connection")
+            for upstream in ups:
+                for downstream in dns:
+                    add_edge(upstream, downstream, "s223:Connection")
 
-        # 3. ASHRAE 223P ConnectionPoint -> Connection -> ConnectionPoint
         cp_owner: dict[str, str] = {}
         for equip, _, cp in g.triples((None, has_cp, None)):
             if isinstance(equip, URIRef) and isinstance(cp, URIRef):
@@ -431,13 +478,35 @@ class TopologyGraph:
             out_s = str(cp_out)
             if out_s not in cp_owner:
                 continue
-            for conn in g.objects(cp_out, cnx):
-                for cp_in in g.objects(conn, cnx):
+            for conn in neighbors(cp_out, cnx):
+                for cp_in in neighbors(conn, cnx):
                     in_s = str(cp_in)
                     if in_s == out_s or in_s not in cp_owner:
                         continue
-                    if (cp_in, rdf_type, inlet_cp) in g:
+                    if (cp_in, rdf_type, inlet_cp) in g or (URIRef(in_s), rdf_type, inlet_cp) in g:
                         add_edge(cp_owner[out_s], cp_owner[in_s], "s223:cnx")
+
+        for equip, _, prop in g.triples((None, has_property, None)):
+            if isinstance(equip, URIRef) and isinstance(prop, URIRef):
+                add_edge(str(equip), str(prop), "s223:hasProperty")
+        for point, _, equip in g.triples((None, equip_ref, None)):
+            if isinstance(point, URIRef) and isinstance(equip, URIRef):
+                add_edge(str(equip), str(point), "phIoT:equipRef")
+
+        roles_by_equip: dict[str, list[str]] = {}
+        for equip, _, prop in list(g.triples((None, has_property, None))):
+            if not (isinstance(equip, URIRef) and isinstance(prop, URIRef)):
+                continue
+            prop_s = str(prop)
+            role = match_property_pattern(
+                types=set(types_by_s.get(prop_s, ())),
+                aspects=set(aspects_by_s.get(prop_s, ())),
+                mediums=set(mediums_by_s.get(prop_s, ())),
+                quantity_kinds=set(qk_by_s.get(prop_s, ())),
+                equip_types=set(types_by_s.get(str(equip), ())),
+            )
+            if role and role not in roles_by_equip.setdefault(str(equip), []):
+                roles_by_equip[str(equip)].append(role)
 
         edge_iris: set[str] = set()
         for edge_list in edges.values():
@@ -445,7 +514,13 @@ class TopologyGraph:
                 edge_iris.add(edge.upstream_iri)
                 edge_iris.add(edge.downstream_iri)
 
-        # Build GraphNode objects (skip bundled ontology vocabulary unless it is an edge endpoint)
+        def display_label(iri: str, node_id: str) -> str:
+            for pred in label_preds:
+                vals = sorted(set(labels_by_pred[str(pred)].get(iri, ())))
+                if vals:
+                    return vals[0]
+            return node_id
+
         nodes: dict[str, GraphNode] = {}
         for iri in sorted(entities):
             if _is_vocab_iri(iri) and iri not in edge_iris:
@@ -453,19 +528,22 @@ class TopologyGraph:
             eq_types = tuple(sorted(set(types_by_s.get(iri, ()))))
             tags = tuple(sorted(set(tags_by_s.get(iri, ()))))
             site_iri = sites_by_s.get(iri, "")
-            site_id_tokens = []
+            site_id_tokens: list[str] = []
             if site_iri:
-                site_id_tokens.append(labels_by_s.get(site_iri, ""))
+                site_id_tokens.append(display_label(site_iri, _local_id(site_iri)))
                 site_id_tokens.append(_local_id(site_iri))
                 site_id_tokens.extend(site_ids_literal_by_s.get(site_iri, ()))
                 site_id_tokens.extend(aliases_by_s.get(site_iri, ()))
             site_id_tokens.extend(site_ids_literal_by_s.get(iri, ()))
             site_id_tokens = list(_unique(site_id_tokens))
             literal_site = (site_ids_literal_by_s.get(iri) or site_ids_literal_by_s.get(site_iri) or [""])[0]
-            site_id = literal_site or (labels_by_s.get(site_iri, _local_id(site_iri)) if site_iri else "")
+            site_id = literal_site or (display_label(site_iri, _local_id(site_iri)) if site_iri else "")
             node_id = _local_id(iri)
-            label = labels_by_s.get(iri, node_id)
-            alias_vals: list[str] = [node_id, label, *aliases_by_s.get(iri, ())]
+            label = display_label(iri, node_id)
+            alias_vals = [node_id, label]
+            for pred in label_preds:
+                alias_vals.extend(labels_by_pred[str(pred)].get(iri, ()))
+            alias_vals.extend(aliases_by_s.get(iri, ()))
             aliases = _unique(form for val in alias_vals for form in _identifier_forms(val))
             nodes[iri] = GraphNode(
                 iri=iri,
@@ -479,9 +557,10 @@ class TopologyGraph:
                 is_point=_is_point(eq_types, tags),
                 aliases=aliases,
                 site_ids=tuple(site_id_tokens),
+                property_roles=tuple(roles_by_equip.get(iri, ())),
             )
 
-        return cls(nodes=nodes, upstream_edges=edges, rdflib_graph=g)
+        return cls(nodes=nodes, upstream_edges=edges, rdflib_graph=g, sparql_triples=sparql_triples)
 
     def _closed_cycle_frontiers(self, visited: set[str]) -> list[str]:
         """Node ids in a visited component that has incoming links but no escape to an unvisited feeder."""
@@ -541,15 +620,27 @@ class TopologyGraph:
         *,
         sparql_runner: SparqlRunner | None = None,
     ) -> list[str]:
-        """Run a SPARQL property-path upstream query against local rdflib or a custom runner."""
+        """Run a SPARQL property-path upstream query on pyoxigraph 0.5.13, or a custom runner."""
         query = UPSTREAM_PATH_SPARQL_TEMPLATE.format(target_iri=target_iri)
         if sparql_runner is not None:
             rows = sparql_runner(query)
             return sorted({r["upstream"] for r in rows if r.get("upstream") and r["upstream"] != target_iri})
-        if self.rdflib_graph is None:
+        if not self.sparql_triples:
             return []
-        res = self.rdflib_graph.query(query)
-        return sorted({str(row[0]) for row in res if row[0] is not None and str(row[0]) != target_iri})
+        try:
+            import pyoxigraph
+        except ImportError:
+            return []
+        store = pyoxigraph.Store()
+        for subj, pred, obj in self.sparql_triples:
+            store.add(pyoxigraph.Quad(pyoxigraph.NamedNode(subj), pyoxigraph.NamedNode(pred), pyoxigraph.NamedNode(obj)))
+        hits: set[str] = set()
+        for solution in store.query(query):
+            term = solution["upstream"]
+            value = getattr(term, "value", None)
+            if value and value != target_iri:
+                hits.add(value)
+        return sorted(hits)
 
     def traverse_upstream(
         self,
@@ -603,6 +694,9 @@ class TopologyGraph:
                     frontier_missing.append(cur_node.node_id)
                 continue
             if hop >= max_hops:
+                # The hop budget stopped before feeders were walked. A source root is a completed path.
+                if cur_node is not None and not cur_node.is_source_root:
+                    frontier_missing.append(cur_node.node_id)
                 continue
             for edge in incoming:
                 up_iri = edge.upstream_iri
@@ -689,6 +783,16 @@ class TopologyGraph:
         )
 
 
+def _is_existing_file(source: str) -> bool:
+    """True when ``source`` is a path to a file. Long or illegal paths fall through to Turtle text."""
+    if "\n" in source or len(source) > 240:
+        return False
+    try:
+        return Path(source).is_file()
+    except OSError:
+        return False
+
+
 def load_graph(source: Path | str | Any) -> TopologyGraph:
     """Load a ``TopologyGraph`` from a Turtle/RDF file path, Turtle text, or ``rdflib.Graph``."""
     import rdflib
@@ -697,7 +801,7 @@ def load_graph(source: Path | str | Any) -> TopologyGraph:
         return source
     if isinstance(source, rdflib.Graph):
         return TopologyGraph.from_rdflib(source)
-    if isinstance(source, Path) or (isinstance(source, str) and "\n" not in source and Path(source).is_file()):
+    if isinstance(source, Path) or (isinstance(source, str) and _is_existing_file(source)):
         from open_fdd.ontology_audit.sources import parse_rdf
 
         return TopologyGraph.from_rdflib(parse_rdf(Path(source)))

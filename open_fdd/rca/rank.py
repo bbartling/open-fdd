@@ -180,14 +180,17 @@ def _select_symptoms(
     if site_id:
         faults = [f for f in faults if not f.site_id or f.site_id == site_id]
     if symptom_equip:
-        eq_low = symptom_equip.lower()
         node = graph.resolve_node(symptom_equip, site_id=site_id)
-        aliases = {eq_low}
         if node is not None:
-            aliases.update(
-                {node.node_id.lower(), node.label.lower(), node.iri.lower(), *(a.lower() for a in node.aliases)}
-            )
-        faults = [f for f in faults if f.equipment_id.lower() in aliases]
+            selected: list[FaultEvidence] = []
+            for fault in faults:
+                fault_node = graph.resolve_node(fault.equipment_id, site_id=fault.site_id or site_id)
+                if fault_node is not None and fault_node.iri == node.iri:
+                    selected.append(fault)
+            faults = selected
+        else:
+            eq_low = symptom_equip.lower()
+            faults = [f for f in faults if f.equipment_id.lower() == eq_low]
     if symptom_rule:
         r_low = symptom_rule.lower()
         faults = [f for f in faults if f.rule_id.lower() == r_low]
@@ -471,12 +474,15 @@ def analyze_rca(
                         "site": lead_site,
                         "conf": [],
                         "equips": set(),
+                        "nodes": set(),
                         "rules": set(),
                         "reasons": set(),
                         "inferred": False,
                     },
                 )
                 slot["conf"].append(lead.confidence)
+                sym_node = tr.target.iri if tr.target is not None else f"{sym.site_id}:{sym.equipment_id}"
+                slot["nodes"].add(sym_node)
                 slot["equips"].add(sym.equipment_id)
                 slot["rules"].add(sym.rule_id)
                 slot["reasons"].update(lead.reasons)
@@ -487,7 +493,11 @@ def analyze_rca(
             CauseTrace(
                 symptom_equipment=sym.equipment_id,
                 symptom_rule=sym.rule_id,
-                symptom_site=(tr.target.site_id if tr.target is not None else "") or sym.site_id,
+                symptom_site=(
+                    (tr.target.site_id if tr.target is not None else "")
+                    or sym.site_id
+                    or (site_id or "")
+                ),
                 symptom_start=_ts_iso(sym.start),
                 symptom_end=_ts_iso(sym.end),
                 upstream_status=tr.upstream_status,
@@ -503,13 +513,13 @@ def analyze_rca(
 
     rollups: list[CommonCauseRollup] = []
     for (root_iri, rule_id), slot in rollup_acc.items():
-        if len(slot["equips"]) >= 2:
+        if len(slot["nodes"]) >= 2:
             rollups.append(
                 CommonCauseRollup(
                     root_equipment=slot["display"],
                     root_rule=rule_id,
                     confidence=round(sum(slot["conf"]) / len(slot["conf"]), 3),
-                    downstream_symptom_count=len(slot["equips"]),
+                    downstream_symptom_count=len(slot["nodes"]),
                     downstream_equipment=sorted(slot["equips"]),
                     downstream_rules=sorted(slot["rules"]),
                     reasons=sorted(slot["reasons"]),
