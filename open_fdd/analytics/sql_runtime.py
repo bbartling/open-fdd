@@ -16,13 +16,16 @@ from importlib import resources
 from typing import Any, Iterable
 
 from open_fdd.analytics.runtime_intervals import ELAPSED_MAX_GAP_SECONDS
-from open_fdd.analytics.sql_anomaly import DEFAULT_SITE, ENGINES, _connect, _quote, create_core, load_core
+from open_fdd.analytics.sql_anomaly import (
+    DEFAULT_SITE, ENGINES, _connect, _quote, create_core, load_core, normalize_engine,
+)
 
 #: ts -> integer epoch milliseconds, per engine (SQLite stores integer ms; the others store timestamps).
 TS_MS = {
     "sqlite": "s.ts",
     "duckdb": "epoch_ms(s.ts)",
     "postgres": "CAST(EXTRACT(EPOCH FROM s.ts) * 1000 AS BIGINT)",
+    "timescale": "CAST(EXTRACT(EPOCH FROM s.ts) * 1000 AS BIGINT)",
 }
 
 #: SQL role -> pandas analytics role (the hyphenated names used by ``open_fdd.analytics.core``).
@@ -98,6 +101,7 @@ def render_runtime_sql(
     Monday weeks; ``occupied`` is (equipment_id, start_ms, end_ms) occupied intervals, and passing it (even empty)
     turns on ``in_hours``.
     """
+    engine = normalize_engine(engine)
     if engine not in TS_MS:
         raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(ENGINES)}")
     gap = float(max_gap_seconds)
@@ -132,6 +136,7 @@ def render_runtime_sql(
 
 def run_runtime_sql(conn: Any, engine: str, **kwargs: Any) -> list[dict]:
     """Run the query on a connection that exposes the core; one dict per (equipment, signal, week) (:data:`COLUMNS`)."""
+    engine = normalize_engine(engine)
     sql = render_runtime_sql(engine, **kwargs)
     if engine == "postgres":
         with conn.cursor() as cur:

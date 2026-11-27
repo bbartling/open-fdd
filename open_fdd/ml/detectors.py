@@ -115,8 +115,21 @@ DEFAULT_QUANTILE = 0.99
 
 
 def canonical_roles(frame: pd.DataFrame) -> pd.DataFrame:
-    """Rename short role aliases (``sat``, ``mat`` ...) to the Haystack role names used here."""
-    renamed = frame.rename(columns={k: v for k, v in ROLE_ALIASES.items() if k in frame.columns and v not in frame.columns})
+    """Rename a 223P role or a legacy key onto the pandas column the detectors read.
+
+    ``discharge_air_temperature`` and ``sat`` both become ``discharge-air-temp``. A column that is already
+    that pandas name is left as it is. The rule-input name is :func:`open_fdd.point_roles.resolve`.
+    """
+    from open_fdd.point_roles import pandas_column
+
+    mapping: dict[str, str] = {}
+    taken = set(frame.columns)
+    for col in frame.columns:
+        target = pandas_column(str(col))
+        if target != col and target not in taken:
+            mapping[col] = target
+            taken.add(target)
+    renamed = frame.rename(columns=mapping)
     renamed.attrs = dict(frame.attrs)
     return renamed
 

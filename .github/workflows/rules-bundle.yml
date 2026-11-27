@@ -1,0 +1,80 @@
+# Pinnable rules bundle (#1806): open-fdd-rules-<version>.zip + .zip.sha256 (scripts/build_rules_bundle.py).
+# PRs: build, --check and the offline DuckDB test. Tags: the same, then attach zip + sha256 to the GitHub release.
+name: Rules bundle
+
+on:
+  pull_request:
+    paths:
+      - "scripts/build_rules_bundle.py"
+      - "tests/test_rules_bundle.py"
+      - "sql/fdd/**"
+      - "roles/openfdd-roles.json"
+      - "nf-app/rules/pack-*.json"
+      - "nf-app/static/fdd-catalog.json"
+      - "open_fdd/parity/**"
+      - "contract/**"
+      - "openapi/**"
+      - ".github/workflows/rules-bundle.yml"
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Build the bundle
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then VERSION="${GITHUB_REF_NAME}"; else VERSION="$(cat VERSION)"; fi
+          python3 scripts/build_rules_bundle.py --version "$VERSION" --check
+          python3 scripts/build_rules_bundle.py --version "$VERSION" --out dist
+          cd dist && sha256sum -c open-fdd-rules-*.zip.sha256
+      - name: Install test dependencies
+        run: python -m pip install -e ".[oracle,test,duckdb]"
+      - name: Offline DuckDB test of the built bundle
+        run: |
+          export RULES_BUNDLE_ZIP="$(ls dist/open-fdd-rules-*.zip)"
+          python -m pytest tests/test_rules_bundle.py -q
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Manifest names and units match the UI API contract (roles/openfdd-roles.json)
+        run: |
+          mkdir -p "$RUNNER_TEMP/m" && unzip -o -q dist/open-fdd-rules-*.zip rules-manifest.json -d "$RUNNER_TEMP/m"
+          cd contract && npm ci && OFDD_CONTRACT_MANIFEST="$RUNNER_TEMP/m/rules-manifest.json" npm test
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rules-bundle
+          path: |
+            dist/open-fdd-rules-*.zip
+            dist/open-fdd-rules-*.zip.sha256
+
+  release:
+    needs: bundle
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # this job only: attach the tested zip + sha256 to the release
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: rules-bundle
+          path: dist
+      - name: Verify the checksum
+        run: cd dist && sha256sum -c open-fdd-rules-*.zip.sha256
+      - name: Attach to the release
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3  # v3.0.4
+        with:
+          files: |
+            dist/open-fdd-rules-*.zip
+            dist/open-fdd-rules-*.zip.sha256

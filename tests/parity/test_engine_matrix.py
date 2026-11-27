@@ -139,7 +139,11 @@ def test_duckdb_and_sqlite_helper_equivalence():
         ("duct_static", "Pa", 250.0),
         ("duct_static", "inH2O", 1.0),
         ("zone_flow", "L/s", 400.0),
+        ("zone_flow", "L/sec", 400.0),
+        ("zone_flow", "L-PER-SEC", 400.0),
         ("zone_flow", "cfm", 800.0),
+        ("zone_flow", "FT3-PER-MIN", 800.0),
+        ("ra_h", "PERCENT_RH", 40.0),
         ("chiller_power", "kW", 45.0),
         ("kwh", "kWh", 120.0),
         ("chiller_amps", "A", 32.0),
@@ -184,11 +188,21 @@ def test_duckdb_and_sqlite_helper_equivalence():
     finally:
         sq.close()
 
-    assert duck_td == sq_td
+    # NaN / Infinity: the DuckDB macros keep them, as PostgreSQL trim(value)::double precision does (#1645);
+    # the SQLite UDF returns NULL. Every other input agrees.
+    special = {"NaN", "Infinity"}
+    keep = [i for i, v in enumerate(try_double_cases) if v not in special]
+    assert [duck_td[i] for i in keep] == [sq_td[i] for i in keep]
+    nan, inf = (duck_td[try_double_cases.index(v)] for v in ("NaN", "Infinity"))
+    assert math.isnan(nan) and inf == math.inf
     assert duck_sweep == sq_sweep
     by_case = dict(zip([(r, u) for r, u, _ in cases], duck_sweep))
     assert by_case[("oa_h", "percent_0_100")] == (False, True, 50.0)
     assert by_case[("zone_rh", "fraction")] == (False, False, None)
+    assert by_case[("zone_flow", "L-PER-SEC")] == (False, True, 400.0)
+    assert by_case[("zone_flow", "L/sec")] == (False, True, 400.0)
+    assert by_case[("zone_flow", "FT3-PER-MIN")] == (False, False, None)
+    assert by_case[("ra_h", "PERCENT_RH")] == (False, True, 40.0)
 
     if postgres_configured():
         import os
@@ -245,11 +259,11 @@ def _register_sqlite_udfs(db: sqlite3.Connection) -> None:
         if qty == "absolute_temperature":
             return 1 if nu in ("c", "degc", "celsius") else 0
         if qty == "relative_humidity":
-            return 1 if (nu in ("pct", "percent", "percent0100", "rh", "percentrelativehumidity") or "%" in str(unit)) else 0
+            return 1 if (nu in ("pct", "percent", "percent0100", "rh", "percentrelativehumidity", "percentrh") or "%" in str(unit)) else 0
         if qty == "air_pressure":
             return 1 if nu in ("pa", "pascal") else 0
         if qty == "volume_flow":
-            return 1 if nu == "ls" else 0
+            return 1 if nu in ("ls", "lpersec", "lsec") else 0
         if qty == "power":
             return 1 if nu == "kw" else 0
         if qty == "energy":

@@ -6,8 +6,9 @@ nav_order: 3
 
 # Using SQL rules outside Open-FDD
 
-The 77 rule SQL files are ordinary PostgreSQL 14+. They use no `time_bucket`, hypertables or continuous aggregates. Timescale is
-only the runtime that builds the wide `history` input, so any database that can build that table can run them.
+The 78 rule SQL files are ordinary PostgreSQL 14+. They use no `time_bucket`, hypertables or continuous aggregates. Timescale is
+only the runtime that builds the wide `history` input, so any database that can build that table can run them. Pins and the DuckDB
+option are in the [SQL cookbook](sql-cookbook.html#engines).
 
 The RCx analytics are portable SQL too: [Using the SQL analytics in your own database](borrowing-analytics.html).
 
@@ -81,13 +82,28 @@ The [beginner DuckDB browser tutorial](https://github.com/bbartling/open-fdd/tre
 
 The [standalone DuckDB tutorial](https://github.com/bbartling/open-fdd/tree/master/tutorials/duckdb_sql_parity) includes executable pandas-versus-SQL assertions for FC1, FC2 and CMD-1, plus SPARQL point discovery joined to a DuckDB long-form historian. Both scripts run locally without an NF server. Follow its README for PowerShell or Linux setup.
 
+## Pinned rules bundle
+
+Each release tag attaches `open-fdd-rules-<version>.zip` and its `.zip.sha256`. Build one locally with
+`python scripts/build_rules_bundle.py`.
+
+| Entry | Content |
+|---|---|
+| `rules-manifest.json` | Per rule: id, title, equipment kinds, inputs (`roles/openfdd-roles.json` role and unit, input column, required), `confirm_min`, dialects, parity; sha256 of every entry |
+| `rules/postgres/<ID>.sql` | Rendered at the shipped defaults; PostgreSQL, TimescaleDB and DuckDB |
+| `rules/sqlite/<ID>.sql` | SQLite translation; register the UDFs in `sqlite_udfs` |
+| `helpers/postgres.sql`, `helpers/duckdb.sql` | The `fdd.*` helpers |
+| `schema/core.sql`, `schema/core.duckdb.sql` | `fdd.point`, `fdd.rule_result`, `fdd.rule_config` |
+| `schema/input_sample.sql`, `schema/inputs.sql` | `fdd.input_sample` and the input tables below |
+| `templates/` | Unrendered templates and `render_rule.py`, to re-render with other parameters |
+
 ## Setup by database
 
 | Database | Rule SQL | Shims |
 |---|---|---|
 | PostgreSQL 14+ | `nf-app/rules/pack-postgres.json` or `sql/fdd/postgres/rules/*.sql` | Run `sql/fdd/postgres/postgres_helpers.sql` once (`fdd.try_double`, `fdd.mask_sweep_val` and the unit gates); `SET TimeZone = 'UTC'` |
 | Timescale | same as PostgreSQL | same; Timescale only supplies `history` |
-| DuckDB | the PostgreSQL pack | Define the `fdd.*` helpers as DuckDB macros (plpgsql does not parse); needed only by the occupancy and sensor-sweep rules; `SET TimeZone = 'UTC'` |
+| DuckDB | the PostgreSQL pack | In-process (`duckdb>=2.0.1`). Run `sql/fdd/duckdb/duckdb_helpers.sql` (the `fdd.*` helpers as macros; plpgsql does not parse); occupancy and sensor-sweep rules; `SET TimeZone = 'UTC'`. The NF app loads it only when the engine option is `duckdb`. |
 | SQLite | `nf-app/rules/pack-sqlite.json` | Built in; use the SQLite pack, not the PostgreSQL one |
 
 `DATE_TRUNC('hour', timestamp_utc)` follows the session time zone, so always set UTC.

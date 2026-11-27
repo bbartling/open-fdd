@@ -66,6 +66,7 @@
 </header>
 <nav class="tabs" id="tabs">
   <button data-tab="overview" class="on">Overview</button>
+  <button data-tab="analytics">Analytics</button>
   <button data-tab="charts">Charts</button>
   <button data-tab="fdd">FDD <span class="count" id="nRules"></span></button>
   <button data-tab="bacnet">BACnet Server <span class="count" id="nBacnet"></span></button>
@@ -84,9 +85,10 @@
     <section class="panel" id="overviewOccupancy" hidden></section>
     <div id="overviewRcx" hidden>
       <section class="panel" id="rcxHead">
-        <h2>Retro-commissioning <span class="hint" id="rcxHint">every modeled device on this site · a panel shows only when the model has that equipment</span></h2>
+        <h2>Retro-commissioning <span class="hint" id="rcxHint">plant, run hours and zone temperatures · more plots are on Analytics</span></h2>
         <div class="rcx-controls">
           <button class="btn" id="rcxAhuOn" type="button" aria-pressed="false" title="Only times the feeding AHU's fan is running">AHU on</button>
+          <button class="btn" id="rcxMore" type="button">More analytics</button>
           <span class="hint" id="rcxAhuNote"></span>
         </div>
         <p class="hint" id="rcxMode"></p>
@@ -133,6 +135,17 @@
         <div class="chart short" id="histChart"></div>
       </section>
     </div>
+  </section>
+
+  <!-- Analytics: scatter, air-handler timeseries, VAV plots and energy. Fetched only after this tab is opened. -->
+  <section class="tab" id="tab-analytics">
+    <section class="panel">
+      <h2>Analytics <span class="hint">scatter, air-handler timeseries, VAV plots and energy · loaded when you open this tab</span></h2>
+      <p class="hint" id="anMode"></p>
+      <div id="anRangeControl"></div><p id="anRangeStatus" class="hint" role="status"></p>
+    </section>
+    <div class="kpis" id="anKpis"></div>
+    <div id="anBody"></div>
   </section>
 
   <!-- Charts: pick one; only that chart's points are fetched (resampled by NF) -->

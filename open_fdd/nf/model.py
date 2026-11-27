@@ -60,10 +60,15 @@ def role_columns() -> dict[str, str]:
 
 
 def column_for(role: str) -> str:
-    """Pandas column for a SQL role (web weather roles map to ``web-outside-air-*``; else the role name)."""
-    extra = {"web_oa_t": "web-outside-air-temp", "web_oa_dp": "web-outside-air-dewpoint",
-             "web_wb_t": "web-outside-air-wetbulb", "web_oa_h": "web-outside-air-humidity"}
-    return role_columns().get(role) or extra.get(role) or role
+    """Pandas column for a rule input.
+
+    The column is the hyphenated local name the reference rules read (``discharge-air-temp``).
+    ``role`` may be that column, a SQL key (``sat``) or the 223P role (``discharge_air_temperature``).
+    The rule-input name is :func:`open_fdd.point_roles.resolve`.
+    """
+    from open_fdd.point_roles import pandas_column
+
+    return pandas_column(role)
 
 
 # ---------------------------------------------------------------------------- model
@@ -145,10 +150,16 @@ def site_name(model: Model, site_id: str) -> str:
 
 
 # ---------------------------------------------------------------------------- binding
+def has_kind_marker(markers: set[str], m: str) -> bool:
+    """A catalog kind marker on an equip. A Haystack 4 conjunct (``hot-water-plant``) matches the literal tag or every
+    part (``hot``, ``water``, ``plant``); twin of static/fdd.js ``hasKindMarker``."""
+    return m in markers or ("-" in m and all(x in markers for x in m.split("-")))
+
+
 def equip_kinds(equip: Mapping[str, Any], catalog: Mapping | None = None) -> list[str]:
     cat = catalog or load_catalog()
     ms = set(markers_of(equip))
-    return [k for k, marks in cat["equipment_kinds"].items() if any(m in ms for m in marks)]
+    return [k for k, marks in cat["equipment_kinds"].items() if any(has_kind_marker(ms, m) for m in marks)]
 
 
 def _is_web(role: str) -> bool:
@@ -316,6 +327,7 @@ def equipment_frames(
     roles: Iterable[str] | None = None,
     site: str | None = None,
     equip: str | None = None,
+    assume_single_feeder: bool = True,
 ) -> dict[tuple[str, str], "Any"]:
     """``{(site_id, equip_id): DataFrame}`` ready for ``open_fdd.rules``.
 
@@ -325,13 +337,46 @@ def equipment_frames(
       (column -> unit), ``bindings`` (column -> {role, uuid, name, unit, source_unit, class}),
       ``skipped`` (role -> reason), ``window_sec``
     Equipment with no usable data in the range is left out.
+
+    A feeder run proof (``airRef`` / water ref, or the site's only AHU when a VAV has no ``airRef``) is fetched
+    with the equipment's own points and stamped as ``run-proof``, including when ``--equip`` does not include the feeder.
     """
+    from open_fdd.run_proof import RUN_PROOF_COLUMN, feeder_proof_points
+
     scope = _frame_scope(model, roles, site, equip)
+    proofs = feeder_proof_points(model, assume_single_feeder=assume_single_feeder)
+    scope_keys = {(b.site, b.equip) for b in scope}
     uuids: list[str] = []
     for b in scope:
         uuids.extend(p.uuid for p in b.best().values())
+    uuids.extend(proofs[k][0].uuid for k in scope_keys if k in proofs)
     data = client.point_data(sorted(set(uuids)), start, end, window_sec=window_sec) if uuids else {}
-    return frames_from_samples(scope, data, window_sec)
+    frames = frames_from_samples(scope, data, window_sec)
+    _stamp_feeder_proof(frames, data, {k: proofs[k] for k in scope_keys if k in proofs})
+    return frames
+
+
+def _stamp_feeder_proof(frames, data: Mapping[str, list], proofs: Mapping[tuple[str, str], tuple]) -> None:
+    """Write the feeder's proof samples onto ``run-proof`` (same SI plan as a bound role)."""
+    import pandas as pd
+
+    from open_fdd.run_proof import RUN_PROOF_COLUMN
+
+    for key, (point, role, via) in proofs.items():
+        df = frames.get(key)
+        if df is None or (RUN_PROOF_COLUMN in df.columns and df[RUN_PROOF_COLUMN].notna().any()):
+            continue
+        samples = data.get(point.uuid) or []
+        if not samples:
+            continue
+        plan = si_plan_for(role, point)
+        if plan.convert is None:
+            continue
+        idx = pd.DatetimeIndex([t for t, _ in samples], tz="UTC")
+        series = plan.convert(pd.Series([v for _, v in samples], index=idx, dtype="float64"))
+        df[RUN_PROOF_COLUMN] = series.reindex(df.index)
+        df.attrs["run_proof_source"] = via
+        df.attrs["run_proof_equip"] = point.equip_ref
 
 
 def frames_from_samples(
@@ -409,6 +454,12 @@ def default_range(days: float, now: datetime | None = None) -> tuple[datetime, d
     return end - timedelta(days=days), end
 
 
+def _rule_input(role: str) -> str:
+    from open_fdd.point_roles import resolve
+
+    return resolve(role) or role
+
+
 def model_summary(model: Model, bindings: list[EquipBinding] | None = None) -> list[dict]:
     """Plain dicts: one per equip with its kinds and the point bound to each role."""
     out = []
@@ -416,7 +467,8 @@ def model_summary(model: Model, bindings: list[EquipBinding] | None = None) -> l
         best = b.best()
         out.append({
             "site": b.site, "equip": b.equip, "dis": b.dis, "kinds": b.kinds, "type": b.stamp,
-            "roles": {r: {"column": column_for(r), "point": p.dis, "uuid": p.uuid, "unit": p.unit,
-                          "scale": role_scales().get(r, "")} for r, p in best.items()},
+            "roles": {r: {"input": _rule_input(r), "column": column_for(r), "point": p.dis,
+                          "uuid": p.uuid, "unit": p.unit, "scale": role_scales().get(r, "")}
+                      for r, p in best.items()},
         })
     return out

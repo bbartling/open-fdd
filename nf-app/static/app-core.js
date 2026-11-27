@@ -182,8 +182,9 @@ function fillPickers(opts = {}) {
 }
 
 async function applyScope() {
+  if (typeof cancelHistory === "function") cancelHistory();
   ({ cards: points, weather: variables, status: statusPts } = scopedSets());
-  rdf = modelToTurtle(model, `urn:nf:${location.host}:`);
+  rdf = modelToTurtle(model, rdfBaseOf());   // host-independent subjects, same as the hooks (#1773)
   const tagged = taggedOnSite();
   const site = model.sites.find((s) => idOf(s) === scope.site);
   $("sub").textContent = `${site?.name ?? scope.site} · ${siteEquipIds().length} equips · ${tagged.length} tagged points · ${location.host}`;
@@ -737,6 +738,7 @@ function renderTab(name) {
 }
 
 function showTab(name) {
+  if (typeof cancelHistory === "function") cancelHistory();
   const requested = name, alias = TAB_ALIASES[name];
   if (alias) name = alias;
   if (!$(`tab-${name}`)) name = "overview";

@@ -46,7 +46,8 @@
 //   fault rule   = pack output_columns contain fault_pct or fault_hours. Published value = fault_pct (unit %) else
 //                  fault_hours (unit h). covered_hours null/0 -> fddStatus "not-assessed", NO numeric value written.
 //                  Otherwise fddStatus "ok" (0) or "fault" (> 0) and fddCoverageHours. Always keeps the fault marker.
-//   metric rule  = every other rule. Publishes its first declared output column (0 is a valid value), unit "".
+//   metric rule  = every other rule. Publishes its first declared output column (0 is a valid value), markers
+//                  point,his,metric,fdd, unit = the column's SI unit (static/fdd.js FDD_METRIC_UNITS; #1775).
 //   stale        = a previously published result point whose rule could not be refreshed this run (no history,
 //                  roles missing, rule error): its record gets fddStatus "stale" + fddReason, no new value.
 //   Every model record also carries fddLastRun (ISO). Any rule error makes the hook throw at the very end, after
@@ -61,7 +62,11 @@
 // Nothing site-specific: sites, equips, points and units all come from NF.
 // config (hook settings, all optional). NF stores these as app OPTIONS and passes them as ctx.config (scalars only:
 // see lib/settings.js; a string value such as "24" or a JSON string for timescale is converted):
-//   engine        "auto" | "sqlite" | "pglite" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
+//   engine        "auto" | "sqlite" | "pglite" | "duckdb" | "timescale"   (auto: timescale when configured, else pglite when NF reports ≥ 3.5 GiB RAM)
+//                 duckdb (#1645, opt-in): native DuckDB, warm in-memory; when its package is not installed the run falls back to the
+//                 auto choice and says so in engine_note
+//                 With the option timescale set, duckdb reads the saved tuning (fdd.rule_config) from it like the timescale engine
+//   duckdbMemoryLimit  DuckDB memory cap, e.g. "256MB" (default) or "1GB"; duckdbThreads  DuckDB threads (default 2). Engine duckdb only
 //   timescale     the NF Timescale connection: JSON {"host","port","database","user","password"} or a postgres:// URL
 //   windowHours   trailing window per run (default 24)
 //   weather       false = web weather is OFF (#1552): weather points are ignored (they are stale leftovers), rules that read
@@ -98,13 +103,15 @@ function loadShared() {
   return {
     toPoint: get('toPoint'), idOf: get('idOf'), has: get('has'), equipRules: get('equipRules'),
     bindRoles: get('bindRoles'), equipPool: get('equipPool'), resolveRunProof: get('resolveRunProof'),
+    singleAhuRecord: get('singleAhuRecord'),
     ENTITY_TYPES: get('ENTITY_TYPES'),
     catalog: JSON.parse(fs.readFileSync(path.join(STATIC, 'fdd-catalog.json'), 'utf8')),
   };
 }
 
 // pglite runs the Postgres pack as written; sqlite runs the translated one.
-const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json', timescale: 'pack-postgres.json' };
+// duckdb (#1645) runs the Postgres pack too, with its fdd.* helpers as DuckDB macros (pack.duckdb_helpers_sql).
+const PACK_FILE = { sqlite: 'pack-sqlite.json', pglite: 'pack-postgres.json', timescale: 'pack-postgres.json', duckdb: 'pack-postgres.json' };
 const loadPack = (kind) => JSON.parse(fs.readFileSync(path.join(RULES, PACK_FILE[kind]), 'utf8'));
 
 // ---- NF reads -----------------------------------------------------------------------
@@ -367,6 +374,17 @@ const OFDD_RESULT_ATTRS = Object.freeze([
 
 const FAULT_COLS = ['fault_pct', 'fault_hours'];
 
+/** SI unit of a metric output column ('' when not declared), from static/fdd.js (shared with the UI). */
+let metricUnits = null;
+function metricUnit(column) {
+  if (!metricUnits) {
+    const ctx = vm.createContext({});
+    vm.runInContext(fs.readFileSync(path.join(STATIC, 'fdd.js'), 'utf8'), ctx, { filename: 'fdd.js' });
+    metricUnits = vm.runInContext('FDD_METRIC_UNITS', ctx);
+  }
+  return metricUnits[column] || '';
+}
+
 
 /**
  * What one rule run publishes.
@@ -394,7 +412,7 @@ function resultValue(packRule, row) {
     return { ...base, value, coverage, status: value > 0 ? 'fault' : 'ok', reason: '' };
   }
   const column = cols.find((c) => c !== 'equipment_id') || '';
-  const base = { kind: 'metric', unit: '', fault: false, column, value: null, coverage: null };
+  const base = { kind: 'metric', unit: metricUnit(column), fault: false, column, value: null, coverage: null };
   if (!row) return { ...base, status: 'not-assessed', reason: 'rule returned no row (no usable input)' };
   const value = num(row[column]);
   if (value == null) return { ...base, status: 'not-assessed', reason: `${column} is null` };
@@ -719,14 +737,31 @@ function pgliteInstalled() {
 }
 
 /**
+ * True when the native DuckDB package (@duckdb/node-api, an optionalDependency, #1645) loads on this box. Loading it is
+ * the only honest test: the npm package can be present while its native build for this CPU / libc is not (no 32-bit ARM).
+ */
+function duckdbLoadable() {
+  try { require('@duckdb/node-api'); return true; } catch (e) { return false; }
+}
+
+/**
  * Which engine to run. An engine the config names (sqlite | pglite | timescale) is used as is, never swapped.
  * Only when none was configured ("auto"/unset) is the choice ours: timescale if configured, else pglite on big
  * boxes, but sqlite (vendored, no npm install) when pglite is not installed. Returns {kind, note}.
+ * duckdb (#1645) is opt-in and never picked by auto. While it is on trial it is the one configured engine that falls
+ * back: when its native package does not load here, the run uses the auto choice and the note says so.
  */
-async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInstalled) {
+async function pickEngine(http, wanted, timescaleConfig, hasPglite = pgliteInstalled, hasDuckdb = duckdbLoadable) {
   // FULL edition: config.timescale set -> run the pack inside NF's TimescaleDB (engine "timescale", or "auto")
   if (wanted === 'timescale' || ((!wanted || wanted === 'auto') && timescaleConfig)) return { kind: 'timescale', note: '' };
   if (wanted === 'sqlite' || wanted === 'pglite') return { kind: wanted, note: '' };
+  if (wanted === 'duckdb') {
+    if (hasDuckdb()) return { kind: 'duckdb', note: '' };
+    // a box with a Timescale store falls back to the timescale engine, which reads the saved tuning too
+    const auto = await pickEngine(http, 'auto', timescaleConfig, hasPglite, hasDuckdb);
+    return { kind: auto.kind, note: `engine duckdb: @duckdb/node-api is not installed or has no native build for this box; using ${auto.kind}`
+      + (auto.note ? ` (${auto.note})` : '') };
+  }
   let kind = 'sqlite';
   try {
     const { data } = await http.get('/api/v1/platform/info');
@@ -913,7 +948,8 @@ async function loadRoleLimitOverrides({ engine, pack, log }) {
 
 /**
  * @typedef {{ engine?: string, windowHours?: number, equips?: string[], dryRun?: boolean,
- *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number }} FddConfig
+ *   bacnet?: { enabled?: boolean, firstInstance?: number }, timescale?: object, writeRetryMs?: number,
+ *   duckdbMemoryLimit?: string, duckdbThreads?: number | string }} FddConfig
  * @param {{ sdk: any, config?: FddConfig, createEngine?: Function, pack?: any, now?: number, hasPglite?: () => boolean }} args
  */
 async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn, now = Date.now(), hasPglite }) {
@@ -949,6 +985,7 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
     occupancy: /** @type {Record<string, {source: string, revision: number | null}>} */ ({}),
     // loud-failure bookkeeping (#1550): what was eligible, what was skipped and why, how fresh the input was
     eligible: 0, skipped: [], stale_reasons: {}, failure: null, roles_skipped_by_unit: {}, no_run_proof: 0,
+    assumed_feeders: 0, airref_hint: '',
     window: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), hours: windowHours },
     source_freshness: { engine: kind, newest_sample: null, age_minutes: null, nf_latest: isoOrNull(newestLatest(model.points)), nf_latest_age_minutes: null } };
   let sourceNewest = null;                               // newest input sample the engine could see (ms)
@@ -956,7 +993,9 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   const queue = { meta: [], values: [], series: [] };    // writes, flushed in batches after all equips ran
   const occCache = { logged: new Set() };    // NF schedules (read once per run) and which sites were logged
   const warnedUnits = new Set();
-  const engine = await createEngine({ kind, pack, config: config.timescale });
+  const engine = await createEngine({ kind, pack, config: kind === 'duckdb'
+    ? { memoryLimit: config.duckdbMemoryLimit, threads: config.duckdbThreads, timescale: config.timescale }   // timescale: saved tuning store
+    : config.timescale });
   try {
     const tuning = await loadRoleLimitOverrides({ engine, pack, log });
     summary.role_limits = tuning.summary;
@@ -1005,10 +1044,14 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
         // history column run_proof. None found = gated rules are SKIPPED no_run_proof (SQL returns covered_hours 0).
         let proof = { found: false };
         if (runnable.some((r) => r.rule.run_proof === 'gated')) {
-          proof = shared.resolveRunProof(equipRec, model, shared.catalog);
+          proof = shared.resolveRunProof(equipRec, model, shared.catalog, { assumeSingleFeeder: settings.assumeSingleFeeder(config) });
           // #1631: commands with an unknown scale are skipped by the resolver (the next candidate wins); say so
           for (const r of proof.refused || []) log(`${equipId}: run proof candidate ${r.equip}/${r.point} (${r.role}) not used: ${r.reason}`);
           if (!proof.found && (proof.refused || []).length) proof = { ...proof, reason: proof.refused.map((r) => r.reason).join('; ') };
+          if (proof.found && proof.via === 'assumedSingleAhu') {
+            summary.assumed_feeders++;
+            log(`${equipId}: run proof uses the site's only AHU ${proof.equip} (no airRef)`);
+          }
           if (proof.found && proof.point) roles.run_proof = proof.point;
         }
         const si = siPlan(roles, shared.catalog, log, warnedUnits);
@@ -1147,8 +1190,16 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
             && pack.rule_tuning_templates.rules[r.rule.id], tunedHere);
           const noProof = gateOn && !roles.run_proof;
           if (noProof && out.status === 'not-assessed') {
-            out.reason = `${shared.catalog.run_proof.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.run_proof.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`;
+            const oneAhu = shared.singleAhuRecord(equipRec, model, shared.catalog);
+            const hint = oneAhu ? 'add airRef on this VAV (the site has one AHU) to name its feeder' : '';
+            out.reason = `${shared.catalog.run_proof.skip_reason}: ${proof.reason && proof.reason !== shared.catalog.run_proof.skip_reason ? proof.reason : 'no status or command of this equipment, or of the equipment feeding it (airRef / chilledWaterRef / hotWaterRef / feeds), is bound'}`
+              + (hint ? `; ${hint}` : '');
             summary.no_run_proof++;
+            if (hint) {
+              if (!summary.airref_vavs) summary.airref_vavs = new Set();
+              summary.airref_vavs.add(equipId);
+              summary.airref_rules = (summary.airref_rules || 0) + 1;
+            }
           }
           const sensorFaultHours = row && row.sensor_fault_hours;
           const perSensor = row && row.sensor_rows || [];
@@ -1291,6 +1342,8 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
           if (attrs.sensorRef) {
             summary.sensor_results.total++;
             summary.sensor_results.stale++;
+            const bucket = why.replace(/\s*\(.*$/s, '').slice(0, 60);
+            summary.stale_reasons[bucket] = (summary.stale_reasons[bucket] || 0) + 1;
             const timeline = model.timelines.get(timelineUuid(key, ruleId, attrs.sensorRef));
             if (timeline) stale.push(staleRecord(timeline, why, runIso));
           } else {
@@ -1327,6 +1380,10 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
     }
   }
   const st = summary.status;
+  const sensorStale = summary.sensor_results.stale || 0;
+  const reportedStale = st.stale + sensorStale;
+  summary.reported_stale = reportedStale;
+  const reportedNa = st['not-assessed'] + (summary.sensor_results['not-assessed'] || 0);
   const skippedRoles = Object.entries(summary.roles_skipped_by_unit).filter(([, n]) => n > 0).sort(([a], [b]) => a.localeCompare(b));
   const skippedRoleCount = skippedRoles.reduce((n, [, count]) => n + count, 0);
   const unitSkipText = `roles skipped by unit: ${skippedRoleCount} (${skippedRoles.length ? skippedRoles.map(([role, count]) => `${role} ${count}`).join(', ') : 'none'})`;
@@ -1341,10 +1398,14 @@ async function runFdd({ sdk, config: rawConfig = {}, createEngine, pack: packIn,
   }
   // An empty / incomplete MODEL is its own failure with its own reason: never "required roles missing" (#1550)
   if (modelProblem) summary.failure = modelProblem;
+  if (summary.airref_vavs && summary.airref_vavs.size) {
+    summary.airref_hint = `add airRef to ${summary.airref_vavs.size} VAVs to enable ${summary.airref_rules} rules`;
+    summary.airref_vavs = summary.airref_vavs.size;
+  }
   for (const line of runReport(summary, windowHours)) log(line);
   log(`open-fdd ${kind}: ${summary.equips} equips, ${summary.rules} rule runs, ${summary.errors} errors, `
     + `${faults.length} with fault time, ${summary.written} values written (window ${windowHours} h); `
-    + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
+    + `ok ${st.ok}, fault ${st.fault}, not-assessed ${reportedNa}, stale ${reportedStale} (equipment ${st.stale}, sensor ${sensorStale}); `
     + `requests: ${summary.requests.metadata} metadata, ${summary.requests.data} data; ${unitSkipText}`);
   return summary;
 }
@@ -1383,9 +1444,11 @@ function runReport(s, windowHours) {
     `open-fdd run: engine ${s.engine}, data window ${s.window.from} .. ${s.window.to} (${windowHours} h); `
     + `newest input sample in the ${s.engine} source ${fr.newest_sample || 'not read'}${age(fr.age_minutes)}, `
     + `NF latest value ${fr.nf_latest || 'none'}${age(fr.nf_latest_age_minutes)}`,
-    `open-fdd counts: eligible ${s.eligible}, evaluated ${s.equips}, written ${s.written}, skipped ${s.skipped.length}, stale ${s.status.stale}; `
+    `open-fdd counts: eligible ${s.eligible}, evaluated ${s.equips}, written ${s.written}, skipped ${s.skipped.length}, stale ${s.reported_stale ?? s.status.stale} (equipment ${s.status.stale}, sensor ${s.sensor_results.stale || 0}); `
     + `skipped by reason: ${tally(s.skipped, (x) => x.kind)}; stale by reason: ${Object.entries(s.stale_reasons).map(([k, n]) => `${k} x${n}`).join('; ') || 'none'}`,
   ];
+  if (s.assumed_feeders) lines.push(`open-fdd run proof: ${s.assumed_feeders} VAVs use the site's only AHU (no airRef)`);
+  if (s.airref_hint) lines.push(`open-fdd run proof: ${s.airref_hint}`);
   for (const x of s.skipped.slice(0, 20)) lines.push(`open-fdd skipped ${x.site ? `${x.site}/` : ''}${x.equip}: ${x.detail}`);
   if (s.skipped.length > 20) lines.push(`open-fdd skipped: ${s.skipped.length - 20} more equips (same format)`);
   if (s.failure) lines.push(`open-fdd FAILED: ${s.failure}`);
@@ -1474,7 +1537,7 @@ async function hook({ sdk, config, ...rest }) {
     const skipped = Object.entries(summary.skipped.reduce((a, x) => ({ ...a, [x.kind]: (a[x.kind] || 0) + 1 }), {})).map(([k, n]) => `${k} x${n}`).join('; ');
     const err = new Error((summary.errors ? `open-fdd: ${summary.errors} error${summary.errors === 1 ? '' : 's'} during the run (see the log); ` : 'open-fdd: ')
       + (summary.failure ? `${summary.failure}; ` : '')
-      + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed']}, stale ${st.stale}; `
+      + `ok ${st.ok}, fault ${st.fault}, not-assessed ${st['not-assessed'] + (summary.sensor_results['not-assessed'] || 0)}, stale ${st.stale + (summary.sensor_results.stale || 0)} (equipment ${st.stale}, sensor ${summary.sensor_results.stale || 0}); `
       + `eligible ${summary.eligible}, evaluated ${summary.equips}, written ${summary.written}, skipped ${summary.skipped.length}${skipped ? ` (${skipped})` : ''}`
       + `${why ? `; stale reasons: ${why}` : ''}; engine ${summary.engine}, window ${summary.window.from} .. ${summary.window.to}; `
       + `newest input sample ${fr.newest_sample || 'not read'}, NF latest value ${fr.nf_latest || 'none'}`);
@@ -1483,4 +1546,4 @@ async function hook({ sdk, config, ...rest }) {
   }
   return summary;
 }
-module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });
+module.exports = Object.assign(hook, { applyOatPolicy, runFdd, loadRoleLimitOverrides, modelProblemOf, loadModel, pickEngine, pgliteInstalled, duckdbLoadable, nameUuid, resultKey, resultUuid, sensorResultUuid, timelineUuid, timelineSamples, buildInput, buildSensorInput, siPlan, resultValue, equipmentResult, resultRecords, OFDD_RESULT_ATTRS, bacnetPlan, chunkBySize });

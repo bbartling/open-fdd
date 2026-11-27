@@ -23,13 +23,20 @@
   ],
   "chwPlant": [
    "chilledWaterPlant",
-   "chilledWater"
+   "chilledWater",
+   "chilled-water-plant"
   ],
   "cooling_tower": [
-   "coolingTower"
+   "coolingTower",
+   "condenserWaterPlant",
+   "condenser-water-plant"
   ],
   "boiler": [
-   "boiler"
+   "boiler",
+   "hotWaterPlant",
+   "hot-water-plant",
+   "steamPlant",
+   "steam-plant"
   ],
   "heatpump": [
    "heatPump"
@@ -67,6 +74,16 @@
     "sensor"
    ],
    "scale": "si:degC"
+  },
+  "boiler_status": {
+   "name": "boiler-status",
+   "classes": [],
+   "markers": [
+    "boiler",
+    "run",
+    "sensor"
+   ],
+   "scale": "boolean"
   },
   "building_ahu_load_satisfied": {
    "name": "building-ahu-load-satisfied",
@@ -964,6 +981,7 @@
    "sa_h",
    "duct_static",
    "chw_flow",
+   "zone_flow",
    "chw_dp",
    "cw_supply_t",
    "cw_return_t",
@@ -1014,7 +1032,9 @@
    "ra_h",
    "zone_rh",
    "ma_h",
-   "sa_h"
+   "sa_h",
+   "duct_static",
+   "zone_flow"
   ],
   "SV-RATE": [
    "oa_t",
@@ -1811,7 +1831,9 @@
     "ra_h",
     "zone_rh",
     "ma_h",
-    "sa_h"
+    "sa_h",
+    "duct_static",
+    "zone_flow"
    ],
    "unmapped_roles": [],
    "confirm_seconds": 0,
@@ -2029,14 +2051,14 @@
    "equipment_kinds": [
     "ahu"
    ],
-   "required_roles": [],
-   "optional_roles": [
+   "required_roles": [
     "heating_coil_entering_temp",
     "heating_coil_leaving_temp",
-    "mat",
-    "sat",
+    "oa_damper_pct",
+    "clg_valve_pct"
+   ],
+   "optional_roles": [
     "htg_valve_pct",
-    "clg_valve_pct",
     "fan_status",
     "fan_cmd",
     "run_proof"
@@ -2289,6 +2311,31 @@
    },
    "run_proof": "exempt",
    "run_proof_note": "needs cold-weather samples even when proof drops; carries its own mechanical-cooling proof"
+  },
+  {
+   "id": "HW-OAT-1",
+   "description": "Hot-water plant proven on above 18.3 °C web OAT",
+   "sql_file": "hw_oat_1.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "boiler"
+   ],
+   "required_roles": [
+    "web_oa_t"
+   ],
+   "optional_roles": [
+    "pump_status",
+    "hw_supply_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "confirm_seconds": 900.0,
+    "hw_oat_min": 18.333333,
+    "hw_on_min": 43.333333
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
   },
   {
    "id": "CMD-1",
@@ -3397,6 +3444,121 @@
     "require_run_proof": 1.0
    },
    "run_proof": "gated"
+  },
+  {
+   "id": "SHORT-CYCLE",
+   "description": "Too many starts per hour, or short on-times",
+   "sql_file": "short_cycle.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "boiler",
+    "chiller",
+    "heatpump",
+    "ahu"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "boiler_status",
+    "compressor_status",
+    "chiller_status",
+    "chiller_amps",
+    "chiller_power"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "max_starts_per_hour": 6.0,
+    "min_on_seconds": 600.0,
+    "min_short_cycles": 3.0
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "the run status is the signal: starts and on-times are counted from it"
+  },
+  {
+   "id": "XS-MIX",
+   "description": "Mixed-air temperature outside the outdoor / return mixing envelope (sensor or mapping)",
+   "sql_file": "xs_mix.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "ahu"
+   ],
+   "required_roles": [
+    "mat",
+    "oa_t",
+    "rat"
+   ],
+   "optional_roles": [
+    "fan_status",
+    "fan_cmd",
+    "run_proof"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 900,
+   "parameters": {
+    "confirm_seconds": 900.0,
+    "mix_band": 1.111111,
+    "require_run_proof": 1.0
+   },
+   "run_proof": "gated"
+  },
+  {
+   "id": "XS-COPY",
+   "description": "Two temperature roles identical while changing (copied or wrongly bound signal)",
+   "sql_file": "xs_copy.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "zone_other"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "rat",
+    "sat",
+    "mat",
+    "zone_t",
+    "vav_discharge_t"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 7200,
+   "parameters": {
+    "confirm_seconds": 7200.0,
+    "copy_tol": 0.02,
+    "change_min": 1.0
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "a copied or wrongly bound signal is a mapping fault whether or not the unit runs"
+  },
+  {
+   "id": "XS-CLIP",
+   "description": "Sensor value piled up at a round transmitter full scale (clipped)",
+   "sql_file": "xs_clip.sql",
+   "priority": "P1",
+   "equipment_kinds": [
+    "ahu",
+    "vav",
+    "zone_other"
+   ],
+   "required_roles": [],
+   "optional_roles": [
+    "zone_co2",
+    "duct_static",
+    "zone_flow",
+    "fan_status",
+    "fan_cmd",
+    "run_proof"
+   ],
+   "unmapped_roles": [],
+   "confirm_seconds": 0,
+   "parameters": {
+    "confirm_seconds": 0.0,
+    "clip_share": 5.0,
+    "co2_round": 100.0,
+    "static_round": 25.0,
+    "flow_round": 50.0
+   },
+   "run_proof": "exempt",
+   "run_proof_note": "CO2 is judged on every sample; fan-dependent roles count only their own fan-on samples"
   }
  ]
 }

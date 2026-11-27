@@ -23,6 +23,7 @@ ROLE_MAP = ROOT / "sql" / "fdd" / "role_map.json"
 TUNING = ROOT / "sql" / "fdd" / "tuning_catalog.json"
 UNITS = ROOT / "open_fdd" / "data" / "units.json"
 SWEEP = ROOT / "open_fdd" / "data" / "sensor_sweep_limits.json"
+ROLES = ROOT / "roles" / "openfdd-roles.json"
 KNOWN_DIFFS = ROOT / "open_fdd" / "data" / "parity_known_differences.json"
 PARITY_TEST = ROOT / "tests" / "parity" / "test_parity.py"
 
@@ -31,8 +32,24 @@ def _load(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _angles(text: str) -> str:
+    """Escape literal < and > outside `code` spans, so "rise < 1.7" never renders (or counts) as an HTML tag (#1769)."""
+    parts = text.split("`")
+    if len(parts) % 2 == 0:  # unbalanced backtick: no code span, escape everything
+        parts = [text]
+    return "`".join(p if i % 2 else p.replace("<", "&lt;").replace(">", "&gt;") for i, p in enumerate(parts))
+
+
+def md_text(text) -> str:
+    """Rule text (description, equation, title) as one Markdown paragraph: literal < > | cannot become HTML or a table row."""
+    parts = _angles(str(text).replace("\n", " ").strip()).split("`")
+    if len(parts) % 2 == 0:
+        parts = ["`".join(parts)]
+    return "`".join(p if i % 2 else p.replace("|", "\\|") for i, p in enumerate(parts))
+
+
 def cell(text) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ").strip()
+    return _angles(str(text).replace("|", "\\|").replace("\n", " ").strip())
 
 
 def fmt(v) -> str:
@@ -119,6 +136,18 @@ class Contract:
         self.haystack_to_sql = {v: k for k, v in self.role_map.items()}
         sweep = _load(SWEEP)
         self.sweep = {r["role"]: r for r in sweep["roles"]}
+        vocab = _load(ROLES)
+        self.roles_version = vocab["version"]
+        self.by_legacy = {}
+        for entry in vocab["roles"]:
+            unit = entry.get("unit") or ""
+            wire = unit.split(":", 1)[-1] if unit else "—"
+            for key in entry.get("legacy_keys") or []:
+                self.by_legacy[key] = (entry["role"], wire)
+
+    def vocabulary(self, sql_role: str) -> tuple[str, str]:
+        """(openfdd-roles.json role name, QUDT local name) for one SQL column, or em dashes."""
+        return self.by_legacy.get(sql_role, ("—", "—"))
 
     def scale(self, sql_role: str | None) -> str:
         return self.roles[sql_role]["scale"]
@@ -151,16 +180,19 @@ class Contract:
             if scale is None:
                 raise SystemExit(f"role {name!r} is not in sql/fdd/input_contract.json or role_map.json")
             info = scale_info(scale)
-            return (f"| - | `{name}` | {info['quantity']} | {cell(info['si'])} | {cell(info['accepted'])} | "
+            return (f"| — | — | `{name}` | — | {info['quantity']} | {cell(info['si'])} | {cell(info['accepted'])} | "
                     f"{_SCALE_RANGE[scale]} | {need} (pandas only) |")
         info = scale_info(self.scale(sql))
         hs = self.role_map.get(sql) or sql.replace("_", "-")
-        return (f"| `{sql}` | `{hs}` | {info['quantity']} | {cell(info['si'])} | {cell(info['accepted'])} | "
-                f"{self.range_text(sql)} | {need} |")
+        role, qudt = self.vocabulary(sql)
+        role_cell = f"`{role}`" if role != "—" else "—"
+        qudt_cell = f"`{qudt}`" if qudt != "—" else "—"
+        return (f"| {role_cell} | `{sql}` | `{hs}` | {qudt_cell} | {info['quantity']} | {cell(info['si'])} | "
+                f"{cell(info['accepted'])} | {self.range_text(sql)} | {need} |")
 
 
-INPUT_HEADER = ["| Role (SQL column) | Haystack role | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |",
-                "|---|---|---|---|---|---:|---|"]
+INPUT_HEADER = ["| Role | SQL column | Haystack column | QUDT | Quantity | SI unit | Also accepted (converted at ingest) | Expected range | Needed |",
+                "|---|---|---|---|---|---|---|---:|---|"]
 
 # tuning-catalog parameter unit -> label (SI), with the quantity "kind" deciding temperature differences.
 PARAM_UNIT = {
@@ -232,7 +264,7 @@ OUTPUT_COLUMNS = {
     "proven_on_hours": ("h", "time with run proof ON"),
     "proven_off_hours": ("h", "time with run proof OFF"),
     "unknown_hours": ("h", "window time with no known run proof (missing proof or gaps)"),
-    "assessment": ("-", "assessed, insufficient_proof or no_proof"),
+    "assessment": ("-", "assessed, or why the equipment was not assessed (for example no_proof)"),
 }
 
 
@@ -246,11 +278,6 @@ def output_rows(cols: list[str]) -> list[str]:
     return rows
 
 
-def imperial_note(has_delta: bool, scales: set[str]) -> str:
-    """One line, only where the display conversion is not obvious (a temperature difference has no +32)."""
-    return "**Imperial display**: Δ°C parameters are differences, shown as Δ°F with no +32." if has_delta else ""
-
-
 # --------------------------------------------------------------------------------------------------------------------
 # units convention block (shared by both cookbooks)
 # --------------------------------------------------------------------------------------------------------------------
@@ -262,21 +289,20 @@ _CONVENTION_ROWS = [
 ]
 
 
-def units_convention() -> str:
+def units_convention(rules_text: bool = True) -> str:
+    """The units block. The SQL cookbook carries the rules once; the pandas cookbook links to them (#1769)."""
     rows = ["| Quantity | SI unit (rules compute in this) | Imperial display | Also accepted (converted at ingest) |", "|---|---|---|---|"]
     for label, key in _CONVENTION_ROWS:
         q = _Q[key]
         rows.append(f"| {label} | {q['si']} | {q['display']['imperial']['unit']} | {accepted_units(key) or ('% (the SI unit only)' if key == 'humidity' else 'none')} |")
     rows.append("| Command or position | fraction, 0-1 | % | `%`, ratio |")
     rows.append("| Status | 0/1 | 0/1 | `bool` |")
-    return """## Units convention
-
-- Rules compute in **SI only**. The engineer declares each point's unit in NF; ingest converts it to SI (`open_fdd/data/units.json`).
+    text = """- Rules compute in **SI only**. The engineer declares each point's unit in NF; ingest converts it to SI (`open_fdd/data/units.json`).
   Unknown or incompatible units are skipped, never guessed from the value.
-- Imperial is display-only. Differences (Δ°C) convert with a factor of 1.8 and no +32.
-- Fractions are 0-1, relative humidity is 0-100 %RH, statuses are 0/1.
-
-""" + "\n".join(rows) + "\n"
+- Imperial is display-only. Differences (Δ°C) convert with a factor of 1.8 and no +32. A difference of 2 K is 2 Δ°C; the parameter tables print Δ°C.
+- Fractions are 0-1, relative humidity is 0-100 %RH, statuses are 0/1. The roles file records command and position roles as `PERCENT` (0-100); the SQL column is still the 0-1 fraction.
+""" if rules_text else "The same SI rules as the [SQL cookbook](sql-cookbook.html#units-convention):\n"
+    return "## Units convention\n\n" + text + "\n" + "\n".join(rows) + "\n"
 
 
 # --------------------------------------------------------------------------------------------------------------------

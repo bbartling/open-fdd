@@ -18,7 +18,7 @@ const T0 = Date.UTC(2026, 0, 5, 0, 0, 0); // Monday 00:00 UTC
 // Input contract (sql/fdd/role_scales.json): STATUS columns are 0/1, PERCENT columns are FRACTIONS 0-1 (a stored 1 is
 // 100 %), humidity is %RH 0-100, everything else physical SI. The base waves below are written in percent for
 // readability and divided by 100 for the PERCENT columns in baseSignal().
-const STATUS = new Set(["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "clg_available",
+const STATUS = new Set(["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "boiler_status", "clg_available",
   "loop_enabled", "building_ahu_load_satisfied", "building_zone_load_satisfied"]);
 const PERCENT = new Set(["fan_cmd", "damper_cmd", "damper_pct", "oa_damper_pct", "clg_valve_pct", "htg_valve_pct",
   "reheat_valve_pct", "chw_pump_cmd", "cw_pump_cmd", "return_fan", "chiller_cmd", "tower_fan_cmd"]);

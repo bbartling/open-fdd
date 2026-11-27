@@ -4,7 +4,10 @@ description: Tag a site in Normal Framework so Open-FDD binds its rules and char
 ---
 # Model a site in NF
 
-The app has no site configuration; the NF Haystack model is the configuration. Never fork or edit the app per site.
+The app has no site configuration. The NF model is the configuration: 223P role names from
+`roles/openfdd-roles.json` (`1.1.0-draft.1`), bound by NF class, else Haystack markers. Haystack does not name the role.
+Never fork or edit the app per site. Do not map or poll every point on a live system; tag the points the equipment uses.
+Issue #1740 (`fdd.feeds`, extra zone and pump roles) is not in this tree. Do not invent those roles.
 
 1. Connect the NF MCP (`connect`); check `session` status and notes first.
 2. Site record: latitude, longitude, timezone, optional `area` (ft2 unless `areaUnit` is m2). The weather hook and EUI use them.

@@ -181,12 +181,18 @@ def _missing_roles(rule: cb.CookbookRule, df: pd.DataFrame) -> list[str]:
         if not has_demand:
             base.append("cooling-valve|dx_or_chiller_proof")
         return base + missing_wx
-    if rule.id in {"MECH-OAT-1", "ECON-6"}:
+    if rule.id in {"MECH-OAT-1", "ECON-6", "HW-OAT-1"}:
         if "web-outside-air-temp" not in df.columns or not df["web-outside-air-temp"].notna().any():
             return ["web-outside-air-temp"]
         if rule.id == "ECON-6":
             if "outside-air-damper" not in df.columns or not df["outside-air-damper"].notna().any():
                 return ["outside-air-damper"]
+        if rule.id == "HW-OAT-1":
+            # #1782: no hot-water pump status and no supply temperature -> no proof (SQL assessment no_proof)
+            from open_fdd.rules.economizer_weather import HW_PROOF_ROLES
+
+            if not any(r in df.columns and df[r].notna().any() for r in HW_PROOF_ROLES):
+                return ["pump-status|hot-water-supply-temp"]
         return []
     if rule.id == "CHW-NOLOAD-1":
         from open_fdd.analytics.load_satisfaction import AHU_SAT_COL, ZONE_SAT_COL
@@ -456,6 +462,14 @@ def run_cookbook_rule(
         d = df
     else:
         d = merge_weather(df, weather)
+        if rule.id == "HW-OAT-1" and weather is not None and not weather.empty and "web-outside-air-temp" in df.columns:
+            # #1782: per sample, the equipment's web OAT else the sidecar as-of (hw_oat_1.sql COALESCE), also when the
+            # equipment column exists but is empty
+            wx = _weather_asof(weather, d.index)
+            if "web-outside-air-temp" in wx.columns:
+                d = d.copy()
+                d["web-outside-air-temp"] = pd.to_numeric(d["web-outside-air-temp"], errors="coerce").fillna(
+                    pd.to_numeric(wx["web-outside-air-temp"], errors="coerce"))
         # OAT-METEO needs both real sources — never inject web into oa_t for the compare.
         if rule.id != "OAT-METEO":
             d = inject_oa_t_for_physics(d)
@@ -547,6 +561,20 @@ def run_cookbook_rule(
     pre_quality = d
     if apply_quality:
         d = apply_normalized(d, quality, attach_raw_and_flags=False)
+        if rule.id == "HW-OAT-1":
+            # #1782: proof that quality nulled entirely (a sentinel on a dead sensor) is no proof: skipped, never a PASS
+            gone = _missing_roles(rule, d)
+            if gone:
+                return skipped(
+                    rule.id,
+                    equipment_id,
+                    gone,
+                    notes="SKIPPED — no valid samples after quality normalization",
+                    site_id=sid,
+                    building_id=bid,
+                    equipment_type=eq_type,
+                    params_fingerprint=fp,
+                )
     if rule.sensor_sweep:
         # #1673: the SQL sweeps judge the stored SI values (masked only by unit). A value quality calls out of range is
         # exactly what SV-RANGE / SV-SPIKE assess; nulling it first hid it, and turned it into a gap (now SV-STALE's).
@@ -694,6 +722,8 @@ def run_cookbook_rule(
         for attr_key, metric_key in (
             ("mech_oat1_weather_source", "weather_source"),
             ("mech_oat1_proof", "mech_proof"),
+            ("hw_oat1_weather_source", "weather_source"),
+            ("hw_oat1_proof", "hw_proof"),
             ("econ6_weather_source", "weather_source"),
             ("chw_noload_proof", "mech_proof"),
         ):
@@ -717,14 +747,36 @@ def run_cookbook_rule(
             pct_mask=(proof_ok if proof_ok is not None
                       else pd.Series(True, index=d.index) if rule.id in run_proof_gated_ids() else None),
         )
-        if rule.id == "COIL-PERF" and d.attrs.get("coil_perf_assessment", "assessed") != "assessed":
-            # #1641: no coil valve or no temperature pair: not assessable, never an assessed zero
-            why = d.attrs["coil_perf_assessment"]
+        why_attr = ("coil_perf_assessment" if rule.id == "COIL-PERF"
+                    else "xs_assessment" if rule.id in {"XS-MIX", "XS-COPY", "XS-CLIP"} else None)
+        if why_attr and d.attrs.get(why_attr, "assessed") != "assessed":
+            # #1641 / #1780: missing inputs (no coil valve, no temperature pair, ...): never an assessed zero
+            why = d.attrs[why_attr]
             result.status = f"NOT_ASSESSED_{why.upper()}"
             result.fault_hours = None
             result.fault_pct = None
             result.notes = f"NOT ASSESSED — {why.replace('_', ' ')}"
             result.metrics["assessment"] = why
+        if rule.id == "SHORT-CYCLE":
+            # #1781: no run status -> skipped (never a silent pass); a trend too coarse to count cycles -> not assessed;
+            # a fault found on a coarse trend is a floor (the counts can only be higher)
+            why = d.attrs.get("short_cycle_assessment", "assessed")
+            result.metrics["assessment"] = why
+            result.metrics["run_status_source"] = d.attrs.get("short_cycle_proof", "")
+            if why == "no_run_status":
+                result.status = "SKIPPED_MISSING_ROLES"
+                result.applicable = False
+                result.missing_roles = ["boiler-status|compressor-status|chiller-status|chiller-amps|chiller-power"]
+                result.fault_hours = None
+                result.fault_pct = None
+                result.notes = "SKIPPED — no boiler / compressor / chiller run status, current or power"
+            elif why == "insufficient_trend":
+                result.status = "NOT_ASSESSED_INSUFFICIENT_TREND"
+                result.fault_hours = None
+                result.fault_pct = None
+                result.notes = "NOT ASSESSED — run-status trend too coarse (or too short) to count cycles"
+            elif why == "coarse_floor":
+                result.notes += " (coarse trend: start counts are a floor)"
         if rule.id == "SCHED-247" and metrics.get("assessment") not in (None, "assessed"):
             # #1670: too little known proof for an always-on verdict; unknown is never an assessed zero
             result.status = "NOT_ASSESSED_INSUFFICIENT_PROOF"

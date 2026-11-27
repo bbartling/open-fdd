@@ -64,7 +64,7 @@ reads and is not a deployment route.
 
 ## Timescale option and schema preflight
 
-Full can use SQLite, PGlite, or TimescaleDB. Lite does not use Timescale. For Timescale, configure the app option
+Full can use SQLite, PGlite, or TimescaleDB, and an opt-in native DuckDB engine on trial (app option `engine` `duckdb`). Lite does not use Timescale. For Timescale, configure the app option
 `timescale` as a JSON string or PostgreSQL URL, then apply `core.sql`, `adapter_nf.sql` and `install.sql` (in that
 order, `psql -v ON_ERROR_STOP=1 -1`) using a database installer role. Give the hooks a separate least-privilege runtime role. See the
 [`nf-app/timescale` guide](https://github.com/bbartling/open-fdd/tree/master/nf-app/timescale).
@@ -155,6 +155,10 @@ Back up NF configuration before changing the host itself. Upgrading the NF frame
 the framework's release instructions and verify its console before installing Open-FDD. For the NF Compose backup,
 upgrade, and rollback steps, see the [NF Compose guide](https://github.com/bbartling/open-fdd/blob/master/docs/operations/nf/nf-upgrade-compose.md).
 App uninstall is not a substitute for an NF backup.
+
+A release that drops a file: `install` and `push` delete files an earlier push wrote that the new manifest no longer
+lists, only when unchanged since that push and not a hook's entry point. Files the tool never wrote and NF's own files
+stay. `install --dry-run` and `doctor` (`extra files`) list them; `--keep-files` keeps them.
 
 Points the app leaves behind are cleaned up with `prune-points`, which is a dry run unless `--yes` is given:
 

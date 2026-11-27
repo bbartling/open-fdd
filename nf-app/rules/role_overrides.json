@@ -271,6 +271,14 @@
    "sensor"
   ]
  },
+ "boiler_status": {
+  "classes": [],
+  "markers": [
+   "boiler",
+   "run",
+   "sensor"
+  ]
+ },
  "reheat_valve_pct": {
   "classes": [
    "reheat-cmd"
@@ -619,7 +627,7 @@
   ]
  },
  "_equipment_kinds": {
-  "_doc": "Rule equipment_kinds (registry.yaml) -> Haystack equip markers. An equip has a kind if it carries any of the listed markers.",
+  "_doc": "Rule equipment_kinds (registry.yaml) -> Haystack equip markers. An equip has a kind if it carries any of the listed markers. A Haystack 4 conjunct (hot-water-plant) matches the literal tag or every part (hot, water, plant).",
   "ahu": [
    "ahu",
    "rtu",
@@ -634,13 +642,20 @@
   ],
   "chwPlant": [
    "chilledWaterPlant",
-   "chilledWater"
+   "chilledWater",
+   "chilled-water-plant"
   ],
   "cooling_tower": [
-   "coolingTower"
+   "coolingTower",
+   "condenserWaterPlant",
+   "condenser-water-plant"
   ],
   "boiler": [
-   "boiler"
+   "boiler",
+   "hotWaterPlant",
+   "hot-water-plant",
+   "steamPlant",
+   "steam-plant"
   ],
   "heatpump": [
    "heatPump"

@@ -6,7 +6,13 @@ The shipped limits are ``open_fdd/data/sensor_sweep_limits.json`` (phase 1, #158
 
 stored as one revision of ``fdd.rule_config`` (rule_id ``SV-LIMITS``; scope_key ``site`` or ``equip:<equipment id>``;
 append-only, at most one active revision per scope). Precedence per field: shipped file, then the site override, then
-the equipment override. The merged document is validated with ``validate_role_limits`` before anything is saved, and
+the equipment override. #1763: an override may also carry per-sensor values,
+
+    {"version": 1, "roles": {...}, "sensors": {"<series id>": {"role": "zone-air-temp", "hi": 26.0}}}
+
+which apply to that one point only (two points of one role stay independent) and win over every role value; a sensor
+field saved at the equipment scope wins over the same field saved at the site scope.
+The merged document is validated with ``validate_role_limits`` before anything is saved, and
 ``render_rule.render(rule_id, role_limits=effective_role_limits(...))`` gives the SQL a scheduled run uses. The NF
 hook twin is ``nf-app/hooks/lib/role-limits.js`` (same merge, same conversions, same fragment rendering).
 
@@ -53,6 +59,19 @@ _MULTIPLY: dict[str, dict[str, float]] = {
     "power": {"kW": 1.0, "ton": _FACTORS["kw_per_ton"]["value"]},
 }
 TEMPERATURE_UNITS = ("degC", "degF")
+_ALIAS = {
+    "l/s": "L/s", "l/sec": "L/s", "lpersec": "L/s", "l-per-sec": "L/s",
+    "cfm": "cfm", "ft3/min": "cfm", "ft3permin": "cfm", "ft3-per-min": "cfm",
+    "inh2o": "inH2O", "inh20": "inH2O", "in h2o": "inH2O", "in h20": "inH2O",
+    "%rh": "%RH", "percentrh": "%RH", "percent_rh": "%RH",
+    "pa": "Pa", "psi": "psi", "gpm": "gpm",
+}
+
+
+def _canon_unit(unit: str) -> str:
+    fold = str(unit or "").strip().lower().replace("₂", "2").replace("₀", "0").replace("³", "3")
+    squashed = fold.replace(" ", "").replace("_", "").replace("-", "")
+    return _ALIAS.get(fold) or _ALIAS.get(squashed) or unit
 
 
 def display_units(quantity: str) -> tuple[str, ...]:
@@ -74,9 +93,10 @@ def to_si(value: float, unit: str, quantity: str, field: str) -> float:
             raise ValueError(f"{field}: unit {unit!r} is not a temperature unit (degC, degF)")
         return (value - 32.0) * 5.0 / 9.0 if kind == "absolute" else value * 5.0 / 9.0
     factors = _MULTIPLY.get(quantity) or {}
-    if unit not in factors:
+    named = _canon_unit(unit)
+    if named not in factors:
         raise ValueError(f"{field}: unit {unit!r} not accepted for {quantity} ({', '.join(factors)})")
-    return value * factors[unit]
+    return value * factors[named]
 
 
 def from_si(value: float, unit: str, quantity: str, field: str) -> float:
@@ -86,7 +106,7 @@ def from_si(value: float, unit: str, quantity: str, field: str) -> float:
         if unit == "degC":
             return float(value)
         return value * 9.0 / 5.0 + 32.0 if kind == "absolute" else value * 9.0 / 5.0
-    return value / _MULTIPLY[quantity][unit]
+    return value / _MULTIPLY[quantity][_canon_unit(unit)]
 
 
 def equipment_scope(equipment_id: str) -> str:
@@ -122,6 +142,27 @@ def normalize_override(params: Any, shipped: Mapping | None = None) -> dict:
                 raise ValueError(f"override: {role}.{field} must be a finite SI number")
             out[role][field] = float(value)
     doc = {"version": OVERRIDE_VERSION, "roles": out}
+    sensors = params.get("sensors")
+    if sensors is not None:
+        if not isinstance(sensors, Mapping):
+            raise ValueError("override: sensors must be an object")
+        doc["sensors"] = {}
+        for sid, fields in sensors.items():
+            if not isinstance(sid, str) or not _cat.SERIES_ID_RE.fullmatch(sid):
+                raise ValueError(f"override: invalid series id {sid!r}")
+            if not isinstance(fields, Mapping) or fields.get("role") not in known:
+                raise ValueError(f"override: sensor {sid} needs a known role")
+            own = {k: v for k, v in fields.items() if k != "role"}
+            if not own:
+                raise ValueError(f"override: sensor {sid} needs at least one field")
+            entry: dict[str, Any] = {"role": fields["role"]}
+            for field, value in own.items():
+                if field not in FIELD_KIND:
+                    raise ValueError(f"override: sensor {sid}.{field} is not editable ({', '.join(FIELD_KIND)})")
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise ValueError(f"override: sensor {sid}.{field} must be a finite SI number")
+                entry[field] = float(value)
+            doc["sensors"][sid] = entry
     for key in ("note", "reset", "rollback_of"):
         if key in params:
             doc[key] = params[key]
@@ -136,17 +177,37 @@ def merge(shipped: Mapping | None = None, site: Mapping | None = None, equipment
     revisions = revisions or {}
     sources: dict[str, dict[str, str]] = {e["role"]: {f: "shipped" for f in FIELD_KIND} for e in base["roles"]}
     by_role = {e["role"]: e for e in base["roles"]}
+    own: dict[str, dict] = {}    # series id -> {"role", field: value, "_layer": {field: layer}, "_label": text}
     for layer, override in (("site", site), ("equipment", equipment)):
         if not override:
             continue
         doc = normalize_override(override, base)
         rev = revisions.get(layer)
+        label = f"{layer} override" + (f" revision {rev}" if rev is not None else "")
         for role, fields in doc["roles"].items():
             entry = by_role[role]
             for field, value in fields.items():
                 entry[field] = value
                 sources[role][field] = layer
-            entry["source"] = f"{layer} override" + (f" revision {rev}" if rev is not None else "")
+            entry["source"] = label
+        for sid, fields in (doc.get("sensors") or {}).items():
+            cur = own.setdefault(sid, {"role": fields["role"], "_layer": {}})
+            if cur["role"] != fields["role"]:
+                raise ValueError(f"override: sensor {sid} is {cur['role']!r} at one scope and {fields['role']!r} at another")
+            for field, value in fields.items():
+                if field != "role":
+                    cur[field] = value
+                    cur["_layer"][field] = layer
+            cur["_label"] = f"{label} (sensor)"
+    if own:
+        # #1763: a sensor = its role's merged entry with its own fields on top (validated with the roles)
+        base["sensors"] = []
+        for sid in sorted(own):
+            cur = own[sid]
+            fields = sorted(cur["_layer"])
+            entry = {**by_role[cur["role"]], **{f: cur[f] for f in fields}, "source": cur["_label"], "series_id": sid, "fields": fields}
+            base["sensors"].append(entry)
+            sources[f"sensor:{sid}"] = {f: (cur["_layer"].get(f) or "role") for f in FIELD_KIND}
     return base, sources
 
 
@@ -160,6 +221,8 @@ def effective_role_limits(shipped: Mapping | None = None, site: Mapping | None =
 def config_hash(site: Mapping | None = None, equipment: Mapping | None = None) -> str:
     """sha256 of the overrides in effect (canonical JSON of their roles); '' when none (the shipped limits)."""
     layers = {k: dict(v.get("roles") or {}) for k, v in (("site", site), ("equipment", equipment)) if v and v.get("roles")}
+    # #1763: per-sensor values under their own keys, so a config without them keeps its earlier hash
+    layers.update({f"{k}_sensors": dict(v["sensors"]) for k, v in (("site", site), ("equipment", equipment)) if v and v.get("sensors")})
     if not layers:
         return ""
     return hashlib.sha256(json.dumps(layers, sort_keys=True, separators=(",", ":")).encode()).hexdigest()

@@ -9,7 +9,10 @@ on:
     paths:
       - "docs/**"
       - "README.md"
-      - "openfdd_agent_spec/skills/**"
+      - "AGENTS.md"
+      - "openfdd_agent_spec/**"
+      - "scripts/check_agent_spec.py"
+      - "tests/test_agent_spec.py"
       - ".agents/skills/**"
       - ".claude/skills/**"
       - "scripts/check_skills_sync.py"
@@ -32,7 +35,10 @@ on:
     paths:
       - "docs/**"
       - "README.md"
-      - "openfdd_agent_spec/skills/**"
+      - "AGENTS.md"
+      - "openfdd_agent_spec/**"
+      - "scripts/check_agent_spec.py"
+      - "tests/test_agent_spec.py"
       - ".agents/skills/**"
       - ".claude/skills/**"
       - "scripts/check_skills_sync.py"
@@ -93,7 +99,8 @@ jobs:
           python3 -m pip install --quiet pandas numpy pyyaml pytest
           python3 scripts/nf/gen_cookbook.py --check
           python3 scripts/check_skills_sync.py
-          python3 -m pytest -q tests/test_skills_sync.py
+          python3 scripts/check_agent_spec.py
+          python3 -m pytest -q tests/test_skills_sync.py tests/test_agent_spec.py
 
       - name: Jekyll build
         run: bundle exec jekyll build --trace --strict_front_matter

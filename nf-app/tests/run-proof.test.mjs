@@ -157,3 +157,28 @@ test("collision fixture: a ref matching one id and another's dis binds nothing, 
   assert.doesNotMatch(got.ttl, /local:v1[^.]*phIoT:airRef local:c0000000/);
 });
 
+test("one AHU and VAVs with no airRef: FDD assumes that AHU, unless the option is off or the ref dangles", () => {
+  const got = vm.runInContext(`(() => {
+    const site = { uuid: "s", name: "site", pointType: "SITE", attrs: { id: "site", markers: "site" } };
+    const ahu = (id) => ({ uuid: id, name: id, pointType: "EQUIPMENT", attrs: { id, siteRef: "site", markers: "equip,ahu" } });
+    const vav = (id, extra) => ({ uuid: id, name: id, pointType: "EQUIPMENT", attrs: { id, siteRef: "site", markers: "equip,vav", ...extra } });
+    const fan = { uuid: "fan", name: "fan", pointType: "POINT", attrs: { equipRef: "AHU", siteRef: "site", markers: "point,sensor,discharge,fan,run,his", class: "discharge-run-sensor", kind: "Bool" } };
+    const model = (equips) => ({ sites: [site], equips, devices: [], points: [toPoint(fan)] });
+    const one = model([ahu("AHU"), vav("V1"), vav("V2"), vav("DANGLE", { airRef: "missing" })]);
+    const r = (m, id, opts) => resolveRunProof(m.equips.find((e) => idOf(e) === id), m, catalog, opts);
+    const two = model([ahu("AHU"), ahu("AHU-B"), vav("V1")]);
+    return {
+      v1: r(one, "V1").via, v2: r(one, "V2").equip, assumed: r(one, "V1").assumed,
+      off: r(one, "V1", { assumeSingleFeeder: false }).found,
+      dangle: r(one, "DANGLE").found,
+      two: r(two, "V1").found,
+    };
+  })()`, ctx);
+  assert.equal(got.v1, "assumedSingleAhu");
+  assert.equal(got.v2, "AHU");
+  assert.equal(got.assumed, true);
+  assert.equal(got.off, false);
+  assert.equal(got.dangle, false);
+  assert.equal(got.two, false);
+});
+

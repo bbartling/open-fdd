@@ -7,8 +7,8 @@ description: Deploy the Open-FDD full app or Lite to an NF box with nf_app_sync.
 Need NF 3.10 or newer and a console login. Keep the env file outside git (`NF_CONSOLE_URL`, `CONSOLE_USERNAME`, `CONSOLE_PASSWORD`).
 
 1. Run the tests first: `node --test nf-app/tests/*.test.mjs lite/tests/*.test.mjs`.
-2. Choose the edition. **1 GB boxes (Raspberry Pi 3) get Lite only** (`lite/app.json`). Full (`nf-app/app.json`) is for
-   machines with real resources (SQLite engine from about 2 GB, PGlite from 4 GB).
+2. Choose the edition. **1 GB boxes (Raspberry Pi 3) get Lite only** (`lite/app.json`). Full (`nf-app/app.json`):
+   `auto` uses Timescale when configured, else PGlite from 3.5 GiB, else SQLite. DuckDB (`duckdb>=2.0.1`) is opt-in.
 3. `python3 scripts/nf/hooks/nf_app_sync.py --env <env file> diff nf-app/app.json` then
    `... push nf-app/app.json` (`--skip-hooks` for UI only, `--hook fdd` for one hook; `run ... --hook fdd` runs it now).
    Alternative: NF MCP `manage_app` (create, `write_file`, `restart`) and `deploy_hook`; run a hook with its uuid.
@@ -25,6 +25,22 @@ Before touching a live box read `nf-gotchas.md` (this folder). Related runbooks 
 `nf-upgrade-compose.md`, `bacnet-validate.md` (see the `bacnet-validate` skill). Read-only checks of a deployed box:
 `scripts/nf/tools/` (`nf_portal_sensors.py`, `nf_sensor_history.py`).
 
+## Release bundles, prune, host health
+
+Each `vX.Y.Z` tag runs `.github/workflows/nf-app-release.yml`. It builds `open-fdd-<version>.zip` and
+`open-fdd-lite-<version>.zip` with `scripts/nf/build_app_dist.py` from the same manifests `nf_app_sync.py` pushes.
+Check a tree locally with `python3 scripts/nf/build_app_dist.py --check`.
+
+`prune-points` lists this app's orphan and long-stale result points and deletes nothing unless `--yes` is passed:
+
+```bash
+python3 scripts/nf/hooks/nf_app_sync.py --env <env file> prune-points nf-app/app.json
+python3 scripts/nf/hooks/nf_app_sync.py --env <env file> prune-points nf-app/app.json --stale-days 30 --yes
+```
+
+`doctor` prints host memory, disk and service restarts (`host_health` in `scripts/nf/hooks/nf_app_sync.py`). Those
+lines are PASS, WARN or SKIP. They do not fail `doctor`.
+
 ## Timescale schema gate
 
 `push` and `install` read the installed Timescale schema first (read-only) and stop before any write when the database
@@ -34,4 +50,4 @@ applied. `--dry-run` is for `install` only; other actions refuse it (#1634).
 
 ## Live patching (last resort)
 
-Do not hand-edit the box as the normal fix path. If a hotfix is required to unblock verification, follow the **Live patching a box** section in repo-root `AGENTS.md`: read-only capture first, patch one path, commit on a patch branch (HTML without `?v=` stamps), restart before verify, do not rewrite push-manifest hashes early. Coding agents do not deploy releases to NF sites; Grok Bot handles deploys after merge.
+Do not hand-edit the box as the normal fix path. If a hotfix is required to unblock verification, follow the **Live patching a box** section in repo-root `AGENTS.md`: read-only capture first, patch one path, commit on a patch branch (HTML without `?v=` stamps), restart before verify, do not rewrite push-manifest hashes early. Coding agents do not deploy to a live console and do not delete live points. The repository owner does that after the tag exists.

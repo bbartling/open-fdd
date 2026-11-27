@@ -14,10 +14,10 @@ evidence for that dataset, not proof for every input. Run it with `python -m pyt
 
 | | Rules |
 |---|---:|
-| SQL rules | **78** |
-| With a pandas twin | **72** |
-| Match on the synthetic suite | **58** |
-| Known divergence | **14** |
+| SQL rules | **83** |
+| With a pandas twin | **77** |
+| Match on the synthetic suite | **64** |
+| Known divergence | **13** |
 | SQL only (no twin) | **6** |
 
 **Units.** Parity is checked in SI. Imperial input is converted to SI at ingest, so SQL on imperial input equals SQL on SI input by
@@ -64,7 +64,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fc10"></a>[FC10](sql-cookbook.html#fc10) | match |  |
 | <a id="fc11"></a>[FC11](sql-cookbook.html#fc11) | match |  |
 | <a id="fc12"></a>[FC12](sql-cookbook.html#fc12) | match |  |
-| <a id="fc13-sat-high"></a>[FC13-SAT-HIGH](sql-cookbook.html#fc13-sat-high) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
+| <a id="fc13-sat-high"></a>[FC13-SAT-HIGH](sql-cookbook.html#fc13-sat-high) | match |  |
 | <a id="fc14"></a>[FC14](sql-cookbook.html#fc14) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
 | <a id="fc15"></a>[FC15](sql-cookbook.html#fc15) | match |  |
 | <a id="fc2"></a>[FC2](sql-cookbook.html#fc2) | match |  |
@@ -85,6 +85,7 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="fcu-valve-pass-clg"></a>[FCU-VALVE-PASS-CLG](sql-cookbook.html#fcu-valve-pass-clg) | match | match; differs only on edge data: Planted out-of-range zone_t (80 degC): the pandas quality layer marks those samples OUT_OF_RANGE and excludes them, SQL computes zone_t - sat on the value as given and faults. |
 | <a id="fcu-valve-pass-htg"></a>[FCU-VALVE-PASS-HTG](sql-cookbook.html#fcu-valve-pass-htg) | match |  |
 | <a id="hp-1"></a>[HP-1](sql-cookbook.html#hp-1) | known divergence | Small residual left after #1642; not yet attributed. |
+| <a id="hw-oat-1"></a>[HW-OAT-1](sql-cookbook.html#hw-oat-1) | match |  |
 | <a id="mech-oat-1"></a>[MECH-OAT-1](sql-cookbook.html#mech-oat-1) | match |  |
 | <a id="oa-1"></a>[OA-1](sql-cookbook.html#oa-1) | known divergence | pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646). |
 | <a id="oat-meteo"></a>[OAT-METEO](sql-cookbook.html#oat-meteo) | known divergence | weather source: SQL prefers equipment web_oa_* then as-of weather rows; pandas resolves its own web columns |
@@ -92,14 +93,15 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="reset-1"></a>[RESET-1](sql-cookbook.html#reset-1) | match |  |
 | <a id="sched-1"></a>[SCHED-1](sql-cookbook.html#sched-1) | match |  |
 | <a id="sched-247"></a>[SCHED-247](sql-cookbook.html#sched-247) | match |  |
+| <a id="short-cycle"></a>[SHORT-CYCLE](sql-cookbook.html#short-cycle) | match |  |
 | <a id="sv-flatline"></a>[SV-FLATLINE](sql-cookbook.html#sv-flatline) | match |  |
 | <a id="sv-range"></a>[SV-RANGE](sql-cookbook.html#sv-range) | match |  |
 | <a id="sv-rate"></a>[SV-RATE](sql-cookbook.html#sv-rate) | known divergence | documented in sql/fdd/KNOWN_DIFFERENCES.md: pandas uses profile/median/persistence logic, SQL two consecutive exceedances |
 | <a id="sv-spike"></a>[SV-SPIKE](sql-cookbook.html#sv-spike) | match |  |
 | <a id="sv-stale"></a>[SV-STALE](sql-cookbook.html#sv-stale) | match |  |
 | <a id="trim-1"></a>[TRIM-1](sql-cookbook.html#trim-1) | known divergence | SQL and pandas gate 'equipment on' with different fan/pump proof order and thresholds |
-| <a id="trim-3"></a>[TRIM-3](sql-cookbook.html#trim-3) | match | match; differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run |
-| <a id="trim-4"></a>[TRIM-4](sql-cookbook.html#trim-4) | match | match; differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum <= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run |
+| <a id="trim-3"></a>[TRIM-3](sql-cookbook.html#trim-3) | match | match; differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum &lt;= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run |
+| <a id="trim-4"></a>[TRIM-4](sql-cookbook.html#trim-4) | match | match; differs only on stress-only data: role names, threshold and missing input are aligned (#1588: contract roles hot-water- / chilled-water-reset-request-sum, fault at request sum &lt;= request_lo, an absent request sum is not assessed on either side). Residual: pandas applies its hydronic proof gate with the 600 s startup holdoff, SQL has no startup holdoff, so SQL confirms one 5-minute sample earlier per pump start; matches on the 2 x 3 and 4 x 3 datasets, differs on the 8 x 7 run |
 | <a id="util-interval"></a>[UTIL-INTERVAL](sql-cookbook.html#util-interval) | SQL only | aggregate or utility analytic, no pandas function |
 | <a id="util-monthly"></a>[UTIL-MONTHLY](sql-cookbook.html#util-monthly) | SQL only | aggregate or utility analytic, no pandas function |
 | <a id="vav-1"></a>[VAV-1](sql-cookbook.html#vav-1) | match | match; differs only on edge data: Two input-handling differences: (1) NULL zone_t cells: SQL drops NULL rows (WHERE zone_t IS NOT NULL) and holds the previous sample's state across the null run, pandas scores a NULL as not faulted; (2) planted out-of-range zone_t (80 degC): the pandas quality layer marks it OUT_OF_RANGE and excludes it, SQL scores the value as given. |
@@ -112,7 +114,10 @@ the same in all three legs. See the [harness](parity-harness.html).
 | <a id="vav-ahu-leave"></a>[VAV-AHU-LEAVE](sql-cookbook.html#vav-ahu-leave) | known divergence | pandas applies the rule's startup delay after the proof turns on; the SQL has no startup holdoff yet (#1646). |
 | <a id="vav-reheat"></a>[VAV-REHEAT](sql-cookbook.html#vav-reheat) | match | match; differs only on stress-only data: pandas operational gate holds a fan-running rule for startup_delay_seconds=600 after the fan proves on, SQL has no startup holdoff: a fault already present at fan start is confirmed one 5-minute sample earlier in SQL per fan start (0.1667 h over the two fan starts of the 8-equipment 7-day run); with the gate off pandas equals SQL |
 | <a id="vlv-1"></a>[VLV-1](sql-cookbook.html#vlv-1) | match |  |
-| <a id="wx-1"></a>[WX-1](sql-cookbook.html#wx-1) | match | match; differs only on edge data: Gap handling: SQL flags \|oa_t - previous sample\| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a >2 h gap is a spike in SQL only. |
+| <a id="wx-1"></a>[WX-1](sql-cookbook.html#wx-1) | match | match; differs only on edge data: Gap handling: SQL flags \|oa_t - previous sample\| above the fixed limit whatever the time between samples, pandas scales the limit by the sample gap (limit x dt/poll), so a real change across a &gt;2 h gap is a spike in SQL only. |
+| <a id="xs-clip"></a>[XS-CLIP](sql-cookbook.html#xs-clip) | match |  |
+| <a id="xs-copy"></a>[XS-COPY](sql-cookbook.html#xs-copy) | match |  |
+| <a id="xs-mix"></a>[XS-MIX](sql-cookbook.html#xs-mix) | match |  |
 | <a id="zone-comfort-pct"></a>[ZONE-COMFORT-PCT](sql-cookbook.html#zone-comfort-pct) | SQL only | aggregate or utility analytic, no pandas function |
 
 ## Pinned deltas
@@ -130,7 +135,6 @@ The deltas live in `open_fdd/data/parity_known_differences.json` (`expected`, ke
 | [ECON-3](#econ-3) | edge | - | - |
 | [ECON-4](#econ-4) | all | 0.1667 h &plusmn; 0.01 | 0.4167 h &plusmn; 0.01 |
 | [ECON-7](#econ-7) | all | 0.25 h &plusmn; 0.01 | 0.25 h &plusmn; 0.01 |
-| [FC13-SAT-HIGH](#fc13-sat-high) | all | 10.0833 h &plusmn; 0.01 | 26.0833 h &plusmn; 0.01 |
 | [FC14](#fc14) | all | 62.5 h &plusmn; 0.01 | 292.917 h &plusmn; 0.01 |
 | [FC3](#fc3) | edge | - | - |
 | [FC5](#fc5) | edge | - | - |

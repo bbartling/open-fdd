@@ -36,6 +36,10 @@
       "scale": "si:degC",
       "type": "double"
     },
+    "boiler_status": {
+      "scale": "boolean",
+      "type": "double"
+    },
     "building_ahu_load_satisfied": {
       "scale": "boolean",
       "type": "double"
@@ -345,6 +349,10 @@
         "ahu_sat": {
           "type": "double",
           "role": "ahu_sat"
+        },
+        "boiler_status": {
+          "type": "double",
+          "role": "boiler_status"
         },
         "building_ahu_load_satisfied": {
           "type": "double",

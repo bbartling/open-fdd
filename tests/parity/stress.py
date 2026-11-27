@@ -168,7 +168,13 @@ def main() -> int:
     if ts_raw is not None:
         ingest_mode = ts_raw.get("ingest", "native")
         if ingest_mode == "si":
-            ts_vs_pg = engine_mismatches.get("pglite_vs_timescale", []) if "pglite" in results else ["no pglite run to compare"]
+            # A DuckDB + Timescale run has no PGlite result. Those two engines are already compared above.
+            if "pglite" in results:
+                ts_vs_pg = engine_mismatches.get("pglite_vs_timescale", [])
+            elif "duckdb" in results:
+                ts_vs_pg = engine_mismatches.get("duckdb_vs_timescale", [])
+            else:
+                ts_vs_pg = ["no duckdb run to compare"]
             tie_only = []
         else:
             pg_same = None

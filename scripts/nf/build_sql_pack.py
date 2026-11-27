@@ -11,6 +11,7 @@ Both files have the shape
   { "poll_seconds": 300,
     "dialect": "postgres" | "sqlite",
     "helpers_sql": "<fdd.* helper functions; empty for sqlite, see helper_functions>",
+    "duckdb_helpers_sql": "<postgres only: the same helpers as DuckDB macros (sql/fdd/duckdb), #1645>",
     "helper_functions": [...],              # sqlite only: implemented in JS by engines.js
     "contract": { table: [ {name, type} ] },  # type = double | text | timestamp
     "rules": { rule_id: { "sql", "output_columns", "timeline_sql", "timeline_reason" } },
@@ -594,7 +595,10 @@ def build():
             lite_rules[rid] = {"sql": lite, "output_columns": cols, "timeline_sql": tl_lite,
                                "timeline_reason": "" if tl_lite else tl_reason}
     head = {"poll_seconds": POLL_SECONDS}
-    pg_pack = {**head, "dialect": "postgres", "helpers_sql": helpers, "contract": contract, "rules": pg_rules,
+    # #1645: the DuckDB engine runs these same Postgres rules; its fdd.* helpers are the macros in duckdb_helpers.sql.
+    duckdb_helpers = (SQL_DIR / "duckdb" / "duckdb_helpers.sql").read_text(encoding="utf-8")
+    pg_pack = {**head, "dialect": "postgres", "helpers_sql": helpers, "duckdb_helpers_sql": duckdb_helpers,
+               "contract": contract, "rules": pg_rules,
                "role_limit_templates": role_limit_templates(pg_rules),
                "rule_tuning_templates": rule_tuning_templates(catalog, pg_rules)}
     lite_pack = {**head, "dialect": "sqlite", "helpers_sql": "", "helper_functions": sorted(HELPER_FUNCTIONS),

@@ -1,0 +1,155 @@
+@prefix s223: <http://data.ashrae.org/standard223#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix qudt: <http://qudt.org/schema/qudt/> .
+@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ph: <https://project-haystack.org/def/ph/4.0.0#> .
+@prefix phIoT: <https://project-haystack.org/def/phIoT/4.0.0#> .
+@prefix ex: <urn:openfdd:example:plant:> .
+
+<urn:openfdd:example:plant> a owl:Ontology ;
+    owl:imports <http://data.ashrae.org/standard223/1.0/model/all> ;
+    rdfs:label "Synthetic 223P air-handler to terminal-unit plant" .
+
+ex:site-1 a phIoT:site ;
+    rdfs:label "Example Building" ;
+    ex:siteId "Example Building" .
+
+# Chiller (source) --water--> AHU --air--> two terminal units --> two zones.
+# Haystack tags below are an optional lookup/display overlay, not the feeder graph.
+
+ex:chiller-1 a s223:Chiller ;
+    rdfs:label "chiller-1" ;
+    phIoT:siteRef ex:site-1 ;
+    ph:hasTag phIoT:chiller ;
+    s223:hasConnectionPoint ex:chiller-1-out .
+
+ex:chiller-1-out a s223:OutletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Water ;
+    s223:cnx ex:cnx-chiller-ahu .
+
+ex:cnx-chiller-ahu a s223:Connection ;
+    s223:hasMedium s223:Fluid-Water ;
+    s223:connectsFrom ex:chiller-1 ;
+    s223:connectsTo ex:ahu-1 ;
+    s223:cnx ex:chiller-1-out, ex:ahu-1-chw-in .
+
+ex:ahu-1 a s223:AirHandlingUnit ;
+    rdfs:label "ahu-1" ;
+    phIoT:siteRef ex:site-1 ;
+    ph:hasTag phIoT:ahu ;
+    s223:hasConnectionPoint ex:ahu-1-chw-in, ex:ahu-1-sa-out ;
+    s223:hasProperty ex:ahu-1-dat, ex:ahu-1-dat-sp .
+
+ex:ahu-1-chw-in a s223:InletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Water ;
+    s223:cnx ex:cnx-chiller-ahu .
+
+ex:ahu-1-sa-out a s223:OutletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-ahu-vav1, ex:cnx-ahu-vav2 .
+
+ex:ahu-1-dat a s223:QuantifiableObservableProperty ;
+    rdfs:label "discharge_air_temperature" ;
+    s223:ofMedium s223:Fluid-Air ;
+    s223:hasAspect s223:Role-Discharge ;
+    qudt:hasQuantityKind quantitykind:Temperature ;
+    qudt:hasUnit unit:DEG_C .
+
+ex:ahu-1-dat-sp a s223:QuantifiableActuatableProperty ;
+    rdfs:label "discharge_air_temperature_setpoint" ;
+    s223:ofMedium s223:Fluid-Air ;
+    s223:hasAspect s223:Role-Discharge, s223:Aspect-Setpoint ;
+    qudt:hasQuantityKind quantitykind:Temperature ;
+    qudt:hasUnit unit:DEG_C .
+
+ex:vav-1 a s223:TerminalUnit ;
+    rdfs:label "vav-1" ;
+    phIoT:siteRef ex:site-1 ;
+    ph:hasTag phIoT:vav ;
+    s223:hasConnectionPoint ex:vav-1-in, ex:vav-1-out .
+
+ex:vav-1-in a s223:InletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-ahu-vav1 .
+
+ex:cnx-ahu-vav1 a s223:Connection ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:connectsFrom ex:ahu-1 ;
+    s223:connectsTo ex:vav-1 ;
+    s223:cnx ex:ahu-1-sa-out, ex:vav-1-in .
+
+ex:vav-1-out a s223:OutletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-vav1-zone1 .
+
+# The zone groups a DomainSpace. The space is the connectable that owns the inlet.
+ex:cnx-vav1-zone1 a s223:Connection ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:connectsFrom ex:vav-1 ;
+    s223:connectsTo ex:space-1 ;
+    s223:cnx ex:vav-1-out, ex:space-1-in .
+
+ex:space-1 a s223:DomainSpace ;
+    rdfs:label "space-1" ;
+    phIoT:siteRef ex:site-1 ;
+    s223:hasConnectionPoint ex:space-1-in .
+
+ex:space-1-in a s223:InletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-vav1-zone1 .
+
+ex:zone-1 a s223:Zone ;
+    rdfs:label "zone-1" ;
+    phIoT:siteRef ex:site-1 ;
+    ph:hasTag phIoT:zone ;
+    s223:hasDomainSpace ex:space-1 .
+
+ex:vav-2 a s223:TerminalUnit ;
+    rdfs:label "vav-2" ;
+    phIoT:siteRef ex:site-1 ;
+    ph:hasTag phIoT:vav ;
+    s223:hasConnectionPoint ex:vav-2-in, ex:vav-2-out .
+
+ex:vav-2-in a s223:InletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-ahu-vav2 .
+
+ex:cnx-ahu-vav2 a s223:Connection ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:connectsFrom ex:ahu-1 ;
+    s223:connectsTo ex:vav-2 ;
+    s223:cnx ex:ahu-1-sa-out, ex:vav-2-in .
+
+ex:vav-2-out a s223:OutletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-vav2-zone2 .
+
+ex:cnx-vav2-zone2 a s223:Connection ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:connectsFrom ex:vav-2 ;
+    s223:connectsTo ex:space-2 ;
+    s223:cnx ex:vav-2-out, ex:space-2-in .
+
+ex:space-2 a s223:DomainSpace ;
+    rdfs:label "space-2" ;
+    phIoT:siteRef ex:site-1 ;
+    s223:hasConnectionPoint ex:space-2-in .
+
+ex:space-2-in a s223:InletConnectionPoint ;
+    s223:hasMedium s223:Fluid-Air ;
+    s223:cnx ex:cnx-vav2-zone2 .
+
+ex:zone-2 a s223:Zone ;
+    rdfs:label "zone-2" ;
+    phIoT:siteRef ex:site-1 ;
+    ph:hasTag phIoT:zone ;
+    s223:hasDomainSpace ex:space-2 .
+
+# No connection into this zone: traversal must report unknown_upstream.
+ex:zone-unlinked a s223:Zone ;
+    rdfs:label "zone-unlinked" ;
+    phIoT:siteRef ex:site-1 ;
+    ph:hasTag phIoT:zone .

@@ -19,6 +19,20 @@ const dispVal = (p, v) => (typeof ofddUnits === "undefined" || v == null ? v : o
 const dispUnit = (p) => (typeof ofddUnits === "undefined" ? p.units || "" : ofddUnits.display(0, p.units, unitSystem()).unit);
 /** [[ms, value], ...] of point `p` converted to the display system. */
 const dispSeries = (p, arr) => (typeof ofddUnits === "undefined" || !arr ? arr : arr.map(([t, v]) => [t, dispVal(p, v)]));
+/** An SI temperature (°C) as display text, e.g. "74.0 °F" (imperial) or "23.3 °C" (si). Without units.js
+ *  (Lite) the display system is imperial, as everywhere else in the UI. */
+const dispTempC = (c, d = 1) => {
+  if (c == null || !Number.isFinite(Number(c))) return "–";
+  const r = typeof ofddUnits !== "undefined" ? ofddUnits.fromSI(Number(c), "°C", unitSystem())
+    : unitSystem() === "si" ? { value: Number(c), unit: "°C" } : { value: Number(c) * 9 / 5 + 32, unit: "°F" };
+  return `${r.value.toFixed(d)} ${r.unit}`;
+};
+/** An SI temperature difference (K) as display text, e.g. "18 Δ°F" (imperial) or "10 Δ°C" (si). */
+const dispDeltaK = (k, d = 1) => {
+  const r = typeof ofddUnits !== "undefined" ? ofddUnits.deltaFromSI(Number(k), "°C", unitSystem())
+    : unitSystem() === "si" ? { value: Number(k), unit: "Δ°C" } : { value: Number(k) * 9 / 5, unit: "Δ°F" };
+  return `${r.value.toFixed(d)} ${r.unit}`;
+};
 const parseTs = (ts) => Date.parse(ts.replace(/(\.\d{3})\d+/, "$1"));
 const fmt = (v, d = 1) => (v == null || isNaN(v) ? "–" : v.toFixed(d));
 const latestOf = (p) => p.latest?.double ?? p.latest?.real;
@@ -115,7 +129,27 @@ function sortOverviewEquips(equips) {
     || label(a).localeCompare(label(b)) || String(idOf(a)).localeCompare(String(idOf(b))));
 }
 
+/** Default largest |local BAS OAT - site weather OAT| (K) the Overview picker still trusts the local sensor (#1774). */
+const OVERVIEW_OAT_MAX_DISAGREE_K = 10;
+
+/** The Overview's outside-air temperature (°C): a fresh, unambiguous local BAS sensor first, else site weather.
+ *  When both are valid and differ by more than opts.maxOatDisagreeK (default OVERVIEW_OAT_MAX_DISAGREE_K), the
+ *  local sensor is not trusted (indoors or mis-tagged): site weather is used and `disagree` says why. */
 function inspectOverviewOatC(model, site, opts = {}) {
+  const local = inspectOverviewOatSource(model, site, opts);
+  if (!local.result || local.result.source !== "local" || (opts.weatherOff ?? weatherDisabled())) return local;
+  const maxK = Number.isFinite(opts.maxOatDisagreeK) ? opts.maxOatDisagreeK : OVERVIEW_OAT_MAX_DISAGREE_K;
+  const wx = inspectOverviewOatSource(model, site, { ...opts, skipLocal: true });
+  if (!wx.result) return local;
+  const deltaK = local.result.tempC - wx.result.tempC;
+  if (Math.abs(deltaK) <= maxK) return local;
+  return {
+    result: { ...wx.result, disagree: { localC: local.result.tempC, weatherC: wx.result.tempC, deltaK, maxK, localLabel: local.result.label } },
+    reason: "weather",
+  };
+}
+
+function inspectOverviewOatSource(model, site, opts = {}) {
   const nowMs = opts.nowMs ?? Date.now();
   const maxBasAgeMs = opts.maxBasAgeMs ?? 30 * 60e3;
   const maxWeatherAgeMs = opts.maxWeatherAgeMs ?? 2 * 3600e3;
@@ -137,7 +171,8 @@ function inspectOverviewOatC(model, site, opts = {}) {
     && !isWeatherPoint(p) && !isFddResult(p) && !has(p, "spare")
     && (!p.equipRef || equipIds.has(p.equipRef)));
   let localReason = "none";
-  if (opts.configuredOatUuid) {
+  if (opts.skipLocal) localReason = "skipped";
+  else if (opts.configuredOatUuid) {
     const picked = basCandidates.find((p) => p.uuid === opts.configuredOatUuid);
     if (picked) {
       const ev = evalPoint(picked, maxBasAgeMs);
@@ -187,14 +222,18 @@ function autoSelectOverviewEquip(model, site, opts = {}) {
   const pickByClass = (cls) => equips.find((e) => overviewEquipClass(e) === cls) || null;
   const labelOf = (e) => (e.attrs || {}).dis || e.name || idOf(e);
   if (oat) {
+    // Bands and the pick stay in SI (°C); only the text goes through the display units (#1774).
     const targetCls = oat.tempC < 12 ? "boiler" : oat.tempC < 24 ? "rtu" : "chiller";
-    const band = oat.tempC < 12 ? "< 12 °C" : oat.tempC < 24 ? "12–24 °C" : ">= 24 °C";
+    const band = oat.tempC < 12 ? `< ${dispTempC(12)}` : oat.tempC < 24 ? `${dispTempC(12)} to < ${dispTempC(24)}` : `>= ${dispTempC(24)}`;
     const clsName = targetCls === "boiler" ? "boiler/heating-water" : targetCls === "rtu" ? "RTU" : "chiller/chilled-water";
+    const oatText = `OAT ${dispTempC(oat.tempC)} from ${oat.source === "local" ? "local BAS" : "site weather"}`;
+    const d = oat.disagree;
+    const hint = d ? `; local BAS OAT ${dispTempC(d.localC)} ignored: differs from site weather by more than ${dispDeltaK(d.maxK, 0)}` : "";
     const match = pickByClass(targetCls);
     if (match) {
       return {
         equipId: idOf(match), equip: match, oat, band, fallback: false,
-        reason: `Auto-selected ${labelOf(match)} (${clsName}; OAT ${oat.tempC.toFixed(1)} °C from ${oat.source === "local" ? "local BAS" : "site weather"})`,
+        reason: `Auto-selected ${labelOf(match)} (${clsName}; ${oatText}${hint})`,
       };
     }
     for (const fb of ["rtu", "ahu"]) {
@@ -202,13 +241,13 @@ function autoSelectOverviewEquip(model, site, opts = {}) {
       if (hit) {
         return {
           equipId: idOf(hit), equip: hit, oat, band, fallback: true,
-          reason: `Auto-selected ${labelOf(hit)} (no ${clsName} for OAT ${oat.tempC.toFixed(1)} °C; fallback ${fb.toUpperCase()})`,
+          reason: `Auto-selected ${labelOf(hit)} (no ${clsName} for ${oatText}; fallback ${fb.toUpperCase()}${hint})`,
         };
       }
     }
     return {
       equipId: idOf(equips[0]), equip: equips[0], oat, band, fallback: true,
-      reason: `Auto-selected ${labelOf(equips[0])} (no ${clsName}, RTU, or AHU for OAT ${oat.tempC.toFixed(1)} °C)`,
+      reason: `Auto-selected ${labelOf(equips[0])} (no ${clsName}, RTU, or AHU for ${oatText}${hint})`,
     };
   }
   for (const fb of ["rtu", "ahu"]) {
@@ -354,7 +393,7 @@ const WINDOWS = [60, 300, 600, 900, 1800, 3600, 7200, 14400, 86400];
 const pickWindow = (hours, target = 360) => WINDOWS.find((w) => (hours * 3600) / w <= target) || 86400;
 const windowLabel = (seconds) => seconds >= 3600 ? `${+(seconds / 3600).toFixed(1)} h` : `${+(seconds / 60).toFixed(1)} min`;
 
-const seriesCache = new Map();  // url -> { at, promise }
+const seriesCache = new Map();  // url -> { at, promise, uuids, from, to, windowSec, method }
 const CACHE_MS = 60e3;
 // Leave room for fixed query parameters and request headers under NF's ~8 KB front-door limit.
 const HISTORY_URL_BUDGET = 6000;
@@ -381,7 +420,7 @@ function chartTimeZone(siteTz) { return validChartTimeZone(siteTz); }
 // Nothing is retagged; the resolved source is shown next to the zone when it is a fallback.
 // modelSites: SITE records in the loaded model (null until loadModel ran); a lone Sites API record is only
 // borrowed for an unmatched site when the model is not known to hold several sites.
-const SITE_TZ_SOURCES = { appOption: null, sites: [], weatherOff: false, modelSites: null };
+const SITE_TZ_SOURCES = { appOption: null, sites: [], weatherOff: false, assumeSingle: true, modelSites: null };
 /** Called by loadModel with the number of modeled sites. */
 function noteModelSiteCount(n) { SITE_TZ_SOURCES.modelSites = Number.isFinite(n) ? n : null; }
 /** The optional zone reads must not hold the page: give up after `ms` and use the remaining fallbacks. */
@@ -399,11 +438,12 @@ const knownZone = (z) => {
   try { new Intl.DateTimeFormat("en-US", { timeZone: s }); return s; } catch { return null; }
 };
 const isUtcZone = (z) => /^(utc|etc\/utc|etc\/gmt|gmt|z)$/i.test(String(z ?? "").trim());
-/** @param {{appOption?: string|null, sites?: any[], weatherOff?: boolean}} s */
+/** @param {{appOption?: string|null, sites?: any[], weatherOff?: boolean, assumeSingle?: boolean}} s */
 function setSiteTimeZoneSources(s = {}) {
   SITE_TZ_SOURCES.appOption = knownZone(s.appOption);
   SITE_TZ_SOURCES.sites = Array.isArray(s.sites) ? s.sites : [];
   SITE_TZ_SOURCES.weatherOff = !!s.weatherOff;
+  SITE_TZ_SOURCES.assumeSingle = s.assumeSingle !== false;
 }
 /** The raw value of an app option (typed or scalar) from a GET /api/v1/apps listing entry, or undefined. */
 function appOptionRaw(app, name) {
@@ -420,11 +460,18 @@ function appWeatherOff(app) {
 }
 /** Is the web weather switched off in the app options? (set by loadSiteTimeZoneSources / the analytics hook) */
 const weatherDisabled = () => SITE_TZ_SOURCES.weatherOff;
+/** A VAV with no airRef uses the site's only AHU (default on; app option assumeSingleFeeder). */
+function appAssumeSingleFeeder(app) {
+  const raw = appOptionRaw(app, "assumeSingleFeeder");
+  if (raw == null || String(raw).trim() === "") return true;
+  return !["false", "0", "no", "off"].includes(String(raw).trim().toLowerCase());
+}
+const siteAssumeSingleFeeder = () => SITE_TZ_SOURCES.assumeSingle !== false;
 /** Best-effort read of the non-model zone sources + the weather switch; a failure just leaves that source empty. */
 async function loadSiteTimeZoneSources() {
   const loc = typeof location === "undefined" ? null : location;
   const appId = loc && (String(loc.pathname || "").match(/\/apps\/static\/([^/]+)\//) || [])[1];
-  let appOption = null, weatherOff = false, sites = [];
+  let appOption = null, weatherOff = false, assumeSingle = true, sites = [];
   // both reads run together, each bounded; a failure or a timeout just leaves that source empty
   const [appsR, sitesR] = await Promise.allSettled([
     appId ? boundedRead(api("/api/v1/apps")) : Promise.resolve(null),
@@ -432,10 +479,10 @@ async function loadSiteTimeZoneSources() {
   ]);
   try {
     const app = appsR.status === "fulfilled" && appsR.value ? (appsR.value.applications || []).find((a) => a.id === appId) : null;
-    appOption = appTimeZoneOption(app); weatherOff = appWeatherOff(app);
+    appOption = appTimeZoneOption(app); weatherOff = appWeatherOff(app); assumeSingle = appAssumeSingleFeeder(app);
   } catch { /* malformed: leave empty */ }
   try { sites = sitesR.status === "fulfilled" ? ((sitesR.value || {}).sites || []).filter((s) => s && knownZone(s.timezone)) : []; } catch { sites = []; }
-  setSiteTimeZoneSources({ appOption, sites, weatherOff });
+  setSiteTimeZoneSources({ appOption, sites, weatherOff, assumeSingle });
 }
 /**
  * The zone to show and parse for a model site record.
@@ -524,6 +571,27 @@ const dateTimeInputMs = (value, siteTz) => {
   return fields(t) === wall ? t : NaN;
 };
 
+// container -> the state it last rendered; state -> the control that rendered it (both weak: controls re-render often).
+const rangeControlShows = new WeakMap(), rangeControlOf = new WeakMap();
+
+/** Write resolved bounds into a range control's From / To inputs, as site-local wall time, so Apply keeps the range
+ * the chart shows (#1771). A field the user is editing is left alone.
+ * @param {HTMLElement | null | undefined} container
+ * @param {{fromMs:number,toMs:number} | null | undefined} bounds
+ * @param {string} [siteTz]
+ */
+function syncRangeInputs(container, bounds, siteTz = "UTC") {
+  if (!container || !bounds || !Number.isFinite(bounds.fromMs) || !Number.isFinite(bounds.toMs)) return false;
+  const tz = chartTimeZone(siteTz), active = container.ownerDocument?.activeElement;
+  const write = (/** @type {string} */ sel, /** @type {number} */ ms) => {
+    const input = /** @type {HTMLInputElement | null} */ (container.querySelector(sel));
+    if (input && input !== active) input.value = dateTimeInputValue(ms, tz);
+  };
+  write("[data-range-from]", bounds.fromMs);
+  write("[data-range-to]", bounds.toMs);
+  return true;
+}
+
 /** Mount shared range buttons and site-timezone custom fields.
  * @param {HTMLElement} container
  * @param {{key?:string,state?:any,siteTz?:string,onChange?:(state:any)=>void}} options
@@ -531,6 +599,10 @@ const dateTimeInputMs = (value, siteTz) => {
 function renderRangeControl(container, { key = "default", state = getChartRangeState(key), siteTz = "UTC", onChange } = {}) {
   const tz = chartTimeZone(siteTz), now = Date.now();
   container.classList.add("chart-range-control");
+  // The inputs start from a placeholder ("All" does not know its oldest sample yet); resolveChartSelection writes the
+  // resolved bounds back once it has them (#1771), as long as this control still shows this state.
+  rangeControlShows.set(container, state);
+  if (state && typeof state === "object") rangeControlOf.set(state, { container, tz });
   const bounds = state.preset === "custom" ? state : resolveChartRange(state, { nowMs: now, oldestMs: now - 24 * 3600e3 });
   container.innerHTML = `<div class="seg chart-range-presets">${[["1h", "1 h"], ["24h", "24 h"], ["1w", "1 week"], ["all", "All"]].map(([v, label]) =>
     `<button type="button" data-range="${v}" class="${state.preset === v ? "on" : ""}">${label}</button>`).join("")}</div>
@@ -581,6 +653,36 @@ function historyChunks(list, from, to, windowSec, method) {
   return chunks;
 }
 
+/** In-flight history for the visible tab. A tab, site or range change aborts it. */
+let historyCtrl = typeof AbortController === "function" ? new AbortController() : { signal: undefined, abort() {} };
+function cancelHistory() {
+  try { historyCtrl.abort(); } catch { /* already aborted */ }
+  historyCtrl = typeof AbortController === "function" ? new AbortController() : { signal: undefined, abort() {} };
+}
+
+/**
+ * A cached answer whose uuid set covers `list` for the same window (Overview prefetches one batch; each card reuses it).
+ * @returns {Promise<{data: any[]}> | null}
+ */
+function coverFromCache(list, from, to, windowSec, method) {
+  const want = new Set(list.map((p) => p.uuid));
+  if (!want.size) return null;
+  const hits = [];
+  const covered = new Set();
+  for (const hit of seriesCache.values()) {
+    if (!hit || !hit.uuids || hit.from !== from || hit.to !== to || hit.windowSec !== windowSec || hit.method !== method) continue;
+    if (Date.now() - hit.at > CACHE_MS) continue;
+    let useful = false;
+    for (const u of hit.uuids) if (want.has(u) && !covered.has(u)) { covered.add(u); useful = true; }
+    if (useful) hits.push(hit);
+    if (covered.size === want.size) break;
+  }
+  if (covered.size !== want.size) return null;
+  return Promise.all(hits.map((h) => h.promise)).then((responses) => ({
+    data: responses.flatMap((r) => r.data || []).filter((s) => want.has(s.uuid)),
+  }));
+}
+
 /**
  * uuid -> [[ms, value], ...] for `list` over the last `hours`, one value per window.
  * UUIDs are grouped into bounded requests; repeat calls within a minute reuse each chunk answer.
@@ -593,27 +695,31 @@ async function fetchSeries(list, hours, { method = "AVERAGE", windowSec = pickWi
   // caller walk a long span back in chunks (rcx.js alignedFine).
   const end = endMs != null ? endMs : Math.ceil(Date.now() / (windowSec * 1e3)) * windowSec * 1e3;
   const from = new Date(fromMs == null ? end - hours * 3600e3 : fromMs).toISOString(), to = new Date(end).toISOString();
-  const chunks = historyChunks(list, from, to, windowSec, method);
+  const signal = historyCtrl.signal;
+  const covered = coverFromCache(list, from, to, windowSec, method);
+  const chunks = covered ? [] : historyChunks(list, from, to, windowSec, method);
   // A small fixed concurrency bounds load while keeping 709-sensor views practical.
+  const responses = covered ? [await covered] : [];
   for (let base = 0; base < chunks.length; base += 4) {
-    const responses = await Promise.all(chunks.slice(base, base + 4).map((chunk) => {
+    if (signal && signal.aborted) throw new DOMException("aborted", "AbortError");
+    responses.push(...await Promise.all(chunks.slice(base, base + 4).map((chunk) => {
       const url = historyUrl(chunk, from, to, windowSec, method);
       let hit = seriesCache.get(url);
       if (!hit || Date.now() - hit.at > CACHE_MS) {
-        hit = { at: Date.now(), promise: api(url) };
+        hit = { at: Date.now(), promise: api(url, null, { signal }), uuids: chunk.map((p) => p.uuid), from, to, windowSec, method };
         seriesCache.set(url, hit);
         hit.promise.catch(() => seriesCache.delete(url));
         for (const [k, v] of seriesCache) if (Date.now() - v.at > CACHE_MS) seriesCache.delete(k);
       }
       return hit.promise;
-    }));
-    for (const response of responses) for (const series of response.data || []) {
-      const arr = out.get(series.uuid);
-      if (!arr) continue;
-      for (const s of series.values || []) {
-        const v = s.double ?? s.real;
-        if (v != null && s.ts) arr.push([parseTs(s.ts), v]);
-      }
+    })));
+  }
+  for (const response of responses) for (const series of response.data || []) {
+    const arr = out.get(series.uuid);
+    if (!arr) continue;
+    for (const s of series.values || []) {
+      const v = s.double ?? s.real;
+      if (v != null && s.ts) arr.push([parseTs(s.ts), v]);
     }
   }
   for (const arr of out.values()) arr.sort((a, b) => a[0] - b[0]);
@@ -686,7 +792,10 @@ async function resolveChartSelection(list, state, { siteTz = "UTC", nowMs = Date
       }
     }
   }
-  return { ...state, resolvedBounds: resolveChartRange(state, { nowMs, oldestMs }), timeZone: chartTimeZone(siteTz),
+  const resolvedBounds = resolveChartRange(state, { nowMs, oldestMs });
+  const control = state && typeof state === "object" ? rangeControlOf.get(state) : null;
+  if (control && rangeControlShows.get(control.container) === state) syncRangeInputs(control.container, resolvedBounds, control.tz);
+  return { ...state, resolvedBounds, timeZone: chartTimeZone(siteTz),
     ...(oldestSource ? { oldestSource } : {}), ...(oldestWarning ? { oldestWarning } : {}) };
 }
 

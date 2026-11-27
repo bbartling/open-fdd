@@ -51,7 +51,7 @@ def test_dataset_is_si(data):
     declared = set(data["units"].values())
     assert declared <= {"°C", "%", "Pa", "°F", None}, declared
     pg = data["results"]["pglite"]
-    assert len(pg) == 78
+    assert len(pg) == 83
 
 
 def test_dataset_follows_the_declared_scales(data):
@@ -120,7 +120,7 @@ def test_pandas_equals_sql_in_si(report):
 def test_rules_without_pandas_twin_are_listed(report):
     # SQL-only rules (no open_fdd.rules twin): listed by stress.py in the report, never silently skipped
     assert set(report["no_twin"]) == NO_TWIN
-    assert len(report["twins"]) + len(report["no_twin"]) == 78
+    assert len(report["twins"]) + len(report["no_twin"]) == 83
 
 
 # ---- SI-only contract (no imperial anywhere in the pack or the oracle) -------------------------------------------

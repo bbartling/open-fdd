@@ -1547,9 +1547,9 @@ rules:
     description: Stale data (no fresh samples for longer than the stale threshold)
     # #1673: SV-STALE is missing data only (gaps and expected series with no sample); a stuck value that is still polled is
     # SV-FLATLINE. Not gated by run proof. Gap scoring was removed from SV-FLATLINE, SV-RANGE and SV-SPIKE.
-    # Catalog matches pandas FLATLINE_SENSOR_ROLES (SENSOR_LIMITS minus duct static).
+    # Temps, humidity, duct static and zone airflow. A stuck value that is still polled is SV-FLATLINE.
     required_roles: []
-    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h]
+    optional_roles: [oa_t, mat, zone_t, rat, sat, chw_supply_t, chw_return_t, hw_supply_t, hw_return_t, oa_h, ra_h, zone_rh, ma_h, sa_h, duct_static, zone_flow]
     output_columns: [equipment_id, series_id, sensor_role, fault_hours, covered_hours]
     priority: P0
     parity_status: sql_screening
@@ -2064,8 +2064,8 @@ rules:
     sql_file: fc15_hw_coil_dt_inactive.sql
     pandas_function: null
     description: HW coil ΔT when inactive (GL36 M)
-    required_roles: []
-    optional_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, mat, sat, htg_valve_pct, clg_valve_pct, fan_status, fan_cmd, run_proof]
+    required_roles: [heating_coil_entering_temp, heating_coil_leaving_temp, oa_damper_pct, clg_valve_pct]
+    optional_roles: [htg_valve_pct, fan_status, fan_cmd, run_proof]
     output_columns: [equipment_id, fault_hours]
     priority: P0
     parity_status: sql_screening
@@ -2644,6 +2644,53 @@ rules:
         kind: absolute_temperature
         frontend_control: slider
         sql_placeholder: MECH_OAT_MAX
+
+  - rule_id: HW-OAT-1
+    # #1782: hot-water summer lockout, the heating-side twin of MECH-OAT-1 (same web dry bulb source).
+    equipment_kinds: [boiler]
+    run_proof: exempt
+    run_proof_note: "carries its own proven-on proof (hot-water pump status or supply temperature) and must see warm samples while that proof is off"
+    sql_file: hw_oat_1.sql
+    pandas_function: hw_oat1_compute
+    description: Hot-water plant proven on above 18.3 °C web OAT
+    required_roles: [web_oa_t]
+    optional_roles: [pump_status, hw_supply_t]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      hw_oat_min:
+        label: HW lockout OAT
+        default: 18.333333
+        min: 12.777778
+        max: 23.888889
+        step: 0.555556
+        unit: degC
+        kind: absolute_temperature
+        frontend_control: slider
+        sql_placeholder: HW_OAT_MIN
+      hw_on_min:
+        label: HW supply running cut
+        default: 43.333333
+        min: 32.222222
+        max: 60.0
+        step: 0.555556
+        unit: degC
+        kind: absolute_temperature
+        frontend_control: slider
+        sql_placeholder: HW_ON_MIN
 
   - rule_id: CMD-1
     equipment_kinds: [ahu]
@@ -4459,3 +4506,210 @@ rules:
         kind: boolean
         frontend_control: slider
         sql_placeholder: REQUIRE_RUN_PROOF
+
+  - rule_id: SHORT-CYCLE
+    # #1781: boiler / compressor short cycling from proven run status (duty-aware: a resampled status is an on-fraction).
+    equipment_kinds: [boiler, chiller, heatpump, ahu]
+    run_proof: exempt
+    run_proof_note: "the run status is the signal: starts and on-times are counted from it"
+    sql_file: short_cycle.sql
+    pandas_function: short_cycle
+    description: "Too many starts per hour, or short on-times"
+    required_roles: []
+    optional_roles: [boiler_status, compressor_status, chiller_status, chiller_amps, chiller_power]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      max_starts_per_hour:
+        label: Max starts per hour
+        default: 6.0
+        min: 2.0
+        max: 20.0
+        step: 1.0
+        unit: count
+        kind: count
+        frontend_control: slider
+        sql_placeholder: MAX_STARTS_PER_HOUR
+      min_on_seconds:
+        label: Minimum on-time
+        default: 600.0
+        min: 60.0
+        max: 1800.0
+        step: 60.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: MIN_ON_SECONDS
+      min_short_cycles:
+        label: Short cycles per hour
+        default: 3.0
+        min: 1.0
+        max: 10.0
+        step: 1.0
+        unit: count
+        kind: count
+        frontend_control: slider
+        sql_placeholder: MIN_SHORT_CYCLES
+
+  - rule_id: XS-MIX
+    # #1780: cross-sensor consistency, a sensor / mapping finding (not an economizer fault).
+    equipment_kinds: [ahu]
+    run_proof: gated
+    sql_file: xs_mix.sql
+    pandas_function: xs_mix
+    description: Mixed-air temperature outside the outdoor / return mixing envelope (sensor or mapping)
+    required_roles: [mat, oa_t, rat]
+    optional_roles: [fan_status, fan_cmd, run_proof]
+    output_columns: [equipment_id, fault_hours, covered_hours, active_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 900
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 900.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      mix_band:
+        label: Mixing envelope band
+        default: 1.111111
+        min: 0.277778
+        max: 5.555556
+        step: 0.138889
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: MIX_BAND
+      require_run_proof:
+        label: Require motor status
+        default: 1.0
+        min: 0.0
+        max: 1.0
+        step: 1.0
+        unit: bool
+        kind: boolean
+        frontend_control: slider
+        sql_placeholder: REQUIRE_RUN_PROOF
+
+  - rule_id: XS-COPY
+    # #1780: two temperature roles of one unit carry the same changing signal (copied or bound wrong).
+    equipment_kinds: [ahu, vav, zone_other]
+    run_proof: exempt
+    run_proof_note: "a copied or wrongly bound signal is a mapping fault whether or not the unit runs"
+    sql_file: xs_copy.sql
+    pandas_function: xs_copy
+    description: Two temperature roles identical while changing (copied or wrongly bound signal)
+    required_roles: []
+    optional_roles: [rat, sat, mat, zone_t, vav_discharge_t]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 7200
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 7200.0
+        min: 1800.0
+        max: 43200.0
+        step: 1800.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      copy_tol:
+        label: Copy tolerance
+        default: 0.02
+        min: 0.0
+        max: 0.5
+        step: 0.01
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: COPY_TOL
+      change_min:
+        label: Minimum change over the run
+        default: 1.0
+        min: 0.277778
+        max: 5.555556
+        step: 0.138889
+        unit: degC
+        kind: temperature_difference
+        frontend_control: slider
+        sql_placeholder: CHANGE_MIN
+
+  - rule_id: XS-CLIP
+    # #1780: a transmitter clipped at a round full scale; an instrumentation finding inside the hard range.
+    equipment_kinds: [ahu, vav, zone_other]
+    run_proof: exempt
+    run_proof_note: "CO2 is judged on every sample; fan-dependent roles count only their own fan-on samples"
+    sql_file: xs_clip.sql
+    pandas_function: xs_clip
+    description: Sensor value piled up at a round transmitter full scale (clipped)
+    required_roles: []
+    optional_roles: [zone_co2, duct_static, zone_flow, fan_status, fan_cmd, run_proof]
+    output_columns: [equipment_id, fault_hours, covered_hours, fault_pct, assessment]
+    priority: P1
+    parity_status: sql_screening
+    delete_python_candidate: false
+    confirm_seconds: 0
+    parameters:
+      confirm_seconds:
+        label: Confirm time
+        default: 0.0
+        min: 0.0
+        max: 3600.0
+        step: 300.0
+        unit: sec
+        kind: duration_seconds
+        frontend_control: slider
+        sql_placeholder: CONFIRM_SECONDS
+      clip_share:
+        label: Share of samples at the limit
+        default: 5.0
+        min: 1.0
+        max: 50.0
+        step: 1.0
+        unit: pct
+        kind: percent
+        frontend_control: slider
+        sql_placeholder: CLIP_SHARE
+      co2_round:
+        label: CO2 full-scale step
+        default: 100.0
+        min: 50.0
+        max: 1000.0
+        step: 50.0
+        unit: ppm
+        kind: dimensionless
+        frontend_control: slider
+        sql_placeholder: CO2_ROUND
+      static_round:
+        label: Duct static full-scale step
+        default: 25.0
+        min: 5.0
+        max: 250.0
+        step: 5.0
+        unit: Pa
+        kind: air_pressure
+        frontend_control: slider
+        sql_placeholder: STATIC_ROUND
+      flow_round:
+        label: Airflow full-scale step
+        default: 50.0
+        min: 5.0
+        max: 500.0
+        step: 5.0
+        unit: L_per_s
+        kind: volumetric_flow
+        frontend_control: slider
+        sql_placeholder: FLOW_ROUND

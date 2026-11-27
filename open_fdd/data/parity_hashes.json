@@ -1,10 +1,10 @@
 {
  "_doc": "Published content hashes of open_fdd.parity.generate(), per generator version. Stable for a given (profile, seed, equips, days) until GENERATOR_VERSION changes. Key: profile/seed/equips/days.",
- "generator": 4,
+ "generator": 5,
  "hashes": {
-  "basic/0/2/3": "ce21f5d933ae422f1724edc41cbac8c766f33c314f73b050d1288465482cfdec",
-  "basic/0/8/7": "b14dbe206fda79385f3f52e440dd4fae8b30744f71b30ead5d98f4b10d838eab",
-  "edge/0/2/3": "a42e532ad0e3dfd1590ca8bbdbac4d60e627cdddc759378212140888aee8eff5",
-  "edge/0/8/7": "59a995205896b510070b8901dc80bab4a67ed8e7dc00ea310f7d24f7dc0f046a"
+  "basic/0/2/3": "3e362164db6eee218a23754ee203566b0c18c79b4141d2d4b5508df36b3b45ac",
+  "basic/0/8/7": "0e12d3c44b8f3348f5e6e549371dd0463d5936ffd8a15d1d5ca8eba549af61df",
+  "edge/0/2/3": "4aca6fb99e60e8d85e2fcd6fa69e965d400e14b886cd9aeecf592961b0ca5751",
+  "edge/0/8/7": "14e8edb14face2da57ba79edc99e625013c50a0ddc2eba29d8869552696d613e"
  }
 }

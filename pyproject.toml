@@ -58,6 +58,7 @@ open-fdd-nf = "open_fdd.nf.cli:main"
 open-fdd-ml = "open_fdd.ml.cli:main"
 open-fdd-scorecard = "open_fdd.scorecard.cli:main"
 open-fdd-ontology-audit = "open_fdd.ontology_audit.cli:main"
+open-fdd-rca = "open_fdd.rca.cli:main"
 
 [project.optional-dependencies]
 ecm-web = [
@@ -88,13 +89,14 @@ analytics = [
 nf = [
     "open-fdd[oracle]",
 ]
-# Read the NF app's RDF/Turtle export.
+# Read the NF app's RDF/Turtle export. pyoxigraph is the second parser tools/rdf-check uses.
 rdf = [
-    "rdflib>=7.6.0",
+    "rdflib==7.6.0",
+    "pyoxigraph==0.5.13",
 ]
 # Offline SQL parity replay (borrowing sql/fdd on DuckDB); also the in-process DuckDB engine of the SQL analytics.
 duckdb = [
-    "duckdb>=2.0.0",
+    "duckdb>=2.0.1",
 ]
 # Standalone PostgreSQL parity driver.
 postgres = [
@@ -124,7 +126,8 @@ ml-copod = [
 ]
 # open-fdd-ontology-audit: requirements coverage audit and model doctor (#1569); SHACL is optional
 ontology = [
-    "rdflib>=7.6.0",
+    "rdflib==7.6.0",
+    "pyoxigraph==0.5.13",
     "openpyxl>=3.1.5",
 ]
 ontology-shacl = [
@@ -137,7 +140,9 @@ test = [
     "open-fdd[anomaly]",
     "open-fdd[ml]",
     "open-fdd[ontology-shacl]",
-    "duckdb>=2.0.0",
+    "duckdb>=2.0.1",
+    "rdflib>=7.6.0",
+    "pyoxigraph>=0.5.13",
 ]
 dev = [
     "pytest>=9.2.0",
@@ -159,6 +164,7 @@ include = ["open_fdd*"]
 [tool.setuptools.package-data]
 "open_fdd" = ["data/*.json", "data/*.sql"]
 "open_fdd.ontology_audit" = ["data/*.json", "data/*.csv", "data/*.ttl"]
+"open_fdd.rca" = ["data/*.ttl", "data/*.json"]
 "open_fdd.scorecard" = ["*.sql"]
 "open_fdd.ecm_engineering" = [
     "data/*.xlsx",

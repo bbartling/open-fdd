@@ -1,9 +1,10 @@
 """In-repo engine adapters (implement open_fdd.parity.EngineAdapter).
 
-``NodeEngineAdapter("pglite" | "sqlite")`` runs the SQL pack through ``sql_run.mjs`` (nf-app engines: PGlite = real
-Postgres, sql.js = translated SQLite) on a Python-generated dataset.
+``NodeEngineAdapter`` runs the SQL pack through ``sql_run.mjs`` on a Python-generated dataset.
 
-``DuckDBAdapter`` runs the rendered PostgreSQL pack in DuckDB (UTC, narrowly scoped ``fdd.*`` scalar macros).
+``DuckDBAdapter`` runs the rendered PostgreSQL pack in DuckDB (UTC). It installs ``duckdb_helpers_sql``
+from ``pack-postgres.json`` (the macros in ``sql/fdd/duckdb/duckdb_helpers.sql``), the same text the native
+DuckDB engine installs. ``NodeEngineAdapter("duckdb")`` runs that engine through ``sql_run.mjs``.
 
 ``PostgresAdapter`` runs the same pack and canonical ``sql/fdd/postgres/postgres_helpers.sql`` on a standalone plain
 PostgreSQL server without Timescale (``POSTGRES_TEST_URL`` + ``OPENFDD_PG_TEST_DISPOSABLE=1``; creates and drops its own
@@ -34,6 +35,9 @@ ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 PACK_PG_PATH = ROOT / "nf-app" / "rules" / "pack-postgres.json"
 PG_HELPERS_PATH = ROOT / "sql" / "fdd" / "postgres" / "postgres_helpers.sql"
+DUCKDB_HELPERS_PATH = ROOT / "sql" / "fdd" / "duckdb" / "duckdb_helpers.sql"
+# The macros the DuckDB parity tests execute. The pack copies this file; DuckDBAdapter installs the pack copy.
+DUCKDB_HELPERS_SQL = DUCKDB_HELPERS_PATH.read_text(encoding="utf-8")
 
 
 def node() -> str:
@@ -97,7 +101,7 @@ class NodeEngineAdapter:
     """load(dataset) writes the loader JSON; run(rule_ids) spawns ``sql_run.mjs`` for this engine only."""
 
     def __init__(self, kind: str):
-        if kind not in ("pglite", "sqlite"):
+        if kind not in ("pglite", "sqlite", "duckdb"):
             raise ValueError(kind)
         self.kind = kind
         self.name = kind
@@ -138,100 +142,8 @@ class NodeEngineAdapter:
             self._dir = self._ds_file = None
 
 
-DUCKDB_HELPERS_SQL = """
-CREATE SCHEMA IF NOT EXISTS fdd;
-
-CREATE OR REPLACE MACRO fdd.try_double(v) AS (
-  CASE
-    WHEN ISFINITE(TRY_CAST(NULLIF(TRIM(CAST(v AS VARCHAR)), '') AS DOUBLE))
-      THEN TRY_CAST(NULLIF(TRIM(CAST(v AS VARCHAR)), '') AS DOUBLE)
-    ELSE NULL
-  END
-);
-
-CREATE OR REPLACE MACRO fdd.norm_unit(v) AS (
-  LOWER(REGEXP_REPLACE(COALESCE(TRIM(CAST(v AS VARCHAR)), ''), '[^a-zA-Z0-9]', '', 'g'))
-);
-
-CREATE OR REPLACE MACRO fdd.quantity_for_sql_role(role) AS (
-  CASE
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('ahu_sat', 'chw_return_t', 'chw_supply_sp', 'chw_supply_t',
-      'cooling_coil_entering_temp', 'cooling_coil_leaving_temp', 'cooling_sp', 'cw_return_t',
-      'cw_supply_t', 'heating_coil_entering_temp', 'heating_coil_leaving_temp', 'heating_sp',
-      'hw_return_t', 'hw_supply_t', 'mat', 'oa_t', 'preheat_leave_t', 'rat', 'sat', 'sat_sp',
-      'vav_discharge_t', 'vav_inlet_t', 'web_oa_dp', 'web_oa_t', 'web_wb_t', 'zone_air_temp_sp', 'zone_t')
-      THEN 'absolute_temperature'
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('ma_h', 'oa_h', 'ra_h', 'sa_h', 'web_oa_h', 'zone_rh')
-      THEN 'relative_humidity'
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('chw_dp', 'chw_dp_sp', 'duct_static', 'duct_static_sp') THEN 'air_pressure'
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('chw_flow', 'min_flow_sp', 'vav_total_flow', 'zone_airflow_sp', 'zone_flow') THEN 'volume_flow'
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('chiller_power', 'electric_kw') THEN 'power'
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('electric_kwh', 'kwh') THEN 'energy'
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('chiller_amps', 'chiller_current') THEN 'electric_current'
-    WHEN TRIM(CAST(role AS VARCHAR)) = 'zone_co2' THEN 'concentration'
-    WHEN TRIM(CAST(role AS VARCHAR)) IN ('chw_reset_request_sum', 'hw_reset_request_sum', 'static_reset_request') THEN 'count'
-    ELSE NULL
-  END
-);
-
-CREATE OR REPLACE MACRO fdd.unit_declares_quantity(unit, quantity) AS (
-  CASE
-    WHEN unit IS NULL OR TRIM(CAST(unit AS VARCHAR)) = '' THEN false
-    WHEN quantity = 'absolute_temperature' THEN fdd.norm_unit(unit) IN ('c', 'degc', 'celsius')
-    WHEN quantity = 'relative_humidity' THEN (
-      fdd.norm_unit(unit) IN ('pct', 'percent', 'percent0100', 'rh', 'percentrelativehumidity')
-      OR STRPOS(CAST(unit AS VARCHAR), '%') > 0
-    )
-    WHEN quantity = 'air_pressure' THEN fdd.norm_unit(unit) IN ('pa', 'pascal')
-    WHEN quantity = 'volume_flow' THEN fdd.norm_unit(unit) = 'ls'
-    WHEN quantity = 'power' THEN fdd.norm_unit(unit) = 'kw'
-    WHEN quantity = 'energy' THEN fdd.norm_unit(unit) = 'kwh'
-    WHEN quantity = 'electric_current' THEN fdd.norm_unit(unit) = 'a'
-    WHEN quantity = 'concentration' THEN fdd.norm_unit(unit) = 'ppm'
-    WHEN quantity = 'count' THEN fdd.norm_unit(unit) = 'count'
-    ELSE false
-  END
-);
-
-CREATE OR REPLACE MACRO fdd.is_expected_constant_sql_role(role) AS (
-  CASE
-    WHEN role IS NULL OR TRIM(CAST(role AS VARCHAR)) = '' THEN false
-    WHEN fdd.norm_unit(role) LIKE '%sp' THEN true
-    WHEN STRPOS(fdd.norm_unit(role), 'setpoint') > 0 THEN true
-    WHEN STRPOS(fdd.norm_unit(role), 'status') > 0 THEN true
-    WHEN fdd.norm_unit(role) LIKE '%cmd' THEN true
-    WHEN STRPOS(fdd.norm_unit(role), 'command') > 0 THEN true
-    WHEN fdd.norm_unit(role) = 'occmode' THEN true
-    WHEN STRPOS(fdd.norm_unit(role), 'occupied') > 0 THEN true
-    WHEN STRPOS(fdd.norm_unit(role), 'occupancy') > 0 THEN true
-    WHEN fdd.norm_unit(role) = 'loopenabled' THEN true
-    ELSE false
-  END
-);
-
-CREATE OR REPLACE MACRO fdd.sweep_assessable_sql_role(role, unit) AS (
-  CASE
-    WHEN fdd.is_expected_constant_sql_role(role) THEN false
-    ELSE fdd.unit_declares_quantity(unit, fdd.quantity_for_sql_role(role))
-  END
-);
-
-CREATE OR REPLACE MACRO fdd.mask_sweep_val(role, unit, val) AS (
-  CASE WHEN fdd.sweep_assessable_sql_role(role, unit) THEN CAST(val AS DOUBLE) ELSE NULL END
-);
-
-CREATE OR REPLACE MACRO to_char(ts, fmt) AS (
-  CASE
-    WHEN fmt = 'YYYY-MM' THEN strftime(CAST(ts AS TIMESTAMPTZ) AT TIME ZONE 'UTC', '%Y-%m')
-    WHEN fmt = 'YYYY-MM-DD' THEN strftime(CAST(ts AS TIMESTAMPTZ) AT TIME ZONE 'UTC', '%Y-%m-%d')
-    ELSE strftime(CAST(ts AS TIMESTAMPTZ) AT TIME ZONE 'UTC', fmt)
-  END
-);
-"""
-
-
 class DuckDBAdapter:
-    """Runs the rendered PostgreSQL rule pack in DuckDB with UTC and narrowly scoped ``fdd.*`` macros."""
+    """Runs the PostgreSQL rule pack in DuckDB (UTC) with ``pack['duckdb_helpers_sql']``."""
 
     name = "duckdb"
 
@@ -255,7 +167,10 @@ class DuckDBAdapter:
         self._pack = json.loads(PACK_PG_PATH.read_text(encoding="utf-8"))
         self._conn = duckdb.connect(":memory:")
         self._conn.execute("SET TimeZone = 'UTC'")
-        self._conn.execute(DUCKDB_HELPERS_SQL)
+        helpers = self._pack.get("duckdb_helpers_sql") or ""
+        if not str(helpers).strip():
+            raise RuntimeError("pack-postgres.json has no duckdb_helpers_sql (rebuild scripts/nf/build_sql_pack.py)")
+        self._conn.execute(helpers)
 
         t0 = time.time()
         cols = _table_columns(self._pack, dataset)

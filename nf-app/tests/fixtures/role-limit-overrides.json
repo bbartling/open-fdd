@@ -18,7 +18,7 @@
    "equipment": null,
    "config_hash": "3cd060229ce74465f3c06d97a904205a4b348698e90f11dd24e90b5c6c557b9a",
    "sql_sha256": {
-    "SV-RANGE": "673cdfa91dff1b0c158836bc3433278be60caf9ce1c020f36df0c74f33cc52e1",
+    "SV-RANGE": "a24c7337695639b2122cda33216863a487dff8f6f5de39a0dbfb11b71406e088",
     "SV-SPIKE": "395013a827cfad56043d3f12e2376116c8c1ea75bf32517699fb1de692425378",
     "SV-FLATLINE": "fea76bfa16c091f229b04ab723370c6d47ff567b9bdf2d1e233a761e23e35e71",
     "SV-RATE": "268fd70b0253781b689caf7914e3bc778a8f3281f0626afb8be81dad5508fb48"
@@ -57,7 +57,7 @@
    },
    "config_hash": "0f614be3906f600b03c611ed2d692b2caea152cc15a4b5fd3995643901f22577",
    "sql_sha256": {
-    "SV-RANGE": "94db16e6ab45b5489029ec3ebc85a1c500bd596f3e8143dbf4fd1c57446327d8",
+    "SV-RANGE": "69c7e28f7cff5bb253db4ce38560143e528cf71e387ac1826132c5ec52c72692",
     "SV-SPIKE": "0f7639890895f5f2f3a77dae83bea26e3f821163885fa5b7f3880cc4b66b03fe",
     "SV-FLATLINE": "798f1726c257289d541412f00f7ed6381b61968400257ff9d514c89b087197b3",
     "SV-RATE": "a9b3d503877261cbc76f73d5ef1252ba7cc3d97cfdcc8121d0d3a8be4dd8e4f6"
@@ -80,10 +80,54 @@
    },
    "config_hash": "0ecdc43d641ee5585e5450ade6bb72e972fd3bd82ec907d237f3e349660cf26e",
    "sql_sha256": {
-    "SV-RANGE": "c5c4bbd2d0c1d6628919ae91362997d41f4f83feeb62004ded8b9f62195fecdd",
+    "SV-RANGE": "1e459a7fdb0d4a03f9bfc4d7dc7522ff1594ada4f656ac9c21028b250d52eeef",
     "SV-SPIKE": "395013a827cfad56043d3f12e2376116c8c1ea75bf32517699fb1de692425378",
     "SV-FLATLINE": "fea76bfa16c091f229b04ab723370c6d47ff567b9bdf2d1e233a761e23e35e71",
     "SV-RATE": "a9b3d503877261cbc76f73d5ef1252ba7cc3d97cfdcc8121d0d3a8be4dd8e4f6"
+   }
+  },
+  {
+   "name": "sensor overrides",
+   "site": {
+    "version": 1,
+    "roles": {
+     "zone-air-temp": {
+      "hi": 30.0
+     }
+    },
+    "sensors": {
+     "zat-2": {
+      "role": "zone-air-temp",
+      "lo": 15.0,
+      "flat_tol": 0.2
+     }
+    }
+   },
+   "equipment": {
+    "version": 1,
+    "roles": {},
+    "sensors": {
+     "zat-2": {
+      "role": "zone-air-temp",
+      "hi": 26.0,
+      "rate_per_h": 4.0
+     },
+     "rh-9": {
+      "role": "zone-air-humidity",
+      "flat_tol": 0.5
+     },
+     "dat-1": {
+      "role": "discharge-air-temp",
+      "spike_delta": 5.0
+     }
+    }
+   },
+   "config_hash": "35d54951a8348498d256533821dbfb96abda94e56124cfff5887f839e60d97ba",
+   "sql_sha256": {
+    "SV-RANGE": "adaff625dc7461ee365d2c65bb9101e604df7ee927b8a5ee0e24ba9d424761ca",
+    "SV-SPIKE": "47f7819164deddfb8681ab9fd7f0781f16526176a6ed1f1eceef5a027b5bf95e",
+    "SV-FLATLINE": "a5c54389472d6619d4a8aa4ea1ae74e2a2ab74105f3bb1d55d60e9b030e0a636",
+    "SV-RATE": "922c8b908fa238774b433ff6b015c61243814fd6e5a206eecc08fb698955c470"
    }
   }
  ]

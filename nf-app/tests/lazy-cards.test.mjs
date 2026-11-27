@@ -90,7 +90,7 @@ test("a failed card still frees its slot", async () => {
 
 test("Overview wires the queue to the active tab and the render run", () => {
   const app = readFileSync(new URL("../static/app.js", import.meta.url), "utf8");
-  assert.match(app, /isLive: \(\) => run === viewTabRuns\[tab\] && activeTab === "overview"/);
+  assert.match(app, /isLive: \(\) => run === viewTabRuns\[tab\] && activeTab === \(tab === "rcx" \? "overview" : tab\)/);
   const html = readFileSync(new URL("../static/index.html", import.meta.url), "utf8");
   assert.ok(html.indexOf('src="lazy-cards.js"') < html.indexOf('src="app.js"'), "lazy-cards.js loads before app.js");
   const manifest = JSON.parse(readFileSync(new URL("../app.json", import.meta.url), "utf8"));

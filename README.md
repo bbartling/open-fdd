@@ -15,7 +15,7 @@
     <img src="https://img.shields.io/badge/Docs-online-2563EB?style=for-the-badge" alt="Online docs">
   </a>
   <a href="https://bbartling.github.io/open-fdd/rules/">
-    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-78%20SQL%20%2B%2073%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 78 SQL + 73 pandas, SI units">
+    <img src="https://img.shields.io/badge/FDD%20Rule%20Cookbook-83%20SQL%20%2B%2078%20Pandas%20%C2%B7%20SI-DC2626?style=for-the-badge" alt="FDD Rule Cookbook — 83 SQL + 78 pandas, SI units">
   </a>
   <a href="https://pypi.org/project/open-fdd/">
     <img src="https://img.shields.io/pypi/v/open-fdd?style=for-the-badge&label=PyPI&color=3775A9" alt="Open-FDD on PyPI">
@@ -129,7 +129,11 @@ Commands: `open-fdd-nf`, `open-fdd-anomaly`, `open-fdd-ml`, `open-fdd-report`, `
 Every tool with an example: [PyPI agent tools](https://bbartling.github.io/open-fdd/pypi-agent-tools.html).
 The ML detectors are benchmarked on public LBNL AHU data: [results](https://github.com/bbartling/open-fdd/blob/master/docs/ml/lbnl-ahu-benchmark.md).
 The anomaly and ML tools need no NF box or database: they read a device folder (`history_wide.csv` in SI +
-`column_map.json`). The package (4.x) is versioned separately from the NF app (5.x).
+`column_map.json`). Rule inputs are the ASHRAE 223P role names in `roles/openfdd-roles.json` (1.1.0-draft.1),
+for example `discharge_air_temperature`. `open_fdd.point_roles` loads that file. Legacy keys (`sat`) still resolve.
+The pandas reference also accepts the older hyphenated columns (`discharge-air-temp`).
+`open-fdd-anomaly screen --engine sql --sql-engine duckdb` runs the z-score on DuckDB (`duckdb>=2.0.1`).
+Timescale uses the same PostgreSQL statements on a connection that already has the core tables. The package (4.x) is versioned separately from the NF app (5.x).
 
 ## Support
 

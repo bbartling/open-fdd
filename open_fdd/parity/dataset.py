@@ -29,7 +29,7 @@ from open_fdd.parity._fdlibm import sin as _sin  # V8's sin, bit for bit (math.s
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 #: Bump when ``generate`` changes its output for any (profile, seed, equips, days). Published hashes are per version.
-GENERATOR_VERSION = 4
+GENERATOR_VERSION = 5
 
 PROFILES = ("basic", "edge")
 EDGE_FEATURES = ("nulls", "planted", "gap", "jitter", "duplicates", "out_of_order")
@@ -37,7 +37,7 @@ SITE_ID = "site-1"
 STEP_SECONDS = 300
 
 # ---- the input contract's scales (mirror of the constants in synthetic_dataset.js) ------------------------------------
-_STATUS = frozenset(["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "clg_available",
+_STATUS = frozenset(["fan_status", "pump_status", "chw_pump_status", "chiller_status", "compressor_status", "boiler_status", "clg_available",
                      "loop_enabled", "building_ahu_load_satisfied", "building_zone_load_satisfied"])
 _PERCENT = frozenset(["fan_cmd", "damper_cmd", "damper_pct", "oa_damper_pct", "clg_valve_pct", "htg_valve_pct",
                       "reheat_valve_pct", "chw_pump_cmd", "cw_pump_cmd", "return_fan", "chiller_cmd", "tower_fan_cmd"])

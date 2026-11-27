@@ -229,8 +229,8 @@ test("sweeps emit only their canonical assessable roles", async () => {
     const expected = new Set(catalog.sensor_sweep_roles[rule]);
     const actual = new Set(out[rule].map((row) => row.sensor_role));
     assert.deepEqual(actual, new Set([...actual].filter((role) => expected.has(role))), `${rule} rows stay in its allowlist`);
-    assert.ok(!actual.has("zone_flow"), `${rule} must not publish occupancy flow as a sensor result`);
-    assert.equal(actual.has("duct_static"), ["SV-RANGE", "SV-SPIKE"].includes(rule), `${rule} duct static inclusion`);
+    assert.equal(actual.has("zone_flow"), ["SV-RANGE", "SV-STALE"].includes(rule), `${rule} zone airflow inclusion`);
+    assert.equal(actual.has("duct_static"), ["SV-RANGE", "SV-SPIKE", "SV-STALE"].includes(rule), `${rule} duct static inclusion`);
     assert.ok(out[rule].every((row) => row.fault_hours != null || Number(row.covered_hours) === 0), `${rule} null hours mean no coverage`);
   }
 });

@@ -72,7 +72,8 @@ function loadShared() {
   const ctx = vm.createContext({ console, URLSearchParams, TextDecoder, atob, btoa });
   for (const f of ['model.js']) vm.runInContext(fs.readFileSync(path.join(STATIC, f), 'utf8'), ctx, { filename: f });
   const get = (n) => vm.runInContext(n, ctx);
-  return { toPoint: get('toPoint'), idOf: get('idOf'), ENTITY_TYPES: get('ENTITY_TYPES'), modelToTurtle: get('modelToTurtle') };
+  return { toPoint: get('toPoint'), idOf: get('idOf'), ENTITY_TYPES: get('ENTITY_TYPES'), modelToTurtle: get('modelToTurtle'),
+    rdfBaseOf: get('rdfBaseOf') };
 }
 
 // the shared pager (lib/paging.js): pageOffset + totalCount or a token, loud on a cap or short read (#1550)
@@ -97,19 +98,18 @@ const argsOf = (ctx) => {
   return startArgs.startHookArgs(ctx, { configFallback: true, numberFields: ['maxTriples'] });
 };
 
-/** @param {{sdk: any, args?: any, nfBase?: string, now?: () => number}} o */
-async function handle({ sdk, args = {}, nfBase, now = () => Date.now() }) {
+/** @param {{sdk: any, args?: any, now?: () => number}} o */
+async function handle({ sdk, args = {}, now = () => Date.now() }) {
   const log = (m) => (sdk && sdk.logEvent ? sdk.logEvent(m) : console.log(m));
   const t0 = now();
   let result;
   try {
     const shared = loadShared();
     const model = await loadModel(sdk.http, shared);
-    // Base IRIs: same scheme as the UI (urn:nf:<host>:); the hook has no browser host, so default to
-    // the NF host the SDK talks to. Pass args.base to match the UI's IRIs, args.nfBase to get the
-    // rdfs:seeAlso history URLs (without it only ref:hasTimeseriesId is exported).
-    const host = args.base || nfBase || (sdk.http && sdk.http.defaults && sdk.http.defaults.baseURL) || 'nf';
-    const base = String(args.base || `urn:nf:${String(host).replace(/^https?:\/\//, '').replace(/\/$/, '')}:`);
+    // Base IRI: the UI's own rdfBaseOf (static/model.js, fixed `urn:nf:`), never the host (#1773), so the
+    // subjects match the Model & RDF tab and the rdf hook. args.base overrides it; args.nfBase adds the
+    // schema:url history links (without it only ref:hasTimeseriesId is exported).
+    const base = String(args.base || shared.rdfBaseOf());
     const { turtle } = shared.modelToTurtle(model, base, { nfBase: args.nfBase || '' });
     const r = runSparql(turtle, args.query, args.format, { maxTriples: args.maxTriples });
     result = { ok: true, ms: now() - t0, base, ...r };

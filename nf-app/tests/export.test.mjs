@@ -45,10 +45,12 @@ test("chunkRange: consecutive pieces of at most 7 days that cover the range exac
   assert.equal(X.chunkRange(t0, t0 + 7 * DAY).length, 1);
 });
 
-test("columnName: equip, point and unit in brackets; empty parts dropped", () => {
-  assert.equal(X.columnName("AHU-1", "Discharge Air Temp", "°F"), "AHU-1 Discharge Air Temp [°F]");
+test("columnName: equip · point and unit in brackets; equip prefix is not repeated", () => {
+  assert.equal(X.columnName("AHU-1", "Discharge Air Temp", "°F"), "AHU-1 · Discharge Air Temp [°F]");
+  assert.equal(X.columnName("AHU-1", "AHU-1 Duct Static Pressure", "inH₂O"), "AHU-1 · Duct Static Pressure [inH₂O]");
+  assert.equal(X.columnName("Plant", "Plant Hot Water Return Temperature", "°F"), "Plant · Hot Water Return Temperature [°F]");
   assert.equal(X.columnName("", "Outdoor Air Temp", "°C"), "Outdoor Air Temp [°C]");
-  assert.equal(X.columnName("AHU-1", "Fan Cmd", ""), "AHU-1 Fan Cmd");
+  assert.equal(X.columnName("AHU-1", "Fan Cmd", ""), "AHU-1 · Fan Cmd");
   assert.deepEqual(X.uniqueHeaders(["a", "b", "a", "a"]), ["a", "b", "a (2)", "a (3)"]);
 });
 
@@ -108,6 +110,9 @@ test("unitFor: display converts per system, stored keeps NF's unit", () => {
   assert.ok(Math.abs(pa.convert(1) - 249.0889) < 1e-6);
   assert.equal(X.unitFor("", "display", "si").unit, "");     // unknown/empty unit passes through
   assert.equal(X.unitFor("zz", "display", "si").convert(5), 5);
+  const raw = X.unitFor("in h₂0", "display", "imperial");
+  assert.equal(raw.unit, "inH₂O", "a raw source spelling uses the canonical display label");
+  assert.equal(X.unitFor("in h₂0", "display", "si").unit, "Pa");
 });
 
 const t = (h, m = 0) => Date.UTC(2026, 10, 5, h, m);
@@ -124,7 +129,7 @@ test("toCsv: timestamp columns, quoted headers, union of timestamps, unit conver
   const { csv, rows } = X.toCsv({ columns: cols, data, mode: "display", system: "si" });
   assert.equal(rows, 3);
   const lines = csv.slice(1).split("\r\n");
-  assert.equal(lines[0], 'timestamp,timestamp_utc,"AHU-1 Discharge, Temp [°C]","AHU-1 Fan ""Cmd"""');
+  assert.equal(lines[0], 'timestamp,timestamp_utc,"AHU-1 · Discharge, Temp [°C]","AHU-1 · Fan ""Cmd"""');
   assert.equal(lines[1], `${X.localIso(t(12))},2026-11-05T12:00:00.000Z,22,`);
   assert.equal(lines[2], `${X.localIso(t(12, 15))},2026-11-05T12:15:00.000Z,24,1`);
   assert.equal(lines[3], `${X.localIso(t(12, 30))},2026-11-05T12:30:00.000Z,,0`);
@@ -136,6 +141,28 @@ test("toCsv: timestamp columns, quoted headers, union of timestamps, unit conver
   const stored = X.toCsv({ columns: cols, data, mode: "stored", system: "si" }).csv;
   assert.match(stored, /\[°F\]/);
   assert.match(stored, /,71\.6,/);
+});
+
+test("toCsv: display headers use the canonical unit, and an unaligned bucket start has no empty leading row", () => {
+  const start = Date.parse("2026-11-05T14:45:35Z");
+  const step = 300000;
+  const first = Math.ceil(start / step) * step;
+  const col = { uuid: "p", equip: "AHU-1", dis: "AHU-1 Duct Static Pressure", unit: "in h₂0" };
+  const data = new Map([["p", new Map([[first, 1], [first + step, 2]])]]);
+  const { csv, rows } = X.toCsv({
+    columns: [col], data, mode: "display", system: "imperial",
+    startMs: start, endMs: first + step * 2, windowSec: 300, includeEmptyBuckets: true,
+  });
+  const lines = csv.slice(1).split("\r\n").filter(Boolean);
+  assert.equal(rows, 2);
+  assert.match(lines[0], /AHU-1 · Duct Static Pressure \[inH₂O\]/);
+  assert.equal(lines[1].split(",")[1], new Date(first).toISOString());
+  assert.ok(!lines.some((l) => l.includes("14:45:35")), "no row at the unaligned range start");
+  const si = X.toCsv({
+    columns: [col], data, mode: "display", system: "si",
+    startMs: start, endMs: first + step, windowSec: 300, includeEmptyBuckets: true,
+  }).csv;
+  assert.match(si, /\[Pa\]/);
 });
 
 test("toCsv: rows outside [start, end) are dropped", () => {
@@ -234,15 +261,15 @@ test("toCsv neutralises malicious point and equip names in the header, not the d
   const { csv } = X.toCsv({ columns: evil, data, mode: "stored", system: "si" });
   const [head, row] = csv.slice(1).split("\r\n");
   const cells = head.split(",");
-  assert.equal(cells[2], "'=cmd|' /C calc'!A0 Temp [°F]");
-  assert.equal(cells[3], "AHU @SUM(1+1)");   // starts with "AHU": not a formula
-  assert.equal(cells[4], "'+1 -2");
+  assert.equal(cells[2], "'=cmd|' /C calc'!A0 · Temp [°F]");
+  assert.equal(cells[3], "AHU · @SUM(1+1)");   // starts with "AHU": not a formula
+  assert.equal(cells[4], "'+1 · -2");
   assert.ok(row.endsWith(",-3.2,5,-0.5"), row);
 });
 
 test("export locks before resolving its range and restores state when that lookup fails", async () => {
   const saved = new Map();
-  const globals = ["document", "renderRangeControl", "getChartRangeState", "resolveChartSelection", "chartTimeZone", "ofddUnits", "esc"];
+  const globals = ["document", "renderRangeControl", "getChartRangeState", "resolveChartSelection", "syncRangeInputs", "chartTimeZone", "ofddUnits", "esc"];
   for (const key of globals) saved.set(key, { had: Object.hasOwn(globalThis, key), value: globalThis[key] });
   const listeners = new Map(), elements = new Map();
   const element = (id) => {
@@ -256,7 +283,9 @@ test("export locks before resolving its range and restores state when that looku
   const gates = [];
   try {
     globalThis.document = { getElementById: element };
+    const synced = [];
     globalThis.renderRangeControl = () => {};
+    globalThis.syncRangeInputs = (el, bounds, tz) => synced.push({ el, bounds, tz });
     globalThis.getChartRangeState = () => ({ preset: "all" });
     globalThis.chartTimeZone = () => "UTC";
     globalThis.ofddUnits = { displaySystem: () => "si", display: () => ({ unit: "" }) };
@@ -268,6 +297,11 @@ test("export locks before resolving its range and restores state when that looku
     await new Promise(setImmediate);
     gates[0].resolve({ resolvedBounds: { fromMs: 1000, toMs: 3600e3 } });
     await new Promise(setImmediate);
+    // "All" resolved: From / To now show those bounds, not the 24 h placeholder (#1771)
+    assert.equal(synced.length, 1);
+    assert.equal(synced[0].el, element("exRangeControl"));
+    assert.deepEqual(synced[0].bounds, { fromMs: 1000, toMs: 3600e3 });
+    assert.equal(synced[0].tz, "UTC");
 
     const go = element("exGo");
     listeners.get("exGo:click")();

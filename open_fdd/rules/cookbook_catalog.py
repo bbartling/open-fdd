@@ -30,6 +30,7 @@ from open_fdd.rules.sensor_sweep_catalog import (
     limits_for_haystack_role,
     quantity_for_haystack_role,
     stale_tolerance_for_role,
+    starter_profile,
     sweep_assessable_role,
 )
 
@@ -234,6 +235,8 @@ SWEEP_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-RANGE"])
 # Pressure points (e.g. duct static) legitimately rest at ~0 when equipment is off,
 # so they would false-positive as "stuck" — exclude them from stuck-sensor sweeps.
 FLATLINE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-FLATLINE"])
+# Stale is missing data, so it follows the SV-STALE allowlist (pressure and zone airflow included).
+STALE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-STALE"])
 
 SPIKE_SENSOR_ROLES = list(ASSESSABLE_ROLES_BY_SWEEP["SV-SPIKE"])
 
@@ -554,6 +557,8 @@ def confirm_sensor_sweep_segments(
             "first_fault_timestamp": first_ts,
             "last_fault_timestamp": last_ts,
         })
+        if (sid := _series_id(d, role)) is not None:   # #1763: the point keeps its identity in the evidence
+            ev["series_id"] = sid
         evidence.append(ev)
     return {
         "raw_mask": raw_union,
@@ -726,6 +731,21 @@ def _sweep_limits(d: pd.DataFrame) -> dict | None:
     return raw if isinstance(raw, dict) else None
 
 
+def _series_id(d: pd.DataFrame, role: str) -> str | None:
+    """#1763: the point (series id) behind a role column (``d.attrs['series_ids']``), for its own saved limits."""
+    raw = d.attrs.get("series_ids")
+    sid = raw.get(role) if isinstance(raw, dict) else None
+    return str(sid) if sid else None
+
+
+def _sweep_profile(d: pd.DataFrame, role: str, limits: dict | None, rule_tag: str, **tuners) -> dict:
+    """The sensor's SI limits (sensor, then role, then rule tuner, then quantity starter; see starter_profile)."""
+    prof = starter_profile(role, series_id=_series_id(d, role), limits=limits, **tuners)
+    if not prof["assessed"]:
+        raise ValueError(f"{rule_tag} role {role!r} has no SI limit ({prof['reason']})")
+    return prof
+
+
 def _units_map(d: pd.DataFrame) -> dict[str, str]:
     raw = d.attrs.get("units_map")
     if isinstance(raw, dict):
@@ -748,10 +768,8 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
             continue
-        lim = limits_for_haystack_role(role, limits)
-        if lim is None:
-            raise ValueError(f"SV-RANGE role {role!r} has no SI limit")
-        base_lo, base_hi = lim["lo"], lim["hi"]
+        prof = _sweep_profile(d, role, limits, "SV-RANGE")
+        base_lo, base_hi = prof["lo"], prof["hi"]
         type_scale = _role_type_scale(p, role, kind="range")
         # Widen limits when scale > 1 (more forgiving); shrink when scale < 1.
         mid = (base_lo + base_hi) / 2.0
@@ -766,8 +784,6 @@ def _sweep_range(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
 
 
 def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
-    from open_fdd.rules.sensor_sweep_catalog import flatline_tolerance_for_role
-
     tol = _f(p, "flatline_tol", 0.055556)
     hours = _f(p, "flatline_hours", 1.0)
     max_silence = _f(p, "max_silence_hours", 0.5)
@@ -786,13 +802,16 @@ def _sweep_flatline(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         s = pd.to_numeric(d[role], errors="coerce")
         if not s.notna().any():
             continue
+        flat_tol = _sweep_profile(d, role, limits, "SV-FLATLINE", flatline_tol=tol)["flat_tol"]
+        if flat_tol is None:
+            raise ValueError(f"SV-FLATLINE role {role!r} has no declared tolerance")
         role_gate = gate
         if role_gate is not None:
             role_gate = role_gate.reindex(s.index).fillna(False)
         role_mask = _window_flatline_mask(
             s,
             hours=hours,
-            tolerance=flatline_tolerance_for_role(role, tol, limits),
+            tolerance=flat_tol,
             max_silence_hours=max_silence,
             poll=poll,
             gate=role_gate,
@@ -820,10 +839,10 @@ def _sweep_spike(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
         if not s.notna().any():
             continue
         type_scale = _role_type_scale(p, role, kind="spike")
-        lim = limits_for_haystack_role(role, limits)
-        if lim is None:
+        spike = _sweep_profile(d, role, limits, "SV-SPIKE")["spike_delta"]
+        if spike is None:
             raise ValueError(f"SV-SPIKE role {role!r} has no SI limit")
-        limit = lim["spike"] * type_scale
+        limit = spike * type_scale
         valid = s.dropna().sort_index(kind="mergesort")
         role_mask = _false(s.index)
         if len(valid) > 1:
@@ -864,7 +883,7 @@ def _sweep_stale(d: pd.DataFrame, p: dict, poll: float) -> pd.Series:
     else:
         start, end = 0.0, max(0, len(d.index) - 1) * max(float(poll), 1.0)
     anchor = d.index.min() if isinstance(d.index, pd.DatetimeIndex) else d.index[0]
-    for role in FLATLINE_SENSOR_ROLES:
+    for role in STALE_SENSOR_ROLES:
         if role not in d.columns or not sweep_assessable_role(role, None, units_map, rule_id="SV-STALE", limits=limits):
             continue
         valid, epochs = _valid_series_times(pd.to_numeric(d[role], errors="coerce"), poll)
@@ -1177,7 +1196,7 @@ def fc13(d, p, poll):
     sat_err = _gl36_value(p, "eps_sat", "sat_err", 0.638889)
     econ_min = _f(p, "econ_min_pos", AHU_MIN_OA_DPR)
     econ_full = _f(p, "econ_full_open", 0.9)
-    clg_full = _f(p, "clg_full_min", 0.01)
+    clg_full = _f(p, "clg_full_min", 0.9)
     econ = norm_cmd(d["outside-air-damper"]).fillna(0)
     clg = norm_cmd(d["cooling-valve"]).fillna(0)
     raw = (
@@ -1630,6 +1649,13 @@ def fcu_mode_cycle(d, p, poll):
     # Idle samples are omitted from the transition sequence and must not become
     # fault rows after the threshold is crossed.
     return (mode != 0) & (changes >= int(_f(p, "mode_changes", 4.0)))
+
+
+def short_cycle(d, p, poll):
+    """#1781 SHORT-CYCLE: starts in the trailing hour, or repeated short on-times, from proven run status (duty-aware)."""
+    from open_fdd.rules.short_cycle import short_cycle_compute
+
+    return short_cycle_compute(d, p, poll)
 
 
 # ---------------------------------------------------------------------------
@@ -2139,7 +2165,7 @@ RULES: list[CookbookRule] = [
         fc13, params=[
             EPS_TEMP_PARAM("eps_sat", "SAT sensor error εSAT"),
             CookbookParam("sat_err", "Legacy SAT error (sets εSAT)", "Δ°C", 0.0, 5.555556, 0.138889, 0.555556),
-            CookbookParam("clg_full_min", "Full-cooling threshold (fraction)", "frac", 0.5, 1.0, 0.01, 0.01),
+            CookbookParam("clg_full_min", "Full-cooling threshold (fraction)", "frac", 0.5, 1.0, 0.01, 0.9),
             ECON_MIN_PARAM(), ECON_FULL_PARAM(), MODE_DELAY_PARAM(), CONFIRM_PARAM()], confirm_seconds=600),
     CookbookRule("FC14", "CHW coil ΔT when inactive (GL36 L)", "ahu", ["ahu"],
         ["cooling-coil-entering-temp", "cooling-coil-leaving-temp", "outside-air-damper", "cooling-valve"],
@@ -2294,6 +2320,22 @@ RULES: list[CookbookRule] = [
         confirm_seconds=600,
     ),
     CookbookRule(
+        "HW-OAT-1",
+        "Hot-water plant proven on above 18.3 °C web OAT",
+        "plant",
+        ["boiler"],
+        ["web-outside-air-temp"],
+        "Pump on, or supply above 43.3 °C, with web dry-bulb above 18.3 °C.",
+        __import__("open_fdd.rules.economizer_weather", fromlist=["hw_oat1_compute"]).hw_oat1_compute,
+        params=[
+            CookbookParam("hw_oat_min", "HW lockout OAT", "°C", 12.777778, 23.888889, 0.555556, 18.333333, direction="fewer"),
+            CookbookParam("hw_on_min", "HW supply running cut", "°C", 32.222222, 60.0, 0.555556, 43.333333, direction="fewer"),
+            CONFIRM_PARAM(15.0),
+        ],
+        optional_roles=["pump-status", "hot-water-supply-temp"],
+        confirm_seconds=900,
+    ),
+    CookbookRule(
         "CHW-NOLOAD-1",
         "Chiller running with no building load",
         "plant",
@@ -2343,6 +2385,30 @@ RULES: list[CookbookRule] = [
                         "heating-coil-leaving-temp", "cooling-coil-entering-temp", "cooling-coil-leaving-temp",
                         "mixed-air-temp", "discharge-air-temp", "vav-inlet-air-temp", "vav-discharge-air-temp",
                         "zone-air-temp", "zone-airflow", "fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("XS-MIX", "Mixing envelope breach", "sensor", ["ahu"],
+        ["mixed-air-temp", "outside-air-temp", "return-air-temp"],
+        "MAT outside OAT/RAT ± band, fan on.",
+        __import__("open_fdd.rules.cross_sensor", fromlist=["xs_mix"]).xs_mix, params=[
+            CookbookParam("mix_band", "Mixing envelope band", "Δ°C", 0.277778, 5.555556, 0.138889, 1.111111, direction="fewer"),
+            CONFIRM_PARAM(15.0)],
+        optional_roles=["fan-status", "fan-cmd"], confirm_seconds=900),
+    CookbookRule("XS-COPY", "Copied signal", "sensor", ["ahu", "vav", "zone_other"], [],
+        "Pair within copy_tol while moving.",
+        __import__("open_fdd.rules.cross_sensor", fromlist=["xs_copy"]).xs_copy, params=[
+            CookbookParam("copy_tol", "Copy tolerance", "Δ°C", 0.0, 0.5, 0.01, 0.02, direction="stricter"),
+            CookbookParam("change_min", "Minimum change over the run", "Δ°C", 0.277778, 5.555556, 0.138889, 1.0, direction="fewer"),
+            CONFIRM_PARAM(120.0, 720.0)],
+        optional_roles=["return-air-temp", "discharge-air-temp", "mixed-air-temp", "zone-air-temp",
+                        "vav-discharge-air-temp"], confirm_seconds=7200),
+    CookbookRule("XS-CLIP", "Clipped sensor", "sensor", ["ahu", "vav", "zone_other"], [],
+        "Round maximum held for at least clip_share percent of samples.",
+        __import__("open_fdd.rules.cross_sensor", fromlist=["xs_clip"]).xs_clip, params=[
+            CookbookParam("clip_share", "Share of samples at the limit", "%", 1.0, 50.0, 1.0, 5.0, direction="fewer"),
+            CookbookParam("co2_round", "CO₂ full-scale step", "ppm", 50.0, 1000.0, 50.0, 100.0),
+            CookbookParam("static_round", "Duct static full-scale step", "Pa", 5.0, 250.0, 5.0, 25.0),
+            CookbookParam("flow_round", "Airflow full-scale step", "L/s", 5.0, 500.0, 5.0, 50.0),
+            CONFIRM_PARAM(0.0)],
+        optional_roles=["zone-co2", "duct-static-pressure", "zone-airflow", "fan-status", "fan-cmd"], confirm_seconds=0),
     CookbookRule("FCU-CLG-COIL", "FCU cooling coil under-delivery", "fcu", ["zone_other", "general", "ahu"],
         ["discharge-air-temp", "zone-air-temp", "cooling-valve", "heating-valve"],
         "Fan on, cooling valve ≥80%, and heating shut, but discharge air is not below zone temperature.",
@@ -2564,6 +2630,15 @@ RULES: list[CookbookRule] = [
             CookbookParam("chw_lo", "CHWS low", "°C", 1.666667, 12.777778, 0.277778, 7.222222, direction="stricter"),
             CookbookParam("request_lo", "Request sum low", "count", 0.0, 10.0, 0.5, 1.0, direction="stricter"),
             CONFIRM_PARAM()], confirm_seconds=1800),
+    CookbookRule("SHORT-CYCLE", "Short cycling", "plant", ["boiler", "chiller", "heatpump", "ahu"], [],
+        "Too many starts per hour, or short on-times.",
+        short_cycle, params=[
+            CookbookParam("max_starts_per_hour", "Max starts per hour", "count", 2.0, 20.0, 1.0, 6.0, direction="fewer"),
+            CookbookParam("min_on_seconds", "Minimum on-time", "sec", 60.0, 1800.0, 60.0, 600.0, direction="stricter"),
+            CookbookParam("min_short_cycles", "Short cycles per hour", "count", 1.0, 10.0, 1.0, 3.0, direction="fewer"),
+            CONFIRM_PARAM(0.0)],
+        optional_roles=["boiler-status", "compressor-status", "chiller-status", "chiller-amps", "chiller-power"],
+        confirm_seconds=0),
 
     # --- Extended families ---
     CookbookRule(
@@ -2666,12 +2741,16 @@ RULE_SUMMARY_OVERRIDES: dict[str, str] = {
     "SV-SPIKE": "Flags an implausible sample-to-sample jump for the sensor type.",
     "SV-STALE": "Flags a sensor that sent no valid sample for longer than the stale threshold — missing data.",
     "SV-RATE": "Flags implausible sustained sensor rates of change using location- and state-aware thresholds.",
+    "XS-MIX": "Flags mixed air outside the outdoor/return envelope: a sensor or mapping fault.",
+    "XS-COPY": "Flags two temperature roles carrying one copied, changing signal.",
+    "XS-CLIP": "Flags a sensor piled up at a round transmitter full scale.",
     "PID-HUNT-1": "Flags control outputs that oscillate enough to suggest loop hunting.",
     "SCHED-247": "Flags fans or pumps that stay on for nearly the entire analysis window (24/7 runtime).",
     "ECON-3": "Flags mechanical cooling during web free-cool weather when the OA damper is not fully integrated.",
     "ECON-6": "Flags an AHU economizing above min-OA when web outdoor air is below freezing (−3.9 °C).",
     "ECON-7": "Flags cooling demand during economizer-OK web weather (dew point < 15.6 °C, dry-bulb < 22.2 °C) while the OA damper is not economizing.",
     "MECH-OAT-1": "Flags proven DX or chiller cooling while web dry-bulb is below 15.6 °C.",
+    "HW-OAT-1": "Flags a boiler, hot-water plant or hot-water pump proven on while web dry-bulb is above 18.3 °C.",
     "CHW-NOLOAD-1": "Flags a chiller running while mapped zones or AHU SAT show the building is satisfied.",
     "FC1": "Flags duct static too low while the supply fan is near full speed.",
     "FC2": "Flags mixed-air temperature colder than the OAT/RAT mixing envelope allows.",

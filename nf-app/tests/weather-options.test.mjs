@@ -155,4 +155,7 @@ test("settings.weatherEnabled: default on, either option false = off", () => {
   assert.equal(settings.weatherEnabled(settings.normalizeConfig({ weatherEnabled: { boolean: false } })), false);
   assert.equal(settings.weatherEnabled(settings.normalizeConfig({ weather: "true", weatherEnabled: "no" })), false);
   assert.equal(settings.weatherEnabled(settings.normalizeConfig({ weather: "" })), true, "blank = not set");
+  assert.equal(settings.assumeSingleFeeder({}), true);
+  assert.equal(settings.assumeSingleFeeder(settings.normalizeConfig({ assumeSingleFeeder: "false" })), false);
+  assert.equal(settings.assumeSingleFeeder(settings.normalizeConfig({ assumeSingleFeeder: "on" })), true);
 });

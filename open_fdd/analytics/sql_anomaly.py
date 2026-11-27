@@ -16,8 +16,17 @@ import math
 from importlib import resources
 from typing import Any, Iterable, Sequence
 
-ENGINES = ("sqlite", "duckdb", "postgres")
+ENGINES = ("sqlite", "duckdb", "postgres", "timescale")
 DEFAULT_SITE = "local"
+
+
+def normalize_engine(engine: str) -> str:
+    """``timescale`` uses the PostgreSQL statements. Any other unknown name is an error."""
+    if engine == "timescale":
+        return "postgres"
+    if engine not in ("sqlite", "duckdb", "postgres"):
+        raise ValueError(f"unknown engine {engine!r}; choose from {', '.join(ENGINES)}")  # pragma: no cover
+    return engine
 
 
 def zscore_sql_template() -> str:
@@ -66,8 +75,9 @@ def create_core(conn: Any, engine: str) -> None:
     """Create a minimal ``fdd.point`` + ``fdd.input_sample`` (view over ``fdd.sample_store``) on a fresh connection.
 
     SQLite gets an attached in-memory database named ``fdd``. Only the columns the analytics read are created; the
-    full core schema is ``sql/fdd/schema/core.sql``.
+    full core schema is ``sql/fdd/schema/core.sql``. ``timescale`` uses the PostgreSQL statements.
     """
+    engine = normalize_engine(engine)
     if engine == "sqlite":
         conn.execute("ATTACH DATABASE ':memory:' AS fdd")
         conn.execute("CREATE TABLE fdd.point (site_id TEXT NOT NULL, point_key TEXT NOT NULL, equipment_id TEXT, "
@@ -98,6 +108,7 @@ def load_core(
 ) -> None:
     """Insert ``points`` (dicts with site_id, point_key, equipment_id, role) and ``samples``
     (``(site_id, point_key, ts_ms_utc, value)``). Timestamps are stored as integer ms on SQLite, timestamps elsewhere."""
+    engine = normalize_engine(engine)
     point_rows = [(p["site_id"], p["point_key"], p.get("equipment_id"), p.get("role")) for p in points]
     if engine == "sqlite":
         conn.executemany("INSERT INTO fdd.point VALUES (?, ?, ?, ?)", point_rows)
@@ -143,6 +154,7 @@ def run_zscore_sql(
     point_keys: Iterable[str] | None = None,
 ) -> list[dict]:
     """Run the query on a connection that exposes the core; return one dict per scored sample (:data:`COLUMNS`)."""
+    engine = normalize_engine(engine)
     sql = render_zscore_sql(window, threshold, site_id=site_id, point_keys=point_keys)
     if engine == "postgres":
         with conn.cursor() as cur:
@@ -154,6 +166,7 @@ def run_zscore_sql(
 
 
 def _connect(engine: str):
+    engine = normalize_engine(engine)
     if engine == "sqlite":
         import sqlite3
 
